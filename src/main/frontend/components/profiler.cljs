@@ -19,7 +19,7 @@
         *register-fn-name (get state ::register-fn-name)]
     [:div
      [:b "Profiling fns (Only support UI thread now):"]
-     [:div.pb-4
+     [:div.pb-1
       (for [f-name profiling-fns]
         [:div.flex.flex-row.items-center.gap-2
          [:pre.select-text (str f-name)]
@@ -30,19 +30,20 @@
              (util/stop e)
              (profiler-handler/unregister-fn! f-name))}
           (shui/tabler-icon "x")]])]
-     [:div.flex.flex-row.items-center.gap-2
+     [:div.flex.flex-row.items-center.gap-2.mb-2
       (shui/button
-       {:on-click (fn []
+       {:size :sm
+        :on-click (fn []
                     (when-let [fn-sym (some-> @*register-fn-name symbol)]
                       (profiler-handler/register-fn! fn-sym)))}
        "Register fn")
-      [:input.form-input.my-2.py-1
+      [:input.form-input.flex-1.h-8.leading-8.py-0.box-border
        {:on-change (fn [e] (reset! *register-fn-name (util/evalue e)))
         :on-focus (fn [e] (let [v (.-value (.-target e))]
                             (when (= v (t :profiler/input-fn-placeholder))
                               (set! (.-value (.-target e)) ""))))
         :placeholder (t :profiler/input-fn-placeholder)}]]
-     [:div.flex.gap-2.flex-wrap.items-center.pb-3
+     [:div.flex.gap-2.flex-wrap.items-center.pb-1
       (shui/button
        {:size :sm
         :on-click (fn [_] (reset! *reports (profiler-handler/profile-report)))}
@@ -54,23 +55,25 @@
        (shui/tabler-icon "x") "Reset reports")]
      (let [update-time-sum
            (fn [m] (update-vals m (fn [m2] (update-vals m2 #(.toFixed % 6)))))]
-       [:div.pb-4
+       [:div.pb-0
         [:pre.select-text
          (when @*reports
            (-> @*reports
                (update :time-sum update-time-sum)
                (fipp/pprint {:width 20})
                with-out-str))]])
-     [:hr]
-     [:b "Atom/Volatile Mem Leak Detect (Only support UI thread now):"]
-     [:pre "Only check atoms/volatiles with a value type of `coll`.
+     [:hr.my-2]
+     [:div.pb-1
+      [:b "Atom/Volatile Mem Leak Detect (Only support UI thread now):"]
+      [:pre.mb-2 "Only check atoms/volatiles with a value type of `coll`.
 The report shows refs with coll-size > 5k and atom's watches-count > 1k.
 `ref` means atom or volatile.
-`ref-hash` means `(hash ref)`."]
-     [:div.flex.flex-row.items-center.gap-2
+`ref-hash` means `(hash ref)`."]]
+     [:div.flex.flex-row.items-center.gap-2.pb-2
       (if (= 2 (count (set/difference #{'cljs.core/reset! 'cljs.core/vreset!} (set profiling-fns))))
         (shui/button
-         {:on-click (fn []
+         {:size :sm
+          :on-click (fn []
                       (profiler-handler/mem-leak-detect))}
          "Start to detect")
         (shui/button

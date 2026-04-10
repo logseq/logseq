@@ -424,7 +424,7 @@
      [:div.cp__right-sidebar-scrollable
       {:on-drag-over util/stop}
       [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center
-       [:div.cp__right-sidebar-settings.hide-scrollbar.gap-1 {:key "right-sidebar-settings"}
+       [:div.cp__right-sidebar-settings.hide-scrollbar.gap-0 {:key "right-sidebar-settings"}
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                      (state/sidebar-add-block! repo "contents" :contents))}
