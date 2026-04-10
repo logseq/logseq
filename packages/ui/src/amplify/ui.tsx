@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button'
 import { Input, InputProps } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
-import { FormHTMLAttributes, useEffect, useState } from 'react'
+import { FormHTMLAttributes, useEffect, useRef, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircleIcon, Loader2Icon, LucideEye, LucideEyeClosed, LucideX } from 'lucide-react'
 import { AuthFormRootContext, t, useAuthFormState } from './core'
@@ -110,12 +110,20 @@ function validatePasswordPolicy(password: string) {
 
 function useCountDown() {
   const [countDownNum, setCountDownNum] = useState<number>(0)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const startCountDown = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+    }
     setCountDownNum(60)
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       setCountDownNum((num) => {
         if (num <= 1) {
-          clearInterval(interval)
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current)
+            intervalRef.current = null
+          }
           return 0
         }
         return num - 1
@@ -125,7 +133,10 @@ function useCountDown() {
 
   useEffect(() => {
     return () => {
-      setCountDownNum(0)
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
     }
   }, [])
 
