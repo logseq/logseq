@@ -278,6 +278,7 @@
  :ui/apply "应用"
  :ui/cancel "取消"
  :ui/close "关闭"
+ :ui/configure "配置"
  :ui/confirm "确认"
  :ui/copy "复制"
  :ui/copy-all "全部复制"
@@ -297,6 +298,7 @@
  :ui/image "图片"
  :ui/label "标签"
  :ui/link "链接"
+ :ui/load-more "加载更多"
  :ui/loading "加载中..."
  :ui/login "登录"
  :ui/logout "退出登录"
@@ -310,6 +312,8 @@
  :ui/remove-background "移除背景"
  :ui/run "运行"
  :ui/save "保存"
+ :ui/show-less "收起"
+ :ui/show-more "更多"
  :ui/skip "跳过"
  :ui/submit "提交"
  :ui/to "到："
@@ -317,6 +321,7 @@
  :ui/true "是"
  :ui/type "类型"
  :ui/untitled "无标题"
+ :ui/use-current-time "使用当前时间"
  :ui/yes "是"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "不支持该表情回应。"
 
  ;; Search
+ :search/blank-input "空白输入"
  :search/full-text-placeholder "全文搜索"
  :search/indices-rebuilt-success "搜索索引已成功重建！"
  :search/no-result "未找到匹配项"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "确定要离开这个图谱吗？"
  :graph/leave-failed "离开图谱失败。"
  :graph/left "已离开图谱。"
+ :graph/link-count "{1} 条链接"
  :graph/link-distance "链接距离"
  :graph/local-graphs "本地图谱"
  :graph/n-hops-from-selected-nodes "距选中节点 N 跳"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "知识库名称不能包含以下保留字符："
  :graph/nodes "节点"
  :graph/orphan-pages "孤立页面"
+ :graph/page-count "{1} 个页面"
  :graph/pause-simulation "暂停模拟"
  :graph/preparing "准备中"
  :graph/refresh-remote-graphs "刷新远程知识库"
@@ -549,6 +557,7 @@
  :page/the-app "应用"
  :page/try "尝试"
  :page/unfavorite "取消收藏"
+ :page/unknown "未知页面"
  :page/updated-at "更新日期"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "创建一个高级查询块"
  :editor.slash/calculator "计算器"
  :editor.slash/calculator-desc "插入一个计算器"
+ :editor.slash/cloze "填空"
  :editor.slash/code-block "代码块"
  :editor.slash/code-block-desc "插入代码块"
  :editor.slash/current-time "当前时间"
@@ -797,6 +807,7 @@
  :property/name "属性名称"
  :property/name-placeholder "名称"
  :property/no-value "无“{1}”"
+ :property/nodes-with-property "具有该属性的节点"
  :property/overdue "已逾期"
  :property/private-built-in-not-usable "这是一个私有内置属性，不能使用。"
  :property/select-choice "选择一个选项"
@@ -807,6 +818,8 @@
  :property/set-default-value "设置默认值"
  :property/set-icon "设置图标"
  :property/set-placeholder "设置“{1}”"
+ :property/set-property "设置属性"
+ :property/set-tags "设置标签"
  :property/set-value "设置值"
  :property/show-as-checkbox-on-node "在节点上显示为复选框"
  :property/show-as-checkbox-on-tagged-nodes "在已标记节点上显示为复选框"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "块的开头"
  :property/ui-position-block-right "块的结尾"
  :property/ui-position-properties "块属性"
+ :property/unset-property "移除属性"
  :property/updated "属性已更新！"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "画廊视图"
  :property.view-type/list "列表视图"
  :property.view-type/table "表格视图"
+
+ ;; Class
+ :class/add-property "添加标签属性"
+ :class/tag-properties-desc "标签属性会被所有使用该标签的节点继承。例如，每个 #Task 节点都会继承“Status”和“Priority”。"
+ :class/tagged-nodes "已标记节点"
 
  ;; Class built in
  :class.built-in/asset "附件"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "添加新查询"
+ :flashcard/all-cards "全部卡片"
  :flashcard/select-cards "选择卡片"
  :flashcard/shortcut-tooltip "快捷键：{1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "你可以给任意块添加“{1}”将其变为闪卡，或使用“/cloze”添加填空。"
  :flashcard.empty/title "来创建一张闪卡吧！"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "重来"
+ :flashcard.rating/again-desc "我们答错了。这通常意味着我们已经忘记了这张卡片，是一次记忆失误。"
+ :flashcard.rating/easy "简单"
+ :flashcard.rating/easy-desc "答案是对的，而且我们无需费力就能快速且自信地回忆起来。"
+ :flashcard.rating/good "良好"
+ :flashcard.rating/good-desc "答案是对的，但我们花了一些心力才想起来。"
+ :flashcard.rating/hard "困难"
+ :flashcard.rating/hard-desc "答案是对的，但我们没有把握，花了太久才想起来。"
 
  ;; Flashcard review
  :flashcard.review/finished "恭喜，你已完成本次复习，下次见！💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "回收站为空。"
  :storage.recycle/page-deleted-at "页面已删除 {1}"
  :storage.recycle/restore "恢复"
+ :storage.recycle/retention-desc "已删除的页面和块会保留在此处，直到被恢复或在 60 天后被自动垃圾回收。"
 
  ;; Account
  :account/authentication "身份验证"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "帮助改进 Logseq!"
  :bug-report.issue/action-title "提交错误报告"
  :bug-report.issue/desc "如果没有可用的工具供你收集额外的信息，请直接报告错误。"
+ :bug-report.issue/report-link "报告问题"
  :bug-report.issue/title "或..."
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "以页面形式打开"
  :sidebar.right/resize-handle "调整右侧边栏大小"
  :sidebar.right/toggle "切换右侧边栏"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "（开发）Profiler"
+ :sidebar.right.dev/rtc "（开发）RTC"
+ :sidebar.right.dev/vector-search "（开发）VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "开发者工具"

@@ -73,6 +73,12 @@
 (defn register-slash-command [cmd]
   (swap! *extend-slash-commands conj cmd))
 
+(defn- resolve-slash-command
+  [command]
+  (if (fn? command)
+    (command)
+    command))
+
 (defn ->marker
   [marker]
   [[:editor/clear-current-slash]
@@ -320,6 +326,7 @@
         :icon/cube-plus]]
 
       (let [commands (->> @*extend-slash-commands
+                          (map resolve-slash-command)
                           (remove (fn [command] (when (map? (last command))
                                                   (false? (:db-graph? (last command)))))))]
         commands)

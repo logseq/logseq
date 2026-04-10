@@ -42,7 +42,7 @@
   (if (ldb/page? root)
     (:block/title root)
     (or (:block/title (resolve-entity db (:logseq.property.recycle/original-page root)))
-        "Unknown page")))
+        (t :page/unknown))))
 
 (defn- deleted-by
   [db root]
@@ -76,6 +76,7 @@
        :class "!py-0 !px-1 h-4"
        :on-click #(page-handler/restore-recycled! (:block/uuid root))}
       (t :storage.recycle/restore))]))
+
 (defn- deleted-root-outliner
   [root]
   (component-block/block-container
@@ -99,7 +100,7 @@
                              #(compare %2 %1)))]
     [:div.flex.flex-col.gap-1
      [:div.text-sm.text-muted-foreground.mb-4
-      "Deleted pages and blocks stay here until restored or automatically garbage collected after 60 days."]
+      (t :storage.recycle/retention-desc)]
      (if (seq groups)
        (for [[title roots] groups]
          [:section {:key title}

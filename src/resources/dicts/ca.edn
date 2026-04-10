@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Cancel·la"
  :ui/close "Tanca"
+ :ui/configure "Configura"
  :ui/confirm "Confirma"
  :ui/copy "Copiar"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "imatge"
  :ui/label "Etiqueta"
  :ui/link "Enllaç"
+ :ui/load-more "Carrega'n més"
  :ui/loading "Carregant"
  :ui/login "Iniciar sessió"
  :ui/logout "Tancar sessió"
@@ -310,6 +312,8 @@
  :ui/remove-background "Eliminar fons"
  :ui/run "Run"
  :ui/save "Desa"
+ :ui/show-less "Mostra'n menys"
+ :ui/show-more "Mostra'n més"
  :ui/skip "Skip"
  :ui/submit "Envia"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Cert"
  :ui/type "Tipus"
  :ui/untitled "Sense títol"
+ :ui/use-current-time "Utilitza l'hora actual"
  :ui/yes "Sí"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Emoji de reacció no suportat"
 
  ;; Search
+ :search/blank-input "Entrada buida"
  :search/full-text-placeholder "Cerca de text complet"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Sense resultats"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Error en sortir del graf"
  :graph/left "Graf abandonat"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "enllaç" "enllaços")))
  :graph/link-distance "Distància d'enllaç"
  :graph/local-graphs "Grafs locals"
  :graph/n-hops-from-selected-nodes "N salts des dels nodes seleccionats"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "El nom del graf no pot contenir els caràcters reservats següents:"
  :graph/nodes "Nodes"
  :graph/orphan-pages "Pàgines òrfenes"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "pàgina" "pàgines")))
  :graph/pause-simulation "Pausar simulació"
  :graph/preparing "preparant"
  :graph/refresh-remote-graphs "Actualitzar grafs remots"
@@ -549,6 +557,7 @@
  :page/the-app "l'aplicació"
  :page/try "Intentar"
  :page/unfavorite "Treure pàgina de preferides"
+ :page/unknown "Pàgina desconeguda"
  :page/updated-at "Actualitzada el"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Nom"
  :property/name-placeholder "Nom de la propietat"
  :property/no-value "Sense {1}"
+ :property/nodes-with-property "Nodes amb propietat"
  :property/overdue "Endarrerit"
  :property/private-built-in-not-usable "Propietat integrada privada no utilitzable"
  :property/select-choice "Seleccionar opció"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Definir icona"
  :property/set-placeholder "Establir {1}"
+ :property/set-property "Assigna una propietat"
+ :property/set-tags "Assigna etiquetes"
  :property/set-value "Definir valor"
  :property/show-as-checkbox-on-node "Mostrar com a casella al node"
  :property/show-as-checkbox-on-tagged-nodes "Mostrar com a casella als nodes amb etiqueta"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "A l'esquerra del bloc"
  :property/ui-position-block-right "A la dreta del bloc"
  :property/ui-position-properties "Propietats"
+ :property/unset-property "Treu la propietat"
  :property/updated "Actualitzat"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Vista de galeria"
  :property.view-type/list "Vista de llista"
  :property.view-type/table "Vista de taula"
+
+ ;; Class
+ :class/add-property "Afegeix una propietat d'etiqueta"
+ :class/tag-properties-desc "Les propietats de l'etiqueta s'hereten a tots els nodes que la fan servir. Per exemple, cada node #Task hereta 'Status' i 'Priority'."
+ :class/tagged-nodes "Nodes etiquetats"
 
  ;; Class built in
  :class.built-in/asset "Recurs"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Afegir nova consulta"
+ :flashcard/all-cards "Totes les targetes"
  :flashcard/select-cards "Seleccionar targetes"
  :flashcard/shortcut-tooltip "Drecera: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Pots afegir \"{1}\" a qualsevol bloc per convertir-lo en una targeta o activar \"/cloze\" per afegir-hi alguns clozes."
  :flashcard.empty/title "Benvingut als Flashcards"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "De nou"
+ :flashcard.rating/again-desc "Hem respost malament. Això vol dir automàticament que hem oblidat la targeta. És un lapsus de memòria。"
+ :flashcard.rating/easy "Fàcil"
+ :flashcard.rating/easy-desc "La resposta era correcta i l'hem recordada ràpidament i amb confiança, sense esforç mental。"
+ :flashcard.rating/good "Bé"
+ :flashcard.rating/good-desc "La resposta era correcta, però ha calgut una mica d'esforç mental per recordar-la。"
+ :flashcard.rating/hard "Difícil"
+ :flashcard.rating/hard-desc "La resposta era correcta, però no n'estàvem segurs o vam trigar massa a recordar-la."
 
  ;; Flashcard review
  :flashcard.review/finished "Acabat! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "La paperera és buida."
  :storage.recycle/page-deleted-at "Pàgina suprimida {1}"
  :storage.recycle/restore "Restaurar"
+ :storage.recycle/retention-desc "Les pàgines i els blocs suprimits es queden aquí fins que es restauren o s'eliminen automàticament després de 60 dies."
 
  ;; Account
  :account/authentication "Autenticació"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Veure problemes coneguts"
  :bug-report.issue/action-title "Problemes a GitHub"
  :bug-report.issue/desc "Comproveu si el vostre problema ja ha estat reportat"
+ :bug-report.issue/report-link "Informa d'un problema"
  :bug-report.issue/title "Problemes coneguts"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Obrir com a pàgina"
  :sidebar.right/resize-handle "Eina per redimensionar panell dret "
  :sidebar.right/toggle "Alternar barra lateral dreta"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

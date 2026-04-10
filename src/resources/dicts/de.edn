@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Abbrechen"
  :ui/close "Schließen"
+ :ui/configure "Konfigurieren"
  :ui/confirm "Bestätigen"
  :ui/copy "Kopieren"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "Bild"
  :ui/label "Bezeichnung"
  :ui/link "Link"
+ :ui/load-more "Mehr laden"
  :ui/loading "Laden"
  :ui/login "Anmelden"
  :ui/logout "Abmelden"
@@ -310,6 +312,8 @@
  :ui/remove-background "Hintergrund entfernen"
  :ui/run "Run"
  :ui/save "Speichern"
+ :ui/show-less "Weniger anzeigen"
+ :ui/show-more "Mehr anzeigen"
  :ui/skip "Skip"
  :ui/submit "Absenden"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Wahr"
  :ui/type "Typ"
  :ui/untitled "Unbenannt"
+ :ui/use-current-time "Aktuelle Uhrzeit verwenden"
  :ui/yes "Ja"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Nicht unterstütztes Reaktions-Emoji"
 
  ;; Search
+ :search/blank-input "Leere Eingabe"
  :search/full-text-placeholder "Volltextsuche"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Keine übereinstimmenden Treffer"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Graph verlassen fehlgeschlagen"
  :graph/left "Graph verlassen"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "Link" "Links")))
  :graph/link-distance "Linkabstand"
  :graph/local-graphs "Lokale Graphen:"
  :graph/n-hops-from-selected-nodes "N Sprünge von ausgewählten Knoten"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Graphname darf folgende reservierte Zeichen nicht enthalten:"
  :graph/nodes "Knoten"
  :graph/orphan-pages "Verwaiste Seiten"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "Seite" "Seiten")))
  :graph/pause-simulation "Simulation pausieren"
  :graph/preparing "wird vorbereitet"
  :graph/refresh-remote-graphs "Entfernte Graphen aktualisieren"
@@ -549,6 +557,7 @@
  :page/the-app "die App"
  :page/try "Versuch"
  :page/unfavorite "Seite aus Favoriten entfernen"
+ :page/unknown "Unbekannte Seite"
  :page/updated-at "Aktualisiert am"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Name"
  :property/name-placeholder "Eigenschaftsname"
  :property/no-value "Kein {1}"
+ :property/nodes-with-property "Knoten mit Eigenschaft"
  :property/overdue "Überfällig"
  :property/private-built-in-not-usable "Private eingebaute Eigenschaft ist nicht verwendbar"
  :property/select-choice "Auswahl treffen"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Symbol setzen"
  :property/set-placeholder "{1} festlegen"
+ :property/set-property "Eigenschaft setzen"
+ :property/set-tags "Tags setzen"
  :property/set-value "Wert setzen"
  :property/show-as-checkbox-on-node "Als Checkbox auf Knoten anzeigen"
  :property/show-as-checkbox-on-tagged-nodes "Als Checkbox auf getaggten Knoten anzeigen"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "Links vom Block"
  :property/ui-position-block-right "Rechts vom Block"
  :property/ui-position-properties "Eigenschaften"
+ :property/unset-property "Eigenschaft entfernen"
  :property/updated "Aktualisiert"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Galerieansicht"
  :property.view-type/list "Listenansicht"
  :property.view-type/table "Tabellenansicht"
+
+ ;; Class
+ :class/add-property "Tag-Eigenschaft hinzufügen"
+ :class/tag-properties-desc "Tag-Eigenschaften werden von allen Knoten geerbt, die das Tag verwenden. Zum Beispiel erbt jeder #Task-Knoten 'Status' und 'Priority'."
+ :class/tagged-nodes "Getaggte Knoten"
 
  ;; Class built in
  :class.built-in/asset "Asset"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Neue Abfrage hinzufügen"
+ :flashcard/all-cards "Alle Karten"
  :flashcard/select-cards "Karten auswählen"
  :flashcard/shortcut-tooltip "Tastenkürzel: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Fügen Sie \"{1}\" zu einem beliebigen Block hinzu, um daraus eine Karte zu machen, oder nutzen Sie \"/cloze\", um Clozes zu erstellen."
  :flashcard.empty/title "Zeit, eine Karte zu erstellen!"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Erneut"
+ :flashcard.rating/again-desc "Wir haben die Antwort falsch gegeben. Das bedeutet automatisch, dass wir die Karte vergessen haben. Das ist ein Gedächtnisaussetzer."
+ :flashcard.rating/easy "Leicht"
+ :flashcard.rating/easy-desc "Die Antwort war richtig und wir konnten uns schnell und sicher ohne große Anstrengung erinnern."
+ :flashcard.rating/good "Gut"
+ :flashcard.rating/good-desc "Die Antwort war richtig, aber wir mussten uns etwas anstrengen, um uns daran zu erinnern."
+ :flashcard.rating/hard "Schwer"
+ :flashcard.rating/hard-desc "Die Antwort war richtig, aber wir waren uns nicht sicher oder brauchten zu lange, um sie abzurufen."
 
  ;; Flashcard review
  :flashcard.review/finished "Gratulation, alle Karten für diese Runde sind geschafft, bis zum nächsten Mal! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Papierkorb ist leer."
  :storage.recycle/page-deleted-at "Seite gelöscht {1}"
  :storage.recycle/restore "Wiederherstellen"
+ :storage.recycle/retention-desc "Gelöschte Seiten und Blöcke bleiben hier, bis sie wiederhergestellt oder nach 60 Tagen automatisch bereinigt werden."
 
  ;; Account
  :account/authentication "Authentifizierung"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Helfen Sie, Logseq zu verbessern!"
  :bug-report.issue/action-title "Fehlerbericht einsenden"
  :bug-report.issue/desc "Wenn Ihnen keine Werkzeuge zum Sammeln zusätzlicher Information zur Verfügung stehen, melden Sie den Fehler bitte direkt."
+ :bug-report.issue/report-link "Problem melden"
  :bug-report.issue/title "Oder..."
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Als Seite öffnen"
  :sidebar.right/resize-handle "Griff zur Größenänderung der rechten Seitenleiste"
  :sidebar.right/toggle "Rechte Seitenleiste umschalten"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

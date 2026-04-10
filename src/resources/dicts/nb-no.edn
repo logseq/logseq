@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Avbryt"
  :ui/close "Lukk"
+ :ui/configure "Konfigurer"
  :ui/confirm "Bekreft"
  :ui/copy "Kopier"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "bilde"
  :ui/label "Etikett"
  :ui/link "Lenke"
+ :ui/load-more "Last inn mer"
  :ui/loading "Laster"
  :ui/login "Logg inn"
  :ui/logout "Logg ut"
@@ -310,6 +312,8 @@
  :ui/remove-background "Fjern bakgrunn"
  :ui/run "Run"
  :ui/save "Lagre"
+ :ui/show-less "Vis mindre"
+ :ui/show-more "Vis mer"
  :ui/skip "Skip"
  :ui/submit "Send"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Sann"
  :ui/type "Type"
  :ui/untitled "Uten tittel"
+ :ui/use-current-time "Bruk nåværende tid"
  :ui/yes "Ja"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Ustøttet reaksjonsemoji"
 
  ;; Search
+ :search/blank-input "Tom inndata"
  :search/full-text-placeholder "Fulltekstsøk"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Ingen resultater"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Kunne ikke forlate graf"
  :graph/left "Forlot graf"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "lenke" "lenker")))
  :graph/link-distance "Lenkeavstand"
  :graph/local-graphs "Lokale grafer"
  :graph/n-hops-from-selected-nodes "N hopp fra valgte noder"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Grafnavnet kan ikke inneholde følgende reserverte tegn:"
  :graph/nodes "Noder"
  :graph/orphan-pages "Foreldreløse sider"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "side" "sider")))
  :graph/pause-simulation "Pause simulering"
  :graph/preparing "forbereder"
  :graph/refresh-remote-graphs "Oppdater eksterne grafer"
@@ -549,6 +557,7 @@
  :page/the-app "appen"
  :page/try "Prøv"
  :page/unfavorite "Fjern side fra Faoritter"
+ :page/unknown "Ukjent side"
  :page/updated-at "Oppdatert"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Navn"
  :property/name-placeholder "Egenskapsnavn"
  :property/no-value "Ingen {1}"
+ :property/nodes-with-property "Noder med egenskap"
  :property/overdue "Forfalt"
  :property/private-built-in-not-usable "Privat innebygd egenskap kan ikke brukes"
  :property/select-choice "Velg et valg"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Sett ikon"
  :property/set-placeholder "Sett {1}"
+ :property/set-property "Sett egenskap"
+ :property/set-tags "Sett tagger"
  :property/set-value "Sett verdi"
  :property/show-as-checkbox-on-node "Vis som avkrysningsboks på node"
  :property/show-as-checkbox-on-tagged-nodes "Vis som avkrysningsboks på taggede noder"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "Venstre for blokk"
  :property/ui-position-block-right "Høyre for blokk"
  :property/ui-position-properties "Egenskaper"
+ :property/unset-property "Fjern egenskap"
  :property/updated "Oppdatert"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Gallerivisning"
  :property.view-type/list "Listevisning"
  :property.view-type/table "Tabellvisning"
+
+ ;; Class
+ :class/add-property "Legg til tagg-egenskap"
+ :class/tag-properties-desc "Tagg-egenskaper arves av alle noder som bruker taggen. For eksempel arver hver #Task-node 'Status' og 'Priority'."
+ :class/tagged-nodes "Taggede noder"
 
  ;; Class built in
  :class.built-in/asset "Vedlegg"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Legg til ny spørring"
+ :flashcard/all-cards "Alle kort"
  :flashcard/select-cards "Velg kort"
  :flashcard/shortcut-tooltip "Hurtigtast: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Du kan legge til \"{1}\" til en hvilken som helst blokk for å gjøre den om til et kort eller utløse \"/cloze\" for å legge til noen clozes."
  :flashcard.empty/title "Velkommen til Flashkort"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Igjen"
+ :flashcard.rating/again-desc "Vi svarte feil. Det betyr automatisk at vi har glemt kortet. Dette er en minnesvikt。"
+ :flashcard.rating/easy "Lett"
+ :flashcard.rating/easy-desc "Svaret var riktig, og vi husket det raskt og sikkert uten mental innsats。"
+ :flashcard.rating/good "Bra"
+ :flashcard.rating/good-desc "Svaret var riktig, men det krevde litt mental innsats å huske det。"
+ :flashcard.rating/hard "Vanskelig"
+ :flashcard.rating/hard-desc "Svaret var riktig, men vi var ikke sikre på det eller brukte for lang tid på å huske det."
 
  ;; Flashcard review
  :flashcard.review/finished "Ferdig! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Papirkurven er tom."
  :storage.recycle/page-deleted-at "Side slettet {1}"
  :storage.recycle/restore "Gjenopprett"
+ :storage.recycle/retention-desc "Slettede sider og blokker blir her til de gjenopprettes eller automatisk ryddes opp etter 60 dager."
 
  ;; Account
  :account/authentication "Autentisering"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Se kjente problemer"
  :bug-report.issue/action-title "GitHub-saker"
  :bug-report.issue/desc "Sjekk om problemet ditt allerede er rapportert"
+ :bug-report.issue/report-link "Rapporter problem"
  :bug-report.issue/title "Kjente problemer"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Åpne som side"
  :sidebar.right/resize-handle "Skillelinje"
  :sidebar.right/toggle "Slå av/på høyre sidepanel"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

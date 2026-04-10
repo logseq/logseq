@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Отмена"
  :ui/close "Закрыть"
+ :ui/configure "Настроить"
  :ui/confirm "Подтвердить"
  :ui/copy "Копировать"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "изображение"
  :ui/label "Метка"
  :ui/link "Ссылка"
+ :ui/load-more "Загрузить ещё"
  :ui/loading "Загрузка"
  :ui/login "Войти"
  :ui/logout "Выйти"
@@ -310,6 +312,8 @@
  :ui/remove-background "Удалить фон"
  :ui/run "Run"
  :ui/save "Сохранить"
+ :ui/show-less "Показать меньше"
+ :ui/show-more "Показать больше"
  :ui/skip "Skip"
  :ui/submit "Отправить"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Истина"
  :ui/type "Тип"
  :ui/untitled "Без названия"
+ :ui/use-current-time "Использовать текущее время"
  :ui/yes "Да"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Неподдерживаемый эмодзи реакции"
 
  ;; Search
+ :search/blank-input "Пустой ввод"
  :search/full-text-placeholder "Полнотекстовый поиск"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Нет результатов"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Не удалось покинуть граф"
  :graph/left "Граф покинут"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "ссылка" "ссылок")))
  :graph/link-distance "Расстояние связи"
  :graph/local-graphs "Локальные графы"
  :graph/n-hops-from-selected-nodes "Количество переходов от выбранных узлов"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Имя графа не может содержать следующие зарезервированные символы:"
  :graph/nodes "Узлы"
  :graph/orphan-pages "Изолированные страницы"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "страница" "страниц")))
  :graph/pause-simulation "Приостановить симуляцию"
  :graph/preparing "подготовка"
  :graph/refresh-remote-graphs "Обновить удалённые графы"
@@ -549,6 +557,7 @@
  :page/the-app "приложение"
  :page/try "Попробовать"
  :page/unfavorite "Удалить из Избранного"
+ :page/unknown "Неизвестная страница"
  :page/updated-at "Обновлена"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Имя"
  :property/name-placeholder "Имя свойства"
  :property/no-value "Нет {1}"
+ :property/nodes-with-property "Узлы со свойством"
  :property/overdue "Просрочено"
  :property/private-built-in-not-usable "Приватное встроенное свойство недоступно"
  :property/select-choice "Выбрать вариант"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Установить значок"
  :property/set-placeholder "Задать {1}"
+ :property/set-property "Установить свойство"
+ :property/set-tags "Установить теги"
  :property/set-value "Установить значение"
  :property/show-as-checkbox-on-node "Показать как флажок на узле"
  :property/show-as-checkbox-on-tagged-nodes "Показать как флажок на узлах с тегом"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "Слева от блока"
  :property/ui-position-block-right "Справа от блока"
  :property/ui-position-properties "Свойства"
+ :property/unset-property "Убрать свойство"
  :property/updated "Обновлено"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Галерея"
  :property.view-type/list "Список"
  :property.view-type/table "Таблица"
+
+ ;; Class
+ :class/add-property "Добавить свойство тега"
+ :class/tag-properties-desc "Свойства тега наследуются всеми узлами, использующими этот тег. Например, каждый узел #Task наследует 'Status' и 'Priority'."
+ :class/tagged-nodes "Узлы с тегом"
 
  ;; Class built in
  :class.built-in/asset "Ресурс"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Добавить новый запрос"
+ :flashcard/all-cards "Все карточки"
  :flashcard/select-cards "Выбрать карточки"
  :flashcard/shortcut-tooltip "Горячая клавиша: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Вы можете добавить «{1}» к любому блоку, чтобы превратить его в карточку, или вызвать «/cloze», чтобы добавить пропуски."
  :flashcard.empty/title "Добро пожаловать в Карточки"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Снова"
+ :flashcard.rating/again-desc "Мы ответили неправильно. Это автоматически означает, что мы забыли карточку. Это провал в памяти."
+ :flashcard.rating/easy "Легко"
+ :flashcard.rating/easy-desc "Ответ был правильным, и мы вспомнили его быстро и уверенно, без умственного усилия."
+ :flashcard.rating/good "Хорошо"
+ :flashcard.rating/good-desc "Ответ был правильным, но потребовалось некоторое умственное усилие, чтобы его вспомнить."
+ :flashcard.rating/hard "Трудно"
+ :flashcard.rating/hard-desc "Ответ был правильным, но мы не были в нём уверены или слишком долго его вспоминали."
 
  ;; Flashcard review
  :flashcard.review/finished "Готово! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Корзина пуста."
  :storage.recycle/page-deleted-at "Страница удалена {1}"
  :storage.recycle/restore "Восстановить"
+ :storage.recycle/retention-desc "Удалённые страницы и блоки остаются здесь, пока их не восстановят или они не будут автоматически очищены через 60 дней."
 
  ;; Account
  :account/authentication "Аутентификация"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Просмотреть известные проблемы"
  :bug-report.issue/action-title "Проблемы на GitHub"
  :bug-report.issue/desc "Проверьте, не была ли ваша проблема уже описана"
+ :bug-report.issue/report-link "Сообщить о проблеме"
  :bug-report.issue/title "Известные проблемы"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Открыть как страницу"
  :sidebar.right/resize-handle "Изменение размера правой боковой панели"
  :sidebar.right/toggle "Переключить правую панель"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

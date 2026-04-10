@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Zrušiť"
  :ui/close "Zavrieť"
+ :ui/configure "Konfigurovať"
  :ui/confirm "Potvrdiť"
  :ui/copy "Kopírovať"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "obrázok"
  :ui/label "Štítok"
  :ui/link "Odkaz"
+ :ui/load-more "Načítať viac"
  :ui/loading "Načítavanie"
  :ui/login "Prihlásiť sa"
  :ui/logout "Odhlásiť sa"
@@ -310,6 +312,8 @@
  :ui/remove-background "Odstrániť pozadie"
  :ui/run "Run"
  :ui/save "Uložiť"
+ :ui/show-less "Zobraziť menej"
+ :ui/show-more "Zobraziť viac"
  :ui/skip "Skip"
  :ui/submit "Odoslať"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Pravda"
  :ui/type "Typ"
  :ui/untitled "Bez názvu"
+ :ui/use-current-time "Použiť aktuálny čas"
  :ui/yes "Áno"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Nepodporovaný emoji reakce"
 
  ;; Search
+ :search/blank-input "Prázdny vstup"
  :search/full-text-placeholder "Fulltextové vyhľadávanie"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Žiadne výsledky"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Nepodarilo sa opustit graf"
  :graph/left "Graf opuštěn"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "odkaz" "odkazov")))
  :graph/link-distance "Vzdialenosť prepojení"
  :graph/local-graphs "Lokálne grafy"
  :graph/n-hops-from-selected-nodes "Počet skokov od vybraných uzlov"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Názov grafu nesmie obsahovať nasledujúce vyhradené znaky:"
  :graph/nodes "Uzly"
  :graph/orphan-pages "Osirotené stránky"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "stránka" "stránok")))
  :graph/pause-simulation "Pozastaviť simuláciu"
  :graph/preparing "príprava"
  :graph/refresh-remote-graphs "Obnoviť vzdialené grafy"
@@ -549,6 +557,7 @@
  :page/the-app "aplikácia"
  :page/try "Vyskúšať"
  :page/unfavorite "Odstrániť z obľúbených"
+ :page/unknown "Neznáma stránka"
  :page/updated-at "Aktualizované"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Názov"
  :property/name-placeholder "Názov vlastnosťi"
  :property/no-value "Žiadne {1}"
+ :property/nodes-with-property "Uzly s vlastnosťou"
  :property/overdue "Po termíne"
  :property/private-built-in-not-usable "Soukromá vstavaná vlastnosť nedostupná"
  :property/select-choice "Vybrať volbu"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Nastaviť ikonu"
  :property/set-placeholder "Nastaviť {1}"
+ :property/set-property "Nastaviť vlastnosť"
+ :property/set-tags "Nastaviť tagy"
  :property/set-value "Nastaviť hodnotu"
  :property/show-as-checkbox-on-node "Zobraziť jako zaškrtávací pole na uzlu"
  :property/show-as-checkbox-on-tagged-nodes "Zobraziť jako zaškrtávací pole na uzlech sa štítkem"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "Vlevo od bloku"
  :property/ui-position-block-right "Vpravo od bloku"
  :property/ui-position-properties "Vlastnosťi"
+ :property/unset-property "Odstrániť vlastnosť"
  :property/updated "Aktualizováno"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Pohľad galérie"
  :property.view-type/list "Pohľad zoznamu"
  :property.view-type/table "Tabuľkový pohľad"
+
+ ;; Class
+ :class/add-property "Pridať vlastnosť tagu"
+ :class/tag-properties-desc "Vlastnosti tagu dedia všetky uzly, ktoré tento tag používajú. Napríklad každý uzol #Task dedí 'Status' a 'Priority'."
+ :class/tagged-nodes "Otagované uzly"
 
  ;; Class built in
  :class.built-in/asset "Súbor"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Pridať nový dopyt"
+ :flashcard/all-cards "Všetky kartičky"
  :flashcard/select-cards "Vybrať kartičky"
  :flashcard/shortcut-tooltip "Skratka: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Môžete pridať „{1}“ do ľubovoľného bloku, aby ste ho zmenili na kartu, alebo spustiť „/cloze“ a pridať nejaké cloze."
  :flashcard.empty/title "Vitajte v Kartičkách"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Znova"
+ :flashcard.rating/again-desc "Odpoveď bola nesprávna. To automaticky znamená, že sme kartičku zabudli. Je to výpadok pamäti。"
+ :flashcard.rating/easy "Ľahké"
+ :flashcard.rating/easy-desc "Odpoveď bola správna a vybavili sme si ju rýchlo a s istotou, bez mentálnej námahy。"
+ :flashcard.rating/good "Dobré"
+ :flashcard.rating/good-desc "Odpoveď bola správna, ale vyžadovalo si to určité mentálne úsilie si ju vybaviť。"
+ :flashcard.rating/hard "Ťažké"
+ :flashcard.rating/hard-desc "Odpoveď bola správna, ale neboli sme si ňou istí alebo trvalo príliš dlho si ju vybaviť."
 
  ;; Flashcard review
  :flashcard.review/finished "Hotovo! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Kôš je prázdny."
  :storage.recycle/page-deleted-at "Stránka bola odstránená {1}"
  :storage.recycle/restore "Obnoviť"
+ :storage.recycle/retention-desc "Odstránené stránky a bloky tu zostanú, kým sa neobnovia alebo nebudú po 60 dňoch automaticky vyčistené."
 
  ;; Account
  :account/authentication "Autentifikácia"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Procházet známé problémy"
  :bug-report.issue/action-title "Hlášení na GitHubu"
  :bug-report.issue/desc "Zkontrolujte, zda váš problém nebyl už nahlášen"
+ :bug-report.issue/report-link "Nahlásiť problém"
  :bug-report.issue/title "Známé problémy"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Otvoriť ako stránku"
  :sidebar.right/resize-handle "Nástroj na zmenu veľkosti pravého bočného panelu"
  :sidebar.right/toggle "Prepnúť pravý panel"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

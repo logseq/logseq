@@ -78,6 +78,14 @@
 (def ^:private shortcut-category-key-pattern
   #":shortcut\.category/[A-Za-z0-9._-]+")
 
+;; Matches FSRS flashcard rating translation keys derived with
+;; `(keyword "flashcard.rating" ...)`.
+(def ^:private flashcard-rating-label-keyword-pattern
+  #"\(keyword\s+\"flashcard\.rating\"\s+\(name\s+[^\)]+\)\)")
+
+(def ^:private flashcard-rating-desc-keyword-pattern
+  #"\(keyword\s+\"flashcard\.rating\"\s+\(str\s+\(name\s+[^\)]+\)\s+\"-desc\"\)\)")
+
 ;; Matches the start of `(comment ...)` forms.
 (def ^:private comment-form-prefix-pattern
   #"\(comment\b")
@@ -353,6 +361,18 @@
        (map #(keyword (subs % 1)))
        set))
 
+(defn flashcard-rating-translation-keys
+  "Return `:flashcard.rating/*` keys derived from supported FSRS dynamic
+  keyword construction."
+  [content]
+  (let [ratings [:again :hard :good :easy]]
+    (into #{}
+          (concat
+           (when (re-find flashcard-rating-label-keyword-pattern content)
+             (map #(keyword "flashcard.rating" (name %)) ratings))
+           (when (re-find flashcard-rating-desc-keyword-pattern content)
+             (map #(keyword "flashcard.rating" (str (name %) "-desc")) ratings))))))
+
 (defn derived-translation-keys
   "Return translation keys derived from supported non-literal UI patterns.
 
@@ -366,7 +386,8 @@
         (built-in-color-keys content)
         (left-sidebar-translation-keys content)
         (date-nlp-translation-keys content)
-        (shortcut-category-translation-keys content)]
+        (shortcut-category-translation-keys content)
+        (flashcard-rating-translation-keys content)]
        (apply concat)
        set))
 

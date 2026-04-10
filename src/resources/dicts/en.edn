@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Cancel"
  :ui/close "Close"
+ :ui/configure "Configure"
  :ui/confirm "Confirm"
  :ui/copy "Copy"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "image"
  :ui/label "Label"
  :ui/link "Link"
+ :ui/load-more "Load more"
  :ui/loading "Loading..."
  :ui/login "Login"
  :ui/logout "Logout"
@@ -310,6 +312,8 @@
  :ui/remove-background "Remove background"
  :ui/run "Run"
  :ui/save "Save"
+ :ui/show-less "Show less"
+ :ui/show-more "Show more"
  :ui/skip "Skip"
  :ui/submit "Submit"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "True"
  :ui/type "Type"
  :ui/untitled "Untitled"
+ :ui/use-current-time "Use current time"
  :ui/yes "Yes"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Unsupported reaction emoji."
 
  ;; Search
+ :search/blank-input "Blank input"
  :search/full-text-placeholder "Full text search"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "No matched result"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Failed to leave graph."
  :graph/left "Left graph."
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "link" "links")))
  :graph/link-distance "Link Distance"
  :graph/local-graphs "Local graphs:"
  :graph/n-hops-from-selected-nodes "N hops from selected nodes"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Graph name can't contain following reserved characters:"
  :graph/nodes "Nodes"
  :graph/orphan-pages "Orphan pages"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "page" "pages")))
  :graph/pause-simulation "Pause simulation"
  :graph/preparing "preparing"
  :graph/refresh-remote-graphs "Refresh remote graphs"
@@ -549,6 +557,7 @@
  :page/the-app "the app"
  :page/try "Try"
  :page/unfavorite "Unfavorite page"
+ :page/unknown "Unknown page"
  :page/updated-at "Updated At"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Property name"
  :property/name-placeholder "name"
  :property/no-value "No {1}"
+ :property/nodes-with-property "Nodes with property"
  :property/overdue "Overdue"
  :property/private-built-in-not-usable "This is a private built-in property that can't be used."
  :property/select-choice "Select a choice"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Set Icon"
  :property/set-placeholder "Set {1}"
+ :property/set-property "Set property"
+ :property/set-tags "Set tags"
  :property/set-value "Set value"
  :property/show-as-checkbox-on-node "Show as checkbox on node"
  :property/show-as-checkbox-on-tagged-nodes "Show as checkbox on tagged nodes"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "Beginning of the block"
  :property/ui-position-block-right "End of the block"
  :property/ui-position-properties "Block properties"
+ :property/unset-property "Unset property"
  :property/updated "Property updated!"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Gallery View"
  :property.view-type/list "List View"
  :property.view-type/table "Table View"
+
+ ;; Class
+ :class/add-property "Add tag property"
+ :class/tag-properties-desc "Tag properties are inherited by all nodes using the tag. For example, each #Task node inherits 'Status' and 'Priority'."
+ :class/tagged-nodes "Tagged nodes"
 
  ;; Class built in
  :class.built-in/asset "Asset"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Add new query"
+ :flashcard/all-cards "All cards"
  :flashcard/select-cards "Select cards"
  :flashcard/shortcut-tooltip "Shortcut: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "You can add \"{1}\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."
  :flashcard.empty/title "Time to create a card!"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Again"
+ :flashcard.rating/again-desc "We got the answer wrong. Automatically means that we have forgotten the card. This is a lapse in memory."
+ :flashcard.rating/easy "Easy"
+ :flashcard.rating/easy-desc "The answer was correct and we were confident and quick in our recall without mental effort."
+ :flashcard.rating/good "Good"
+ :flashcard.rating/good-desc "The answer was correct but we took some mental effort to recall it."
+ :flashcard.rating/hard "Hard"
+ :flashcard.rating/hard-desc "The answer was correct but we were not confident about it or took too long to recall."
 
  ;; Flashcard review
  :flashcard.review/finished "Congrats, you've reviewed all the cards for this query, see you next time! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Recycle is empty."
  :storage.recycle/page-deleted-at "Page deleted {1}"
  :storage.recycle/restore "Restore"
+ :storage.recycle/retention-desc "Deleted pages and blocks stay here until restored or automatically garbage collected after 60 days."
 
  ;; Account
  :account/authentication "Authentication"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Help Make Logseq Better!"
  :bug-report.issue/action-title "Submit a bug report"
  :bug-report.issue/desc "If there are no tools available for you to gather additional information, please report the bug directly."
+ :bug-report.issue/report-link "Report issue"
  :bug-report.issue/title "Or..."
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Open as page"
  :sidebar.right/resize-handle "Right sidebar resize handler"
  :sidebar.right/toggle "Toggle right sidebar"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

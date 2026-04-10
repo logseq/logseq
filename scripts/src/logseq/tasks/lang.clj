@@ -133,9 +133,10 @@
 ;; Matches files containing dynamic translation-call `if`/`or` forms, `i18n-key`
 ;; `if` forms, literal `:prompt-key`/`:title-key` options, `built-in-colors`,
 ;; `navs` vectors, date NLP labels, built-in property/class definitions, or
-;; `:shortcut.category/*` keys for later exact extraction.
+;; `:shortcut.category/*` keys, or supported dynamic `keyword` i18n patterns for
+;; later exact extraction.
 (def ^:private derived-ui-key-candidate-rg-pattern
-  "(?:[(](?:[[:alnum:]._-]+/)?tt?[[:space:]]+[(](?:if|or)\\b|:?i18n-key[[:space:]]+[(]if\\b|:prompt-key[[:space:]]+:|:title-key[[:space:]]+:|[(]def[[:space:]]+built-in-colors\\b|\\bnavs[[:space:]]+\\[|[(]def[[:space:]]+nlp-pages\\b|[(]def[[:space:]]+\\^:large-vars/data-var[[:space:]]+built-in-(?:properties|classes)\\b|:shortcut\\.category/)")
+  "(?:[(](?:[[:alnum:]._-]+/)?tt?[[:space:]]+[(](?:if|or)\\b|:?i18n-key[[:space:]]+[(]if\\b|:prompt-key[[:space:]]+:|:title-key[[:space:]]+:|[(]def[[:space:]]+built-in-colors\\b|\\bnavs[[:space:]]+\\[|[(]def[[:space:]]+nlp-pages\\b|[(]def[[:space:]]+\\^:large-vars/data-var[[:space:]]+built-in-(?:properties|classes)\\b|:shortcut\\.category/|[(]keyword[[:space:]]+\"flashcard\\.rating\")")
 
 (def ^:private built-in-db-ident-candidate-rg-pattern
   "[(]def[[:space:]]+\\^:large-vars/data-var[[:space:]]+built-in-(?:properties|classes)\\b")

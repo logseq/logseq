@@ -29,8 +29,12 @@
             [rum.core :as rum]
             [tick.core :as tick]))
 
-(commands/register-slash-command ["Cloze"
-                                  [[:editor/input "{{cloze }}" {:backward-pos 2}]]])
+(commands/register-slash-command
+ (fn []
+   [(t :editor.slash/cloze)
+    [[:editor/input "{{cloze }}" {:backward-pos 2}]]
+    nil
+    :icon/brackets-contain]))
 
 (def ^:private instant->inst-ms (comp inst-ms tick/inst))
 (defn- inst-ms->instant [ms] (tick/instant (js/Date. ms)))
@@ -160,11 +164,26 @@
       :show-answer
       :init)))
 
+(def ^:private ratings
+  [:again :hard :good :easy])
+
 (def ^:private rating->shortcut
   {:again "1"
    :hard  "2"
    :good  "3"
    :easy  "4"})
+
+(defn- rating-key
+  [rating]
+  (keyword "flashcard.rating" (name rating)))
+
+(defn- rating-desc-key
+  [rating]
+  (keyword "flashcard.rating" (str (name rating) "-desc")))
+
+(defn- rating-label
+  [rating]
+  (t (rating-key rating)))
 
 (defn- rating-btns
   [repo block *card-index *phase]
@@ -174,14 +193,14 @@
       (fn [rating]
         (let [card-map (get-card-map block)
               due (:due (fsrs.core/repeat-card! card-map rating))]
-          (btn-with-shortcut {:btn-text (string/capitalize (name rating))
+          (btn-with-shortcut {:btn-text (rating-label rating)
                               :shortcut (rating->shortcut rating)
                               :due due
                               :id (str "card-" (name rating))
                               :on-click #(do (repeat-card! repo block-id rating)
                                              (swap! *card-index inc)
                                              (reset! *phase :init))})))
-      (keys rating->shortcut))
+      ratings)
      (shui/button
       {:variant :ghost
        :size :sm
@@ -190,18 +209,11 @@
                    (shui/popup-show! (.-target e)
                                      (fn []
                                        [:div.p-4.max-w-lg
-                                        [:dl
-                                         [:dt "Again"]
-                                         [:dd "We got the answer wrong. Automatically means that we have forgotten the card. This is a lapse in memory."]]
-                                        [:dl
-                                         [:dt "Hard"]
-                                         [:dd "The answer was correct but we were not confident about it and/or took too long to recall."]]
-                                        [:dl
-                                         [:dt "Good"]
-                                         [:dd "The answer was correct but we took some mental effort to recall it."]]
-                                        [:dl
-                                         [:dt "Easy"]
-                                         [:dd "The answer was correct and we were confident and quick in our recall without mental effort."]]])
+                                        (for [rating ratings]
+                                          ^{:key (name rating)}
+                                          [:dl
+                                           [:dt (t (rating-key rating))]
+                                           [:dd (t (rating-desc-key rating))]])])
                                      {:align "start"}))}
       (ui/icon "info-circle"))]))
 
@@ -254,7 +266,7 @@
                  *loading? (atom nil)
                  cards-id (last (:rum/args state))
                  *cards-list (atom [{:db/id :global
-                                     :block/title "All cards"}])
+                                     :block/title (t :flashcard/all-cards)}])
                  repo (state/get-current-repo)
                  cards-class-id (:db/id (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards))]
              (reset! *loading? true)
@@ -271,7 +283,7 @@
                                                  (assoc block :block/title (:block/title query-block))))))
                                          cards))]
                  (reset! *cards-list (concat [{:db/id :global
-                                               :block/title "All cards"}]
+                                               :block/title (t :flashcard/all-cards)}]
                                              (remove
                                               (fn [card]
                                                 (string/blank? (:block/title card)))
@@ -291,7 +303,7 @@
         *cards-list (::cards-list state)
         all-cards (or (rum/react *cards-list)
                       [{:db/id :global
-                        :block/title "All cards"}])
+                        :block/title (t :flashcard/all-cards)}])
         *block-ids (::block-ids state)
         block-ids (rum/react *block-ids)
         loading? (rum/react (::loading? state))

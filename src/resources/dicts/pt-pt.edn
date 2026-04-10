@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Cancelar"
  :ui/close "Fechar"
+ :ui/configure "Configurar"
  :ui/confirm "Confirmar"
  :ui/copy "Copiar"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "imagem"
  :ui/label "Etiqueta"
  :ui/link "Ligação"
+ :ui/load-more "Carregar mais"
  :ui/loading "A carregar"
  :ui/login "Iniciar sessão"
  :ui/logout "Terminar sessão"
@@ -310,6 +312,8 @@
  :ui/remove-background "Remover fundo"
  :ui/run "Run"
  :ui/save "Guardar"
+ :ui/show-less "Mostrar menos"
+ :ui/show-more "Mostrar mais"
  :ui/skip "Skip"
  :ui/submit "Enviar"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Verdadeiro"
  :ui/type "Tipo"
  :ui/untitled "Sem título"
+ :ui/use-current-time "Usar hora atual"
  :ui/yes "Sim"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Emoji de reação não suportado"
 
  ;; Search
+ :search/blank-input "Entrada vazia"
  :search/full-text-placeholder "Pesquisa de texto completo"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Sem resultados"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Falha ao sair do grafo"
  :graph/left "Grafo abandonado"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "ligação" "ligações")))
  :graph/link-distance "Distância da ligação"
  :graph/local-graphs "Grafos locais"
  :graph/n-hops-from-selected-nodes "N saltos a partir dos nós selecionados"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "O nome do grafo não pode conter os seguintes caracteres reservados:"
  :graph/nodes "Nós"
  :graph/orphan-pages "Páginas órfãs"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "página" "páginas")))
  :graph/pause-simulation "Pausar simulação"
  :graph/preparing "a preparar"
  :graph/refresh-remote-graphs "Atualizar grafos remotos"
@@ -549,6 +557,7 @@
  :page/the-app "a aplicação"
  :page/try "Tentar"
  :page/unfavorite "Remover dos Favoritos"
+ :page/unknown "Página desconhecida"
  :page/updated-at "Atualizada Em"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Nome"
  :property/name-placeholder "Nome da propriedade"
  :property/no-value "Sem {1}"
+ :property/nodes-with-property "Nós com propriedade"
  :property/overdue "Em atraso"
  :property/private-built-in-not-usable "Propriedade integrada privada não utilizável"
  :property/select-choice "Selecionar opção"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Definir ícone"
  :property/set-placeholder "Definir {1}"
+ :property/set-property "Definir propriedade"
+ :property/set-tags "Definir etiquetas"
  :property/set-value "Definir valor"
  :property/show-as-checkbox-on-node "Mostrar como caixa de verificação no nó"
  :property/show-as-checkbox-on-tagged-nodes "Mostrar como caixa de verificação em nós com tag"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "À esquerda do bloco"
  :property/ui-position-block-right "À direita do bloco"
  :property/ui-position-properties "Propriedades"
+ :property/unset-property "Remover propriedade"
  :property/updated "Atualizado"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Vista de galeria"
  :property.view-type/list "Vista de lista"
  :property.view-type/table "Vista de tabela"
+
+ ;; Class
+ :class/add-property "Adicionar propriedade da etiqueta"
+ :class/tag-properties-desc "As propriedades da etiqueta são herdadas por todos os nós que usam a etiqueta. Por exemplo, cada nó #Task herda 'Status' e 'Priority'."
+ :class/tagged-nodes "Nós com etiqueta"
 
  ;; Class built in
  :class.built-in/asset "Ficheiro"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Adicionar nova consulta"
+ :flashcard/all-cards "Todos os cartões"
  :flashcard/select-cards "Selecionar cartões"
  :flashcard/shortcut-tooltip "Atalho: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Pode adicionar \"{1}\" a qualquer bloco para o transformar numa carta ou acionar \"/cloze\" para adicionar alguns clozes."
  :flashcard.empty/title "Bem-vindo aos Flashcards"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Novamente"
+ :flashcard.rating/again-desc "Falhámos a resposta. Isto significa automaticamente que nos esquecemos do cartão. É uma falha de memória."
+ :flashcard.rating/easy "Fácil"
+ :flashcard.rating/easy-desc "A resposta estava correta e recordámo-la rápida e confiantemente, sem esforço mental."
+ :flashcard.rating/good "Bom"
+ :flashcard.rating/good-desc "A resposta estava correta, mas exigiu algum esforço mental para a recordar."
+ :flashcard.rating/hard "Difícil"
+ :flashcard.rating/hard-desc "A resposta estava correta, mas não tínhamos confiança nela ou demorámos demasiado tempo a recordá-la."
 
  ;; Flashcard review
  :flashcard.review/finished "Concluído! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "A reciclagem está vazia."
  :storage.recycle/page-deleted-at "Página eliminada {1}"
  :storage.recycle/restore "Restaurar"
+ :storage.recycle/retention-desc "As páginas e blocos eliminados ficam aqui até serem restaurados ou recolhidos automaticamente após 60 dias."
 
  ;; Account
  :account/authentication "Autenticação"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Ver problemas conhecidos"
  :bug-report.issue/action-title "Problemas no GitHub"
  :bug-report.issue/desc "Verifique se o seu problema já foi reportado"
+ :bug-report.issue/report-link "Reportar problema"
  :bug-report.issue/title "Problemas conhecidos"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Abrir como página"
  :sidebar.right/resize-handle "Manipulador de redimensionamento da barra lateral direita"
  :sidebar.right/toggle "Alternar barra lateral direita"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

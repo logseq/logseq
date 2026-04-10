@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Kanselleer"
  :ui/close "Sluit"
+ :ui/configure "Stel op"
  :ui/confirm "Bevestig"
  :ui/copy "Kopieer"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "beeld"
  :ui/label "Etiket"
  :ui/link "Skakel"
+ :ui/load-more "Laai meer"
  :ui/loading "Laai"
  :ui/login "Meld aan"
  :ui/logout "Meld af"
@@ -310,6 +312,8 @@
  :ui/remove-background "Verwyder agtergrond"
  :ui/run "Run"
  :ui/save "Stoor"
+ :ui/show-less "Wys minder"
+ :ui/show-more "Wys meer"
  :ui/skip "Skip"
  :ui/submit "Dien in"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Waar"
  :ui/type "Tipe"
  :ui/untitled "Titelloos"
+ :ui/use-current-time "Gebruik huidige tyd"
  :ui/yes "Ja"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Niet-ondersteunde reactie-emoji"
 
  ;; Search
+ :search/blank-input "Leë invoer"
  :search/full-text-placeholder "Voltekssoektog"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Geen resultate nie"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Grafiek verlaten mislukt"
  :graph/left "Grafiek verlaten"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "skakel" "skakels")))
  :graph/link-distance "Skakelafstand"
  :graph/local-graphs "Plaaslike grafieke"
  :graph/n-hops-from-selected-nodes "N hoppe van gekose nodusse"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Grafieknaam kan nie die volgende gereserveerde karakters bevat nie:"
  :graph/nodes "Nodusse"
  :graph/orphan-pages "Weesbladsye"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "bladsy" "bladsye")))
  :graph/pause-simulation "Onderbreek simulasie"
  :graph/preparing "berei voor"
  :graph/refresh-remote-graphs "Verfris afgeleë grafieke"
@@ -549,6 +557,7 @@
  :page/the-app "die toep"
  :page/try "Probeer"
  :page/unfavorite "Verwyder van gunstelinge"
+ :page/unknown "Onbekende bladsy"
  :page/updated-at "Opgedateer op"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Naam"
  :property/name-placeholder "Eienskapsnaam"
  :property/no-value "Geen {1}"
+ :property/nodes-with-property "Nodusse met eienskap"
  :property/overdue "Agterstallig"
  :property/private-built-in-not-usable "Privé ingebouwde eienskap is nie bruikbaar"
  :property/select-choice "Keuze kies"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Pictogram instellen"
  :property/set-placeholder "Stel {1}"
+ :property/set-property "Stel eienskap"
+ :property/set-tags "Stel etikette"
  :property/set-value "Stel waarde"
  :property/show-as-checkbox-on-node "Als selectievakje op knooppunt tonen"
  :property/show-as-checkbox-on-tagged-nodes "Als selectievakje op getagde knooppunten tonen"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "Links van blok"
  :property/ui-position-block-right "Rechts van blok"
  :property/ui-position-properties "Eienskappe"
+ :property/unset-property "Verwyder eienskap"
  :property/updated "Opgedateer"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Galeryaansig"
  :property.view-type/list "Lysaansig"
  :property.view-type/table "Tabelaansig"
+
+ ;; Class
+ :class/add-property "Voeg etiketeienskap by"
+ :class/tag-properties-desc "Etiket-eienskappe word geërf deur alle nodusse wat die etiket gebruik. Byvoorbeeld, elke #Task-nodus erf 'Status' en 'Priority'."
+ :class/tagged-nodes "Gemerkte nodusse"
 
  ;; Class built in
  :class.built-in/asset "Bate"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Voeg nuwe navraag by"
+ :flashcard/all-cards "Alle kaarte"
  :flashcard/select-cards "Kies kaarte"
  :flashcard/shortcut-tooltip "Sneltoets: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Jy kan \"{1}\" by enige blok voeg om dit in 'n kaart te verander, of \"/cloze\" gebruik om 'n paar clozes by te voeg."
  :flashcard.empty/title "Welkom by Flitskaarte"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Weer"
+ :flashcard.rating/again-desc "Ons het die antwoord verkeerd gehad. Dit beteken outomaties dat ons die kaart vergeet het. Dit is 'n geheueglips。"
+ :flashcard.rating/easy "Maklik"
+ :flashcard.rating/easy-desc "Die antwoord was korrek en ons het dit vinnig en met selfvertroue onthou, sonder geestelike inspanning。"
+ :flashcard.rating/good "Goed"
+ :flashcard.rating/good-desc "Die antwoord was korrek, maar dit het 'n bietjie geestelike inspanning gekos om dit te onthou。"
+ :flashcard.rating/hard "Moeilik"
+ :flashcard.rating/hard-desc "Die antwoord was korrek, maar ons was nie seker daarvan nie of dit het te lank geneem om dit te onthou."
 
  ;; Flashcard review
  :flashcard.review/finished "Klaar! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Herwinning is leeg."
  :storage.recycle/page-deleted-at "Bladsy uitgevee {1}"
  :storage.recycle/restore "Herstel"
+ :storage.recycle/retention-desc "Geskrapte bladsye en blokke bly hier totdat hulle herstel word of na 60 dae outomaties opgeskoon word."
 
  ;; Account
  :account/authentication "Verifikasie"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Bekende issues bekijken"
  :bug-report.issue/action-title "GitHub Issues"
  :bug-report.issue/desc "Controleer of uw probleem reeds gemeld is"
+ :bug-report.issue/report-link "Rapporteer probleem"
  :bug-report.issue/title "Bekende issues"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Maak oop as bladsy"
  :sidebar.right/resize-handle "Skeiding"
  :sidebar.right/toggle "Wissel regter sypaneel"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

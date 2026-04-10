@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Anuluj"
  :ui/close "Zamknij"
+ :ui/configure "Skonfiguruj"
  :ui/confirm "Potwierdź"
  :ui/copy "Kopiuj"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "obraz"
  :ui/label "Etykieta"
  :ui/link "Link"
+ :ui/load-more "Wczytaj więcej"
  :ui/loading "Ładowanie"
  :ui/login "Zaloguj się"
  :ui/logout "Wyloguj się"
@@ -310,6 +312,8 @@
  :ui/remove-background "Usuń tło"
  :ui/run "Run"
  :ui/save "Zapisz"
+ :ui/show-less "Pokaż mniej"
+ :ui/show-more "Pokaż więcej"
  :ui/skip "Skip"
  :ui/submit "Wyślij"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Prawda"
  :ui/type "Typ"
  :ui/untitled "Bez tytułu"
+ :ui/use-current-time "Użyj bieżącego czasu"
  :ui/yes "Tak"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Nieobsługiwane emoji reakcji"
 
  ;; Search
+ :search/blank-input "Puste wejście"
  :search/full-text-placeholder "Wyszukiwanie pełnotekstowe"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Brak wyników"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Nie udało się opuścić grafu"
  :graph/left "Opuszczono graf"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "link" "linków")))
  :graph/link-distance "Odległość linków"
  :graph/local-graphs "Lokalne grafy"
  :graph/n-hops-from-selected-nodes "N kroków od wybranych węzłów"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Nazwa grafu nie może zawierać następujących znaków zastrzeżonych:"
  :graph/nodes "Węzły"
  :graph/orphan-pages "Strony osierocone"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "strona" "stron")))
  :graph/pause-simulation "Wstrzymaj symulację"
  :graph/preparing "przygotowywanie"
  :graph/refresh-remote-graphs "Odśwież zdalne grafy"
@@ -549,6 +557,7 @@
  :page/the-app "aplikacja"
  :page/try "Spróbuj"
  :page/unfavorite "Usuń z ulubionych"
+ :page/unknown "Nieznana strona"
  :page/updated-at "Zaktualizowany"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Nazwa"
  :property/name-placeholder "Nazwa właściwości"
  :property/no-value "Brak {1}"
+ :property/nodes-with-property "Węzły z właściwością"
  :property/overdue "Zaległe"
  :property/private-built-in-not-usable "Prywatna wbudowana właściwość niedostępna"
  :property/select-choice "Wybierz opcję"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Ustaw ikonę"
  :property/set-placeholder "Ustaw {1}"
+ :property/set-property "Ustaw właściwość"
+ :property/set-tags "Ustaw tagi"
  :property/set-value "Ustaw wartość"
  :property/show-as-checkbox-on-node "Pokaż jako pole wyboru na węźle"
  :property/show-as-checkbox-on-tagged-nodes "Pokaż jako pole wyboru na węzłach z tagiem"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "Po lewej bloku"
  :property/ui-position-block-right "Po prawej bloku"
  :property/ui-position-properties "Właściwości"
+ :property/unset-property "Usuń właściwość"
  :property/updated "Zaktualizowano"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Widok galerii"
  :property.view-type/list "Widok listy"
  :property.view-type/table "Widok tabeli"
+
+ ;; Class
+ :class/add-property "Dodaj właściwość tagu"
+ :class/tag-properties-desc "Właściwości tagu są dziedziczone przez wszystkie węzły używające tego tagu. Na przykład każdy węzeł #Task dziedziczy 'Status' i 'Priority'."
+ :class/tagged-nodes "Otagowane węzły"
 
  ;; Class built in
  :class.built-in/asset "Zasób"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Dodaj nowe zapytanie"
+ :flashcard/all-cards "Wszystkie karty"
  :flashcard/select-cards "Wybierz karty"
  :flashcard/shortcut-tooltip "Skrót: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Możesz dodać „{1}” do dowolnego bloku, żeby zmienić go w fiszkę, albo wpisać „/cloze”, żeby dodać luki do uzupełnienia."
  :flashcard.empty/title "Witaj w Fiszkach"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Ponownie"
+ :flashcard.rating/again-desc "Odpowiedź była błędna. To automatycznie oznacza, że zapomnieliśmy tej karty. To luka w pamięci。"
+ :flashcard.rating/easy "Łatwe"
+ :flashcard.rating/easy-desc "Odpowiedź była poprawna i przypomnieliśmy ją sobie szybko oraz pewnie, bez wysiłku umysłowego。"
+ :flashcard.rating/good "Dobrze"
+ :flashcard.rating/good-desc "Odpowiedź była poprawna, ale wymagała pewnego wysiłku umysłowego, by ją sobie przypomnieć。"
+ :flashcard.rating/hard "Trudne"
+ :flashcard.rating/hard-desc "Odpowiedź była poprawna, ale nie byliśmy jej pewni lub przypomnienie sobie jej zajęło zbyt dużo czasu."
 
  ;; Flashcard review
  :flashcard.review/finished "Gotowe! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Kosz jest pusty."
  :storage.recycle/page-deleted-at "Strona usunięta {1}"
  :storage.recycle/restore "Przywróć"
+ :storage.recycle/retention-desc "Usunięte strony i bloki pozostają tutaj, dopóki nie zostaną przywrócone lub automatycznie usunięte po 60 dniach."
 
  ;; Account
  :account/authentication "Uwierzytelnianie"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Przeglądaj znane problemy"
  :bug-report.issue/action-title "Zgłoszenia na GitHub"
  :bug-report.issue/desc "Sprawdź, czy Twój problem nie został już zgłoszony"
+ :bug-report.issue/report-link "Zgłoś problem"
  :bug-report.issue/title "Znane problemy"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Otwórz jako stronę"
  :sidebar.right/resize-handle "Separator"
  :sidebar.right/toggle "Przełącz prawy panel"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
