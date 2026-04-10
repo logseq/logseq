@@ -2,16 +2,15 @@
   "Construct canonical forward and reverse outliner ops for history actions."
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.common.entity-plus :as entity-plus]))
+            [logseq.db.frontend.property :as db-property]))
 
-(def ^:private semantic-outliner-ops
+(def ^:api semantic-outliner-ops
   #{:save-block
     :insert-blocks
     :apply-template
@@ -24,19 +23,7 @@
     :delete-page
     :restore-recycled
     :recycle-delete-permanently
-    :set-block-property
-    :remove-block-property
-    :batch-set-property
-    :batch-remove-property
-    :delete-property-value
-    :batch-delete-property-value
-    :create-property-text-block
-    :upsert-property
-    :class-add-property
-    :class-remove-property
-    :upsert-closed-value
-    :add-existing-values-to-closed-values
-    :delete-closed-value})
+    :upsert-property})
 
 (def ^:private transient-block-keys
   #{:db/id
@@ -59,10 +46,11 @@
 (defn- stable-entity-ref
   [db x]
   (cond
-    (map? x) (let [eid (or (:db/id x)
-                           (when-let [id (:block/uuid x)]
-                             (:db/id (d/entity db [:block/uuid id]))))]
-               (stable-entity-ref db eid))
+    (or (map? x) (de/entity? x))
+    (let [eid (or (:db/id x)
+                  (when-let [id (:block/uuid x)]
+                    (:db/id (d/entity db [:block/uuid id]))))]
+      (stable-entity-ref db eid))
     (uuid? x)
     [:block/uuid x]
     (and (integer? x) (not (neg? x)))
@@ -93,6 +81,16 @@
     (vector? v) (stable-entity-ref db v)
     (or (set? v) (sequential? v)) (set (map #(stable-entity-ref db %) v))
     :else (stable-entity-ref db v)))
+
+(defn- sanitize-upsert-property-schema
+  [db schema]
+  (reduce-kv (fn [m k v]
+               (assoc m k
+                      (if (= :logseq.property/classes k)
+                        (sanitize-ref-value db v)
+                        v)))
+             {}
+             schema))
 
 (defn- sanitize-block-refs
   [refs]
@@ -229,13 +227,6 @@
   [db ids]
   (when-let [first-block (some->> ids first (d/entity db))]
     (resolve-target-and-sibling first-block)))
-
-(defn- stable-property-value
-  [db property-id v]
-  (let [property-type (some-> (d/entity db property-id) :logseq.property/type)]
-    (if (contains? db-property-type/all-ref-property-types property-type)
-      (sanitize-ref-value db v)
-      v)))
 
 (defn- created-block-uuids-from-tx-data
   [tx-data]
@@ -513,79 +504,12 @@
     (let [[root-id] args]
       [:recycle-delete-permanently [(stable-block-uuid db root-id)]])
 
-    :set-block-property
-    (let [[block-eid property-id v] args
-          property-id' (stable-entity-ref db property-id)]
-      [:set-block-property [(stable-entity-ref db block-eid)
-                            property-id'
-                            (stable-property-value db property-id' v)]])
-
-    :remove-block-property
-    (let [[block-eid property-id] args]
-      [:remove-block-property [(stable-entity-ref db block-eid)
-                               (stable-entity-ref db property-id)]])
-
-    :batch-set-property
-    (let [[block-ids property-id v opts] args
-          property-id' (stable-entity-ref db property-id)]
-      [:batch-set-property [(stable-id-coll db block-ids)
-                            property-id'
-                            (stable-property-value db property-id' v)
-                            opts]])
-
-    :batch-remove-property
-    (let [[block-ids property-id] args]
-      [:batch-remove-property [(stable-id-coll db block-ids)
-                               (stable-entity-ref db property-id)]])
-
-    :delete-property-value
-    (let [[block-eid property-id property-value] args
-          property-id' (stable-entity-ref db property-id)]
-      [:delete-property-value [(stable-entity-ref db block-eid)
-                               property-id'
-                               (stable-property-value db property-id' property-value)]])
-
-    :batch-delete-property-value
-    (let [[block-eids property-id property-value] args
-          property-id' (stable-entity-ref db property-id)]
-      [:batch-delete-property-value [(stable-id-coll db block-eids)
-                                     property-id'
-                                     (stable-property-value db property-id' property-value)]])
-
-    :create-property-text-block
-    (let [[block-id property-id value opts] args]
-      [:create-property-text-block [(stable-entity-ref db block-id)
-                                    (stable-entity-ref db property-id)
-                                    value
-                                    opts]])
-
     :upsert-property
     (let [[property-id schema opts] args
           property-id' (or (stable-entity-ref db property-id)
                            (property-ident-by-title db (:property-name opts))
                            (created-db-ident-from-tx-data tx-data))]
       [:upsert-property [property-id' schema opts]])
-
-    :class-add-property
-    (let [[class-id property-id] args]
-      [:class-add-property [(stable-entity-ref db class-id) (stable-entity-ref db property-id)]])
-
-    :class-remove-property
-    (let [[class-id property-id] args]
-      [:class-remove-property [(stable-entity-ref db class-id) (stable-entity-ref db property-id)]])
-
-    :upsert-closed-value
-    (let [[property-id opts] args]
-      [:upsert-closed-value [(stable-entity-ref db property-id) opts]])
-
-    :add-existing-values-to-closed-values
-    (let [[property-id values] args]
-      [:add-existing-values-to-closed-values [(stable-entity-ref db property-id) values]])
-
-    :delete-closed-value
-    (let [[property-id value-block-id] args]
-      [:delete-closed-value [(stable-entity-ref db property-id)
-                             (stable-block-ref-with-tx-data db tx-data value-block-id)]])
 
     [op args]))
 
@@ -639,154 +563,6 @@
                          {:block/uuid (:block/uuid before-ent)}
                          keys-to-restore)]
       [:save-block [inverse-block opts]])))
-
-(defn- property-ref-value
-  [db property-id value]
-  (let [property-type (some-> (d/entity db property-id) :logseq.property/type)]
-    (cond
-      ;; Number property values are stored as ref entities but the semantic op
-      ;; uses scalar content for undo/redo payloads.
-      (= :number property-type)
-      (let [to-content (fn [v]
-                         (if (some? (:db/id v))
-                           (or (db-property/property-value-content v) v)
-                           v))]
-        (cond
-          (set? value) (set (map to-content value))
-          (sequential? value) (mapv to-content value)
-          :else (to-content value)))
-
-      (contains? db-property-type/all-ref-property-types property-type)
-      (sanitize-ref-value db value)
-
-      :else
-      value)))
-
-(defn- block-property-value
-  [db block-id property-id]
-  ;; `get` lookup may include derived defaults.
-  (when-let [value (entity-plus/lookup-entity (d/entity db block-id) property-id)]
-    (property-ref-value db property-id value)))
-
-(defn- property-history-refs-from-tx-data
-  [db-before db-after tx-data block-ids property-id]
-  (let [target-block-ids (->> block-ids
-                              (keep (fn [block-id]
-                                      (:db/id (block-entity db-before block-id))))
-                              set)
-        target-property-id (some-> (d/entity db-before property-id) :db/id)
-        history-eid->block-id (reduce (fn [acc d]
-                                        (if (and (:added d)
-                                                 (= :logseq.property.history/block (:a d)))
-                                          (assoc acc (:e d) (:v d))
-                                          acc))
-                                      {}
-                                      tx-data)
-        history-eid->property-id (reduce (fn [acc d]
-                                           (if (and (:added d)
-                                                    (= :logseq.property.history/property (:a d)))
-                                             (assoc acc (:e d) (:v d))
-                                             acc))
-                                         {}
-                                         tx-data)]
-    (->> history-eid->block-id
-         (keep (fn [[history-eid history-block-id]]
-                 (when (and (contains? target-block-ids history-block-id)
-                            (= target-property-id (get history-eid->property-id history-eid))
-                            (nil? (d/entity db-before history-eid)))
-                   (stable-entity-ref db-after history-eid))))
-         distinct
-         vec
-         seq)))
-
-(defn- normalize-op-or-ops
-  [op-or-ops]
-  (cond
-    (nil? op-or-ops)
-    []
-
-    (and (sequential? op-or-ops)
-         (seq op-or-ops)
-         (sequential? (first op-or-ops)))
-    (vec op-or-ops)
-
-    :else
-    [op-or-ops]))
-
-(defn- prepend-history-cleanup-op
-  [cleanup-op op-or-ops]
-  (let [ops (normalize-op-or-ops op-or-ops)
-        ops' (if cleanup-op
-               (into [cleanup-op] ops)
-               ops)]
-    (seq ops')))
-
-(defn- property-history-cleanup-op
-  [db-before db-after tx-data block-ids property-id]
-  (when-let [history-refs (property-history-refs-from-tx-data
-                           db-before
-                           db-after
-                           tx-data
-                           block-ids
-                           property-id)]
-    [:delete-blocks [history-refs {}]]))
-
-(defn- restore-property-op
-  [before-value block-ref property-id {:keys [remove-when-nil?]}]
-  (if (nil? before-value)
-    (when remove-when-nil?
-      [:remove-block-property [block-ref property-id]])
-    [:set-block-property [block-ref property-id before-value]]))
-
-(defn- inverse-property-ops-for-blocks
-  [db-before block-ids property-id restore-opts]
-  (->> block-ids
-       (keep (fn [block-id]
-               (let [before-value (block-property-value db-before block-id property-id)
-                     block-ref (stable-entity-ref db-before block-id)]
-                 (restore-property-op before-value block-ref property-id restore-opts))))
-       vec
-       seq))
-
-(defn- inverse-property-change-op
-  [db-before db-after tx-data block-ids property-id restore-opts]
-  (let [cleanup-op (property-history-cleanup-op
-                    db-before
-                    db-after
-                    tx-data
-                    block-ids
-                    property-id)
-        inverse-ops (inverse-property-ops-for-blocks
-                     db-before
-                     block-ids
-                     property-id
-                     restore-opts)]
-    (prepend-history-cleanup-op cleanup-op inverse-ops)))
-
-(defn- inverse-property-op
-  [db-before db-after tx-data op args]
-  (case op
-    :set-block-property
-    (let [[block-id property-id _value] args]
-      (inverse-property-change-op
-       db-before db-after tx-data [block-id] property-id {:remove-when-nil? true}))
-
-    :remove-block-property
-    (let [[block-id property-id] args]
-      (inverse-property-change-op
-       db-before db-after tx-data [block-id] property-id {:remove-when-nil? false}))
-
-    :batch-set-property
-    (let [[block-ids property-id _value _opts] args]
-      (inverse-property-change-op
-       db-before db-after tx-data block-ids property-id {:remove-when-nil? true}))
-
-    :batch-remove-property
-    (let [[block-ids property-id _opts] args]
-      (inverse-property-change-op
-       db-before db-after tx-data block-ids property-id {:remove-when-nil? false}))
-
-    nil))
 
 (defn- build-insert-block-payload
   [db-before ent]
@@ -1030,47 +806,17 @@
                           (let [[page-uuid _opts] args]
                             (build-inverse-delete-page db-before page-uuid))
 
-                          :set-block-property
-                          (inverse-property-op db-before db-after tx-data op args)
-
-                          :remove-block-property
-                          (inverse-property-op db-before db-after tx-data op args)
-
-                          :batch-set-property
-                          (inverse-property-op db-before db-after tx-data op args)
-
-                          :batch-remove-property
-                          (inverse-property-op db-before db-after tx-data op args)
-
-                          :create-property-text-block
-                          (let [[_block-id _property-id _value opts] args
-                                new-block-id (:new-block-id opts)
-                                new-block-ref (cond
-                                                (vector? new-block-id)
-                                                new-block-id
-
-                                                (uuid? new-block-id)
-                                                [:block/uuid new-block-id]
-
-                                                :else
-                                                (stable-entity-ref db-before new-block-id))]
-                            (when new-block-ref
-                              [:delete-blocks [[new-block-ref] {}]]))
-
-                          :class-add-property
-                          (let [[class-id property-id] args]
-                            [:class-remove-property [(stable-entity-ref db-before class-id)
-                                                     (stable-entity-ref db-before property-id)]])
-
-                          :class-remove-property
-                          (let [[class-id property-id] args]
-                            [:class-add-property [(stable-entity-ref db-before class-id)
-                                                  (stable-entity-ref db-before property-id)]])
-
                           :upsert-property
                           (let [[property-id _schema _opts] args]
                             (when (qualified-keyword? property-id)
-                              [:delete-page [(common-uuid/gen-uuid :db-ident-block-uuid property-id) {}]]))
+                              (if-let [property (d/entity db-before property-id)]
+                                [:upsert-property
+                                 [property-id
+                                  (sanitize-upsert-property-schema
+                                   db-before
+                                   (db-property/get-property-schema (into {} property)))
+                                  {:property-name (:block/title property)}]]
+                                [:delete-page [(common-uuid/gen-uuid :db-ident-block-uuid property-id) {}]])))
 
                           nil)]
                     (if (and (sequential? inverse-entry)
@@ -1098,29 +844,55 @@
 
 (defn contains-transact-op?
   [ops]
-  (some (fn [[op]]
-          (= :transact op))
-        ops))
+  (let [ops' (cond
+               (nil? ops)
+               nil
+
+               (and (sequential? ops)
+                    (keyword? (first ops)))
+               [(vec ops)]
+
+               :else
+               ops)]
+    (some (fn [entry]
+            (and (sequential? entry)
+                 (= :transact (first entry))))
+          ops')))
+
+(defn- normalize-op-entries
+  [ops]
+  (let [ops' (some-> ops seq vec)]
+    (cond
+      (nil? ops')
+      nil
+
+      (and (keyword? (first ops'))
+           (vector? (second ops')))
+      [ops']
+
+      :else
+      ops')))
 
 (defn- canonicalize-explicit-outliner-ops
   [db tx-data ops]
-  (cond
-    (nil? ops)
+  (let [ops' (normalize-op-entries ops)]
+    (cond
+      (nil? ops')
     nil
 
-    (seq ops)
-    (->> ops
-         (mapcat (fn [op]
-                   (let [canonicalized-op (canonicalize-semantic-outliner-op db tx-data op)]
-                     (if (and (sequential? canonicalized-op)
-                              (sequential? (first canonicalized-op))
-                              (keyword? (ffirst canonicalized-op)))
-                       canonicalized-op
-                       [canonicalized-op]))))
-         vec)
+      (seq ops')
+      (->> ops'
+           (mapcat (fn [op]
+                     (let [canonicalized-op (canonicalize-semantic-outliner-op db tx-data op)]
+                       (if (and (sequential? canonicalized-op)
+                                (sequential? (first canonicalized-op))
+                                (keyword? (ffirst canonicalized-op)))
+                         canonicalized-op
+                         [canonicalized-op]))))
+           vec)
 
-    :else
-    nil))
+      :else
+      nil)))
 
 (defn- patch-inverse-delete-block-ops
   [inverse-outliner-ops forward-outliner-ops]
@@ -1157,8 +929,8 @@
 
 (defn- canonicalize-outliner-ops
   [db tx-meta tx-data]
-  (let [explicit-forward-ops (:db-sync/forward-outliner-ops tx-meta)
-        outliner-ops (:outliner-ops tx-meta)]
+  (let [explicit-forward-ops (normalize-op-entries (:db-sync/forward-outliner-ops tx-meta))
+        outliner-ops (normalize-op-entries (:outliner-ops tx-meta))]
     (cond
       (seq explicit-forward-ops)
       (canonicalize-explicit-outliner-ops db tx-data explicit-forward-ops)
@@ -1177,10 +949,6 @@
   [x]
   (and (integer? x)
        (not (neg? x))))
-
-(defn- unresolved-numeric-entity-id-coll?
-  [xs]
-  (some unresolved-numeric-entity-id? xs))
 
 (defn- numeric-id-in-ref-value?
   [v]
@@ -1244,96 +1012,11 @@
 
     nil))
 
-(defn- stale-numeric-id-in-structure-ops?
-  [op args]
-  (case op
-    :move-blocks
-    (let [[ids target-id _opts] args]
-      (or (unresolved-numeric-entity-id-coll? ids)
-          (unresolved-numeric-entity-id? target-id)))
-
-    :move-blocks-up-down
-    (let [[ids _up?] args]
-      (unresolved-numeric-entity-id-coll? ids))
-
-    :indent-outdent-blocks
-    (let [[ids _indent? _opts] args]
-      (unresolved-numeric-entity-id-coll? ids))
-
-    :delete-blocks
-    (let [[ids _opts] args]
-      (unresolved-numeric-entity-id-coll? ids))
-
-    nil))
-
-(defn- stale-numeric-id-in-property-ops?
-  [op args]
-  (case op
-    :set-block-property
-    (let [[block-id property-id _v] args]
-      (or (unresolved-numeric-entity-id? block-id)
-          (unresolved-numeric-entity-id? property-id)))
-
-    :remove-block-property
-    (let [[block-id property-id] args]
-      (or (unresolved-numeric-entity-id? block-id)
-          (unresolved-numeric-entity-id? property-id)))
-
-    :batch-set-property
-    (let [[block-ids property-id _v _opts] args]
-      (or (unresolved-numeric-entity-id-coll? block-ids)
-          (unresolved-numeric-entity-id? property-id)))
-
-    :batch-remove-property
-    (let [[block-ids property-id] args]
-      (or (unresolved-numeric-entity-id-coll? block-ids)
-          (unresolved-numeric-entity-id? property-id)))
-
-    :delete-property-value
-    (let [[block-id property-id _property-value] args]
-      (or (unresolved-numeric-entity-id? block-id)
-          (unresolved-numeric-entity-id? property-id)))
-
-    :batch-delete-property-value
-    (let [[block-ids property-id _property-value] args]
-      (or (unresolved-numeric-entity-id-coll? block-ids)
-          (unresolved-numeric-entity-id? property-id)))
-
-    :create-property-text-block
-    (let [[block-id property-id _value _opts] args]
-      (or (unresolved-numeric-entity-id? block-id)
-          (unresolved-numeric-entity-id? property-id)))
-
-    :class-add-property
-    (let [[class-id property-id] args]
-      (or (unresolved-numeric-entity-id? class-id)
-          (unresolved-numeric-entity-id? property-id)))
-
-    :class-remove-property
-    (let [[class-id property-id] args]
-      (or (unresolved-numeric-entity-id? class-id)
-          (unresolved-numeric-entity-id? property-id)))
-
-    :delete-closed-value
-    (let [[property-id value-block-id] args]
-      (or (unresolved-numeric-entity-id? property-id)
-          (unresolved-numeric-entity-id? value-block-id)))
-
-    nil))
-
 (defn- stale-numeric-id-in-schema-ops?
   [op args]
   (case op
     :upsert-property
     (let [[property-id _schema _opts] args]
-      (unresolved-numeric-entity-id? property-id))
-
-    :upsert-closed-value
-    (let [[property-id _opts] args]
-      (unresolved-numeric-entity-id? property-id))
-
-    :add-existing-values-to-closed-values
-    (let [[property-id _values] args]
       (unresolved-numeric-entity-id? property-id))
 
     nil))
@@ -1343,8 +1026,6 @@
   (and (not= :transact op)
        (boolean
         (or (stale-numeric-id-in-page-ops? db op args)
-            (stale-numeric-id-in-structure-ops? op args)
-            (stale-numeric-id-in-property-ops? op args)
             (stale-numeric-id-in-schema-ops? op args)))))
 
 (defn- assert-no-stale-numeric-ids!
@@ -1400,8 +1081,8 @@
                                (nil? explicit-inverse-outliner-ops)
                                nil
 
-                                 ;; Treat explicit transact placeholder as "no semantic inverse".
-                                 ;; Keep nil so semantic replay must fail-fast when required.
+                               ;; Treat explicit transact placeholder as "no semantic inverse".
+                               ;; Keep nil so semantic replay must fail-fast when required.
                                (= canonical-transact-op explicit-inverse-outliner-ops)
                                nil
 

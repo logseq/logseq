@@ -300,8 +300,7 @@
        {:id :selection-action-bar
         :root-props {:modal false}
         :content-props {:side "top"
-                        :class "!py-0 !px-0 !border-none"
-                        :modal? false}
+                        :class "!py-0 !px-0 !border-none"}
         :auto-side? false
         :align :start}))))
 
