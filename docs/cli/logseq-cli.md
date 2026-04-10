@@ -131,11 +131,15 @@ Debug commands:
   - exactly one of `--id`, `--uuid`, or `--ident` is required
   - if `--graph` is omitted, CLI falls back to current graph config
 
-Shell completion and examples:
+Utility commands:
 - `completion <zsh|bash>` - generate shell completion script to stdout
 - `example <command-or-prefix...>` - show runnable command examples for a command path or command prefix (phase 1 covers Graph Inspect and Edit commands)
   - exact selector example: `logseq example upsert page`
   - prefix selector example: `logseq example upsert`
+- `skill show` - print built-in `logseq-cli` skill markdown to stdout
+  - always prints raw markdown text, even when `--output json` or `--output edn` is set
+- `skill install` - install built-in skill to `./.agents/skills/logseq-cli/SKILL.md`
+- `skill install --global` - install built-in skill to `~/.agents/skills/logseq-cli/SKILL.md`
 
 Setup for zsh (add to `~/.zshrc`):
 ```bash
@@ -146,6 +150,18 @@ eval "$(logseq completion zsh)"
 Setup for bash (add to `~/.bashrc`):
 ```bash
 eval "$(logseq completion bash)"
+```
+
+Skill command examples:
+```bash
+# Print markdown content to stdout
+logseq skill show
+
+# Install for current working directory
+logseq skill install
+
+# Install for current user home directory
+logseq skill install --global
 ```
 
 Server ownership behavior:
@@ -299,6 +315,7 @@ Output formats:
     ```
 - Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. `list property` includes dedicated `TYPE` and `CARDINALITY` columns; `list node` includes a dedicated `TYPE` column (page/block) and page context columns for blocks. Search table columns are `ID` and `TITLE`. For `list page|tag|property|task|node` in human output, the `TITLE` column is display-width-aware (CJK-safe), defaults to max width `40`, and truncates overflow with `…`; set `:list-title-max-display-width` in `cli.edn` to override. JSON/EDN outputs keep full titles (no truncation). Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
 - `example` human output includes `Selector`, `Matched commands`, and `Examples` sections. Structured output (`json`/`edn`) includes `selector`, `matched-commands`, `examples`, and `message` fields under `data`.
+- `skill show` always prints raw markdown text to stdout, regardless of `--output` mode.
 - `sync download` progress lines are streamed to stdout only when progress is enabled. In `json`/`edn` mode, progress is disabled by default unless `--progress true` is provided.
 - JSON machine output preserves namespaced keyword semantics:
   - Namespaced keyword keys are emitted as canonical string keys in `namespace/name` form (for example `:block/title` -> `"block/title"`).

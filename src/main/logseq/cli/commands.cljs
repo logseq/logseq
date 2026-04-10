@@ -15,6 +15,7 @@
             [logseq.cli.command.search :as search-command]
             [logseq.cli.command.server :as server-command]
             [logseq.cli.command.show :as show-command]
+            [logseq.cli.command.skill :as skill-command]
             [logseq.cli.command.sync :as sync-command]
             [logseq.cli.command.upsert :as upsert-command]
             [logseq.cli.completion-generator :as completion-gen]
@@ -134,7 +135,8 @@
                debug-command/entries
                sync-command/entries
                auth-command/entries
-               completion-command/entries)))
+               completion-command/entries
+               skill-command/entries)))
 
 (def ^:private table
   (vec (concat base-table
@@ -591,6 +593,12 @@
          :action {:type :completion
                   :shell (or (:shell options) (first args))}}
 
+        :skill-show
+        (skill-command/build-show-action options)
+
+        :skill-install
+        (skill-command/build-install-action options)
+
         :example
         (example-command/build-action base-table cmds)
 
@@ -651,6 +659,8 @@
                                        {:status :ok
                                         :data {:message (completion-gen/generate-completions
                                                          (:shell action) table)}})
+                         :skill-show (skill-command/execute-skill-show action config)
+                         :skill-install (skill-command/execute-skill-install action config)
                          :example (example-command/execute-example action config)
                          :server-list (server-command/execute-list action config)
                          :server-status (server-command/execute-status action config)

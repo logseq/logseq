@@ -121,10 +121,11 @@
                 {:title "Authentication"
                  :commands #{"login" "logout"}}
                 {:title "Utilities"
-                 :commands #{"completion" "debug" "example"}
+                 :commands #{"completion" "debug" "example" "skill"}
                  :top-level-only? true
                  :desc-overrides {"debug" "Pull raw entity data for debugging"
-                                  "example" "Show command examples"}}]
+                                  "example" "Show command examples"
+                                  "skill" "Show/install built-in logseq-cli skill"}}]
         to-top-level-entries (fn [entries commands desc-overrides]
                                (->> commands
                                     sort
