@@ -697,6 +697,10 @@
  :editor.document-mode/title "Modo documento"
  :editor.document-mode/toggle-desc "Pulsa `D` o escribe {1} para alternar el modo documento"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Añadir a la página de hoy"
+ :editor.quick-add/title "Añadir rápido"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} opciones"
  :property/choose-tag "Elegir etiqueta"
  :property/choose-tags "Elegir etiquetas"
+ :property/clear-value "Borrar"
  :property/configure "Configurar"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Error al crear la propiedad."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "¿Habilitar valores múltiples?"
  :property/name "Nombre"
  :property/name-placeholder "Nombre de la propiedad"
- :property/no-value "Sin {1}"
  :property/nodes-with-property "Nodos con propiedad"
  :property/overdue "Vencido"
  :property/private-built-in-not-usable "Propiedad integrada privada no utilizable"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Seleccionar columna"
  :view.table/select-order "Seleccionar orden"
  :view.table/select-row "Seleccionar fila"
+ :view.table/selected-count "Seleccionados: {1}"
  :view.table/sort-ascending "Ascendente"
  :view.table/sort-descending "Descendente"
  :view.table/sort-groups-by "Ordenar grupos por"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Escritura de datos inválida."
- :storage/recycle "Papelera"
- :storage/recycle-readonly "Papelera (solo lectura)"
  :storage/sqlitedb-error "Error de SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Error de importación de SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Error al guardar SQLiteDB: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Bloque eliminado {1}"
  :storage.recycle/empty "La papelera está vacía."
  :storage.recycle/page-deleted-at "Página eliminada {1}"
+ :storage.recycle/readonly "Papelera (solo lectura)"
  :storage.recycle/restore "Restaurar"
  :storage.recycle/retention-desc "Las páginas y bloques eliminados permanecen aquí hasta que se restauren o se recojan automáticamente después de 60 días."
+ :storage.recycle/title "Papelera"
 
  ;; Account
  :account/authentication "Autenticación"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Buscar"
  :help.handbook/settings "Opciones"
  :help.handbook/shortcuts-count "{1} atajos"
+ :help.handbook/sync "Sincronización"
  :help.handbook/title "Ayuda"
  :help.handbook/topics "Temas"
  :help.handbook/users-online "usuarios en línea"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Añadir páginas existentes a la Biblioteca"
  :library/add-pages "Add pages"
+ :library/title "Biblioteca"
 
  ;; Shell
  :shell/input-command-title "Input command"

@@ -12,7 +12,7 @@
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
@@ -990,8 +990,8 @@
 
 (defn get-month-label
   [n]
-  (some->> n (nth month-values)
-           (name)))
+  (when (number? n)
+    (i18n/locale-format-date (js/Date. 2000 n 1) {:month "long"})))
 
 (rum/defc date-year-month-select
   [{:keys [name value onChange _children]}]
@@ -1013,8 +1013,8 @@
                      :size :sm}
                     (get-month-label value)))
       (shui/dropdown-menu-content
-       (for [[idx month] (medley/indexed month-values)
-             :let [label (clojure.core/name month)]]
+       (for [[idx _month] (medley/indexed month-values)
+             :let [label (get-month-label idx)]]
          (shui/dropdown-menu-checkbox-item
           {:checked (= value idx)
            :on-select (fn []
@@ -1032,6 +1032,8 @@
      :caption-layout "dropdown-buttons"
      :fromYear 1000
      :toYear 3000
+     :formatters {:formatWeekdayName (fn [weekday _]
+                                       (i18n/locale-format-date weekday {:weekday "short"}))}
      :components (cond-> {:Dropdown #(date-year-month-select (bean/bean %))}
                    del-btn? (assoc :Head #(DelDateButton on-delete)))
      :class-names {:months "" :root (when del-btn? "has-del-btn")}

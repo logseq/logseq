@@ -697,6 +697,10 @@
  :editor.document-mode/title "Mode dokumen"
  :editor.document-mode/toggle-desc "Klik `D` atau ketik {1} untuk beralih mode dokumen"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Tambahkan ke halaman hari ini"
+ :editor.quick-add/title "Tambah cepat"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} pilihan"
  :property/choose-tag "Pilih tag"
  :property/choose-tags "Pilih tag"
+ :property/clear-value "Kosongkan"
  :property/configure "Konfigurasi"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Gagal membuat properti."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Aktifkan nilai ganda?"
  :property/name "Nama"
  :property/name-placeholder "Nama properti"
- :property/no-value "Tidak ada {1}"
  :property/nodes-with-property "Node dengan properti"
  :property/overdue "Terlambat"
  :property/private-built-in-not-usable "Properti bawaan privat tidak dapat digunakan"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Pilih kolom"
  :view.table/select-order "Pilih urutan"
  :view.table/select-row "Pilih baris"
+ :view.table/selected-count "Dipilih: {1}"
  :view.table/sort-ascending "Naik"
  :view.table/sort-descending "Turun"
  :view.table/sort-groups-by "Urutkan grup berdasarkan"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Penulisan data tidak valid."
- :storage/recycle "Tempat Sampah"
- :storage/recycle-readonly "Tempat sampah (hanya-baca)"
  :storage/sqlitedb-error "Kesalahan SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Kesalahan impor SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Kesalahan penyimpanan SQLiteDB: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Blok dihapus {1}"
  :storage.recycle/empty "Tempat Sampah kosong."
  :storage.recycle/page-deleted-at "Halaman dihapus {1}"
+ :storage.recycle/readonly "Tempat sampah (hanya-baca)"
  :storage.recycle/restore "Pulihkan"
  :storage.recycle/retention-desc "Halaman dan blok yang dihapus tetap di sini sampai dipulihkan atau dibersihkan otomatis setelah 60 hari."
+ :storage.recycle/title "Tempat Sampah"
 
  ;; Account
  :account/authentication "Autentikasi"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Cari"
  :help.handbook/settings "Pengaturan"
  :help.handbook/shortcuts-count "{1} pintasan"
+ :help.handbook/sync "Sinkronisasi"
  :help.handbook/title "Panduan"
  :help.handbook/topics "Topik"
  :help.handbook/users-online "pengguna online"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Tambahkan halaman yang ada ke Pustaka"
  :library/add-pages "Add pages"
+ :library/title "Pustaka"
 
  ;; Shell
  :shell/input-command-title "Input command"

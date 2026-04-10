@@ -1543,7 +1543,7 @@
       (macro-function-cp config arguments)
 
       (= name "namespace")
-      [:div.warning (t :block.macro/namespace-deprecated common-config/library-page-name)]
+      [:div.warning (t :block.macro/namespace-deprecated (t :library/title))]
 
       (= name "youtube")
       (when-let [url (first arguments)]
@@ -2130,6 +2130,7 @@
   [config block {:keys [*show-query?]}]
   (let [block' (db/entity (:db/id block))
         node-display-type (:logseq.property.node/display-type block')
+        display-title (:display-title config)
         db (db/get-db)
         query? (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block')]
     (cond
@@ -2139,6 +2140,12 @@
       (and (ldb/asset? block)
            (= :pdf (some-> (:logseq.property.asset/type block) string/lower-case keyword)))
       (asset-cp config block)
+
+      display-title
+      (text-block-title (dissoc config :display-title)
+                        (-> block
+                            (assoc :block/title display-title)
+                            (dissoc :block.temp/ast-title :block.temp/ast-body)))
 
       (:raw-title? config)
       (text-block-title (dissoc config :raw-title?) block)
@@ -3724,7 +3731,7 @@
                                (util/copy-to-clipboard! (.getValue cm))
                                (notification/show! (t :notification/copied) :success)))}
                 (ui/icon "copy")
-                "Copy")]
+                (t :ui/copy))]
               (lazy-editor/editor config (str (d/squuid)) attr code options)
               (let [options (:options options) block (:block config)]
                 (when (and (= language "clojure") (contains? (set options) ":results"))

@@ -610,7 +610,7 @@
                               (remove nil?)
                               (remove #(= :logseq.property/empty-placeholder %))
                               set)
-        clear-value (t :property/no-value (db-property/built-in-display-title property t))
+        clear-value (t :property/clear-value)
         clear-value-label [:div.flex.flex-row.items-center.gap-1.text-sm
                            (ui/icon "x" {:size 14})
                            [:div clear-value]]

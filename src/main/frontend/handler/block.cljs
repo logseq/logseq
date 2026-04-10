@@ -154,7 +154,7 @@
       (when-let [block-id (:block/uuid block)]
         (let [block (or (db/entity [:block/uuid block-id]) block)]
           (if (ldb/recycled? block)
-            (notification/show! (t :storage/recycle-readonly) :warning)
+            (notification/show! (t :storage.recycle/readonly) :warning)
             (p/do!
              (db-async/<get-block repo (:db/id block) {:children? false})
              (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))

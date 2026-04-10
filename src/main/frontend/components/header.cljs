@@ -158,7 +158,7 @@
                    :icon (ui/icon "color-swatch")}
 
                   (when (db/get-page common-config/recycle-page-name)
-                    {:title (t :storage/recycle)
+                    {:title (t :storage.recycle/title)
                      :options {:on-click page-handler/open-recycle!}
                      :icon (ui/icon "trash")})
 

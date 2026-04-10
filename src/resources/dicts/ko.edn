@@ -697,6 +697,10 @@
  :editor.document-mode/title "문서 모드"
  :editor.document-mode/toggle-desc "`D`를 클릭하거나 {1}을 입력하여 문서 모드 전환"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "오늘 페이지에 추가"
+ :editor.quick-add/title "빠른 추가"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} 선택 사항"
  :property/choose-tag "태그 선택"
  :property/choose-tags "태그 선택"
+ :property/clear-value "지우기"
  :property/configure "설정"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "속성 생성에 실패했습니다."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "복수 값을 활성화하시겠습니까?"
  :property/name "이름"
  :property/name-placeholder "속성 이름"
- :property/no-value "{1} 없음"
  :property/nodes-with-property "속성이 있는 노드"
  :property/overdue "기한 초과"
  :property/private-built-in-not-usable "프라이빗 내장 속성은 사용할 수 없습니다"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "열 선택"
  :view.table/select-order "정렬 선택"
  :view.table/select-row "행 선택"
+ :view.table/selected-count "선택됨: {1}"
  :view.table/sort-ascending "오름차순"
  :view.table/sort-descending "내림차순"
  :view.table/sort-groups-by "그룹 정렬 기준"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "유효하지 않은 데이터 쓰기입니다."
- :storage/recycle "휴지통"
- :storage/recycle-readonly "휴지통 (읽기 전용)"
  :storage/sqlitedb-error "SQLiteDB 오류: {1}"
  :storage/sqlitedb-import-error "SQLiteDB 가져오기 오류: {1}"
  :storage/sqlitedb-save-error "SQLiteDB 저장 오류: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "차단이 삭제되었습니다. {1}"
  :storage.recycle/empty "휴지통이 비어 있습니다."
  :storage.recycle/page-deleted-at "페이지가 삭제되었습니다. {1}"
+ :storage.recycle/readonly "휴지통 (읽기 전용)"
  :storage.recycle/restore "복원"
  :storage.recycle/retention-desc "삭제된 페이지와 블록은 복원되거나 60일 후 자동으로 정리될 때까지 여기에 남아 있습니다。"
+ :storage.recycle/title "휴지통"
 
  ;; Account
  :account/authentication "인증"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "검색"
  :help.handbook/settings "설정"
  :help.handbook/shortcuts-count "단축키 {1}개"
+ :help.handbook/sync "동기화"
  :help.handbook/title "도움말"
  :help.handbook/topics "주제"
  :help.handbook/users-online "온라인 사용자"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "기존 페이지를 라이브러리에 추가"
  :library/add-pages "Add pages"
+ :library/title "라이브러리"
 
  ;; Shell
  :shell/input-command-title "Input command"

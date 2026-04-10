@@ -697,6 +697,10 @@
  :editor.document-mode/title "Tryb dokumentu"
  :editor.document-mode/toggle-desc "Kliknij `D` lub wpisz {1}, aby przełączyć tryb dokumentu"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Dodaj do dzisiejszej strony"
+ :editor.quick-add/title "Szybkie dodawanie"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} możliwości wyboru"
  :property/choose-tag "Wybierz tag"
  :property/choose-tags "Wybierz tagi"
+ :property/clear-value "Wyczyść"
  :property/configure "Konfiguruj"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Nie udało się utworzyć właściwości."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Włączyć wiele wartości?"
  :property/name "Nazwa"
  :property/name-placeholder "Nazwa właściwości"
- :property/no-value "Brak {1}"
  :property/nodes-with-property "Węzły z właściwością"
  :property/overdue "Zaległe"
  :property/private-built-in-not-usable "Prywatna wbudowana właściwość niedostępna"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Wybierz kolumnę"
  :view.table/select-order "Wybierz kolejność"
  :view.table/select-row "Wybierz wiersz"
+ :view.table/selected-count "Wybrano: {1}"
  :view.table/sort-ascending "Rosnąco"
  :view.table/sort-descending "Malejąco"
  :view.table/sort-groups-by "Sortuj grupy wg"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Nieprawidłowy zapis danych."
- :storage/recycle "Kosz"
- :storage/recycle-readonly "Kosz (tylko do odczytu)"
  :storage/sqlitedb-error "Błąd SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Błąd importu SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Błąd zapisu bazy danych SQLiteDB: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Blok usunięty {1}"
  :storage.recycle/empty "Kosz jest pusty."
  :storage.recycle/page-deleted-at "Strona usunięta {1}"
+ :storage.recycle/readonly "Kosz (tylko do odczytu)"
  :storage.recycle/restore "Przywróć"
  :storage.recycle/retention-desc "Usunięte strony i bloki pozostają tutaj, dopóki nie zostaną przywrócone lub automatycznie usunięte po 60 dniach."
+ :storage.recycle/title "Kosz"
 
  ;; Account
  :account/authentication "Uwierzytelnianie"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Szukaj"
  :help.handbook/settings "Ustawienia"
  :help.handbook/shortcuts-count "{1} skrótów"
+ :help.handbook/sync "Synchronizacja"
  :help.handbook/title "Podręcznik"
  :help.handbook/topics "Tematy"
  :help.handbook/users-online "użytkowników online"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Dodaj istniejące strony do Biblioteki"
  :library/add-pages "Add pages"
+ :library/title "Biblioteka"
 
  ;; Shell
  :shell/input-command-title "Input command"

@@ -697,6 +697,10 @@
  :editor.document-mode/title "Mode document"
  :editor.document-mode/toggle-desc "Feu clic a `D` o escriviu {1} per alternar el mode document"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Afegeix a la pàgina d'avui"
+ :editor.quick-add/title "Addició ràpida"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} opcions"
  :property/choose-tag "Triar etiqueta"
  :property/choose-tags "Triar etiquetes"
+ :property/clear-value "Esborra"
  :property/configure "Configurar"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Error en crear la propietat."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Activar valors múltiples?"
  :property/name "Nom"
  :property/name-placeholder "Nom de la propietat"
- :property/no-value "Sense {1}"
  :property/nodes-with-property "Nodes amb propietat"
  :property/overdue "Endarrerit"
  :property/private-built-in-not-usable "Propietat integrada privada no utilitzable"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Seleccionar columna"
  :view.table/select-order "Seleccionar ordre"
  :view.table/select-row "Seleccionar fila"
+ :view.table/selected-count "Seleccionats: {1}"
  :view.table/sort-ascending "Ascendent"
  :view.table/sort-descending "Descendent"
  :view.table/sort-groups-by "Ordenar grups per"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Escriptura de dades no vàlida."
- :storage/recycle "Paperera"
- :storage/recycle-readonly "Paperera (només lectura)"
  :storage/sqlitedb-error "Error de SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Error d'importació de SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Error de desar SQLiteDB: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Bloqueig suprimit {1}"
  :storage.recycle/empty "La paperera és buida."
  :storage.recycle/page-deleted-at "Pàgina suprimida {1}"
+ :storage.recycle/readonly "Paperera (només lectura)"
  :storage.recycle/restore "Restaurar"
  :storage.recycle/retention-desc "Les pàgines i els blocs suprimits es queden aquí fins que es restauren o s'eliminen automàticament després de 60 dies."
+ :storage.recycle/title "Paperera"
 
  ;; Account
  :account/authentication "Autenticació"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Cerca"
  :help.handbook/settings "Configuració"
  :help.handbook/shortcuts-count "{1} dreceres"
+ :help.handbook/sync "Sincronització"
  :help.handbook/title "Manual"
  :help.handbook/topics "Temes"
  :help.handbook/users-online "usuaris en línia"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Afegeix pàgines existents a la Biblioteca"
  :library/add-pages "Add pages"
+ :library/title "Biblioteca"
 
  ;; Shell
  :shell/input-command-title "Input command"

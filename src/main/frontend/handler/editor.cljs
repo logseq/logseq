@@ -543,7 +543,7 @@
                   (db/entity [:block/uuid block-uuid]))]
       (when block
         (if (ldb/recycled? block)
-          (notification/show! (t :storage/recycle-readonly) :warning)
+          (notification/show! (t :storage.recycle/readonly) :warning)
           (let [last-block (when (not sibling?)
                              (let [children (:block/_parent block)
                                    blocks (db/sort-by-order children)
@@ -801,7 +801,7 @@
   (when (seq blocks)
     (if (or (some ldb/recycled? blocks)
             (ldb/recycled? target))
-      (notification/show! (t :storage/recycle-readonly) :warning)
+      (notification/show! (t :storage.recycle/readonly) :warning)
       (ui-outliner-tx/transact!
        {:outliner-op :move-blocks}
        (outliner-op/move-blocks! blocks target opts)))))
