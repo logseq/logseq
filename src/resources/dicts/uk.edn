@@ -217,6 +217,7 @@
  :keymap/used-by-action "Використуется {1}"
 
  ;; Command palette actions
+ :cmdk.action/apply-theme "Застосувати тему"
  :cmdk.action/copy-ref "Копіювати ссылку"
  :cmdk.action/create "Створити"
  :cmdk.action/filter "Фільтр"

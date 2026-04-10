@@ -217,6 +217,7 @@
  :keymap/used-by-action "Digunakan oleh {1}"
 
  ;; Command palette actions
+ :cmdk.action/apply-theme "Terapkan tema"
  :cmdk.action/copy-ref "Salin referensi"
  :cmdk.action/create "Buat"
  :cmdk.action/filter "Filter"

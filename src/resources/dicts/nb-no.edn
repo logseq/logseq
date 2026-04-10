@@ -217,6 +217,7 @@
  :keymap/used-by-action "Brukt av {1}"
 
  ;; Command palette actions
+ :cmdk.action/apply-theme "Bruk tema"
  :cmdk.action/copy-ref "Kopier referanse"
  :cmdk.action/create "Opprett"
  :cmdk.action/filter "Filter"

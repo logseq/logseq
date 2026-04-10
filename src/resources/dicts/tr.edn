@@ -217,6 +217,7 @@
  :keymap/used-by-action "Kullanan {1}"
 
  ;; Command palette actions
+ :cmdk.action/apply-theme "Temayı uygula"
  :cmdk.action/copy-ref "Referansı kopyala"
  :cmdk.action/create "Oluştur"
  :cmdk.action/filter "Filtre"

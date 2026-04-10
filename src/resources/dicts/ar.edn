@@ -217,6 +217,7 @@
  :keymap/used-by-action "مستخدَم بواسطة {1}"
 
  ;; Command palette actions
+ :cmdk.action/apply-theme "تطبيق السمة"
  :cmdk.action/copy-ref "نسخ المرجع"
  :cmdk.action/create "إنشاء"
  :cmdk.action/filter "تصفية"
