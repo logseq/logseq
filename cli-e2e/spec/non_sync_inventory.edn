@@ -154,4 +154,9 @@
   {:commands ["completion"]
    :options ["bash"
              "zsh"
-             "--shell"]}}}
+             "--shell"]}
+
+  :skill
+  {:commands ["skill show"
+              "skill install"]
+   :options ["--global"]}}}

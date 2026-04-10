@@ -797,6 +797,48 @@
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:server]}
 
+ {:id "skill-show-human"
+  :cmds ["{{cli}} skill show"]
+  :expect {:exit 0
+           :stdout-contains ["name: logseq-cli"
+                             "# Logseq CLI"]}
+  :covers {:commands ["skill show"]
+           :options {:skill []}}
+  :tags [:skill :smoke]}
+
+ {:id "skill-show-json-still-raw-markdown"
+  :cmds ["{{cli}} --output json skill show"]
+  :expect {:exit 0
+           :stdout-contains ["name: logseq-cli"
+                             "# Logseq CLI"]
+           :stdout-not-contains ["\"status\"" "\"data\""]}
+  :covers {:commands ["skill show"]
+           :options {:global ["--output"]}}
+  :tags [:skill]}
+
+ {:id "skill-install-local"
+  :cmds ["{{cli}} skill install >/dev/null"
+         "python3 -c 'import pathlib; p=pathlib.Path(\".agents/skills/logseq-cli/SKILL.md\"); print(\"installed\" if p.exists() else \"missing\")'"]
+  :expect {:exit 0
+           :stdout-contains ["installed"]}
+  :covers {:commands ["skill install"]
+           :options {:skill []}}
+  :cleanup ["rm -rf ./.agents/skills/logseq-cli"]
+  :tags [:skill]}
+
+ {:id "skill-install-global-preserves-other-skills"
+  :setup ["rm -rf ./tmp/cli-e2e-skill-home"
+          "mkdir -p ./tmp/cli-e2e-skill-home/.agents/skills/existing-skill"
+          "python3 -c 'import pathlib; pathlib.Path(\"./tmp/cli-e2e-skill-home/.agents/skills/existing-skill/SKILL.md\").write_text(\"keep\", encoding=\"utf8\")'"]
+  :cmds ["HOME=\"$(pwd)/tmp/cli-e2e-skill-home\" {{cli}} skill install --global >/dev/null"
+         "python3 -c 'import pathlib; home=pathlib.Path(\"./tmp/cli-e2e-skill-home\"); existing=(home / \".agents/skills/existing-skill/SKILL.md\").read_text(encoding=\"utf8\"); installed=(home / \".agents/skills/logseq-cli/SKILL.md\").exists(); print(\"ok\" if existing==\"keep\" and installed else \"bad\")'"]
+  :expect {:exit 0
+           :stdout-contains ["ok"]}
+  :covers {:commands ["skill install"]
+           :options {:skill ["--global"]}}
+  :cleanup ["rm -rf ./tmp/cli-e2e-skill-home"]
+  :tags [:skill]}
+
  {:id "completion-zsh"
   :cmds ["{{cli}} completion zsh"]
   :expect {:exit 0

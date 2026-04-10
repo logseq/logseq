@@ -13,6 +13,7 @@
             [logseq.cli.command.search :as search-command]
             [logseq.cli.command.server :as server-command]
             [logseq.cli.command.show :as show-command]
+            [logseq.cli.command.skill :as skill-command]
             [logseq.cli.command.upsert :as upsert-command]
             [logseq.cli.completion-generator :as gen]))
 
@@ -27,7 +28,8 @@
                show-command/entries
                doctor-command/entries
                debug-command/entries
-               completion-command/entries)))
+               completion-command/entries
+               skill-command/entries)))
 
 (def ^:private full-table
   (vec (concat base-table
@@ -190,7 +192,13 @@
     (testing "completion is a standalone group"
       (let [completion-entries (get groups "completion")]
         (is (= 1 (count completion-entries)))
-        (is (= ["completion"] (:cmds (first completion-entries))))))))
+        (is (= ["completion"] (:cmds (first completion-entries))))))
+    (testing "skill is a subcommand group"
+      (let [skill-entries (get groups "skill")
+            skill-cmds (set (map :cmds skill-entries))]
+        (is (= 2 (count skill-entries)))
+        (is (contains? skill-cmds ["skill" "show"]))
+        (is (contains? skill-cmds ["skill" "install"]))))))
 
 (deftest test-leaf-and-group-commands
   (let [leaves (gen/leaf-commands full-table)
@@ -200,7 +208,7 @@
     (testing "show and doctor are leaves"
       (is (contains? leaf-names "show"))
       (is (contains? leaf-names "doctor")))
-    (testing "graph, server, list, upsert, remove, search, debug, example are groups"
+    (testing "graph, server, list, upsert, remove, search, debug, example, skill are groups"
       (is (contains? group-names "graph"))
       (is (contains? group-names "server"))
       (is (contains? group-names "list"))
@@ -208,7 +216,8 @@
       (is (contains? group-names "remove"))
       (is (contains? group-names "search"))
       (is (contains? group-names "debug"))
-      (is (contains? group-names "example")))))
+      (is (contains? group-names "example"))
+      (is (contains? group-names "skill")))))
 
 (deftest test-spec->token
   (testing "boolean spec → :flag type"
@@ -268,7 +277,8 @@
       (is (string/includes? output "_logseq_search()"))
       (is (string/includes? output "_logseq_upsert()"))
       (is (string/includes? output "_logseq_debug()"))
-      (is (string/includes? output "_logseq_example()")))
+      (is (string/includes? output "_logseq_example()"))
+      (is (string/includes? output "_logseq_skill()")))
     (testing "output contains top-level dispatcher"
       (is (string/includes? output "_logseq()")))
     (testing "output ends with compdef _logseq logseq"
@@ -432,6 +442,11 @@
       (is (string/includes? output "--name"))
       (is (string/includes? output "--src"))
       (is (string/includes? output "--dst")))
+    (testing "skill subcommands include show/install and --global"
+      (is (string/includes? output "skill"))
+      (is (string/includes? output "show"))
+      (is (string/includes? output "install"))
+      (is (string/includes? output "--global")))
     (testing "boolean flags appear in wordlist"
       (is (string/includes? output "--verbose"))
       (is (string/includes? output "--profile")))

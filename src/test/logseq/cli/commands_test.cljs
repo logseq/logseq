@@ -86,6 +86,8 @@
       (is (string/includes? plain-summary "completion"))
       (is (string/includes? plain-summary "example"))
       (is (not (string/includes? plain-summary "example upsert")))
+      (is (string/includes? plain-summary "skill"))
+      (is (not (string/includes? plain-summary "skill show")))
       (is (string/includes? plain-summary "Path to db-worker data dir (default ~/logseq/graphs)"))
       (is (contains-bold? summary "list page"))
       (is (contains-bold? summary "list tag"))
@@ -122,6 +124,8 @@
       (is (contains-bold? summary "completion"))
       (is (contains-bold? summary "example"))
       (is (not (contains-bold? summary "example upsert")))
+      (is (contains-bold? summary "skill"))
+      (is (not (contains-bold? summary "skill show")))
       (is (contains-bold? summary "--help"))
       (is (contains-bold? summary "--graph"))
       (is (re-find #"\u001b\[[0-9;]*mCommands\u001b\[[0-9;]*m:" summary))
@@ -206,6 +210,17 @@
     (is (true? (:help? result)))
     (is (string/includes? plain-summary "debug pull"))
     (is (contains-bold? summary "debug pull"))))
+
+(deftest test-parse-args-help-skill-group
+  (let [result (binding [style/*color-enabled?* true]
+                 (commands/parse-args ["skill"]))
+        summary (:summary result)
+        plain-summary (strip-ansi summary)]
+    (is (true? (:help? result)))
+    (is (string/includes? plain-summary "skill show"))
+    (is (string/includes? plain-summary "skill install"))
+    (is (contains-bold? summary "skill show"))
+    (is (contains-bold? summary "skill install"))))
 
 (deftest test-parse-args-help-graph-backup-group
   (let [result (binding [style/*color-enabled?* true]
@@ -294,7 +309,7 @@
   (testing "all groups show group help with -h and --help"
     ;; query and example are excluded: they are both groups and exact commands,
     ;; so -h shows their command help with options instead of group subcommand listing
-    (doseq [group ["graph" "server" "list" "upsert" "remove" "search" "sync" "debug"]
+    (doseq [group ["graph" "server" "list" "upsert" "remove" "search" "sync" "debug" "skill"]
             help-flag ["-h" "--help"]]
       (let [result (binding [style/*color-enabled?* true]
                      (commands/parse-args [group help-flag]))
@@ -1930,6 +1945,29 @@
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
 
+(deftest test-verb-subcommand-parse-skill
+  (testing "skill show parses"
+    (let [result (commands/parse-args ["skill" "show"])]
+      (is (true? (:ok? result)))
+      (is (= :skill-show (:command result)))))
+
+  (testing "skill install parses"
+    (let [result (commands/parse-args ["skill" "install"])]
+      (is (true? (:ok? result)))
+      (is (= :skill-install (:command result)))
+      (is (not (true? (get-in result [:options :global]))))))
+
+  (testing "skill install --global parses"
+    (let [result (commands/parse-args ["skill" "install" "--global"])]
+      (is (true? (:ok? result)))
+      (is (= :skill-install (:command result)))
+      (is (true? (get-in result [:options :global])))))
+
+  (testing "skill show rejects unknown option"
+    (let [result (commands/parse-args ["skill" "show" "--global"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
+
 (deftest test-verb-subcommand-parse-query
   (testing "query shows group help"
     (let [result (commands/parse-args ["query"])]
@@ -2303,6 +2341,36 @@
       (is (true? (:ok? result)))
       (is (= :example (get-in result [:action :type])))
       (is (= "upsert page" (get-in result [:action :selector]))))))
+
+(deftest test-build-action-skill
+  (testing "skill show builds local action"
+    (let [parsed {:ok? true
+                  :command :skill-show
+                  :options {}
+                  :args []}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :skill-show (get-in result [:action :type])))))
+
+  (testing "skill install builds local target by default"
+    (let [parsed {:ok? true
+                  :command :skill-install
+                  :options {}
+                  :args []}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :skill-install (get-in result [:action :type])))
+      (is (false? (get-in result [:action :global?])))))
+
+  (testing "skill install builds global target with --global"
+    (let [parsed {:ok? true
+                  :command :skill-install
+                  :options {:global true}
+                  :args []}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :skill-install (get-in result [:action :type])))
+      (is (true? (get-in result [:action :global?]))))))
 
 (deftest test-build-action-inspect-edit-add-upsert
   (testing "list page requires repo"
