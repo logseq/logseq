@@ -697,6 +697,10 @@
  :editor.document-mode/title "Режим документа"
  :editor.document-mode/toggle-desc "Натисніть `D` або введіть {1} для перемикання режиму документа"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Додати на сьогодні"
+ :editor.quick-add/title "Швидке додавання"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} варіантів"
  :property/choose-tag "Вибрати тег"
  :property/choose-tags "Вибрати теги"
+ :property/clear-value "Очистити"
  :property/configure "Налаштувати"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Не удалось створити властивість."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Увімкнути множественные значения?"
  :property/name "Назва"
  :property/name-placeholder "Имя властивості"
- :property/no-value "Немає {1}"
  :property/nodes-with-property "Вузли з властивістю"
  :property/overdue "Прострочено"
  :property/private-built-in-not-usable "Приватное вбудованое властивість недоступно"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Вибрати столбец"
  :view.table/select-order "Вибрати порядок"
  :view.table/select-row "Вибрати строку"
+ :view.table/selected-count "Вибрано: {1}"
  :view.table/sort-ascending "По возрастанию"
  :view.table/sort-descending "По убыванию"
  :view.table/sort-groups-by "Сортировать группы по"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Недійсная запись данных."
- :storage/recycle "Кошик"
- :storage/recycle-readonly "Корзина (тільки чтение)"
  :storage/sqlitedb-error "Помилка SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Помилка імпорту SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Помилка збереження SQLiteDB: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Блок видалено {1}"
  :storage.recycle/empty "Кошик порожній."
  :storage.recycle/page-deleted-at "Сторінку видалено {1}"
+ :storage.recycle/readonly "Корзина (тільки чтение)"
  :storage.recycle/restore "Відновити"
  :storage.recycle/retention-desc "Видалені сторінки та блоки залишаються тут, доки їх не буде відновлено або автоматично очищено через 60 днів."
+ :storage.recycle/title "Кошик"
 
  ;; Account
  :account/authentication "Автентифікація"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Пошук"
  :help.handbook/settings "Налаштування"
  :help.handbook/shortcuts-count "{1} скорочень"
+ :help.handbook/sync "Синхронізація"
  :help.handbook/title "Довідник"
  :help.handbook/topics "Теми"
  :help.handbook/users-online "користувачів онлайн"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Додати наявні сторінки до Бібліотеки"
  :library/add-pages "Add pages"
+ :library/title "Бібліотека"
 
  ;; Shell
  :shell/input-command-title "Input command"

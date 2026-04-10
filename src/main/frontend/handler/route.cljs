@@ -103,6 +103,20 @@
                        (assoc :push push))]
                (redirect! m)))))))))
 
+(defn built-in-page-title
+  [page-name]
+  (case page-name
+    common-config/library-page-name
+    (t :library/title)
+
+    common-config/quick-add-page-name
+    (t :editor.quick-add/title)
+
+    common-config/recycle-page-name
+    (t :storage.recycle/title)
+
+    nil))
+
 (defn get-title
   [name path-params]
   (case name
@@ -139,7 +153,8 @@
           block-name' (when block-name
                         (if (common-util/uuid-string? block-name)
                           (t :ui/untitled)
-                          block-name))]
+                          (or (built-in-page-title block-name)
+                               block-name)))]
       (or block-name'
           block-title
           "Logseq"))

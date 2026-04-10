@@ -73,6 +73,13 @@
          (string/includes? key "/"))
     (assoc :parent (parse-parent-key key))))
 
+(defn- display-category-title
+  [{:keys [key title]}]
+  (case key
+    "1.getting_started" (t :help/start)
+    "2.sync" (t :help.handbook/sync)
+    title))
+
 (defn load-glide-assets!
   []
   (p/let [_ (util/css-load$ (str util/JS_ROOT "/glide/glide.core.min.css"))
@@ -102,7 +109,7 @@
       (when-let [category (get handbook-nodes category-key)]
         (for [topic (:children category)]
           (rum/with-key
-            (topic-card topic #(nav! [:topic-detail topic (:title category)] pane-state) nil)
+            (topic-card topic #(nav! [:topic-detail topic (display-category-title category)] pane-state) nil)
             (:key topic)))))]])
 
 (rum/defc media-render
@@ -201,7 +208,7 @@
                  topic chapters
                  (fn [k]
                    (when-let [chapter (get handbook-nodes k)]
-                     (nav! [:topic-detail chapter (:title parent)] pane-state))))])
+                     (nav! [:topic-detail chapter (display-category-title parent)] pane-state))))])
 
              ;; demos gallery
              (when-let [demos (:demos topic)]
@@ -242,7 +249,7 @@
                                                     (when-let [to-k (and (not (string/starts-with? link "http"))
                                                                          (parse-key-from-href link parent-key))]
                                                       (if-let [to (get handbook-nodes to-k)]
-                                                        (nav! [:topic-detail to (:title parent)] pane-state)
+                                                        (nav! [:topic-detail to (display-category-title parent)] pane-state)
                                                         (js/console.error "ERROR: handbook link resource not found: " to-k link))
                                                       (util/stop e))))))}]
 
@@ -252,9 +259,9 @@
 
                      [:div.controls.flex.justify-between.pt-4
                       [:div (when prev (ui/button [:span.flex.items-center (ui/icon "arrow-left") (t :help.handbook/prev-chapter)]
-                                                  :small? true :on-click #(nav! [:topic-detail (nth chapters prev) (:title parent)] pane-state)))]
+                                                  :small? true :on-click #(nav! [:topic-detail (nth chapters prev) (display-category-title parent)] pane-state)))]
                       [:div (when next (ui/button [:span.flex.items-center (t :help.handbook/next-chapter) (ui/icon "arrow-right")]
-                                                  :small? true :on-click #(nav! [:topic-detail (nth chapters next) (:title parent)] pane-state)))]]))])]]))))))
+                                                  :small? true :on-click #(nav! [:topic-detail (nth chapters next) (display-category-title parent)] pane-state)))]]))])]]))))))
 
 (rum/defc pane-dashboard
   [handbooks-nodes pane-state nav-to-pane!]
@@ -293,11 +300,11 @@
                          (do (state/toggle! :ui/handbooks-open?)
                              (state/open-right-sidebar!)
                              (state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings))
-                         (nav-to-pane! [:topics category title] pane-state))}
+                         (nav-to-pane! [:topics category (display-category-title category)] pane-state))}
            [:div.icon-wrap
             (ui/icon (or icon "chart-bubble") {:size 20})]
            [:div.text-wrap
-            [:strong title]
+            [:strong (display-category-title category)]
             (cond
               (vector? children)
               children

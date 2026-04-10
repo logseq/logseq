@@ -697,6 +697,10 @@
  :editor.document-mode/title "Dokumentmodus"
  :editor.document-mode/toggle-desc "Klicken Sie `D` oder geben Sie {1} ein, um den Dokumentmodus umzuschalten"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Zur heutigen Seite hinzufügen"
+ :editor.quick-add/title "Schnell hinzufügen"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} Auswahlmöglichkeiten"
  :property/choose-tag "Tag auswählen"
  :property/choose-tags "Tags auswählen"
+ :property/clear-value "Leeren"
  :property/configure "Konfigurieren"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Eigenschaftserstellung fehlgeschlagen."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Mehrfachwerte aktivieren?"
  :property/name "Name"
  :property/name-placeholder "Eigenschaftsname"
- :property/no-value "Kein {1}"
  :property/nodes-with-property "Knoten mit Eigenschaft"
  :property/overdue "Überfällig"
  :property/private-built-in-not-usable "Private eingebaute Eigenschaft ist nicht verwendbar"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Spalte auswählen"
  :view.table/select-order "Reihenfolge auswählen"
  :view.table/select-row "Zeile auswählen"
+ :view.table/selected-count "Ausgewählt: {1}"
  :view.table/sort-ascending "Aufsteigend"
  :view.table/sort-descending "Absteigend"
  :view.table/sort-groups-by "Gruppen sortieren nach"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Ungültiger Datenschreibvorgang."
- :storage/recycle "Papierkorb"
- :storage/recycle-readonly "Papierkorb (Nur Lesen)"
  :storage/sqlitedb-error "SQLiteDB-Fehler: {1}"
  :storage/sqlitedb-import-error "SQLiteDB-Importfehler: {1}"
  :storage/sqlitedb-save-error "SQLiteDB-Speicherfehler: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Block gelöscht {1}"
  :storage.recycle/empty "Papierkorb ist leer."
  :storage.recycle/page-deleted-at "Seite gelöscht {1}"
+ :storage.recycle/readonly "Papierkorb (Nur Lesen)"
  :storage.recycle/restore "Wiederherstellen"
  :storage.recycle/retention-desc "Gelöschte Seiten und Blöcke bleiben hier, bis sie wiederhergestellt oder nach 60 Tagen automatisch bereinigt werden."
+ :storage.recycle/title "Papierkorb"
 
  ;; Account
  :account/authentication "Authentifizierung"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Suche"
  :help.handbook/settings "Einstellungen"
  :help.handbook/shortcuts-count "{1} Tastenkürzel"
+ :help.handbook/sync "Synchronisierung"
  :help.handbook/title "Hilfe"
  :help.handbook/topics "Themen"
  :help.handbook/users-online "Nutzer online"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Vorhandene Seiten zur Bibliothek hinzufügen"
  :library/add-pages "Add pages"
+ :library/title "Bibliothek"
 
  ;; Shell
  :shell/input-command-title "Input command"

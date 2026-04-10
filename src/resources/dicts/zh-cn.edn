@@ -697,6 +697,10 @@
  :editor.document-mode/title "文档模式"
  :editor.document-mode/toggle-desc "按 `D` 键或输入 {1} 切换文档模式"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "添加到今天"
+ :editor.quick-add/title "快速添加"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "高级查询"
  :editor.slash/advanced-query-desc "创建一个高级查询块"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} 个选项"
  :property/choose-tag "选择标签"
  :property/choose-tags "选择标签"
+ :property/clear-value "清空"
  :property/configure "配置属性"
  :property/convert-page-to-property "将“{1}”转换为属性"
  :property/create-error "创建属性失败。"
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "此操作不可撤销，确认要更改此属性为多值吗？"
  :property/name "属性名称"
  :property/name-placeholder "名称"
- :property/no-value "无“{1}”"
  :property/nodes-with-property "具有该属性的节点"
  :property/overdue "已逾期"
  :property/private-built-in-not-usable "这是一个私有内置属性，不能使用。"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "选择"
  :view.table/select-order "选择排序"
  :view.table/select-row "选择行"
+ :view.table/selected-count "已选中：{1}"
  :view.table/sort-ascending "升序排列"
  :view.table/sort-descending "降序排列"
  :view.table/sort-groups-by "分组排序依据"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "无效数据写入。"
- :storage/recycle "回收站"
- :storage/recycle-readonly "回收站是只读的。"
  :storage/sqlitedb-error "SQLiteDB 错误：{1}"
  :storage/sqlitedb-import-error "SQLiteDB 导入错误：{1}"
  :storage/sqlitedb-save-error "SQLiteDB 保存错误：{1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "块已删除 {1}"
  :storage.recycle/empty "回收站为空。"
  :storage.recycle/page-deleted-at "页面已删除 {1}"
+ :storage.recycle/readonly "回收站是只读的。"
  :storage.recycle/restore "恢复"
  :storage.recycle/retention-desc "已删除的页面和块会保留在此处，直到被恢复或在 60 天后被自动垃圾回收。"
+ :storage.recycle/title "回收站"
 
  ;; Account
  :account/authentication "身份验证"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "搜索"
  :help.handbook/settings "设置"
  :help.handbook/shortcuts-count "{1} 个快捷键"
+ :help.handbook/sync "同步"
  :help.handbook/title "帮助"
  :help.handbook/topics "主题"
  :help.handbook/users-online "位在线用户"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "图标"
 
  ;; Library
- :library/add-existing-pages "将现有页面添加到 Library"
+ :library/add-existing-pages "将现有页面添加到页面库"
  :library/add-pages "添加页面"
+ :library/title "页面库"
 
  ;; Shell
  :shell/input-command-title "输入命令"

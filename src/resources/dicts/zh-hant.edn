@@ -697,6 +697,10 @@
  :editor.document-mode/title "文件模式"
  :editor.document-mode/toggle-desc "點擊 `D` 或輸入 {1} 切換文件模式"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "加入今天"
+ :editor.quick-add/title "快速新增"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} 個選項"
  :property/choose-tag "選擇標籤"
  :property/choose-tags "選擇標籤"
+ :property/clear-value "清空"
  :property/configure "設定屬性"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "建立屬性失敗。"
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "此操作無法復原，確認要將此屬性改為多值嗎？"
  :property/name "屬性名稱"
  :property/name-placeholder "名稱"
- :property/no-value "無 {1}"
  :property/nodes-with-property "具有屬性的節點"
  :property/overdue "已逾期"
  :property/private-built-in-not-usable "這是私有內建屬性，不能使用。"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "選擇"
  :view.table/select-order "選擇排序"
  :view.table/select-row "選取列"
+ :view.table/selected-count "已選取：{1}"
  :view.table/sort-ascending "升冪排序"
  :view.table/sort-descending "降冪排序"
  :view.table/sort-groups-by "分組排序依據"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "無效資料寫入。"
- :storage/recycle "資源回收筒"
- :storage/recycle-readonly "回收站是唯讀的。"
  :storage/sqlitedb-error "SQLiteDB 錯誤：{1}"
  :storage/sqlitedb-import-error "SQLiteDB 匯入錯誤：{1}"
  :storage/sqlitedb-save-error "SQLiteDB 儲存錯誤：{1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "塊已刪除 {1}"
  :storage.recycle/empty "資源回收筒是空的。"
  :storage.recycle/page-deleted-at "頁面已刪除 {1}"
+ :storage.recycle/readonly "回收站是唯讀的。"
  :storage.recycle/restore "還原"
  :storage.recycle/retention-desc "已刪除的頁面與區塊會保留在這裡，直到被還原或在 60 天後自動垃圾回收。"
+ :storage.recycle/title "資源回收筒"
 
  ;; Account
  :account/authentication "身份驗證"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "搜尋"
  :help.handbook/settings "設定"
  :help.handbook/shortcuts-count "{1} 個快捷鍵"
+ :help.handbook/sync "同步"
  :help.handbook/title "說明"
  :help.handbook/topics "主題"
  :help.handbook/users-online "在線使用者"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "將現有頁面加入頁面庫"
  :library/add-pages "Add pages"
+ :library/title "頁面庫"
 
  ;; Shell
  :shell/input-command-title "Input command"

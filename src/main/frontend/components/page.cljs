@@ -274,7 +274,7 @@
        (t :property/set-property)))]])
 
 (rum/defc db-page-title
-  [page {:keys [sidebar? journals? container-id tag-dialog?]}]
+  [page {:keys [sidebar? journals? container-id tag-dialog? display-title]}]
   (let [with-actions? (not config/publishing?)]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class "title"
@@ -295,6 +295,7 @@
         :hide-title? sidebar?
         :sidebar? sidebar?
         :tag-dialog? tag-dialog?
+        :display-title display-title
         :hide-children? true
         :container-id container-id
         :show-tag-and-property-classes? true
@@ -427,6 +428,8 @@
                 (= title (date/journal-name)))
         home? (= :home (state/get-current-route))
         recycled? (ldb/recycled? page)
+        page-display-title (when (ldb/page? page)
+                             (route-handler/built-in-page-title (:block/title page)))
         show-tabs? (and (or class-page? (ldb/property? page)) (not tag-dialog?))]
     (if page
       (when (or title block?)
@@ -453,6 +456,7 @@
                                 {:sidebar? sidebar?
                                  :journals? journals?
                                  :container-id (:container-id state)
+                                 :display-title page-display-title
                                  :tag-dialog? tag-dialog?}))
                (lsp-pagebar-slot)])
 

@@ -697,6 +697,10 @@
  :editor.document-mode/title "Режим документа"
  :editor.document-mode/toggle-desc "Нажмите `D` или введите {1} для переключения режима документа"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Добавить на сегодня"
+ :editor.quick-add/title "Быстрое добавление"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} вариантов"
  :property/choose-tag "Выбрать тег"
  :property/choose-tags "Выбрать теги"
+ :property/clear-value "Очистить"
  :property/configure "Настроить"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Не удалось создать свойство."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Включить множественные значения?"
  :property/name "Имя"
  :property/name-placeholder "Имя свойства"
- :property/no-value "Нет {1}"
  :property/nodes-with-property "Узлы со свойством"
  :property/overdue "Просрочено"
  :property/private-built-in-not-usable "Приватное встроенное свойство недоступно"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Выбрать столбец"
  :view.table/select-order "Выбрать порядок"
  :view.table/select-row "Выбрать строку"
+ :view.table/selected-count "Выбрано: {1}"
  :view.table/sort-ascending "По возрастанию"
  :view.table/sort-descending "По убыванию"
  :view.table/sort-groups-by "Сортировать группы по"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Недопустимая запись данных."
- :storage/recycle "Корзина"
- :storage/recycle-readonly "Корзина (только чтение)"
  :storage/sqlitedb-error "Ошибка SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Ошибка импорта SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Ошибка сохранения SQLiteDB: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Блок удален {1}"
  :storage.recycle/empty "Корзина пуста."
  :storage.recycle/page-deleted-at "Страница удалена {1}"
+ :storage.recycle/readonly "Корзина (только чтение)"
  :storage.recycle/restore "Восстановить"
  :storage.recycle/retention-desc "Удалённые страницы и блоки остаются здесь, пока их не восстановят или они не будут автоматически очищены через 60 дней."
+ :storage.recycle/title "Корзина"
 
  ;; Account
  :account/authentication "Аутентификация"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Поиск"
  :help.handbook/settings "Настройки"
  :help.handbook/shortcuts-count "{1} горячих клавиш"
+ :help.handbook/sync "Синхронизация"
  :help.handbook/title "Справочник"
  :help.handbook/topics "Темы"
  :help.handbook/users-online "пользователей онлайн"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Добавить существующие страницы в Библиотеку"
  :library/add-pages "Add pages"
+ :library/title "Библиотека"
 
  ;; Shell
  :shell/input-command-title "Input command"

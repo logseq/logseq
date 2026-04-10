@@ -697,6 +697,10 @@
  :editor.document-mode/title "وضع المستند"
  :editor.document-mode/toggle-desc "انقر `D` أو اكتب {1} للتبديل إلى وضع المستند"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "أضف إلى اليوم"
+ :editor.quick-add/title "إضافة سريعة"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} الاختيارات"
  :property/choose-tag "اختر وسماً"
  :property/choose-tags "اختر وسوماً"
+ :property/clear-value "مسح"
  :property/configure "تكوين"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "فشل إنشاء الخاصية."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "تفعيل القيم المتعددة؟"
  :property/name "الاسم"
  :property/name-placeholder "اسم الخاصية"
- :property/no-value "لا يوجد {1}"
  :property/nodes-with-property "العُقد ذات الخاصية"
  :property/overdue "متأخر"
  :property/private-built-in-not-usable "خاصية مدمجة خاصة لا يمكن استخدامها"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "اختر عموداً"
  :view.table/select-order "اختر الترتيب"
  :view.table/select-row "اختر صفاً"
+ :view.table/selected-count "المحدد: {1}"
  :view.table/sort-ascending "تصاعدي"
  :view.table/sort-descending "تنازلي"
  :view.table/sort-groups-by "ترتيب المجموعات حسب"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "كتابة بيانات غير صالحة."
- :storage/recycle "سلة المحذوفات"
- :storage/recycle-readonly "سلة المهملات (للقراءة فقط)"
  :storage/sqlitedb-error "خطأ SQLiteDB: {1}"
  :storage/sqlitedb-import-error "خطأ في استيراد SQLiteDB: {1}"
  :storage/sqlitedb-save-error "خطأ في حفظ SQLiteDB: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "تم حذف الكتلة «{1}»"
  :storage.recycle/empty "سلة المحذوفات فارغة."
  :storage.recycle/page-deleted-at "تم حذف الصفحة «{1}»"
+ :storage.recycle/readonly "سلة المهملات (للقراءة فقط)"
  :storage.recycle/restore "استعادة"
  :storage.recycle/retention-desc "تبقى الصفحات والكتل المحذوفة هنا حتى تتم استعادتها أو يتم تنظيفها تلقائياً بعد 60 يوماً."
+ :storage.recycle/title "سلة المحذوفات"
 
  ;; Account
  :account/authentication "المصادقة"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "بحث"
  :help.handbook/settings "الإعدادات"
  :help.handbook/shortcuts-count "{1} اختصارات"
+ :help.handbook/sync "المزامنة"
  :help.handbook/title "الدليل"
  :help.handbook/topics "المواضيع"
  :help.handbook/users-online "مستخدمون متصلون"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "أضف الصفحات الموجودة إلى المكتبة"
  :library/add-pages "Add pages"
+ :library/title "المكتبة"
 
  ;; Shell
  :shell/input-command-title "Input command"

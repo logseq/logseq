@@ -697,6 +697,10 @@
  :editor.document-mode/title "Documentmodus"
  :editor.document-mode/toggle-desc "Klik op `D` of typ {1} om documentmodus te wisselen"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Toevoegen aan de pagina van vandaag"
+ :editor.quick-add/title "Snel toevoegen"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} keuzes"
  :property/choose-tag "Tag kiezen"
  :property/choose-tags "Tags kiezen"
+ :property/clear-value "Wissen"
  :property/configure "Configureren"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Eigenschap aanmaken mislukt."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Meerdere waarden inschakelen?"
  :property/name "Naam"
  :property/name-placeholder "Eigenschapsnaam"
- :property/no-value "Geen {1}"
  :property/nodes-with-property "Knooppunten met eigenschap"
  :property/overdue "Achterstallig"
  :property/private-built-in-not-usable "Privé ingebouwde eigenschap is niet bruikbaar"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Kolom selecteren"
  :view.table/select-order "Volgorde selecteren"
  :view.table/select-row "Rij selecteren"
+ :view.table/selected-count "Geselecteerd: {1}"
  :view.table/sort-ascending "Oplopend"
  :view.table/sort-descending "Aflopend"
  :view.table/sort-groups-by "Groepen sorteren op"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Ongeldige gegevensschrijving."
- :storage/recycle "Prullenbak"
- :storage/recycle-readonly "Prullenbak (alleen-lezen)"
  :storage/sqlitedb-error "SQLiteDB-fout: {1}"
  :storage/sqlitedb-import-error "SQLiteDB-importfout: {1}"
  :storage/sqlitedb-save-error "SQLiteDB-opslagfout: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Blok verwijderd {1}"
  :storage.recycle/empty "Prullenbak is leeg."
  :storage.recycle/page-deleted-at "Pagina verwijderd {1}"
+ :storage.recycle/readonly "Prullenbak (alleen-lezen)"
  :storage.recycle/restore "Herstellen"
  :storage.recycle/retention-desc "Verwijderde pagina's en blokken blijven hier totdat ze worden hersteld of na 60 dagen automatisch worden opgeschoond."
+ :storage.recycle/title "Prullenbak"
 
  ;; Account
  :account/authentication "Authenticatie"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Zoeken"
  :help.handbook/settings "Instellingen"
  :help.handbook/shortcuts-count "{1} sneltoetsen"
+ :help.handbook/sync "Synchronisatie"
  :help.handbook/title "Handboek"
  :help.handbook/topics "Onderwerpen"
  :help.handbook/users-online "gebruikers online"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Bestaande pagina's aan de Bibliotheek toevoegen"
  :library/add-pages "Add pages"
+ :library/title "Bibliotheek"
 
  ;; Shell
  :shell/input-command-title "Input command"

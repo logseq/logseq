@@ -697,6 +697,10 @@
  :editor.document-mode/title "Dokumentmodus"
  :editor.document-mode/toggle-desc "Klikk `D` eller skriv {1} for å veksle dokumentmodus"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Legg til på dagens side"
+ :editor.quick-add/title "Hurtigtillegg"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} valg"
  :property/choose-tag "Velg tagg"
  :property/choose-tags "Velg tagger"
+ :property/clear-value "Tøm"
  :property/configure "Konfigurer"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Egenskapsoppretting mislyktes."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Aktivere flere verdier?"
  :property/name "Navn"
  :property/name-placeholder "Egenskapsnavn"
- :property/no-value "Ingen {1}"
  :property/nodes-with-property "Noder med egenskap"
  :property/overdue "Forfalt"
  :property/private-built-in-not-usable "Privat innebygd egenskap kan ikke brukes"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Velg kolonne"
  :view.table/select-order "Velg rekkefølge"
  :view.table/select-row "Velg rad"
+ :view.table/selected-count "Valgt: {1}"
  :view.table/sort-ascending "Stigende"
  :view.table/sort-descending "Synkende"
  :view.table/sort-groups-by "Sorter grupper etter"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Ugyldig dataskriving."
- :storage/recycle "Papirkurv"
- :storage/recycle-readonly "Papirkurv (skrivebeskyttet)"
  :storage/sqlitedb-error "SQLiteDB-feil: {1}"
  :storage/sqlitedb-import-error "SQLiteDB import feil: {1}"
  :storage/sqlitedb-save-error "SQLiteDB-lagringsfeil: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Blokk slettet {1}"
  :storage.recycle/empty "Papirkurven er tom."
  :storage.recycle/page-deleted-at "Side slettet {1}"
+ :storage.recycle/readonly "Papirkurv (skrivebeskyttet)"
  :storage.recycle/restore "Gjenopprett"
  :storage.recycle/retention-desc "Slettede sider og blokker blir her til de gjenopprettes eller automatisk ryddes opp etter 60 dager."
+ :storage.recycle/title "Papirkurv"
 
  ;; Account
  :account/authentication "Autentisering"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Søk"
  :help.handbook/settings "Innstillinger"
  :help.handbook/shortcuts-count "{1} hurtigtaster"
+ :help.handbook/sync "Synkronisering"
  :help.handbook/title "Håndbok"
  :help.handbook/topics "Emner"
  :help.handbook/users-online "brukere pålogget"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Legg til eksisterende sider i Bibliotek"
  :library/add-pages "Add pages"
+ :library/title "Bibliotek"
 
  ;; Shell
  :shell/input-command-title "Input command"

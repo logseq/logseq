@@ -697,6 +697,10 @@
  :editor.document-mode/title "Modo documento"
  :editor.document-mode/toggle-desc "Clique `D` ou digite {1} para alternar o modo documento"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Adicionar à página de hoje"
+ :editor.quick-add/title "Adição rápida"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} escolhas"
  :property/choose-tag "Escolher tag"
  :property/choose-tags "Escolher tags"
+ :property/clear-value "Limpar"
  :property/configure "Configurar"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Falha ao criar a propriedade."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Habilitar valores múltiplos?"
  :property/name "Nome"
  :property/name-placeholder "Nome da propriedade"
- :property/no-value "Sem {1}"
  :property/nodes-with-property "Nós com propriedade"
  :property/overdue "Atrasado"
  :property/private-built-in-not-usable "Propriedade integrada privada não utilizável"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Selecionar coluna"
  :view.table/select-order "Selecionar ordem"
  :view.table/select-row "Selecionar linha"
+ :view.table/selected-count "Selecionados: {1}"
  :view.table/sort-ascending "Ascendente"
  :view.table/sort-descending "Descendente"
  :view.table/sort-groups-by "Ordenar grupos por"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Gravação de dados inválida."
- :storage/recycle "Lixeira"
- :storage/recycle-readonly "Lixeira (somente leitura)"
  :storage/sqlitedb-error "Erro SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Erro de importação SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Erro ao salvar SQLiteDB: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Bloco excluído {1}"
  :storage.recycle/empty "A lixeira está vazia."
  :storage.recycle/page-deleted-at "Página excluída {1}"
+ :storage.recycle/readonly "Lixeira (somente leitura)"
  :storage.recycle/restore "Restaurar"
  :storage.recycle/retention-desc "Páginas e blocos excluídos ficam aqui até serem restaurados ou coletados automaticamente após 60 dias."
+ :storage.recycle/title "Lixeira"
 
  ;; Account
  :account/authentication "Autenticação"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Pesquisar"
  :help.handbook/settings "Configurações"
  :help.handbook/shortcuts-count "{1} atalhos"
+ :help.handbook/sync "Sincronização"
  :help.handbook/title "Ajuda"
  :help.handbook/topics "Tópicos"
  :help.handbook/users-online "usuários online"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Adicionar páginas existentes à Biblioteca"
  :library/add-pages "Add pages"
+ :library/title "Biblioteca"
 
  ;; Shell
  :shell/input-command-title "Input command"

@@ -697,6 +697,10 @@
  :editor.document-mode/title "Modalità documento"
  :editor.document-mode/toggle-desc "Premi `D` o digita {1} per attivare/disattivare la modalità documento"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Aggiungi alla pagina di oggi"
+ :editor.quick-add/title "Aggiunta rapida"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} scelte"
  :property/choose-tag "Scegli tag"
  :property/choose-tags "Scegli tag"
+ :property/clear-value "Cancella"
  :property/configure "Configura"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Creazione proprietà fallita."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Abilitare valori multipli?"
  :property/name "Nome"
  :property/name-placeholder "Nome della proprietà"
- :property/no-value "Nessun {1}"
  :property/nodes-with-property "Nodi con proprietà"
  :property/overdue "Scaduto"
  :property/private-built-in-not-usable "Proprietà predefinita privata non utilizzabile"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Seleziona colonna"
  :view.table/select-order "Seleziona ordine"
  :view.table/select-row "Seleziona riga"
+ :view.table/selected-count "Selezionati: {1}"
  :view.table/sort-ascending "Crescente"
  :view.table/sort-descending "Decrescente"
  :view.table/sort-groups-by "Ordina gruppi per"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Scrittura dati non valida."
- :storage/recycle "Cestino"
- :storage/recycle-readonly "Cestino (solo lettura)"
  :storage/sqlitedb-error "Errore SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Errore di importazione SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Errore di salvataggio SQLiteDB: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Blocco eliminato {1}"
  :storage.recycle/empty "Il cestino è vuoto."
  :storage.recycle/page-deleted-at "Pagina eliminata {1}"
+ :storage.recycle/readonly "Cestino (solo lettura)"
  :storage.recycle/restore "Ripristina"
  :storage.recycle/retention-desc "Le pagine e i blocchi eliminati restano qui finché non vengono ripristinati o rimossi automaticamente dopo 60 giorni."
+ :storage.recycle/title "Cestino"
 
  ;; Account
  :account/authentication "Autenticazione"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Cerca"
  :help.handbook/settings "Impostazioni"
  :help.handbook/shortcuts-count "{1} scorciatoie"
+ :help.handbook/sync "Sincronizzazione"
  :help.handbook/title "Aiuto"
  :help.handbook/topics "Argomenti"
  :help.handbook/users-online "utenti online"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Aggiungi pagine esistenti alla Libreria"
  :library/add-pages "Add pages"
+ :library/title "Libreria"
 
  ;; Shell
  :shell/input-command-title "Input command"
