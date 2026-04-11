@@ -1564,13 +1564,6 @@
             :size :sm
             :on-click (fn [e]
                         (util/stop e)
-                        (state/pub-event! [:asset/show-preview value]))}
-           "View")
-          (shui/button
-           {:variant :outline
-            :size :sm
-            :on-click (fn [e]
-                        (util/stop e)
                         (show-grid! (or (.-currentTarget e) (rum/deref *el))))}
            "Swap")])
        [:div.w-full.cursor-pointer
