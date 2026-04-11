@@ -231,3 +231,27 @@
       (is (nil? (:logseq.property/deleted-at source')))
       (is (nil? (:logseq.property.recycle/original-page source')))
       (is (not= (:db/id recycle-page) (:db/id (:block/page source')))))))
+
+(deftest extend-selection-under-pointer-test
+  (let [calls (atom [])
+        block-dom-element #js {:id "ls-block-target"}
+        original-element-from-point (.-elementFromPoint js/document)]
+    (try
+      (set! (.-elementFromPoint js/document) (fn [_x _y] #js {:tagName "DIV"}))
+      (with-redefs [state/get-selection-start-block-or-first (constantly #js {:id "ls-block-start"})
+                    state/get-unsorted-selection-blocks (constantly [])
+                    state/get-selection-direction (constantly :down)
+                    util/rec-get-node (fn [_node class]
+                                        (when (= class "ls-block")
+                                          block-dom-element))
+                    editor/highlight-selection-area! (fn [block-id dom-block & {:keys [append?]}]
+                                                       (swap! calls conj [block-id dom-block append?]))]
+        (editor/track-selection-pointer! #js {:clientX 12
+                                              :clientY 34
+                                              :buttons 1})
+        (editor/extend-selection-under-pointer!)
+        (is (= [["ls-block-target" block-dom-element true]]
+               @calls)))
+      (finally
+        (set! (.-elementFromPoint js/document) original-element-from-point)
+        (editor/clear-selection-pointer!)))))

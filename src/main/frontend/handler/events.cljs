@@ -406,6 +406,9 @@
                   (db-async/<get-block (state/get-current-repo) id
                                        {:skip-refresh? false})) ids))))
 
+(defmethod handle :editor/extend-selection-under-pointer [_]
+  (editor-handler/extend-selection-under-pointer!))
+
 (defn run!
   []
   (let [chan (state/get-events-chan)]

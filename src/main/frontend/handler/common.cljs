@@ -38,6 +38,7 @@
                     (when @*scroll-timer
                       (js/clearTimeout @*scroll-timer))
                     (state/set-state! :ui/scrolling? true)
+                    (state/pub-event! [:editor/extend-selection-under-pointer])
                     (state/save-scroll-position! (util/scroll-top))
                     (state/save-main-container-position!
                      (-> (util/app-scroll-container-node)

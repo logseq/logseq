@@ -69,9 +69,21 @@
 
 (defonce *asset-uploading? (atom false))
 (defonce *asset-uploading-process (atom 0))
+(defonce ^:private *selection-pointer (atom nil))
 
 (def clear-selection! state/clear-selection!)
 (def edit-block! block-handler/edit-block!)
+
+(defn track-selection-pointer!
+  [^js e]
+  (when e
+    (reset! *selection-pointer {:x (.-clientX e)
+                                :y (.-clientY e)
+                                :buttons (.-buttons e)})))
+
+(defn clear-selection-pointer!
+  []
+  (reset! *selection-pointer nil))
 
 (defn- outliner-save-block!
   [block & {:as opts}]
@@ -1159,6 +1171,23 @@
                     (state/drop-selection-blocks-starts-with! end-block-node)
                     (state/conj-selection-block! blocks direction)))
               (state/exit-editing-and-set-selected-blocks! blocks direction))))))))
+
+(defn extend-selection-under-pointer!
+  []
+  (when-let [{:keys [x y buttons]} @*selection-pointer]
+    (when (and (= buttons 1)
+               (state/get-selection-start-block-or-first))
+      (when-let [target (.elementFromPoint js/document x y)]
+        (when-let [block-dom-element (util/rec-get-node target "ls-block")]
+          (let [selected-blocks (state/get-unsorted-selection-blocks)
+                selection-end (when (seq selected-blocks)
+                                (if (= :up (state/get-selection-direction))
+                                  (first selected-blocks)
+                                  (last selected-blocks)))]
+            (when-not (identical? selection-end block-dom-element)
+              (highlight-selection-area! (.-id block-dom-element)
+                                         block-dom-element
+                                         {:append? true}))))))))
 
 (defonce *action-bar-timeout (atom nil))
 
