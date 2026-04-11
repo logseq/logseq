@@ -1539,12 +1539,12 @@
             (shui/button
              {:variant :outline
               :size :sm
-              :class "gap-1 max-w-[240px]"
+              :class "gap-1 h-auto whitespace-normal text-left"
               :on-click (fn [e]
                           (util/stop e)
                           (state/pub-event! [:asset/show-preview value]))}
              (ui/icon "movie" {:size 14})
-             [:span.truncate (:block/title value)])
+             [:span (:block/title value)])
 
             :else
             (when-let [asset-cp (state/get-component :block/asset-cp)]
