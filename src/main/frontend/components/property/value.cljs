@@ -31,6 +31,7 @@
             [frontend.util.cursor :as cursor]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
@@ -1246,7 +1247,7 @@
                                           :align "start"}))}]
            (rum/with-key (page-cp opts value) (:db/id value))))
 
-       (contains? #{:node :class :property :page} type)
+       (contains? #{:node :class :property :page :asset} type)
        (when-let [reference (state/get-component :block/reference)]
          (when value (reference {:table-view? table-view?} (:block/uuid value))))
 
@@ -1448,6 +1449,91 @@
                               nil))))})
        value)]))
 
+(rum/defc asset-grid-popup-content
+  [block property {:keys [on-chosen]}]
+  (let [[assets set-assets!] (hooks/use-state nil)
+        repo (state/get-current-repo)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [asset-class (db/entity :logseq.class/Asset)
+               result (when asset-class
+                        (db-async/<get-tag-objects repo (:db/id asset-class)))
+               images (filter (fn [a]
+                                (contains? (common-config/img-formats)
+                                           (keyword (:logseq.property.asset/type a))))
+                              result)]
+         (set-assets! (vec images))))
+     [])
+    [:div.asset-picker-grid.p-3
+     {:style {:width 640 :max-height 480 :overflow "auto"}}
+     (cond
+       (nil? assets)
+       [:div.p-4.opacity-60 "Loading…"]
+
+       (empty? assets)
+       [:div.p-4.opacity-60 "No image assets found"]
+
+       :else
+       [:div.grid.gap-2
+        {:style {:grid-template-columns "repeat(4, minmax(0, 1fr))"}}
+        (for [asset assets]
+          [:button.asset-picker-cell.rounded.overflow-hidden.border.flex.items-center.justify-center.p-1.hover:bg-gray-03
+           {:key (str (:block/uuid asset))
+            :title (:block/title asset)
+            :style {:aspect-ratio "1 / 1"}
+            :on-click (fn []
+                        (shui/popup-hide!)
+                        (p/do!
+                         (db-property-handler/set-block-property!
+                          (:db/id block) (:db/ident property) (:db/id asset))
+                         (when on-chosen (on-chosen))))}
+           (when-let [asset-cp (state/get-component :block/asset-cp)]
+             [:div.flex.items-center.justify-center.w-full.h-full.overflow-hidden
+              (asset-cp {:disable-resize? true} asset)])])])]))
+
+(rum/defc asset-value-picker
+  [block property value opts]
+  (let [*el (hooks/use-ref nil)
+        show-grid! (fn [target]
+                     (shui/popup-show! target
+                                       (fn [] (asset-grid-popup-content block property opts))
+                                       {:align "start"
+                                        :auto-focus? true}))]
+    (shui/trigger-as
+     :div.jtrigger.flex.flex-1.w-full
+     {:ref *el
+      :tabIndex 0
+      :on-key-down (fn [e]
+                     (case (util/ekey e)
+                       ("Backspace" "Delete")
+                       (delete-block-property! block property)
+                       nil))}
+     (if (and value (:db/id value))
+       [:div.flex.items-center.gap-2.w-full.flex-wrap
+        (when-let [asset-cp (state/get-component :block/asset-cp)]
+          [:div.asset-value-thumb.flex-shrink-0.overflow-hidden.rounded
+           {:style {:max-width 120 :max-height 80}}
+           (asset-cp {:disable-resize? true} value)])
+        (shui/button
+         {:variant :outline
+          :size :sm
+          :on-click (fn [e]
+                      (util/stop e)
+                      (state/pub-event! [:asset/show-preview value]))}
+         "View")
+        (shui/button
+         {:variant :outline
+          :size :sm
+          :on-click (fn [e]
+                      (util/stop e)
+                      (show-grid! (or (.-currentTarget e) (rum/deref *el))))}
+         "Swap")]
+       [:div.w-full.cursor-pointer
+        {:on-click (fn [e]
+                     (util/stop e)
+                     (show-grid! (.-target e)))}
+        (property-empty-text-value property opts)]))))
+
 (rum/defcs property-scalar-value-aux < rum/static rum/reactive
   [state block property value* {:keys [editing? on-chosen]
                                 :as opts}]
@@ -1470,6 +1556,9 @@
 
       (= type :string)
       (single-string-input block property value (:table-view? opts))
+
+      (= type :asset)
+      (asset-value-picker block property value (assoc opts :editing? editing?))
 
       :else
       (if (and select-type?'

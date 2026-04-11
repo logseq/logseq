@@ -20,6 +20,9 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
+            [frontend.extensions.lightbox :as lightbox]
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
@@ -37,6 +40,8 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
@@ -333,6 +338,30 @@
    {:id :edit-external-asset-source-dialog
     :title (if asset-block (t :asset/edit-title) (t :asset/create-title))
     :center? true}))
+
+(defmethod events/handle :asset/show-preview [[_ asset]]
+  (when-let [asset-type-str (:logseq.property.asset/type asset)]
+    (let [asset-type (keyword asset-type-str)
+          image? (contains? (common-config/img-formats) asset-type)
+          pdf? (= :pdf asset-type)
+          file-name (str (:block/uuid asset) "." asset-type-str)
+          rel-path (path/path-join (str "../" common-config/local-assets-dir) file-name)]
+      (cond
+        image?
+        (p/let [url (assets-handler/<make-asset-url rel-path)]
+          (when url
+            (lightbox/preview-images!
+             [{:src url
+               :w (or (:logseq.property.asset/width asset) 1200)
+               :h (or (:logseq.property.asset/height asset) 800)}])))
+
+        pdf?
+        (p/let [url (assets-handler/<make-asset-url rel-path)]
+          (when-let [current (pdf-assets/inflate-asset rel-path {:block asset :href url})]
+            (state/set-current-pdf! current)))
+
+        :else
+        (route-handler/redirect-to-page! (:block/uuid asset))))))
 
 (defn ensure-user-rsa-keys-if-possible!
   []

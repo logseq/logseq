@@ -18,7 +18,7 @@
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
-  [:default :number :date :datetime :checkbox :url :node])
+  [:default :number :date :datetime :checkbox :url :node :asset])
 
 (def user-allowed-internal-property-types
   "Internal property types that users are allowed to store. These aren't available in the UI
@@ -63,7 +63,7 @@
 (def user-ref-property-types
   "User ref types. Property values that users see are stored in either
   :logseq.property/value or :block/title. :block/title is for all the page related types"
-  (into #{:date :node} value-ref-property-types))
+  (into #{:date :node :asset} value-ref-property-types))
 
 (assert (set/subset? user-ref-property-types
                      (set user-built-in-property-types))
@@ -144,6 +144,13 @@
   (when-let [ent (d/entity db val)]
     (some? (:block/title ent))))
 
+(defn- asset-entity?
+  [db val]
+  (when-let [ent (d/entity db val)]
+    (and (some? (:block/title ent))
+         (contains? (set (map :db/ident (:block/tags ent)))
+                    :logseq.class/Asset))))
+
 (defn- date?
   [db val]
   (when-let [ent (d/entity db val)]
@@ -208,7 +215,10 @@
                url-entity?]
     :node   [:fn
              {:error/message "should be a node with a title"}
-             node-entity?]}
+             node-entity?]
+    :asset  [:fn
+             {:error/message "should be an asset node"}
+             asset-entity?]}
    internal-validation-schemas))
 
 (assert (= (set (keys built-in-validation-schemas))
@@ -218,7 +228,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:default :url :number :date :node :entity :class :property :page})
+  #{:default :url :number :date :node :asset :entity :class :property :page})
 
 ;; Helper fns
 ;; ==========

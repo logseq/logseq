@@ -724,6 +724,7 @@
     :checkbox (t :property/type-checkbox)
     :url (t :property/type-url)
     :node (t :property/type-node)
+    :asset (t :property/type-asset)
     ((comp string/capitalize name) property-type)))
 
 (defn- handle-delete-property!

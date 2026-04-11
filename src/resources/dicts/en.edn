@@ -1342,6 +1342,7 @@
  :property/specify-node-tags "Specify node tags"
  :property/title-placeholder "title"
  :property/type "Property type"
+ :property/type-asset "Asset"
  :property/type-change-warning "Changing the property type clears some property configurations."
  :property/type-checkbox "Checkbox"
  :property/type-date "Date"
