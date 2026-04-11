@@ -1169,7 +1169,7 @@
   (testing "list asset parses with common list options"
     (let [result (commands/parse-args ["list" "asset"
                                        "--expand"
-                                       "--fields" "id,title,type,updated-at"
+                                       "--fields" "id,title,asset-type,size,updated-at"
                                        "--limit" "5"
                                        "--offset" "1"
                                        "--sort" "updated-at"
@@ -1177,7 +1177,7 @@
       (is (true? (:ok? result)))
       (is (= :list-asset (:command result)))
       (is (true? (get-in result [:options :expand])))
-      (is (= "id,title,type,updated-at" (get-in result [:options :fields])))
+      (is (= "id,title,asset-type,size,updated-at" (get-in result [:options :fields])))
       (is (= 5 (get-in result [:options :limit])))
       (is (= 1 (get-in result [:options :offset])))
       (is (= "updated-at" (get-in result [:options :sort])))
@@ -1271,6 +1271,12 @@
     (let [result (commands/parse-args ["list" "asset" "--sort" "wat"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "list asset accepts size sort field"
+    (let [result (commands/parse-args ["list" "asset" "--sort" "size"])]
+      (is (true? (:ok? result)))
+      (is (= :list-asset (:command result)))
+      (is (= "size" (get-in result [:options :sort])))))
 
   (testing "list task rejects invalid priority"
     (let [result (commands/parse-args ["list" "task" "--priority" "wat"])

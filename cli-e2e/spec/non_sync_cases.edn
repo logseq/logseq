@@ -217,11 +217,12 @@
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "printf 'asset-content' > {{export-path-arg}}.png"]
   :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert asset --graph {{graph-arg}} --path {{export-path-arg}}.png --content 'Asset One' --target-page Home >/dev/null"
-         "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list asset --graph {{graph-arg}} --fields id,title,type --sort updated-at --order desc --limit 1"]
+         "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list asset --graph {{graph-arg}} --fields id,title,asset-type,size --sort updated-at --order desc --limit 1"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"
                                [:data :items 0 :block/title] "Asset One"
-                               [:data :items 0 :node/type] "block"}}
+                               [:data :items 0 :logseq.property.asset/type] "png"
+                               [:data :items 0 :logseq.property.asset/size] 13}}
   :covers {:commands ["upsert asset" "list asset"]
            :options {:global ["--config" "--graph" "--data-dir" "--output"]
                      :upsert ["--path" "--content" "--target-page"]

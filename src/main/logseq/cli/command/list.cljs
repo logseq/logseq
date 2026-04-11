@@ -175,7 +175,12 @@
     :fields {:multiple-values (keys list-node-field-map)}}))
 
 (def ^:private list-asset-field-map
-  list-node-field-map)
+  {"id" :db/id
+   "title" :block/title
+   "asset-type" :logseq.property.asset/type
+   "size" :logseq.property.asset/size
+   "updated-at" :block/updated-at
+   "created-at" :block/created-at})
 
 (def ^:private list-asset-spec
   (merge-with

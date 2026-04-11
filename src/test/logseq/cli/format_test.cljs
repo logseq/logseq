@@ -300,16 +300,20 @@
                                       :command :list-asset
                                       :data {:items [{:db/id 3
                                                       :block/title "Asset Node"
-                                                      :node/type "block"
-                                                      :block/page-id 1
-                                                      :block/page-title "Assets"
+                                                      :logseq.property.asset/type "md"
+                                                      :logseq.property.asset/size 2552
                                                       :block/created-at 40000
                                                       :block/updated-at 90000}]}}
                                      {:output-format nil
-                                      :now-ms 100000})]
-    (is (string/includes? result "TYPE"))
-    (is (string/includes? result "PAGE-ID"))
+                                      :now-ms 100000})
+        lines (string/split-lines result)]
+    (is (= "ID  TITLE       ASSET-TYPE  SIZE  UPDATED-AT  CREATED-AT" (first lines)))
     (is (string/includes? result "Asset Node"))
+    (is (string/includes? result "md"))
+    (is (string/includes? result "2552"))
+    (is (not (string/includes? (first lines) " TYPE  ")))
+    (is (not (string/includes? result "PAGE-ID")))
+    (is (not (string/includes? result "PAGE-TITLE")))
     (is (string/includes? result "Count: 1"))))
 
 (deftest test-human-output-list-title-max-display-width
@@ -351,9 +355,8 @@
             :list-asset
             {:db/id 6
              :block/title "ABCDEFGH"
-             :node/type "block"
-             :block/page-id 1
-             :block/page-title "Assets"
+             :logseq.property.asset/type "png"
+             :logseq.property.asset/size 2048
              :block/updated-at 90000
              :block/created-at 40000}]]]
     (testing label
