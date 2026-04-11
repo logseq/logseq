@@ -1489,7 +1489,9 @@
                          (when on-chosen (on-chosen))))}
            (when-let [asset-cp (state/get-component :block/asset-cp)]
              [:div.flex.items-center.justify-center.w-full.h-full.overflow-hidden.pointer-events-none
-              {:class "[&_*]:!max-w-full [&_*]:!max-h-full [&_img]:!w-auto [&_img]:!h-auto [&_img]:object-contain"}
+              {:class (str "[&_.asset-container]:!w-full [&_.asset-container]:!h-full "
+                           "[&_.asset-container]:flex [&_.asset-container]:items-center [&_.asset-container]:justify-center "
+                           "[&_img]:!w-auto [&_img]:!h-auto [&_img]:!max-w-full [&_img]:!max-h-full [&_img]:object-contain")}
               (asset-cp {:disable-resize? true} asset)])])])]))
 
 (rum/defc asset-value-picker
@@ -1513,7 +1515,9 @@
        [:div.flex.items-center.gap-2.w-full.flex-wrap
         (when-let [asset-cp (state/get-component :block/asset-cp)]
           [:div.asset-value-thumb.flex-shrink-0.rounded.overflow-hidden.flex.items-center.justify-center
-           {:class "[&_*]:!max-w-full [&_*]:!max-h-full [&_img]:!w-auto [&_img]:!h-auto [&_img]:object-contain"
+           {:class (str "[&_.asset-container]:!w-full [&_.asset-container]:!h-full "
+                        "[&_.asset-container]:flex [&_.asset-container]:items-center [&_.asset-container]:justify-center "
+                        "[&_img]:!w-auto [&_img]:!h-auto [&_img]:!max-w-full [&_img]:!max-h-full [&_img]:object-contain")
             :style {:width 80 :height 80}}
            (rum/with-key (asset-cp {:disable-resize? true} value)
              (str "asset-cp-" (:block/uuid value)))])
