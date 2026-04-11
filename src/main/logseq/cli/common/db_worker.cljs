@@ -147,13 +147,17 @@
 (defn- minimal-node-item
   [entity]
   (let [page (:block/page entity)
-        block? (some? page)]
+        block? (some? page)
+        asset-type (:logseq.property.asset/type entity)
+        asset-size (:logseq.property.asset/size entity)]
     (cond-> (assoc (minimal-list-item entity)
                    :node/type (if block? "block" "page")
                    :block/uuid (:block/uuid entity))
       (:db/ident entity) (assoc :db/ident (:db/ident entity))
       block? (assoc :block/page-id (:db/id page)
-                    :block/page-title (:block/title page)))))
+                    :block/page-title (:block/title page))
+      (some? asset-type) (assoc :logseq.property.asset/type asset-type)
+      (some? asset-size) (assoc :logseq.property.asset/size asset-size))))
 
 (defn list-nodes
   "List ordinary nodes (pages and blocks) filtered by tags/properties."
