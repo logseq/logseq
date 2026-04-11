@@ -15,9 +15,9 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.asset :as db-asset]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
-            [promesa.core :as p]
-            [logseq.db.frontend.property :as db-property]))
+            [promesa.core :as p]))
 
 (def ^:private upsert-block-spec
   {:id {:desc "Source block db/id (forces update mode) [update only]"
@@ -947,11 +947,12 @@
   [action cfg block-ids]
   (if (seq block-ids)
     (p/let [task-tag-id (ensure-task-tag-id! cfg (:repo action))
-            update-properties (merge (or (:update-properties action) {})
-                                     (task-property-overrides action))
+            update-properties (task-property-overrides action)
             clear-properties (vec (distinct (or (:clear-properties action) [])))
-            _ (ensure-property-identifiers-exist! cfg (:repo action) (keys update-properties))
-            _ (ensure-property-identifiers-exist! cfg (:repo action) clear-properties)
+            ;; Currently only built-in properties is supported. If user properties are
+            ;; supported, resolution needs to happen before this fn to avoid partial update failures
+            _ (assert (every? db-property/logseq-property? (keys update-properties)))
+            _ (assert (every? db-property/logseq-property? clear-properties))
             ops (append-tag-and-property-ops []
                                              block-ids
                                              {:update-tag-ids [task-tag-id]
@@ -1008,7 +1009,14 @@
   [action config]
   (-> (if (= :update (:mode action))
         (update-command/execute-update (assoc action :type :update-block) config)
-        (p/let [result (add-command/execute-add-block (assoc action :type :add-block) config)
+        (p/let [cfg (cli-server/ensure-server! config (:repo action))
+                ;; Resolve tags/properties before creating block so creation is
+                ;; skipped when resolution fails (e.g. tag doesn't exist)
+                _ (add-command/resolve-tags cfg (:repo action) (:update-tags action))
+                _ (add-command/resolve-properties
+                   cfg (:repo action) (:update-properties action)
+                   {:allow-non-built-in? true})
+                result (add-command/execute-add-block (assoc action :type :add-block) config)
                 created-ids (vec (or (get-in result [:data :result]) []))
                 _ (execute-extra-upsert-block-ops! action config created-ids)]
           {:status :ok
@@ -1022,11 +1030,6 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               update-by-id? (= :update (:mode action))
-              page (if update-by-id?
-                     (ensure-page-by-id! cfg (:repo action) (:id action))
-                     (ensure-page-entity! cfg (:repo action) (:page action)))
-              page-id (:db/id page)
-              block-ids [page-id]
               update-tags (add-command/resolve-tags cfg (:repo action) (:update-tags action))
               remove-tags (add-command/resolve-tags cfg (:repo action) (:remove-tags action))
               update-properties (add-command/resolve-properties cfg (:repo action) (:update-properties action)
@@ -1036,6 +1039,11 @@
                                                                           {:allow-non-built-in? true})
               _ (ensure-property-identifiers-exist! cfg (:repo action) (keys (or update-properties {})))
               _ (ensure-property-identifiers-exist! cfg (:repo action) remove-properties)
+              page (if update-by-id?
+                     (ensure-page-by-id! cfg (:repo action) (:id action))
+                     (ensure-page-entity! cfg (:repo action) (:page action)))
+              page-id (:db/id page)
+              block-ids [page-id]
               update-tag-ids (->> (or update-tags [])
                                   (map :db/id)
                                   (remove nil?)
