@@ -13,7 +13,8 @@
                      :help :boolean
                      :dry-run :boolean
                      :skip-build :boolean
-                     :verbose :boolean}}))
+                     :verbose :boolean
+                     :timings :boolean}}))
 
   unit-test
   {:doc "Run internal cli-e2e harness unit tests"

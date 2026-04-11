@@ -3,7 +3,8 @@
             [clojure.test :refer [deftest is testing]]
             [logseq.cli.e2e.cleanup :as cleanup]
             [logseq.cli.e2e.main :as main]
-            [logseq.cli.e2e.manifests :as manifests]))
+            [logseq.cli.e2e.manifests :as manifests]
+            [logseq.cli.e2e.sync-fixture :as sync-fixture]))
 
 (def sample-cases
   [{:id "global-help"
@@ -168,6 +169,48 @@
               [:cases :sync]]
              @suite-calls)))))
 
+(deftest run-sync-suite-uses-suite-fixture-once
+  (let [before-called (atom 0)
+        after-called (atom 0)
+        prepared-case-ids (atom [])
+        run-case-seen (atom [])
+        sync-inventory {:excluded-command-prefixes ["login" "logout"]
+                        :scopes {:sync {:commands ["sync upload" "sync status"]
+                                        :options []}}}
+        sync-cases [{:id "sync-upload"
+                     :cmds ["node static/logseq-cli.js sync upload"]
+                     :covers {:commands ["sync upload"]}}
+                    {:id "sync-status"
+                     :cmds ["node static/logseq-cli.js sync status"]
+                     :covers {:commands ["sync status"]}}]]
+    (with-redefs [sync-fixture/before-suite! (fn [_]
+                                               (swap! before-called inc)
+                                               {:suite :sync})
+                  sync-fixture/prepare-case (fn [case _suite-context]
+                                              (swap! prepared-case-ids conj (:id case))
+                                              (assoc case :prepared? true))
+                  sync-fixture/after-suite! (fn [_ _]
+                                              (swap! after-called inc))]
+      (let [result (main/run! {:suite :sync
+                               :inventory sync-inventory
+                               :cases sync-cases
+                               :skip-build true
+                               :run-command (fn [_]
+                                              {:exit 0
+                                               :out ""
+                                               :err ""})
+                               :run-case (fn [case _opts]
+                                           (swap! run-case-seen conj [(:id case) (:prepared? case)])
+                                           {:id (:id case)
+                                            :status :ok})})]
+        (is (= :ok (:status result)))))
+    (is (= 1 @before-called))
+    (is (= 1 @after-called))
+    (is (= ["sync-upload" "sync-status"] @prepared-case-ids))
+    (is (= [["sync-upload" true]
+            ["sync-status" true]]
+           @run-case-seen))))
+
 (deftest list-cases-defaults-to-non-sync
   (let [selected-suite (atom nil)
         output (with-out-str
@@ -212,6 +255,46 @@
     (is (string/includes? output "[2/2] ✓ graph-list"))
     (is (string/includes? output "Summary: 2 passed, 0 failed"))))
 
+(deftest test-timings-prints-step-details-and-slow-summary
+  (let [output (with-out-str
+                 (main/test! {:inventory complete-inventory
+                              :cases sample-cases
+                              :include ["smoke"]
+                              :skip-build true
+                              :timings true
+                              :run-command (fn [_]
+                                             {:exit 0
+                                              :out ""
+                                              :err ""})
+                              :run-case (fn [case _opts]
+                                          (if (= "global-help" (:id case))
+                                            {:id "global-help"
+                                             :status :ok
+                                             :timings [{:phase :setup
+                                                        :step-index 1
+                                                        :step-total 1
+                                                        :elapsed-ms 12
+                                                        :status :ok
+                                                        :cmd "setup-global"}
+                                                       {:phase :main
+                                                        :step-index 1
+                                                        :step-total 1
+                                                        :elapsed-ms 55
+                                                        :status :ok
+                                                        :cmd "main-global"}]}
+                                            {:id "graph-list"
+                                             :status :ok
+                                             :timings [{:phase :main
+                                                        :step-index 1
+                                                        :step-total 1
+                                                        :elapsed-ms 210
+                                                        :status :ok
+                                                        :cmd "main-graph-list"}]}))}))]
+    (is (string/includes? output "==> Step timing enabled (--timings)"))
+    (is (string/includes? output "step timings:"))
+    (is (string/includes? output "Slow steps (top 10):"))
+    (is (string/includes? output "main-graph-list"))))
+
 (deftest test-help-prints-usage-and-skips-execution
   (let [ran? (atom false)
         result (atom nil)
@@ -232,7 +315,8 @@
     (is (string/includes? output "Usage: bb -f cli-e2e/bb.edn test [options]"))
     (is (string/includes? output "--skip-build"))
     (is (string/includes? output "--include TAG"))
-    (is (string/includes? output "--case ID"))))
+    (is (string/includes? output "--case ID"))
+    (is (string/includes? output "--timings"))))
 
 (deftest test-sync-help-prints-usage-and-skips-execution
   (let [ran? (atom false)
@@ -254,7 +338,8 @@
     (is (string/includes? output "Usage: bb -f cli-e2e/bb.edn test-sync [options]"))
     (is (string/includes? output "--skip-build"))
     (is (string/includes? output "--include TAG"))
-    (is (string/includes? output "--case ID"))))
+    (is (string/includes? output "--case ID"))
+    (is (string/includes? output "--timings"))))
 
 (deftest test-single-case-enables-detailed-command-logging
   (let [command-opts (atom nil)
@@ -287,12 +372,16 @@
   (let [output (with-out-str (main/cleanup! {:help true}))]
     (is (string/includes? output "Usage: bb -f cli-e2e/bb.edn cleanup"))
     (is (string/includes? output "Terminate cli-e2e db-worker-node processes"))
+    (is (string/includes? output "Terminate db-sync server listeners on port 18080"))
     (is (string/includes? output "--dry-run"))))
 
 (deftest cleanup-prints-summary-and-returns-status
   (with-redefs [cleanup/cleanup-db-worker-processes! (fn [_] {:found-pids [101 202]
                                                                :killed-pids [101]
                                                                :failed-pids [202]})
+                cleanup/cleanup-db-sync-port-processes! (fn [_] {:found-pids [303]
+                                                                  :killed-pids [303]
+                                                                  :failed-pids []})
                 cleanup/cleanup-temp-graph-dirs! (fn [_] {:found-dirs ["/tmp/logseq-cli-e2e-a/graphs"
                                                                         "/tmp/logseq-cli-e2e-b/graphs"]
                                                            :removed-dirs ["/tmp/logseq-cli-e2e-a/graphs"]
@@ -302,12 +391,15 @@
                    (reset! result (main/cleanup! {})))]
       (is (= :ok (:status @result)))
       (is (= [101] (get-in @result [:processes :killed-pids])))
+      (is (= [303] (get-in @result [:db-sync-port-processes :killed-pids])))
       (is (= ["/tmp/logseq-cli-e2e-a/graphs"] (get-in @result [:temp-graphs :removed-dirs])))
       (is (string/includes? output "db-worker-node processes: found 2, killed 1, failed 1"))
+      (is (string/includes? output "db-sync server processes (port 18080): found 1, killed 1, failed 0"))
       (is (string/includes? output "temp graph directories: found 2, removed 1, failed 1")))))
 
 (deftest cleanup-dry-run-prints-summary-and-passes-option
   (let [process-opts (atom nil)
+        db-sync-opts (atom nil)
         dir-opts (atom nil)]
     (with-redefs [cleanup/cleanup-db-worker-processes! (fn [opts]
                                                           (reset! process-opts opts)
@@ -316,6 +408,13 @@
                                                            :would-kill-pids [101 202]
                                                            :killed-pids []
                                                            :failed-pids []})
+                  cleanup/cleanup-db-sync-port-processes! (fn [opts]
+                                                            (reset! db-sync-opts opts)
+                                                            {:dry-run? true
+                                                             :found-pids [303]
+                                                             :would-kill-pids [303]
+                                                             :killed-pids []
+                                                             :failed-pids []})
                   cleanup/cleanup-temp-graph-dirs! (fn [opts]
                                                      (reset! dir-opts opts)
                                                      {:dry-run? true
@@ -327,9 +426,12 @@
             output (with-out-str
                      (reset! result (main/cleanup! {:dry-run true})))]
         (is (= {:dry-run true} @process-opts))
+        (is (= {:dry-run true} @db-sync-opts))
         (is (= {:dry-run true} @dir-opts))
         (is (= :ok (:status @result)))
         (is (true? (get-in @result [:processes :dry-run?])))
+        (is (true? (get-in @result [:db-sync-port-processes :dry-run?])))
         (is (true? (get-in @result [:temp-graphs :dry-run?])))
         (is (string/includes? output "[dry-run] db-worker-node processes: found 2, would kill 2"))
+        (is (string/includes? output "[dry-run] db-sync server processes (port 18080): found 1, would kill 1"))
         (is (string/includes? output "[dry-run] temp graph directories: found 1, would remove 1"))))))
