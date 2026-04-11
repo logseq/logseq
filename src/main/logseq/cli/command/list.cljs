@@ -174,6 +174,16 @@
     :sort {:validate (set (keys list-node-field-map))}
     :fields {:multiple-values (keys list-node-field-map)}}))
 
+(def ^:private list-asset-field-map
+  list-node-field-map)
+
+(def ^:private list-asset-spec
+  (merge-with
+   merge
+   list-common-spec
+   {:sort {:validate (set (keys list-asset-field-map))}
+    :fields {:multiple-values (keys list-asset-field-map)}}))
+
 (def entries
   [(core/command-entry ["list" "page"] :list-page "List pages" list-page-spec
                        {:examples ["logseq list page --graph my-graph"
@@ -190,7 +200,10 @@
                                    "logseq list task --graph my-graph --content \"release\" --sort updated-at --order desc"]})
    (core/command-entry ["list" "node"] :list-node "List nodes" list-node-spec
                        {:examples ["logseq list node --graph my-graph --tags project,work"
-                                   "logseq list node --graph my-graph --properties status,priority --sort updated-at --order desc"]})])
+                                   "logseq list node --graph my-graph --properties status,priority --sort updated-at --order desc"]})
+   (core/command-entry ["list" "asset"] :list-asset "List assets" list-asset-spec
+                       {:examples ["logseq list asset --graph my-graph"
+                                   "logseq list asset --graph my-graph --limit 20 --sort updated-at --order desc"]})])
 
 (defn- parse-csv-option
   [value]
@@ -401,6 +414,35 @@
               sorted (apply-sort items sort-field order list-node-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
               final (apply-fields limited fields list-node-field-map)]
+        {:status :ok
+         :data {:items final}})))
+
+(def ^:private asset-tag-ident
+  :logseq.class/Asset)
+
+(defn- ensure-asset-tag-id!
+  [config repo]
+  (p/let [entity (transport/invoke config :thread-api/pull false
+                                   [repo [:db/id] [:db/ident asset-tag-ident]])]
+    (if-let [tag-id (:db/id entity)]
+      tag-id
+      (throw (ex-info "asset tag not found"
+                      {:code :asset-tag-not-found})))))
+
+(defn execute-list-asset
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              options (:options action)
+              asset-tag-id (ensure-asset-tag-id! cfg (:repo action))
+              worker-options (assoc options :tag-ids [asset-tag-id])
+              items (transport/invoke cfg :thread-api/cli-list-nodes false
+                                      [(:repo action) worker-options])
+              sort-field (effective-sort-field options)
+              order (or (:order options) "asc")
+              fields (parse-field-list (:fields options))
+              sorted (apply-sort items sort-field order list-asset-field-map)
+              limited (apply-offset-limit sorted (:offset options) (:limit options))
+              final (apply-fields limited fields list-asset-field-map)]
         {:status :ok
          :data {:items final}})))
 
