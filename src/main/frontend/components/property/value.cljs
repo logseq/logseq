@@ -1529,29 +1529,35 @@
                        (delete-block-property! block property)
                        nil))}
      (if (and value (:db/id value))
-       [:div.flex.items-center.gap-2.w-full.flex-wrap
-        (when-let [asset-cp (state/get-component :block/asset-cp)]
-          [:div.asset-value-thumb.flex-shrink-0.rounded.overflow-hidden.flex.items-center.justify-center
-           {:class (str "[&_.asset-container]:!w-full [&_.asset-container]:!h-full "
-                        "[&_.asset-container]:flex [&_.asset-container]:items-center [&_.asset-container]:justify-center "
-                        "[&_img]:!w-auto [&_img]:!h-auto [&_img]:!max-w-full [&_img]:!max-h-full [&_img]:object-contain")
-            :style {:width 80 :height 80}}
-           (rum/with-key (asset-cp {:disable-resize? true} value)
-             (str "asset-cp-" (:block/uuid value)))])
-        (shui/button
-         {:variant :outline
-          :size :sm
-          :on-click (fn [e]
-                      (util/stop e)
-                      (state/pub-event! [:asset/show-preview value]))}
-         "View")
-        (shui/button
-         {:variant :outline
-          :size :sm
-          :on-click (fn [e]
-                      (util/stop e)
-                      (show-grid! (or (.-currentTarget e) (rum/deref *el))))}
-         "Swap")]
+       (let [value-asset-type (:logseq.property.asset/type value)
+             value-image? (contains? (common-config/img-formats) (keyword value-asset-type))]
+         [:div.flex.items-center.gap-2.w-full.flex-wrap
+          (when-let [asset-cp (state/get-component :block/asset-cp)]
+            (if value-image?
+              [:div.asset-value-thumb.flex-shrink-0.rounded.overflow-hidden.flex.items-center.justify-center
+               {:class (str "[&_.asset-container]:!w-full [&_.asset-container]:!h-full "
+                            "[&_.asset-container]:flex [&_.asset-container]:items-center [&_.asset-container]:justify-center "
+                            "[&_img]:!w-auto [&_img]:!h-auto [&_img]:!max-w-full [&_img]:!max-h-full [&_img]:object-contain")
+                :style {:width 80 :height 80}}
+               (rum/with-key (asset-cp {:disable-resize? true} value)
+                 (str "asset-cp-" (:block/uuid value)))]
+              [:div.asset-value-thumb.flex-shrink-0.flex.items-center
+               (rum/with-key (asset-cp {:disable-resize? true} value)
+                 (str "asset-cp-" (:block/uuid value)))]))
+          (shui/button
+           {:variant :outline
+            :size :sm
+            :on-click (fn [e]
+                        (util/stop e)
+                        (state/pub-event! [:asset/show-preview value]))}
+           "View")
+          (shui/button
+           {:variant :outline
+            :size :sm
+            :on-click (fn [e]
+                        (util/stop e)
+                        (show-grid! (or (.-currentTarget e) (rum/deref *el))))}
+           "Swap")])
        [:div.w-full.cursor-pointer
         {:on-click (fn [e]
                      (util/stop e)
