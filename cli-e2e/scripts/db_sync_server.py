@@ -8,6 +8,7 @@ import base64
 import json
 import os
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -103,7 +104,7 @@ def wait_health(base_url: str, timeout_s: float, interval_s: float) -> bool:
             with urllib.request.urlopen(url, timeout=2) as response:
                 if response.status == 200:
                     return True
-        except (urllib.error.URLError, TimeoutError):
+        except (urllib.error.URLError, TimeoutError, socket.timeout):
             pass
         time.sleep(interval_s)
     return False

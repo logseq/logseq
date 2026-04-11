@@ -7,6 +7,8 @@
     logseq.cli.e2e.shell-test
     logseq.cli.e2e.runner-test
     logseq.cli.e2e.cleanup-test
+    logseq.cli.e2e.manifests-test
+    logseq.cli.e2e.sync-fixture-test
     logseq.cli.e2e.main-test])
 
 (defn run!

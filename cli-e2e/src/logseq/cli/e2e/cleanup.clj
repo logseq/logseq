@@ -4,6 +4,7 @@
             [clojure.string :as string]))
 
 (def ^:private cli-e2e-temp-prefix "logseq-cli-e2e-")
+(def ^:private db-sync-default-port 18080)
 
 (defn- parse-ps-line
   [line]
@@ -60,6 +61,68 @@
    (cleanup-db-worker-processes! {}))
   ([{:keys [dry-run list-pids-fn kill-pid-fn]}]
    (let [list-pids-fn (or list-pids-fn list-cli-e2e-db-worker-pids)
+         kill-pid-fn (or kill-pid-fn kill-pid!)
+         found-pids (vec (list-pids-fn))]
+     (if dry-run
+       {:dry-run? true
+        :found-pids found-pids
+        :would-kill-pids found-pids
+        :killed-pids []
+        :failed-pids []}
+       (let [{:keys [killed-pids failed-pids]}
+             (reduce (fn [acc pid]
+                       (if (= :failed (kill-pid-fn pid))
+                         (update acc :failed-pids conj pid)
+                         (update acc :killed-pids conj pid)))
+                     {:killed-pids []
+                      :failed-pids []}
+                     found-pids)]
+         {:dry-run? false
+          :found-pids found-pids
+          :would-kill-pids []
+          :killed-pids killed-pids
+          :failed-pids failed-pids})))))
+
+(defn- parse-long-safe
+  [value]
+  (try
+    (Long/parseLong value)
+    (catch Exception _
+      nil)))
+
+(defn list-cli-e2e-db-sync-port-pids
+  ([]
+   (list-cli-e2e-db-sync-port-pids {}))
+  ([{:keys [shell-fn port]
+     :or {shell-fn java-shell/sh
+          port db-sync-default-port}}]
+   (let [{:keys [exit out err]} (shell-fn "lsof" "-nP" (str "-iTCP:" port) "-sTCP:LISTEN")
+         out-lines (->> (string/split-lines (or out ""))
+                        (map string/trim)
+                        (remove string/blank?)
+                        vec)]
+     (when (and (not (zero? exit))
+                (or (not (string/blank? err))
+                    (seq out-lines)))
+       (throw (ex-info "Unable to scan db-sync server port listeners"
+                       {:exit exit
+                        :err err
+                        :port port})))
+     (->> out-lines
+          (filter #(re-find (re-pattern (str ":" port "\\b")) %))
+          (keep (fn [line]
+                  (some-> (string/split line #"\s+")
+                          (nth 1 nil)
+                          parse-long-safe)))
+          distinct
+          vec))))
+
+(defn cleanup-db-sync-port-processes!
+  ([]
+   (cleanup-db-sync-port-processes! {}))
+  ([{:keys [dry-run list-pids-fn kill-pid-fn]
+     :as _opts}]
+   (let [list-pids-fn (or list-pids-fn list-cli-e2e-db-sync-port-pids)
          kill-pid-fn (or kill-pid-fn kill-pid!)
          found-pids (vec (list-pids-fn))]
      (if dry-run

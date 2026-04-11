@@ -6,7 +6,8 @@
             [logseq.cli.e2e.preflight :as preflight]
             [logseq.cli.e2e.report :as report]
             [logseq.cli.e2e.runner :as runner]
-            [logseq.cli.e2e.shell :as shell]))
+            [logseq.cli.e2e.shell :as shell]
+            [logseq.cli.e2e.sync-fixture :as sync-fixture]))
 
 (defn select-cases
   [cases {:keys [case include]}]
@@ -38,7 +39,7 @@
   (format "%.2fs" (/ (double (- (System/nanoTime) started-at)) 1000000000.0)))
 
 (defn- run-selected-cases!
-  [selected-cases run-case run-command {:keys [on-case-start on-case-success on-case-failure detailed-log?]}]
+  [selected-cases run-case run-command {:keys [on-case-start on-case-success on-case-failure detailed-log? timings?]}]
   (let [total (count selected-cases)]
     (reduce (fn [acc [idx case]]
               (let [index (inc idx)
@@ -49,7 +50,8 @@
                                   :case case}))
                 (try
                   (let [result (run-case case {:run-command run-command
-                                               :detailed-log? detailed-log?})
+                                               :detailed-log? detailed-log?
+                                               :timings? timings?})
                         payload {:index index
                                  :total total
                                  :case case
@@ -75,6 +77,7 @@
   (let [run-command (or run-command shell/run!)
         run-case (or (:run-case opts) runner/run-case!)
         suite (suite-from-opts opts)
+        sync-suite? (= suite :sync)
         targeted-run? (or (:case opts) (seq (:include opts)))
         on-preflight-start (:on-preflight-start opts)
         on-preflight-complete (:on-preflight-complete opts)
@@ -98,10 +101,21 @@
         (when on-cases-ready
           (on-cases-ready {:total (count selected-cases)
                            :targeted-run? targeted-run?}))
-        {:status :ok
-         :cases selected-cases
-         :coverage coverage-result
-         :results (run-selected-cases! selected-cases run-case run-command opts)}))))
+        (let [suite-context (when sync-suite?
+                              (sync-fixture/before-suite! {:run-command run-command}))
+              run-case* (if sync-suite?
+                          (fn [case case-opts]
+                            (run-case (sync-fixture/prepare-case case suite-context)
+                                      case-opts))
+                          run-case)]
+          (try
+            {:status :ok
+             :cases selected-cases
+             :coverage coverage-result
+             :results (run-selected-cases! selected-cases run-case* run-command opts)}
+            (finally
+              (when suite-context
+                (sync-fixture/after-suite! suite-context {:run-command run-command})))))))))
 (defn build!
   [opts]
   (preflight/run! opts))
@@ -125,6 +139,7 @@
   (println)
   (println "Cleanups performed:")
   (println "  - Terminate cli-e2e db-worker-node processes")
+  (println "  - Terminate db-sync server listeners on port 18080")
   (println "  - Remove cli-e2e temp graph directories")
   (flush))
 
@@ -138,6 +153,7 @@
           cleanup-opts (cond-> {}
                          dry-run? (assoc :dry-run true))
           processes (cleanup/cleanup-db-worker-processes! cleanup-opts)
+          db-sync-port-processes (cleanup/cleanup-db-sync-port-processes! cleanup-opts)
           temp-graphs (cleanup/cleanup-temp-graph-dirs! cleanup-opts)]
       (println "==> Running cli-e2e cleanup")
       (if dry-run?
@@ -145,6 +161,9 @@
           (println (format "[dry-run] db-worker-node processes: found %d, would kill %d"
                            (count (:found-pids processes))
                            (count (:would-kill-pids processes))))
+          (println (format "[dry-run] db-sync server processes (port 18080): found %d, would kill %d"
+                           (count (:found-pids db-sync-port-processes))
+                           (count (:would-kill-pids db-sync-port-processes))))
           (println (format "[dry-run] temp graph directories: found %d, would remove %d"
                            (count (:found-dirs temp-graphs))
                            (count (:would-remove-dirs temp-graphs)))))
@@ -153,6 +172,10 @@
                            (count (:found-pids processes))
                            (count (:killed-pids processes))
                            (count (:failed-pids processes))))
+          (println (format "db-sync server processes (port 18080): found %d, killed %d, failed %d"
+                           (count (:found-pids db-sync-port-processes))
+                           (count (:killed-pids db-sync-port-processes))
+                           (count (:failed-pids db-sync-port-processes))))
           (println (format "temp graph directories: found %d, removed %d, failed %d"
                            (count (:found-dirs temp-graphs))
                            (count (:removed-dirs temp-graphs))
@@ -161,6 +184,7 @@
       {:status :ok
        :dry-run? dry-run?
        :processes processes
+       :db-sync-port-processes db-sync-port-processes
        :temp-graphs temp-graphs})))
 
 (defn- print-failure-details!
@@ -175,6 +199,38 @@
       (println (str "      snippet: " snippet)))
     (flush)))
 
+(defn- format-step-label
+  [{:keys [phase step-index step-total]}]
+  (let [phase-name (name (or phase :command))]
+    (format "%s %d/%d" phase-name (or step-index 1) (or step-total 1))))
+
+(defn- print-case-timings!
+  [timings]
+  (when (seq timings)
+    (println "      step timings:")
+    (doseq [{:keys [elapsed-ms status cmd] :as timing} timings]
+      (println (format "      - [%-12s] %6dms (%s) $ %s"
+                       (format-step-label timing)
+                       elapsed-ms
+                       (name (or status :ok))
+                       cmd)))
+    (flush)))
+
+(defn- print-slow-steps!
+  [all-step-timings]
+  (when (seq all-step-timings)
+    (println "Slow steps (top 10):")
+    (doseq [{:keys [case-id elapsed-ms cmd] :as timing}
+            (->> all-step-timings
+                 (sort-by :elapsed-ms >)
+                 (take 10))]
+      (println (format "  - %-45s [%-12s] %6dms $ %s"
+                       case-id
+                       (format-step-label timing)
+                       elapsed-ms
+                       cmd)))
+    (flush)))
+
 (defn- print-test-help!
   [command-name]
   (println (str "Usage: bb -f cli-e2e/bb.edn " command-name " [options]"))
@@ -185,6 +241,7 @@
   (println "  -i, --include TAG    Run only cases with matching tag (repeatable)")
   (println "      --case ID        Run a single case by id")
   (println "      --verbose        Enable verbose output")
+  (println "      --timings        Print per-step timings and slow-step summary")
   (println)
   (println "Examples:")
   (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build"))
@@ -206,6 +263,8 @@
             passed (atom 0)
             failed (atom 0)
             total-count (atom 0)
+            timings? (boolean (:timings opts))
+            all-step-timings (atom [])
             detailed-case-log? (some? (:case opts))
             base-run-command (or (:run-command opts) shell/run!)
             run-command (if detailed-case-log?
@@ -222,11 +281,14 @@
         (println "==> Running cli-e2e cases")
         (when detailed-case-log?
           (println (format "==> Detailed case logging enabled (--case %s)" (:case opts))))
+        (when timings?
+          (println "==> Step timing enabled (--timings)"))
         (flush)
         (try
           (run! (assoc opts
                        :run-command run-command
                        :detailed-log? detailed-case-log?
+                       :timings? timings?
                        :on-preflight-start (fn [_]
                                              (println "==> Build preflight: running...")
                                              (flush))
@@ -249,6 +311,11 @@
                                                            total
                                                            (:id result)
                                                            elapsed-ms))
+                                          (when timings?
+                                            (let [case-timings (vec (:timings result))]
+                                              (swap! all-step-timings into
+                                                     (map #(assoc % :case-id (:id result)) case-timings))
+                                              (print-case-timings! case-timings)))
                                           (flush))
                        :on-case-failure (fn [{:keys [index total case error elapsed-ms]}]
                                           (swap! failed inc)
@@ -257,15 +324,24 @@
                                                            total
                                                            (:id case)
                                                            elapsed-ms))
-                                          (print-failure-details! error))))
+                                          (print-failure-details! error)
+                                          (when timings?
+                                            (let [case-timings (vec (:timings (ex-data error)))]
+                                              (swap! all-step-timings into
+                                                     (map #(assoc % :case-id (:id case)) case-timings))
+                                              (print-case-timings! case-timings))))))
           (println (format "Summary: %d passed, %d failed" @passed @failed))
           (println (str "Selected cases: " @total-count))
           (println (str "Duration: " (format-duration started-at)))
+          (when timings?
+            (print-slow-steps! @all-step-timings))
           (catch Exception error
             (let [failed-count (max 1 @failed)]
               (println (format "Summary: %d passed, %d failed" @passed failed-count))
               (println (str "Selected cases: " (max @total-count failed-count)))
-              (println (str "Duration: " (format-duration started-at))))
+              (println (str "Duration: " (format-duration started-at)))
+              (when timings?
+                (print-slow-steps! @all-step-timings)))
             (throw error)))))))
 
 (defn test!
