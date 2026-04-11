@@ -200,6 +200,46 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest test-execute-upsert-block-create-does-not-insert-when-tag-missing
+  (async done
+         (let [mutation-called?* (atom false)
+               action {:type :upsert-block
+                       :mode :create
+                       :repo "demo-repo"
+                       :graph "demo-graph"
+                       :target-page-name "TestPage"
+                       :blocks [{:block/title "b2" :block/uuid (random-uuid)}]
+                       :update-tags ["c2"]
+                       :pos "last-child"}]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    ;; resolve-tags queries for the tag by name
+                                                    :thread-api/q
+                                                    (p/resolved [])
+
+                                                    :thread-api/pull
+                                                    (p/resolved {:db/id 10 :block/uuid (random-uuid)
+                                                                 :block/name "testpage" :block/title "TestPage"})
+
+                                                    :thread-api/apply-outliner-ops
+                                                    (let [[_ _ops _] args]
+                                                      (reset! mutation-called?* true)
+                                                      (p/resolved nil))
+
+                                                    (throw (ex-info "unexpected invoke"
+                                                                    {:method method :args args}))))]
+                 (p/let [result (upsert-command/execute-upsert-block action {})]
+                   (is (= :error (:status result))
+                       "should return error when tag does not exist")
+                   (is (= :tag-not-found (get-in result [:error :code])))
+                   (is (false? @mutation-called?*)
+                       "block insert must not be called when tag resolution fails")))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest test-build-task-action-validation
   (testing "upsert task requires target selector or content/page"
     (let [result (upsert-command/build-task-action {} "logseq_db_demo")]
