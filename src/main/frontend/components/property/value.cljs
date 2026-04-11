@@ -1513,7 +1513,8 @@
         (when-let [asset-cp (state/get-component :block/asset-cp)]
           [:div.asset-value-thumb.flex-shrink-0.overflow-hidden.rounded
            {:style {:max-width 120 :max-height 80}}
-           (asset-cp {:disable-resize? true} value)])
+           (rum/with-key (asset-cp {:disable-resize? true} value)
+             (str "asset-cp-" (:block/uuid value)))])
         (shui/button
          {:variant :outline
           :size :sm
