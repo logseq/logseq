@@ -1488,7 +1488,7 @@
                           (:db/id block) (:db/ident property) (:db/id asset))
                          (when on-chosen (on-chosen))))}
            (when-let [asset-cp (state/get-component :block/asset-cp)]
-             [:div.flex.items-center.justify-center.w-full.h-full.overflow-hidden
+             [:div.flex.items-center.justify-center.w-full.h-full.overflow-hidden.pointer-events-none
               (asset-cp {:disable-resize? true} asset)])])])]))
 
 (rum/defc asset-value-picker
