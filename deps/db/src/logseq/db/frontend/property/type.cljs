@@ -144,6 +144,9 @@
   (when-let [ent (d/entity db val)]
     (some? (:block/title ent))))
 
+;; :logseq.class/Asset is in ldb/private-tags, so users can't type `#Asset`
+;; inline — we use the class programmatically here to scope :asset property
+;; values to uploaded asset blocks.
 (defn- asset-entity?
   [db val]
   (when-let [ent (d/entity db val)]

@@ -1460,6 +1460,18 @@
       (= :pdf kw) "file-type-pdf"
       :else "file")))
 
+(def ^:private asset-thumb-fit-class
+  "CSS escape hatch that makes asset-cp's output fit the wrapper's bounding box.
+  asset-cp wraps the <img> in a div.asset-container with no size constraint of
+  its own, so max-h-full on the img resolves against an auto-sized parent and
+  never actually caps height. Forcing .asset-container to w-full h-full (plus
+  flex centering) gives the img a real bounded parent; the !w-auto/!h-auto +
+  !max-w-full/!max-h-full + object-contain rules then shrink it proportionally
+  to fit without cropping any aspect ratio."
+  (str "[&_.asset-container]:!w-full [&_.asset-container]:!h-full "
+       "[&_.asset-container]:flex [&_.asset-container]:items-center [&_.asset-container]:justify-center "
+       "[&_img]:!w-auto [&_img]:!h-auto [&_img]:!max-w-full [&_img]:!max-h-full [&_img]:object-contain"))
+
 (rum/defc asset-grid-popup-content
   [block property {:keys [on-chosen]}]
   (let [[assets set-assets!] (hooks/use-state nil)
@@ -1492,10 +1504,16 @@
               :style {:aspect-ratio "1 / 1"}
               :on-click (fn []
                           (shui/popup-hide!)
-                          (p/do!
-                           (db-property-handler/set-block-property!
-                            (:db/id block) (:db/ident property) (:db/id asset))
-                           (when on-chosen (on-chosen))))}
+                          (-> (p/do!
+                               (db-property-handler/set-block-property!
+                                (:db/id block) (:db/ident property) (:db/id asset))
+                               (when on-chosen (on-chosen)))
+                              (p/catch
+                               (fn [err]
+                                 (log/error :msg "Failed to set asset property" :error err)
+                                 (notification/show!
+                                  "Failed to set asset property"
+                                  :error)))))}
              [:div.asset-picker-title.w-full.px-1.py-0.5.text-xs.truncate.text-left.border-b.opacity-80
               (:block/title asset)]
              [:div.flex.flex-1.items-center.justify-center.w-full.overflow-hidden.p-1.pointer-events-none
@@ -1503,9 +1521,7 @@
               (if image?
                 (when-let [asset-cp (state/get-component :block/asset-cp)]
                   [:div.flex.items-center.justify-center.w-full.h-full
-                   {:class (str "[&_.asset-container]:!w-full [&_.asset-container]:!h-full "
-                                "[&_.asset-container]:flex [&_.asset-container]:items-center [&_.asset-container]:justify-center "
-                                "[&_img]:!w-auto [&_img]:!h-auto [&_img]:!max-w-full [&_img]:!max-h-full [&_img]:object-contain")}
+                   {:class asset-thumb-fit-class}
                    (asset-cp {:disable-resize? true} asset)])
                 [:div.flex.flex-col.items-center.justify-center.gap-1.opacity-70
                  (ui/icon (asset-icon-for-type asset-type) {:size 40})
@@ -1534,8 +1550,7 @@
              value-image? (contains? (common-config/img-formats) value-kw)
              value-video? (contains? config/video-formats value-kw)]
          [:div.flex.items-center.gap-2.w-full.flex-wrap
-          (cond
-            value-video?
+          (if value-video?
             (shui/button
              {:variant :outline
               :size :sm
@@ -1545,14 +1560,10 @@
                           (state/pub-event! [:asset/show-preview value]))}
              (ui/icon "movie" {:size 14})
              [:span (:block/title value)])
-
-            :else
             (when-let [asset-cp (state/get-component :block/asset-cp)]
               (if value-image?
                 [:div.asset-value-thumb.flex-shrink-0.rounded.overflow-hidden.flex.items-center.justify-center
-                 {:class (str "[&_.asset-container]:!w-full [&_.asset-container]:!h-full "
-                              "[&_.asset-container]:flex [&_.asset-container]:items-center [&_.asset-container]:justify-center "
-                              "[&_img]:!w-auto [&_img]:!h-auto [&_img]:!max-w-full [&_img]:!max-h-full [&_img]:object-contain")
+                 {:class asset-thumb-fit-class
                   :style {:width 80 :height 80}}
                  (rum/with-key (asset-cp {:disable-resize? true} value)
                    (str "asset-cp-" (:block/uuid value)))]

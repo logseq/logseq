@@ -370,8 +370,8 @@
                   :autoPlay true
                   :style {:max-height "80vh"}}]])
              {:id :asset-video-preview
-              :center? true
-              :content-props {:class "max-w-[min(90vw,1200px)]"}})))
+              :auto-width? true
+              :center? true})))
 
         pdf?
         (p/let [url (assets-handler/<make-asset-url rel-path)]
