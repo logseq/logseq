@@ -2,69 +2,89 @@
   (:require [clojure.test :refer [deftest is testing]]
             [logseq.cli.e2e.manifests :as manifests]))
 
-(deftest load-cases-supports-legacy-vector-format
+(deftest load-cases-requires-new-map-format
   (with-redefs [manifests/read-edn-file (fn [_]
                                           [{:id "legacy-a"}
                                            {:id "legacy-b"}])]
-    (is (= ["legacy-a" "legacy-b"]
-           (mapv :id (manifests/load-cases :non-sync))))))
+    (let [error (try
+                  (manifests/load-cases :non-sync)
+                  nil
+                  (catch clojure.lang.ExceptionInfo error
+                    error))]
+      (is (some? error))
+      (is (re-find #"Invalid cli-e2e manifest format" (.getMessage error)))
+      (is (= "{:templates {...} :cases [...]}"
+             (:expected (ex-data error)))))))
 
-(deftest load-cases-supports-templates-and-inheritance
-  (with-redefs [manifests/read-edn-file (fn [_]
-                                          {:templates
-                                           {:base {:setup ["setup-a"]
-                                                   :cmds ["cmd-a"]
-                                                   :cleanup ["cleanup-a"]
-                                                   :tags [:base]
-                                                   :vars {:nested {:left 1}
-                                                          :only-base true}
-                                                   :covers {:commands ["base-command"]
-                                                            :options {:global ["--base"]}}
-                                                   :expect {:stdout-json-paths {[:status] "ok"}}
-                                                   :graph "base-graph"}
-                                            :addon {:setup ["setup-b"]
-                                                    :cmds ["cmd-b"]
-                                                    :cleanup ["cleanup-b"]
-                                                    :tags [:addon]
-                                                    :vars {:nested {:right 2}}
-                                                    :covers {:options {:graph ["--addon"]}}
-                                                    :expect {:stdout-json-paths {[:data :x] 1}}
-                                                    :graph "addon-graph"}}
-                                           :cases
-                                           [{:id "templated"
-                                             :extends [:base :addon]
-                                             :setup ["setup-case"]
-                                             :cmds ["cmd-case"]
-                                             :cleanup ["cleanup-case"]
-                                             :tags [:case]
-                                             :vars {:nested {:leaf 3}
-                                                    :only-case true}
-                                             :covers {:options {:graph ["--case"]}}
-                                             :expect {:stdout-json-paths {[:data :y] 2}}
-                                             :graph "case-graph"}]})]
-    (let [case (first (manifests/load-cases :sync))]
+(deftest load-cases-merges-templates-and-cases-by-rules
+  (with-redefs [manifests/read-edn-file
+                (fn [_]
+                  {:templates
+                   {:base {:setup ["setup-a"]
+                           :cmds ["cmd-a"]
+                           :cleanup ["cleanup-a"]
+                           :tags [:base]
+                           :vars {:nested {:left 1}
+                                  :only-base true}
+                           :covers {:commands ["base-command"]
+                                    :options {:global ["--base"]}}
+                           :expect {:stdout-json-paths {[:status] "ok"
+                                                        [:data :base] 1}}
+                           :graph "base-graph"}
+                    :addon {:setup ["setup-b"]
+                            :cmds ["cmd-b"]
+                            :cleanup ["cleanup-b"]
+                            :tags [:addon]
+                            :vars {:nested {:right 2}}
+                            :covers {:options {:graph ["--addon"]}}
+                            :expect {:stdout-json-paths {[:data :addon] 2}}
+                            :graph "addon-graph"}}
+                   :cases
+                   [{:id "single-parent"
+                     :extends :base
+                     :cmds ["cmd-case"]
+                     :expect {:stdout-json-paths {[:data :case] 3}}
+                     :graph "single-parent-graph"}
+                    {:id "multi-parent"
+                     :extends [:base :addon]
+                     :setup ["setup-case"]
+                     :cmds ["cmd-case"]
+                     :cleanup ["cleanup-case"]
+                     :tags [:case]
+                     :vars {:nested {:leaf 3}
+                            :only-case true}
+                     :covers {:commands ["case-command"]
+                              :options {:graph ["--case"]}}
+                     :expect {:stdout-json-paths {[:data :case] 3}}
+                     :graph "case-graph"}]})]
+    (let [[single-parent multi-parent] (manifests/load-cases :sync)]
+      (testing "supports :extends keyword"
+        (is (= "single-parent" (:id single-parent)))
+        (is (= ["cmd-a" "cmd-case"] (:cmds single-parent)))
+        (is (= "single-parent-graph" (:graph single-parent))))
       (testing "append merge keys"
-        (is (= ["setup-a" "setup-b" "setup-case"] (:setup case)))
-        (is (= ["cmd-a" "cmd-b" "cmd-case"] (:cmds case)))
-        (is (= ["cleanup-a" "cleanup-b" "cleanup-case"] (:cleanup case)))
-        (is (= [:base :addon :case] (:tags case))))
+        (is (= ["setup-a" "setup-b" "setup-case"] (:setup multi-parent)))
+        (is (= ["cmd-a" "cmd-b" "cmd-case"] (:cmds multi-parent)))
+        (is (= ["cleanup-a" "cleanup-b" "cleanup-case"] (:cleanup multi-parent)))
+        (is (= [:base :addon :case] (:tags multi-parent))))
       (testing "deep merge keys"
         (is (= {:nested {:left 1 :right 2 :leaf 3}
                 :only-base true
                 :only-case true}
-               (:vars case)))
-        (is (= {:commands ["base-command"]
+               (:vars multi-parent)))
+        (is (= {:commands ["case-command"]
                 :options {:global ["--base"]
                           :graph ["--case"]}}
-               (:covers case)))
+               (:covers multi-parent)))
         (is (= {[:status] "ok"
-                [:data :x] 1
-                [:data :y] 2}
-               (get-in case [:expect :stdout-json-paths]))))
-      (testing "scalar child override"
-        (is (= "case-graph" (:graph case)))))))
+                [:data :base] 1
+                [:data :addon] 2
+                [:data :case] 3}
+               (get-in multi-parent [:expect :stdout-json-paths]))))
+      (testing "scalar keys are overridden by child"
+        (is (= "case-graph" (:graph multi-parent)))))))
 
-(deftest load-cases-detects-circular-template-inheritance
+(deftest load-cases-detects-circular-template-inheritance-with-cycle-path
   (with-redefs [manifests/read-edn-file (fn [_]
                                           {:templates
                                            {:a {:extends :b
@@ -72,7 +92,76 @@
                                             :b {:extends :a
                                                 :setup ["b"]}}
                                            :cases [{:id "cycle" :extends :a}]})]
-    (is (thrown-with-msg?
-         clojure.lang.ExceptionInfo
-         #"Circular template inheritance"
-         (manifests/load-cases :sync)))))
+    (let [error (try
+                  (manifests/load-cases :sync)
+                  nil
+                  (catch clojure.lang.ExceptionInfo error
+                    error))]
+      (is (some? error))
+      (is (re-find #"Circular template inheritance" (.getMessage error)))
+      (is (= [:a :b :a] (:cycle (ex-data error)))))))
+
+(deftest load-cases-validates-extends-entries
+  (with-redefs [manifests/read-edn-file (fn [_]
+                                          {:templates {:base {:cmds ["base"]}}
+                                           :cases [{:id "invalid-extends"
+                                                    :extends [:base "bad"]
+                                                    :cmds ["case"]}]})]
+    (let [error (try
+                  (manifests/load-cases :non-sync)
+                  nil
+                  (catch clojure.lang.ExceptionInfo error
+                    error))]
+      (is (some? error))
+      (is (re-find #"Invalid :extends entries" (.getMessage error)))
+      (is (= ["bad"] (:invalid-entries (ex-data error)))))))
+
+(deftest load-cases-lint-detects-invalid-extends-references
+  (with-redefs [manifests/read-edn-file (fn [_]
+                                          {:templates {:base {:cmds ["base"]}
+                                                       :unused {:extends :missing-template
+                                                                :cmds ["unused"]}}
+                                           :cases [{:id "valid" :extends :base :cmds ["case"]}
+                                                   {:id "invalid" :extends :also-missing :cmds ["case"]}]})]
+    (let [error (try
+                  (manifests/load-cases :sync)
+                  nil
+                  (catch clojure.lang.ExceptionInfo error
+                    error))
+          issues (:issues (ex-data error))]
+      (is (some? error))
+      (is (re-find #"manifest lint failed" (.getMessage error)))
+      (is (= #{:also-missing :missing-template}
+             (set (map :target (filter #(= :invalid-extends (:type %)) issues))))))))
+
+(deftest load-cases-lint-detects-duplicate-case-ids
+  (with-redefs [manifests/read-edn-file (fn [_]
+                                          {:templates {:base {:cmds ["base"]}}
+                                           :cases [{:id "dup" :extends :base :cmds ["case-a"]}
+                                                   {:id "dup" :extends :base :cmds ["case-b"]}]})]
+    (let [error (try
+                  (manifests/load-cases :non-sync)
+                  nil
+                  (catch clojure.lang.ExceptionInfo error
+                    error))
+          duplicate-issues (filter #(= :duplicate-case-id (:type %))
+                                   (:issues (ex-data error)))]
+      (is (some? error))
+      (is (= [{:type :duplicate-case-id :id "dup" :count 2}]
+             (vec duplicate-issues))))))
+
+(deftest load-cases-lint-detects-unused-templates
+  (with-redefs [manifests/read-edn-file (fn [_]
+                                          {:templates {:base {:cmds ["base"]}
+                                                       :unused {:cmds ["unused"]}}
+                                           :cases [{:id "only" :extends :base :cmds ["case"]}]})]
+    (let [error (try
+                  (manifests/load-cases :sync)
+                  nil
+                  (catch clojure.lang.ExceptionInfo error
+                    error))
+          unused-issues (filter #(= :unused-template (:type %))
+                                (:issues (ex-data error)))]
+      (is (some? error))
+      (is (= [{:type :unused-template :template :unused}]
+             (vec unused-issues))))))

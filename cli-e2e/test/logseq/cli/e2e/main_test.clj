@@ -295,6 +295,72 @@
     (is (string/includes? output "Slow steps (top 10):"))
     (is (string/includes? output "main-graph-list"))))
 
+(deftest test-without-timings-keeps-output-concise
+  (let [output (with-out-str
+                 (main/test! {:inventory complete-inventory
+                              :cases sample-cases
+                              :include ["smoke"]
+                              :skip-build true
+                              :run-command (fn [_]
+                                             {:exit 0
+                                              :out ""
+                                              :err ""})
+                              :run-case (fn [case _opts]
+                                          {:id (:id case)
+                                           :status :ok
+                                           :timings [{:phase :main
+                                                      :step-index 1
+                                                      :step-total 1
+                                                      :elapsed-ms 88
+                                                      :status :ok
+                                                      :cmd "hidden-step"}]})}))]
+    (is (not (string/includes? output "==> Step timing enabled (--timings)")))
+    (is (not (string/includes? output "step timings:")))
+    (is (not (string/includes? output "Slow steps (top 10):")))))
+
+(deftest test-sync-timings-prints-step-details-and-slow-summary
+  (let [sync-inventory {:excluded-command-prefixes ["login" "logout"]
+                        :scopes {:sync {:commands ["sync status"]
+                                        :options []}}}
+        sync-cases [{:id "sync-status-case"
+                     :cmds ["node static/logseq-cli.js sync status"]
+                     :covers {:commands ["sync status"]}}]
+        output (with-out-str
+                 (main/test-sync! {:inventory sync-inventory
+                                   :cases sync-cases
+                                   :skip-build true
+                                   :timings true
+                                   :run-command (fn [_]
+                                                  {:exit 0
+                                                   :out ""
+                                                   :err ""})
+                                   :run-case (fn [case _opts]
+                                               {:id (:id case)
+                                                :status :ok
+                                                :timings [{:phase :setup
+                                                           :step-index 1
+                                                           :step-total 1
+                                                           :elapsed-ms 10
+                                                           :status :ok
+                                                           :cmd "sync-setup"}
+                                                          {:phase :main
+                                                           :step-index 1
+                                                           :step-total 1
+                                                           :elapsed-ms 150
+                                                           :status :ok
+                                                           :cmd "sync-main"}
+                                                          {:phase :cleanup
+                                                           :step-index 1
+                                                           :step-total 1
+                                                           :elapsed-ms 20
+                                                           :status :ok
+                                                           :cmd "sync-cleanup"}]})}))]
+    (is (string/includes? output "==> Running cli-e2e cases"))
+    (is (string/includes? output "==> Step timing enabled (--timings)"))
+    (is (string/includes? output "step timings:"))
+    (is (string/includes? output "Slow steps (top 10):"))
+    (is (string/includes? output "sync-main"))))
+
 (deftest test-help-prints-usage-and-skips-execution
   (let [ran? (atom false)
         result (atom nil)
