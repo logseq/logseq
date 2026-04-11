@@ -384,6 +384,27 @@
   ([items now-ms title-max-display-width]
    (format-list-dynamic items now-ms list-node-columns {:title-max-display-width title-max-display-width})))
 
+(defn- normalize-asset-type
+  [value]
+  (cond
+    (keyword? value) (name value)
+    (string? value) value
+    :else "-"))
+
+(def ^:private list-asset-columns
+  [["ID"         (fn [item _] (or (:db/id item) (:id item))) [:db/id :id]]
+   ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item))) [:title :block/title :name]]
+   ["ASSET-TYPE" (fn [item _] (normalize-asset-type (:logseq.property.asset/type item))) [:logseq.property.asset/type]]
+   ["SIZE"       (fn [item _] (or (:logseq.property.asset/size item) "-")) [:logseq.property.asset/size]]
+   ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at]]
+   ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
+
+(defn- format-list-asset
+  ([items now-ms]
+   (format-list-asset items now-ms nil))
+  ([items now-ms title-max-display-width]
+   (format-list-dynamic items now-ms list-asset-columns {:title-max-display-width title-max-display-width})))
+
 (defn- quote-posix-shell
   [value]
   (str "'" (string/replace (normalize-cell value) #"'" "'\"'\"'") "'"))
@@ -933,7 +954,7 @@
         :list-property (format-list-property (:items data) now-ms list-title-max-display-width)
         :list-task (format-list-task (:items data) now-ms list-title-max-display-width)
         :list-node (format-list-node (:items data) now-ms list-title-max-display-width)
-        :list-asset (format-list-node (:items data) now-ms list-title-max-display-width)
+        :list-asset (format-list-asset (:items data) now-ms list-title-max-display-width)
         (:search-block :search-page :search-property :search-tag)
         (format-list-page (:items data) now-ms)
         :upsert-block (format-upsert-block context (:result data))
