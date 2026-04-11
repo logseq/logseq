@@ -799,6 +799,10 @@
   [_context ids]
   (str "Upserted property:\n" (pr-str (vec (or ids [])))))
 
+(defn- format-upsert-asset
+  [_context ids]
+  (str "Upserted asset:\n" (pr-str (vec (or ids [])))))
+
 (defn- format-remove-block
   [{:keys [repo uuid id ids]}]
   (cond
@@ -929,11 +933,13 @@
         :list-property (format-list-property (:items data) now-ms list-title-max-display-width)
         :list-task (format-list-task (:items data) now-ms list-title-max-display-width)
         :list-node (format-list-node (:items data) now-ms list-title-max-display-width)
+        :list-asset (format-list-node (:items data) now-ms list-title-max-display-width)
         (:search-block :search-page :search-property :search-tag)
         (format-list-page (:items data) now-ms)
         :upsert-block (format-upsert-block context (:result data))
         :upsert-page (format-upsert-page context (:result data))
         :upsert-task (format-upsert-task context (:result data))
+        :upsert-asset (format-upsert-asset context (:result data))
         :upsert-tag (format-upsert-tag context (:result data))
         :upsert-property (format-upsert-property context (:result data))
         :remove-block (format-remove-block context)

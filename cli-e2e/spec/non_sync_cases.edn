@@ -213,6 +213,38 @@
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:upsert :list]}
 
+ {:id "asset-upsert-and-list-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "printf 'asset-content' > {{export-path-arg}}.png"]
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert asset --graph {{graph-arg}} --path {{export-path-arg}}.png --content 'Asset One' --target-page Home >/dev/null"
+         "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list asset --graph {{graph-arg}} --fields id,title,type --sort updated-at --order desc --limit 1"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :items 0 :block/title] "Asset One"
+                               [:data :items 0 :node/type] "block"}}
+  :covers {:commands ["upsert asset" "list asset"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--path" "--content" "--target-page"]
+                     :list ["--fields" "--limit" "--sort" "--order"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:upsert :list]}
+
+ {:id "asset-upsert-update-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "printf 'asset-content' > {{export-path-arg}}.png"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert asset --graph {{graph-arg}} --path {{export-path-arg}}.png --content 'Asset Original' --target-page Home >/dev/null"]
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert asset --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Asset Original\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\" --content 'Asset Updated' >/dev/null"
+         "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list asset --graph {{graph-arg}} --fields id,title --sort updated-at --order desc --limit 1"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :items 0 :block/title] "Asset Updated"}}
+  :covers {:commands ["upsert asset" "list asset"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--id" "--content"]
+                     :list ["--fields" "--limit" "--sort" "--order"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:upsert :list]}
+
  {:id "block-upsert-and-show-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"]

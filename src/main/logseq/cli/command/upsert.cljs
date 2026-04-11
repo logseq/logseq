@@ -1,6 +1,9 @@
 (ns logseq.cli.command.upsert
   "Upsert-related CLI commands."
-  (:require [clojure.string :as string]
+  (:require ["crypto" :as crypto]
+            ["fs" :as fs]
+            ["path" :as node-path]
+            [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.command.task-status :as task-status-command]
@@ -8,8 +11,10 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.graph :as common-graph]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.property.type :as db-property-type]
             [promesa.core :as p]
             [logseq.db.frontend.property :as db-property]))
@@ -84,6 +89,27 @@
    :no-deadline {:desc "Clear task deadline datetime"
                  :coerce :boolean}})
 
+(def ^:private upsert-asset-spec
+  {:id {:desc "Target asset node db/id (forces update mode) [update only]"
+        :coerce :long}
+   :uuid {:desc "Target asset node UUID (forces update mode) [update only]"
+          :validate {:pred (comp parse-uuid str)
+                     :ex-msg (constantly "Option uuid must be a valid UUID string")}}
+   :path {:desc "Asset file path [create only]"
+          :coerce common-graph/expand-home
+          :complete :file}
+   :target-id {:desc "Target block db/id [create only]"
+               :coerce :long}
+   :target-uuid {:desc "Target block UUID [create only]"
+                 :validate {:pred (comp parse-uuid str)
+                            :ex-msg (constantly "Option target-uuid must be a valid UUID string")}}
+   :target-page {:desc "Target page name [create only]"
+                 :complete :pages}
+   :pos {:desc "Position. Default: last-child"
+         :validate #{"first-child" "last-child" "sibling"}}
+   :content {:alias :c
+             :desc "Asset title (create/update)"}})
+
 (def ^:private upsert-tag-spec
   {:id {:desc "Target tag db/id (forces update mode)"
         :coerce :long}
@@ -119,6 +145,9 @@
                        {:examples ["logseq upsert task --graph my-graph --content \"Ship release\" --target-page Home --status todo --priority high --scheduled \"2026-02-10T08:00:00.000Z\" --deadline \"2026-02-12T18:00:00.000Z\""
                                    "logseq upsert task --graph my-graph --page Weekly Plan --status doing"
                                    "logseq upsert task --graph my-graph --id 123 --no-status --no-priority"]})
+   (core/command-entry ["upsert" "asset"] :upsert-asset "Upsert asset" upsert-asset-spec
+                       {:examples ["logseq upsert asset --graph my-graph --path ./assets/logo.png --target-page Home"
+                                   "logseq upsert asset --graph my-graph --id 123 --content \"Updated asset title\""]})
    (core/command-entry ["upsert" "tag"] :upsert-tag "Upsert tag" upsert-tag-spec
                        {:examples ["logseq upsert tag --graph my-graph --name project"
                                    "logseq upsert tag --graph my-graph --id 200 --name Project Renamed"]})
@@ -174,7 +203,7 @@
        ". Available values: "
        (string/join ", " available-priority-values)))
 
-(defn invalid-options?
+(defn ^:large-vars/cleanup-todo invalid-options?
   [command opts]
   (case command
     :upsert-block
@@ -256,6 +285,42 @@
 
         (and (seq priority-text) (not (normalize-priority priority-text)))
         (invalid-priority-message priority-text)
+
+        :else
+        nil))
+
+    :upsert-asset
+    (let [id (:id opts)
+          uuid (some-> (:uuid opts) string/trim)
+          path (some-> (:path opts) str string/trim)
+          target-page (some-> (:target-page opts) string/trim)
+          selectors (filter some? [id uuid])
+          target-selectors (filter some? [(:target-id opts)
+                                          (:target-uuid opts)
+                                          target-page])
+          pos (some-> (:pos opts) string/trim string/lower-case)
+          update-mode? (or (some? id) (seq uuid))]
+      (cond
+        (> (count selectors) 1)
+        "only one of --id or --uuid is allowed"
+
+        (and update-mode? (seq path))
+        "--path is only valid in create mode"
+
+        (and (not update-mode?) (not (seq path)))
+        "--path is required in create mode"
+
+        (> (count target-selectors) 1)
+        "only one of --target-id, --target-uuid, or --target-page is allowed"
+
+        (and update-mode? (or (seq target-selectors) (seq pos)))
+        "--target-* and --pos are only valid in create mode"
+
+        (and (seq pos) (empty? target-selectors))
+        "--pos is only valid when a target option is provided"
+
+        (and (= pos "sibling") (seq target-page))
+        "--pos sibling is only valid for block targets"
 
         :else
         nil))
@@ -482,6 +547,53 @@
                    (seq page) (assoc :page page)
                    (seq status-text) (assoc :status-input status-text)
                    (and (seq content) (not= mode :page)) (assoc :content content))}))))
+
+(defn build-asset-action
+  [options repo]
+  (if-not (seq repo)
+    {:ok? false
+     :error {:code :missing-repo
+             :message "repo is required for upsert"}}
+    (let [id (:id options)
+          uuid (some-> (:uuid options) string/trim)
+          content (some-> (:content options) string/trim)
+          path (some-> (:path options) str string/trim)
+          asset-update-mode? (or (some? id) (seq uuid))
+          invalid-message (invalid-options? :upsert-asset options)]
+      (cond
+        (seq invalid-message)
+        {:ok? false
+         :error {:code :invalid-options
+                 :message invalid-message}}
+
+        asset-update-mode?
+        {:ok? true
+         :action (cond-> {:type :upsert-asset
+                          :mode :update
+                          :repo repo
+                          :graph (core/repo->graph repo)}
+                   (some? id) (assoc :id id)
+                   (seq uuid) (assoc :uuid uuid)
+                   (seq content) (assoc :content content))}
+
+        :else
+        (let [default-title (db-asset/asset-name->title (node-path/basename path))
+              create-content (or content default-title)
+              create-options (cond-> (assoc options :content create-content)
+                               (seq (:target-page options))
+                               (assoc :target-page-name (:target-page options))
+                               true
+                               (dissoc :target-page :path))
+              create-result (add-command/build-add-block-action create-options [] repo)]
+          (if (:ok? create-result)
+            (-> create-result
+                (update :action
+                        (fn [action]
+                          (-> action
+                              (assoc :type :upsert-asset
+                                     :mode :create
+                                     :asset-path path)))))
+            create-result))))))
 
 (defn build-tag-action
   [options repo]
@@ -741,6 +853,13 @@
 (def ^:private task-tag-ident
   :logseq.class/Task)
 
+(def ^:private asset-selector
+  [:db/id :block/uuid :block/title :logseq.property/deleted-at
+   {:block/tags [:db/ident]}])
+
+(def ^:private asset-tag-ident
+  :logseq.class/Asset)
+
 (defn- normalize-lookup-uuid
   [value]
   (cond
@@ -772,6 +891,38 @@
                       {:code upsert-id-not-found-code
                        :id id
                        :uuid uuid})))))
+
+(defn- asset-entity?
+  [entity]
+  (some #(= asset-tag-ident (:db/ident %))
+        (:block/tags entity)))
+
+(defn- ensure-asset-node!
+  [config repo {:keys [id uuid]}]
+  (p/let [entity (cond
+                   (some? id)
+                   (pull-entity-by-id config repo asset-selector id)
+
+                   (seq uuid)
+                   (pull-entity-by-uuid config repo asset-selector uuid)
+
+                   :else
+                   nil)]
+    (cond
+      (or (not (:db/id entity)) (ldb/recycled? entity))
+      (throw (ex-info "asset not found for selector"
+                      {:code upsert-id-not-found-code
+                       :id id
+                       :uuid uuid}))
+
+      (not (asset-entity? entity))
+      (throw (ex-info "selector must be a node tagged with #Asset"
+                      {:code upsert-id-type-mismatch-code
+                       :id id
+                       :uuid uuid}))
+
+      :else
+      entity)))
 
 (defn- ensure-task-tag-id!
   [config repo]
@@ -966,6 +1117,134 @@
               {:status :error
                :error {:code :invalid-options
                        :message "invalid upsert task mode"}}))))
+      (p/catch (fn [e]
+                 {:status :error
+                  :error {:code (or (get-in (ex-data e) [:code]) :exception)
+                          :message (or (ex-message e) (str e))}}))))
+
+(defn- asset-file-exists?
+  [path]
+  (and (seq path)
+       (fs/existsSync path)))
+
+(defn- asset-file-size-bytes
+  [path]
+  (let [stat (fs/statSync path)]
+    (.-size stat)))
+
+(defn- asset-file-checksum
+  [path]
+  (-> (.createHash crypto "sha256")
+      (.update (fs/readFileSync path))
+      (.digest "hex")))
+
+(defn- ensure-dir!
+  [path]
+  (fs/mkdirSync path #js {:recursive true}))
+
+(defn- copy-file!
+  [source destination]
+  (fs/copyFileSync source destination))
+
+(defn- graph-assets-dir-path
+  [config repo]
+  (if-let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)]
+    (node-path/join (cli-server/resolve-data-dir config)
+                    graph-dir-name
+                    "assets")
+    (throw (ex-info "invalid repo"
+                    {:code :invalid-repo
+                     :repo repo}))))
+
+(defn- ensure-asset-file-path!
+  [path]
+  (when-not (asset-file-exists? path)
+    (throw (ex-info "asset file not found"
+                    {:code :asset-file-not-found
+                     :path path}))))
+
+(defn- read-asset-file-metadata
+  [path]
+  (let [asset-type (db-asset/asset-path->type path)]
+    (when-not (seq asset-type)
+      (throw (ex-info "asset path must include a file extension"
+                      {:code :invalid-options
+                       :path path})))
+    {:asset/type asset-type
+     :asset/size (asset-file-size-bytes path)
+     :asset/checksum (asset-file-checksum path)}))
+
+(defn- ensure-asset-tag-id!
+  [config repo]
+  (p/let [entity (transport/invoke config :thread-api/pull false
+                                   [repo [:db/id] [:db/ident asset-tag-ident]])]
+    (if-let [tag-id (:db/id entity)]
+      tag-id
+      (throw (ex-info "asset tag not found"
+                      {:code :asset-tag-not-found})))))
+
+(defn- copy-asset-file-to-graph!
+  [config repo block-uuid asset-type source-path]
+  (let [assets-dir (graph-assets-dir-path config repo)
+        destination-path (node-path/join assets-dir (str block-uuid "." asset-type))]
+    (ensure-dir! assets-dir)
+    (copy-file! source-path destination-path)
+    destination-path))
+
+(defn execute-upsert-asset
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))]
+        (case (:mode action)
+          :create
+          (p/let [asset-path (:asset-path action)
+                  _ (ensure-asset-file-path! asset-path)
+                  metadata (read-asset-file-metadata asset-path)
+                  asset-tag-id (ensure-asset-tag-id! cfg (:repo action))
+                  action* (update action
+                                  :blocks
+                                  (fn [blocks]
+                                    (if (seq blocks)
+                                      (update blocks 0 merge
+                                              {:logseq.property.asset/type (:asset/type metadata)
+                                               :logseq.property.asset/size (:asset/size metadata)
+                                               :logseq.property.asset/checksum (:asset/checksum metadata)
+                                               :block/tags #{asset-tag-id}})
+                                      blocks)))
+                  create-result (add-command/execute-add-block (assoc action* :type :add-block) config)
+                  created-ids (vec (or (get-in create-result [:data :result]) []))
+                  created-id (first created-ids)
+                  _ (when-not (some? created-id)
+                      (throw (ex-info "asset block not created"
+                                      {:code :asset-create-failed})))
+                  created-entity (pull-entity-by-id cfg (:repo action) [:db/id :block/uuid] created-id)
+                  block-uuid (:block/uuid created-entity)
+                  _ (when-not (uuid? block-uuid)
+                      (throw (ex-info "created asset block missing uuid"
+                                      {:code :asset-create-failed
+                                       :id created-id})))
+                  _ (copy-asset-file-to-graph! config
+                                              (:repo action)
+                                              block-uuid
+                                              (:asset/type metadata)
+                                              asset-path)]
+            {:status :ok
+             :data {:result [created-id]}})
+
+          :update
+          (p/let [entity (ensure-asset-node! cfg (:repo action) action)
+                  node-id (:db/id entity)
+                  _ (when (seq (:content action))
+                      (update-command/execute-update (-> action
+                                                         (assoc :type :update-block
+                                                                :id node-id)
+                                                         (dissoc :uuid))
+                                                    config))]
+            {:status :ok
+             :data {:result [node-id]}})
+
+          {:status :error
+           :error {:code :invalid-options
+                   :message "invalid upsert asset mode"}}))
       (p/catch (fn [e]
                  {:status :error
                   :error {:code (or (get-in (ex-data e) [:code]) :exception)

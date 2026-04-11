@@ -71,7 +71,9 @@
       (is (string/includes? plain-summary "Graph Management"))
       (is (string/includes? plain-summary "Authentication"))
       (is (string/includes? plain-summary "list"))
+      (is (string/includes? plain-summary "list asset"))
       (is (string/includes? plain-summary "upsert"))
+      (is (string/includes? plain-summary "upsert asset"))
       (is (string/includes? plain-summary "remove"))
       (is (string/includes? plain-summary "query"))
       (is (string/includes? plain-summary "search"))
@@ -95,11 +97,13 @@
       (is (contains-bold? summary "list property"))
       (is (contains-bold? summary "list task"))
       (is (contains-bold? summary "list node"))
+      (is (contains-bold? summary "list asset"))
       (is (contains-bold? summary "upsert block"))
       (is (contains-bold? summary "upsert page"))
       (is (contains-bold? summary "upsert tag"))
       (is (contains-bold? summary "upsert property"))
       (is (contains-bold? summary "upsert task"))
+      (is (contains-bold? summary "upsert asset"))
       (is (contains-bold? summary "remove block"))
       (is (contains-bold? summary "remove page"))
       (is (contains-bold? summary "remove tag"))
@@ -153,11 +157,11 @@
               ["graph list" "graph create" "graph export" "graph import"]
               ["graph list" "graph create" "graph export" "graph import"]]
              ["list"
-              ["list page" "list tag" "list property" "list task" "list node"]
-              ["list page" "list tag" "list property" "list task" "list node"]]
+              ["list page" "list tag" "list property" "list task" "list node" "list asset"]
+              ["list page" "list tag" "list property" "list task" "list node" "list asset"]]
              ["upsert"
-              ["upsert task" "upsert tag" "upsert property"]
-              ["upsert task" "upsert tag" "upsert property"]]
+              ["upsert task" "upsert tag" "upsert property" "upsert asset"]
+              ["upsert task" "upsert tag" "upsert property" "upsert asset"]]
              ["server"
               ["server list" "server start"]
               ["server list" "server start"]]]]
@@ -426,11 +430,13 @@
       (is (string/includes? plain-summary "upsert tag"))
       (is (string/includes? plain-summary "upsert property"))
       (is (string/includes? plain-summary "upsert task"))
+      (is (string/includes? plain-summary "upsert asset"))
       (is (contains-bold? summary "upsert block"))
       (is (contains-bold? summary "upsert page"))
       (is (contains-bold? summary "upsert tag"))
       (is (contains-bold? summary "upsert property"))
-      (is (contains-bold? summary "upsert task")))))
+      (is (contains-bold? summary "upsert task"))
+      (is (contains-bold? summary "upsert asset")))))
 
 (deftest test-parse-args-help-alignment
   (testing "graph group aligns subcommand columns"
@@ -1060,7 +1066,7 @@
           result (tree->text tree-data)]
       (is (string/includes? result (str "[[" (nth uuids 10) "]]"))))))
 
-(deftest test-list-subcommand-parse
+(deftest ^:large-vars/cleanup-todo test-list-subcommand-parse
   (testing "list page parses"
     (let [result (commands/parse-args ["list" "page"
                                        "--expand"
@@ -1158,6 +1164,23 @@
       (is (= 10 (get-in result [:options :limit])))
       (is (= 2 (get-in result [:options :offset])))
       (is (= "updated-at" (get-in result [:options :sort])))
+      (is (= "desc" (get-in result [:options :order])))))
+
+  (testing "list asset parses with common list options"
+    (let [result (commands/parse-args ["list" "asset"
+                                       "--expand"
+                                       "--fields" "id,title,type,updated-at"
+                                       "--limit" "5"
+                                       "--offset" "1"
+                                       "--sort" "updated-at"
+                                       "--order" "desc"])]
+      (is (true? (:ok? result)))
+      (is (= :list-asset (:command result)))
+      (is (true? (get-in result [:options :expand])))
+      (is (= "id,title,type,updated-at" (get-in result [:options :fields])))
+      (is (= 5 (get-in result [:options :limit])))
+      (is (= 1 (get-in result [:options :offset])))
+      (is (= "updated-at" (get-in result [:options :sort])))
       (is (= "desc" (get-in result [:options :order]))))))
 
 (deftest test-search-subcommand-parse
@@ -1241,6 +1264,11 @@
 
   (testing "list task rejects invalid sort field"
     (let [result (commands/parse-args ["list" "task" "--sort" "wat"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "list asset rejects invalid sort field"
+    (let [result (commands/parse-args ["list" "asset" "--sort" "wat"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
@@ -1359,6 +1387,40 @@
              (p/catch (fn [e]
                         (is false (str "unexpected error: " e))))
              (p/finally done))))
+
+(deftest test-list-asset-execute-filters-by-asset-tag
+  (async done
+         (let [calls* (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (swap! calls* conj {:method method :args args})
+                                                  (case method
+                                                    :thread-api/pull
+                                                    {:db/id 900}
+
+                                                    :thread-api/cli-list-nodes
+                                                    [{:db/id 2
+                                                      :block/title "asset-b"
+                                                      :node/type "block"
+                                                      :block/updated-at 30}
+                                                     {:db/id 1
+                                                      :block/title "asset-a"
+                                                      :node/type "block"
+                                                      :block/updated-at 10}]
+
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (list-command/execute-list-asset
+                                 {:repo "demo"
+                                  :options {:sort "updated-at" :order "desc" :limit 1}}
+                                 {})
+                         items (get-in result [:data :items])
+                         list-call (some #(when (= :thread-api/cli-list-nodes (:method %)) %) @calls*)]
+                   (is (= :ok (:status result)))
+                   (is (= [2] (mapv :db/id items)))
+                   (is (= [900] (get-in list-call [:args 1 :tag-ids])))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-task-runtime-invalid-status-includes-graph-values
   (async done
@@ -1849,6 +1911,52 @@
       (is (= :invalid-options (get-in result [:error :code])))
       (is (string/includes? message "Invalid value for option :priority: wat"))
       (is (string/includes? message "Available values: low, medium, high, urgent")))))
+
+(deftest test-verb-subcommand-parse-upsert-asset-mode
+  (testing "upsert asset create mode requires --path"
+    (let [result (commands/parse-args ["upsert" "asset" "--content" "Asset title"])
+          message (or (some-> (get-in result [:error :message]) strip-ansi) "")]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? message "--path is required"))))
+
+  (testing "upsert asset create mode parses with path, target and pos"
+    (let [result (commands/parse-args ["upsert" "asset"
+                                       "--path" "./fixtures/image.png"
+                                       "--content" "Asset title"
+                                       "--target-page" "Home"
+                                       "--pos" "last-child"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-asset (:command result)))
+      (is (= "./fixtures/image.png" (get-in result [:options :path])))
+      (is (= "Asset title" (get-in result [:options :content])))
+      (is (= "Home" (get-in result [:options :target-page])))
+      (is (= "last-child" (get-in result [:options :pos])))))
+
+  (testing "upsert asset update mode parses with id and content"
+    (let [result (commands/parse-args ["upsert" "asset"
+                                       "--id" "42"
+                                       "--content" "Updated asset title"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-asset (:command result)))
+      (is (= 42 (get-in result [:options :id])))
+      (is (= "Updated asset title" (get-in result [:options :content])))))
+
+  (testing "upsert asset update mode rejects --path"
+    (let [result (commands/parse-args ["upsert" "asset"
+                                       "--id" "42"
+                                       "--path" "./fixtures/image.png"])
+          message (or (some-> (get-in result [:error :message]) strip-ansi) "")]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? message "--path is only valid in create mode"))))
+
+  (testing "upsert asset rejects selector conflict"
+    (let [result (commands/parse-args ["upsert" "asset"
+                                       "--id" "42"
+                                       "--uuid" "11111111-1111-1111-1111-111111111111"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
 (deftest test-verb-subcommand-parse-update-target-page
   (testing "upsert block update mode parses with target page"
@@ -2381,7 +2489,7 @@
       (is (= :skill-install (get-in result [:action :type])))
       (is (true? (get-in result [:action :global?]))))))
 
-(deftest test-build-action-inspect-edit-add-upsert
+(deftest ^:large-vars/cleanup-todo test-build-action-inspect-edit-add-upsert
   (testing "list page requires repo"
     (let [parsed {:ok? true :command :list-page :options {}}
           result (commands/build-action parsed {})]
@@ -2402,6 +2510,14 @@
       (is (= "logseq_db_demo" (get-in result [:action :repo])))
       (is (= "project,work" (get-in result [:action :options :tags])))
       (is (= "status" (get-in result [:action :options :properties])))))
+
+  (testing "list asset builds action"
+    (let [parsed {:ok? true :command :list-asset :options {:limit 10 :sort "updated-at"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :list-asset (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= 10 (get-in result [:action :options :limit])))))
 
   (testing "search page builds action from --content option"
     (let [parsed {:ok? true :command :search-page :options {:content "project home"} :args []}
@@ -2463,7 +2579,27 @@
                   :options {:content "Task from CLI" :status "todo"}}
           result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
-      (is (= :upsert-task (get-in result [:action :type]))))))
+      (is (= :upsert-task (get-in result [:action :type])))))
+
+  (testing "upsert asset create builds action with default title"
+    (let [parsed {:ok? true
+                  :command :upsert-asset
+                  :options {:path "/tmp/asset-name.png"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :upsert-asset (get-in result [:action :type])))
+      (is (= :create (get-in result [:action :mode])))
+      (is (= "asset-name" (get-in result [:action :blocks 0 :block/title])))))
+
+  (testing "upsert asset update builds action"
+    (let [parsed {:ok? true
+                  :command :upsert-asset
+                  :options {:id 42 :content "New asset title"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :upsert-asset (get-in result [:action :type])))
+      (is (= :update (get-in result [:action :mode])))
+      (is (= 42 (get-in result [:action :id]))))))
 
 (deftest test-build-action-upsert-tag-property
 
@@ -3591,6 +3727,30 @@
                    (is (= :ok (:status upsert-result)))
                    (is (= :upsert-task (:command upsert-result)))
                    (is (= [:list-task :upsert-task]
+                          (mapv :type @calls*)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-asset-dispatch
+  (async done
+         (let [calls* (atom [])]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               list-command/execute-list-asset (fn [action _]
+                                                                 (swap! calls* conj action)
+                                                                 (p/resolved {:status :ok
+                                                                              :data {:items []}}))
+                               upsert-command/execute-upsert-asset (fn [action _]
+                                                                     (swap! calls* conj action)
+                                                                     (p/resolved {:status :ok
+                                                                                  :data {:result [202]}}))]
+                 (p/let [list-result (commands/execute {:type :list-asset :repo "logseq_db_demo"} {})
+                         upsert-result (commands/execute {:type :upsert-asset :repo "logseq_db_demo"} {})]
+                   (is (= :ok (:status list-result)))
+                   (is (= :list-asset (:command list-result)))
+                   (is (= :ok (:status upsert-result)))
+                   (is (= :upsert-asset (:command upsert-result)))
+                   (is (= [:list-asset :upsert-asset]
                           (mapv :type @calls*)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))

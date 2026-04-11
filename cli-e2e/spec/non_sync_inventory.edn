@@ -35,7 +35,8 @@
               "list tag"
               "list property"
               "list task"
-              "list node"]
+              "list node"
+              "list asset"]
    :options ["--expand"
              "--fields"
              "--limit"
@@ -57,6 +58,7 @@
   {:commands ["upsert block"
               "upsert page"
               "upsert task"
+              "upsert asset"
               "upsert tag"
               "upsert property"]
    :options ["--id"
@@ -66,6 +68,7 @@
              "--target-page"
              "--pos"
              "--content"
+             "--path"
              "--blocks-file"
              "--status"
              "--priority"

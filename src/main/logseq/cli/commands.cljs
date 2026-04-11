@@ -185,13 +185,13 @@
   #{:graph-create :graph-switch :graph-remove :graph-import})
 
 (def ^:private upsert-validation-commands
-  #{:upsert-block :upsert-page :upsert-task :upsert-tag :upsert-property})
+  #{:upsert-block :upsert-page :upsert-task :upsert-tag :upsert-property :upsert-asset})
 
 (def ^:private search-validation-commands
   #{:search-block :search-page :search-property :search-tag})
 
 (def ^:private list-validation-commands
-  #{:list-page :list-tag :list-property :list-task :list-node})
+  #{:list-page :list-tag :list-property :list-task :list-node :list-asset})
 
 (def ^:private remove-validation-commands
   #{:remove-block :remove-page :remove-tag :remove-property})
@@ -257,6 +257,9 @@
          (not (some? (:id opts)))
          (not (seq (some-> (:name opts) string/trim))))
     (missing-property-name-result summary)
+
+    (and (= command :upsert-asset) upsert-invalid-options-message)
+    (command-core/invalid-options-result summary upsert-invalid-options-message)
 
     :else
     nil))
@@ -560,7 +563,7 @@
 
 ;; Command-specific errors live in subcommand namespaces.
 
-(defn build-action
+(defn ^:large-vars/cleanup-todo build-action
   [parsed config]
   (if-not (:ok? parsed)
     parsed
@@ -596,7 +599,7 @@
         (:server-list :server-cleanup :server-start :server-stop :server-restart)
         (server-command/build-action command server-repo)
 
-        (:list-page :list-tag :list-property :list-task :list-node)
+        (:list-page :list-tag :list-property :list-task :list-node :list-asset)
         (list-command/build-action command options repo)
 
         (:search-block :search-page :search-property :search-tag)
@@ -610,6 +613,9 @@
 
         :upsert-task
         (upsert-command/build-task-action options repo)
+
+        :upsert-asset
+        (upsert-command/build-asset-action options repo)
 
         :upsert-tag
         (upsert-command/build-tag-action options repo)
@@ -692,6 +698,7 @@
                          :list-property (list-command/execute-list-property action config)
                          :list-task (list-command/execute-list-task action config)
                          :list-node (list-command/execute-list-node action config)
+                         :list-asset (list-command/execute-list-asset action config)
                          :search-block (search-command/execute-search-block action config)
                          :search-page (search-command/execute-search-page action config)
                          :search-property (search-command/execute-search-property action config)
@@ -699,6 +706,7 @@
                          :upsert-block (upsert-command/execute-upsert-block action config)
                          :upsert-page (upsert-command/execute-upsert-page action config)
                          :upsert-task (upsert-command/execute-upsert-task action config)
+                         :upsert-asset (upsert-command/execute-upsert-asset action config)
                          :upsert-tag (upsert-command/execute-upsert-tag action config)
                          :upsert-property (upsert-command/execute-upsert-property action config)
                          :remove-block (remove-command/execute-remove-block action config)
