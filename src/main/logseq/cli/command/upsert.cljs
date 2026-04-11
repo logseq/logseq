@@ -947,7 +947,8 @@
   [action cfg block-ids]
   (if (seq block-ids)
     (p/let [task-tag-id (ensure-task-tag-id! cfg (:repo action))
-            update-properties (task-property-overrides action)
+            update-properties (merge (or (:update-properties action) {})
+                                     (task-property-overrides action))
             clear-properties (vec (distinct (or (:clear-properties action) [])))
             ;; Currently only built-in properties is supported. If user properties are
             ;; supported, resolution needs to happen before this fn to avoid partial update failures
