@@ -1449,6 +1449,17 @@
                               nil))))})
        value)]))
 
+(defn- asset-icon-for-type
+  "Returns a tabler-icon name for a given asset file extension string."
+  [asset-type]
+  (let [kw (some-> asset-type keyword)]
+    (cond
+      (contains? (common-config/img-formats) kw) "photo"
+      (contains? config/audio-formats kw) "music"
+      (contains? config/video-formats kw) "movie"
+      (= :pdf kw) "file-type-pdf"
+      :else "file")))
+
 (rum/defc asset-grid-popup-content
   [block property {:keys [on-chosen]}]
   (let [[assets set-assets!] (hooks/use-state nil)
@@ -1457,12 +1468,8 @@
      (fn []
        (p/let [asset-class (db/entity :logseq.class/Asset)
                result (when asset-class
-                        (db-async/<get-tag-objects repo (:db/id asset-class)))
-               images (filter (fn [a]
-                                (contains? (common-config/img-formats)
-                                           (keyword (:logseq.property.asset/type a))))
-                              result)]
-         (set-assets! (vec images))))
+                        (db-async/<get-tag-objects repo (:db/id asset-class)))]
+         (set-assets! (vec result))))
      [])
     [:div.asset-picker-grid.p-3
      {:style {:width 640 :max-height 480 :overflow "auto"}}
@@ -1471,28 +1478,38 @@
        [:div.p-4.opacity-60 "Loading…"]
 
        (empty? assets)
-       [:div.p-4.opacity-60 "No image assets found"]
+       [:div.p-4.opacity-60 "No assets found"]
 
        :else
        [:div.grid.gap-2
         {:style {:grid-template-columns "repeat(4, minmax(0, 1fr))"}}
         (for [asset assets]
-          [:button.asset-picker-cell.rounded.overflow-hidden.border.flex.items-center.justify-center.p-1.hover:bg-gray-03
-           {:key (str (:block/uuid asset))
-            :title (:block/title asset)
-            :style {:aspect-ratio "1 / 1"}
-            :on-click (fn []
-                        (shui/popup-hide!)
-                        (p/do!
-                         (db-property-handler/set-block-property!
-                          (:db/id block) (:db/ident property) (:db/id asset))
-                         (when on-chosen (on-chosen))))}
-           (when-let [asset-cp (state/get-component :block/asset-cp)]
-             [:div.flex.items-center.justify-center.w-full.h-full.overflow-hidden.pointer-events-none
-              {:class (str "[&_.asset-container]:!w-full [&_.asset-container]:!h-full "
-                           "[&_.asset-container]:flex [&_.asset-container]:items-center [&_.asset-container]:justify-center "
-                           "[&_img]:!w-auto [&_img]:!h-auto [&_img]:!max-w-full [&_img]:!max-h-full [&_img]:object-contain")}
-              (asset-cp {:disable-resize? true} asset)])])])]))
+          (let [asset-type (:logseq.property.asset/type asset)
+                image? (contains? (common-config/img-formats) (keyword asset-type))]
+            [:button.asset-picker-cell.rounded.overflow-hidden.border.flex.flex-col.p-0.hover:bg-gray-03
+             {:key (str (:block/uuid asset))
+              :title (:block/title asset)
+              :style {:aspect-ratio "1 / 1"}
+              :on-click (fn []
+                          (shui/popup-hide!)
+                          (p/do!
+                           (db-property-handler/set-block-property!
+                            (:db/id block) (:db/ident property) (:db/id asset))
+                           (when on-chosen (on-chosen))))}
+             [:div.asset-picker-title.w-full.px-1.py-0.5.text-xs.truncate.text-left.border-b.opacity-80
+              (:block/title asset)]
+             [:div.flex.flex-1.items-center.justify-center.w-full.overflow-hidden.p-1.pointer-events-none
+              {:style {:min-height 0}}
+              (if image?
+                (when-let [asset-cp (state/get-component :block/asset-cp)]
+                  [:div.flex.items-center.justify-center.w-full.h-full
+                   {:class (str "[&_.asset-container]:!w-full [&_.asset-container]:!h-full "
+                                "[&_.asset-container]:flex [&_.asset-container]:items-center [&_.asset-container]:justify-center "
+                                "[&_img]:!w-auto [&_img]:!h-auto [&_img]:!max-w-full [&_img]:!max-h-full [&_img]:object-contain")}
+                   (asset-cp {:disable-resize? true} asset)])
+                [:div.flex.flex-col.items-center.justify-center.gap-1.opacity-70
+                 (ui/icon (asset-icon-for-type asset-type) {:size 40})
+                 [:span.text-xs.uppercase (or asset-type "file")]])]]))])]))
 
 (rum/defc asset-value-picker
   [block property value opts]
