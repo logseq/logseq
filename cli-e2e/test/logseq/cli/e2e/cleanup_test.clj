@@ -51,6 +51,60 @@
     (is (= [] (:failed-pids result)))
     (is (= [] @killed))))
 
+(deftest list-cli-e2e-db-sync-port-pids-filters-port-18080
+  (let [shell-fn (fn [& _]
+                   {:exit 0
+                    :out (str "COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME\n"
+                              "node    111 me    13u  IPv6 0x0 0t0 TCP *:18080 (LISTEN)\n"
+                              "python  222 me    13u  IPv4 0x0 0t0 TCP 127.0.0.1:18080 (LISTEN)\n"
+                              "node    333 me    13u  IPv6 0x0 0t0 TCP *:18081 (LISTEN)\n")
+                    :err ""})]
+    (is (= [111 222]
+           (cleanup/list-cli-e2e-db-sync-port-pids {:shell-fn shell-fn}))))
+
+  (testing "returns empty when no listener exists"
+    (is (= []
+           (cleanup/list-cli-e2e-db-sync-port-pids {:shell-fn (fn [& _]
+                                                                 {:exit 1
+                                                                  :out ""
+                                                                  :err ""})}))))
+
+  (testing "throws when lsof invocation fails"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"Unable to scan db-sync server port listeners"
+         (cleanup/list-cli-e2e-db-sync-port-pids {:shell-fn (fn [& _]
+                                                               {:exit 1
+                                                                :out ""
+                                                                :err "permission denied"})})))))
+
+(deftest cleanup-db-sync-port-processes-separates-killed-and-failed
+  (let [killed (atom [])
+        result (cleanup/cleanup-db-sync-port-processes! {:list-pids-fn (fn [] [44 55])
+                                                         :kill-pid-fn (fn [pid]
+                                                                        (swap! killed conj pid)
+                                                                        (if (= pid 55)
+                                                                          :failed
+                                                                          :killed))})]
+    (is (= [44 55] (:found-pids result)))
+    (is (= [44] (:killed-pids result)))
+    (is (= [55] (:failed-pids result)))
+    (is (= [44 55] @killed))))
+
+(deftest cleanup-db-sync-port-processes-dry-run-does-not-kill
+  (let [killed (atom [])
+        result (cleanup/cleanup-db-sync-port-processes! {:dry-run true
+                                                         :list-pids-fn (fn [] [44])
+                                                         :kill-pid-fn (fn [pid]
+                                                                        (swap! killed conj pid)
+                                                                        :killed)})]
+    (is (= [44] (:found-pids result)))
+    (is (true? (:dry-run? result)))
+    (is (= [44] (:would-kill-pids result)))
+    (is (= [] (:killed-pids result)))
+    (is (= [] (:failed-pids result)))
+    (is (= [] @killed))))
+
 (deftest cleanup-temp-graph-dirs-removes-only-cli-e2e-graphs
   (let [tmp-root (fs/create-temp-dir {:prefix "cleanup-e2e-test-"})
         matching-graphs (fs/path tmp-root "logseq-cli-e2e-case-a-123" "graphs")

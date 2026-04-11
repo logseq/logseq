@@ -172,34 +172,67 @@
                 :case-id case-id
                 :throw? (not allow-failure)}))
 
+(defn- elapsed-ms
+  [started-at]
+  (long (/ (- (System/nanoTime) started-at) 1000000)))
+
+(defn- run-step!
+  [timings command context {:keys [timings? phase step-index step-total]
+                            :as run-opts}]
+  (if-not timings?
+    (run-command! command context run-opts)
+    (let [started-at (System/nanoTime)]
+      (try
+        (let [result (run-command! command context run-opts)]
+          (swap! timings conj {:phase phase
+                               :step-index step-index
+                               :step-total step-total
+                               :cmd (:cmd result)
+                               :elapsed-ms (elapsed-ms started-at)
+                               :status :ok})
+          result)
+        (catch Exception error
+          (swap! timings conj {:phase phase
+                               :step-index step-index
+                               :step-total step-total
+                               :cmd (or (:cmd (ex-data error))
+                                        (render-string command context))
+                               :elapsed-ms (elapsed-ms started-at)
+                               :status :failed})
+          (throw error))))))
+
 (defn run-case!
-  [case {:keys [run-command detailed-log?]
+  [case {:keys [run-command detailed-log? timings?]
          :or {run-command shell/run!}
          :as opts}]
   (let [context (case-context case opts)
         rendered (render-case case context)
         case-id (:id rendered)
+        timings? (boolean timings?)
+        timings (atom [])
         cleanup-commands (vec (:cleanup rendered))
         setup-commands (vec (:setup rendered))
         main-commands (vec (:cmds rendered))
         cleanup! (fn []
                    (doseq [[idx command] (map-indexed vector cleanup-commands)]
                      (try
-                       (run-command! command context {:run-command run-command
-                                                      :allow-failure true
-                                                      :phase (when detailed-log? :cleanup)
-                                                      :step-index (inc idx)
-                                                      :step-total (count cleanup-commands)
-                                                      :case-id case-id})
+                       (run-step! timings command context {:run-command run-command
+                                                           :timings? timings?
+                                                           :allow-failure true
+                                                           :phase (when (or detailed-log? timings?) :cleanup)
+                                                           :step-index (inc idx)
+                                                           :step-total (count cleanup-commands)
+                                                           :case-id case-id})
                        (catch Exception _
                          nil))))]
-    (doseq [[idx command] (map-indexed vector setup-commands)]
-      (run-command! command context {:run-command run-command
-                                     :phase (when detailed-log? :setup)
-                                     :step-index (inc idx)
-                                     :step-total (count setup-commands)
-                                     :case-id case-id}))
     (try
+      (doseq [[idx command] (map-indexed vector setup-commands)]
+        (run-step! timings command context {:run-command run-command
+                                            :timings? timings?
+                                            :phase (when (or detailed-log? timings?) :setup)
+                                            :step-index (inc idx)
+                                            :step-total (count setup-commands)
+                                            :case-id case-id}))
       (let [main-total (count main-commands)
             _ (when (zero? main-total)
                 (throw (ex-info "Missing case commands"
@@ -207,20 +240,30 @@
                                  :case rendered})))
             result (reduce (fn [_ [idx command]]
                              (let [last-step? (= idx (dec main-total))]
-                               (run-command! command context {:run-command run-command
-                                                              :stdin (when last-step? (:stdin rendered))
-                                                              :allow-failure last-step?
-                                                              :phase (when detailed-log? :main)
-                                                              :step-index (inc idx)
-                                                              :step-total main-total
-                                                              :case-id case-id})))
+                               (run-step! timings command context {:run-command run-command
+                                                                   :timings? timings?
+                                                                   :stdin (when last-step? (:stdin rendered))
+                                                                   :allow-failure last-step?
+                                                                   :phase (when (or detailed-log? timings?) :main)
+                                                                   :step-index (inc idx)
+                                                                   :step-total main-total
+                                                                   :case-id case-id})))
                            nil
                            (map-indexed vector main-commands))]
         (assert-result! rendered result)
-        {:id case-id
-         :status :ok
-         :cmd (:cmd result)
-         :result result
-         :context context})
-      (finally
-        (cleanup!)))))
+        (cleanup!)
+        (cond-> {:id case-id
+                 :status :ok
+                 :cmd (:cmd result)
+                 :result result
+                 :context context}
+          timings? (assoc :timings @timings)))
+      (catch Exception error
+        (cleanup!)
+        (if timings?
+          (throw (ex-info (.getMessage error)
+                          (assoc (or (ex-data error) {})
+                                 :timings @timings
+                                 :case-id case-id)
+                          error))
+          (throw error))))))

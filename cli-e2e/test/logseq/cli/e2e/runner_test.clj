@@ -57,6 +57,50 @@
             {:cmd "cleanup one" :phase :cleanup :step-index 1 :step-total 1 :case-id "graph-info" :throw? false}]
            @calls))))
 
+(deftest run-case-collects-step-timings-when-enabled
+  (let [result (runner/run-case!
+                {:id "graph-info"
+                 :setup ["setup one"]
+                 :cmds ["main command"]
+                 :cleanup ["cleanup one"]
+                 :expect {:exit 0}}
+                {:context {}
+                 :timings? true
+                 :run-command (fn [{:keys [cmd]}]
+                                {:cmd cmd
+                                 :exit 0
+                                 :out ""
+                                 :err ""})})]
+    (is (= 3 (count (:timings result))))
+    (is (= [:setup :main :cleanup]
+           (mapv :phase (:timings result))))))
+
+(deftest run-case-attaches-timings-to-error-when-enabled
+  (let [error (try
+                (runner/run-case!
+                 {:id "graph-info"
+                  :setup ["setup one"]
+                  :cmds ["main command"]
+                  :cleanup ["cleanup one"]
+                  :expect {:exit 0}}
+                 {:context {}
+                  :timings? true
+                  :run-command (fn [{:keys [cmd]}]
+                                 (when (= cmd "main command")
+                                   (throw (ex-info "boom" {:cmd cmd})))
+                                 {:cmd cmd
+                                  :exit 0
+                                  :out ""
+                                  :err ""})})
+                nil
+                (catch clojure.lang.ExceptionInfo error
+                  error))
+        timings (:timings (ex-data error))]
+    (is (= "graph-info" (:case-id (ex-data error))))
+    (is (= [:setup :main :cleanup]
+           (mapv :phase timings)))
+    (is (= :failed (:status (second timings))))))
+
 (deftest run-case-validates-json-paths-and-nonzero-exit
   (let [result (runner/run-case!
                 {:id "invalid-shell"
