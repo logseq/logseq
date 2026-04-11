@@ -295,6 +295,23 @@
     (is (string/includes? result "Node Block"))
     (is (string/includes? result "Count: 2"))))
 
+(deftest test-human-output-list-asset
+  (let [result (format/format-result {:status :ok
+                                      :command :list-asset
+                                      :data {:items [{:db/id 3
+                                                      :block/title "Asset Node"
+                                                      :node/type "block"
+                                                      :block/page-id 1
+                                                      :block/page-title "Assets"
+                                                      :block/created-at 40000
+                                                      :block/updated-at 90000}]}}
+                                     {:output-format nil
+                                      :now-ms 100000})]
+    (is (string/includes? result "TYPE"))
+    (is (string/includes? result "PAGE-ID"))
+    (is (string/includes? result "Asset Node"))
+    (is (string/includes? result "Count: 1"))))
+
 (deftest test-human-output-list-title-max-display-width
   (doseq [[label command item]
           [["list page truncates title by configured display width"
@@ -328,6 +345,15 @@
             {:db/id 5
              :block/title "ABCDEFGH"
              :node/type "page"
+             :block/updated-at 90000
+             :block/created-at 40000}]
+           ["list asset truncates title by configured display width"
+            :list-asset
+            {:db/id 6
+             :block/title "ABCDEFGH"
+             :node/type "block"
+             :block/page-id 1
+             :block/page-title "Assets"
              :block/updated-at 90000
              :block/created-at 40000}]]]
     (testing label
@@ -474,7 +500,13 @@
              :context {:repo "demo-repo"
                        :page "Weekly Plan"}
              :data {:result [987]}}
-            "Upserted task:\n[987]"]]]
+            "Upserted task:\n[987]"]
+           ["upsert asset renders ids in two lines"
+            {:status :ok
+             :command :upsert-asset
+             :context {:repo "demo-repo"}
+             :data {:result [555]}}
+            "Upserted asset:\n[555]"]]]
     (testing label
       (let [result (format/format-result payload {:output-format nil})]
         (is (= expected result))))))

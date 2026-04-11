@@ -1,6 +1,8 @@
 (ns logseq.cli.command.upsert-test
   (:require [clojure.string :as string]
             [cljs.test :refer [async deftest is testing]]
+            [logseq.cli.command.add :as add-command]
+            [logseq.cli.command.update :as update-command]
             [logseq.cli.command.upsert :as upsert-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
@@ -49,6 +51,151 @@
               (is (= [42] (get-in result [:data :result])))
               (is @create-called?*)
               (is (= 2 @q-calls*))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-build-asset-action
+  (testing "upsert asset create mode derives default title from path"
+    (let [result (upsert-command/build-asset-action {:path "/tmp/team-logo.png"}
+                                                    "logseq_db_demo")]
+      (is (true? (:ok? result)))
+      (is (= :upsert-asset (get-in result [:action :type])))
+      (is (= :create (get-in result [:action :mode])))
+      (is (= "/tmp/team-logo.png" (get-in result [:action :asset-path])))
+      (is (= "team-logo" (get-in result [:action :blocks 0 :block/title])))))
+
+  (testing "upsert asset update mode preserves selector and content"
+    (let [result (upsert-command/build-asset-action {:id 42 :content "New title"}
+                                                    "logseq_db_demo")]
+      (is (true? (:ok? result)))
+      (is (= :upsert-asset (get-in result [:action :type])))
+      (is (= :update (get-in result [:action :mode])))
+      (is (= 42 (get-in result [:action :id])))
+      (is (= "New title" (get-in result [:action :content]))))))
+
+(deftest test-execute-upsert-asset-create-applies-metadata-and-copies-file
+  (async done
+    (let [add-actions* (atom [])
+          copy-calls* (atom [])
+          action {:type :upsert-asset
+                  :mode :create
+                  :repo "demo-repo"
+                  :graph "demo-graph"
+                  :asset-path "/tmp/logo.png"
+                  :content "Logo"
+                  :blocks [{:block/title "Logo"}] }]
+      (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                      (p/resolved (assoc config :base-url "http://example")))
+                          upsert-command/asset-file-exists? (fn [_] true)
+                          upsert-command/asset-file-size-bytes (fn [_] 123)
+                          upsert-command/asset-file-checksum (fn [_] "sha-256-value")
+                          upsert-command/copy-asset-file-to-graph! (fn [_ repo block-uuid asset-type source-path]
+                                                                     (swap! copy-calls* conj [repo block-uuid asset-type source-path])
+                                                                     "/tmp/copied/logo.png")
+                          add-command/execute-add-block (fn [add-action _]
+                                                          (swap! add-actions* conj add-action)
+                                                          (p/resolved {:status :ok
+                                                                       :data {:result [101]}}))
+                          transport/invoke (fn [_ method _ args]
+                                             (case method
+                                               :thread-api/pull
+                                               (let [[_ _ lookup] args]
+                                                 (cond
+                                                   (= lookup 101)
+                                                   (p/resolved {:db/id 101
+                                                                :block/uuid (uuid "00000000-0000-0000-0000-000000000101")})
+
+                                                   (= lookup [:db/ident :logseq.class/Asset])
+                                                   (p/resolved {:db/id 900})
+
+                                                   :else
+                                                   (p/resolved {})))
+
+                                               (throw (ex-info "unexpected invoke"
+                                                               {:method method
+                                                                :args args}))))]
+            (p/let [result (upsert-command/execute-upsert-asset action {})
+                    block (get-in (first @add-actions*) [:blocks 0])]
+              (is (= :ok (:status result)))
+              (is (= [101] (get-in result [:data :result])))
+              (is (= "png" (:logseq.property.asset/type block)))
+              (is (= 123 (:logseq.property.asset/size block)))
+              (is (= "sha-256-value" (:logseq.property.asset/checksum block)))
+              (is (= #{900} (:block/tags block)))
+              (is (= [["demo-repo"
+                       (uuid "00000000-0000-0000-0000-000000000101")
+                       "png"
+                       "/tmp/logo.png"]]
+                     @copy-calls*))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-upsert-asset-update
+  (async done
+    (let [update-calls* (atom [])
+          action {:type :upsert-asset
+                  :mode :update
+                  :repo "demo-repo"
+                  :graph "demo-graph"
+                  :id 42
+                  :content "Updated title"}]
+      (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                      (p/resolved (assoc config :base-url "http://example")))
+                          update-command/execute-update (fn [update-action _]
+                                                          (swap! update-calls* conj update-action)
+                                                          (p/resolved {:status :ok :data {:result nil}}))
+                          transport/invoke (fn [_ method _ args]
+                                             (case method
+                                               :thread-api/pull
+                                               (let [[_ _ lookup] args]
+                                                 (if (= lookup 42)
+                                                   (p/resolved {:db/id 42
+                                                                :block/uuid (uuid "00000000-0000-0000-0000-000000000042")
+                                                                :block/tags [{:db/ident :logseq.class/Asset}]})
+                                                   (p/resolved {})))
+
+                                               (throw (ex-info "unexpected invoke"
+                                                               {:method method
+                                                                :args args}))))]
+            (p/let [result (upsert-command/execute-upsert-asset action {})]
+              (is (= :ok (:status result)))
+              (is (= [42] (get-in result [:data :result])))
+              (is (= :update-block (get-in (first @update-calls*) [:type])))
+              (is (= 42 (get-in (first @update-calls*) [:id])))
+              (is (= "Updated title" (get-in (first @update-calls*) [:content])))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-upsert-asset-update-rejects-non-asset-node
+  (async done
+    (let [action {:type :upsert-asset
+                  :mode :update
+                  :repo "demo-repo"
+                  :graph "demo-graph"
+                  :id 42}]
+      (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                      (p/resolved (assoc config :base-url "http://example")))
+                          transport/invoke (fn [_ method _ args]
+                                             (case method
+                                               :thread-api/pull
+                                               (let [[_ _ lookup] args]
+                                                 (if (= lookup 42)
+                                                   (p/resolved {:db/id 42
+                                                                :block/uuid (uuid "00000000-0000-0000-0000-000000000042")
+                                                                :block/tags [{:db/ident :logseq.class/Task}]})
+                                                   (p/resolved {})))
+
+                                               (throw (ex-info "unexpected invoke"
+                                                               {:method method
+                                                                :args args}))))]
+            (p/let [result (upsert-command/execute-upsert-asset action {})
+                    message (or (get-in result [:error :message]) "")]
+              (is (= :error (:status result)))
+              (is (= :upsert-id-type-mismatch (get-in result [:error :code])))
+              (is (string/includes? message "#Asset"))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
