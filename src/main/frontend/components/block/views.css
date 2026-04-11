@@ -47,19 +47,19 @@
     .virtuoso-grid-item { @apply w-[290px]; }
   }
 
-  /* Header: Steam store header aspect ratio (460:215 ≈ 2.14:1) */
+  /* Header: landscape header aspect ratio (460:215 ≈ 2.14:1) */
   &.ls-cards-header {
     .ls-card-item { @apply h-[14rem]; }
     .virtuoso-grid-item { @apply w-[344px]; }
   }
 
-  /* Capsule: Steam library capsule portrait (2:3) */
+  /* Capsule: portrait capsule aspect ratio (2:3) */
   &.ls-cards-capsule {
     .ls-card-item { @apply h-[23rem]; }
     .virtuoso-grid-item { @apply w-[200px]; }
   }
 
-  /* Hero: Steam library hero ultra-wide banner (1920:620 ≈ 3.1:1) */
+  /* Hero: ultra-wide banner aspect ratio (1920:620 ≈ 3.1:1) */
   &.ls-cards-hero {
     .ls-card-item { @apply h-[12rem]; }
     .virtuoso-grid-item { @apply w-[400px]; }
