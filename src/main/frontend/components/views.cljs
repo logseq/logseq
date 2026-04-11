@@ -2073,25 +2073,42 @@
   (let [n (when (string? s) (parse-long (string/replace s #"[^0-9]" "")))]
     (when (and (number? n) (pos? n)) n)))
 
+(def ^:private gallery-custom-dimension-debounce-ms 250)
+
 (rum/defc gallery-custom-dimension-inputs
   "Two text inputs for the custom Width and Height, separated by `:`.
-   Each keystroke commits back to the view entity as soon as the raw
-   value parses as a positive integer, so the card resizes live and
-   values persist without relying on blur (which the popup may eat
-   when the user clicks outside it)."
+   Non-digit keystrokes are filtered before they reach local state, and
+   commits back to the view entity are debounced so rapid typing does
+   not produce a burst of db writes. Commit happens on-change rather
+   than on-blur because the surrounding popup tears the input out of
+   the DOM before blur would fire."
   [view-entity]
   (let [initial-w (or (gallery-custom-width view-entity) gallery-custom-dimension-default)
         initial-h (or (gallery-custom-height view-entity) gallery-custom-dimension-default)
         [w-input set-w-input!] (hooks/use-state (str initial-w))
         [h-input set-h-input!] (hooks/use-state (str initial-h))
-        on-change! (fn [k set-input!]
-                     (fn [e]
-                       (let [raw (.. e -target -value)]
-                         (set-input! raw)
-                         (when-let [v (parse-dimension-input raw)]
-                           (db-property-handler/set-block-property!
-                            (:db/id view-entity) k v)))))
+        debounced-w (hooks/use-debounced-value w-input gallery-custom-dimension-debounce-ms)
+        debounced-h (hooks/use-debounced-value h-input gallery-custom-dimension-debounce-ms)
+        on-digit-change! (fn [set-input!]
+                           (fn [e]
+                             (set-input! (string/replace (.. e -target -value) #"[^0-9]" ""))))
         input-cls "!px-2 !py-0 !h-8 w-[72px] text-sm border rounded bg-transparent text-right tabular-nums"]
+    (hooks/use-effect!
+     (fn []
+       (when-let [v (parse-dimension-input debounced-w)]
+         (db-property-handler/set-block-property!
+          (:db/id view-entity)
+          :logseq.property.view/gallery-card-custom-width
+          v)))
+     [debounced-w])
+    (hooks/use-effect!
+     (fn []
+       (when-let [v (parse-dimension-input debounced-h)]
+         (db-property-handler/set-block-property!
+          (:db/id view-entity)
+          :logseq.property.view/gallery-card-custom-height
+          v)))
+     [debounced-h])
     [:div.flex.flex-row.items-center.gap-2.self-end
      [:input
       {:type "text"
@@ -2099,7 +2116,7 @@
        :value w-input
        :class input-cls
        :aria-label "Custom card width in pixels"
-       :on-change (on-change! :logseq.property.view/gallery-card-custom-width set-w-input!)}]
+       :on-change (on-digit-change! set-w-input!)}]
      [:div.text-muted-foreground ":"]
      [:input
       {:type "text"
@@ -2107,7 +2124,7 @@
        :value h-input
        :class input-cls
        :aria-label "Custom card height in pixels"
-       :on-change (on-change! :logseq.property.view/gallery-card-custom-height set-h-input!)}]]))
+       :on-change (on-digit-change! set-h-input!)}]]))
 
 (rum/defc gallery-settings-config
   [view-entity table columns]
