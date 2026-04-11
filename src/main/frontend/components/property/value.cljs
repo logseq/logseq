@@ -1530,20 +1530,35 @@
                        nil))}
      (if (and value (:db/id value))
        (let [value-asset-type (:logseq.property.asset/type value)
-             value-image? (contains? (common-config/img-formats) (keyword value-asset-type))]
+             value-kw (keyword value-asset-type)
+             value-image? (contains? (common-config/img-formats) value-kw)
+             value-video? (contains? config/video-formats value-kw)]
          [:div.flex.items-center.gap-2.w-full.flex-wrap
-          (when-let [asset-cp (state/get-component :block/asset-cp)]
-            (if value-image?
-              [:div.asset-value-thumb.flex-shrink-0.rounded.overflow-hidden.flex.items-center.justify-center
-               {:class (str "[&_.asset-container]:!w-full [&_.asset-container]:!h-full "
-                            "[&_.asset-container]:flex [&_.asset-container]:items-center [&_.asset-container]:justify-center "
-                            "[&_img]:!w-auto [&_img]:!h-auto [&_img]:!max-w-full [&_img]:!max-h-full [&_img]:object-contain")
-                :style {:width 80 :height 80}}
-               (rum/with-key (asset-cp {:disable-resize? true} value)
-                 (str "asset-cp-" (:block/uuid value)))]
-              [:div.asset-value-thumb.flex-shrink-0.flex.items-center
-               (rum/with-key (asset-cp {:disable-resize? true} value)
-                 (str "asset-cp-" (:block/uuid value)))]))
+          (cond
+            value-video?
+            (shui/button
+             {:variant :outline
+              :size :sm
+              :class "gap-1 max-w-[240px]"
+              :on-click (fn [e]
+                          (util/stop e)
+                          (state/pub-event! [:asset/show-preview value]))}
+             (ui/icon "movie" {:size 14})
+             [:span.truncate (:block/title value)])
+
+            :else
+            (when-let [asset-cp (state/get-component :block/asset-cp)]
+              (if value-image?
+                [:div.asset-value-thumb.flex-shrink-0.rounded.overflow-hidden.flex.items-center.justify-center
+                 {:class (str "[&_.asset-container]:!w-full [&_.asset-container]:!h-full "
+                              "[&_.asset-container]:flex [&_.asset-container]:items-center [&_.asset-container]:justify-center "
+                              "[&_img]:!w-auto [&_img]:!h-auto [&_img]:!max-w-full [&_img]:!max-h-full [&_img]:object-contain")
+                  :style {:width 80 :height 80}}
+                 (rum/with-key (asset-cp {:disable-resize? true} value)
+                   (str "asset-cp-" (:block/uuid value)))]
+                [:div.asset-value-thumb.flex-shrink-0.flex.items-center
+                 (rum/with-key (asset-cp {:disable-resize? true} value)
+                   (str "asset-cp-" (:block/uuid value)))])))
           (shui/button
            {:variant :outline
             :size :sm

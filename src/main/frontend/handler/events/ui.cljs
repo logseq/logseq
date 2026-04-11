@@ -343,6 +343,7 @@
   (when-let [asset-type-str (:logseq.property.asset/type asset)]
     (let [asset-type (keyword asset-type-str)
           image? (contains? (common-config/img-formats) asset-type)
+          video? (contains? config/video-formats asset-type)
           pdf? (= :pdf asset-type)
           file-name (str (:block/uuid asset) "." asset-type-str)
           rel-path (path/path-join (str "../" common-config/local-assets-dir) file-name)]
@@ -354,6 +355,23 @@
              [{:src url
                :w (or (:logseq.property.asset/width asset) 1200)
                :h (or (:logseq.property.asset/height asset) 800)}])))
+
+        video?
+        (p/let [url (assets-handler/<make-asset-url rel-path)]
+          (when url
+            (shui/dialog-open!
+             (fn []
+               [:div.flex.flex-col.gap-2.items-center
+                [:div.font-medium.text-sm.self-start.truncate.max-w-full
+                 (:block/title asset)]
+                [:video.rounded.max-w-full
+                 {:src url
+                  :controls true
+                  :autoPlay true
+                  :style {:max-height "80vh"}}]])
+             {:id :asset-video-preview
+              :center? true
+              :content-props {:class "max-w-[min(90vw,1200px)]"}})))
 
         pdf?
         (p/let [url (assets-handler/<make-asset-url rel-path)]
