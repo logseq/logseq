@@ -594,12 +594,14 @@
                                   (into new-block properties)
                                   new-block)]
                  (ui-outliner-tx/transact!
-                  {:outliner-op :insert-blocks}
+                  (cond->
+                   {:outliner-op :insert-blocks}
+                    (not= outliner-op :insert-blocks)
+                    (assoc :source-outliner-op outliner-op))
                   (outliner-insert-block! config target-block new-block'
                                           {:sibling? sibling?
                                            :keep-uuid? true
                                            :ordered-list? ordered-list?
-                                           :outliner-op outliner-op
                                            :replace-empty-target? replace-empty-target?})))
                (when edit-block?
                  (if (and replace-empty-target?
