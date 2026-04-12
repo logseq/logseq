@@ -314,7 +314,8 @@
            (true? local-tx?)
            outliner-op
            (not (false? (:gen-undo-ops? tx-meta)))
-           (not (:create-today-journal? tx-meta)))
+           (not (:create-today-journal? tx-meta))
+           (not (contains? #{:create-view} (:source-outliner-op tx-meta))))
       (let [all-ids (distinct (map :e tx-data))
             retracted-ids (set
                            (filter

@@ -339,15 +339,12 @@
                    [[:db/add [:block/uuid child-uuid] :block/title "restored child"]]
                    (local-tx-meta
                     {:client-id "test-client"
-                     :outliner-op :restore-recycled
-                     :outliner-ops [[:transact nil]]}))
+                     :outliner-op :restore-recycled}))
       (let [undo-op (last (get @worker-undo-redo/*undo-ops test-repo))
             data (some #(when (= ::worker-undo-redo/db-transact (first %))
                           (second %))
                        undo-op)]
         (is (some? data))
-        (is (= [[:transact nil]]
-               (:db-sync/forward-outliner-ops data)))
         (is (nil? (:db-sync/inverse-outliner-ops data)))))))
 
 (deftest undo-history-canonicalizes-insert-block-uuids-test

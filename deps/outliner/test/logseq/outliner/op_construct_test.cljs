@@ -38,22 +38,6 @@
       (is (= [[:delete-page [page-uuid {}]]]
              inverse-outliner-ops)))))
 
-(deftest derive-history-outliner-ops-collapses-mixed-stream-to-transact-placeholder-test
-  (testing "mixed semantic/non-semantic ops collapse to transact placeholder"
-    (let [conn (db-test/create-conn-with-blocks
-                {:pages-and-blocks
-                 [{:page {:block/title "page"}
-                   :blocks [{:block/title "child"}]}]})
-          child (db-test/find-block-by-content @conn "child")
-          tx-meta {:outliner-op :save-block
-                   :outliner-ops [[:save-block [{:block/uuid (:block/uuid child)
-                                                 :block/title "changed"} {}]]
-                                  [:transact nil]]}
-          {:keys [forward-outliner-ops inverse-outliner-ops]}
-          (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)]
-      (is (= [[:transact nil]] forward-outliner-ops))
-      (is (nil? inverse-outliner-ops)))))
-
 (deftest derive-history-outliner-ops-handles-replace-empty-target-insert-inverse-test
   (testing "replace-empty-target insert keeps source uuid and inverse deletes target placeholder"
     (let [conn (db-test/create-conn-with-blocks
@@ -211,23 +195,6 @@
       (is (= [:block/uuid target-uuid]
              (get-in forward-outliner-ops [0 1 1]))))))
 
-(deftest derive-history-outliner-ops-delete-closed-value-resolves-value-id-from-tx-data-test
-  (testing "delete-closed-value is treated as raw transact placeholder"
-    (let [conn (db-test/create-conn-with-blocks
-                {:properties {:status {:logseq.property/type :default}}
-                 :pages-and-blocks []})
-          property-page (d/entity @conn :user.property/status)
-          property-id (:db/id property-page)
-          stale-value-id 8888888
-          value-uuid (random-uuid)
-          tx-data [{:e stale-value-id :a :block/uuid :v value-uuid :added false}]
-          tx-meta {:outliner-op :delete-closed-value
-                   :outliner-ops [[:delete-closed-value [property-id stale-value-id]]]}
-          {:keys [forward-outliner-ops]}
-          (op-construct/derive-history-outliner-ops @conn @conn tx-data tx-meta)]
-      (is (= op-construct/canonical-transact-op
-             forward-outliner-ops)))))
-
 (deftest derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page-test
   (testing "delete-page inverse restores hard-retracted class/property/today pages with stable db/ident"
     (let [today (date-time-util/ms->journal-day (js/Date.))
@@ -287,11 +254,7 @@
         page (db-test/find-page-by-title @conn "page")
         parent (db-test/find-block-by-content @conn "parent")
         child-a (db-test/find-block-by-content @conn "child-a")
-        child-b (db-test/find-block-by-content @conn "child-b")
-        prop-block-1 (db-test/find-block-by-content @conn "prop-block-1")
-        prop-block-2 (db-test/find-block-by-content @conn "prop-block-2")
-        class-id (:db/id (d/entity @conn :user.class/c1))
-        property-id (:db/id (d/entity @conn :user.property/p1))]
+        child-b (db-test/find-block-by-content @conn "child-b")]
     (testing ":save-block"
       (let [{:keys [inverse-outliner-ops]}
             (op-construct/derive-history-outliner-ops
@@ -355,63 +318,6 @@
         (is (= [[:restore-recycled [(:block/uuid page)]]]
                inverse-outliner-ops))))
 
-    (testing ":set-block-property"
-      (let [{:keys [forward-outliner-ops inverse-outliner-ops]}
-            (op-construct/derive-history-outliner-ops
-             @conn @conn [] {:outliner-op :set-block-property
-                             :outliner-ops [[:set-block-property [(:db/id prop-block-1)
-                                                                  :user.property/p1
-                                                                  "new-value"]]]})]
-        (is (= op-construct/canonical-transact-op forward-outliner-ops))
-        (is (nil? inverse-outliner-ops))))
-
-    (testing ":remove-block-property"
-      (let [{:keys [forward-outliner-ops inverse-outliner-ops]}
-            (op-construct/derive-history-outliner-ops
-             @conn @conn [] {:outliner-op :remove-block-property
-                             :outliner-ops [[:remove-block-property [(:db/id prop-block-1)
-                                                                     :user.property/p1]]]})]
-        (is (= op-construct/canonical-transact-op forward-outliner-ops))
-        (is (nil? inverse-outliner-ops))))
-
-    (testing ":batch-set-property"
-      (let [{:keys [forward-outliner-ops inverse-outliner-ops]}
-            (op-construct/derive-history-outliner-ops
-             @conn @conn [] {:outliner-op :batch-set-property
-                             :outliner-ops [[:batch-set-property [[(:db/id prop-block-1)
-                                                                   (:db/id prop-block-2)]
-                                                                  :user.property/p1
-                                                                  "new-value"
-                                                                  {}]]]})]
-        (is (= op-construct/canonical-transact-op forward-outliner-ops))
-        (is (nil? inverse-outliner-ops))))
-
-    (testing ":batch-remove-property"
-      (let [{:keys [forward-outliner-ops inverse-outliner-ops]}
-            (op-construct/derive-history-outliner-ops
-             @conn @conn [] {:outliner-op :batch-remove-property
-                             :outliner-ops [[:batch-remove-property [[(:db/id prop-block-1)
-                                                                      (:db/id prop-block-2)]
-                                                                     :user.property/p1]]]})]
-        (is (= op-construct/canonical-transact-op forward-outliner-ops))
-        (is (nil? inverse-outliner-ops))))
-
-    (testing ":class-add-property"
-      (let [{:keys [forward-outliner-ops inverse-outliner-ops]}
-            (op-construct/derive-history-outliner-ops
-             @conn @conn [] {:outliner-op :class-add-property
-                             :outliner-ops [[:class-add-property [class-id property-id]]]})]
-        (is (= op-construct/canonical-transact-op forward-outliner-ops))
-        (is (nil? inverse-outliner-ops))))
-
-    (testing ":class-remove-property"
-      (let [{:keys [forward-outliner-ops inverse-outliner-ops]}
-            (op-construct/derive-history-outliner-ops
-             @conn @conn [] {:outliner-op :class-remove-property
-                             :outliner-ops [[:class-remove-property [class-id property-id]]]})]
-        (is (= op-construct/canonical-transact-op forward-outliner-ops))
-        (is (nil? inverse-outliner-ops))))
-
     (testing ":upsert-property"
       (let [property-ident :user.property/test-inverse
             expected-page-uuid (common-uuid/gen-uuid :db-ident-block-uuid property-ident)
@@ -453,82 +359,6 @@
                                         :logical-outdenting? nil}]]]
              inverse-outliner-ops)))))
 
-(deftest derive-history-outliner-ops-property-history-blocks-undo-cleanup-test
-  (testing ":set-block-property now falls back to transact placeholder history"
-    (let [conn (db-test/create-conn-with-blocks
-                {:properties {:pnum {:logseq.property/type :number
-                                     :db/cardinality :db.cardinality/one}}
-                 :pages-and-blocks
-                 [{:page {:block/title "page"}
-                   :blocks [{:block/title "task"
-                             :build/properties {:pnum 1}}]}]})
-          block (db-test/find-block-by-content @conn "task")
-          block-id (:db/id block)
-          property-id (:db/id (d/entity @conn :user.property/pnum))
-          history-uuid (random-uuid)
-          {:keys [db-after tx-data]}
-          (d/with @conn
-                  [[:db/add block-id :user.property/pnum 2]
-                   {:db/id -1
-                    :block/uuid history-uuid
-                    :logseq.property.history/block block-id
-                    :logseq.property.history/property property-id
-                    :logseq.property.history/scalar-value 2}]
-                  {})
-          {:keys [forward-outliner-ops inverse-outliner-ops]}
-          (op-construct/derive-history-outliner-ops
-           @conn
-           db-after
-           tx-data
-           {:outliner-op :set-block-property
-            :outliner-ops [[:set-block-property [block-id :user.property/pnum 2]]]})]
-      (is (= op-construct/canonical-transact-op forward-outliner-ops))
-      (is (nil? inverse-outliner-ops))))
-
-  (testing ":batch-set-property now falls back to transact placeholder history"
-    (let [conn (db-test/create-conn-with-blocks
-                {:properties {:pnum {:logseq.property/type :number
-                                     :db/cardinality :db.cardinality/one}}
-                 :pages-and-blocks
-                 [{:page {:block/title "page"}
-                   :blocks [{:block/title "task-1"
-                             :build/properties {:pnum 1}}
-                            {:block/title "task-2"}]}]})
-          block-1 (db-test/find-block-by-content @conn "task-1")
-          block-2 (db-test/find-block-by-content @conn "task-2")
-          block-1-id (:db/id block-1)
-          block-2-id (:db/id block-2)
-          property-id (:db/id (d/entity @conn :user.property/pnum))
-          history-uuid-1 (random-uuid)
-          history-uuid-2 (random-uuid)
-          {:keys [db-after tx-data]}
-          (d/with @conn
-                  [[:db/add block-1-id :user.property/pnum 2]
-                   [:db/add block-2-id :user.property/pnum 2]
-                   {:db/id -1
-                    :block/uuid history-uuid-1
-                    :logseq.property.history/block block-1-id
-                    :logseq.property.history/property property-id
-                    :logseq.property.history/scalar-value 2}
-                   {:db/id -2
-                    :block/uuid history-uuid-2
-                    :logseq.property.history/block block-2-id
-                    :logseq.property.history/property property-id
-                    :logseq.property.history/scalar-value 2}]
-                  {})
-          {:keys [forward-outliner-ops inverse-outliner-ops]}
-          (op-construct/derive-history-outliner-ops
-           @conn
-           db-after
-           tx-data
-           {:outliner-op :batch-set-property
-            :outliner-ops [[:batch-set-property [[block-1-id block-2-id]
-                                                 :user.property/pnum
-                                                 2
-                                                 {}]]]})]
-      (is (= op-construct/canonical-transact-op forward-outliner-ops))
-      (is (nil? inverse-outliner-ops)))))
-
 (deftest derive-history-outliner-ops-direct-outdent-with-extra-moved-blocks-keeps-semantic-ops-test
   (testing "direct outdent keeps semantic indent-outdent op and inverse"
     (let [conn (db-test/create-conn-with-blocks
@@ -557,13 +387,3 @@
                                        {:parent-original nil
                                         :logical-outdenting? nil}]]]
              inverse-outliner-ops)))))
-
-(deftest build-history-action-metadata-non-semantic-outliner-op-does-not-throw-test
-  (testing "non-semantic outliner-op with transact placeholder should not fail strict semantic validation"
-    (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})
-          tx-meta {:outliner-op :restore-recycled
-                   :outliner-ops [[:transact nil]]}
-          result (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)]
-      (is (= [[:transact nil]]
-             (:forward-outliner-ops result)))
-      (is (nil? (:inverse-outliner-ops result))))))

@@ -28,8 +28,6 @@
 
 (def sqlite (if (find-ns 'nbb.core) (aget sqlite3 "default") sqlite3))
 
-(def canonical-transact-op [[:transact nil]])
-
 (def cli-spec
   {:help {:alias :h
           :desc "Show help"}
@@ -297,10 +295,7 @@
 
 (defn usable-history-ops
   [ops]
-  (let [ops' (some-> ops seq vec)]
-    (when (and (seq ops')
-               (not= canonical-transact-op ops'))
-      ops')))
+  ops)
 
 (defn entity-id->block-uuid
   [db id]
@@ -725,21 +720,14 @@
                            :outliner-op (:outliner-op local-tx)}))))
 
 (defn rebase-history-ops
-  [mode local-tx]
+  [_mode local-tx]
   (let [forward-outliner-ops (seq (:forward-outliner-ops local-tx))
         inverse-outliner-ops (seq (:inverse-outliner-ops local-tx))
-        fallback-forward-ops (when (and (nil? forward-outliner-ops)
-                                        (seq (:tx local-tx))
-                                        (if (= mode :legacy)
-                                          (= :rebase (:outliner-op local-tx))
-                                          true))
-                               canonical-transact-op)
-        forward-ops (or forward-outliner-ops fallback-forward-ops)
-        inverse-ops (or inverse-outliner-ops
-                        (when forward-ops canonical-transact-op))]
+        forward-ops forward-outliner-ops
+        inverse-ops inverse-outliner-ops]
     {:forward-ops forward-ops
      :inverse-ops inverse-ops
-     :fallback? (boolean fallback-forward-ops)}))
+     :fallback? false}))
 
 (defn transact-remote-txs!
   [conn remote-rows]
@@ -820,13 +808,8 @@
     (let [{:keys [forward-ops inverse-ops fallback?]} (rebase-history-ops mode local-tx)]
       (if (seq forward-ops)
         (try
-          (if (= canonical-transact-op (vec forward-ops))
-            (when-let [tx-data (seq (:tx local-tx))]
-              (ldb/transact! conn tx-data {:outliner-op :transact
-                                           :reapply-local? true
-                                           :tx-id (:tx-id local-tx)}))
-            (doseq [op forward-ops]
-              (replay-canonical-outliner-op! conn op rebase-db-before)))
+          (doseq [op forward-ops]
+            (replay-canonical-outliner-op! conn op rebase-db-before))
           {:tx-id (:tx-id local-tx)
            :status :rebased
            :fallback? fallback?
