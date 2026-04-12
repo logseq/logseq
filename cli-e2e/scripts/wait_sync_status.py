@@ -121,6 +121,49 @@ def tx_sync_status(status_payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def tx_deltas(
+    tx_status: Dict[str, Any],
+    baseline_tx: Dict[str, Any],
+) -> Dict[str, int | None]:
+    local_tx = tx_status.get("local-tx")
+    remote_tx = tx_status.get("remote-tx")
+    baseline_local_tx = baseline_tx.get("local-tx")
+    baseline_remote_tx = baseline_tx.get("remote-tx")
+
+    local_tx_delta = (
+        None
+        if local_tx is None or baseline_local_tx is None
+        else local_tx - baseline_local_tx
+    )
+    remote_tx_delta = (
+        None
+        if remote_tx is None or baseline_remote_tx is None
+        else remote_tx - baseline_remote_tx
+    )
+
+    return {
+        "local-tx-delta": local_tx_delta,
+        "remote-tx-delta": remote_tx_delta,
+    }
+
+
+def min_tx_delta_reached(
+    tx_status: Dict[str, Any],
+    baseline_tx: Dict[str, Any],
+    min_tx_delta: int,
+) -> bool:
+    if min_tx_delta <= 0:
+        return True
+
+    deltas = tx_deltas(tx_status, baseline_tx)
+    local_tx_delta = deltas.get("local-tx-delta")
+    remote_tx_delta = deltas.get("remote-tx-delta")
+    if local_tx_delta is None or remote_tx_delta is None:
+        return False
+
+    return local_tx_delta >= min_tx_delta and remote_tx_delta >= min_tx_delta
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Wait for sync status to settle"
@@ -135,11 +178,46 @@ def main() -> None:
     parser.add_argument("--graph", required=True)
     parser.add_argument("--timeout-s", type=float, default=120.0)
     parser.add_argument("--interval-s", type=float, default=1.0)
+    parser.add_argument(
+        "--min-tx-delta",
+        type=int,
+        default=0,
+        help=(
+            "Require synced tx delta to be >= this value: "
+            "(new-tx - old-tx) >= min-tx-delta "
+            "(default: 0)"
+        ),
+    )
+    parser.add_argument(
+        "--baseline-tx",
+        type=int,
+        default=None,
+        help=(
+            "Optional explicit baseline tx used as old-tx for both local "
+            "and remote; if omitted, first observed tx values "
+            "are used"
+        ),
+    )
     args = parser.parse_args()
+
+    if args.min_tx_delta < 0:
+        invalid_min_tx_delta = args.min_tx_delta
+        fail(
+            "min-tx-delta must be non-negative",
+            min_tx_delta=invalid_min_tx_delta,
+        )
 
     started = time.time()
     deadline = started + args.timeout_s
     last_payload: Dict[str, Any] | None = None
+    baseline_tx: Dict[str, Any] | None = (
+        {
+            "local-tx": args.baseline_tx,
+            "remote-tx": args.baseline_tx,
+        }
+        if args.baseline_tx is not None
+        else None
+    )
 
     while time.time() < deadline:
         payload = run_status(args)
@@ -152,7 +230,22 @@ def main() -> None:
 
         counts = pending_counts(payload)
         tx_status = tx_sync_status(payload)
-        if all_settled(counts) and tx_status["synced"]:
+        if baseline_tx is None:
+            baseline_tx = {
+                "local-tx": tx_status.get("local-tx"),
+                "remote-tx": tx_status.get("remote-tx"),
+            }
+
+        deltas = tx_deltas(tx_status, baseline_tx)
+        if (
+            all_settled(counts)
+            and tx_status["synced"]
+            and min_tx_delta_reached(
+                tx_status,
+                baseline_tx,
+                args.min_tx_delta,
+            )
+        ):
             print(
                 json.dumps(
                     {
@@ -163,6 +256,9 @@ def main() -> None:
                             "local-tx": tx_status["local-tx"],
                             "remote-tx": tx_status["remote-tx"],
                         },
+                        "tx-delta": deltas,
+                        "baseline-tx": baseline_tx,
+                        "min_tx_delta": args.min_tx_delta,
                         "payload": payload,
                     }
                 )
@@ -171,11 +267,23 @@ def main() -> None:
 
         time.sleep(max(args.interval_s, 0.0))
 
+    last_tx_status = tx_sync_status(last_payload or {})
+    last_baseline_tx = baseline_tx or {"local-tx": None, "remote-tx": None}
     fail(
-        "sync status polling timed out before queues settled and tx synced",
+        (
+            "sync status polling timed out before queues settled, tx synced, "
+            "and min tx delta reached"
+        ),
         timeout_s=args.timeout_s,
+        min_tx_delta=args.min_tx_delta,
+        baseline_tx=last_baseline_tx,
         last_payload=last_payload,
-        last_tx=tx_sync_status(last_payload or {}),
+        last_counts=pending_counts(last_payload or {}),
+        last_tx=last_tx_status,
+        last_tx_delta=tx_deltas(
+            last_tx_status,
+            last_baseline_tx,
+        ),
     )
 
 
