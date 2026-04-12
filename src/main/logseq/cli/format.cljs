@@ -223,7 +223,7 @@
 (defn- human-ago
   [value now-ms]
   (if-let [ts (parse-ts value)]
-    (cli-humanize/relative-ago ts now-ms)
+    (cli-humanize/relative-datetime ts now-ms)
     "-"))
 
 (defn- format-task-datetime

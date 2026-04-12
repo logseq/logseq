@@ -212,8 +212,8 @@
                                                         :created-at 40000}]}}
                                        {:output-format nil
                                         :now-ms 100000})]
-      (is (= (str "ID  TITLE  UPDATED-AT  CREATED-AT\n"
-                  "1   Alpha  10s ago     1m ago\n"
+      (is (= (str "ID  TITLE  UPDATED-AT      CREATED-AT\n"
+                  "1   Alpha  10 seconds ago  1 minute ago\n"
                   "Count: 1")
              result)))))
 
@@ -228,8 +228,8 @@
                                                         :db/ident :logseq.class/Tag}]}}
                                        {:output-format nil
                                         :now-ms 100000})]
-      (is (= (str "ID  TITLE  IDENT              UPDATED-AT  CREATED-AT\n"
-                  "42  Tag    :logseq.class/Tag  10s ago     1m ago\n"
+      (is (= (str "ID  TITLE  IDENT              UPDATED-AT      CREATED-AT\n"
+                  "42  Tag    :logseq.class/Tag  10 seconds ago  1 minute ago\n"
                   "Count: 1")
              result))))
 
@@ -244,8 +244,8 @@
                                                         :block/updated-at 90000}]}}
                                        {:output-format nil
                                         :now-ms 100000})]
-      (is (= (str "ID  TITLE  TYPE  CARDINALITY  UPDATED-AT  CREATED-AT\n"
-                  "99  Prop   node  many         10s ago     1m ago\n"
+      (is (= (str "ID  TITLE  TYPE  CARDINALITY  UPDATED-AT      CREATED-AT\n"
+                  "99  Prop   node  many         10 seconds ago  1 minute ago\n"
                   "Count: 1")
              result))))
 
@@ -264,9 +264,9 @@
                                                         :block/updated-at 90000}]}}
                                        {:output-format nil
                                         :now-ms 100000})]
-      (is (= (str "ID   TITLE    TYPE  CARDINALITY  UPDATED-AT  CREATED-AT\n"
-                  "99   Prop     node  many         10s ago     1m ago\n"
-                  "100  Untyped  -     one          10s ago     1m ago\n"
+      (is (= (str "ID   TITLE    TYPE  CARDINALITY  UPDATED-AT      CREATED-AT\n"
+                  "99   Prop     node  many         10 seconds ago  1 minute ago\n"
+                  "100  Untyped  -     one          10 seconds ago  1 minute ago\n"
                   "Count: 2")
              result)))))
 
@@ -435,8 +435,8 @@
         lines (string/split-lines result)
         line-1 (nth lines 1)
         line-2 (nth lines 2)
-        updated-at-idx-1 (.indexOf line-1 "10s ago")
-        updated-at-idx-2 (.indexOf line-2 "10s ago")
+        updated-at-idx-1 (.indexOf line-1 "10 seconds ago")
+        updated-at-idx-2 (.indexOf line-2 "10 seconds ago")
         prefix-width-1 (string-width (subs line-1 0 updated-at-idx-1))
         prefix-width-2 (string-width (subs line-2 0 updated-at-idx-2))]
     (is (pos? updated-at-idx-1))
@@ -667,7 +667,7 @@
       (is (string/includes? result "CREATED-AT"))
       (is (string/includes? result "SIZE-BYTES"))
       (is (string/includes? result "demo-nightly"))
-      (is (string/includes? result "10s ago"))
+      (is (string/includes? result "10 seconds ago"))
       (is (string/includes? result "2048"))
       (is (string/includes? result "Count: 1"))))
 
@@ -863,7 +863,7 @@
                                        {:output-format nil
                                         :now-ms 100000})]
       (is (= (str "Graph: demo-graph\n"
-                  "Created at: 1m ago\n"
+                  "Created at: 1 minute ago\n"
                   "Schema version: 2\n"
                   "KV:\n"
                   "  logseq.kv/db-type: :sqlite\n"
