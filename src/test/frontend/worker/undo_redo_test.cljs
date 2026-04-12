@@ -159,6 +159,43 @@
              (second %))
           redo-op)))
 
+(defn- move-retract-entity-ops-to-front
+  [tx-data]
+  (let [retract-entity-op? (fn [item]
+                             (and (vector? item)
+                                  (= 2 (count item))
+                                  (= :db/retractEntity (first item))))
+        retract-ops (filter retract-entity-op? tx-data)
+        others (remove retract-entity-op? tx-data)]
+    (vec (concat retract-ops others))))
+
+(defn- poison-history-tx-order!
+  [tx-id]
+  (when-let [entry (client-op/get-local-tx-entry test-repo tx-id)]
+    (client-op/upsert-local-tx-entry!
+     test-repo
+     {:tx-id tx-id
+      :pending? true
+      :failed? false
+      :outliner-op (:outliner-op entry)
+      :undo-redo (:db-sync/undo-redo entry)
+      :forward-outliner-ops (:forward-outliner-ops entry)
+      :inverse-outliner-ops (:inverse-outliner-ops entry)
+      :inferred-outliner-ops? (:inferred-outliner-ops? entry)
+      :normalized-tx-data (move-retract-entity-ops-to-front (:tx entry))
+      :reversed-tx-data (move-retract-entity-ops-to-front (:reversed-tx entry))})))
+
+(defn- property-value-titles
+  [value]
+  (cond
+    (nil? value) []
+    (string? value) [value]
+    (map? value) [(:block/title value)]
+    (coll? value) (->> value
+                       (mapcat property-value-titles)
+                       vec)
+    :else [value]))
+
 (deftest undo-missing-history-action-row-replays-from-inline-ops-test
   (testing "undo/redo should replay from inline history ops when pending row is missing"
     (worker-undo-redo/clear-history! test-repo)
@@ -952,6 +989,40 @@
       (is (= "foo" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
       (worker-undo-redo/redo test-repo)
       (is (= "foo bar" (:block/title (d/entity @conn [:block/uuid child-uuid])))))))
+
+(deftest repeated-set-block-property-text-value-undo-redo-test
+  (testing "set-block-property text value survives repeated undo/redo for one and many cardinalities"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)]
+      (doseq [[suffix cardinality] [[:one :one] [:many :many]]]
+        (let [property-id (keyword (str "user.property/p1-undo-redo-" (name suffix)))]
+          (outliner-op/apply-ops! conn
+                                  [[:upsert-property [property-id
+                                                      {:logseq.property/type :default
+                                                       :db/cardinality cardinality}
+                                                      {}]]]
+                                  (local-tx-meta {:client-id "test-client"}))
+          (worker-undo-redo/clear-history! test-repo)
+          (outliner-op/apply-ops! conn
+                                  [[:set-block-property [[:block/uuid child-uuid]
+                                                         property-id
+                                                         "value-1"]]]
+                                  (local-tx-meta {:client-id "test-client"}))
+          (let [history (latest-undo-history-data)]
+            (is (empty? (:db-sync/forward-outliner-ops history))))
+          (dotimes [_ 3]
+            (when-let [undo-tx-id (:db-sync/tx-id (latest-undo-history-data))]
+              (poison-history-tx-order! undo-tx-id))
+            (is (map? (worker-undo-redo/undo test-repo)))
+            (is (empty? (property-value-titles
+                         (get (d/entity @conn [:block/uuid child-uuid]) property-id))))
+            (when-let [redo-tx-id (:db-sync/tx-id (latest-redo-history-data))]
+              (poison-history-tx-order! redo-tx-id))
+            (is (map? (worker-undo-redo/redo test-repo)))
+            (let [titles (property-value-titles
+                          (get (d/entity @conn [:block/uuid child-uuid]) property-id))]
+              (is (contains? (set titles) "value-1")))))))))
 
 (deftest save-two-blocks-undo-targets-latest-block-test
   (testing "undo after saving two blocks reverts the latest saved block first"

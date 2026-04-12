@@ -104,7 +104,8 @@
                (let [reversed-datom (d/datom e a v t (not added))]
                  ;; trick: reverse the order of `db-before` and `db-after`
                 (db-normalize/normalize-datom db-before db-after reversed-datom))))
-       (db-normalize/replace-attr-retract-with-retract-entity-v2 db-after)))
+       (db-normalize/replace-attr-retract-with-retract-entity-v2 db-after)
+       db-normalize/reorder-retract-entity))
 
 (defn normalize-rebased-pending-tx
   [{:keys [db-before db-after tx-data]}]
@@ -190,7 +191,8 @@
                    (if (and (vector? item) (= 5 (count item)))
                      (let [[op e a v _t] item]
                        [op e a v])
-                     item)))))
+                     item)))
+           db-normalize/reorder-retract-entity))
 
 (defn- inferred-outliner-ops?
   [tx-meta]
@@ -307,7 +309,8 @@
                                     (contains? op-construct/semantic-outliner-ops
                                                (first op-entry)))))
                      seq)
-            tx-data (if undo? reversed-tx tx)
+            tx-data (-> (if undo? reversed-tx tx)
+                        normalize-tx-data-for-rebase)
             ops' (if (seq ops)
                    ops
                    [[:transact [tx-data nil]]])
@@ -425,7 +428,8 @@
 (defn- reverse-history-action!
   [conn local-tx]
   (if-let [tx-data (seq (:reversed-tx local-tx))]
-    (ldb/transact! conn tx-data
+    (ldb/transact! conn
+                   (normalize-tx-data-for-rebase tx-data)
                    {:outliner-op (:outliner-op local-tx)
                     :reverse? true})
     (invalid-rebase-op! :reverse-history-action
