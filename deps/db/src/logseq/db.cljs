@@ -269,7 +269,7 @@
             _ (reset! *tx-data nil)
             tx-report {:db-before db-before
                        :db-after @conn
-                       :tx-meta tx-meta
+                       :tx-meta (assoc tx-meta :batch-final-tx-report? true)
                        :tx-data batch-tx-data}]
         (dc/run-callbacks conn tx-report)
         tx-report)
