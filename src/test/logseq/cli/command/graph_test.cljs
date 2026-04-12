@@ -22,6 +22,17 @@
                           "Found 1 entity with errors:"))
     (is (= :ok (:status valid-result)))))
 
+(deftest test-graph-validate-result-formats-large-error-count
+  (let [graph-validate-result #'graph-command/graph-validate-result
+        errors (mapv (fn [idx]
+                       {:entity {:db/id idx}
+                        :errors {:foo ["bad"]}})
+                     (range 1234))
+        invalid-result (graph-validate-result {:errors errors})]
+    (is (= :error (:status invalid-result)))
+    (is (string/includes? (get-in invalid-result [:error :message])
+                          "Found 1,234 entities with errors:"))))
+
 (deftest test-execute-graph-info-queries-kv-rows-with-thread-api-q
   (async done
          (let [invoke-calls* (atom [])

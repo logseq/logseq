@@ -80,3 +80,13 @@
           result (example-command/build-action mock-base-table ["example" "upsert"])]
       (is (false? (:ok? result)))
       (is (= :missing-examples (get-in result [:error :code]))))))
+
+(deftest test-build-action-formats-large-example-count
+  (let [mock-base-table [{:cmds ["upsert" "page"]
+                          :examples (mapv (fn [idx]
+                                            (str "logseq upsert page --graph demo --page Page-" idx))
+                                          (range 1234))}]
+        result (example-command/build-action mock-base-table ["example" "upsert" "page"])]
+    (is (true? (:ok? result)))
+    (is (= "Found 1,234 examples for selector upsert page"
+           (get-in result [:action :message])))))

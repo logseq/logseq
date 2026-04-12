@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [logseq.cli.command.core :as command-core]
+            [logseq.cli.humanize :as cli-humanize]
             [logseq.cli.output-mode :as output-mode]
             [logseq.cli.style :as style]
             [logseq.common.util :as common-util]
@@ -162,7 +163,7 @@
          (str (render-table headers rows) "\n")
          (str (string/join "\n" (map (comp string/trimr first) rows)) "\n"))
        "Count: "
-       (count rows)))
+       (cli-humanize/format-count (count rows))))
 
 (defn- missing-search-query-hint
   [command]
@@ -222,21 +223,19 @@
 (defn- human-ago
   [value now-ms]
   (if-let [ts (parse-ts value)]
-    (let [diff-ms (max 0 (- now-ms ts))
-          secs (js/Math.floor (/ diff-ms 1000))
-          mins (js/Math.floor (/ secs 60))
-          hours (js/Math.floor (/ mins 60))
-          days (js/Math.floor (/ hours 24))
-          months (js/Math.floor (/ days 30))
-          years (js/Math.floor (/ days 365))]
-      (cond
-        (< secs 60) (str secs "s ago")
-        (< mins 60) (str mins "m ago")
-        (< hours 24) (str hours "h ago")
-        (< days 30) (str days "d ago")
-        (< months 12) (str months "mo ago")
-        :else (str years "y ago")))
+    (cli-humanize/relative-ago ts now-ms)
     "-"))
+
+(defn- format-task-datetime
+  [value now-ms]
+  (if-let [ts (parse-ts value)]
+    (cli-humanize/relative-datetime ts now-ms)
+    (if (string? value)
+      (let [text (string/trim value)]
+        (if (seq text)
+          text
+          "-"))
+      "-")))
 
 (defn- items-have-key?
   [items & ks]
@@ -349,9 +348,9 @@
     [:status :logseq.property/status]]
    ["PRIORITY"   (fn [item _] (format-task-choice (or (:priority item) (:logseq.property/priority item)) "priority."))
     [:priority :logseq.property/priority]]
-   ["SCHEDULED"  (fn [item _] (or (:scheduled item) (:logseq.property/scheduled item) "-"))
+   ["SCHEDULED"  (fn [item now-ms] (format-task-datetime (or (:scheduled item) (:logseq.property/scheduled item)) now-ms))
     [:scheduled :logseq.property/scheduled]]
-   ["DEADLINE"   (fn [item _] (or (:deadline item) (:logseq.property/deadline item) "-"))
+   ["DEADLINE"   (fn [item now-ms] (format-task-datetime (or (:deadline item) (:logseq.property/deadline item)) now-ms))
     [:deadline :logseq.property/deadline]]
    ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at]]
    ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
@@ -395,7 +394,7 @@
   [["ID"         (fn [item _] (or (:db/id item) (:id item))) [:db/id :id]]
    ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item))) [:title :block/title :name]]
    ["ASSET-TYPE" (fn [item _] (normalize-asset-type (:logseq.property.asset/type item))) [:logseq.property.asset/type]]
-   ["SIZE"       (fn [item _] (or (:logseq.property.asset/size item) "-")) [:logseq.property.asset/size]]
+   ["SIZE"       (fn [item _] (cli-humanize/format-filesize (:logseq.property.asset/size item))) [:logseq.property.asset/size]]
    ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at]]
    ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
 
@@ -496,7 +495,12 @@
         base-output (format-counted-table nil rows)
         legacy-items (filterv legacy-graph-item? graph-items)]
     (if (seq legacy-items)
-      (let [warning-lines (vec (concat [(str "Warning: " (count legacy-items) " legacy graph directories detected.")]
+      (let [legacy-count (count legacy-items)
+            warning-lines (vec (concat [(str "Warning: "
+                                             (cli-humanize/format-count legacy-count)
+                                             " legacy graph "
+                                             (cli-humanize/pluralize-noun legacy-count "directory")
+                                             " detected.")]
                                        (mapcat #(format-legacy-warning-lines % data-dir) legacy-items)))]
         (str base-output "\n\n" (string/join "\n" warning-lines)))
       base-output)))
@@ -631,12 +635,12 @@
         skipped-owner-targets (vec (or skipped-owner-targets []))
         header-lines [(str "Server cleanup summary")
                       (str "CLI revision: " (normalize-cell cli-revision))
-                      (str "Checked: " (or checked 0))
-                      (str "Mismatched: " (or mismatched 0))
-                      (str "Eligible (:cli owner): " (or eligible 0))
-                      (str "Skipped owner mismatch: " (or skipped-owner 0))
-                      (str "Killed: " (count (or killed [])))
-                      (str "Failed: " (count failed))]
+                      (str "Checked: " (cli-humanize/format-count (or checked 0)))
+                      (str "Mismatched: " (cli-humanize/format-count (or mismatched 0)))
+                      (str "Eligible (:cli owner): " (cli-humanize/format-count (or eligible 0)))
+                      (str "Skipped owner mismatch: " (cli-humanize/format-count (or skipped-owner 0)))
+                      (str "Killed: " (cli-humanize/format-count (count (or killed []))))
+                      (str "Failed: " (cli-humanize/format-count (count failed)))]
         skipped-lines (when (seq skipped-owner-targets)
                         (into ["" "Skipped owner targets:"]
                               (mapv format-server-cleanup-target skipped-owner-targets)))
@@ -721,11 +725,15 @@
                           (str "repo: " (or repo "-"))
                           (str "graph-id: " (or graph-id "-"))
                           (str "ws-state: " (or ws-state :unknown))
-                          (str "pending-local: " (or pending-local 0))
-                          (str "pending-asset: " (or pending-asset 0))
-                          (str "pending-server: " (or pending-server 0))
-                          (str "local-tx: " (or local-tx "-"))
-                          (str "remote-tx: " (or remote-tx "-"))]
+                          (str "pending-local: " (cli-humanize/format-count (or pending-local 0)))
+                          (str "pending-asset: " (cli-humanize/format-count (or pending-asset 0)))
+                          (str "pending-server: " (cli-humanize/format-count (or pending-server 0)))
+                          (str "local-tx: " (if (number? local-tx)
+                                               (cli-humanize/format-count local-tx)
+                                               "-"))
+                          (str "remote-tx: " (if (number? remote-tx)
+                                                (cli-humanize/format-count remote-tx)
+                                                "-"))]
                    last-error-line (conj last-error-line)))))
 
 (defn- format-sync-remote-graphs
@@ -794,10 +802,10 @@
   (if (vector? result)
     (str "Upserted blocks:\n" (pr-str (vec (or result []))))
     (let [change-parts (cond-> []
-                         (seq update-tags) (conj (str "tags:+" (count update-tags)))
-                         (seq update-properties) (conj (str "properties:+" (count update-properties)))
-                         (seq remove-tags) (conj (str "remove-tags:+" (count remove-tags)))
-                         (seq remove-properties) (conj (str "remove-properties:+" (count remove-properties))))
+                         (seq update-tags) (conj (str "tags:+" (cli-humanize/format-count (count update-tags))))
+                         (seq update-properties) (conj (str "properties:+" (cli-humanize/format-count (count update-properties))))
+                         (seq remove-tags) (conj (str "remove-tags:+" (cli-humanize/format-count (count remove-tags))))
+                         (seq remove-properties) (conj (str "remove-properties:+" (cli-humanize/format-count (count remove-properties)))))
           changes (when (seq change-parts)
                     (str ", " (string/join ", " change-parts)))
           move-fragment (when (seq target)
@@ -828,7 +836,7 @@
   [{:keys [repo uuid id ids]}]
   (cond
     (seq uuid) (str "Removed block: " uuid " (repo: " repo ")")
-    (seq ids) (str "Removed blocks: " (count ids) " (repo: " repo ")")
+    (seq ids) (str "Removed blocks: " (cli-humanize/format-count (count ids)) " (repo: " repo ")")
     (some? id) (str "Removed block: " id " (repo: " repo ")")
     :else (str "Removed block (repo: " repo ")")))
 

@@ -2,6 +2,7 @@
   "Example command generation and execution."
   (:require [clojure.string :as string]
             [logseq.cli.command.core :as core]
+            [logseq.cli.humanize :as cli-humanize]
             [promesa.core :as p]))
 
 (def ^:private phase1-groups
@@ -122,8 +123,10 @@
                 :matched-commands matched-commands
                 :examples examples
                 :message (str "Found "
-                              (count examples)
-                              " examples for selector "
+                              (cli-humanize/format-count (count examples))
+                              " "
+                              (cli-humanize/pluralize-noun (count examples) "example")
+                              " for selector "
                               selector)}})))
 
 (defn execute-example
