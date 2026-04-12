@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [logseq.cli.command.core :as core]
             [logseq.cli.data-dir :as data-dir]
+            [logseq.cli.humanize :as cli-humanize]
             [logseq.cli.server :as cli-server]
             [logseq.cli.version :as version]
             [promesa.core :as p]))
@@ -108,9 +109,7 @@
                    :status :warning
                    :code :doctor-server-not-ready
                    :servers starting
-                   :message (str (count starting)
-                                 " server"
-                                 (when (> (count starting) 1) "s")
+                   :message (str (cli-humanize/format-count-with-noun (count starting) "server")
                                  " still starting: "
                                  (string/join ", " (map :repo starting)))}}
           {:ok? true
@@ -147,9 +146,7 @@
                :code :doctor-server-revision-mismatch
                :cli-revision cli-revision
                :servers mismatch-servers
-               :message (str mismatch-count
-                             " server"
-                             (when (> mismatch-count 1) "s")
+               :message (str (cli-humanize/format-count-with-noun mismatch-count "server")
                              " "
                              (if (= 1 mismatch-count) "uses" "use")
                              " a different revision than this CLI")}}

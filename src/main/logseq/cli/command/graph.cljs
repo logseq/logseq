@@ -7,6 +7,7 @@
             [logseq.cli.command.core :as core]
             [logseq.cli.common :as cli-common]
             [logseq.cli.config :as cli-config]
+            [logseq.cli.humanize :as cli-humanize]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.graph :as common-graph]
@@ -421,10 +422,13 @@
 
 (defn- format-validation-errors
   [errors]
-  (str "Graph invalid. Found " (count errors)
-       (if (= 1 (count errors)) " entity" " entities")
-       " with errors:\n"
-       (with-out-str (pprint/pprint errors))))
+  (let [error-count (count errors)]
+    (str "Graph invalid. Found "
+         (cli-humanize/format-count error-count)
+         " "
+         (cli-humanize/pluralize-noun error-count "entity")
+         " with errors:\n"
+         (with-out-str (pprint/pprint errors)))))
 
 (defn- graph-validate-result
   [result]
