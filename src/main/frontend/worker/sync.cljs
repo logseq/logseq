@@ -15,7 +15,9 @@
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
    [logseq.db-sync.checksum :as sync-checksum]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   ;; [logseq.db :as ldb]
+   ))
 
 (def ^:private reconnect-base-delay-ms 1000)
 (def ^:private reconnect-max-delay-ms 30000)
@@ -64,7 +66,8 @@
       ;;          :full-checksum full-checksum
       ;;          :db-before (ldb/write-transit-str (:db-before tx-report))
       ;;          :db-after (ldb/write-transit-str (:db-after tx-report))
-      ;;          :tx-data (ldb/write-transit-str (:tx-data tx-report))})))
+      ;;          :tx-data (ldb/write-transit-str (:tx-data tx-report))
+      ;;          :tx-meta (ldb/write-transit-str (:tx-meta tx-report))})))
       (client-op/update-local-checksum repo new-checksum))))
 
 (defn- broadcast-rtc-state!
