@@ -177,7 +177,30 @@
                                                               :conflict? false}]}}
                                        {:output-format nil
                                         :data-dir "/tmp/graphs"})]
-      (is (string/includes? result "mv '/tmp/graphs/weird'\"'\"'++name' '/tmp/graphs/weird~27~2Fname'")))))
+      (is (string/includes? result "mv '/tmp/graphs/weird'\"'\"'++name' '/tmp/graphs/weird~27~2Fname'"))))
+
+  )
+
+(deftest test-human-output-graph-list-count-grouping
+  (let [graphs (mapv #(str "graph-" %) (range 1234))
+        result (format/format-result {:status :ok
+                                      :command :graph-list
+                                      :data {:graphs graphs}}
+                                     {:output-format nil})]
+    (is (string/includes? result "Count: 1,234"))))
+
+(deftest test-human-output-graph-list-legacy-warning-singular
+  (let [result (format/format-result {:status :ok
+                                      :command :graph-list
+                                      :data {:graphs ["legacy/name"]
+                                             :graph-items [{:kind :legacy
+                                                            :legacy-dir "legacy++name"
+                                                            :legacy-graph-name "legacy/name"
+                                                            :target-graph-dir "legacy~2Fname"
+                                                            :conflict? false}]}}
+                                     {:output-format nil
+                                      :data-dir "/tmp/graphs"})]
+    (is (string/includes? result "Warning: 1 legacy graph directory detected."))))
 
 (deftest test-human-output-list-page
   (testing "list page renders a table with count"
@@ -265,7 +288,26 @@
     (is (string/includes? result "SCHEDULED"))
     (is (string/includes? result "DEADLINE"))
     (is (string/includes? result "Alpha task"))
-    (is (string/includes? result "Count: 1"))))
+    (is (string/includes? result "Count: 1")))
+
+  (testing "list task renders epoch-ms scheduled/deadline with humanized relative datetime"
+    (let [now-ms 1000000000
+          scheduled-ms (+ now-ms (* 3 60 60 1000))
+          deadline-ms (- now-ms (* 2 24 60 60 1000))
+          result (format/format-result {:status :ok
+                                        :command :list-task
+                                        :data {:items [{:db/id 226
+                                                        :block/title "q3"
+                                                        :logseq.property/status :logseq.property/status.todo
+                                                        :logseq.property/priority :logseq.property/priority.high
+                                                        :logseq.property/scheduled scheduled-ms
+                                                        :logseq.property/deadline deadline-ms}]}}
+                                       {:output-format nil
+                                        :now-ms now-ms})]
+      (is (string/includes? result "in "))
+      (is (string/includes? result "ago"))
+      (is (not (string/includes? result (str scheduled-ms))))
+      (is (not (string/includes? result (str deadline-ms)))))))
 
 (deftest test-human-output-list-node
   (let [result (format/format-result {:status :ok
@@ -306,11 +348,18 @@
                                                       :block/updated-at 90000}]}}
                                      {:output-format nil
                                       :now-ms 100000})
-        lines (string/split-lines result)]
-    (is (= "ID  TITLE       ASSET-TYPE  SIZE  UPDATED-AT  CREATED-AT" (first lines)))
+        lines (string/split-lines result)
+        header (first lines)]
+    (is (string/includes? header "ID"))
+    (is (string/includes? header "TITLE"))
+    (is (string/includes? header "ASSET-TYPE"))
+    (is (string/includes? header "SIZE"))
+    (is (string/includes? header "UPDATED-AT"))
+    (is (string/includes? header "CREATED-AT"))
     (is (string/includes? result "Asset Node"))
     (is (string/includes? result "md"))
-    (is (string/includes? result "2552"))
+    (is (not (string/includes? result "2552")))
+    (is (some? (re-find #"\b2(\.\d+)?\s*[KM]i?B\b" result)))
     (is (not (string/includes? (first lines) " TYPE  ")))
     (is (not (string/includes? result "PAGE-ID")))
     (is (not (string/includes? result "PAGE-TITLE")))
@@ -530,6 +579,13 @@
                        :ids [1 2 3]}
              :data {:result {:ok true}}}
             "Removed blocks: 3 (repo: demo-repo)"]
+           ["remove block with large id list uses grouped count"
+            {:status :ok
+             :command :remove-block
+             :context {:repo "demo-repo"
+                       :ids (vec (range 1234))}
+             :data {:result {:ok true}}}
+            "Removed blocks: 1,234 (repo: demo-repo)"]
            ["remove tag renders a succinct success line"
             {:status :ok
              :command :remove-tag
@@ -559,6 +615,14 @@
              :remove-tags ["TagB"]
              :remove-properties [:logseq.property/deadline]}
             "Upserted block: source-uuid -> target-uuid (repo: demo-repo, tags:+1, properties:+1, remove-tags:+1, remove-properties:+1)"]
+           ["upsert block update uses grouped counts for large changes"
+            {:repo "demo-repo"
+             :source "source-uuid"
+             :update-tags (vec (range 1234))
+             :update-properties (zipmap (map #(keyword (str "prop-" %)) (range 1234)) (repeat true))
+             :remove-tags (vec (range 1234))
+             :remove-properties (mapv #(keyword (str "remove-" %)) (range 1234))}
+            "Upserted block: source-uuid (repo: demo-repo, tags:+1,234, properties:+1,234, remove-tags:+1,234, remove-properties:+1,234)"]
            ["upsert block update without move target renders a succinct success line"
             {:repo "demo-repo"
              :source "source-uuid"
@@ -657,18 +721,20 @@
                                         :data {:repo "demo-graph"
                                                :graph-id "graph-uuid"
                                                :ws-state :open
-                                               :pending-local 2
-                                               :pending-asset 1
-                                               :pending-server 3
-                                               :local-tx 10
-                                               :remote-tx 13}}
+                                               :pending-local 2345
+                                               :pending-asset 1234
+                                               :pending-server 9876
+                                               :local-tx 12345
+                                               :remote-tx 67890}}
                                        {:output-format nil})]
       (is (string/includes? result "Sync status"))
       (is (string/includes? result "demo-graph"))
       (is (string/includes? result "graph-uuid"))
-      (is (string/includes? result "pending-local"))
-      (is (string/includes? result "pending-asset"))
-      (is (string/includes? result "pending-server"))))
+      (is (string/includes? result "pending-local: 2,345"))
+      (is (string/includes? result "pending-asset: 1,234"))
+      (is (string/includes? result "pending-server: 9,876"))
+      (is (string/includes? result "local-tx: 12,345"))
+      (is (string/includes? result "remote-tx: 67,890"))))
 
   (testing "sync status renders last error diagnostic when present"
     (let [result (format/format-result {:status :ok
@@ -900,18 +966,20 @@
     (let [result (format/format-result {:status :ok
                                         :command :server-cleanup
                                         :data {:cli-revision "cli-rev"
-                                               :checked 4
-                                               :mismatched 3
-                                               :eligible 2
-                                               :skipped-owner 1
+                                               :checked 4321
+                                               :mismatched 3210
+                                               :eligible 2100
+                                               :skipped-owner 1111
                                                :skipped-owner-targets [{:repo "logseq_db_graph-b"
                                                                         :pid 22
                                                                         :owner-source :electron
                                                                         :revision "worker-rev-b"}]
-                                               :killed [{:repo "logseq_db_graph-a"
-                                                         :pid 11
-                                                         :owner-source :cli
-                                                         :revision "worker-rev-a"}]
+                                               :killed (mapv (fn [idx]
+                                                               {:repo (str "logseq_db_graph-killed-" idx)
+                                                                :pid (+ 1000 idx)
+                                                                :owner-source :cli
+                                                                :revision "worker-rev-a"})
+                                                             (range 1234))
                                                :failed [{:repo "logseq_db_graph-c"
                                                          :pid 33
                                                          :owner-source :cli
@@ -921,11 +989,11 @@
                                        {:output-format nil})]
       (is (string/includes? result "Server cleanup summary"))
       (is (string/includes? result "CLI revision: cli-rev"))
-      (is (string/includes? result "Checked: 4"))
-      (is (string/includes? result "Mismatched: 3"))
-      (is (string/includes? result "Eligible (:cli owner): 2"))
-      (is (string/includes? result "Skipped owner mismatch: 1"))
-      (is (string/includes? result "Killed: 1"))
+      (is (string/includes? result "Checked: 4,321"))
+      (is (string/includes? result "Mismatched: 3,210"))
+      (is (string/includes? result "Eligible (:cli owner): 2,100"))
+      (is (string/includes? result "Skipped owner mismatch: 1,111"))
+      (is (string/includes? result "Killed: 1,234"))
       (is (string/includes? result "Failed: 1"))
       (is (string/includes? result "Skipped owner targets:"))
       (is (string/includes? result "graph-b"))

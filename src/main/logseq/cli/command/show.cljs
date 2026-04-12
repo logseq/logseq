@@ -6,6 +6,7 @@
             [clojure.walk :as walk]
             [logseq.cli.command.core :as core]
             [logseq.cli.command.id :as id-command]
+            [logseq.cli.humanize :as cli-humanize]
             [logseq.cli.output-mode :as output-mode]
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
@@ -855,7 +856,9 @@
     (if (seq refs)
       (str tree-text
            "\n\n"
-           "Linked References (" count ")\n"
+           "Linked References ("
+           (cli-humanize/format-count count)
+           ")\n"
            (linked-refs->text refs uuid->label property-titles property-value-labels))
       tree-text)))
 
@@ -870,7 +873,9 @@
   [ordered-uuids uuid->entity]
   (let [ordered-uuids (vec (distinct (remove string/blank? ordered-uuids)))]
     (when (seq ordered-uuids)
-      (str "Referenced Entities (" (count ordered-uuids) ")\n"
+      (str "Referenced Entities ("
+           (cli-humanize/format-count (count ordered-uuids))
+           ")\n"
            (string/join "\n" (map #(referenced-entity-row % uuid->entity) ordered-uuids))))))
 
 (defn build-action

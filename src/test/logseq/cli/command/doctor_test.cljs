@@ -175,3 +175,31 @@
              (p/catch (fn [e]
                         (is false (str "unexpected error: " e))))
              (p/finally done))))
+
+(deftest test-check-running-servers-formats-large-count
+  (async done
+         (let [servers (mapv (fn [idx]
+                               {:repo (str "logseq_db_graph-" idx)
+                                :status :starting})
+                             (range 1234))]
+           (-> (p/with-redefs [cli-server/list-servers (fn [_] (p/resolved servers))]
+                 (p/let [result (#'doctor-command/check-running-servers {})
+                         message (get-in result [:check :message])]
+                   (is (= true (:warning? result)))
+                   (is (string/includes? message "1,234 servers still starting:"))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-check-server-revision-mismatch-formats-large-count
+  (let [mismatch-servers (mapv (fn [idx]
+                                 {:repo (str "logseq_db_graph-" idx)
+                                  :revision "worker-rev"})
+                               (range 1234))
+        result (with-redefs [cli-server/compute-revision-mismatches
+                             (fn [_ _]
+                               {:servers mismatch-servers})]
+                 (#'doctor-command/check-server-revision-mismatch "cli-rev" []))]
+    (is (= true (:warning? result)))
+    (is (string/includes? (get-in result [:check :message])
+                          "1,234 servers use a different revision than this CLI"))))

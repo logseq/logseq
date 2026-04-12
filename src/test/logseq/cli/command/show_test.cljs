@@ -236,6 +236,16 @@
                             {(string/lower-case u1) {:label "Broken ref"}
                              (string/lower-case u2) {:id 88}}))))))
 
+(deftest test-render-referenced-entities-footer-formats-large-count
+  (let [render-footer (fn [ordered-uuids uuid->entity]
+                        (call-private 'render-referenced-entities-footer ordered-uuids uuid->entity))
+        ordered-uuids (mapv (fn [idx]
+                              (str "uuid-" idx))
+                            (range 1234))
+        uuid->entity {}
+        output (render-footer ordered-uuids uuid->entity)]
+    (is (string/includes? output "Referenced Entities (1,234)"))))
+
 (deftest test-build-action-ref-id-footer
   (testing "ref-id-footer defaults to true"
     (let [result (show-command/build-action {:id "42"}
