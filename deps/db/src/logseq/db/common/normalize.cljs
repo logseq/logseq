@@ -113,7 +113,7 @@
       #{e block-uuid (str block-uuid)})
     #{e}))
 
-(defn- reorder-retract-entity
+(defn reorder-retract-entity
   [tx-data]
   (let [retract-ops (filter retract-entity-op? tx-data)
         {recreated-block-retract-ops true
@@ -122,7 +122,8 @@
                                                  (boolean
                                                   (some (fn [x]
                                                           (and
-                                                           (= 5 (count x))
+                                                           (vector? x)
+                                                           (>= (count x) 4)
                                                            (= (first x) :db/add)
                                                            (= (nth x 2) :block/uuid)
                                                            (= (nth x 3) id))) tx-data)))))
@@ -132,7 +133,8 @@
                           set)
         datom-for-retracted-eid?
         (fn [item]
-          (and (= 5 (count item))
+          (and (vector? item)
+               (>= (count item) 4)
                (contains? retract-keys (second item))))
         datoms-for-retracted-eids (filter datom-for-retracted-eid? tx-data)
         others (remove (fn [item]
