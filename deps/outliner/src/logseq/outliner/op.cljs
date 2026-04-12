@@ -10,7 +10,8 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.recycle :as outliner-recycle]
             [logseq.outliner.transaction :as outliner-tx]
-            [malli.core :as m]))
+            [malli.core :as m]
+            [logseq.outliner.op.construct :as op-construct]))
 
 (def ^:private ^:large-vars/data-var op-schema
   [:multi {:dispatch first}
@@ -398,12 +399,13 @@
 (defn apply-ops!
   [conn ops opts]
   (assert (ops-validator ops) ops)
-  (let [single-op-outliner-op (when (= 1 (count ops))
+  (let [semantic-ops (filter (fn [op] (get op-construct/semantic-outliner-ops (first op))) ops)
+        single-op-outliner-op (when (= 1 (count ops))
                                 (first (first ops)))
         opts' (cond-> (assoc opts
                              :transact-opts {:conn conn}
                              :local-tx? true
-                             :outliner-ops ops
+                             :outliner-ops semantic-ops
                              :db-sync/tx-id (or (:db-sync/tx-id opts) (random-uuid)))
                 (and single-op-outliner-op
                      (nil? (:outliner-op opts)))

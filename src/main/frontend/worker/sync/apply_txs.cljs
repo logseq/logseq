@@ -174,51 +174,14 @@
   (when-let [queue (:asset-queue client)]
     (swap! queue (fn [prev] (p/then prev (fn [_] (task)))))))
 
-(def ^:private canonical-transact-op op-construct/canonical-transact-op)
-
-(defn- contains-transact-op?
-  [ops]
-  (op-construct/contains-transact-op? ops))
-
-(defn- explicit-transact-forward-op?
-  [tx-meta]
-  (let [explicit-forward-ops (or (some-> (:db-sync/forward-outliner-ops tx-meta)
-                                         seq
-                                         vec)
-                                 (some-> (:outliner-ops tx-meta)
-                                         seq
-                                         vec))]
-    (and (seq explicit-forward-ops)
-         (contains-transact-op? explicit-forward-ops))))
-
 (defn- derive-history-outliner-ops
   [db-before db-after tx-data tx-meta]
-  ;; Rebased txs can carry explicit forward ops like [[:transact nil]].
-  ;; Keep them as raw-tx placeholders instead of forcing semantic canonicalization.
-  (if (explicit-transact-forward-op? tx-meta)
-    {:forward-outliner-ops canonical-transact-op
-     :inverse-outliner-ops (or (some-> (:db-sync/inverse-outliner-ops tx-meta) seq vec)
-                               (some-> (:inverse-outliner-ops tx-meta) seq vec))}
-    (op-construct/derive-history-outliner-ops db-before db-after tx-data tx-meta)))
+  (op-construct/derive-history-outliner-ops db-before db-after tx-data tx-meta))
 
 (defn- rebase-history-ops
   [local-tx]
-  (let [forward-outliner-ops (seq (:forward-outliner-ops local-tx))
-        inverse-outliner-ops (seq (:inverse-outliner-ops local-tx))
-        forward-ops (or forward-outliner-ops
-                        (when (seq (:tx local-tx))
-                          canonical-transact-op))
-        inverse-ops (or inverse-outliner-ops
-                        (when (seq (:reversed-tx local-tx))
-                          canonical-transact-op)
-                        (when forward-ops canonical-transact-op))]
-    {:forward-ops forward-ops
-     :inverse-ops inverse-ops}))
-
-(defn- semantic-op-entry?
-  [op-entry]
-  (and (sequential? op-entry)
-       (contains? op-construct/semantic-outliner-ops (first op-entry))))
+  {:forward-ops (seq (:forward-outliner-ops local-tx))
+   :inverse-ops (seq (:inverse-outliner-ops local-tx))})
 
 (defn- normalize-tx-data-for-rebase
   [tx-data]
@@ -734,11 +697,10 @@
                  :db-sync/tx-id (:tx-id local-tx)
                  :db-sync/forward-outliner-ops forward-ops
                  :db-sync/inverse-outliner-ops inverse-ops}
-        semantic-forward-ops? (and (seq forward-ops)
-                                   (every? semantic-op-entry? forward-ops))
-        forward-ops' (if semantic-forward-ops? forward-ops
-                         (let [tx-data (-> (:tx local-tx) normalize-tx-data-for-rebase)]
-                           [[:transact [tx-data]]]))]
+        forward-ops' (if (seq forward-ops)
+                       forward-ops
+                       (let [tx-data (-> (:tx local-tx) normalize-tx-data-for-rebase)]
+                         [[:transact [tx-data nil]]]))]
     (try
       (let [rebase-tx-report
             (ldb/batch-transact-with-temp-conn!

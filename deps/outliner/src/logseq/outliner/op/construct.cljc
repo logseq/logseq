@@ -41,7 +41,6 @@
 
 (def ^:api rebase-refs-key :block.temp/sync-rebase-refs)
 (def ^:api rebase-created-refs-key :block.temp/sync-created-refs)
-(def ^:api canonical-transact-op [[:transact nil]])
 
 (defn- stable-entity-ref
   [db x]
@@ -936,14 +935,10 @@
       (canonicalize-explicit-outliner-ops db tx-data explicit-forward-ops)
 
       (seq outliner-ops)
-      (if (every? (fn [[op]]
-                    (contains? semantic-outliner-ops op))
-                  outliner-ops)
-        (canonicalize-explicit-outliner-ops db tx-data outliner-ops)
-        canonical-transact-op)
+      (canonicalize-explicit-outliner-ops db tx-data outliner-ops)
 
-      (contains? #{:transact :batch-import-edn} (:outliner-op tx-meta))
-      canonical-transact-op)))
+      :else
+      nil)))
 
 (defn- unresolved-numeric-entity-id?
   [x]
@@ -1052,11 +1047,6 @@
         canonical-forward-outliner-ops (some-> canonical-forward-outliner-ops seq vec)
         _ (assert-no-stale-numeric-ids! db-after canonical-forward-outliner-ops :forward-outliner-ops)
         forward-outliner-ops canonical-forward-outliner-ops
-        forward-outliner-ops (when (seq forward-outliner-ops)
-                               (if (and (> (count forward-outliner-ops) 1)
-                                        (some (fn [[op]] (= :transact op)) forward-outliner-ops))
-                                 canonical-transact-op
-                                 forward-outliner-ops))
         built-inverse-outliner-ops (some-> (build-strict-inverse-outliner-ops db-before db-after tx-data forward-outliner-ops)
                                            seq
                                            vec)
@@ -1079,11 +1069,6 @@
                                built-inverse-outliner-ops
 
                                (nil? explicit-inverse-outliner-ops)
-                               nil
-
-                               ;; Treat explicit transact placeholder as "no semantic inverse".
-                               ;; Keep nil so semantic replay must fail-fast when required.
-                               (= canonical-transact-op explicit-inverse-outliner-ops)
                                nil
 
                                :else
