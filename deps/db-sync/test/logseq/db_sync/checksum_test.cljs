@@ -1,6 +1,9 @@
 (ns logseq.db-sync.checksum-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require ["fs" :as fs]
+            [cljs.reader :as reader]
+            [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [logseq.db :as ldb]
             [logseq.db-sync.checksum :as checksum]
             [logseq.db.frontend.schema :as db-schema]))
 
@@ -40,6 +43,14 @@
     {:db (:db-after tx-report)
      :checksum incremental}))
 
+(defn- load-rebased-retract-checksum-fixture
+  []
+  (let [payload (-> (.readFileSync fs "test/logseq/db_sync/fixtures/rebased_retract_checksum_payload.edn" "utf8")
+                    reader/read-string)]
+    {:db-before (ldb/read-transit-str (:db-before payload))
+     :db-after (ldb/read-transit-str (:db-after payload))
+     :tx-data (ldb/read-transit-str (:tx-data payload))}))
+
 (deftest checksum-ignores-unrelated-datoms-test
   (testing "recompute and incremental checksums ignore unrelated datoms"
     (let [db-before (sample-db)
@@ -51,6 +62,18 @@
              (checksum/recompute-checksum (:db-after tx-report))))
       (is (= checksum-before
              (checksum/update-checksum checksum-before tx-report))))))
+
+(deftest incremental-checksum-matches-recompute-on-rebased-retract-entity-log-repro-test
+  (testing "incremental checksum should equal full recompute on rebased retract-entity replay payload"
+    (let [{:keys [db-before db-after tx-data]} (load-rebased-retract-checksum-fixture)
+          checksum-before (checksum/recompute-checksum db-before)
+          tx-report {:db-before db-before
+                     :db-after db-after
+                     :tx-data tx-data}
+          full (checksum/recompute-checksum db-after)
+          incremental (checksum/update-checksum checksum-before tx-report)]
+      (is (not= checksum-before full))
+      (is (= full incremental)))))
 
 (deftest incremental-checksum-matches-recompute-on-replace-datom-test
   (testing "incremental checksum matches full recompute when replacing existing values"

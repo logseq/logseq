@@ -54,9 +54,17 @@
   [repo tx-report]
   (when (worker-state/get-client-ops-conn repo)
     (let [current-checksum (client-op/get-local-checksum repo)
-          new-checksum (sync-checksum/update-checksum current-checksum tx-report)
-          ;; new-checksum (sync-checksum/recompute-checksum (:db-after tx-report))
-          ]
+          new-checksum (sync-checksum/update-checksum current-checksum tx-report)]
+      ;; (let [full-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
+      ;;   (when (not= new-checksum full-checksum)
+      ;;    (prn :debug
+      ;;         "checksum-doesn't match"
+      ;;         {:current-checksum current-checksum
+      ;;          :new-checksum new-checksum
+      ;;          :full-checksum full-checksum
+      ;;          :db-before (ldb/write-transit-str (:db-before tx-report))
+      ;;          :db-after (ldb/write-transit-str (:db-after tx-report))
+      ;;          :tx-data (ldb/write-transit-str (:tx-data tx-report))})))
       (client-op/update-local-checksum repo new-checksum))))
 
 (defn- broadcast-rtc-state!
