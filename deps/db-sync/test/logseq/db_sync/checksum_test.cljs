@@ -51,6 +51,14 @@
      :db-after (ldb/read-transit-str (:db-after payload))
      :tx-data (ldb/read-transit-str (:tx-data payload))}))
 
+(defn- load-parent-order-rebase-checksum-fixture
+  []
+  (let [payload (-> (.readFileSync fs "test/logseq/db_sync/fixtures/parent_order_rebase_checksum_payload.edn" "utf8")
+                    reader/read-string)]
+    {:db-before (ldb/read-transit-str (:db-before payload))
+     :db-after (ldb/read-transit-str (:db-after payload))
+     :tx-data (ldb/read-transit-str (:tx-data payload))}))
+
 (deftest checksum-ignores-unrelated-datoms-test
   (testing "recompute and incremental checksums ignore unrelated datoms"
     (let [db-before (sample-db)
@@ -73,6 +81,17 @@
           full (checksum/recompute-checksum db-after)
           incremental (checksum/update-checksum checksum-before tx-report)]
       (is (not= checksum-before full))
+      (is (= full incremental)))))
+
+(deftest incremental-checksum-matches-recompute-on-parent-order-rebase-log-repro-test
+  (testing "incremental checksum should equal full recompute on parent/order rebase payload"
+    (let [{:keys [db-before db-after tx-data]} (load-parent-order-rebase-checksum-fixture)
+          checksum-before (checksum/recompute-checksum db-before)
+          tx-report {:db-before db-before
+                     :db-after db-after
+                     :tx-data tx-data}
+          full (checksum/recompute-checksum db-after)
+          incremental (checksum/update-checksum checksum-before tx-report)]
       (is (= full incremental)))))
 
 (deftest incremental-checksum-matches-recompute-on-replace-datom-test
@@ -140,6 +159,51 @@
           before-checksum (checksum/recompute-checksum db-before)
           tx-report (d/with db-before [[:db/retractEntity 3]
                                        [:db/retractEntity 1]])
+          db-after (:db-after tx-report)
+          full (checksum/recompute-checksum db-after)
+          incremental (checksum/update-checksum before-checksum tx-report)]
+      (is (not= before-checksum full))
+      (is (= full incremental)))))
+
+(deftest incremental-checksum-matches-recompute-when-parent-uuid-changes-test
+  (testing "incremental checksum tracks children whose normalized parent UUID changes via parent :block/uuid update"
+    (let [db-before (sample-db)
+          before-checksum (checksum/recompute-checksum db-before)
+          tx-report (d/with db-before [[:db/add 3 :block/uuid (random-uuid)]])
+          db-after (:db-after tx-report)
+          full (checksum/recompute-checksum db-after)
+          incremental (checksum/update-checksum before-checksum tx-report)]
+      (is (not= before-checksum full))
+      (is (= full incremental)))))
+
+(deftest incremental-checksum-matches-recompute-when-page-uuid-changes-test
+  (testing "incremental checksum tracks blocks whose normalized page UUID changes via page :block/uuid update"
+    (let [db-before (sample-db)
+          before-checksum (checksum/recompute-checksum db-before)
+          tx-report (d/with db-before [[:db/add 1 :block/uuid (random-uuid)]])
+          db-after (:db-after tx-report)
+          full (checksum/recompute-checksum db-after)
+          incremental (checksum/update-checksum before-checksum tx-report)]
+      (is (not= before-checksum full))
+      (is (= full incremental)))))
+
+(deftest incremental-checksum-matches-recompute-when-parent-uuid-changes-on-ineligible-target-test
+  (testing "incremental checksum tracks children when parent UUID changes on a non-checksum-eligible target entity"
+    (let [db-before (-> (d/empty-db db-schema/schema)
+                        (d/db-with [{:db/id 1
+                                     :block/uuid (random-uuid)
+                                     :block/name "page-a"
+                                     :block/title "Page A"}
+                                    {:db/id 2
+                                     :block/uuid (random-uuid)
+                                     :block/title "Orphan parent"}
+                                    {:db/id 3
+                                     :block/uuid (random-uuid)
+                                     :block/title "Child"
+                                     :block/parent 2
+                                     :block/page 1}]))
+          before-checksum (checksum/recompute-checksum db-before)
+          tx-report (d/with db-before [[:db/add 2 :block/uuid (random-uuid)]])
           db-after (:db-after tx-report)
           full (checksum/recompute-checksum db-after)
           incremental (checksum/update-checksum before-checksum tx-report)]
@@ -369,6 +433,27 @@
           full-final (checksum/recompute-checksum db2)
           incremental (checksum/update-checksum checksum0 batch-report)]
       (is (= full-final incremental)))))
+
+(deftest incremental-checksum-matches-recompute-with-duplicate-block-uuid-tx-churn-test
+  (testing "incremental checksum stays equal to recompute when tx-data retracts+adds the same :block/uuid in one tx"
+    (let [db0 (sample-db)
+          shared-uuid (random-uuid)
+          db1 (:db-after (d/with db0 [{:db/id 5
+                                       :block/uuid shared-uuid
+                                       :block/title "Peer"
+                                       :block/parent 1
+                                       :block/page 1}]))
+          original-parent-uuid (:block/uuid (d/entity db1 3))
+          tx-data [(d/datom 3 :block/uuid original-parent-uuid 200 false)
+                   (d/datom 5 :block/uuid shared-uuid 200 false)
+                   (d/datom 3 :block/uuid shared-uuid 200 true)
+                   (d/datom 3 :block/order "a9" 200 true)]
+          tx-report (d/with db1 tx-data)
+          db-before (:db-before tx-report)
+          checksum-before (checksum/recompute-checksum db-before)
+          full (checksum/recompute-checksum (:db-after tx-report))
+          incremental (checksum/update-checksum checksum-before tx-report)]
+      (is (= full incremental)))))
 
 (deftest checksum-ignores-non-page-non-block-entities-test
   (testing "entities with uuid but without page semantics do not affect checksum"
