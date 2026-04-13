@@ -3697,6 +3697,21 @@
               (let [pending-after (#'sync-apply/pending-txs test-repo)]
                 (is (empty? pending-after))))))))))
 
+(deftest apply-remote-tx-collapsed-encrypted-title-update-test
+  (testing "decrypted tx that collapses old/new encrypted titles should keep title instead of retracting it"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-uuid (:block/uuid child1)
+          title (:block/title child1)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           nil
+           [[:db/add [:block/uuid child-uuid] :block/title title]
+            [:db/retract [:block/uuid child-uuid] :block/title title]])
+          (is (= title
+                 (:block/title (d/entity @conn [:block/uuid child-uuid])))))))))
+
 (deftest rebase-later-tx-for-new-block-uses-lookup-ref-test
   (testing "rebased tx after creating a block should use lookup ref instead of stale tempid"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
