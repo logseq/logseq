@@ -26,6 +26,13 @@
 (def ^:private base-page-title "Home")
 (def ^:private default-seed 1337)
 
+(defn- new-client-ops-db
+  []
+  (let [Database (js/require "better-sqlite3")
+        db (new Database ":memory:")]
+    (client-op/ensure-sqlite-schema! db)
+    db))
+
 (defn- env-seed []
   (try
     (when (exists? js/process)
@@ -91,7 +98,7 @@
 
 (declare op-runs assert-synced-attrs! assert-no-invalid-tx! active-block-uuids block-attr-map checksum-entity-map run-ops!)
 
-(deftest rng-uuid-deterministic-test
+(deftest ^:long rng-uuid-deterministic-test
   (testing "rng-uuid produces stable sequences for the same seed"
     (let [rng-a (make-rng 42)
           rng-b (make-rng 42)
@@ -102,7 +109,7 @@
       (is (= seq-a seq-b))
       (is (not= seq-a seq-c)))))
 
-(deftest invalid-tx-repro-callback-test
+(deftest ^:long invalid-tx-repro-callback-test
   (testing "invalid tx callback captures sim repro payload"
     (let [seed 7
           history (atom [{:type :op :op :create-page}])
@@ -159,6 +166,9 @@
       (finally
         (doseq [[conn key] @listeners]
           (d/unlisten! conn key))
+        (doseq [[_ {:keys [ops-conn]}] repo->conns]
+          (when (fn? (some-> ops-conn .-close))
+            (.close ops-conn)))
         (reset! worker-state/*datascript-conns worker-db-prev)
         (reset! worker-state/*client-ops-conns ops-prev)
         (reset! db-conn-state/conns db-prev)
@@ -455,7 +465,7 @@
           clients [{:repo repo-a :conn conn :client client :online? false}]]
       (is (nil? (sync-loop! server clients))))))
 
-(deftest two-clients-initial-sync-keeps-shared-base-page-test
+(deftest ^:long two-clients-initial-sync-keeps-shared-base-page-test
   (testing "initial sync keeps the shared base page on both clients"
     (let [seed (or (env-seed) default-seed)
           rng (make-rng seed)
@@ -463,8 +473,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)]
@@ -492,7 +502,7 @@
               (is (ldb/page? base-b))
               (is (nil? (:logseq.property/deleted-at base-b))))))))))
 
-(deftest recycled-entities-are-excluded-from-sim-comparison-test
+(deftest ^:long recycled-entities-are-excluded-from-sim-comparison-test
   (testing "deleted blocks are excluded from active sync comparison"
     (let [base-uuid (random-uuid)
           block-uuid (random-uuid)
@@ -504,12 +514,12 @@
         (is (not (contains? (active-block-uuids @conn) block-uuid)))
         (is (not (contains? (block-attr-map @conn) block-uuid)))))))
 
-(deftest uploaded-pending-txs-are-cleared-in-sim-test
+(deftest ^:long uploaded-pending-txs-are-cleared-in-sim-test
   (testing "sim upload removes acked pending txs so later rebases don't reverse stale creates"
     (let [base-uuid (random-uuid)
           block-uuid (random-uuid)
           conn (db-test/create-conn)
-          ops-conn (d/create-conn client-op/schema-in-db)
+          ops-conn (new-client-ops-db)
           client (make-client repo-a)
           server (make-server)]
       (with-test-repos {repo-a {:conn conn :ops-conn ops-conn}}
@@ -1252,17 +1262,17 @@
    {:name :delete-block :weight 4 :f op-delete-block!}
    {:name :update-title :weight 8 :f op-update-title!}])
 
-(deftest copy-paste-tree-op-registered-in-sim-op-table-test
+(deftest ^:long copy-paste-tree-op-registered-in-sim-op-table-test
   (testing "sim op-table includes copy-paste tree op for random sync stress"
     (is (contains? (set (map :name op-table))
                    :copy-paste-block-tree-into-empty-target))))
 
-(deftest cut-paste-op-registered-in-sim-op-table-test
+(deftest ^:long cut-paste-op-registered-in-sim-op-table-test
   (testing "sim op-table includes cut-paste op for random sync stress"
     (is (contains? (set (map :name op-table))
                    :cut-paste-block-with-child))))
 
-(deftest undo-redo-ops-registered-in-sim-op-table-test
+(deftest ^:long undo-redo-ops-registered-in-sim-op-table-test
   (testing "sim op-table includes undo/redo ops for random sync stress"
     (let [registered (set (map :name op-table))]
       (is (contains? registered :undo))
@@ -1294,7 +1304,7 @@
     :toggle-reaction
     :transact})
 
-(deftest core-outliner-ops-registered-in-sim-op-table-test
+(deftest ^:long core-outliner-ops-registered-in-sim-op-table-test
   (testing "sim op-table includes core logseq.outliner.op operations"
     (let [registered (set (map :name op-table))
           required required-core-outliner-op-names]
@@ -1540,7 +1550,7 @@
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
           client-a (make-client repo-a)
           server (make-server)
           history (atom [])
@@ -1603,8 +1613,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -1742,14 +1752,14 @@
                 (d/unlisten! conn-b listener-b)
                 (restore)))))))))
 
-(deftest two-clients-rebase-keeps-local-title-after-reverse-tx-test
+(deftest ^:long two-clients-rebase-keeps-local-title-after-reverse-tx-test
   (testing "two clients keep local title after reverse tx with newer tx id"
     (let [base-uuid (uuid "11111111-1111-1111-1111-111111111111")
           block-uuid (uuid "22222222-2222-2222-2222-222222222222")
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)]
@@ -1793,7 +1803,7 @@
                 (d/unlisten! conn-a listener-a)
                 (d/unlisten! conn-b listener-b)))))))))
 
-(deftest undo-redo-indent-sequence-does-not-produce-invalid-entity-test
+(deftest ^:long undo-redo-indent-sequence-does-not-produce-invalid-entity-test
   (testing "undo/redo of add-1 add-2 indent-2 should remain valid after another undo"
     (let [seed 20260321
           base-uuid (uuid "61111111-1111-1111-1111-111111111111")
@@ -1803,7 +1813,7 @@
                   {:pages-and-blocks [{:page {:block/title base-page-title
                                               :block/uuid base-uuid}
                                        :blocks []}]})
-          ops-a (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
           history (atom [])]
       (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}}
         (fn []
@@ -1877,8 +1887,8 @@
           child-uuid (uuid "34444444-4444-4444-4444-444444444444")
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -1941,7 +1951,7 @@
               (finally
                 (restore)))))))))
 
-(deftest two-clients-rebase-repairs-descendant-page-after-remote-subtree-move-test
+(deftest ^:long two-clients-rebase-repairs-descendant-page-after-remote-subtree-move-test
   (testing "rebase repairs descendant page after a remote subtree move"
     (let [seed 20260316
           base-uuid (uuid "41111111-1111-1111-1111-111111111111")
@@ -1952,8 +1962,8 @@
           local-grandchild-uuid (uuid "46666666-6666-6666-6666-666666666666")
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -2039,14 +2049,14 @@
               (finally
                 (restore)))))))))
 
-(deftest two-clients-syncs-undo-of-new-block-test
+(deftest ^:long two-clients-syncs-undo-of-new-block-test
   (testing "undoing a newly created block syncs the retractEntity to other clients"
     (let [base-uuid (uuid "51111111-1111-1111-1111-111111111111")
           block-uuid (uuid "52222222-2222-2222-2222-222222222222")
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)]
@@ -2107,7 +2117,7 @@
         steps
         (recur (inc steps))))))
 
-(deftest two-clients-offline-insert-delete-indent-undo-redo-keeps-checksum-cache-aligned-test
+(deftest ^:long two-clients-offline-insert-delete-indent-undo-redo-keeps-checksum-cache-aligned-test
   (testing "both clients offline insert/delete/indent/outdent + undo-all/redo-all keep cached checksums aligned after reconnect"
     (let [seed (or (env-seed) default-seed)
           rng (make-rng seed)
@@ -2115,8 +2125,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)]
@@ -2178,7 +2188,7 @@
                 (d/unlisten! conn-a listener-a)
                 (d/unlisten! conn-b listener-b)))))))))
 
-(deftest two-clients-empty-child-undo-redo-reconnect-keeps-checksum-cache-aligned-test
+(deftest ^:long two-clients-empty-child-undo-redo-reconnect-keeps-checksum-cache-aligned-test
   (testing "A online add empty child; B offline add empty child + undo/redo; reconnect keeps checksum cache aligned"
     (let [base-uuid (uuid "81111111-1111-1111-1111-111111111111")
           root-uuid (uuid "82222222-2222-2222-2222-222222222222")
@@ -2186,8 +2196,8 @@
           child-b-uuid (uuid "84444444-4444-4444-4444-444444444444")
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)]
@@ -2265,7 +2275,7 @@
           cycle-op-table (build-weighted-op-table cycle-ops local-undo-redo-cycle-op-weights :cycle)
           base-uuid (gen-uuid)
           conn (db-test/create-conn)
-          ops-conn (d/create-conn client-op/schema-in-db)
+          ops-conn (new-client-ops-db)
           history (atom [])
           state (atom {:pages #{base-uuid} :blocks #{}})
           client-context {:repo repo-a
@@ -2440,8 +2450,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -2484,7 +2494,7 @@
               (finally
                 (restore)))))))))
 
-(deftest ^:fix-me two-clients-cut-paste-random-sim-test
+(deftest ^:long ^:fix-me two-clients-cut-paste-random-sim-test
   (testing "db-sync convergence under random cut-paste with child operations"
     (let [seed (or (env-seed) default-seed)
           rng (make-rng seed)
@@ -2493,8 +2503,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -2560,8 +2570,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -2650,8 +2660,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -2757,8 +2767,8 @@
             base-uuid (gen-uuid)
             conn-a (db-test/create-conn)
             conn-b (db-test/create-conn)
-            ops-a (d/create-conn client-op/schema-in-db)
-            ops-b (d/create-conn client-op/schema-in-db)
+            ops-a (new-client-ops-db)
+            ops-b (new-client-ops-db)
             client-a (make-client repo-a)
             client-b (make-client repo-b)
             server (make-server)
@@ -2909,9 +2919,9 @@
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
           conn-c (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
-          ops-c (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
+          ops-c (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           client-c (make-client repo-c)

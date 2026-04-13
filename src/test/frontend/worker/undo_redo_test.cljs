@@ -14,6 +14,24 @@
 
 (def ^:private test-repo "test-worker-undo-redo")
 
+(defn- new-client-ops-db
+  []
+  (let [Database (js/require "better-sqlite3")
+        db (new Database ":memory:")]
+    (client-op/ensure-sqlite-schema! db)
+    db))
+
+(defn- delete-client-op-tx-row!
+  [^js db tx-id]
+  (let [^js stmt (.prepare db "delete from client_ops where kind = 'tx' and tx_id = ?")]
+    (.run stmt (str tx-id))))
+
+(defn- client-op-tx-row-exists?
+  [^js db tx-id]
+  (let [^js stmt (.prepare db "select 1 as ok from client_ops where kind = 'tx' and tx_id = ? limit 1")
+        row (.get stmt (str tx-id))]
+    (some? row)))
+
 (defn- local-tx-meta
   [m]
   (assoc m
@@ -31,7 +49,7 @@
                  :blocks [{:block/title "task"}
                           {:block/title "parent"
                            :build/children [{:block/title "child"}]}]}]})
-        client-ops-conn (d/create-conn client-op/schema-in-db)]
+        client-ops-conn (new-client-ops-db)]
     (reset! worker-state/*datascript-conns {test-repo conn})
     (reset! worker-state/*client-ops-conns {test-repo client-ops-conn})
     (reset! worker-undo-redo/*apply-history-action! sync-apply/apply-history-action!)
@@ -44,6 +62,7 @@
       (finally
         (d/unlisten! conn ::gen-undo-ops)
         (worker-undo-redo/clear-history! test-repo)
+        (.close client-ops-conn)
         (reset! worker-undo-redo/*apply-history-action! apply-history-action-prev)
         (reset! worker-state/*datascript-conns datascript-prev)
         (reset! worker-state/*client-ops-conns client-ops-prev)))))
@@ -140,6 +159,43 @@
              (second %))
           redo-op)))
 
+(defn- move-retract-entity-ops-to-front
+  [tx-data]
+  (let [retract-entity-op? (fn [item]
+                             (and (vector? item)
+                                  (= 2 (count item))
+                                  (= :db/retractEntity (first item))))
+        retract-ops (filter retract-entity-op? tx-data)
+        others (remove retract-entity-op? tx-data)]
+    (vec (concat retract-ops others))))
+
+(defn- poison-history-tx-order!
+  [tx-id]
+  (when-let [entry (client-op/get-local-tx-entry test-repo tx-id)]
+    (client-op/upsert-local-tx-entry!
+     test-repo
+     {:tx-id tx-id
+      :pending? true
+      :failed? false
+      :outliner-op (:outliner-op entry)
+      :undo-redo (:db-sync/undo-redo entry)
+      :forward-outliner-ops (:forward-outliner-ops entry)
+      :inverse-outliner-ops (:inverse-outliner-ops entry)
+      :inferred-outliner-ops? (:inferred-outliner-ops? entry)
+      :normalized-tx-data (move-retract-entity-ops-to-front (:tx entry))
+      :reversed-tx-data (move-retract-entity-ops-to-front (:reversed-tx entry))})))
+
+(defn- property-value-titles
+  [value]
+  (cond
+    (nil? value) []
+    (string? value) [value]
+    (map? value) [(:block/title value)]
+    (coll? value) (->> value
+                       (mapcat property-value-titles)
+                       vec)
+    :else [value]))
+
 (deftest undo-missing-history-action-row-replays-from-inline-ops-test
   (testing "undo/redo should replay from inline history ops when pending row is missing"
     (worker-undo-redo/clear-history! test-repo)
@@ -168,8 +224,7 @@
                                            :tx-data [(d/datom 1 :block/title "poisoned" 1 true)])]
                                    item))
                                op)))))
-      (when-let [tx-ent (d/entity @client-ops-conn [:db-sync/tx-id tx-id-2])]
-        (ldb/transact! client-ops-conn [[:db/retractEntity (:db/id tx-ent)]]))
+      (delete-client-op-tx-row! client-ops-conn tx-id-2)
       (let [undo-result (worker-undo-redo/undo test-repo)]
         (is (not= ::worker-undo-redo/empty-undo-stack undo-result))
         (is (= "v1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
@@ -246,8 +301,7 @@
                                     (assoc (second item) :tx-data [(d/datom 1 :block/title "poisoned" 1 true)])]
                                    item))
                                op)))))
-      (when-let [tx-ent (d/entity @client-ops-conn [:db-sync/tx-id tx-id])]
-        (ldb/transact! client-ops-conn [[:db/retractEntity (:db/id tx-ent)]]))
+      (delete-client-op-tx-row! client-ops-conn tx-id)
       (is (not= ::worker-undo-redo/empty-undo-stack
                 (worker-undo-redo/undo test-repo)))
       (is (seq (get @worker-undo-redo/*redo-ops test-repo))))))
@@ -271,7 +325,7 @@
           (let [undo-tx-id (:db-sync/tx-id (latest-undo-history-data))]
             (is (uuid? undo-tx-id))
             (is (not= source-tx-id undo-tx-id))
-            (is (some? (d/entity @client-ops-conn [:db-sync/tx-id undo-tx-id])))))))))
+            (is (client-op-tx-row-exists? client-ops-conn undo-tx-id))))))))
 
 (deftest undo-records-only-local-txs-test
   (testing "undo history records only local txs"
@@ -314,7 +368,7 @@
                (get-in data [:db-sync/inverse-outliner-ops 0 1 0 :block/uuid])))))))
 
 (deftest undo-history-allows-non-semantic-outliner-op-test
-  (testing "non-semantic outliner-op with transact placeholder is skipped by ops-only undo history"
+  (testing "non-semantic outliner-op with transact placeholder is persisted in undo history"
     (worker-undo-redo/clear-history! test-repo)
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)]
@@ -322,9 +376,13 @@
                    [[:db/add [:block/uuid child-uuid] :block/title "restored child"]]
                    (local-tx-meta
                     {:client-id "test-client"
-                     :outliner-op :restore-recycled
-                     :outliner-ops [[:transact nil]]}))
-      (is (empty? (get @worker-undo-redo/*undo-ops test-repo))))))
+                     :outliner-op :restore-recycled}))
+      (let [undo-op (last (get @worker-undo-redo/*undo-ops test-repo))
+            data (some #(when (= ::worker-undo-redo/db-transact (first %))
+                          (second %))
+                       undo-op)]
+        (is (some? data))
+        (is (nil? (:db-sync/inverse-outliner-ops data)))))))
 
 (deftest undo-history-canonicalizes-insert-block-uuids-test
   (testing "worker undo history uses the created block uuid for insert semantic ops"
@@ -931,6 +989,40 @@
       (is (= "foo" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
       (worker-undo-redo/redo test-repo)
       (is (= "foo bar" (:block/title (d/entity @conn [:block/uuid child-uuid])))))))
+
+(deftest repeated-set-block-property-text-value-undo-redo-test
+  (testing "set-block-property text value survives repeated undo/redo for one and many cardinalities"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)]
+      (doseq [[suffix cardinality] [[:one :one] [:many :many]]]
+        (let [property-id (keyword (str "user.property/p1-undo-redo-" (name suffix)))]
+          (outliner-op/apply-ops! conn
+                                  [[:upsert-property [property-id
+                                                      {:logseq.property/type :default
+                                                       :db/cardinality cardinality}
+                                                      {}]]]
+                                  (local-tx-meta {:client-id "test-client"}))
+          (worker-undo-redo/clear-history! test-repo)
+          (outliner-op/apply-ops! conn
+                                  [[:set-block-property [[:block/uuid child-uuid]
+                                                         property-id
+                                                         "value-1"]]]
+                                  (local-tx-meta {:client-id "test-client"}))
+          (let [history (latest-undo-history-data)]
+            (is (empty? (:db-sync/forward-outliner-ops history))))
+          (dotimes [_ 3]
+            (when-let [undo-tx-id (:db-sync/tx-id (latest-undo-history-data))]
+              (poison-history-tx-order! undo-tx-id))
+            (is (map? (worker-undo-redo/undo test-repo)))
+            (is (empty? (property-value-titles
+                         (get (d/entity @conn [:block/uuid child-uuid]) property-id))))
+            (when-let [redo-tx-id (:db-sync/tx-id (latest-redo-history-data))]
+              (poison-history-tx-order! redo-tx-id))
+            (is (map? (worker-undo-redo/redo test-repo)))
+            (let [titles (property-value-titles
+                          (get (d/entity @conn [:block/uuid child-uuid]) property-id))]
+              (is (contains? (set titles) "value-1")))))))))
 
 (deftest save-two-blocks-undo-targets-latest-block-test
   (testing "undo after saving two blocks reverts the latest saved block first"

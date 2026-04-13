@@ -81,26 +81,39 @@
             db-before (ldb/read-transit-str (:db-before payload))
             tx-data (vec (ensure-tx-data (:tx-data payload)))
             tx-report (d/with db-before tx-data)
+            input-checksum (or (:prev-checksum payload)
+                               (:current-checksum payload))
+            logged-prev-full (:prev-full-checksum payload)
+            logged-full-after (or (:recomputed-after-checksum payload)
+                                  (:full-checksum payload))
             replayed-prev-full (sync-checksum/recompute-checksum db-before)
             replayed-incremental-from-full-before
             (sync-checksum/update-checksum replayed-prev-full tx-report)
-            replayed-incremental (sync-checksum/update-checksum (:prev-checksum payload) tx-report)
+            replayed-incremental-from-input
+            (sync-checksum/update-checksum input-checksum tx-report)
             replayed-recomputed (sync-checksum/recompute-checksum (:db-after tx-report))
             result {:log-file log-path
                     :prev-tx (:prev-tx payload)
                     :tx-meta (:tx-meta payload)
                     :tx-count (count tx-data)
-                    :prev-checksum (:prev-checksum payload)
-                    :logged-prev-full-checksum (:prev-full-checksum payload)
+                    :input-checksum input-checksum
+                    :logged-prev-full-checksum logged-prev-full
                     :replayed-prev-full-checksum replayed-prev-full
-                    :prev-checksum-eq-replayed-prev-full?
-                    (= (:prev-checksum payload) replayed-prev-full)
+                    :input-checksum-eq-replayed-prev-full?
+                    (= input-checksum replayed-prev-full)
+                    :match-logged-prev-full?
+                    (= logged-prev-full replayed-prev-full)
                     :logged-new-checksum (:new-checksum payload)
-                    :replayed-incremental replayed-incremental
+                    :replayed-incremental replayed-incremental-from-input
                     :replayed-incremental-from-full-before replayed-incremental-from-full-before
-                    :logged-recomputed-after (:recomputed-after-checksum payload)
+                    :logged-full-after-checksum logged-full-after
                     :replayed-recomputed-after replayed-recomputed
-                    :match-logged-new? (= replayed-incremental (:new-checksum payload))
-                    :match-logged-recomputed? (= replayed-recomputed (:recomputed-after-checksum payload))
-                    :incremental-eq-full? (= replayed-incremental replayed-recomputed)}]
+                    :match-logged-new?
+                    (= replayed-incremental-from-input (:new-checksum payload))
+                    :match-logged-full-after?
+                    (= replayed-recomputed logged-full-after)
+                    :incremental-eq-full?
+                    (= replayed-incremental-from-input replayed-recomputed)
+                    :incremental-from-full-before-eq-full?
+                    (= replayed-incremental-from-full-before replayed-recomputed)}]
         (println (pr-str result))))))

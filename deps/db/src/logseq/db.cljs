@@ -248,7 +248,7 @@
   (let [db-before @conn
         *tx-data (atom [])]
     (try
-      (when (:batch-tx @conn)
+      (when (:batch-tx? @conn)
         (throw (ex-info "batch-transact! can't be nested called" {:tx-meta tx-meta})))
       (d/listen! conn ::batch-tx
                  (fn [tx-report]
@@ -269,16 +269,18 @@
             _ (reset! *tx-data nil)
             tx-report {:db-before db-before
                        :db-after @conn
-                       :tx-meta tx-meta
+                       :tx-meta (assoc tx-meta :batch-final-tx-report? true)
                        :tx-data batch-tx-data}]
         (dc/run-callbacks conn tx-report)
         tx-report)
       (catch :default e
         (log/error e)
         (reset! conn db-before)
+        (throw e))
+      (finally
+        (d/unlisten! conn ::batch-tx)
         (swap! conn dissoc :skip-store? :batch-tx?)
-        (reset! *tx-data nil)
-        (throw e)))))
+        (reset! *tx-data nil)))))
 
 (def page? entity-util/page?)
 (def internal-page? entity-util/internal-page?)

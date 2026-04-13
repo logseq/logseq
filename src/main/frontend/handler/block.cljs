@@ -250,7 +250,7 @@
         (p/do!
          (ui-outliner-tx/transact!
           {:outliner-op :move-blocks
-           :real-outliner-op :indent-outdent}
+           :source-outliner-op :indent-outdent}
           (when save-current-block (save-current-block))
           (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks')
                                               indent?

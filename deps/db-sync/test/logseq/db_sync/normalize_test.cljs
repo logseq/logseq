@@ -112,9 +112,9 @@
                                                    (:db-before tx-report)
                                                    (:tx-data tx-report))
         tx-data (mapv op-e-a-v normalized)]
-    (testing "drops old :block/title retract and keeps new add during title update"
+    (testing "keeps old :block/title retract and new add during title update"
       (is (some #(= [:db/add [:block/uuid page-uuid] :block/title "Page 2"] %) tx-data))
-      (is (not-any? #(= [:db/retract [:block/uuid page-uuid] :block/title "Page"] %) tx-data)))))
+      (is (some #(= [:db/retract [:block/uuid page-uuid] :block/title "Page"] %) tx-data)))))
 
 (deftest normalize-tx-data-keeps-recreated-normal-blocks-test
   (testing "retract + recreate for normal blocks should not drop recreated entity datoms"

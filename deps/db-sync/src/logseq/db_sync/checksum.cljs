@@ -149,31 +149,167 @@
                  (when (checksum-eligible-entity? db e)
                    (entity-checksum-tuples db e e2ee?))))))
 
-(defn- touched-checksum-eids
+(defn- touched-base-eids
   [db-before db-after tx-data]
-  (->> tx-data
-       (keep :e)
-       (filter (fn [eid]
-                 (or (checksum-eligible-entity? db-before eid)
-                     (checksum-eligible-entity? db-after eid))))
+  (let [before-eligible-cache (volatile! {})
+        after-eligible-cache (volatile! {})
+        cached-eligible? (fn [db cache eid]
+                           (if-some [cached (find @cache eid)]
+                             (val cached)
+                             (let [eligible? (boolean (checksum-eligible-entity? db eid))]
+                               (vswap! cache assoc eid eligible?)
+                               eligible?)))]
+    (->> tx-data
+         (reduce (fn [eids datom]
+                   (if-let [eid (:e datom)]
+                     (let [attr (:a datom)]
+                       (cond-> eids
+                         (= attr :block/uuid) (conj eid)
+                         (or (cached-eligible? db-before before-eligible-cache eid)
+                             (cached-eligible? db-after after-eligible-cache eid))
+                         (conj eid)))
+                     eids))
+                 #{})
+         set)))
+
+(defn- touched-checksum-uuids
+  [db-before db-after eids]
+  (->> eids
+       (mapcat (fn [eid]
+                 [(get-block-uuid db-before eid)
+                  (get-block-uuid db-after eid)]))
+       (remove nil?)
        set))
+
+(defn- eids-with-changed-block-uuid
+  [db-before db-after eids]
+  (->> eids
+       (filter (fn [eid]
+                 (not= (get-block-uuid db-before eid)
+                       (get-block-uuid db-after eid))))
+       set))
+
+(defn- referrer-eids-by-target
+  [db target-eid]
+  (->> (concat (d/datoms db :avet :block/parent target-eid)
+               (d/datoms db :avet :block/page target-eid))
+       (map :e)
+       set))
+
+(defn- impacted-referrer-eids
+  [db-before db-after target-eids]
+  (->> target-eids
+       (mapcat (fn [target-eid]
+                 (concat (referrer-eids-by-target db-before target-eid)
+                         (referrer-eids-by-target db-after target-eid))))
+       set))
+
+(defn- eids-by-block-uuid
+  [db block-uuid]
+  (->> (d/datoms db :avet :block/uuid block-uuid)
+       (map :e)
+       set))
+
+(defn- block-uuid-datom-count
+  [db eid]
+  (count (d/datoms db :eavt eid :block/uuid)))
+
+(defn- duplicate-block-uuid?
+  [db-before db-after block-uuids]
+  (some (fn [uuid]
+          (or (> (count (d/datoms db-before :avet :block/uuid uuid)) 1)
+              (> (count (d/datoms db-after :avet :block/uuid uuid)) 1)))
+        block-uuids))
+
+(defn- tuple-set-for-eids
+  [db eids e2ee?]
+  (reduce (fn [tuples eid]
+            (if (checksum-eligible-entity? db eid)
+              (into tuples (or (entity-checksum-tuples db eid e2ee?) #{}))
+              tuples))
+          #{}
+          eids))
+
+(defn- tuple-counts-for-eids
+  [db eids e2ee?]
+  (reduce
+   (fn [counts eid]
+     (let [datom-count (block-uuid-datom-count db eid)]
+       (if (and (pos? datom-count)
+                (checksum-eligible-entity? db eid))
+         (reduce (fn [acc tuple]
+                   (update acc tuple (fnil + 0) datom-count))
+                 counts
+                 (or (entity-checksum-tuples db eid e2ee?) #{}))
+         counts)))
+   {}
+   eids))
 
 (defn- net-tuple-delta
   [db-before db-after e2ee? tx-data]
-  (let [touched-eids (touched-checksum-eids db-before db-after tx-data)]
-    (reduce
-     (fn [{:keys [removed added]} eid]
-       (let [before-tuples (if (checksum-eligible-entity? db-before eid)
-                             (or (entity-checksum-tuples db-before eid e2ee?) #{})
-                             #{})
-             after-tuples (if (checksum-eligible-entity? db-after eid)
-                            (or (entity-checksum-tuples db-after eid e2ee?) #{})
-                            #{})]
-         {:removed (into removed (set/difference before-tuples after-tuples))
-          :added (into added (set/difference after-tuples before-tuples))}))
-     {:removed #{}
-      :added #{}}
-     touched-eids)))
+  (let [base-eids (touched-base-eids db-before db-after tx-data)]
+    (if (empty? base-eids)
+      {:removed {}
+       :added {}}
+      (let [uuid-changed-eids (eids-with-changed-block-uuid db-before db-after base-eids)
+            dependent-eids (when (seq uuid-changed-eids)
+                             (->> (impacted-referrer-eids db-before db-after uuid-changed-eids)
+                                  (filter (fn [eid]
+                                            (or (checksum-eligible-entity? db-before eid)
+                                                (checksum-eligible-entity? db-after eid))))
+                                  set))
+            effective-eids (if (seq dependent-eids)
+                             (set/union base-eids dependent-eids)
+                             base-eids)
+            touched-uuids (touched-checksum-uuids db-before db-after effective-eids)]
+        (if (duplicate-block-uuid? db-before db-after touched-uuids)
+          (let [peer-eids (->> touched-uuids
+                               (mapcat (fn [uuid]
+                                         (concat (eids-by-block-uuid db-before uuid)
+                                                 (eids-by-block-uuid db-after uuid))))
+                               (filter (fn [eid]
+                                         (or (checksum-eligible-entity? db-before eid)
+                                             (checksum-eligible-entity? db-after eid))))
+                               set)
+                touched-eids (set/union effective-eids peer-eids)
+                before-counts (tuple-counts-for-eids db-before touched-eids e2ee?)
+                after-counts (tuple-counts-for-eids db-after touched-eids e2ee?)
+                all-tuples (set/union (set (keys before-counts))
+                                      (set (keys after-counts)))]
+            (reduce
+             (fn [{:keys [removed added]} tuple]
+               (let [before-count (get before-counts tuple 0)
+                     after-count (get after-counts tuple 0)]
+                 (cond
+                   (> before-count after-count)
+                   {:removed (assoc removed tuple (- before-count after-count))
+                    :added added}
+
+                   (> after-count before-count)
+                   {:removed removed
+                    :added (assoc added tuple (- after-count before-count))}
+
+                   :else
+                   {:removed removed
+                    :added added})))
+             {:removed {}
+              :added {}}
+             all-tuples))
+          (let [before-tuples (tuple-set-for-eids db-before effective-eids e2ee?)
+                after-tuples (tuple-set-for-eids db-after effective-eids e2ee?)
+                removed (set/difference before-tuples after-tuples)
+                added (set/difference after-tuples before-tuples)]
+            {:removed (into {} (map (fn [tuple] [tuple 1]) removed))
+             :added (into {} (map (fn [tuple] [tuple 1]) added))}))))))
+
+(defn- apply-digest-n
+  [checksum-state tuple count op]
+  (let [digest (tuple-digest tuple)]
+    (loop [n count
+           state checksum-state]
+      (if (pos? n)
+        (recur (dec n) (op state digest))
+        state))))
 
 (defn recompute-checksum
   [db]
@@ -230,12 +366,12 @@
                             (checksum->state checksum)
                             (checksum->state (recompute-checksum db-before)))
             {:keys [removed added]} (net-tuple-delta db-before db-after after-e2ee? tx-data)
-            state-after-removals (reduce (fn [checksum-state tuple]
-                                           (subtract-digest checksum-state (tuple-digest tuple)))
-                                         initial-state
-                                         removed)
-            state-after-additions (reduce (fn [checksum-state tuple]
-                                            (add-digest checksum-state (tuple-digest tuple)))
-                                          state-after-removals
-                                          added)]
+            state-after-removals (reduce-kv (fn [checksum-state tuple count]
+                                              (apply-digest-n checksum-state tuple count subtract-digest))
+                                            initial-state
+                                            removed)
+            state-after-additions (reduce-kv (fn [checksum-state tuple count]
+                                               (apply-digest-n checksum-state tuple count add-digest))
+                                             state-after-removals
+                                             added)]
         (state->checksum state-after-additions)))))

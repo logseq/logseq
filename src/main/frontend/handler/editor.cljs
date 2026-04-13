@@ -594,12 +594,14 @@
                                   (into new-block properties)
                                   new-block)]
                  (ui-outliner-tx/transact!
-                  {:outliner-op :insert-blocks}
+                  (cond->
+                   {:outliner-op :insert-blocks}
+                    (not= outliner-op :insert-blocks)
+                    (assoc :source-outliner-op outliner-op))
                   (outliner-insert-block! config target-block new-block'
                                           {:sibling? sibling?
                                            :keep-uuid? true
                                            :ordered-list? ordered-list?
-                                           :outliner-op outliner-op
                                            :replace-empty-target? replace-empty-target?})))
                (when edit-block?
                  (if (and replace-empty-target?
@@ -1347,8 +1349,7 @@
                 (notification/show! [:div "Asset size shouldn't be larger than 100M"]
                                     :warning
                                     false)
-                (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
-            asset (db/entity :logseq.class/Asset)]
+                (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))]
         (p/do!
          (when file
            (let [file-path (str block-id "." ext)]
@@ -1359,7 +1360,9 @@
           :logseq.property.asset/external-url external-url
           :logseq.property.asset/size size
           :logseq.property.asset/checksum checksum
-          :block/tags #{(:db/id asset)}})))))
+          ;; Use stable class ident in tx payload to avoid leaking numeric eids
+          ;; into outliner history ops shared with the worker sync pipeline.
+          :block/tags #{:logseq.class/Asset}})))))
 
 (defn db-based-save-assets!
   "Save incoming(pasted) assets to assets directory.

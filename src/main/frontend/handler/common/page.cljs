@@ -66,7 +66,7 @@
          :else
          (when-not (string/blank? title')
            (p/let [existing-page (when-not class? (db/get-page title'))]
-             (if existing-page
+             (if (and existing-page (not (ldb/recycled? existing-page)))
                existing-page
                (p/let [options' (cond-> (update options :tags concat (:block/tags parsed-result))
                                   (nil? (:split-namespace? options))

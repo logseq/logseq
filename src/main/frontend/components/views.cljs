@@ -1877,7 +1877,8 @@
                                                          (cond->
                                                           {:page (:block/uuid page)
                                                            :properties properties
-                                                           :edit-block? false}
+                                                           :edit-block? false
+                                                           :outliner-op :create-view}
                                                            auto-triggered?
                                                            (assoc :custom-uuid view-block-id)))]
       (db/entity [:block/uuid (:block/uuid result)]))))

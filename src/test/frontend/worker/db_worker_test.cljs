@@ -159,21 +159,28 @@
       (p/resolved {:error error}))))
 
 (defn- with-fake-create-or-open-db
-  [repo conn f]
-  (let [thread-apis-prev @thread-api/*thread-apis]
-    (vreset! thread-api/*thread-apis
-             (assoc thread-apis-prev
-                    :thread-api/create-or-open-db
-                    (fn [_repo _opts]
-                      (swap! worker-state/*datascript-conns assoc repo conn)
-                      (p/resolved nil))
-                    :thread-api/db-sync-close-db
-                    (fn [_repo] nil)
-                    :thread-api/db-sync-invalidate-search-db
-                    (fn [_repo] (p/resolved nil))))
-    (-> (f)
-        (p/finally (fn []
-                     (vreset! thread-api/*thread-apis thread-apis-prev))))))
+  ([repo conn f]
+   (with-fake-create-or-open-db repo conn {} f))
+  ([repo conn
+    {:keys [create-or-open-db-f close-db-f invalidate-search-db-f unlink-db-f]}
+    f]
+   (let [thread-apis-prev @thread-api/*thread-apis
+         create-or-open-db-f (or create-or-open-db-f
+                                 (fn [_repo _opts]
+                                   (swap! worker-state/*datascript-conns assoc repo conn)
+                                   (p/resolved nil)))
+         close-db-f (or close-db-f (fn [_repo] nil))
+         invalidate-search-db-f (or invalidate-search-db-f (fn [_repo] (p/resolved nil)))
+         unlink-db-f (or unlink-db-f (fn [_repo] nil))]
+     (vreset! thread-api/*thread-apis
+              (assoc thread-apis-prev
+                     :thread-api/create-or-open-db create-or-open-db-f
+                     :thread-api/db-sync-close-db close-db-f
+                     :thread-api/db-sync-invalidate-search-db invalidate-search-db-f
+                     :thread-api/unsafe-unlink-db unlink-db-f))
+     (-> (f)
+         (p/finally (fn []
+                      (vreset! thread-api/*thread-apis thread-apis-prev)))))))
 
 (deftest db-sync-import-prepare-replaces-active-import-state-test
   (async done
@@ -197,6 +204,48 @@
                       (p/catch (fn [error]
                                  (is false (str error))
                                  (done)))))))))))
+
+(deftest db-sync-import-prepare-reset-unlinks-db-before-reopen-test
+  (async done
+    (restoring-worker-state
+     (fn []
+       (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+             conn (d/create-conn db-schema/schema)
+             calls (atom [])]
+         (with-fake-create-or-open-db
+           test-repo conn
+           {:close-db-f (fn [repo]
+                          (swap! calls conj [:close repo])
+                          nil)
+            :unlink-db-f (fn [repo]
+                           (swap! calls conj [:unlink repo])
+                           nil)
+            :invalidate-search-db-f (fn [repo]
+                                      (swap! calls conj [:invalidate-search repo])
+                                      (p/resolved nil))
+            :create-or-open-db-f (fn [repo opts]
+                                   (swap! calls conj [:create-or-open repo opts])
+                                   (swap! worker-state/*datascript-conns assoc repo conn)
+                                   (p/resolved nil))}
+           (fn []
+             (-> (prepare test-repo true "graph-1" false)
+                 (p/then (fn [_]
+                           (let [ops (mapv first @calls)
+                                 idx (fn [op]
+                                       (first (keep-indexed (fn [i v]
+                                                              (when (= op v) i))
+                                                            ops)))]
+                             (is (some? (idx :close)))
+                             (is (some? (idx :unlink)))
+                             (is (some? (idx :invalidate-search)))
+                             (is (some? (idx :create-or-open)))
+                             (is (< (idx :close) (idx :unlink)))
+                             (is (< (idx :unlink) (idx :invalidate-search)))
+                             (is (< (idx :invalidate-search) (idx :create-or-open))))
+                           (done)))
+                 (p/catch (fn [error]
+                            (is false (str error))
+                            (done)))))))))))
 
 (deftest db-sync-import-finalize-rejects-stale-import-id-test
   (async done
@@ -294,6 +343,23 @@
       (is (< ident-idx data-idx))
       (is (< cardinality-idx data-idx)))))
 
+(deftest import-datoms-batch-transacts-all-db-schema-before-data-test
+  (async done
+         (let [conn (d/create-conn db-schema/schema)
+               attr-eid 8001
+               datoms [{:e attr-eid :a :db/ident :v :user.test/indexed}
+                       {:e 100 :a :user.test/indexed :v "hello"}
+                       {:e attr-eid :a :db/valueType :v :db.type/string}
+                       {:e attr-eid :a :db/cardinality :v :db.cardinality/one}
+                       {:e attr-eid :a :db/index :v true}]]
+           (-> (#'sync-download/import-datoms-batch! conn nil false datoms)
+               (p/then (fn [_]
+                         (is (= 1 (count (d/datoms @conn :avet :user.test/indexed "hello"))))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest thread-api-validate-db-passes-sync-diagnostics-test
   (restoring-worker-state
    (fn []
@@ -373,7 +439,7 @@
            (-> (export-client-ops-db test-repo)
                (p/then (fn [result]
                          (is (= ["PRAGMA wal_checkpoint(2)"] @sql-calls))
-                         (is (= ["client-ops-/db.sqlite"] @export-calls))
+                         (is (= ["client-ops/db.sqlite"] @export-calls))
                          (is (instance? js/Uint8Array result))
                          (is (= [1 2 3] (vec result)))
                          (done)))
