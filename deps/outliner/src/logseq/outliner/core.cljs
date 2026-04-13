@@ -11,7 +11,6 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.datascript :as ds]
@@ -452,15 +451,21 @@
   "Save the `block`."
   [db block opts]
   {:pre [(map? block)]}
-  (let [*txs-state (atom [])
+  (let [eid (or (:db/id block) (when-let [id (:block/uuid block)] [:block/uuid id]))
+        _ (when-let [ent (and eid (d/entity db eid))]
+            (when (outliner-validate/built-in-entity? ent)
+              (throw (ex-info "Built-in nodes can't be modified"
+                              {:type :notification
+                               :payload {:message "Built-in nodes can't be modified"
+                                         :type :error}}))))
+        *txs-state (atom [])
         block' (if (de/entity? block)
                  block
                  (do
                    (assert (or (:db/id block) (:block/uuid block)) "save-block db/id not exists")
-                   (when-let [eid (or (:db/id block) (when-let [id (:block/uuid block)] [:block/uuid id]))]
-                     (let [ent (d/entity db eid)]
-                       (assert (some? ent) "save-block entity not exists")
-                       (merge ent block)))))]
+                   (when-let [ent (and eid (d/entity db eid))]
+                     (assert (some? ent) "save-block entity not exists")
+                     (merge ent block))))]
     (otree/-save block' *txs-state db opts)
     {:tx-data @*txs-state}))
 
@@ -837,10 +842,7 @@
   (let [top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
         top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
-        undeletable? (fn [b] (or (:logseq.property/built-in? b)
-                                 (:file/path b)
-                                 (some-> (:db/ident b) db-malli-schema/internal-ident?)))
-        top-level-blocks (remove undeletable? top-level-blocks*)
+        top-level-blocks (remove outliner-validate/built-in-entity? top-level-blocks*)
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
@@ -848,7 +850,7 @@
         delete-one-block? (or (= 1 (count top-level-blocks)) (= start-block end-block))]
 
     ;; Validate before `when` since top-level-blocks will be empty when deleting one built-in/internal block
-    (when (seq (filter undeletable? top-level-blocks*))
+    (when (seq (filter outliner-validate/built-in-entity? top-level-blocks*))
       (throw (ex-info "Built-in nodes can't be deleted"
                       {:type :notification
                        :payload {:message "Built-in nodes can't be deleted"
@@ -935,6 +937,13 @@
                              :as opts}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
+  (doseq [b blocks]
+    (let [entity (d/entity @conn (:db/id b))]
+      (when (outliner-validate/built-in-entity? entity)
+        (throw (ex-info "Built-in nodes can't be modified"
+                        {:type :notification
+                         :payload {:message "Built-in nodes can't be modified"
+                                   :type :error}})))))
   (let [db @conn
         top-level-blocks (filter-top-level-blocks db blocks)
         [target-block sibling?] (get-target-block db top-level-blocks target-block opts)

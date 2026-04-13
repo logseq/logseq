@@ -80,3 +80,20 @@
         (is (some? (:db/id kv)))
         (is (thrown-with-msg? js/Error #"Built-in nodes can't be deleted"
                               (db-test/silence-stderr (outliner-core/delete-blocks! conn [kv] {}))))))))
+
+(deftest save-block-rejects-built-in-entity
+  (let [conn (db-test/create-conn)
+        placeholder (d/entity @conn :logseq.property/description)]
+    (is (thrown-with-msg? js/Error #"Built-in.*can't be modified"
+          (db-test/silence-stderr
+            (outliner-core/save-block! conn {:db/id (:db/id placeholder) :block/title "hacked"}))))))
+
+(deftest move-blocks-rejects-built-in-entity
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "target"}]}])
+        placeholder (d/entity @conn :logseq.property/description)
+        target (db-test/find-block-by-content @conn "target")]
+    (is (thrown-with-msg? js/Error #"Built-in.*can't be modified"
+          (db-test/silence-stderr
+            (outliner-core/move-blocks! conn [placeholder] target {:sibling? true}))))))
