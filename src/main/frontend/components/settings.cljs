@@ -593,7 +593,7 @@
                                  (p/then #(notification/show! (t :settings-page/sync-server-url-saved) :success))
                                  (p/catch #(notification/show! (str "Failed to update worker: " %) :error))))))))}
         (t :save))
-       (when (seq current-url)
+       (when (seq url)
          (shui/button
           {:size :sm
            :variant :outline
