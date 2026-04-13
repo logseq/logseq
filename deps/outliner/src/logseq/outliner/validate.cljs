@@ -9,6 +9,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]))
 
 (defn ^:api validate-page-title-no-hashtag
@@ -231,9 +232,21 @@
                      :property-id :block/tags
                      :property-value v}))))
 
+(defn built-in-entity?
+  "Returns true when the entity is a built-in. Ideally checking
+  :logseq.property/built-in? would be enough but not all built-in nodes have
+  that property. Covers:
+  - entities marked with :logseq.property/built-in?  (built-in pages, classes, properties)
+  - file entities  (logseq/config.edn, custom.css, etc.)
+  - entities whose :db/ident belongs to an internal namespace  (KV entries, empty-placeholder)"
+  [ent]
+  (or (:logseq.property/built-in? ent)
+      (:file/path ent)
+      (some-> (:db/ident ent) db-malli-schema/internal-ident?)))
+
 (defn- disallow-tagging-a-built-in-entity
   [db block-eids & {:keys [delete?]}]
-  (when-let [built-in-ent (some #(when (:logseq.property/built-in? %) %)
+  (when-let [built-in-ent (some #(when (built-in-entity? %) %)
                                 (map #(d/entity db %) block-eids))]
     (throw (ex-info (str (if delete? "Can't remove tag" "Can't add tag")
                          " on built-in " (pr-str (:block/title built-in-ent)))
@@ -316,3 +329,17 @@
   (disallow-tagging-a-built-in-entity db block-eids {:delete? true})
   (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true})
   (disallow-removing-page-tag db block-eids v))
+
+(defn disallow-editing-private-built-in-nodes
+  "Disallow editing private :built-in nodes. This explicit validation is needed for contexts
+   like CLI and API which allow users to edit any built-in entity whereas the app guards this
+   by not allowing users to navigate to private built-in nodes"
+  [entities]
+  (doseq [entity entities]
+    (when (and (built-in-entity? entity)
+               ;; This also checks private status of non-page ents like ents with :kv/value
+               (ldb/private-built-in-page? entity))
+      (throw (ex-info "Built-in private nodes can't be modified"
+                      {:type :notification
+                       :payload {:message "Built-in private nodes can't be modified"
+                                 :type :error}})))))
