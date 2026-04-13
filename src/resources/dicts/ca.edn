@@ -182,7 +182,6 @@
  :keymap/already-bound "Drecera ja en ús"
  :keymap/also-used-for-action "També usat per {1}"
  :keymap/also-used-for-action-in-context "També usat per {1} En context {2}"
- :keymap/chord-separator " després "
  :keymap/clear "Esborrar"
  :keymap/clear-keystroke-filter "Netejar filtre de tecles"
  :keymap/clear-search "Netejar cerca"
@@ -311,6 +310,7 @@
  :ui/refresh "Actualitzar"
  :ui/relaunch-confirm "Cal reiniciar l'aplicació per aplicar aquest canvi. La voleu reiniciar ara?"
  :ui/remove-background "Eliminar fons"
+ :ui/reset "Restableix"
  :ui/run "Run"
  :ui/save "Desa"
  :ui/show-less "Mostra'n menys"
@@ -682,6 +682,7 @@
  :editor/cut "Tallar"
  :editor/cycle-todo "Alternar TODO"
  :editor/delete-selection "Eliminar selecció"
+ :editor/display-tag-inline-hint "per mostrar aquesta etiqueta en línia en lloc del final d'aquest node."
  :editor/expand-block-children "Expandir fills del bloc"
  :editor/heading "Títol {1}"
  :editor/moving-blocks-count "Data no vàlida"
@@ -690,6 +691,8 @@
  :editor/paste "Enganxar"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Eliminar títol"
+ :editor/search-for-node "Cerca un node"
+ :editor/search-for-tag "Cerca una etiqueta"
  :editor/search-template-placeholder "Cercar una plantilla"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "Nova propietat"
  :view/new-view "Nova visualització"
  :view/rename "Reanomenar"
+ :view/results "Resultats:"
  :view/unlinked-references "Referències no vinculades"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "Descendent"
  :view.table/drag-to-reorder "Arrossegueu per reordenar"
  :view.table/group-by "Agrupar per"
+ :view.table/group-journal-date "Data del diari"
+ :view.table/group-page-created-date "Data de creació de la pàgina"
+ :view.table/group-page-name "Nom de la pàgina"
+ :view.table/group-page-updated-date "Data d'actualització de la pàgina"
  :view.table/id-column "ID"
  :view.table/live-query-title "Consulta en viu ({1})"
  :view.table/name-column "Nom"
+ :view.table/no-group-value "Cap {1}"
  :view.table/open "Obrir"
  :view.table/page "Pàgina"
+ :view.table/pages "Pàgines"
  :view.table/pin "Fixar"
  :view.table/row-number "Número de fila"
  :view.table/select-all "Seleccionar tot"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "Desafixar"
 
  ;; Query
+ :query/advanced-results "Resultats de la consulta avançada"
  :query/custom-view-error "Error de vista personalitzada: {1}"
  :query/error "Error de consulta:"
  :query/examples-desc "Consulteu més exemples a {{Queries documentation}}."
  :query/examples-title "Exemples de consultes:"
+ :query/results-for "Resultats per a {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Substituir per:"
  :query.builder/search-label "Cercar: {1}"
+ :query.builder/show-built-in-properties "Mostra les propietats integrades"
  :query.builder/unwrap-operator "Desembolcallar"
  :query.builder/updated-label "Actualitzat"
  :query.builder/wrap-filter-with-label "Embolcallar aquest filtre amb:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "Edita settings.json"
+ :plugin.settings/exit-code-mode "Surt del mode de codi"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "Generant embeddings..."
  :ai/local-embedding-model "Model d'incrustació local"
  :ai/model-download-progress "Descarregant {1}"
  :ai/model-downloaded "Descarregat {1}"
  :ai/model-ready "El model està preparat 🚀"
  :ai/search-label "Cerca"
- :ai/search-result-label "Resultat de la cerca:"
+ :ai/search-result-label "Resultat de la cerca"
  :ai/search-title "Cerca semàntica:"
  :ai/select-model "Seleccioneu un model"
+ :ai/vector-search-debug-actions "Accions"
+ :ai/vector-search-debug-settings "Configuració"
+ :ai/vector-search-debug-state "Estat"
  :ai/vector-search-model-placeholder "Seleccioneu un model (cal tornar a forçar l'incrustació de tots els blocs del graf)"
  :ai/webgpu-unsupported "WebGPU no és compatible amb aquest navegador, actualitzeu-lo o feu servir un altre navegador."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "S'està creant el gràfic remot..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "Descarregant {1} ..."
  :sync/graph-count-exceed-limit "El nombre de grafs supera el límit"
@@ -1745,13 +1767,16 @@
  :help/changelog "Registre de canvis"
  :help/community-title "Comunitat"
  :help/context-menu "Menú contextual"
+ :help/context-menu-action "Clic dret al punt"
  :help/development-title "Desenvolupament"
  :help/docs "Documentació"
  :help/feature "Sol·licitud de funcionalitat"
  :help/forum-community "Comunitat del fòrum"
  :help/handbook "Manual"
+ :help/learn-more "Més informació"
  :help/markdown-syntax "Sintaxi de Markdown"
  :help/open-link-in-sidebar "Obrir enllaç al panell lateral"
+ :help/open-link-in-sidebar-action "Maj + clic a la referència"
  :help/privacy "Política de privacitat"
  :help/reference-autocomplete "Referència de pàgina"
  :help/release-notes "Notes de la versió"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "Enrere"
  :header/go-forward "Endavant"
+ :header/highlight-recent-blocks "Ressalta els blocs recents"
+ :header/highlight-recent-blocks-days-ago "Ressalta els blocs recents: fa {1} dies"
  :header/more "Més"
  :header/quit-highlight-recent-blocks "Deixar de ressaltar els blocs recents"
  :header/search "Cerca"

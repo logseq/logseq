@@ -573,40 +573,38 @@
                       href))]
          (resizable-image config title href metadata full_text false))))))
 
-(def timestamp-to-string export-common-handler/timestamp-to-string)
-
 (defn timestamp [{:keys [active _date _time _repetition _wday] :as t} kind]
   (let [prefix (case kind
-                 "Scheduled"
+                 :scheduled
                  [:i {:class "fa fa-calendar"
                       :style {:margin-right 3.5}}]
-                 "Deadline"
+                 :deadline
                  [:i {:class "fa fa-calendar-times-o"
                       :style {:margin-right 3.5}}]
-                 "Date"
+                 :date
                  nil
-                 "Closed"
+                 :closed
                  nil
-                 "Started"
+                 :started
                  [:i {:class "fa fa-clock-o"
                       :style {:margin-right 3.5}}]
-                 "Start"
+                 :start
                  (t :ui/from)
-                 "Stop"
+                 :stop
                  (t :ui/to)
                  nil)
-        class (when (= kind "Closed")
+        class (when (= kind :closed)
                 "line-through")]
     [:span.timestamp (cond-> {:active (str active)}
                        class
                        (assoc :class class))
-     prefix (timestamp-to-string t)]))
+     prefix (export-common-handler/timestamp-to-string t)]))
 
 (defn range [{:keys [start stop]} stopped?]
   [:div {:class "timestamp-range"
          :stopped stopped?}
-   (timestamp start "Start")
-   (timestamp stop "Stop")])
+   (timestamp start :start)
+   (timestamp stop :stop)])
 
 (declare map-inline)
 (declare markup-element-cp)
@@ -1706,15 +1704,15 @@
     ["Timestamp" [(:or "Scheduled" "Deadline") _timestamp]]
     nil
     ["Timestamp" ["Date" t]]
-    (timestamp t "Date")
+    (timestamp t :date)
     ["Timestamp" ["Closed" t]]
-    (timestamp t "Closed")
+    (timestamp t :closed)
     ["Timestamp" ["Range" t]]
     (range t false)
     ["Timestamp" ["Clock" ["Stopped" t]]]
     (range t true)
     ["Timestamp" ["Clock" ["Started" t]]]
-    (timestamp t "Started")
+    (timestamp t :started)
 
     ["Cookie" ["Percent" n]]
     [:span {:class "cookie-percent"}
@@ -4072,7 +4070,7 @@
          (ui/foldable
           [:div.with-foldable-page
            (page-cp config page)
-           (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+           (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
           items
           {:debug-id page})
          [:div.only-page-blocks items]))]))
@@ -4096,7 +4094,7 @@
              (ui/foldable
               [:div
                (page-cp config page)
-               (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+               (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
               (fn []
                 (let [{top-level-blocks true others false} (group-by
                                                             (fn [b] (= (:db/id page) (:db/id (first b))))
@@ -4145,7 +4143,7 @@
                  (ui/foldable
                   [:div
                    (page-cp config page)
-                   (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+                   (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
                   (fn []
                     (blocks-container config blocks))
                   {})])))))]

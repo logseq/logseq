@@ -235,8 +235,8 @@
          :item-render (fn [block _chosen?]
                         (node-render block q {:db-tag? db-tag?}))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                    "Search for a tag"
-                                                                    "Search for a node")]
+                                                                    (t :editor/search-for-tag)
+                                                                    (t :editor/search-for-node))]
          :class "black"})
 
        (when (and db-tag?
@@ -244,7 +244,7 @@
                   (not= "page" (string/lower-case q)))
          [:p.px-1.opacity-50.text-sm.flex.flex-row.items-center.gap-2
           (shui/shortcut "mod+enter")
-          [:span " to display this tag inline instead of at the end of this node."]])])))
+          [:span (t :editor/display-tag-inline-hint)]])])))
 
 (rum/defcs page-search < rum/reactive
   {:init (fn [state]

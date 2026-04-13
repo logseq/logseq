@@ -182,7 +182,6 @@
  :keymap/already-bound "Atalho já em uso"
  :keymap/also-used-for-action "Também usado para {1}"
  :keymap/also-used-for-action-in-context "Também usado para {1} No contexto {2}"
- :keymap/chord-separator " depois "
  :keymap/clear "Limpar"
  :keymap/clear-keystroke-filter "Limpar filtro de teclas"
  :keymap/clear-search "Limpar pesquisa"
@@ -311,6 +310,7 @@
  :ui/refresh "Atualizar"
  :ui/relaunch-confirm "Esta alteração requer reiniciar a aplicação. Reiniciar agora?"
  :ui/remove-background "Remover fundo"
+ :ui/reset "Repor"
  :ui/run "Run"
  :ui/save "Guardar"
  :ui/show-less "Mostrar menos"
@@ -682,6 +682,7 @@
  :editor/cut "Cortar"
  :editor/cycle-todo "Alternar TODO"
  :editor/delete-selection "Eliminar seleção"
+ :editor/display-tag-inline-hint "para mostrar esta tag em linha em vez de no fim deste nó."
  :editor/expand-block-children "Expandir filhos do bloco"
  :editor/heading "Título {1}"
  :editor/moving-blocks-count "Data inválida"
@@ -690,6 +691,8 @@
  :editor/paste "Colar"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Remover título"
+ :editor/search-for-node "Procurar um nó"
+ :editor/search-for-tag "Procurar uma tag"
  :editor/search-template-placeholder "Pesquisar um modelo"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "Nova propriedade"
  :view/new-view "Nova visualização"
  :view/rename "Renomear"
+ :view/results "Resultados:"
  :view/unlinked-references "Referências não ligadas"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "Descendente"
  :view.table/drag-to-reorder "Arraste para reordenar"
  :view.table/group-by "Agrupar por"
+ :view.table/group-journal-date "Data do diário"
+ :view.table/group-page-created-date "Data de criação da página"
+ :view.table/group-page-name "Nome da página"
+ :view.table/group-page-updated-date "Data de atualização da página"
  :view.table/id-column "ID"
  :view.table/live-query-title "Consulta ao vivo ({1})"
  :view.table/name-column "Nome"
+ :view.table/no-group-value "Sem {1}"
  :view.table/open "Abrir"
  :view.table/page "Página"
+ :view.table/pages "Páginas"
  :view.table/pin "Fixar"
  :view.table/row-number "Número da linha"
  :view.table/select-all "Selecionar tudo"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "Soltar"
 
  ;; Query
+ :query/advanced-results "Resultados da consulta avançada"
  :query/custom-view-error "Erro na vista personalizada: {1}"
  :query/error "Erro na consulta:"
  :query/examples-desc "Consulte mais exemplos em {{Queries documentation}}."
  :query/examples-title "Exemplos de consultas:"
+ :query/results-for "Resultados para {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Substituir por:"
  :query.builder/search-label "Pesquisa: {1}"
+ :query.builder/show-built-in-properties "Mostrar propriedades incorporadas"
  :query.builder/unwrap-operator "Desembrulhar"
  :query.builder/updated-label "Atualizado"
  :query.builder/wrap-filter-with-label "Embrulhar este filtro com:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "Editar settings.json"
+ :plugin.settings/exit-code-mode "Sair do modo de código"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "A gerar embeddings..."
  :ai/local-embedding-model "Modelo de embedding local"
  :ai/model-download-progress "A transferir {1}"
  :ai/model-downloaded "Transferido {1}"
  :ai/model-ready "O modelo está pronto 🚀"
  :ai/search-label "Pesquisa"
- :ai/search-result-label "Resultado da pesquisa:"
+ :ai/search-result-label "Resultado da pesquisa"
  :ai/search-title "Pesquisa semântica:"
  :ai/select-model "Selecionar um modelo"
+ :ai/vector-search-debug-actions "Ações"
+ :ai/vector-search-debug-settings "Definições"
+ :ai/vector-search-debug-state "Estado"
  :ai/vector-search-model-placeholder "Selecionar um modelo (necessário forçar embedding de todos os blocos do grafo novamente)"
  :ai/webgpu-unsupported "O WebGPU não é suportado neste navegador. Por favor, atualize-o ou utilize outro navegador."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "A criar grafo remoto..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "A transferir {1} ..."
  :sync/graph-count-exceed-limit "O número de grafos excede o limite"
@@ -1745,13 +1767,16 @@
  :help/changelog "Registo de alterações"
  :help/community-title "Comunidade"
  :help/context-menu "Menu de contexto"
+ :help/context-menu-action "Clique com o botão direito no marcador"
  :help/development-title "Desenvolvimento"
  :help/docs "Documentação"
  :help/feature "Pedido de funcionalidade"
  :help/forum-community "Comunidade do fórum"
  :help/handbook "Manual"
+ :help/learn-more "Saber mais"
  :help/markdown-syntax "Sintaxe de Markdown"
  :help/open-link-in-sidebar "Abrir ligação na barra lateral"
+ :help/open-link-in-sidebar-action "Shift+clique na referência"
  :help/privacy "Política de privacidade"
  :help/reference-autocomplete "Autocompletar referência de página"
  :help/release-notes "Notas de versão"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "Voltar"
  :header/go-forward "Avançar"
+ :header/highlight-recent-blocks "Destacar blocos recentes"
+ :header/highlight-recent-blocks-days-ago "Destacar blocos recentes: há {1} dias"
  :header/more "Mais"
  :header/quit-highlight-recent-blocks "Sair do destaque de blocos recentes"
  :header/search "Pesquisar"

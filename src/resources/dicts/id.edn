@@ -182,7 +182,6 @@
  :keymap/already-bound "Pintasan sudah ditetapkan"
  :keymap/also-used-for-action "Juga digunakan untuk {1}"
  :keymap/also-used-for-action-in-context "Juga digunakan untuk {1} Dalam konteks {2}"
- :keymap/chord-separator " lalu "
  :keymap/clear "Hapus"
  :keymap/clear-keystroke-filter "Hapus filter ketukan tombol"
  :keymap/clear-search "Hapus pencarian"
@@ -311,6 +310,7 @@
  :ui/refresh "Segarkan"
  :ui/relaunch-confirm "Perubahan ini memerlukan aplikasi dimulai ulang. Mulai ulang sekarang?"
  :ui/remove-background "Hapus latar belakang"
+ :ui/reset "Setel ulang"
  :ui/run "Run"
  :ui/save "Simpan"
  :ui/show-less "Tampilkan lebih sedikit"
@@ -682,6 +682,7 @@
  :editor/cut "Potong"
  :editor/cycle-todo "Putar status TODO item saat ini"
  :editor/delete-selection "Hapus blok terpilih"
+ :editor/display-tag-inline-hint "untuk menampilkan tag ini secara inline, bukan di akhir node ini."
  :editor/expand-block-children "Perluas semua"
  :editor/heading "Judul {1}"
  :editor/moving-blocks-count "Tanggal tidak valid"
@@ -690,6 +691,8 @@
  :editor/paste "Tempel"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Hapus judul"
+ :editor/search-for-node "Cari node"
+ :editor/search-for-tag "Cari tag"
  :editor/search-template-placeholder "Cari templat"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "Properti baru"
  :view/new-view "Tampilan baru"
  :view/rename "Ganti nama"
+ :view/results "Hasil:"
  :view/unlinked-references "Referensi tidak tertaut"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "Turun"
  :view.table/drag-to-reorder "Seret untuk mengurutkan"
  :view.table/group-by "Kelompokkan berdasarkan"
+ :view.table/group-journal-date "Tanggal jurnal"
+ :view.table/group-page-created-date "Tanggal pembuatan halaman"
+ :view.table/group-page-name "Nama halaman"
+ :view.table/group-page-updated-date "Tanggal pembaruan halaman"
  :view.table/id-column "ID"
  :view.table/live-query-title "Kueri langsung ({1})"
  :view.table/name-column "Nama"
+ :view.table/no-group-value "Tidak ada {1}"
  :view.table/open "Buka"
  :view.table/page "Halaman"
+ :view.table/pages "Halaman"
  :view.table/pin "Sematkan"
  :view.table/row-number "Nomor baris"
  :view.table/select-all "Pilih semua"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "Lepas sematan"
 
  ;; Query
+ :query/advanced-results "Hasil kueri lanjutan"
  :query/custom-view-error "Kesalahan tampilan kustom: {1}"
  :query/error "Kesalahan kueri:"
  :query/examples-desc "Lihat lebih banyak contoh di {{Queries documentation}}."
  :query/examples-title "Contoh kueri:"
+ :query/results-for "Hasil untuk {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Ganti dengan:"
  :query.builder/search-label "Cari: {1}"
+ :query.builder/show-built-in-properties "Tampilkan properti bawaan"
  :query.builder/unwrap-operator "Buka bungkus"
  :query.builder/updated-label "Diperbarui"
  :query.builder/wrap-filter-with-label "Bungkus filter ini dengan:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "Edit settings.json"
+ :plugin.settings/exit-code-mode "Keluar dari mode kode"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "Menyematkan..."
  :ai/local-embedding-model "Model embedding lokal"
  :ai/model-download-progress "Mengunduh {1}"
  :ai/model-downloaded "Berhasil mengunduh {1}"
  :ai/model-ready "Model siap digunakan 🚀"
  :ai/search-label "Cari"
- :ai/search-result-label "Hasil Pencarian:"
+ :ai/search-result-label "Hasil Pencarian"
  :ai/search-title "Pencarian semantik:"
  :ai/select-model "Pilih model"
+ :ai/vector-search-debug-actions "Tindakan"
+ :ai/vector-search-debug-settings "Pengaturan"
+ :ai/vector-search-debug-state "Status"
  :ai/vector-search-model-placeholder "Pilih model (perlu force-embedding-all-graph-blocks lagi)"
  :ai/webgpu-unsupported "WebGPU tidak didukung di browser ini, silakan perbarui atau gunakan browser lain."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "Membuat graph jarak jauh..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "Mengunduh {1} ..."
  :sync/graph-count-exceed-limit "Jumlah grafik melebihi batas"
@@ -1745,13 +1767,16 @@
  :help/changelog "Catatan perubahan"
  :help/community-title "Komunitas"
  :help/context-menu "Blokir menu konteks"
+ :help/context-menu-action "Klik kanan bullet"
  :help/development-title "Pengembangan"
  :help/docs "Dokumentasi"
  :help/feature "Permintaan fitur"
  :help/forum-community "Komunitas forum"
  :help/handbook "Buku Panduan"
+ :help/learn-more "Pelajari lebih lanjut"
  :help/markdown-syntax "Sintaks penurunan harga"
  :help/open-link-in-sidebar "Buka tautan di bilah sisi"
+ :help/open-link-in-sidebar-action "Shift+klik referensi"
  :help/privacy "Kebijakan privasi"
  :help/reference-autocomplete "Pelengkapan otomatis referensi halaman"
  :help/release-notes "Catatan rilis"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "Kembali"
  :header/go-forward "Maju"
+ :header/highlight-recent-blocks "Sorot blok terbaru"
+ :header/highlight-recent-blocks-days-ago "Sorot blok terbaru: {1} hari lalu"
  :header/more "Lainnya"
  :header/quit-highlight-recent-blocks "Hentikan sorotan blok terbaru"
  :header/search "Cari"

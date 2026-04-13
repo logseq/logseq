@@ -182,7 +182,6 @@
  :keymap/already-bound "الاختصار مرتبط بالفعل"
  :keymap/also-used-for-action "يُستخدم أيضًا لـ {1}"
  :keymap/also-used-for-action-in-context "يُستخدم أيضًا لـ {1} السياق: {2}"
- :keymap/chord-separator " ثم "
  :keymap/clear "مسح"
  :keymap/clear-keystroke-filter "مسح فلتر ضغطات المفاتيح"
  :keymap/clear-search "مسح البحث"
@@ -311,6 +310,7 @@
  :ui/refresh "تحديث"
  :ui/relaunch-confirm "يتطلب هذا التغيير إعادة تشغيل التطبيق. هل تريد إعادة تشغيله الآن؟"
  :ui/remove-background "إزالة الخلفية"
+ :ui/reset "إعادة تعيين"
  :ui/run "Run"
  :ui/save "حفظ"
  :ui/show-less "عرض أقل"
@@ -682,6 +682,7 @@
  :editor/cut "قص"
  :editor/cycle-todo "تبديل TODO"
  :editor/delete-selection "حذف التحديد"
+ :editor/display-tag-inline-hint "لعرض هذا الوسم ضمن السطر بدلًا من نهاية هذه العقدة."
  :editor/expand-block-children "توسيع الكتل الفرعية"
  :editor/heading "العنوان {1}"
  :editor/moving-blocks-count "تاريخ غير صالح"
@@ -690,6 +691,8 @@
  :editor/paste "لصق"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "إزالة العنوان"
+ :editor/search-for-node "ابحث عن عقدة"
+ :editor/search-for-tag "ابحث عن وسم"
  :editor/search-template-placeholder "البحث عن قالب"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "خاصية جديدة"
  :view/new-view "عرض جديد"
  :view/rename "إعادة تسمية"
+ :view/results "النتائج:"
  :view/unlinked-references "المراجع غير المرتبطة"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "تنازلي"
  :view.table/drag-to-reorder "اسحب لإعادة الترتيب"
  :view.table/group-by "التجميع حسب"
+ :view.table/group-journal-date "تاريخ اليومية"
+ :view.table/group-page-created-date "تاريخ إنشاء الصفحة"
+ :view.table/group-page-name "اسم الصفحة"
+ :view.table/group-page-updated-date "تاريخ تحديث الصفحة"
  :view.table/id-column "المعرف"
  :view.table/live-query-title "استعلام مباشر ({1})"
  :view.table/name-column "الاسم"
+ :view.table/no-group-value "لا يوجد {1}"
  :view.table/open "فتح"
  :view.table/page "صفحة"
+ :view.table/pages "الصفحات"
  :view.table/pin "تثبيت"
  :view.table/row-number "رقم الصف"
  :view.table/select-all "تحديد الكل"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "إلغاء التثبيت"
 
  ;; Query
+ :query/advanced-results "نتائج الاستعلام المتقدم"
  :query/custom-view-error "خطأ في العرض المخصص: {1}"
  :query/error "خطأ في الاستعلام:"
  :query/examples-desc "تحقق من المزيد من الأمثلة في {{Queries documentation}}."
  :query/examples-title "أمثلة الاستعلامات:"
+ :query/results-for "نتائج {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "استبدال بـ:"
  :query.builder/search-label "بحث: {1}"
+ :query.builder/show-built-in-properties "إظهار الخصائص المدمجة"
  :query.builder/unwrap-operator "فك التغليف"
  :query.builder/updated-label "تاريخ التحديث"
  :query.builder/wrap-filter-with-label "تغليف هذا الفلتر بـ:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "تعديل settings.json"
+ :plugin.settings/exit-code-mode "إنهاء وضع الكود"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "جارٍ إنشاء التضمينات..."
  :ai/local-embedding-model "نموذج التضمين المحلي"
  :ai/model-download-progress "جارٍ تنزيل {1}"
  :ai/model-downloaded "تم تنزيل {1}"
  :ai/model-ready "النموذج جاهز 🚀"
  :ai/search-label "بحث"
- :ai/search-result-label "نتيجة البحث:"
+ :ai/search-result-label "نتيجة البحث"
  :ai/search-title "البحث الدلالي:"
  :ai/select-model "اختر نموذجًا"
+ :ai/vector-search-debug-actions "الإجراءات"
+ :ai/vector-search-debug-settings "الإعدادات"
+ :ai/vector-search-debug-state "الحالة"
  :ai/vector-search-model-placeholder "اختر نموذجًا (يتطلب إعادة تضمين جميع كتل الرسم البياني)"
  :ai/webgpu-unsupported "WebGPU غير مدعوم في هذا المتصفح، يرجى تحديثه أو استخدام متصفح آخر."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "جارٍ إنشاء الرسم البياني البعيد..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "جارٍ تنزيل {1} ..."
  :sync/graph-count-exceed-limit "عدد الرسوم تجاوز الحد"
@@ -1745,13 +1767,16 @@
  :help/changelog "سجل التغييرات"
  :help/community-title "المجتمع"
  :help/context-menu "قائمة سياق الكتلة"
+ :help/context-menu-action "انقر بزر الفأرة الأيمن على التعداد"
  :help/development-title "التطوير"
  :help/docs "التوثيق"
  :help/feature "طلب ميزة"
  :help/forum-community "مجتمع المنتدى"
  :help/handbook "الدليل"
+ :help/learn-more "اعرف المزيد"
  :help/markdown-syntax "صيغة Markdown"
  :help/open-link-in-sidebar "فتح الرابط في الشريط الجانبي"
+ :help/open-link-in-sidebar-action "Shift+النقر على المرجع"
  :help/privacy "سياسة الخصوصية"
  :help/reference-autocomplete "مرجع الصفحة للإكمال التلقائي"
  :help/release-notes "ملاحظات الإصدار"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "رجوع"
  :header/go-forward "تقدم"
+ :header/highlight-recent-blocks "تمييز الكتل الحديثة"
+ :header/highlight-recent-blocks-days-ago "تمييز الكتل الحديثة: منذ {1} يومًا"
  :header/more "المزيد"
  :header/quit-highlight-recent-blocks "إيقاف تمييز الكتل الأخيرة"
  :header/search "بحث"

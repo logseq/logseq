@@ -26,8 +26,8 @@
                   (plugin-handler/open-settings-file-in-default-app! pid)
                   (set-edit-mode! #(if % nil :code))))}
    (if (= edit-mode :code)
-     "Exit code mode"
-     "Edit settings.json")])
+     (t :plugin.settings/exit-code-mode)
+     (t :plugin.settings/edit-settings-json))])
 
 (rum/defc render-item-input
   [val {:keys [key type title default description inputAs]} update-setting!]
@@ -148,7 +148,7 @@
                                       (let [^js cm (util/get-cm-instance (-> (.-target e) (.closest ".code-mode-wrap")))
                                             content' (some-> (.toJSON plugin-settings) (js/JSON.stringify nil 2))]
                                         (.setValue cm content')))}
-                         "Reset")
+                         (t :ui/reset))
             (shui/button {:size :sm
                           :on-click (fn [^js e]
                                       (try
@@ -159,7 +159,7 @@
                                           (set-edit-mode! nil))
                                         (catch js/Error e
                                           (notification/show! (.-message e) :error))))}
-                         "Save")]]
+                         (t :ui/save))]]
 
           ;; render with gui items
           (for [desc schema

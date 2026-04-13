@@ -152,7 +152,7 @@
      [:div.flex.flex-row.justify-between.gap-1.items-center.px-1.pb-1.border-b
       [:label.opacity-50.cursor.select-none.text-sm
        {:for "built-in"}
-       "Show built-in properties"]
+       (t :query.builder/show-built-in-properties)]
       (shui/checkbox
        {:id "built-in"
         :value @*private-property?

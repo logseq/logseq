@@ -182,7 +182,6 @@
  :keymap/already-bound "Already bound to this action"
  :keymap/also-used-for-action "Also used for {1}"
  :keymap/also-used-for-action-in-context "Also used for {1} in {2}"
- :keymap/chord-separator "then"
  :keymap/clear "Clear"
  :keymap/clear-keystroke-filter "Clear keystroke filter"
  :keymap/clear-search "Clear search"
@@ -311,6 +310,7 @@
  :ui/refresh "Refresh"
  :ui/relaunch-confirm "Restart the app to apply this change. Restart now?"
  :ui/remove-background "Remove background"
+ :ui/reset "Reset"
  :ui/run "Run"
  :ui/save "Save"
  :ui/show-less "Show less"
@@ -682,6 +682,7 @@
  :editor/cut "Cut"
  :editor/cycle-todo "Rotate the TODO state"
  :editor/delete-selection "Delete selected blocks"
+ :editor/display-tag-inline-hint "to display this tag inline instead of at the end of this node."
  :editor/expand-block-children "Expand all"
  :editor/heading "Heading {1}"
  :editor/moving-blocks-count (fn [n] (str "Moving " n (if (> n 1) " blocks" " block")))
@@ -690,6 +691,8 @@
  :editor/paste "Paste"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Remove heading"
+ :editor/search-for-node "Search for a node"
+ :editor/search-for-tag "Search for a tag"
  :editor/search-template-placeholder "Search for a template"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "New property"
  :view/new-view "New view"
  :view/rename "Rename"
+ :view/results "Results:"
  :view/unlinked-references "Unlinked references"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "Descending"
  :view.table/drag-to-reorder "Drag && Drop to reorder"
  :view.table/group-by "Group by"
+ :view.table/group-journal-date "Journal date"
+ :view.table/group-page-created-date "Page created date"
+ :view.table/group-page-name "Page name"
+ :view.table/group-page-updated-date "Page updated date"
  :view.table/id-column "ID"
  :view.table/live-query-title "Live query ({1})"
  :view.table/name-column "Name"
+ :view.table/no-group-value "No {1}"
  :view.table/open "Open"
  :view.table/page "Page"
+ :view.table/pages "Pages"
  :view.table/pin "Pin"
  :view.table/row-number "Row number"
  :view.table/select-all "Select all"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "Unpin"
 
  ;; Query
+ :query/advanced-results "Advanced query results"
  :query/custom-view-error "Custom view error: {1}"
  :query/error "Query error:"
  :query/examples-desc "Check more examples at {{Queries documentation}}."
  :query/examples-title "Query examples:"
+ :query/results-for "Results for {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Replace with:"
  :query.builder/search-label "Search: {1}"
+ :query.builder/show-built-in-properties "Show built-in properties"
  :query.builder/unwrap-operator "Unwrap"
  :query.builder/updated-label "Updated"
  :query.builder/wrap-filter-with-label "Wrap this filter with:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "Edit settings.json"
+ :plugin.settings/exit-code-mode "Exit code mode"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} Theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "Embedding..."
  :ai/local-embedding-model "Local embedding model"
  :ai/model-download-progress "Downloading {1}"
  :ai/model-downloaded "Downloaded {1}"
  :ai/model-ready "Model is ready 🚀"
  :ai/search-label "Search"
- :ai/search-result-label "Search Result:"
+ :ai/search-result-label "Search Result"
  :ai/search-title "Semantic search:"
  :ai/select-model "Select a model"
+ :ai/vector-search-debug-actions "Actions"
+ :ai/vector-search-debug-settings "Settings"
+ :ai/vector-search-debug-state "State"
  :ai/vector-search-model-placeholder "Select a model(need force-embedding-all-graph-blocks again)"
  :ai/webgpu-unsupported "WebGPU is not supported on this browser, please upgrade it or use another browser."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "Creating remote graph..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "Downloading {1} ..."
  :sync/graph-count-exceed-limit "Sync graph count exceed limit"
@@ -1745,13 +1767,16 @@
  :help/changelog "Changelog"
  :help/community-title "Community"
  :help/context-menu "Block context menu"
+ :help/context-menu-action "Right-click bullet"
  :help/development-title "Development"
  :help/docs "Documentation"
  :help/feature "Feature request"
  :help/forum-community "Forum community"
  :help/handbook "Handbook"
+ :help/learn-more "Learn more"
  :help/markdown-syntax "Markdown syntax"
  :help/open-link-in-sidebar "Open link in sidebar"
+ :help/open-link-in-sidebar-action "Shift-click reference"
  :help/privacy "Privacy policy"
  :help/reference-autocomplete "Page reference autocomplete"
  :help/release-notes "Release notes"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "Go back"
  :header/go-forward "Go forward"
+ :header/highlight-recent-blocks "Highlight recent blocks"
+ :header/highlight-recent-blocks-days-ago "Highlight recent blocks: {1} days ago"
  :header/more "More"
  :header/quit-highlight-recent-blocks "Quit highlight recent blocks"
  :header/search "Search"
