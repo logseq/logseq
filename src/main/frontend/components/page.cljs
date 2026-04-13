@@ -157,6 +157,10 @@
     (add-button-inner block (assoc config :editing? editing?))))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
+  {:did-mount (fn [state]
+                (when-let [on-page-blocks-rendered (get-in state [:rum/args 2 :on-page-blocks-rendered])]
+                  (on-page-blocks-rendered))
+                state)}
   [state block* {:keys [sidebar? hide-add-button? journals?] :as config}]
   (when-let [id (:db/id block*)]
     (let [block (db/sub-block id)
@@ -337,6 +341,14 @@
   (when-let [path-page-name (get-path-page-name state page-name)]
     (util/page-name-sanity-lc path-page-name)))
 
+(rum/defcs on-mounted <
+  {:did-mount (fn [state]
+                (when-let [f (get-in state [:rum/args 2])]
+                  (f))
+                state)}
+  [state child _on-mounted]
+  child)
+
 (rum/defc lsp-pagebar-slot <
   rum/static
   []
@@ -382,11 +394,13 @@
       (when class?
         (shui/tabs-content
          {:value "tag"}
-         (objects/class-objects page opts)))
+         (on-mounted (objects/class-objects page opts)
+                     (:on-tagged-nodes-rendered opts))))
       (when property?
         (shui/tabs-content
          {:value "property"}
-         (objects/property-related-objects page opts))))]))
+         (on-mounted (objects/property-related-objects page opts)
+                     (:on-tagged-nodes-rendered opts))))]))
 
 (rum/defc sidebar-page-properties
   [config page]
@@ -408,9 +422,14 @@
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query mixins/container-id
   (rum/local nil   ::current-page)
+  (rum/local nil   ::linked-refs-blocks-ready-page-id)
+  (rum/local nil   ::linked-refs-tagged-ready-page-id)
   [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
   (let [current-repo (state/sub :git/current-repo)
+        linked-refs-blocks-ready-page-id (get state ::linked-refs-blocks-ready-page-id)
+        linked-refs-tagged-ready-page-id (get state ::linked-refs-tagged-ready-page-id)
         page (or page (some-> (:db/id option) db/entity))
+        page-id (:db/id page)
         config (assoc config
                       :id (str (:block/uuid page)))
         repo (or repo current-repo)
@@ -427,7 +446,12 @@
                 (= title (date/journal-name)))
         home? (= :home (state/get-current-route))
         recycled? (ldb/recycled? page)
-        show-tabs? (and (or class-page? (ldb/property? page)) (not tag-dialog?))]
+        show-tabs? (and (or class-page? (ldb/property? page)) (not tag-dialog?))
+        blocks-ready? (or journals?
+                          (= page-id @linked-refs-blocks-ready-page-id))
+        tagged-ready? (or (not show-tabs?)
+                          (= page-id @linked-refs-tagged-ready-page-id))
+        linked-refs-ready? (and blocks-ready? tagged-ready?)]
     (if page
       (when (or title block?)
         (if recycled?
@@ -467,7 +491,9 @@
                (sidebar-page-properties config page)])
 
             (when show-tabs?
-              (tabs page {:current-page? option :sidebar? sidebar?}))
+              (tabs page {:current-page? option
+                          :sidebar? sidebar?
+                          :on-tagged-nodes-rendered #(reset! linked-refs-tagged-ready-page-id page-id)}))
 
             (when (not tag-dialog?)
               (if recycle-page?
@@ -477,6 +503,7 @@
                   :class (when-not (or sidebar? (util/capacitor?))
                            "mt-4")}
                  (page-blocks-cp page (merge option {:sidebar? sidebar?
+                                                     :on-page-blocks-rendered #(reset! linked-refs-blocks-ready-page-id page-id)
                                                      :container-id (:container-id state)}))]))]
 
            (when-not (or preview? recycle-page?)
@@ -492,7 +519,9 @@
                 (class-component/class-children page))
 
             ;; referenced blocks
-              (when-not (or tag-dialog? linked-refs?)
+              (when (and linked-refs-ready?
+                         (not tag-dialog?)
+                         (not linked-refs?))
                 [:div.fade-in.delay {:key "page-references"}
                  (rum/with-key
                    (reference/references page {:sidebar? sidebar?
