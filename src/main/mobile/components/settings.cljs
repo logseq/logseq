@@ -148,7 +148,7 @@
        [:span.text-sm.opacity-70
         (if-let [custom (config/get-custom-sync-server-url)]
           custom
-          "Logseq Cloud (default)")]]
+          "Logseq sync (default)")]]
 
       (when login?
         [:div.mobile-setting-item
