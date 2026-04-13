@@ -2808,21 +2808,21 @@ function buildRendererProgram(config) {
           }
 
           if (operation === 'emptyInlineTag') {
-            const candidate = randomItem(
+            const target = randomItem(
               operable.filter((block) => block?.uuid && !isClientRootBlock(block))
             ) || anchor;
-            const latest = await logseq.api.get_block(candidate.uuid, { includeChildren: false });
-            const previousContent = typeof latest?.content === 'string'
-              ? latest.content
-              : (typeof candidate.content === 'string' ? candidate.content : '');
-            const token = '#[[]]';
-            const nextContent = previousContent.length > 0
-              ? previousContent + ' ' + token
-              : token;
-            await logseq.api.update_block(candidate.uuid, nextContent);
+            const tagNameRaw = (config.markerPrefix + 'tag-' + i).replace(/[^a-zA-Z0-9_-]+/g, '-');
+            const tagName = tagNameRaw.replace(/^-+/, '') || ('tag-' + i);
+            const token = '#' + tagName;
+            const inserted = await logseq.api.insert_block(target.uuid, token, {
+              sibling: true,
+              before: false,
+              focus: false,
+            });
             return {
               kind: 'emptyInlineTag',
-              candidateUuid: candidate.uuid || null,
+              targetUuid: target.uuid || null,
+              insertedUuid: inserted?.uuid || null,
               token,
             };
           }
