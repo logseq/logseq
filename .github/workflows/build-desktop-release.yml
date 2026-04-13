@@ -13,13 +13,14 @@ on:
           - beta
           - nightly
           - non-release
+          - release
         default: "non-release"
       git-ref:
         description: "Release Git Ref (Which branch or tag to build?)"
         required: true
         default: "master"
       is-draft:
-        description: 'Draft Release? (Beta only, Nightly will always be a non-draft)'
+        description: 'Draft Release? (Beta/Release only, Nightly will always be a non-draft)'
         type: boolean
         required: true
         default: true
@@ -49,16 +50,16 @@ on:
 env:
   CLOJURE_VERSION: '1.11.1.1413'
   NODE_VERSION: '22'
-  JAVA_VERSION: '11'
+  JAVA_VERSION: '17'
 
 jobs:
   compile-cljs:
     runs-on: ubuntu-22.04
     steps:
       # - name: Check build options
-      #   if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta') && github.event.inputs.git-ref != 'master' }}
+      #   if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'release') && github.event.inputs.git-ref != 'master' }}
       #   run: |
-      #     echo "::error title=CheckFail::Nightly and Beta Release MUST be built from master"
+      #     echo "::error title=CheckFail::Nightly, Beta and Release builds MUST be built from master"
       #     exit 1
 
       - name: Check out Git repository
@@ -110,7 +111,7 @@ jobs:
           echo "version=$pkgver" >> $GITHUB_OUTPUT
 
       - name: Do Not Overwrite Existing Release
-        if: ${{ github.event.inputs.build-target == 'beta' }}
+        if: ${{ github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'release' }}
         run: |
           if curl -f "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.ref.outputs.version }}" &>/dev/null; then
             echo "::error title=CheckFail::Release already exists"
@@ -259,13 +260,13 @@ jobs:
           mkdir -p builds
           # NOTE: save VERSION file to builds directory
           cp static/VERSION ./builds/VERSION
-          mv static/out/make/*-*.AppImage ./builds/Logseq-og-linux-x64-${{ steps.ref.outputs.version }}.AppImage
-          mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-og-linux-x64-${{ steps.ref.outputs.version }}.zip
+          mv static/out/make/*-*.AppImage ./builds/Logseq-OG-linux-x64-${{ steps.ref.outputs.version }}.AppImage
+          mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-OG-linux-x64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: logseq-linux-x64-builds
+          name: logseq-og-linux-x64-builds
           path: builds
 
   build-linux-arm64:
@@ -313,13 +314,13 @@ jobs:
           mkdir -p builds
           # NOTE: save VERSION file to builds directory
           cp static/VERSION ./builds/VERSION
-          # mv static/out/make/*-*.AppImage ./builds/Logseq-og-linux-arm64-${{ steps.ref.outputs.version }}.AppImage
-          mv static/out/make/zip/linux/arm64/*-linux-arm64-*.zip ./builds/Logseq-og-linux-arm64-${{ steps.ref.outputs.version }}.zip
+          # mv static/out/make/*-*.AppImage ./builds/Logseq-OG-linux-arm64-${{ steps.ref.outputs.version }}.AppImage
+          mv static/out/make/zip/linux/arm64/*-linux-arm64-*.zip ./builds/Logseq-OG-linux-arm64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: logseq-linux-arm64-builds
+          name: logseq-og-linux-arm64-builds
           path: builds
 
   build-windows:
@@ -365,10 +366,8 @@ jobs:
       - name: Save Artifact for Code Signing
         run: |
           mkdir builds
-          mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-og-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
-          mv static\out\make\zip\win32\x64\*.exe           builds\Logseq-og-win-x64-${{ steps.ref.outputs.version }}.exe
-          mv static\out\make\wix\x64\Logseq*.msi            builds\Logseq-og-win-x64-${{ steps.ref.outputs.version }}.msi
-          mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
+          mv static\out\make\squirrel.windows\x64\*.exe    builds\Logseq-OG-win-x64-${{ steps.ref.outputs.version }}.exe
+          mv static\out\make\wix\x64\Logseq*.msi           builds\Logseq-OG-win-x64-${{ steps.ref.outputs.version }}.msi
 
       - name: Sign
         uses: azure/trusted-signing-action@v0.5.9
@@ -387,9 +386,8 @@ jobs:
 
       - name: Save Artifact
         run: |
-          mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-og-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
-          mv static\out\make\zip\win32\x64\*.zip           builds\Logseq-og-win-x64-${{ steps.ref.outputs.version }}.zip
-          mv static\out\make\wix\x64\Logseq*.msi           builds\Logseq-og-win-x64-${{ steps.ref.outputs.version }}.msi
+          mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-OG-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
+          mv static\out\make\zip\win32\x64\*.zip           builds\Logseq-OG-win-x64-${{ steps.ref.outputs.version }}.zip
           mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
 
       - name: Upload Artifact
@@ -400,7 +398,7 @@ jobs:
 
   build-macos-x64:
     needs: [ compile-cljs ]
-    runs-on: macos-13
+    runs-on: macos-15-intel
 
     steps:
       - name: Download The Static Asset
@@ -441,7 +439,7 @@ jobs:
             ${{ runner.os }}-yarn-
 
       - name: Signing By Apple Developer ID
-        if: ${{ github.repository == 'logseq/logseq' }}
+        if: ${{ github.repository == 'logseq/og' }}
         uses: apple-actions/import-codesign-certs@v1
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
@@ -465,8 +463,8 @@ jobs:
       - name: Save x64 artifacts
         run: |
           mkdir -p builds
-          mv static/out/make/Logseq*.dmg ./builds/Logseq-og-darwin-x64-${{ steps.ref.outputs.version }}.dmg
-          mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-og-darwin-x64-${{ steps.ref.outputs.version }}.zip
+          mv static/out/make/*.dmg                ./builds/Logseq-OG-darwin-x64-${{ steps.ref.outputs.version }}.dmg
+          mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-OG-darwin-x64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -514,7 +512,7 @@ jobs:
           python-version: '3.11'
 
       - name: Signing By Apple Developer ID
-        if: ${{ github.repository == 'logseq/logseq' }}
+        if: ${{ github.repository == 'logseq/og' }}
         uses: apple-actions/import-codesign-certs@v1
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
@@ -542,8 +540,8 @@ jobs:
       - name: Save arm64 artifacts
         run: |
           mkdir -p builds
-          mv static/out/make/Logseq*.dmg ./builds/Logseq-og-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
-          mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-og-darwin-arm64-${{ steps.ref.outputs.version }}.zip
+          mv static/out/make/*.dmg                  ./builds/Logseq-OG-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
+          mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-OG-darwin-arm64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -572,13 +570,13 @@ jobs:
       - name: Download MacOS x64 Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: logseq-darwin-x64-builds
+          name: logseq-og-darwin-x64-builds
           path: ./
 
       - name: Download MacOS arm64 Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: logseq-darwin-arm64-builds
+          name: logseq-og-darwin-arm64-builds
           path: ./
 
       - name: Download The Linux x64 Artifacts
@@ -638,7 +636,7 @@ jobs:
             ./*.apk
 
   release:
-    # NOTE: For now, we only have beta channel to be released on Github
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'release') }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-android, e2e-test ]
     runs-on: ubuntu-22.04
     steps:
@@ -690,7 +688,7 @@ jobs:
 
       - name: Fix .nupkg name in RELEASES file
         run: |
-          sed -i "s/Logseq.*.nupkg/Logseq-og-win-x64-${{ steps.ref.outputs.version }}-full.nupkg/g" RELEASES
+          sed -i "s/Logseq.*.nupkg/Logseq-OG-win-x64-${{ steps.ref.outputs.version }}-full.nupkg/g" RELEASES
 
       - name: Generate SHA256 checksums
         run: |
@@ -701,16 +699,16 @@ jobs:
           sha256sum RELEASES >> SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: Create Release Draft
+      - name: Create Release
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.ref.outputs.version }}
-          name: Desktop/Android APP ${{ steps.ref.outputs.version }} (Beta Testing)
+          name: ${{ github.event.inputs.build-target == 'beta' && format('Desktop/Android APP {0} (Beta Testing)', steps.ref.outputs.version) || format('Desktop/Android APP {0}', steps.ref.outputs.version) }}
           body: "TODO: Fill this changelog. Sorry for the inconvenience!"
           draft: ${{ github.event.inputs.is-draft }}
-          prerelease: ${{ github.event.inputs.is-pre-release }}
+          prerelease: ${{ github.event.inputs.build-target == 'beta' && github.event.inputs.is-pre-release || false }}
           files: |
             ./VERSION
             ./SHA256SUMS.txt

@@ -42,7 +42,7 @@ on:
 env:
   CLOJURE_VERSION: '1.11.1.1413'
   NODE_VERSION: '22'
-  JAVA_VERSION: '21'
+  JAVA_VERSION: '17'
 
 jobs:
   build-apk:
@@ -89,6 +89,18 @@ jobs:
         uses: DeLaGuardo/setup-clojure@10.1
         with:
           cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Install canvas build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev \
+            libpixman-1-dev \
+            pkg-config
 
       - name: Retrieve tag version
         id: ref
@@ -160,7 +172,7 @@ jobs:
       - name: Rename Apk
         run: |
           mkdir builds
-          mv android/app-signed.apk ./builds/Logseq-og-android-${{ steps.ref.outputs.version }}.apk
+          mv android/app-signed.apk ./builds/Logseq-OG-android-${{ steps.ref.outputs.version }}.apk
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
