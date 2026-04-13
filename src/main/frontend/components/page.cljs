@@ -158,7 +158,13 @@
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:did-mount (fn [state]
-                (when-let [on-page-blocks-rendered (get-in state [:rum/args 2 :on-page-blocks-rendered])]
+                (when-let [on-page-blocks-rendered (some-> (last (:rum/args state))
+                                                           :on-page-blocks-rendered)]
+                  (on-page-blocks-rendered))
+                state)
+   :did-update (fn [state]
+                 (when-let [on-page-blocks-rendered (some-> (last (:rum/args state))
+                                                            :on-page-blocks-rendered)]
                   (on-page-blocks-rendered))
                 state)}
   [state block* {:keys [sidebar? hide-add-button? journals?] :as config}]
@@ -343,7 +349,11 @@
 
 (rum/defcs on-mounted <
   {:did-mount (fn [state]
-                (when-let [f (get-in state [:rum/args 2])]
+                (when-let [f (last (:rum/args state))]
+                  (f))
+                state)
+   :did-update (fn [state]
+                 (when-let [f (last (:rum/args state))]
                   (f))
                 state)}
   [state child _on-mounted]
@@ -400,7 +410,7 @@
         (shui/tabs-content
          {:value "property"}
          (on-mounted (objects/property-related-objects page opts)
-                     (:on-tagged-nodes-rendered opts))))]))
+                     (:on-tagged-nodes-rendered opts)))))]))
 
 (rum/defc sidebar-page-properties
   [config page]
@@ -450,7 +460,9 @@
         blocks-ready? (or journals?
                           (= page-id @linked-refs-blocks-ready-page-id))
         tagged-ready? (or (not show-tabs?)
-                          (= page-id @linked-refs-tagged-ready-page-id))
+                          (= page-id @linked-refs-tagged-ready-page-id)
+                          ;; Fallback to avoid blocking refs forever when tab content is reused.
+                          (= page-id @linked-refs-blocks-ready-page-id))
         linked-refs-ready? (and blocks-ready? tagged-ready?)]
     (if page
       (when (or title block?)
@@ -493,7 +505,8 @@
             (when show-tabs?
               (tabs page {:current-page? option
                           :sidebar? sidebar?
-                          :on-tagged-nodes-rendered #(reset! linked-refs-tagged-ready-page-id page-id)}))
+                          :on-tagged-nodes-rendered #(when-not (= @linked-refs-tagged-ready-page-id page-id)
+                                                       (reset! linked-refs-tagged-ready-page-id page-id))}))
 
             (when (not tag-dialog?)
               (if recycle-page?
@@ -503,7 +516,8 @@
                   :class (when-not (or sidebar? (util/capacitor?))
                            "mt-4")}
                  (page-blocks-cp page (merge option {:sidebar? sidebar?
-                                                     :on-page-blocks-rendered #(reset! linked-refs-blocks-ready-page-id page-id)
+                                                     :on-page-blocks-rendered #(when-not (= @linked-refs-blocks-ready-page-id page-id)
+                                                                                 (reset! linked-refs-blocks-ready-page-id page-id))
                                                      :container-id (:container-id state)}))]))]
 
            (when-not (or preview? recycle-page?)
