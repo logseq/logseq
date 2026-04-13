@@ -89,24 +89,27 @@
     [:div.cp__server-configs-panel.pt-5
      [:h2.text-3xl.-translate-y-4 (t :server.config/title)]
 
-     [:div.item.flex.items-center.space-x-3
-      [:label.basis-96
+     [:div.flex.items-end.gap-3
+      [:div.flex.flex-col.gap-1.flex-1
        [:strong (t :ui/host)]
        [:input.form-input
-        {:value     host
+        {:value     (or host "")
          :on-change #(let [value (.-value (.-target %))]
                        (swap! *configs assoc :host value))}]]
-
-      [:label
+      [:div.flex.flex-col.gap-1
+       {:class "w-40"}
        [:strong (t :server.config/port-label)]
        [:input.form-input
         {:auto-focus true
-         :value      port
-         :min        "1"
-         :max        "65535"
-         :type       "number"
-         :on-change  #(let [value (.-value (.-target %))]
-                        (swap! *configs assoc :port value))}]]]
+         :value      (or port "")
+         :type       "text"
+         :inputMode  "numeric"
+         :pattern    "[0-9]*"
+         :on-change  #(let [value (util/evalue %)
+                            port (if (string/blank? value) 1 (util/sanitize-port-input value))]
+                        (swap! *configs assoc :port port))
+         :on-blur    #(let [value (.-value (.-target %))]
+                        (swap! *configs assoc :port (util/normalize-port-input value)))}]]]
 
      [:p.py-3.px-1
       [:label.flex.space-x-2.items-center
