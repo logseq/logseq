@@ -4110,8 +4110,31 @@
             (when target'
               (is (= "remote-restored" (:block/title target'))))))))))
 
-(deftest apply-remote-txs-local-delete-parent-remote-move-then-delete-parent-repro-test
-  (testing "reproduces transact-remote failure when remote moves blocks under a locally deleted parent and then retracts that parent"
+(deftest apply-remote-txs-delete-parent-with-child-without-local-changes-test
+  (testing "remote delete-blocks tx should retract descendant children on client"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "parent"
+                             :build/children [{:block/title "child"}]}]}]})
+          parent (db-test/find-block-by-content @conn "parent")
+          child (db-test/find-block-by-content @conn "child")
+          parent-uuid (:block/uuid parent)
+          child-uuid (:block/uuid child)]
+      (with-datascript-conns conn nil
+        (fn []
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:tx-data [[:db/retractEntity [:block/uuid parent-uuid]]]}])
+          (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
+          (is (nil? (d/entity @conn [:block/uuid child-uuid])))
+          (let [validation (db-validate/validate-local-db! @conn)]
+            (is (empty? (non-recycle-validation-entities validation))
+                (str (:errors validation)))))))))
+
+(deftest apply-remote-txs-local-delete-parent-remote-move-then-delete-parent-test
+  (testing "remote moves under parent then delete-parent should not fail when local delete is pending"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:block/title "page 1"}
@@ -4147,15 +4170,13 @@
           ;; Local delete creates pending tx requiring reverse before remote apply.
           (outliner-core/delete-blocks! conn [parent] {})
           (is (seq (#'sync-apply/pending-txs test-repo)))
-          (let [result (try
-                         (#'sync-apply/apply-remote-txs! test-repo client remote-txs)
-                         nil
-                         (catch :default e
-                           e))]
-            (is (instance? js/Error result))
-            (is (string/includes? (or (ex-message result) "")
-                                  "DB write failed with invalid data")
-                (str "unexpected error: " (ex-message result)))))))))
+          (#'sync-apply/apply-remote-txs! test-repo client remote-txs)
+          (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
+          (is (nil? (d/entity @conn [:block/uuid mover-1-uuid])))
+          (is (nil? (d/entity @conn [:block/uuid mover-2-uuid])))
+          (let [validation (db-validate/validate-local-db! @conn)]
+            (is (empty? (non-recycle-validation-entities validation))
+                (str (:errors validation)))))))))
 
 (deftest apply-remote-txs-overlap-out-of-order-parent-delete-then-move-repro-test
   (testing "reproduces missing-parent transact-remote failure when overlapping remote slices arrive out of order"

@@ -6,9 +6,6 @@ const fs = require('node:fs');
 const fsPromises = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const {
-  buildOperationPlan,
-} = require('./lib/logseq-electron-op-sim.cjs');
 
 const DEFAULT_URL = 'http://localhost:3001/#/';
 const DEFAULT_SESSION_NAME = 'logseq-op-sim';
@@ -43,6 +40,78 @@ const AGENT_BROWSER_RETRY_COUNT = 2;
 const BOOTSTRAP_EVAL_TIMEOUT_MS = 150000;
 const RENDERER_EVAL_BASE_TIMEOUT_MS = 30000;
 const DEFAULT_ARTIFACT_BASE_DIR = path.join('tmp', 'db-sync-repro');
+const FULL_PROFILE_OPERATION_ORDER = Object.freeze([
+  'add',
+  'save',
+  'inlineTag',
+  'emptyInlineTag',
+  'pageReference',
+  'blockReference',
+  'propertySet',
+  'batchSetProperty',
+  'propertyValueDelete',
+  'copyPaste',
+  'copyPasteTreeToEmptyTarget',
+  'templateApply',
+  'move',
+  'moveUpDown',
+  'indent',
+  'outdent',
+  'delete',
+  'propertyRemove',
+  'undo',
+  'redo',
+]);
+const FAST_PROFILE_OPERATION_ORDER = Object.freeze([
+  'add',
+  'save',
+  'inlineTag',
+  'emptyInlineTag',
+  'pageReference',
+  'blockReference',
+  'propertySet',
+  'batchSetProperty',
+  'move',
+  'delete',
+  'indent',
+  'outdent',
+  'moveUpDown',
+  'templateApply',
+  'propertyValueDelete',
+  'add',
+  'move',
+]);
+const ALL_OUTLINER_OP_COVERAGE_OPS = Object.freeze([
+  'save-block',
+  'insert-blocks',
+  'apply-template',
+  'delete-blocks',
+  'move-blocks',
+  'move-blocks-up-down',
+  'indent-outdent-blocks',
+  'upsert-property',
+  'set-block-property',
+  'remove-block-property',
+  'delete-property-value',
+  'batch-delete-property-value',
+  'create-property-text-block',
+  'collapse-expand-block-property',
+  'batch-set-property',
+  'batch-remove-property',
+  'class-add-property',
+  'class-remove-property',
+  'upsert-closed-value',
+  'delete-closed-value',
+  'add-existing-values-to-closed-values',
+  'batch-import-edn',
+  'transact',
+  'create-page',
+  'rename-page',
+  'delete-page',
+  'recycle-delete-permanently',
+  'toggle-reaction',
+  'restore-recycled',
+]);
 
 function usage() {
   return [
@@ -784,6 +853,7 @@ function buildRendererProgram(config) {
       if (typeof pageLike.title === 'string' && pageLike.title.length > 0) return pageLike.title;
       return null;
     };
+    const expectedOutlinerOps = ${JSON.stringify(ALL_OUTLINER_OP_COVERAGE_OPS)};
 
     const waitForEditorReady = async () => {
       const deadline = Date.now() + config.readyTimeoutMs;
@@ -841,9 +911,27 @@ function buildRendererProgram(config) {
       if (
         requestedOperation === 'move' ||
         requestedOperation === 'delete' ||
-        requestedOperation === 'indent'
+        requestedOperation === 'indent' ||
+        requestedOperation === 'moveUpDown'
       ) {
         return operableCount >= 2 ? requestedOperation : 'add';
+      }
+      if (
+        requestedOperation === 'propertySet' ||
+        requestedOperation === 'batchSetProperty' ||
+        requestedOperation === 'propertyRemove' ||
+        requestedOperation === 'propertyValueDelete'
+      ) {
+        return operableCount >= 1 ? requestedOperation : 'add';
+      }
+      if (
+        requestedOperation === 'inlineTag' ||
+        requestedOperation === 'emptyInlineTag' ||
+        requestedOperation === 'pageReference' ||
+        requestedOperation === 'blockReference' ||
+        requestedOperation === 'templateApply'
+      ) {
+        return operableCount >= 1 ? requestedOperation : 'add';
       }
       if (
         requestedOperation === 'copyPaste' ||
@@ -1291,6 +1379,53 @@ function buildRendererProgram(config) {
       return prev?.uuid || null;
     };
 
+    const getNextSiblingUuid = async (uuid) => {
+      const next = await logseq.api.get_next_sibling_block(uuid);
+      return next?.uuid || null;
+    };
+
+    const pickMoveUpDownCandidate = async (blocks, up) => {
+      for (const candidate of shuffle(blocks)) {
+        if (!candidate?.uuid || isClientRootBlock(candidate)) continue;
+        const siblingUuid = up
+          ? await getPreviousSiblingUuid(candidate.uuid)
+          : await getNextSiblingUuid(candidate.uuid);
+        if (siblingUuid) {
+          return { candidate, siblingUuid };
+        }
+      }
+      return null;
+    };
+
+    const ensureMoveUpDownCandidate = async (blocks, anchorBlock, opIndex, up) => {
+      const existing = await pickMoveUpDownCandidate(blocks, up);
+      if (existing?.candidate?.uuid) return existing;
+
+      const baseTarget = blocks.length > 0 ? randomItem(blocks) : anchorBlock;
+      const first = await logseq.api.insert_block(baseTarget.uuid, config.markerPrefix + ' move-up-down-a-' + opIndex, {
+        sibling: true,
+        before: false,
+        focus: false,
+      });
+      if (!first?.uuid) {
+        throw new Error('Failed to create move-up-down first block');
+      }
+
+      const second = await logseq.api.insert_block(first.uuid, config.markerPrefix + ' move-up-down-b-' + opIndex, {
+        sibling: true,
+        before: false,
+        focus: false,
+      });
+      if (!second?.uuid) {
+        throw new Error('Failed to create move-up-down second block');
+      }
+
+      if (up) {
+        return { candidate: second, siblingUuid: first.uuid };
+      }
+      return { candidate: first, siblingUuid: second.uuid };
+    };
+
     const ensureIndentCandidate = async (blocks, anchorBlock, opIndex) => {
       const existing = await pickIndentCandidate(blocks);
       if (existing?.uuid) return existing;
@@ -1351,6 +1486,480 @@ function buildRendererProgram(config) {
         before: false,
         children: false,
       });
+    };
+
+    const requireFunctionAtPath = (pathText, label) => {
+      const parts = String(pathText || '')
+        .split('.')
+        .filter((part) => part.length > 0);
+      let value = globalThis;
+      for (const part of parts) {
+        value = value ? value[part] : undefined;
+      }
+      if (typeof value !== 'function') {
+        throw new Error(label + ' is unavailable at path: ' + pathText);
+      }
+      return value;
+    };
+
+    const ensureCljsInterop = () => {
+      if (!globalThis.cljs?.core) {
+        throw new Error('cljs.core is unavailable; cannot run full outliner-op coverage');
+      }
+      if (!globalThis.frontend?.db?.transact?.apply_outliner_ops) {
+        throw new Error('frontend.db.transact.apply_outliner_ops is unavailable');
+      }
+      if (!globalThis.frontend?.db?.conn?.get_db) {
+        throw new Error('frontend.db.conn.get_db is unavailable');
+      }
+      return globalThis.cljs.core;
+    };
+
+    let cljsInterop = null;
+    const getCljsInterop = () => {
+      if (cljsInterop) return cljsInterop;
+      const cljsCore = ensureCljsInterop();
+      const kw = (name) => cljsCore.keyword(String(name));
+      const keywordizeOpts = cljsCore.PersistentArrayMap.fromArray(
+        [kw('keywordize-keys'), true],
+        true
+      );
+      cljsInterop = { cljsCore, kw, keywordizeOpts };
+      return cljsInterop;
+    };
+
+    const waitForOutlinerInteropReady = async () => {
+      const deadline = Date.now() + Math.max(
+        Number(config.readyTimeoutMs || 0),
+        45000
+      );
+      let lastError = null;
+      while (Date.now() < deadline) {
+        try {
+          getCljsInterop();
+          return;
+        } catch (error) {
+          lastError = error;
+        }
+        await sleep(Math.max(50, Number(config.readyPollDelayMs || 0) || 250));
+      }
+      throw new Error(
+        'Outliner interop readiness timed out: ' +
+          describeError(lastError || new Error('unknown reason'))
+      );
+    };
+
+    const applyRawOutlinerOp = async (opName, args, txMetaOutlinerOp = opName) => {
+      const { cljsCore, kw, keywordizeOpts } = getCljsInterop();
+      const toClj = (value) => cljsCore.js__GT_clj(value, keywordizeOpts);
+      const conn = frontend.db.conn.get_db(false);
+      const cljArgs = toClj(args);
+      const opVec = cljsCore.PersistentVector.fromArray([kw(opName), cljArgs], true);
+      const opsVec = cljsCore.PersistentVector.fromArray([opVec], true);
+      const txMeta = cljsCore.PersistentArrayMap.fromArray(
+        [kw('outliner-op'), kw(txMetaOutlinerOp)],
+        true
+      );
+      return frontend.db.transact.apply_outliner_ops(conn, opsVec, txMeta);
+    };
+
+    const queryEidByUuid = async (uuidText) => {
+      const eid = await logseq.api.datascript_query(
+        '[:find ?e . :in $ ?uuid :where [?e :block/uuid ?uuid]]',
+        JSON.stringify(String(uuidText))
+      );
+      return Number.isInteger(eid) ? eid : null;
+    };
+
+    const queryEidByIdent = async (identKeywordText) => {
+      const eid = await logseq.api.datascript_query(
+        '[:find ?e . :in $ ?ident :where [?e :db/ident ?ident]]',
+        String(identKeywordText)
+      );
+      return Number.isInteger(eid) ? eid : null;
+    };
+
+    const getEntityUuid = (entity) =>
+      entity?.uuid || entity?.['block/uuid'] || entity?.block?.uuid || null;
+
+    const runAllOutlinerOpsCoveragePass = async (anchorBlock) => {
+      const opResults = [];
+      const failures = [];
+      const coveragePrefix = config.markerPrefix + ' outliner-op-coverage ';
+      const coverageStepTimeoutMs = Math.max(
+        45000,
+        Number(config.opTimeoutMs || 0) * 20
+      );
+
+      const runStep = async (opName, action) => {
+        const startedAt = Date.now();
+        try {
+          const detail = await withTimeout(
+            Promise.resolve().then(action),
+            coverageStepTimeoutMs,
+            'outliner-op coverage step ' + opName
+          );
+          opResults.push({
+            op: opName,
+            ok: true,
+            detail: detail || null,
+            durationMs: Date.now() - startedAt,
+          });
+        } catch (error) {
+          const message = describeError(error);
+          opResults.push({
+            op: opName,
+            ok: false,
+            error: message,
+            durationMs: Date.now() - startedAt,
+          });
+          failures.push({ op: opName, error: message });
+        }
+      };
+
+      const insertCoverageBlock = async (suffix, target = anchorBlock, opts = {}) =>
+        logseq.api.insert_block(
+          target.uuid,
+          coveragePrefix + suffix,
+          {
+            sibling: opts.sibling ?? true,
+            before: opts.before ?? false,
+            focus: false,
+          }
+        );
+
+      const blockA = await insertCoverageBlock('block-a');
+      const blockB = await insertCoverageBlock('block-b');
+      const blockC = await insertCoverageBlock('block-c');
+      const blockAUuid = getEntityUuid(blockA);
+      const blockBUuid = getEntityUuid(blockB);
+      const blockCUuid = getEntityUuid(blockC);
+
+      if (!blockAUuid || !blockBUuid || !blockCUuid) {
+        throw new Error('Failed to create coverage blocks with UUIDs');
+      }
+
+      const blockAEid = await queryEidByUuid(blockAUuid);
+      const blockBEid = await queryEidByUuid(blockBUuid);
+      const blockCEid = await queryEidByUuid(blockCUuid);
+      if (!Number.isInteger(blockAEid) || !Number.isInteger(blockBEid) || !Number.isInteger(blockCEid)) {
+        throw new Error('Failed to resolve coverage block entity ids');
+      }
+
+      const propertyName = (config.markerPrefix + 'cov-prop-' + Date.now())
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-');
+      const tagName = (config.markerPrefix + 'cov-tag-' + Date.now())
+        .replace(/[^a-zA-Z0-9_-]+/g, '-');
+      const pageBaseName = (config.markerPrefix + 'cov-page-' + Date.now())
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-');
+
+      const propertyEntity = await logseq.api.upsert_property(
+        propertyName,
+        { type: 'default', cardinality: 'many' },
+        {}
+      );
+      const propertyUuid = getEntityUuid(propertyEntity) || getEntityUuid(await logseq.api.get_property(propertyName));
+      if (!propertyUuid) {
+        throw new Error('Failed to resolve coverage property uuid');
+      }
+      const propertyEid = await queryEidByUuid(propertyUuid);
+      if (!Number.isInteger(propertyEid)) {
+        throw new Error('Failed to resolve coverage property entity id');
+      }
+
+      const tagEntity = await logseq.api.create_tag(tagName, {});
+      const tagUuid = getEntityUuid(tagEntity);
+      if (!tagUuid) {
+        throw new Error('Failed to resolve coverage tag uuid');
+      }
+      const tagEid = await queryEidByUuid(tagUuid);
+      if (!Number.isInteger(tagEid)) {
+        throw new Error('Failed to resolve coverage tag entity id');
+      }
+
+      const blockTagsEid = await queryEidByIdent(':block/tags');
+      if (!Number.isInteger(blockTagsEid)) {
+        throw new Error('Failed to resolve :block/tags entity id');
+      }
+
+      const templateRoot = await insertCoverageBlock('template-root');
+      const templateRootUuid = getEntityUuid(templateRoot);
+      if (!templateRootUuid) {
+        throw new Error('Failed to create template root block');
+      }
+      const templateChild = await logseq.api.insert_block(
+        templateRootUuid,
+        coveragePrefix + 'template-child',
+        { sibling: false, before: false, focus: false }
+      );
+      if (!getEntityUuid(templateChild)) {
+        throw new Error('Failed to create template child block');
+      }
+      const templateRootEid = await queryEidByUuid(templateRootUuid);
+      if (!Number.isInteger(templateRootEid)) {
+        throw new Error('Failed to resolve template root entity id');
+      }
+
+      const restoreRecycled = requireFunctionAtPath(
+        'frontend.handler.page.restore_recycled_BANG_',
+        'restore recycled handler'
+      );
+      const deleteRecycledPermanently = requireFunctionAtPath(
+        'frontend.handler.page.delete_recycled_permanently_BANG_',
+        'recycle delete permanently handler'
+      );
+
+      await runStep('save-block', async () => {
+        await applyRawOutlinerOp('save-block', [
+          {
+            'block/uuid': blockAUuid,
+            'block/title': coveragePrefix + 'save-block',
+          },
+          {},
+        ]);
+      });
+
+      await runStep('insert-blocks', async () => {
+        await logseq.api.insert_block(blockAUuid, coveragePrefix + 'insert-blocks', {
+          sibling: true,
+          before: false,
+          focus: false,
+        });
+      });
+
+      await runStep('apply-template', async () => {
+        await applyRawOutlinerOp('apply-template', [
+          templateRootEid,
+          blockBEid,
+          { sibling: true },
+        ]);
+      });
+
+      await runStep('move-blocks', async () => {
+        await applyRawOutlinerOp('move-blocks', [
+          [blockAEid],
+          blockBEid,
+          { sibling: true },
+        ]);
+      });
+
+      await runStep('move-blocks-up-down', async () => {
+        await applyRawOutlinerOp('move-blocks-up-down', [[blockBEid], true]);
+      });
+
+      await runStep('indent-outdent-blocks', async () => {
+        await applyRawOutlinerOp('indent-outdent-blocks', [[blockCEid], true, {}]);
+      });
+
+      await runStep('delete-blocks', async () => {
+        await logseq.api.remove_block(blockCUuid);
+      });
+
+      await runStep('upsert-property', async () => {
+        await logseq.api.upsert_property(
+          propertyName,
+          { type: 'default', cardinality: 'many' },
+          { properties: { description: coveragePrefix + 'upsert-property' } }
+        );
+      });
+
+      await runStep('set-block-property', async () => {
+        await logseq.api.upsert_block_property(blockAUuid, propertyName, coveragePrefix + 'set-block-property', {});
+      });
+
+      await runStep('batch-set-property', async () => {
+        await applyRawOutlinerOp('batch-set-property', [
+          [blockAEid, blockBEid],
+          propertyEid,
+          coveragePrefix + 'batch-set-property',
+          {},
+        ]);
+      });
+
+      await runStep('batch-remove-property', async () => {
+        await applyRawOutlinerOp('batch-remove-property', [
+          [blockAEid, blockBEid],
+          propertyEid,
+        ]);
+      });
+
+      await runStep('remove-block-property', async () => {
+        await logseq.api.remove_block_property(blockAUuid, propertyName);
+      });
+
+      await runStep('delete-property-value', async () => {
+        await logseq.api.add_block_tag(blockAUuid, tagUuid);
+        await logseq.api.remove_block_tag(blockAUuid, tagUuid);
+      });
+
+      await runStep('batch-delete-property-value', async () => {
+        await logseq.api.add_block_tag(blockAUuid, tagUuid);
+        await logseq.api.add_block_tag(blockBUuid, tagUuid);
+        await applyRawOutlinerOp('batch-delete-property-value', [
+          [blockAEid, blockBEid],
+          blockTagsEid,
+          tagEid,
+        ]);
+      });
+
+      await runStep('create-property-text-block', async () => {
+        await applyRawOutlinerOp('create-property-text-block', [
+          blockAEid,
+          propertyEid,
+          coveragePrefix + 'property-text-value',
+          {},
+        ]);
+      });
+
+      await runStep('collapse-expand-block-property', async () => {
+        await applyRawOutlinerOp('collapse-expand-block-property', [
+          blockAEid,
+          propertyEid,
+          true,
+        ]);
+        await applyRawOutlinerOp('collapse-expand-block-property', [
+          blockAEid,
+          propertyEid,
+          false,
+        ]);
+      });
+
+      const closedValueText = coveragePrefix + 'closed-choice';
+      await runStep('upsert-closed-value', async () => {
+        await applyRawOutlinerOp('upsert-closed-value', [
+          propertyEid,
+          { value: closedValueText },
+        ]);
+      });
+
+      await runStep('delete-closed-value', async () => {
+        const valueBlockEid = await logseq.api.datascript_query(
+          '[:find ?e . :in $ ?property-id ?value :where [?e :block/closed-value-property ?property-id] (or [?e :block/title ?value] [?e :logseq.property/value ?value])]',
+          String(propertyEid),
+          JSON.stringify(closedValueText)
+        );
+        if (!Number.isInteger(valueBlockEid)) {
+          throw new Error('Failed to find closed value block eid for delete-closed-value');
+        }
+        await applyRawOutlinerOp('delete-closed-value', [propertyEid, valueBlockEid]);
+      });
+
+      await runStep('add-existing-values-to-closed-values', async () => {
+        await applyRawOutlinerOp('add-existing-values-to-closed-values', [
+          propertyEid,
+          [blockBUuid],
+        ]);
+      });
+
+      await runStep('class-add-property', async () => {
+        await logseq.api.add_tag_property(tagUuid, propertyName);
+      });
+
+      await runStep('class-remove-property', async () => {
+        await logseq.api.remove_tag_property(tagUuid, propertyName);
+      });
+
+      await runStep('toggle-reaction', async () => {
+        await applyRawOutlinerOp('toggle-reaction', [blockAUuid, 'thumbsup', null]);
+      });
+
+      await runStep('transact', async () => {
+        await applyRawOutlinerOp('transact', [
+          [
+            {
+              'db/id': blockAEid,
+              'block/title': coveragePrefix + 'transact-title',
+            },
+          ],
+          null,
+        ]);
+      });
+
+      let coveragePageUuid = null;
+      await runStep('create-page', async () => {
+        const page = await logseq.api.create_page(pageBaseName, null, { redirect: false });
+        coveragePageUuid = getEntityUuid(page) || getEntityUuid(await logseq.api.get_page(pageBaseName));
+        if (!coveragePageUuid) {
+          throw new Error('Failed to create coverage page');
+        }
+      });
+
+      const renamedPageName = pageBaseName + '-renamed';
+      await runStep('rename-page', async () => {
+        if (!coveragePageUuid) {
+          throw new Error('Coverage page UUID missing before rename-page');
+        }
+        await logseq.api.rename_page(coveragePageUuid, renamedPageName);
+      });
+
+      await runStep('delete-page', async () => {
+        await logseq.api.delete_page(renamedPageName);
+      });
+
+      await runStep('batch-import-edn', async () => {
+        // Use a minimal payload to exercise the outliner-op path without running
+        // a full export/import cycle that can reopen sqlite resources.
+        const result = await applyRawOutlinerOp('batch-import-edn', [{}, {}]);
+        return {
+          returnedError: result?.error || null,
+        };
+      });
+
+      await runStep('recycle-delete-permanently', async () => {
+        const recyclePageName = pageBaseName + '-perm-delete';
+        const page = await logseq.api.create_page(recyclePageName, null, { redirect: false });
+        const pageUuid = getEntityUuid(page) || getEntityUuid(await logseq.api.get_page(recyclePageName));
+        if (!pageUuid) {
+          throw new Error('Failed to create recycle-delete-permanently page');
+        }
+        await logseq.api.delete_page(recyclePageName);
+        await deleteRecycledPermanently(pageUuid);
+      });
+
+      await runStep('restore-recycled', async () => {
+        const recyclePageName = pageBaseName + '-restore';
+        const page = await logseq.api.create_page(recyclePageName, null, { redirect: false });
+        const pageUuid = getEntityUuid(page) || getEntityUuid(await logseq.api.get_page(recyclePageName));
+        if (!pageUuid) {
+          throw new Error('Failed to create restore-recycled page');
+        }
+        await logseq.api.delete_page(recyclePageName);
+        await restoreRecycled(pageUuid);
+      });
+
+      const coveredOps = Array.from(new Set(opResults.map((entry) => entry.op)));
+      const missingOps = expectedOutlinerOps.filter((op) => !coveredOps.includes(op));
+      const unexpectedOps = coveredOps.filter((op) => !expectedOutlinerOps.includes(op));
+      for (const op of missingOps) {
+        failures.push({ op, error: 'op coverage missing from runAllOutlinerOpsCoveragePass' });
+      }
+      for (const op of unexpectedOps) {
+        failures.push({ op, error: 'unexpected op recorded during coverage pass' });
+      }
+
+      const summary = {
+        ok: failures.length === 0,
+        total: opResults.length,
+        passed: opResults.length - failures.length,
+        failed: failures.length,
+        stepTimeoutMs: coverageStepTimeoutMs,
+        expectedOps: expectedOutlinerOps,
+        coveredOps,
+        missingOps,
+        unexpectedOps,
+        failedOps: failures,
+        sample: opResults.slice(0, 50),
+      };
+
+      if (failures.length > 0) {
+        throw new Error(
+          'Full outliner-op coverage failed: ' + JSON.stringify(summary.failedOps.slice(0, 5))
+        );
+      }
+
+      return summary;
     };
 
     const pickRandomGroup = (blocks, minSize = 1, maxSize = 3) => {
@@ -1889,8 +2498,19 @@ function buildRendererProgram(config) {
 
     const counts = {
       add: 0,
+      save: 0,
+      inlineTag: 0,
+      emptyInlineTag: 0,
+      pageReference: 0,
+      blockReference: 0,
+      propertySet: 0,
+      batchSetProperty: 0,
+      propertyRemove: 0,
+      propertyValueDelete: 0,
+      templateApply: 0,
       delete: 0,
       move: 0,
+      moveUpDown: 0,
       indent: 0,
       outdent: 0,
       undo: 0,
@@ -1929,6 +2549,131 @@ function buildRendererProgram(config) {
         'insert seed block'
       );
     }
+
+    let outlinerOpCoverage = null;
+    try {
+      outlinerOpCoverage = await withTimeout(
+        (async () => {
+          await waitForOutlinerInteropReady();
+          return runAllOutlinerOpsCoveragePass(anchor);
+        })(),
+        Math.max(900000, phaseTimeoutMs * 6),
+        'runAllOutlinerOpsCoveragePass'
+      );
+    } catch (error) {
+      const reason = describeError(error);
+      outlinerOpCoverage = {
+        ok: false,
+        total: 0,
+        passed: 0,
+        failed: expectedOutlinerOps.length,
+        stepTimeoutMs: null,
+        expectedOps: [...expectedOutlinerOps],
+        coveredOps: [],
+        missingOps: [...expectedOutlinerOps],
+        unexpectedOps: [],
+        failedOps: expectedOutlinerOps.map((op) => ({ op, error: reason })),
+        sample: expectedOutlinerOps.map((op) => ({
+          op,
+          ok: false,
+          error: reason,
+          durationMs: 0,
+        })),
+        reason,
+      };
+    }
+
+    const propertyOpsState = {
+      propertyName: (config.markerPrefix + 'sim-prop').toLowerCase().replace(/[^a-z0-9-]+/g, '-'),
+      tagName: (config.markerPrefix + 'sim-tag').replace(/[^a-zA-Z0-9_-]+/g, '-'),
+      propertyUuid: null,
+      propertyEid: null,
+      tagUuid: null,
+      ready: false,
+    };
+
+    const ensurePropertyOpsReady = async () => {
+      if (
+        propertyOpsState.ready &&
+        propertyOpsState.tagUuid &&
+        Number.isInteger(propertyOpsState.propertyEid)
+      ) {
+        return propertyOpsState;
+      }
+      const propertyEntity = await logseq.api.upsert_property(
+        propertyOpsState.propertyName,
+        { type: 'default', cardinality: 'many' },
+        {}
+      );
+      const propertyUuid =
+        getEntityUuid(propertyEntity) ||
+        getEntityUuid(await logseq.api.get_property(propertyOpsState.propertyName));
+      if (!propertyUuid) {
+        throw new Error('Failed to resolve property-op property uuid');
+      }
+      const propertyEid = await queryEidByUuid(propertyUuid);
+      if (!Number.isInteger(propertyEid)) {
+        throw new Error('Failed to resolve property-op property eid');
+      }
+      const tag = await logseq.api.create_tag(propertyOpsState.tagName, {});
+      const tagUuid =
+        tag?.uuid ||
+        tag?.['block/uuid'] ||
+        tag?.block?.uuid ||
+        null;
+      if (!tagUuid) {
+        throw new Error('Failed to create property-op tag');
+      }
+      propertyOpsState.propertyUuid = propertyUuid;
+      propertyOpsState.propertyEid = propertyEid;
+      propertyOpsState.tagUuid = tagUuid;
+      propertyOpsState.ready = true;
+      return propertyOpsState;
+    };
+
+    const templateOpsState = {
+      templateRootUuid: null,
+      templateRootEid: null,
+      ready: false,
+    };
+
+    const ensureTemplateOpsReady = async () => {
+      if (templateOpsState.ready && templateOpsState.templateRootUuid) {
+        const existing = await logseq.api.get_block(templateOpsState.templateRootUuid, { includeChildren: false });
+        if (existing?.uuid && Number.isInteger(templateOpsState.templateRootEid)) {
+          return templateOpsState;
+        }
+      }
+
+      const templateRoot = await logseq.api.insert_block(anchor.uuid, config.markerPrefix + ' template-root', {
+        sibling: true,
+        before: false,
+        focus: false,
+      });
+      const templateRootUuid = getEntityUuid(templateRoot);
+      if (!templateRootUuid) {
+        throw new Error('Failed to create template root block');
+      }
+
+      const templateChild = await logseq.api.insert_block(
+        templateRootUuid,
+        config.markerPrefix + ' template-child',
+        { sibling: false, before: false, focus: false }
+      );
+      if (!getEntityUuid(templateChild)) {
+        throw new Error('Failed to create template child block');
+      }
+
+      const templateRootEid = await queryEidByUuid(templateRootUuid);
+      if (!Number.isInteger(templateRootEid)) {
+        throw new Error('Failed to resolve template root eid');
+      }
+
+      templateOpsState.templateRootUuid = templateRootUuid;
+      templateOpsState.templateRootEid = templateRootEid;
+      templateOpsState.ready = true;
+      return templateOpsState;
+    };
 
     const initialDb = await withTimeout(
       captureInitialDbSnapshot(),
@@ -2007,6 +2752,247 @@ function buildRendererProgram(config) {
               content,
               sibling: !asChild,
               before: false,
+            };
+          }
+
+          if (operation === 'save') {
+            let candidate = randomItem(
+              operable.filter((block) => block?.uuid && !isClientRootBlock(block))
+            );
+            if (!candidate?.uuid) {
+              const target = operable.length > 0 ? randomItem(operable) : anchor;
+              candidate = await logseq.api.insert_block(target.uuid, config.markerPrefix + ' save-target-' + i, {
+                sibling: true,
+                before: false,
+                focus: false,
+              });
+              if (!candidate?.uuid) {
+                throw new Error('Failed to create save candidate block');
+              }
+            }
+            const latest = await logseq.api.get_block(candidate.uuid, { includeChildren: false });
+            const previousContent = typeof latest?.content === 'string'
+              ? latest.content
+              : (typeof candidate.content === 'string' ? candidate.content : '');
+            const nextContent = previousContent.length > 0
+              ? previousContent + ' ' + config.markerPrefix + ' save-' + i
+              : config.markerPrefix + ' save-' + i;
+            await logseq.api.update_block(candidate.uuid, nextContent);
+            return {
+              kind: 'save',
+              candidateUuid: candidate.uuid || null,
+              previousContentLength: previousContent.length,
+              nextContentLength: nextContent.length,
+            };
+          }
+
+          if (operation === 'inlineTag') {
+            const candidate = randomItem(
+              operable.filter((block) => block?.uuid && !isClientRootBlock(block))
+            ) || anchor;
+            const latest = await logseq.api.get_block(candidate.uuid, { includeChildren: false });
+            const previousContent = typeof latest?.content === 'string'
+              ? latest.content
+              : (typeof candidate.content === 'string' ? candidate.content : '');
+            const tagName = (config.markerPrefix + 'inline-tag-' + i).replace(/[^a-zA-Z0-9_-]+/g, '-');
+            const token = '#[[' + tagName + ']]';
+            const nextContent = previousContent.length > 0
+              ? previousContent + ' ' + token
+              : token;
+            await logseq.api.update_block(candidate.uuid, nextContent);
+            return {
+              kind: 'inlineTag',
+              candidateUuid: candidate.uuid || null,
+              token,
+            };
+          }
+
+          if (operation === 'emptyInlineTag') {
+            const candidate = randomItem(
+              operable.filter((block) => block?.uuid && !isClientRootBlock(block))
+            ) || anchor;
+            const latest = await logseq.api.get_block(candidate.uuid, { includeChildren: false });
+            const previousContent = typeof latest?.content === 'string'
+              ? latest.content
+              : (typeof candidate.content === 'string' ? candidate.content : '');
+            const token = '#[[]]';
+            const nextContent = previousContent.length > 0
+              ? previousContent + ' ' + token
+              : token;
+            await logseq.api.update_block(candidate.uuid, nextContent);
+            return {
+              kind: 'emptyInlineTag',
+              candidateUuid: candidate.uuid || null,
+              token,
+            };
+          }
+
+          if (operation === 'pageReference') {
+            const candidate = randomItem(
+              operable.filter((block) => block?.uuid && !isClientRootBlock(block))
+            ) || anchor;
+            const latest = await logseq.api.get_block(candidate.uuid, { includeChildren: false });
+            const previousContent = typeof latest?.content === 'string'
+              ? latest.content
+              : (typeof candidate.content === 'string' ? candidate.content : '');
+            const refPageName = (config.markerPrefix + 'page-ref-' + i).replace(/[^a-zA-Z0-9 _-]+/g, '-').trim();
+            await logseq.api.create_page(refPageName, null, { redirect: false });
+            const token = '[[' + refPageName + ']]';
+            const nextContent = previousContent.length > 0
+              ? previousContent + ' ' + token
+              : token;
+            await logseq.api.update_block(candidate.uuid, nextContent);
+            return {
+              kind: 'pageReference',
+              candidateUuid: candidate.uuid || null,
+              refPageName,
+            };
+          }
+
+          if (operation === 'blockReference') {
+            let blockPool = operable.filter((block) => block?.uuid && !isClientRootBlock(block));
+            if (blockPool.length < 2) {
+              const seedTarget = blockPool.length > 0 ? blockPool[0] : anchor;
+              const inserted = await logseq.api.insert_block(
+                seedTarget.uuid,
+                config.markerPrefix + ' block-ref-target-' + i,
+                { sibling: true, before: false, focus: false }
+              );
+              if (!inserted?.uuid) {
+                throw new Error('Failed to create block-ref target');
+              }
+              blockPool = (await listOperableBlocks()).filter(
+                (block) => block?.uuid && !isClientRootBlock(block)
+              );
+            }
+            if (blockPool.length < 2) {
+              throw new Error('Not enough blocks for block reference');
+            }
+            const [target, source] = pickRandomGroup(blockPool, 2, 2);
+            const latestTarget = await logseq.api.get_block(target.uuid, { includeChildren: false });
+            const previousContent = typeof latestTarget?.content === 'string'
+              ? latestTarget.content
+              : (typeof target.content === 'string' ? target.content : '');
+            const token = '((' + source.uuid + '))';
+            const nextContent = previousContent.length > 0
+              ? previousContent + ' ' + token
+              : token;
+            await logseq.api.update_block(target.uuid, nextContent);
+            return {
+              kind: 'blockReference',
+              targetUuid: target.uuid || null,
+              sourceUuid: source.uuid || null,
+            };
+          }
+
+          if (operation === 'propertySet') {
+            const state = await ensurePropertyOpsReady();
+            const candidate = randomItem(operable.filter((block) => block?.uuid)) || anchor;
+            const value = config.markerPrefix + ' prop-set-' + i;
+            await logseq.api.upsert_block_property(candidate.uuid, state.propertyName, value, {});
+            return {
+              kind: 'propertySet',
+              candidateUuid: candidate.uuid || null,
+              propertyName: state.propertyName,
+            };
+          }
+
+          if (operation === 'batchSetProperty') {
+            const state = await ensurePropertyOpsReady();
+            if (!Number.isInteger(state.propertyEid)) {
+              throw new Error('Property entity id is unavailable for batchSetProperty');
+            }
+
+            let targets = operable
+              .filter((block) => block?.uuid && !isClientRootBlock(block))
+              .map((block) => ({ uuid: block.uuid }));
+            while (targets.length < 2) {
+              const parent = targets.length > 0 ? targets[0] : anchor;
+              const inserted = await logseq.api.insert_block(
+                parent.uuid,
+                config.markerPrefix + ' batch-prop-target-' + i + '-' + targets.length,
+                { sibling: true, before: false, focus: false }
+              );
+              if (!inserted?.uuid) {
+                throw new Error('Failed to create batchSetProperty target');
+              }
+              targets.push({ uuid: inserted.uuid });
+            }
+
+            const selectedTargets = pickRandomGroup(targets, 2, Math.min(4, targets.length));
+            const selectedEids = [];
+            const selectedUuids = [];
+            for (const target of selectedTargets) {
+              if (!target?.uuid) continue;
+              const eid = await queryEidByUuid(target.uuid);
+              if (Number.isInteger(eid)) {
+                selectedEids.push(eid);
+                selectedUuids.push(target.uuid);
+              }
+            }
+            if (selectedEids.length < 2) {
+              throw new Error('Failed to resolve multiple target eids for batchSetProperty');
+            }
+
+            const value = config.markerPrefix + ' batch-set-' + i;
+            await applyRawOutlinerOp('batch-set-property', [
+              selectedEids,
+              state.propertyEid,
+              value,
+              {},
+            ]);
+            return {
+              kind: 'batchSetProperty',
+              propertyName: state.propertyName,
+              targetCount: selectedUuids.length,
+              targetUuids: selectedUuids,
+            };
+          }
+
+          if (operation === 'propertyRemove') {
+            const state = await ensurePropertyOpsReady();
+            const candidate = randomItem(operable.filter((block) => block?.uuid)) || anchor;
+            await logseq.api.remove_block_property(candidate.uuid, state.propertyName);
+            return {
+              kind: 'propertyRemove',
+              candidateUuid: candidate.uuid || null,
+              propertyName: state.propertyName,
+            };
+          }
+
+          if (operation === 'propertyValueDelete') {
+            const state = await ensurePropertyOpsReady();
+            const candidate = randomItem(operable.filter((block) => block?.uuid)) || anchor;
+            await logseq.api.add_block_tag(candidate.uuid, state.tagUuid);
+            await logseq.api.remove_block_tag(candidate.uuid, state.tagUuid);
+            return {
+              kind: 'propertyValueDelete',
+              candidateUuid: candidate.uuid || null,
+              tagUuid: state.tagUuid,
+            };
+          }
+
+          if (operation === 'templateApply') {
+            const state = await ensureTemplateOpsReady();
+            if (!Number.isInteger(state.templateRootEid)) {
+              throw new Error('Template root eid is unavailable for templateApply');
+            }
+            const target = randomItem(
+              operable.filter((block) => block?.uuid && !isClientRootBlock(block))
+            ) || anchor;
+            const targetEid = await queryEidByUuid(target.uuid);
+            if (!Number.isInteger(targetEid)) {
+              throw new Error('Failed to resolve templateApply target eid');
+            }
+            await applyRawOutlinerOp('apply-template', [
+              state.templateRootEid,
+              targetEid,
+              { sibling: true },
+            ]);
+            return {
+              kind: 'templateApply',
+              templateRootUuid: state.templateRootUuid,
+              targetUuid: target.uuid || null,
             };
           }
 
@@ -2109,6 +3095,27 @@ function buildRendererProgram(config) {
               targetUuid: target.uuid || null,
               before,
               children: false,
+            };
+          }
+
+          if (operation === 'moveUpDown') {
+            const up = nextRandom() < 0.5;
+            const prepared = await ensureMoveUpDownCandidate(operable, anchor, i, up);
+            const candidate = prepared?.candidate;
+            if (!candidate?.uuid) {
+              throw new Error('No valid move-up-down candidate');
+            }
+            await logseq.api.select_block(candidate.uuid);
+            const command = up
+              ? 'logseq.editor/move-block-up'
+              : 'logseq.editor/move-block-down';
+            await logseq.api.invoke_external_command(command);
+            return {
+              kind: 'moveUpDown',
+              candidateUuid: candidate.uuid || null,
+              siblingUuid: prepared?.siblingUuid || null,
+              direction: up ? 'up' : 'down',
+              command,
             };
           }
 
@@ -2335,6 +3342,7 @@ function buildRendererProgram(config) {
       requestedPlan: Array.isArray(config.plan) ? [...config.plan] : [],
       opLog: operationLog,
       opLogSample: operationLog.slice(0, 20),
+      outlinerOpCoverage,
       initialDb,
       txCapture: replayTxCapture,
       checksum,
@@ -2529,8 +3537,9 @@ function buildGraphBootstrapProgram(config) {
 
       try {
         node.click();
+        return true;
       } catch (_error) {
-        // continue with explicit events
+        // fall back to explicit events
       }
 
       node.dispatchEvent(new MouseEvent('mousedown', { view: window, bubbles: true, cancelable: true }));
@@ -3004,24 +4013,19 @@ function buildSessionNames(baseSession, instances) {
 }
 
 function buildSimulationOperationPlan(totalOps, profile) {
-  if (profile === 'full') {
-    return buildOperationPlan(totalOps);
+  if (!Number.isInteger(totalOps) || totalOps <= 0) {
+    throw new Error('totalOps must be a positive integer');
+  }
+  if (profile !== 'fast' && profile !== 'full') {
+    throw new Error('profile must be one of: fast, full');
   }
 
-  const fastOperationOrder = [
-    'add',
-    'add',
-    'move',
-    'delete',
-    'indent',
-    'outdent',
-    'add',
-    'move',
-  ];
-
+  const operationOrder = profile === 'full'
+    ? FULL_PROFILE_OPERATION_ORDER
+    : FAST_PROFILE_OPERATION_ORDER;
   const plan = [];
   for (let i = 0; i < totalOps; i += 1) {
-    plan.push(fastOperationOrder[i % fastOperationOrder.length]);
+    plan.push(operationOrder[i % operationOrder.length]);
   }
   return plan;
 }
@@ -3039,9 +4043,10 @@ function shuffleOperationPlan(plan, rng = Math.random) {
 
 function computeRendererEvalTimeoutMs(syncSettleTimeoutMs, opCount) {
   return Math.max(
-    1200000,
+    1800000,
     RENDERER_EVAL_BASE_TIMEOUT_MS +
       (syncSettleTimeoutMs * 2) +
+      300000 +
       (opCount * 500) +
       30000
   );
@@ -3104,6 +4109,95 @@ function summarizeRounds(rounds) {
     },
     { counts: {}, requestedOps: 0, executedOps: 0, errorCount: 0, failedRounds: [] }
   );
+}
+
+function mergeOutlinerCoverageIntoRound(round) {
+  if (!round || typeof round !== 'object') return round;
+  const coverage =
+    round.outlinerOpCoverage && typeof round.outlinerOpCoverage === 'object'
+      ? round.outlinerOpCoverage
+      : null;
+  if (!coverage) return round;
+
+  const expectedOpsRaw = Array.isArray(coverage.expectedOps) ? coverage.expectedOps : [];
+  const expectedOps = expectedOpsRaw
+    .map((op) => (typeof op === 'string' ? op.trim() : ''))
+    .filter((op) => op.length > 0);
+  if (expectedOps.length === 0) return round;
+
+  const baseRequestedPlan = Array.isArray(round.requestedPlan) ? round.requestedPlan : [];
+  if (baseRequestedPlan.some((op) => typeof op === 'string' && op.startsWith('outliner:'))) {
+    return round;
+  }
+
+  const baseOpLog = Array.isArray(round.opLog) ? round.opLog : [];
+  const baseCounts =
+    round.counts && typeof round.counts === 'object' && !Array.isArray(round.counts)
+      ? round.counts
+      : {};
+  const resultByOp = new Map();
+  const coverageResults = Array.isArray(coverage.results)
+    ? coverage.results
+    : (Array.isArray(coverage.sample) ? coverage.sample : []);
+  for (const item of coverageResults) {
+    if (!item || typeof item !== 'object') continue;
+    if (typeof item.op !== 'string' || item.op.length === 0) continue;
+    if (!resultByOp.has(item.op)) resultByOp.set(item.op, item);
+  }
+
+  const coverageEntries = expectedOps.map((op, index) => {
+    const result = resultByOp.get(op) || null;
+    const detail = {
+      kind: 'outlinerCoverage',
+      op,
+      ok: result ? result.ok !== false : true,
+      error: result?.error || null,
+      durationMs: Number.isFinite(Number(result?.durationMs))
+        ? Number(result.durationMs)
+        : null,
+      detail: result?.detail || null,
+    };
+    return {
+      index,
+      requested: `outliner:${op}`,
+      executedAs: `outliner:${op}`,
+      detail,
+    };
+  });
+  const indexOffset = coverageEntries.length;
+  const shiftedBaseOpLog = baseOpLog.map((entry, idx) => {
+    const nextEntry = entry && typeof entry === 'object' ? { ...entry } : {};
+    const originalIndex = Number(nextEntry.index);
+    nextEntry.index = Number.isInteger(originalIndex) ? originalIndex + indexOffset : indexOffset + idx;
+    return nextEntry;
+  });
+
+  const requestedPlan = [
+    ...expectedOps.map((op) => `outliner:${op}`),
+    ...baseRequestedPlan,
+  ];
+  const opLog = [...coverageEntries, ...shiftedBaseOpLog];
+  const executedCoverageCount = coverageEntries.filter((entry) => entry?.detail?.ok !== false).length;
+  const baseExecutedOps = Number.isFinite(Number(round.executedOps))
+    ? Number(round.executedOps)
+    : shiftedBaseOpLog.length;
+  const counts = {
+    ...baseCounts,
+    outlinerCoverage: expectedOps.length,
+    outlinerCoverageFailed: Array.isArray(coverage.failedOps)
+      ? coverage.failedOps.length
+      : 0,
+  };
+
+  return {
+    ...round,
+    requestedOps: requestedPlan.length,
+    executedOps: baseExecutedOps + executedCoverageCount,
+    requestedPlan,
+    opLog,
+    opLogSample: opLog.slice(0, 20),
+    counts,
+  };
 }
 
 async function runSimulationForSession(sessionName, index, args, sharedConfig) {
@@ -3180,13 +4274,15 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
           ...runOptions,
         }
       );
+
       const value = evaluation?.data?.result;
       if (!value) {
         throw new Error(`Unexpected empty result from agent-browser eval (round ${round + 1})`);
       }
+      const normalizedRound = mergeOutlinerCoverageIntoRound(value);
       rounds.push({
         round: round + 1,
-        ...value,
+        ...normalizedRound,
       });
     } catch (error) {
       const captured = await collectFailureReplayCapture(sessionName, markerPrefix, runOptions);
@@ -3440,7 +4536,7 @@ function buildRunArtifact({ output, args, runContext, failFastState }) {
     const errorText = item?.error ? String(item.error) : null;
     const mismatch = errorText ? extractChecksumMismatchDetailsFromError(errorText) : null;
     const txRejected = errorText ? extractTxRejectedDetailsFromError(errorText) : null;
-    const rounds = Array.isArray(item?.result?.rounds)
+      const rounds = Array.isArray(item?.result?.rounds)
       ? item.result.rounds.map((round) => ({
         round: Number(round?.round || 0),
         requestedOps: Number(round?.requestedOps || 0),
@@ -3469,6 +4565,10 @@ function buildRunArtifact({ output, args, runContext, failFastState }) {
           : [],
         wsMessages: round?.wsMessages && typeof round.wsMessages === 'object'
           ? round.wsMessages
+          : null,
+        outlinerOpCoverage: round?.outlinerOpCoverage &&
+            typeof round.outlinerOpCoverage === 'object'
+          ? round.outlinerOpCoverage
           : null,
       }))
       : [];
@@ -3580,6 +4680,10 @@ async function writeRunArtifact(artifact, baseDir = DEFAULT_ARTIFACT_BASE_DIR) {
           {
             requestedPlan: Array.isArray(round?.requestedPlan) ? round.requestedPlan : [],
             opLog: Array.isArray(round?.opLog) ? round.opLog : [],
+            outlinerOpCoverage:
+              round?.outlinerOpCoverage && typeof round.outlinerOpCoverage === 'object'
+                ? round.outlinerOpCoverage
+                : null,
             txCapture: round?.txCapture && typeof round.txCapture === 'object'
               ? round.txCapture
               : null,
@@ -3946,4 +5050,7 @@ module.exports = {
   extractReplayContext,
   createSeededRng,
   shuffleOperationPlan,
+  buildSimulationOperationPlan,
+  mergeOutlinerCoverageIntoRound,
+  ALL_OUTLINER_OP_COVERAGE_OPS,
 };
