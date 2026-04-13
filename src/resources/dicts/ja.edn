@@ -182,7 +182,6 @@
  :keymap/already-bound "ショートカットは既に使用中"
  :keymap/also-used-for-action "以下にも使用：{1}"
  :keymap/also-used-for-action-in-context "以下にも使用：{1}、コンテキスト内：{2}"
- :keymap/chord-separator " の後 "
  :keymap/clear "クリア"
  :keymap/clear-keystroke-filter "キーストロークフィルタをクリア"
  :keymap/clear-search "検索をクリア"
@@ -311,6 +310,7 @@
  :ui/refresh "更新"
  :ui/relaunch-confirm "この変更を適用するにはアプリの再起動が必要です。今すぐ再起動しますか？"
  :ui/remove-background "背景を削除"
+ :ui/reset "リセット"
  :ui/run "Run"
  :ui/save "保存"
  :ui/show-less "表示を減らす"
@@ -682,6 +682,7 @@
  :editor/cut "カット"
  :editor/cycle-todo "TODOステータスを切替"
  :editor/delete-selection "選択を削除"
+ :editor/display-tag-inline-hint "このタグをこのノードの末尾ではなくインラインで表示します。"
  :editor/expand-block-children "展開する"
  :editor/heading "見出し {1}"
  :editor/moving-blocks-count "無効な日付"
@@ -690,6 +691,8 @@
  :editor/paste "貼り付け"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "見出しを削除"
+ :editor/search-for-node "ノードを検索"
+ :editor/search-for-tag "タグを検索"
  :editor/search-template-placeholder "テンプレートを検索"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "新しいプロパティ"
  :view/new-view "新しいビュー"
  :view/rename "名前を変更"
+ :view/results "結果:"
  :view/unlinked-references "リンクされていない参照"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "降順"
  :view.table/drag-to-reorder "ドラッグで並び替え"
  :view.table/group-by "グループ分け"
+ :view.table/group-journal-date "ジャーナル日付"
+ :view.table/group-page-created-date "ページ作成日"
+ :view.table/group-page-name "ページ名"
+ :view.table/group-page-updated-date "ページ更新日"
  :view.table/id-column "ID"
  :view.table/live-query-title "ライブクエリ ({1})"
  :view.table/name-column "名前"
+ :view.table/no-group-value "{1}なし"
  :view.table/open "開く"
  :view.table/page "ページ"
+ :view.table/pages "ページ"
  :view.table/pin "固定"
  :view.table/row-number "行番号"
  :view.table/select-all "すべて選択"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "固定解除"
 
  ;; Query
+ :query/advanced-results "高度なクエリ結果"
  :query/custom-view-error "カスタムビューエラー：{1}"
  :query/error "クエリエラー："
  :query/examples-desc "その他の例は{{Queries documentation}}をご確認ください。"
  :query/examples-title "クエリの例："
+ :query/results-for "{1} の結果"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "置き換え："
  :query.builder/search-label "検索：{1}"
+ :query.builder/show-built-in-properties "組み込みプロパティを表示"
  :query.builder/unwrap-operator "アンラップ"
  :query.builder/updated-label "更新日"
  :query.builder/wrap-filter-with-label "このフィルタをラップ："
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "settings.json を編集"
+ :plugin.settings/exit-code-mode "コードモードを終了"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "埋め込み中..."
  :ai/local-embedding-model "ローカル埋め込みモデル"
  :ai/model-download-progress "{1}をダウンロード中"
  :ai/model-downloaded "{1}をダウンロード済み"
  :ai/model-ready "モデルの準備完了 🚀"
  :ai/search-label "検索"
- :ai/search-result-label "検索結果："
+ :ai/search-result-label "検索結果"
  :ai/search-title "セマンティック検索："
  :ai/select-model "モデルを選択"
+ :ai/vector-search-debug-actions "操作"
+ :ai/vector-search-debug-settings "設定"
+ :ai/vector-search-debug-state "状態"
  :ai/vector-search-model-placeholder "モデルを選択（全グラフブロックの強制埋め込みが再度必要です）"
  :ai/webgpu-unsupported "このブラウザではWebGPUがサポートされていません。ブラウザをアップグレードするか、別のブラウザをご使用ください。"
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "リモートグラフを作成しています..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "{1}をダウンロード中..."
  :sync/graph-count-exceed-limit "グラフ数が上限を超えています"
@@ -1745,13 +1767,16 @@
  :help/changelog "更新履歴"
  :help/community-title "コミュニティ"
  :help/context-menu "ブロックのコンテキストメニュー"
+ :help/context-menu-action "箇条書きの右クリック"
  :help/development-title "開発"
  :help/docs "ドキュメント"
  :help/feature "機能リクエスト"
  :help/forum-community "フォーラムコミュニティ"
  :help/handbook "ハンドブック"
+ :help/learn-more "詳しく見る"
  :help/markdown-syntax "マークダウン文法"
  :help/open-link-in-sidebar "サイドバーでリンクを開く"
+ :help/open-link-in-sidebar-action "Shift+参照をクリック"
  :help/privacy "プライバシーポリシー"
  :help/reference-autocomplete "ページ参照の自動補完"
  :help/release-notes "リリースノート"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "戻る"
  :header/go-forward "進む"
+ :header/highlight-recent-blocks "最近のブロックを強調表示"
+ :header/highlight-recent-blocks-days-ago "最近のブロックを強調表示: {1}日前"
  :header/more "もっと見る"
  :header/quit-highlight-recent-blocks "最近のブロックのハイライトを終了"
  :header/search "検索"

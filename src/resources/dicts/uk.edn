@@ -182,7 +182,6 @@
  :keymap/already-bound "Сочетание уже використуется"
  :keymap/also-used-for-action "Также використуется для {1}"
  :keymap/also-used-for-action-in-context "Также використуется для {1} В контексте {2}"
- :keymap/chord-separator " затем "
  :keymap/clear "Очистити"
  :keymap/clear-keystroke-filter "Очистити фільтр клавіш"
  :keymap/clear-search "Очистити пошук"
@@ -311,6 +310,7 @@
  :ui/refresh "Оновити"
  :ui/relaunch-confirm "Щоб застосувати цю зміну, потрібно перезапустити застосунок. Перезапустити зараз?"
  :ui/remove-background "Видалити фон"
+ :ui/reset "Скинути"
  :ui/run "Run"
  :ui/save "Зберегти"
  :ui/show-less "Показати менше"
@@ -682,6 +682,7 @@
  :editor/cut "Вирізати"
  :editor/cycle-todo "Перемкнути TODO"
  :editor/delete-selection "Видалити виділення"
+ :editor/display-tag-inline-hint "щоб показувати цей тег вбудовано, а не в кінці цього вузла."
  :editor/expand-block-children "Розгорнути дочірні блоки"
  :editor/heading "Заголовок {1}"
  :editor/moving-blocks-count "Недійсна дата"
@@ -690,6 +691,8 @@
  :editor/paste "Вставити"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Видалити заголовок"
+ :editor/search-for-node "Шукати вузол"
+ :editor/search-for-tag "Шукати тег"
  :editor/search-template-placeholder "Пошук шаблону"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "Новое властивість"
  :view/new-view "Новое представление"
  :view/rename "Перейменувати"
+ :view/results "Результати:"
  :view/unlinked-references "Незв'язані посилання"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "По убыванию"
  :view.table/drag-to-reorder "Перетащите для изменения порядка"
  :view.table/group-by "Группировать по"
+ :view.table/group-journal-date "Дата журналу"
+ :view.table/group-page-created-date "Дата створення сторінки"
+ :view.table/group-page-name "Назва сторінки"
+ :view.table/group-page-updated-date "Дата оновлення сторінки"
  :view.table/id-column "ID"
  :view.table/live-query-title "Живой запрос ({1})"
  :view.table/name-column "Имя"
+ :view.table/no-group-value "Немає {1}"
  :view.table/open "Відкрити"
  :view.table/page "Сторінка"
+ :view.table/pages "Сторінки"
  :view.table/pin "Закрепить"
  :view.table/row-number "Номер строки"
  :view.table/select-all "Вибрати всё"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "Открепить"
 
  ;; Query
+ :query/advanced-results "Результати розширеного запиту"
  :query/custom-view-error "Помилка користувацького перегляду: {1}"
  :query/error "Помилка запиту:"
  :query/examples-desc "Більше прикладів дивіться у {{Queries documentation}}."
  :query/examples-title "Приклади запитів:"
+ :query/results-for "Результати для {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Замінити на:"
  :query.builder/search-label "Пошук: {1}"
+ :query.builder/show-built-in-properties "Показувати вбудовані властивості"
  :query.builder/unwrap-operator "Розгорнути"
  :query.builder/updated-label "Оновлено"
  :query.builder/wrap-filter-with-label "Обгорнути цей фільтр:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "Редагувати settings.json"
+ :plugin.settings/exit-code-mode "Вийти з режиму коду"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "Вбудовування..."
  :ai/local-embedding-model "Локальна модель ембедингів"
  :ai/model-download-progress "Завантаження {1}"
  :ai/model-downloaded "Завантажено {1}"
  :ai/model-ready "Модель готова 🚀"
  :ai/search-label "Пошук"
- :ai/search-result-label "Результат пошуку:"
+ :ai/search-result-label "Результат пошуку"
  :ai/search-title "Семантичний пошук:"
  :ai/select-model "Оберіть модель"
+ :ai/vector-search-debug-actions "Дії"
+ :ai/vector-search-debug-settings "Налаштування"
+ :ai/vector-search-debug-state "Стан"
  :ai/vector-search-model-placeholder "Оберіть модель (потрібно повторно виконати force-embedding-all-graph-blocks)"
  :ai/webgpu-unsupported "WebGPU не підтримується у цьому браузері, будь ласка, оновіть його або скористайтеся іншим браузером."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "Створення віддаленого графа..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "Завантаження {1} ..."
  :sync/graph-count-exceed-limit "Превышен лимит количества графов"
@@ -1745,13 +1767,16 @@
  :help/changelog "Журнал змін"
  :help/community-title "Спільнота"
  :help/context-menu "Контекстне меню блоку"
+ :help/context-menu-action "Клік правою кнопкою по маркеру"
  :help/development-title "Розробка"
  :help/docs "Документація"
  :help/feature "Запит функції"
  :help/forum-community "Спільнота на форумі"
  :help/handbook "Довідник"
+ :help/learn-more "Дізнатися більше"
  :help/markdown-syntax "Синтаксис Markdown"
  :help/open-link-in-sidebar "Відкрити посилання у бічній панелі"
+ :help/open-link-in-sidebar-action "Shift+клік по посиланню"
  :help/privacy "Політика приватності"
  :help/reference-autocomplete "Автозаповнення посилання на сторінку"
  :help/release-notes "Примітки до випуску"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "Назад"
  :header/go-forward "Вперед"
+ :header/highlight-recent-blocks "Підсвічувати недавні блоки"
+ :header/highlight-recent-blocks-days-ago "Підсвічувати недавні блоки: {1} дн. тому"
  :header/more "Ще"
  :header/quit-highlight-recent-blocks "Вимкнути підсвічування нещодавніх блоків"
  :header/search "Пошук"

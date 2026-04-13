@@ -64,14 +64,14 @@
           :succ (constantly nil))))
      [(hooks/use-debounced-value query-string 200)])
     [:div
-     [:b "State"]
+     [:b (t :ai/vector-search-debug-state)]
      (let [state-map (assoc (get-in vec-search-state [:repo->index-info repo])
                             :load-model-progress load-model-progress)]
        [:pre.select-text
         (with-out-str
           (fipp/pprint state-map {:width 10}))])
      [:hr.my-2]
-     [:b.block.mb-1 "Actions"]
+     [:b.block.mb-1 (t :ai/vector-search-debug-actions)]
      [:div.flex.gap-2.flex-wrap.items-center.mb-2
       (shui/button
        {:size :sm
@@ -90,7 +90,7 @@
                       (state/<invoke-db-worker :thread-api/vec-search-cancel-indexing repo))}
          "cancel-current-indexing"))]
      [:hr.my-2]
-     [:b.block.mb-1 "Settings"]
+     [:b.block.mb-1 (t :ai/vector-search-debug-settings)]
      (shui/select
       {:on-value-change (fn [model-name]
                           (c.m/run-task

@@ -182,7 +182,6 @@
  :keymap/already-bound "Sneltoets al toegewezen"
  :keymap/also-used-for-action "Ook gebruikt voor {1}"
  :keymap/also-used-for-action-in-context "Ook gebruikt voor {1} In context {2}"
- :keymap/chord-separator " dan "
  :keymap/clear "Wissen"
  :keymap/clear-keystroke-filter "Toetsaanslagfilter wissen"
  :keymap/clear-search "Zoekopdracht wissen"
@@ -311,6 +310,7 @@
  :ui/refresh "Vernieuwen"
  :ui/relaunch-confirm "Voor deze wijziging moet de app opnieuw worden gestart. Nu opnieuw starten?"
  :ui/remove-background "Achtergrond verwijderen"
+ :ui/reset "Resetten"
  :ui/run "Run"
  :ui/save "Opslaan"
  :ui/show-less "Minder tonen"
@@ -682,6 +682,7 @@
  :editor/cut "Knip"
  :editor/cycle-todo "TODO wisselen"
  :editor/delete-selection "Selectie verwijderen"
+ :editor/display-tag-inline-hint "om deze tag inline weer te geven in plaats van aan het einde van deze node."
  :editor/expand-block-children "Onderliggende blokken uitklappen"
  :editor/heading "Kop {1}"
  :editor/moving-blocks-count "Ongeldige datum"
@@ -690,6 +691,8 @@
  :editor/paste "Plakken"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Kop verwijderen"
+ :editor/search-for-node "Naar een node zoeken"
+ :editor/search-for-tag "Naar een tag zoeken"
  :editor/search-template-placeholder "Zoek naar een sjabloon"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "Nieuwe eigenschap"
  :view/new-view "Nieuwe weergave"
  :view/rename "Hernoemen"
+ :view/results "Resultaten:"
  :view/unlinked-references "Niet-gekoppelde referenties"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "Aflopend"
  :view.table/drag-to-reorder "Sleep om te herordenen"
  :view.table/group-by "Groeperen op"
+ :view.table/group-journal-date "Journaaldatum"
+ :view.table/group-page-created-date "Aanmaakdatum van pagina"
+ :view.table/group-page-name "Paginanaam"
+ :view.table/group-page-updated-date "Bijwerkdatum van pagina"
  :view.table/id-column "ID"
  :view.table/live-query-title "Live query ({1})"
  :view.table/name-column "Naam"
+ :view.table/no-group-value "Geen {1}"
  :view.table/open "Openen"
  :view.table/page "Pagina"
+ :view.table/pages "Pagina's"
  :view.table/pin "Vastmaken"
  :view.table/row-number "Rijnummer"
  :view.table/select-all "Alles selecteren"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "Losmaken"
 
  ;; Query
+ :query/advanced-results "Resultaten van geavanceerde query"
  :query/custom-view-error "Fout in aangepaste weergave: {1}"
  :query/error "Zoekopdracht-fout:"
  :query/examples-desc "Bekijk meer voorbeelden op {{Queries documentation}}."
  :query/examples-title "Voorbeelden van zoekopdrachten:"
+ :query/results-for "Resultaten voor {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Vervangen door:"
  :query.builder/search-label "Zoeken: {1}"
+ :query.builder/show-built-in-properties "Ingebouwde eigenschappen tonen"
  :query.builder/unwrap-operator "Uitpakken"
  :query.builder/updated-label "Bijgewerkt"
  :query.builder/wrap-filter-with-label "Dit filter omhullen met:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "settings.json bewerken"
+ :plugin.settings/exit-code-mode "Codemodus afsluiten"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "Insluiten..."
  :ai/local-embedding-model "Lokaal embeddingmodel"
  :ai/model-download-progress "Downloaden van {1}"
  :ai/model-downloaded "{1} gedownload"
  :ai/model-ready "Model is gereed 🚀"
  :ai/search-label "Zoeken"
- :ai/search-result-label "Zoekresultaat:"
+ :ai/search-result-label "Zoekresultaat"
  :ai/search-title "Semantisch zoeken:"
  :ai/select-model "Selecteer een model"
+ :ai/vector-search-debug-actions "Acties"
+ :ai/vector-search-debug-settings "Instellingen"
+ :ai/vector-search-debug-state "Status"
  :ai/vector-search-model-placeholder "Selecteer een model (force-embedding-all-graph-blocks opnieuw vereist)"
  :ai/webgpu-unsupported "WebGPU wordt niet ondersteund in deze browser, werk de browser bij of gebruik een andere browser."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "Externe grafiek maken..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "{1} downloaden ..."
  :sync/graph-count-exceed-limit "Grens grafiekaantal overschreden"
@@ -1745,13 +1767,16 @@
  :help/changelog "Wijzigingslogboek"
  :help/community-title "Community"
  :help/context-menu "Blok context menu"
+ :help/context-menu-action "Rechtsklik op opsommingsteken"
  :help/development-title "Ontwikkeling"
  :help/docs "Documentatie"
  :help/feature "Functieverzoek"
  :help/forum-community "Forumcommunity"
  :help/handbook "Handboek"
+ :help/learn-more "Meer informatie"
  :help/markdown-syntax "Markdown-syntaxis"
  :help/open-link-in-sidebar "Open link in zijbalk"
+ :help/open-link-in-sidebar-action "Shift-klik op referentie"
  :help/privacy "Privacybeleid"
  :help/reference-autocomplete "Automatisch aanvullen van paginareferenties"
  :help/release-notes "Releaseopmerkingen"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "Terug"
  :header/go-forward "Vooruit"
+ :header/highlight-recent-blocks "Recente blokken markeren"
+ :header/highlight-recent-blocks-days-ago "Recente blokken markeren: {1} dagen geleden"
  :header/more "Meer"
  :header/quit-highlight-recent-blocks "Markering van recente blokken stoppen"
  :header/search "Zoeken"

@@ -182,7 +182,6 @@
  :keymap/already-bound "快捷键已被占用"
  :keymap/also-used-for-action "同时用于{1}"
  :keymap/also-used-for-action-in-context "同时用于{1}，上下文：{2}"
- :keymap/chord-separator " 然后 "
  :keymap/clear "清除"
  :keymap/clear-keystroke-filter "清除按键筛选"
  :keymap/clear-search "清除搜索"
@@ -311,6 +310,7 @@
  :ui/refresh "刷新"
  :ui/relaunch-confirm "此更改需重启应用，是否立即重启？"
  :ui/remove-background "移除背景"
+ :ui/reset "重置"
  :ui/run "运行"
  :ui/save "保存"
  :ui/show-less "收起"
@@ -682,6 +682,7 @@
  :editor/cut "剪切"
  :editor/cycle-todo "切换当前事项的待办状态"
  :editor/delete-selection "删除选定块"
+ :editor/display-tag-inline-hint "以内联显示此标签，而不是放在此节点末尾。"
  :editor/expand-block-children "展开所有子块"
  :editor/heading "标题 {1}"
  :editor/moving-blocks-count "正在移动 {1} 个块"
@@ -690,6 +691,8 @@
  :editor/paste "粘贴"
  :editor/reference-node-use-page-ref "要引用一个节点，请使用 `[[]]`。"
  :editor/remove-heading "移除标题"
+ :editor/search-for-node "搜索节点"
+ :editor/search-for-tag "搜索标签"
  :editor/search-template-placeholder "搜索模板"
  :editor/template-insert-error "模板插入错误：{1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "新建属性"
  :view/new-view "新建视图"
  :view/rename "重命名"
+ :view/results "结果："
  :view/unlinked-references "未链接的引用"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "降序"
  :view.table/drag-to-reorder "拖放以重新排序"
  :view.table/group-by "分组"
+ :view.table/group-journal-date "日志日期"
+ :view.table/group-page-created-date "页面创建日期"
+ :view.table/group-page-name "页面名称"
+ :view.table/group-page-updated-date "页面更新日期"
  :view.table/id-column "ID"
  :view.table/live-query-title "实时查询（{1}）"
  :view.table/name-column "名称"
+ :view.table/no-group-value "无 {1}"
  :view.table/open "打开"
  :view.table/page "页面"
+ :view.table/pages "页面"
  :view.table/pin "固定"
  :view.table/row-number "行号"
  :view.table/select-all "全选"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "取消固定"
 
  ;; Query
+ :query/advanced-results "高级查询结果"
  :query/custom-view-error "自定义视图错误：{1}"
  :query/error "查询错误："
  :query/examples-desc "在 {{查询文档}} 查看更多示例。"
  :query/examples-title "查询示例："
+ :query/results-for "{1} 的结果"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "添加过滤器/运算符"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "非"
  :query.builder/replace-with-label "替换为："
  :query.builder/search-label "搜索：{1}"
+ :query.builder/show-built-in-properties "显示内置属性"
  :query.builder/unwrap-operator "展开"
  :query.builder/updated-label "更新时间"
  :query.builder/wrap-filter-with-label "将此筛选器包裹为："
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "测试 URL"
  :plugin.proxy/testing "测试中"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "编辑 settings.json"
+ :plugin.settings/exit-code-mode "退出代码模式"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq 默认主题（{1}）。"
  :plugin.themes/default-name "默认主题（{1}）"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "浅色与深色主题"
 
  ;; AI
+ :ai/embedding "正在嵌入..."
  :ai/local-embedding-model "本地嵌入模型"
  :ai/model-download-progress "正在下载 {1}"
  :ai/model-downloaded "已下载 {1}"
  :ai/model-ready "模型已就绪 🚀"
  :ai/search-label "搜索"
- :ai/search-result-label "搜索结果："
+ :ai/search-result-label "搜索结果"
  :ai/search-title "语义搜索："
  :ai/select-model "选择模型"
+ :ai/vector-search-debug-actions "操作"
+ :ai/vector-search-debug-settings "设置"
+ :ai/vector-search-debug-state "状态"
  :ai/vector-search-model-placeholder "选择模型（需要重新对所有知识库块进行嵌入）"
  :ai/webgpu-unsupported "当前浏览器不支持 WebGPU，请升级浏览器或使用其他浏览器。"
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "正在下载资源（{1}）"
  :sync/assets-uploading-count "正在上传资源（{1}）"
+ :sync/creating-remote-graph "正在创建远程图谱..."
  :sync/downloading "下载中..."
  :sync/downloading-graph "正在下载 {1}……"
  :sync/graph-count-exceed-limit "同步图谱数量超出限制"
@@ -1745,13 +1767,16 @@
  :help/changelog "更新日志"
  :help/community-title "社区"
  :help/context-menu "右键菜单"
+ :help/context-menu-action "右键点击项目符号"
  :help/development-title "开发"
  :help/docs "文档"
  :help/feature "功能建议"
  :help/forum-community "论坛讨论"
  :help/handbook "手册"
+ :help/learn-more "了解更多"
  :help/markdown-syntax "Markdown 语法"
  :help/open-link-in-sidebar "在侧边栏打开"
+ :help/open-link-in-sidebar-action "Shift+点击引用"
  :help/privacy "隐私声明"
  :help/reference-autocomplete "页面引用自动补全"
  :help/release-notes "更新日志"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "后退"
  :header/go-forward "前进"
+ :header/highlight-recent-blocks "高亮最近的块"
+ :header/highlight-recent-blocks-days-ago "高亮最近的块：{1} 天前"
  :header/more "更多"
  :header/quit-highlight-recent-blocks "退出高亮最近块"
  :header/search "搜索"

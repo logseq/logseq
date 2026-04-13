@@ -189,7 +189,7 @@
                                  (state/hide-custom-context-menu!)
                                  (shui/popup-hide!))
                                (notification/show! (t :notification/emoji-required) :warning))))
-              :tabs [[:emoji "Emojis"]]
+              :tabs [[:emoji (t :icon/tab-emojis)]]
               :default-tab :emoji
               :show-used? true
               :icon-value nil})]))

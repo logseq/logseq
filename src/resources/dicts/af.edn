@@ -182,7 +182,6 @@
  :keymap/already-bound "Snelsleutel reeds toegewezen"
  :keymap/also-used-for-action "Ook gebruikt voor {1}"
  :keymap/also-used-for-action-in-context "Ook gebruikt voor {1} In context {2}"
- :keymap/chord-separator " dan "
  :keymap/clear "Maak skoon"
  :keymap/clear-keystroke-filter "Verwyder toetsaanslagfilter"
  :keymap/clear-search "Verwyder soektog"
@@ -311,6 +310,7 @@
  :ui/refresh "Verfris"
  :ui/relaunch-confirm "Hierdie verandering vereis dat die app herbegin word. Herbegin nou?"
  :ui/remove-background "Verwyder agtergrond"
+ :ui/reset "Herstel"
  :ui/run "Run"
  :ui/save "Stoor"
  :ui/show-less "Wys minder"
@@ -682,6 +682,7 @@
  :editor/cut "Sny"
  :editor/cycle-todo "Wissel TODO"
  :editor/delete-selection "Verwyder seleksie"
+ :editor/display-tag-inline-hint "om hierdie tag inlyn te wys in plaas van aan die einde van hierdie node."
  :editor/expand-block-children "Brei onderliggende blokke uit"
  :editor/heading "Opskrif {1}"
  :editor/moving-blocks-count "Ongeldige datum"
@@ -690,6 +691,8 @@
  :editor/paste "Plak"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Verwyder opskrif"
+ :editor/search-for-node "Soek 'n node"
+ :editor/search-for-tag "Soek 'n tag"
  :editor/search-template-placeholder "Soek vir 'n sjabloon"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "Nuwe eienskap"
  :view/new-view "Nuwe aansig"
  :view/rename "Hernoem"
+ :view/results "Resultate:"
  :view/unlinked-references "Ongekoppelde verwysings"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "Dalende"
  :view.table/drag-to-reorder "Sleep om te herordenen"
  :view.table/group-by "Groepeer volgens"
+ :view.table/group-journal-date "Joernaaldatum"
+ :view.table/group-page-created-date "Bladsy-skeppingsdatum"
+ :view.table/group-page-name "Bladsynaam"
+ :view.table/group-page-updated-date "Bladsy-opdateringsdatum"
  :view.table/id-column "ID"
  :view.table/live-query-title "Live query ({1})"
  :view.table/name-column "Naam"
+ :view.table/no-group-value "Geen {1}"
  :view.table/open "Maak oop"
  :view.table/page "Bladsy"
+ :view.table/pages "Bladsye"
  :view.table/pin "Vastmaken"
  :view.table/row-number "Rijnummer"
  :view.table/select-all "Kies alles"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "Losmaken"
 
  ;; Query
+ :query/advanced-results "Gevorderde navraagresultate"
  :query/custom-view-error "Pasgemaakte aansigfout: {1}"
  :query/error "Navraagfout:"
  :query/examples-desc "Kyk meer voorbeelde by {{Queries documentation}}."
  :query/examples-title "Navraagvoorbeelde:"
+ :query/results-for "Resultate vir {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Vervang met:"
  :query.builder/search-label "Soek: {1}"
+ :query.builder/show-built-in-properties "Wys ingeboude eienskappe"
  :query.builder/unwrap-operator "Ontvou"
  :query.builder/updated-label "Bygewerk"
  :query.builder/wrap-filter-with-label "Vou hierdie filter met:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "Wysig settings.json"
+ :plugin.settings/exit-code-mode "Verlaat kodemodus"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "Besig om in te bed..."
  :ai/local-embedding-model "Plaaslike inbeddingsmodel"
  :ai/model-download-progress "Laai {1} af"
  :ai/model-downloaded "{1} afgelaai"
  :ai/model-ready "Model is gereed 🚀"
  :ai/search-label "Soek"
- :ai/search-result-label "Soekresultaat:"
+ :ai/search-result-label "Soekresultaat"
  :ai/search-title "Semantiese soektog:"
  :ai/select-model "Kies 'n model"
+ :ai/vector-search-debug-actions "Aksies"
+ :ai/vector-search-debug-settings "Instellings"
+ :ai/vector-search-debug-state "Status"
  :ai/vector-search-model-placeholder "Kies 'n model (moet force-embedding-all-graph-blocks weer uitvoer)"
  :ai/webgpu-unsupported "WebGPU word nie op hierdie blaaier ondersteun nie, opgradeer dit asseblief of gebruik 'n ander blaaier."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "Skep tans afgeleë grafiek..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "Laai {1} af ..."
  :sync/graph-count-exceed-limit "Grens grafiekaantal overschreden"
@@ -1745,13 +1767,16 @@
  :help/changelog "Veranderingslog"
  :help/community-title "Gemeenskap"
  :help/context-menu "Konteks kaart"
+ :help/context-menu-action "Regskliek kolpunt"
  :help/development-title "Ontwikkeling"
  :help/docs "Dokumentasie"
  :help/feature "Kenmerkversoek"
  :help/forum-community "Forumgemeenskap"
  :help/handbook "Handboek"
+ :help/learn-more "Leer meer"
  :help/markdown-syntax "Markdown-sintaksis"
  :help/open-link-in-sidebar "Maak skakel in kantlys oop"
+ :help/open-link-in-sidebar-action "Shift-kliek verwysing"
  :help/privacy "Privaatheidsbeleid"
  :help/reference-autocomplete "Blad verwysing Outovoltooi"
  :help/release-notes "Vrystellingsnotas"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "Terug"
  :header/go-forward "Vorentoe"
+ :header/highlight-recent-blocks "Merk onlangse blokke"
+ :header/highlight-recent-blocks-days-ago "Merk onlangse blokke: {1} dae gelede"
  :header/more "Meer"
  :header/quit-highlight-recent-blocks "Staak uitlig van onlangse blokke"
  :header/search "Soek"

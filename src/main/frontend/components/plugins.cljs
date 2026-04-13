@@ -1101,7 +1101,7 @@
               (ui/tooltip [:span.opacity-30.hover:opacity-80 (ui/icon "info-circle")] [:p notes]))]])]
 
        ;; all done
-       [:div.py-4 [:strong.text-4xl (str "\uD83C\uDF89 " (t :plugin/all-updated))]])
+       [:div.py-4 [:strong.text-4xl (str "🎉 " (t :plugin/all-updated))]])
 
      ;; actions
      (when (seq updates)
@@ -1150,7 +1150,7 @@
                                (plugin-config-handler/replace-plugins plugins)
                                (shui/dialog-close! "ls-plugins-from-file-modal")))]]
      ;; all done
-     [:div.py-4 [:strong.text-xl (str "\uD83C\uDF89 " (t :plugin.install-from-file/success))]])])
+     [:div.py-4 [:strong.text-xl (str "🎉 " (t :plugin.install-from-file/success))]])])
 
 (defn open-select-theme!
   []

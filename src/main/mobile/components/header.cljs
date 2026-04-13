@@ -201,10 +201,7 @@
 
 (rum/defc header-inner
   [current-repo tab route-match]
-  (let [short-repo-name (if current-repo
-                          (db-conn/get-short-repo-name current-repo)
-                          "Select a Graph")
-        route-name (get-in route-match [:data :name])
+  (let [route-name (get-in route-match [:data :name])
         route-view (get-in route-match [:data :view])
         route-id (get-in route-match [:parameters :path :name])
         page-route? (= route-name :page)
@@ -220,10 +217,12 @@
         pending-asset-ops           (:pending-asset-ops detail-info)
         fallback-title (cond
                          (= tab "home")
-                         short-repo-name
+                         (if current-repo
+                           (db-conn/get-short-repo-name current-repo)
+                           (t :graph.switch/select-prompt))
 
                          (= tab "search")
-                         "Search"
+                         (t :header/search)
 
                          :else
                          (string/capitalize tab))

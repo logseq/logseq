@@ -31,10 +31,10 @@
      [:td.text-right [:code block-ref/left-and-right-parens]]]
     [:tr
      [:td.text-left (t :help/open-link-in-sidebar)]
-     [:td.text-right [:code "Shift click reference"]]]
+     [:td.text-right [:code (t :help/open-link-in-sidebar-action)]]]
     [:tr
      [:td.text-left (t :help/context-menu)]
-     [:td.text-right [:code "Right click bullet"]]]]])
+     [:td.text-right [:code (t :help/context-menu-action)]]]]])
 
 (defn markdown-syntax []
   (let [list [:bold :italics :del :mark :latex :code :link :pre :img]
@@ -52,7 +52,7 @@
 
         rendered {:italics [:i (t :format/italics)]
                   :bold [:b (t :format/bold)]
-                  :link [:a {:href "https://www.example.com"} "Link"]
+                  :link [:a {:href "https://www.example.com"} (t :ui/link)]
                   :del [:del (t :format/strikethrough)]
                   :mark [:mark (t :format/highlight)]
                   :latex (latex/latex "E = mc^2" true false)
@@ -66,7 +66,7 @@
      [:thead
       [:tr
        [:th.text-left [:b title]]
-       [:th.text-right [:a {:href learn-more} "Learn more →"]]]]
+       [:th.text-right [:a {:href learn-more} (str (t :help/learn-more) " →")]]]]
      [:tbody
       (map (fn [name]
              [:tr

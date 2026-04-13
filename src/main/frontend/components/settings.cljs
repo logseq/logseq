@@ -582,8 +582,8 @@
   (ui/button [:span.flex.items-center
               [:span.pr-1
                (case type
-                 "system" "System Default"
-                 "direct" "Direct"
+                 "system" (t :plugin.proxy/system)
+                 "direct" (t :plugin.proxy/direct)
                  (and protocol host port (str protocol "://" host ":" port)))]
               (ui/icon "edit")]
              :class "text-sm"
@@ -708,7 +708,7 @@
                            (reduce + 0))
         storage-usage-formatted (cond
                                   (zero? storage-usage) "0.0"
-                                  (< storage-usage 0.01) "Less than 0.01"
+                                  (< storage-usage 0.01) "< 0.01"
                                   :else (gstring/format "%.2f" storage-usage))
         ;; TODO: check logic on this. What are the rules around storage limits?
         ;; do we, and should we be able to, give individual users more storage?

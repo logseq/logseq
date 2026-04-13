@@ -182,7 +182,6 @@
  :keymap/already-bound "Hurtigtast allerede tilordnet"
  :keymap/also-used-for-action "Også brukt for {1}"
  :keymap/also-used-for-action-in-context "Også brukt for {1} I kontekst {2}"
- :keymap/chord-separator " deretter "
  :keymap/clear "Tøm"
  :keymap/clear-keystroke-filter "Tøm tastetrykksfilter"
  :keymap/clear-search "Tøm søk"
@@ -311,6 +310,7 @@
  :ui/refresh "Oppdater"
  :ui/relaunch-confirm "Denne endringen krever at appen startes på nytt. Starte på nytt nå?"
  :ui/remove-background "Fjern bakgrunn"
+ :ui/reset "Tilbakestill"
  :ui/run "Run"
  :ui/save "Lagre"
  :ui/show-less "Vis mindre"
@@ -682,6 +682,7 @@
  :editor/cut "Klipp ut"
  :editor/cycle-todo "Veksle TODO"
  :editor/delete-selection "Slett utvalg"
+ :editor/display-tag-inline-hint "for å vise denne taggen inline i stedet for på slutten av denne noden."
  :editor/expand-block-children "Utvid underordnede blokker"
  :editor/heading "Overskrift {1}"
  :editor/moving-blocks-count "Ugyldig dato"
@@ -690,6 +691,8 @@
  :editor/paste "Lim inn"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Fjern overskrift"
+ :editor/search-for-node "Søk etter en node"
+ :editor/search-for-tag "Søk etter en tagg"
  :editor/search-template-placeholder "Søk etter en mal"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "Ny egenskap"
  :view/new-view "Ny visning"
  :view/rename "Gi nytt navn"
+ :view/results "Resultater:"
  :view/unlinked-references "Ikke-lenkede referanser"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "Synkende"
  :view.table/drag-to-reorder "Dra for å omorganisere"
  :view.table/group-by "Grupper etter"
+ :view.table/group-journal-date "Journaldato"
+ :view.table/group-page-created-date "Opprettelsesdato for side"
+ :view.table/group-page-name "Sidenavn"
+ :view.table/group-page-updated-date "Oppdateringsdato for side"
  :view.table/id-column "ID"
  :view.table/live-query-title "Direktespørring ({1})"
  :view.table/name-column "Navn"
+ :view.table/no-group-value "Ingen {1}"
  :view.table/open "Åpne"
  :view.table/page "Side"
+ :view.table/pages "Sider"
  :view.table/pin "Fest"
  :view.table/row-number "Radnummer"
  :view.table/select-all "Velg alle"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "Løsne"
 
  ;; Query
+ :query/advanced-results "Resultater for avansert spørring"
  :query/custom-view-error "Feil i tilpasset visning: {1}"
  :query/error "Spørringsfeil:"
  :query/examples-desc "Se flere eksempler på {{Queries documentation}}."
  :query/examples-title "Spørringseksempler:"
+ :query/results-for "Resultater for {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Erstatt med:"
  :query.builder/search-label "Søk: {1}"
+ :query.builder/show-built-in-properties "Vis innebygde egenskaper"
  :query.builder/unwrap-operator "Pakk ut"
  :query.builder/updated-label "Oppdatert"
  :query.builder/wrap-filter-with-label "Pakk dette filteret med:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "Rediger settings.json"
+ :plugin.settings/exit-code-mode "Avslutt kodemodus"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "Bygger inn..."
  :ai/local-embedding-model "Lokal innbyggingsmodell"
  :ai/model-download-progress "Laster ned {1}"
  :ai/model-downloaded "Lastet ned {1}"
  :ai/model-ready "Modellen er klar 🚀"
  :ai/search-label "Søk"
- :ai/search-result-label "Søkeresultat:"
+ :ai/search-result-label "Søkeresultat"
  :ai/search-title "Semantisk søk:"
  :ai/select-model "Velg en modell"
+ :ai/vector-search-debug-actions "Handlinger"
+ :ai/vector-search-debug-settings "Innstillinger"
+ :ai/vector-search-debug-state "Status"
  :ai/vector-search-model-placeholder "Velg en modell (krever force-embedding-all-graph-blocks på nytt)"
  :ai/webgpu-unsupported "WebGPU støttes ikke i denne nettleseren. Vennligst oppgrader den eller bruk en annen nettleser."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "Oppretter ekstern graf..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "Laster ned {1} ..."
  :sync/graph-count-exceed-limit "Grafantall overskrider grensen"
@@ -1745,13 +1767,16 @@
  :help/changelog "Endringslogg"
  :help/community-title "Fellesskap"
  :help/context-menu "Kontekstmeny"
+ :help/context-menu-action "Høyreklikk på punkttegn"
  :help/development-title "Utvikling"
  :help/docs "Dokumentasjon"
  :help/feature "Funksjonsønske"
  :help/forum-community "Forumfellesskap"
  :help/handbook "Håndbok"
+ :help/learn-more "Lær mer"
  :help/markdown-syntax "Markdown-syntaks"
  :help/open-link-in-sidebar "Åpne lenke i sidestolpe"
+ :help/open-link-in-sidebar-action "Shift-klikk på referanse"
  :help/privacy "Personvernerklæring"
  :help/reference-autocomplete "Sidereferanse Autofullføring"
  :help/release-notes "Utgivelsesnotater"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "Tilbake"
  :header/go-forward "Fremover"
+ :header/highlight-recent-blocks "Fremhev nylige blokker"
+ :header/highlight-recent-blocks-days-ago "Fremhev nylige blokker: for {1} dager siden"
  :header/more "Mer"
  :header/quit-highlight-recent-blocks "Avslutt markering av nylige blokker"
  :header/search "Søk"

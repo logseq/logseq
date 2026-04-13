@@ -319,9 +319,9 @@
            :class "block h-4 w-4 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none"}))
         (shui/tooltip-content
          {:onPointerDownOutside (fn [e] (.preventDefault e))}
-         (str "Highlight recent blocks"
-              (when (not= recent-days 0)
-                (str ": " recent-days " days ago")))))))
+         (if (zero? recent-days)
+           (t :header/highlight-recent-blocks)
+           (t :header/highlight-recent-blocks-days-ago recent-days))))))
      (shui/button
       {:variant :ghost
        :size :sm
@@ -375,7 +375,7 @@
        {:class   "opacity-50"
         :variant :ghost
         :size    :sm}
-       "Embedding..."))))
+       (t :ai/embedding)))))
 
 (rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
   [{:keys [current-repo default-home new-block-mode]}]
