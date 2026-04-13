@@ -91,6 +91,7 @@
   [entities property-ident]
   (throw-error-if-deleting-protected-property (map :db/ident entities) property-ident)
   (when (= :block/tags property-ident) (throw-error-if-removing-private-tag entities))
+  (outliner-validate/disallow-editing-private-built-in-nodes entities)
   (throw-error-if-deleting-required-property property-ident))
 
 (defn- build-property-value-tx-data
@@ -504,6 +505,7 @@
 
 (defn- validate-batch-set-property
   [conn block-eids property-id v]
+  (outliner-validate/disallow-editing-private-built-in-nodes (mapv #(d/entity @conn %) block-eids))
   (when (= property-id :block/tags)
     (outliner-validate/validate-tags-property @conn block-eids v))
   (when (= property-id :logseq.property.class/extends)

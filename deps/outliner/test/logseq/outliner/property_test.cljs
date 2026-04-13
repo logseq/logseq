@@ -288,6 +288,14 @@
            (mapv :db/ident (:block/tags (d/entity @conn [:block/uuid project]))))
         "Doesn't add Task to block when it is already tagged")))
 
+(deftest batch-set-property-rejects-private-built-in-entity
+  (let [conn (db-test/create-conn)
+        placeholder (d/entity @conn :logseq.property/empty-placeholder)
+        prop (d/entity @conn :logseq.property/description)]
+    (is (thrown-with-msg? js/Error #"Built-in.*can't be modified"
+                          (db-test/silence-stderr
+                           (outliner-property/batch-set-property! conn [(:db/id placeholder)] (:db/ident prop) "hacked"))))))
+
 (deftest batch-remove-property!
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:C1 {}}
@@ -311,6 +319,14 @@
          js/Error
          #"Can't remove required"
          (outliner-property/batch-remove-property! conn [(:db/id (d/entity @conn :user.class/C1))] :logseq.property.class/extends)))))
+
+(deftest batch-remove-property-rejects-private-built-in-entity
+  (let [conn (db-test/create-conn)
+        placeholder (d/entity @conn :logseq.property/empty-placeholder)
+        prop (d/entity @conn :logseq.property/description)]
+    (is (thrown-with-msg? js/Error #"Built-in.*can't be modified"
+                          (db-test/silence-stderr
+                           (outliner-property/batch-remove-property! conn [(:db/id placeholder)] (:db/ident prop)))))))
 
 (deftest add-existing-values-to-closed-values!
   (let [conn (db-test/create-conn-with-blocks
