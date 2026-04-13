@@ -295,13 +295,13 @@
   (p/let [datoms-batch (if graph-e2ee?
                          (sync-crypt/<decrypt-snapshot-datoms-batch aes-key datoms)
                          datoms)
-          ident-tx-data (into [] (comp (filter #(= :db/ident (:a %)))
-                                       (map datom->tx))
-                              datoms-batch)
-          regular-tx-data (into [] (comp (remove #(= :db/ident (:a %)))
+          schema-tx-data (into [] (comp (filter #(= "db" (namespace (:a %))))
+                                        (map datom->tx))
+                               datoms-batch)
+          regular-tx-data (into [] (comp (remove #(= "db" (namespace (:a %))))
                                          (map datom->tx))
                                 datoms-batch)
-          tx-data (into ident-tx-data regular-tx-data)]
+          tx-data (into schema-tx-data regular-tx-data)]
     (when (seq tx-data)
       (d/transact! conn tx-data {:sync-download-graph? true}))))
 
