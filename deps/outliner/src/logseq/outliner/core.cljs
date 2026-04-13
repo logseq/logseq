@@ -11,6 +11,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.datascript :as ds]
@@ -836,15 +837,18 @@
   (let [top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
         top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
-        top-level-blocks (remove :logseq.property/built-in? top-level-blocks*)
+        undeletable? (fn [b] (or (:logseq.property/built-in? b)
+                                 (:file/path b)
+                                 (some-> (:db/ident b) db-malli-schema/internal-ident?)))
+        top-level-blocks (remove undeletable? top-level-blocks*)
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
         end-block (last top-level-blocks)
         delete-one-block? (or (= 1 (count top-level-blocks)) (= start-block end-block))]
 
-    ;; Validate before `when` since top-level-blocks will be empty when deleting one built-in block
-    (when (seq (filter :logseq.property/built-in? top-level-blocks*))
+    ;; Validate before `when` since top-level-blocks will be empty when deleting one built-in/internal block
+    (when (seq (filter undeletable? top-level-blocks*))
       (throw (ex-info "Built-in nodes can't be deleted"
                       {:type :notification
                        :payload {:message "Built-in nodes can't be deleted"
