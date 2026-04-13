@@ -203,11 +203,11 @@
                      (if entity?
                        (let [property (d/entity db property-ident)]
                          (if (match-property-value-as-entity? (first value') property)
-                           (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
+                           (boolean (some match (map :block/uuid value')))
                            (boolean (seq (set/intersection (set (map db-property/property-value-content value'))
                                                            (set (map (comp db-property/property-value-content #(d/entity db [:block/uuid %]))
                                                                      match)))))))
-                       (boolean (seq (set/intersection (set value') match)))))
+                       (boolean (some match value'))))
 
                    :is-not
                    (cond
@@ -223,11 +223,11 @@
                      (if entity?
                        (let [property (d/entity db property-ident)]
                          (if (match-property-value-as-entity? (first value') property)
-                           (empty? (set/intersection (set (map :block/uuid value')) match))
+                           (not (some match (map :block/uuid value')))
                            (empty? (set/intersection (set (map db-property/property-value-content value'))
                                                      (set (map (comp db-property/property-value-content #(d/entity db [:block/uuid %]))
                                                                match))))))
-                       (empty? (set/intersection (set value') match))))
+                       (not (some match value'))))
 
                    :text-contains
                    (some (fn [v]
@@ -283,6 +283,44 @@
                    true)]
              result))))
       (:filters filters)))))
+
+(defn- ->filter-match-id
+  [db v]
+  (cond
+    (nil? v) nil
+    (number? v) v
+    (uuid? v) (some-> (d/entity db [:block/uuid v]) :db/id)
+    (de/entity? v) (:db/id v)
+    (and (map? v) (contains? v :db/id)) (:db/id v)
+    :else nil))
+
+(defn- build-fast-filter-pred
+  "Build a faster matcher for common filter shapes while preserving semantics.
+   Currently optimized for a single ref property filter with :is/:is-not."
+  [db filters input]
+  (when (and (string/blank? input)
+             (map? filters)
+             (not (:or? filters)))
+    (let [clauses (:filters filters)]
+      (when (= 1 (count clauses))
+        (let [[property-ident operator match] (first clauses)
+              property (d/entity db property-ident)
+              ref-property? (= :db.type/ref (:db/valueType property))]
+          (when (and ref-property?
+                     (#{:is :is-not} operator)
+                     (set? match)
+                     (seq match)
+                     (not (contains? match :empty)))
+            (let [match-ids (set (keep #(->filter-match-id db %) match))]
+              (when (seq match-ids)
+                (fn [row]
+                  (let [v (get row property-ident)
+                        value-col (cond
+                                    (set? v) v
+                                    (nil? v) nil
+                                    :else #{v})
+                        hit? (boolean (some match-ids (keep #(->filter-match-id db %) value-col)))]
+                    (if (= operator :is) hit? (not hit?))))))))))))
 
 (defn- get-exclude-page-ids
   [db]
@@ -484,121 +522,123 @@
                :as opts}]
   ;; TODO: create a view for journals maybe?
   (cond
-    journals?
-    (let [ids (->> (ldb/get-latest-journals db)
-                   (mapv :db/id))]
-      {:count (count ids)
-       :data ids})
-    :else
-    (let [view (d/entity db view-id)
-          group-by-property (:logseq.property.view/group-by-property view)
-          list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
-          group-by-property-ident (or (:db/ident group-by-property) group-by-property-ident)
-          group-by-closed-values? (some? (:property/closed-values group-by-property))
-          ref-property? (= (:db/valueType group-by-property) :db.type/ref)
-          filters (or (:logseq.property.table/filters view) filters)
-          feat-type (or view-feature-type (:logseq.property.view/feature-type view))
-          query? (= feat-type :query-result)
-          query-entity-ids (when (seq query-entity-ids) (set query-entity-ids))
-          sorting (let [sorting* (:logseq.property.table/sorting view)]
-                    (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
-                      (or sorting [{:id :block/updated-at :asc? false}])
-                      sorting*))
-          fast-all-pages-ids (when (and (= feat-type :all-pages)
-                                        (not query?)
-                                        (nil? group-by-property-ident)
-                                        (empty? filters)
-                                        (string/blank? input))
-                               (get-all-page-ids-fast db sorting))]
-      (if fast-all-pages-ids
-        {:count (count fast-all-pages-ids)
-         :data fast-all-pages-ids}
-        (let [entities-result (if query?
-                                (keep (fn [id]
-                                        (let [e (d/entity db id)]
-                                          (when-not (= :logseq.property/query (:db/ident (:logseq.property/created-from-property e)))
-                                            e)))
-                                      query-entity-ids)
-                                (get-view-entities db view-id opts))
-              entities (if (= feat-type :linked-references)
-                         (:ref-blocks entities-result)
-                         entities-result)
-              filtered-entities (if (or (seq filters) (not (string/blank? input)))
-                                  (into [] (filter (fn [row] (row-matched? db row filters input))) entities)
-                                  entities)
-              group-by-page? (= group-by-property-ident :block/page)
-              readable-property-value-or-ent
-              (fn readable-property-value-or-ent [ent]
-                (let [pvalue (get ent group-by-property-ident)]
-                  (if (de/entity? pvalue)
-                    (if (match-property-value-as-entity? pvalue group-by-property)
-                      pvalue
-                      (db-property/property-value-content pvalue))
-                    pvalue)))
-              result (if group-by-property-ident
-                       (let [groups-sort-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by-property view))
-                                                               :block/journal-day)
-                             desc? (:logseq.property.view/sort-groups-desc? view)
-                             result (->> filtered-entities
-                                         (group-by readable-property-value-or-ent)
-                                         (seq))
-                             keyfn (fn [groups-sort-by-property-ident]
-                                     (fn [[by-value _]]
-                                       (cond
-                                         group-by-page?
-                                         (let [v (get by-value groups-sort-by-property-ident)]
-                                           (if (and (= groups-sort-by-property-ident :block/journal-day) (not desc?)
-                                                    (nil? (:block/journal-day by-value)))
+     journals?
+     (let [ids (->> (ldb/get-latest-journals db)
+                    (mapv :db/id))]
+       {:count (count ids)
+        :data ids})
+     :else
+     (let [view (d/entity db view-id)
+           group-by-property (:logseq.property.view/group-by-property view)
+           list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
+           group-by-property-ident (or (:db/ident group-by-property) group-by-property-ident)
+           group-by-closed-values? (some? (:property/closed-values group-by-property))
+           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
+           filters (or (:logseq.property.table/filters view) filters)
+           feat-type (or view-feature-type (:logseq.property.view/feature-type view))
+           query? (= feat-type :query-result)
+           query-entity-ids (when (seq query-entity-ids) (set query-entity-ids))
+           sorting (let [sorting* (:logseq.property.table/sorting view)]
+                     (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
+                       (or sorting [{:id :block/updated-at :asc? false}])
+                       sorting*))
+           fast-all-pages-ids (when (and (= feat-type :all-pages)
+                                         (not query?)
+                                         (nil? group-by-property-ident)
+                                         (empty? filters)
+                                         (string/blank? input))
+                                (get-all-page-ids-fast db sorting))]
+       (if fast-all-pages-ids
+         {:count (count fast-all-pages-ids)
+          :data fast-all-pages-ids}
+         (let [entities-result (if query?
+                                 (keep (fn [id]
+                                         (let [e (d/entity db id)]
+                                           (when-not (= :logseq.property/query (:db/ident (:logseq.property/created-from-property e)))
+                                             e)))
+                                       query-entity-ids)
+                                 (get-view-entities db view-id opts))
+               entities (if (= feat-type :linked-references)
+                          (:ref-blocks entities-result)
+                          entities-result)
+               filtered-entities (if (or (seq filters) (not (string/blank? input)))
+                                   (let [filter-pred (or (build-fast-filter-pred db filters input)
+                                                         (fn [row] (row-matched? db row filters input)))]
+                                     (into [] (filter filter-pred) entities))
+                                   entities)
+               group-by-page? (= group-by-property-ident :block/page)
+               readable-property-value-or-ent
+               (fn readable-property-value-or-ent [ent]
+                 (let [pvalue (get ent group-by-property-ident)]
+                   (if (de/entity? pvalue)
+                     (if (match-property-value-as-entity? pvalue group-by-property)
+                       pvalue
+                       (db-property/property-value-content pvalue))
+                     pvalue)))
+               result (if group-by-property-ident
+                        (let [groups-sort-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by-property view))
+                                                                :block/journal-day)
+                              desc? (:logseq.property.view/sort-groups-desc? view)
+                              result (->> filtered-entities
+                                          (group-by readable-property-value-or-ent)
+                                          (seq))
+                              keyfn (fn [groups-sort-by-property-ident]
+                                      (fn [[by-value _]]
+                                        (cond
+                                          group-by-page?
+                                          (let [v (get by-value groups-sort-by-property-ident)]
+                                            (if (and (= groups-sort-by-property-ident :block/journal-day) (not desc?)
+                                                     (nil? (:block/journal-day by-value)))
                                             ;; Use MAX_SAFE_INTEGER so non-journal pages (without :block/journal-day) are sorted
                                             ;; after all journal pages when sorting by journal date.
-                                             js/Number.MAX_SAFE_INTEGER
-                                             v))
-                                         group-by-closed-values?
-                                         (:block/order by-value)
-                                         ref-property?
-                                         (db-property/property-value-content by-value)
-                                         :else
-                                         by-value)))]
-                         (sort (common-util/by-sorting
-                                (cond->
-                                 [{:get-value (keyfn groups-sort-by-property-ident)
-                                   :asc? (not desc?)}]
-                                  (not= groups-sort-by-property-ident :block/title)
-                                  (conj {:get-value (keyfn :block/title)
-                                         :asc? (not desc?)})))
-                               result))
-                       (sort-entities db sorting filtered-entities))
-              data' (if group-by-property-ident
-                      (map
-                       (fn [[by-value entities]]
-                         (let [by-value' (if (de/entity? by-value)
-                                           (select-keys by-value [:db/id :db/ident :block/uuid :block/title :block/name :logseq.property/value :logseq.property/icon :block/tags])
-                                           by-value)
-                               pages? (not (some :block/page entities))
-                               group (if (and list-view? (not pages?))
-                                       (let [parent-groups (->> entities
-                                                                (group-by :block/parent)
-                                                                (sort-by (fn [[parent _]] (:block/order parent))))]
-                                         (map
-                                          (fn [[_parent blocks]]
-                                            [(:block/uuid (first blocks))
-                                             (map (fn [b]
-                                                    {:db/id (:db/id b)
-                                                     :block/parent (:block/uuid (:block/parent b))})
-                                                  (ldb/sort-by-order blocks))])
-                                          parent-groups))
-                                       (->> (sort-entities db sorting entities)
-                                            (map :db/id)))]
-                           [by-value' group]))
-                       result)
-                      (map :db/id result))
-              dedupe-data? (or (= feat-type :property-objects) query?)]
-          (cond->
+                                              js/Number.MAX_SAFE_INTEGER
+                                              v))
+                                          group-by-closed-values?
+                                          (:block/order by-value)
+                                          ref-property?
+                                          (db-property/property-value-content by-value)
+                                          :else
+                                          by-value)))]
+                          (sort (common-util/by-sorting
+                                 (cond->
+                                  [{:get-value (keyfn groups-sort-by-property-ident)
+                                    :asc? (not desc?)}]
+                                   (not= groups-sort-by-property-ident :block/title)
+                                   (conj {:get-value (keyfn :block/title)
+                                          :asc? (not desc?)})))
+                                result))
+                        (sort-entities db sorting filtered-entities))
+               data' (if group-by-property-ident
+                       (map
+                        (fn [[by-value entities]]
+                          (let [by-value' (if (de/entity? by-value)
+                                            (select-keys by-value [:db/id :db/ident :block/uuid :block/title :block/name :logseq.property/value :logseq.property/icon :block/tags])
+                                            by-value)
+                                pages? (not (some :block/page entities))
+                                group (if (and list-view? (not pages?))
+                                        (let [parent-groups (->> entities
+                                                                 (group-by :block/parent)
+                                                                 (sort-by (fn [[parent _]] (:block/order parent))))]
+                                          (map
+                                           (fn [[_parent blocks]]
+                                             [(:block/uuid (first blocks))
+                                              (map (fn [b]
+                                                     {:db/id (:db/id b)
+                                                      :block/parent (:block/uuid (:block/parent b))})
+                                                   (ldb/sort-by-order blocks))])
+                                           parent-groups))
+                                        (->> (sort-entities db sorting entities)
+                                             (map :db/id)))]
+                            [by-value' group]))
+                        result)
+                       (map :db/id result))
+               dedupe-data? (or (= feat-type :property-objects) query?)]
+           (cond->
             {:count (count filtered-entities)
              :data (if dedupe-data?
                      (distinct data')
                      data')}
-            (= feat-type :linked-references)
-            (merge (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))
-            query?
-            (assoc :properties (get-query-properties query entities-result))))))))
+             (= feat-type :linked-references)
+             (merge (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))
+             query?
+             (assoc :properties (get-query-properties query entities-result))))))))
