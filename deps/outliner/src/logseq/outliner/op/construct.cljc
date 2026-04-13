@@ -448,10 +448,13 @@
     (let [[template-id target-id opts] args
           template-ref (stable-entity-ref db template-id)
           target-ref (stable-entity-ref db target-id)
-          opts' (dissoc opts
-                        :template-blocks
-                        :template-id
-                        :outliner-op)]
+          template-blocks (:template-blocks opts)
+          opts-base (dissoc opts :template-id :outliner-op)
+          opts' (if (seq template-blocks)
+                  (let [[blocks* _target-ref insert-opts]
+                        (canonicalize-insert-blocks-op db tx-data [template-blocks target-id opts-base])]
+                    (assoc insert-opts :template-blocks blocks*))
+                  (dissoc opts-base :template-blocks))]
       (when-not (and template-ref target-ref)
         (throw (ex-info "Invalid apply-template args"
                         {:args args})))
