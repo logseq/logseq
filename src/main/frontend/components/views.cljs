@@ -92,7 +92,7 @@
   [:label.h-8.w-6.flex.items-center.justify-center
    {:html-for "header-index"
     :title (t :view.table/row-number)}
-   "ID"])
+   "#"])
 
 (rum/defc row-checkbox < rum/static
   [{:keys [row-selected? row-toggle-selected! data state data-fns]} row _column]
@@ -447,10 +447,11 @@
     columns))
 
 (defonce groups-sort-by-options
-  [["Journal date" :block/journal-day]
-   ["Page name" :block/title]
-   ["Page updated date" :block/updated-at]
-   ["Page created date" :block/created-at]])
+  [[:view.table/group-journal-date :block/journal-day]
+   [:view.table/group-page-name :block/title]
+   [:view.table/group-page-updated-date :block/updated-at]
+   [:view.table/group-page-created-date :block/created-at]])
+
 (defonce groups-sort-by-name->property-identity
   (into {} groups-sort-by-options))
 (defonce groups-sort-by-property-identity->name
@@ -463,18 +464,18 @@
      (shui/dropdown-menu-sub-trigger
       (t :view.table/sort-groups-by))
      (shui/dropdown-menu-sub-content
-      (for [[option _] groups-sort-by-options]
+      (for [[option-key _] groups-sort-by-options]
         (shui/dropdown-menu-checkbox-item
-         {:key option
-          :checked (= option (groups-sort-by-property-identity->name property-ident))
+         {:key (name option-key)
+          :checked (= option-key (groups-sort-by-property-identity->name property-ident))
           :onCheckedChange (fn [checked?]
-                             (let [property-id (:db/id (db/entity (groups-sort-by-name->property-identity option)))]
+                             (let [property-id (:db/id (db/entity (groups-sort-by-name->property-identity option-key)))]
                                (if checked?
                                  (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-by-property
                                                                           property-id)
                                  (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-by-property))))
           :onSelect (fn [e] (.preventDefault e))}
-         option))))))
+         (t option-key)))))))
 
 (rum/defc groups-sort-order
   [view-entity desc?]
@@ -2030,15 +2031,16 @@
                    (let [c (state/get-component :block/page-cp)]
                      (c {:disable-preview? true} value))
                    [:div.text-muted-foreground.text-sm
-                    "Pages"])
+                    (t :view.table/pages)])
 
                  (some? value)
                  (let [icon (pu/get-block-property-value value :logseq.property/icon)]
                    [:div.flex.flex-row.gap-1.items-center
                     (when icon (icon-component/icon icon {:color? true}))
                     (readable-property-value value)])
+
                  :else
-                 (str "No " (:block/title group-by-property)))]
+                 (t :view.table/no-group-value (:block/title group-by-property)))]
         body-fn (fn []
                   (let [render (view-cp view-entity
                                         (assoc table' :rows group)

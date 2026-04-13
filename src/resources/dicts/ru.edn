@@ -182,7 +182,6 @@
  :keymap/already-bound "Сочетание уже используется"
  :keymap/also-used-for-action "Также используется для {1}"
  :keymap/also-used-for-action-in-context "Также используется для {1} В контексте {2}"
- :keymap/chord-separator " затем "
  :keymap/clear "Очистить"
  :keymap/clear-keystroke-filter "Очистить фильтр нажатий"
  :keymap/clear-search "Очистить поиск"
@@ -311,6 +310,7 @@
  :ui/refresh "Обновить"
  :ui/relaunch-confirm "Чтобы применить это изменение, нужно перезапустить приложение. Перезапустить сейчас?"
  :ui/remove-background "Удалить фон"
+ :ui/reset "Сбросить"
  :ui/run "Run"
  :ui/save "Сохранить"
  :ui/show-less "Показать меньше"
@@ -682,6 +682,7 @@
  :editor/cut "Вырезать"
  :editor/cycle-todo "Переключить TODO"
  :editor/delete-selection "Удалить выделение"
+ :editor/display-tag-inline-hint "чтобы показывать этот тег встроенно, а не в конце этого узла."
  :editor/expand-block-children "Развернуть дочерние блоки"
  :editor/heading "Заголовок {1}"
  :editor/moving-blocks-count "Недопустимая дата"
@@ -690,6 +691,8 @@
  :editor/paste "Вставить"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Удалить заголовок"
+ :editor/search-for-node "Искать узел"
+ :editor/search-for-tag "Искать тег"
  :editor/search-template-placeholder "Поиск шаблона"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "Новое свойство"
  :view/new-view "Новое представление"
  :view/rename "Переименовать"
+ :view/results "Результаты:"
  :view/unlinked-references "Несвязанные ссылки"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "По убыванию"
  :view.table/drag-to-reorder "Перетащите для изменения порядка"
  :view.table/group-by "Группировать по"
+ :view.table/group-journal-date "Дата журнала"
+ :view.table/group-page-created-date "Дата создания страницы"
+ :view.table/group-page-name "Название страницы"
+ :view.table/group-page-updated-date "Дата обновления страницы"
  :view.table/id-column "ID"
  :view.table/live-query-title "Живой запрос ({1})"
  :view.table/name-column "Имя"
+ :view.table/no-group-value "Нет {1}"
  :view.table/open "Открыть"
  :view.table/page "Страница"
+ :view.table/pages "Страницы"
  :view.table/pin "Закрепить"
  :view.table/row-number "Номер строки"
  :view.table/select-all "Выбрать всё"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "Открепить"
 
  ;; Query
+ :query/advanced-results "Результаты расширенного запроса"
  :query/custom-view-error "Ошибка пользовательского представления: {1}"
  :query/error "Ошибка запроса:"
  :query/examples-desc "Больше примеров в {{Queries documentation}}."
  :query/examples-title "Примеры запросов:"
+ :query/results-for "Результаты для {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Заменить на:"
  :query.builder/search-label "Поиск: {1}"
+ :query.builder/show-built-in-properties "Показывать встроенные свойства"
  :query.builder/unwrap-operator "Развернуть"
  :query.builder/updated-label "Обновлено"
  :query.builder/wrap-filter-with-label "Обернуть этот фильтр:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "Редактировать settings.json"
+ :plugin.settings/exit-code-mode "Выйти из режима кода"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "Встраивание..."
  :ai/local-embedding-model "Локальная модель эмбеддингов"
  :ai/model-download-progress "Загрузка {1}"
  :ai/model-downloaded "Загружено {1}"
  :ai/model-ready "Модель готова 🚀"
  :ai/search-label "Поиск"
- :ai/search-result-label "Результат поиска:"
+ :ai/search-result-label "Результат поиска"
  :ai/search-title "Семантический поиск:"
  :ai/select-model "Выберите модель"
+ :ai/vector-search-debug-actions "Действия"
+ :ai/vector-search-debug-settings "Настройки"
+ :ai/vector-search-debug-state "Состояние"
  :ai/vector-search-model-placeholder "Выберите модель (необходимо повторное принудительное создание эмбеддингов для всех блоков графа)"
  :ai/webgpu-unsupported "WebGPU не поддерживается в этом браузере, обновите его или используйте другой браузер."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "Создание удалённого графа..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "Загрузка {1} ..."
  :sync/graph-count-exceed-limit "Превышен лимит количества графов"
@@ -1745,13 +1767,16 @@
  :help/changelog "Журнал изменений"
  :help/community-title "Сообщество"
  :help/context-menu "Контекстное меню блока"
+ :help/context-menu-action "Клик правой кнопкой по маркеру"
  :help/development-title "Разработка"
  :help/docs "Документация"
  :help/feature "Запрос функции"
  :help/forum-community "Сообщество на форуме"
  :help/handbook "Руководство"
+ :help/learn-more "Подробнее"
  :help/markdown-syntax "Markdown синтаксис"
  :help/open-link-in-sidebar "Открыть ссылку на боковой панели"
+ :help/open-link-in-sidebar-action "Shift+клик по ссылке"
  :help/privacy "Политика конфиденциальности"
  :help/reference-autocomplete "Автодополнение ссылок на страницу"
  :help/release-notes "Примечания к выпуску"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "Назад"
  :header/go-forward "Вперёд"
+ :header/highlight-recent-blocks "Подсвечивать недавние блоки"
+ :header/highlight-recent-blocks-days-ago "Подсвечивать недавние блоки: {1} дн. назад"
  :header/more "Ещё"
  :header/quit-highlight-recent-blocks "Прекратить подсветку недавних блоков"
  :header/search "Поиск"

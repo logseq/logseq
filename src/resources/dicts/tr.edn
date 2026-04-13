@@ -182,7 +182,6 @@
  :keymap/already-bound "Kısayol zaten atanmış"
  :keymap/also-used-for-action "Ayrıca şunun için kullanılır {1}"
  :keymap/also-used-for-action-in-context "Ayrıca şunun için kullanılır {1} Bağlamda {2}"
- :keymap/chord-separator " sonra "
  :keymap/clear "Temizle"
  :keymap/clear-keystroke-filter "Tuş vuruşu filtresini temizle"
  :keymap/clear-search "Aramayı temizle"
@@ -311,6 +310,7 @@
  :ui/refresh "Yenile"
  :ui/relaunch-confirm "Bu değişiklik için uygulamanın yeniden başlatılması gerekiyor. Şimdi yeniden başlatılsın mı?"
  :ui/remove-background "Arka planı kaldır"
+ :ui/reset "Sıfırla"
  :ui/run "Run"
  :ui/save "Kaydet"
  :ui/show-less "Daha az göster"
@@ -682,6 +682,7 @@
  :editor/cut "Kes"
  :editor/cycle-todo "TODO geçişi"
  :editor/delete-selection "Seçimi sil"
+ :editor/display-tag-inline-hint "bu etiketi bu düğümün sonunda değil, satır içinde göstermek için."
  :editor/expand-block-children "Alt blokları genişlet"
  :editor/heading "Başlık {1}"
  :editor/moving-blocks-count "Geçersiz tarih"
@@ -690,6 +691,8 @@
  :editor/paste "Yapıştır"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Başlığı kaldır"
+ :editor/search-for-node "Düğüm ara"
+ :editor/search-for-tag "Bir etiket ara"
  :editor/search-template-placeholder "Şablon ara"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "Yeni özellik"
  :view/new-view "Yeni görünüm"
  :view/rename "Yeniden adlandır"
+ :view/results "Sonuçlar:"
  :view/unlinked-references "Bağlantısız referanslar"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "Azalan"
  :view.table/drag-to-reorder "Sıralamak için sürükleyin"
  :view.table/group-by "Grupla"
+ :view.table/group-journal-date "Günlük tarihi"
+ :view.table/group-page-created-date "Sayfa oluşturulma tarihi"
+ :view.table/group-page-name "Sayfa adı"
+ :view.table/group-page-updated-date "Sayfa güncellenme tarihi"
  :view.table/id-column "ID"
  :view.table/live-query-title "Canlı sorgu ({1})"
  :view.table/name-column "Ad"
+ :view.table/no-group-value "{1} yok"
  :view.table/open "Aç"
  :view.table/page "Sayfa"
+ :view.table/pages "Sayfalar"
  :view.table/pin "Sabitle"
  :view.table/row-number "Satır numarası"
  :view.table/select-all "Tümünü seç"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "Sabitlemeyi kaldır"
 
  ;; Query
+ :query/advanced-results "Gelişmiş sorgu sonuçları"
  :query/custom-view-error "Özel görünüm hatası: {1}"
  :query/error "Sorgu hatası:"
  :query/examples-desc "Daha fazla örnek için {{Queries documentation}} sayfasına bakın."
  :query/examples-title "Sorgu örnekleri:"
+ :query/results-for "{1} için sonuçlar"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Şununla değiştir:"
  :query.builder/search-label "Arama: {1}"
+ :query.builder/show-built-in-properties "Yerleşik özellikleri göster"
  :query.builder/unwrap-operator "Açma"
  :query.builder/updated-label "Güncelleme"
  :query.builder/wrap-filter-with-label "Bu filtreyi şununla sar:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "settings.json dosyasını düzenle"
+ :plugin.settings/exit-code-mode "Kod modundan çık"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "Gömme oluşturuluyor..."
  :ai/local-embedding-model "Yerel gömme modeli"
  :ai/model-download-progress "{1} indiriliyor"
  :ai/model-downloaded "{1} indirildi"
  :ai/model-ready "Model hazır 🚀"
  :ai/search-label "Ara"
- :ai/search-result-label "Arama Sonucu:"
+ :ai/search-result-label "Arama Sonucu"
  :ai/search-title "Anlamsal arama:"
  :ai/select-model "Bir model seçin"
+ :ai/vector-search-debug-actions "İşlemler"
+ :ai/vector-search-debug-settings "Ayarlar"
+ :ai/vector-search-debug-state "Durum"
  :ai/vector-search-model-placeholder "Bir model seçin (tüm grafik bloklarını yeniden gömme gerektirir)"
  :ai/webgpu-unsupported "WebGPU bu tarayıcıda desteklenmiyor, lütfen tarayıcınızı güncelleyin veya başka bir tarayıcı kullanın."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "Uzak grafik oluşturuluyor..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "{1} indiriliyor ..."
  :sync/graph-count-exceed-limit "Grafik sayısı sınırı aşıldı"
@@ -1745,13 +1767,16 @@
  :help/changelog "Değişiklik günlüğü"
  :help/community-title "Topluluk"
  :help/context-menu "Blok kısayol menüsü"
+ :help/context-menu-action "Madde işaretine sağ tıkla"
  :help/development-title "Geliştirme"
  :help/docs "Belgeler"
  :help/feature "Özellik isteği"
  :help/forum-community "Forum topluluğu"
  :help/handbook "El Kitabı"
+ :help/learn-more "Daha fazla bilgi"
  :help/markdown-syntax "Markdown sözdizimi"
  :help/open-link-in-sidebar "Bağlantıyı kenar çubuğunda aç"
+ :help/open-link-in-sidebar-action "Referansa Shift ile tıkla"
  :help/privacy "Gizlilik ilkesi"
  :help/reference-autocomplete "Sayfa referansı otomatik tamamlama"
  :help/release-notes "Sürüm notları"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "Geri"
  :header/go-forward "İleri"
+ :header/highlight-recent-blocks "Son blokları vurgula"
+ :header/highlight-recent-blocks-days-ago "Son blokları vurgula: {1} gün önce"
  :header/more "Daha fazla"
  :header/quit-highlight-recent-blocks "Son blok vurgulamadan çık"
  :header/search "Ara"

@@ -182,7 +182,6 @@
  :keymap/already-bound "میان‌بر قبلاً اختصاص داده شده"
  :keymap/also-used-for-action "همچنین برای {1}"
  :keymap/also-used-for-action-in-context "همچنین برای {1} زمینه: {2}"
- :keymap/chord-separator " سپس "
  :keymap/clear "پاک کردن"
  :keymap/clear-keystroke-filter "پاک کردن فیلتر کلید"
  :keymap/clear-search "پاک کردن جستجو"
@@ -311,6 +310,7 @@
  :ui/refresh "بازخوانی"
  :ui/relaunch-confirm "برای اعمال این تغییر باید برنامه دوباره راه‌اندازی شود. اکنون دوباره راه‌اندازی شود؟"
  :ui/remove-background "حذف پس‌زمینه"
+ :ui/reset "بازنشانی"
  :ui/run "Run"
  :ui/save "ذخیره"
  :ui/show-less "نمایش کمتر"
@@ -682,6 +682,7 @@
  :editor/cut "برش"
  :editor/cycle-todo "تغییر TODO"
  :editor/delete-selection "حذف انتخاب‌شده"
+ :editor/display-tag-inline-hint "تا این برچسب به‌صورت درون‌خطی به‌جای انتهای این گره نمایش داده شود."
  :editor/expand-block-children "باز کردن فرزندان بلوک"
  :editor/heading "سرفصل {1}"
  :editor/moving-blocks-count "تاریخ نامعتبر"
@@ -690,6 +691,8 @@
  :editor/paste "چسباندن"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "حذف عنوان"
+ :editor/search-for-node "جستجوی گره"
+ :editor/search-for-tag "جستجوی برچسب"
  :editor/search-template-placeholder "جستجوی الگو"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "ویژگی جدید"
  :view/new-view "نمای جدید"
  :view/rename "تغییر نام"
+ :view/results "نتایج:"
  :view/unlinked-references "مراجع پیوندنشده"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "نزولی"
  :view.table/drag-to-reorder "برای مرتب‌سازی بکشید"
  :view.table/group-by "گروه‌بندی بر اساس"
+ :view.table/group-journal-date "تاریخ ژورنال"
+ :view.table/group-page-created-date "تاریخ ایجاد صفحه"
+ :view.table/group-page-name "نام صفحه"
+ :view.table/group-page-updated-date "تاریخ به‌روزرسانی صفحه"
  :view.table/id-column "شناسه"
  :view.table/live-query-title "پرس‌وجوی زنده ({1})"
  :view.table/name-column "نام"
+ :view.table/no-group-value "بدون {1}"
  :view.table/open "باز کردن"
  :view.table/page "صفحه"
+ :view.table/pages "صفحه‌ها"
  :view.table/pin "سنجاق"
  :view.table/row-number "شماره ردیف"
  :view.table/select-all "انتخاب همه"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "برداشتن سنجاق"
 
  ;; Query
+ :query/advanced-results "نتایج پرس‌وجوی پیشرفته"
  :query/custom-view-error "خطای نمای سفارشی: {1}"
  :query/error "خطای پرس‌وجو:"
  :query/examples-desc "نمونه‌های بیشتر را در {{Queries documentation}} ببینید."
  :query/examples-title "نمونه‌های پرس‌وجو:"
+ :query/results-for "نتایج برای {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "جایگزینی با:"
  :query.builder/search-label "جستجو: {1}"
+ :query.builder/show-built-in-properties "نمایش ویژگی‌های داخلی"
  :query.builder/unwrap-operator "بازکردن"
  :query.builder/updated-label "به‌روزرسانی شده"
  :query.builder/wrap-filter-with-label "بسته‌بندی این فیلتر با:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "ویرایش settings.json"
+ :plugin.settings/exit-code-mode "خروج از حالت کد"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "در حال تعبیه..."
  :ai/local-embedding-model "مدل تعبیه محلی"
  :ai/model-download-progress "در حال دانلود {1}"
  :ai/model-downloaded "{1} دانلود شد"
  :ai/model-ready "مدل آماده است 🚀"
  :ai/search-label "جستجو"
- :ai/search-result-label "نتیجه جستجو:"
+ :ai/search-result-label "نتیجه جستجو"
  :ai/search-title "جستجوی معنایی:"
  :ai/select-model "انتخاب مدل"
+ :ai/vector-search-debug-actions "اقدامات"
+ :ai/vector-search-debug-settings "تنظیمات"
+ :ai/vector-search-debug-state "وضعیت"
  :ai/vector-search-model-placeholder "یک مدل انتخاب کنید (نیاز به اجرای مجدد force-embedding-all-graph-blocks)"
  :ai/webgpu-unsupported "WebGPU در این مرورگر پشتیبانی نمی‌شود، لطفاً مرورگر را به‌روزرسانی کنید یا از مرورگر دیگری استفاده کنید."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "در حال ایجاد گراف راه‌دور..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "در حال دانلود {1} ..."
  :sync/graph-count-exceed-limit "تعداد گراف‌ها از حد مجاز فراتر رفت"
@@ -1745,13 +1767,16 @@
  :help/changelog "سیاهه تغییرات"
  :help/community-title "جامعه"
  :help/context-menu "فهرست زمینه‌ای بلوک"
+ :help/context-menu-action "کلیک راست روی بولت"
  :help/development-title "توسعه"
  :help/docs "مستندات"
  :help/feature "درخواست ویژگی"
  :help/forum-community "جامعه انجمن"
  :help/handbook "کتابچه راهنما"
+ :help/learn-more "بیشتر بدانید"
  :help/markdown-syntax "نحو Markdown"
  :help/open-link-in-sidebar "باز کردن پیوند در نوار کناری"
+ :help/open-link-in-sidebar-action "Shift+کلیک روی ارجاع"
  :help/privacy "سیاست حریم شخصی"
  :help/reference-autocomplete "[[ارجاع]] برای تکمیل خودکار صفحه"
  :help/release-notes "یادداشت‌های انتشار"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "بازگشت"
  :header/go-forward "جلو"
+ :header/highlight-recent-blocks "برجسته‌کردن بلوک‌های اخیر"
+ :header/highlight-recent-blocks-days-ago "برجسته‌کردن بلوک‌های اخیر: {1} روز پیش"
  :header/more "بیشتر"
  :header/quit-highlight-recent-blocks "خروج از برجسته‌سازی بلوک‌های اخیر"
  :header/search "جستجو"

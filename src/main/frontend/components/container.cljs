@@ -456,7 +456,7 @@
 
         (if (state/sub :rtc/uploading?)
           [:div.flex.items-center.justify-center.full-height-without-header
-           (ui/loading "Creating remote graph...")]
+           (ui/loading (t :sync/creating-remote-graph))]
           (main {:route-match route-match
                  :margin-less-pages? margin-less-pages?
                  :logged? logged?

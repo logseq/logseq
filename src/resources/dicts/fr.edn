@@ -182,7 +182,6 @@
  :keymap/already-bound "Raccourci déjà utilisé"
  :keymap/also-used-for-action "Aussi utilisé pour {1}"
  :keymap/also-used-for-action-in-context "Aussi utilisé pour {1} Dans le contexte {2}"
- :keymap/chord-separator " puis "
  :keymap/clear "Effacer"
  :keymap/clear-keystroke-filter "Effacer le filtre de touches"
  :keymap/clear-search "Effacer la recherche"
@@ -311,6 +310,7 @@
  :ui/refresh "Actualiser"
  :ui/relaunch-confirm "Cette modification nécessite de redémarrer l'application. Redémarrer maintenant ?"
  :ui/remove-background "Supprimer l'arrière-plan"
+ :ui/reset "Réinitialiser"
  :ui/run "Run"
  :ui/save "Enregistrer"
  :ui/show-less "Afficher moins"
@@ -682,6 +682,7 @@
  :editor/cut "Couper"
  :editor/cycle-todo "Basculer l'état TODO de l'élément courant"
  :editor/delete-selection "Supprimer les blocs sélectionnés"
+ :editor/display-tag-inline-hint "pour afficher cette étiquette en ligne au lieu de la fin de ce nœud."
  :editor/expand-block-children "Étendre tout"
  :editor/heading "Rubrique {1}"
  :editor/moving-blocks-count "Date invalide"
@@ -690,6 +691,8 @@
  :editor/paste "Coller"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Supprimer le titre"
+ :editor/search-for-node "Rechercher un nœud"
+ :editor/search-for-tag "Rechercher une étiquette"
  :editor/search-template-placeholder "Rechercher un modèle"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "Nouvelle propriété"
  :view/new-view "Nouvelle vue"
  :view/rename "Renommer"
+ :view/results "Résultats :"
  :view/unlinked-references "Références non liées"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "Décroissant"
  :view.table/drag-to-reorder "Glisser pour réordonner"
  :view.table/group-by "Grouper par"
+ :view.table/group-journal-date "Date du journal"
+ :view.table/group-page-created-date "Date de création de la page"
+ :view.table/group-page-name "Nom de la page"
+ :view.table/group-page-updated-date "Date de mise à jour de la page"
  :view.table/id-column "ID"
  :view.table/live-query-title "Requête en direct ({1})"
  :view.table/name-column "Nom"
+ :view.table/no-group-value "Aucun {1}"
  :view.table/open "Ouvrir"
  :view.table/page "Page"
+ :view.table/pages "Pages"
  :view.table/pin "Épingler"
  :view.table/row-number "Numéro de ligne"
  :view.table/select-all "Tout sélectionner"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "Désépingler"
 
  ;; Query
+ :query/advanced-results "Résultats de la requête avancée"
  :query/custom-view-error "Erreur de vue personnalisée : {1}"
  :query/error "Erreur de requête :"
  :query/examples-desc "Consultez plus d'exemples sur {{Queries documentation}}."
  :query/examples-title "Exemples de requêtes :"
+ :query/results-for "Résultats pour {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Remplacer par :"
  :query.builder/search-label "Recherche : {1}"
+ :query.builder/show-built-in-properties "Afficher les propriétés intégrées"
  :query.builder/unwrap-operator "Déballer"
  :query.builder/updated-label "Mis à jour"
  :query.builder/wrap-filter-with-label "Encapsuler ce filtre avec :"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "Modifier settings.json"
+ :plugin.settings/exit-code-mode "Quitter le mode code"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "Vectorisation..."
  :ai/local-embedding-model "Modèle d'embedding local"
  :ai/model-download-progress "Téléchargement de {1}"
  :ai/model-downloaded "{1} téléchargé"
  :ai/model-ready "Le modèle est prêt 🚀"
  :ai/search-label "Rechercher"
- :ai/search-result-label "Résultat de recherche :"
+ :ai/search-result-label "Résultat de recherche "
  :ai/search-title "Recherche sémantique :"
  :ai/select-model "Sélectionner un modèle"
+ :ai/vector-search-debug-actions "Actions"
+ :ai/vector-search-debug-settings "Paramètres"
+ :ai/vector-search-debug-state "État"
  :ai/vector-search-model-placeholder "Sélectionner un modèle (nécessite de relancer force-embedding-all-graph-blocks)"
  :ai/webgpu-unsupported "WebGPU n'est pas pris en charge sur ce navigateur, veuillez le mettre à jour ou utiliser un autre navigateur."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "Création du graphe distant..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "Téléchargement de {1} ..."
  :sync/graph-count-exceed-limit "Le nombre de graphes dépasse la limite"
@@ -1745,13 +1767,16 @@
  :help/changelog "Journal des modifications"
  :help/community-title "Communauté"
  :help/context-menu "Menu contextuel"
+ :help/context-menu-action "Clic droit sur la puce"
  :help/development-title "Développement"
  :help/docs "Documentation"
  :help/feature "Demander une fonctionnalité"
  :help/forum-community "Forum communautaire"
  :help/handbook "Manuel"
+ :help/learn-more "En savoir plus"
  :help/markdown-syntax "Syntaxe Markdown"
  :help/open-link-in-sidebar "Ouvrir le lien dans la barre latérale"
+ :help/open-link-in-sidebar-action "Maj + clic sur la référence"
  :help/privacy "Politique de confidentialité"
  :help/reference-autocomplete "Autocomplétion des références à une Page"
  :help/release-notes "Notes de version"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "Retour"
  :header/go-forward "Suivant"
+ :header/highlight-recent-blocks "Mettre en surbrillance les blocs récents"
+ :header/highlight-recent-blocks-days-ago "Mettre en surbrillance les blocs récents : il y a {1} jours"
  :header/more "Plus"
  :header/quit-highlight-recent-blocks "Arrêter la surbrillance des blocs récents"
  :header/search "Rechercher"

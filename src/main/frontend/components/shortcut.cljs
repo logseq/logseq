@@ -939,7 +939,7 @@
       (for [[idx x] (map-indexed vector current-binding)
             :when (string? x)]
         [:div.shortcut-input-binding {:key x}
-         (shui/shortcut x {:chord-separator (t :keymap/chord-separator)})
+         (shui/shortcut x {:chord-separator "->"})
          (when (#{:idle :accepted :esc-hint :removed :reset} render-state)
            [:button.shortcut-binding-remove
             {:aria-label (t :keymap/remove-binding)
@@ -957,7 +957,7 @@
       (when (and (#{:recording :conflict-cross :conflict-same} render-state)
                  (not (string/blank? keystroke)))
         [:div.shortcut-input-binding.shortcut-input-binding--pending
-         (shui/shortcut keystroke)
+         (shui/shortcut keystroke {:chord-separator "->"})
          (when (#{:conflict-cross :conflict-same} render-state)
            [:button.shortcut-binding-remove
             {:aria-label (t :keymap/remove-binding)
@@ -1430,7 +1430,7 @@
                                (for [b user-binding
                                      :when (string? b)]
                                  [:span {:key b :style {:display "contents"}}
-                                  (shui/shortcut b {:chord-separator (t :keymap/chord-separator)})]))]
+                                  (shui/shortcut b {:chord-separator "->"})]))]
 
                             :else
                             (for [b binding
@@ -1438,4 +1438,4 @@
                               [:span {:key b :style {:display "contents"}}
                                (shui/shortcut (dh/binding-for-display id b)
                                               {:raw-binding [b]
-                                               :chord-separator (t :keymap/chord-separator)})]))]])))))])])]])))
+                                               :chord-separator "->"})]))]])))))])])]])))

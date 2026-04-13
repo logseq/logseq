@@ -182,7 +182,6 @@
  :keymap/already-bound "Zkratka již přiřazena"
  :keymap/also-used-for-action "Také používáno pro {1}"
  :keymap/also-used-for-action-in-context "Také používáno pro {1} V kontextu {2}"
- :keymap/chord-separator " pak "
  :keymap/clear "Vymazat"
  :keymap/clear-keystroke-filter "Vymazat filtr kláves"
  :keymap/clear-search "Vymazat hledání"
@@ -311,6 +310,7 @@
  :ui/refresh "Obnovit"
  :ui/relaunch-confirm "Pro použití této změny je potřeba restartovat aplikaci. Restartovat nyní?"
  :ui/remove-background "Odstranit pozadí"
+ :ui/reset "Resetovat"
  :ui/run "Run"
  :ui/save "Uložit"
  :ui/show-less "Zobrazit méně"
@@ -682,6 +682,7 @@
  :editor/cut "Vyjmout"
  :editor/cycle-todo "Přepnout TODO"
  :editor/delete-selection "Smazat výběr"
+ :editor/display-tag-inline-hint "pro zobrazení tohoto štítku přímo v textu místo na konci tohoto uzlu."
  :editor/expand-block-children "Rozbalit podřízené bloky"
  :editor/heading "Nadpis {1}"
  :editor/moving-blocks-count "Neplatné datum"
@@ -690,6 +691,8 @@
  :editor/paste "Vložit"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Odstranit nadpis"
+ :editor/search-for-node "Hledat uzel"
+ :editor/search-for-tag "Hledat štítek"
  :editor/search-template-placeholder "Hledat šablonu"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "Nová vlastnost"
  :view/new-view "Nový pohled"
  :view/rename "Přejmenovat"
+ :view/results "Výsledky:"
  :view/unlinked-references "Neprepojené odkazy"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "Sestupně"
  :view.table/drag-to-reorder "Přetáhněte pro změnu pořadí"
  :view.table/group-by "Seskupit podle"
+ :view.table/group-journal-date "Datum deníku"
+ :view.table/group-page-created-date "Datum vytvoření stránky"
+ :view.table/group-page-name "Název stránky"
+ :view.table/group-page-updated-date "Datum aktualizace stránky"
  :view.table/id-column "ID"
  :view.table/live-query-title "Živý dotaz ({1})"
  :view.table/name-column "Název"
+ :view.table/no-group-value "Žádné {1}"
  :view.table/open "Otevřít"
  :view.table/page "Stránka"
+ :view.table/pages "Stránky"
  :view.table/pin "Připnout"
  :view.table/row-number "Číslo řádku"
  :view.table/select-all "Vybrat vše"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "Odepnout"
 
  ;; Query
+ :query/advanced-results "Výsledky pokročilého dotazu"
  :query/custom-view-error "Chyba vlastního pohledu: {1}"
  :query/error "Chyba dotazu:"
  :query/examples-desc "Další příklady naleznete na {{Queries documentation}}."
  :query/examples-title "Příklady dotazů:"
+ :query/results-for "Výsledky pro {1}"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Nahradit za:"
  :query.builder/search-label "Hledat: {1}"
+ :query.builder/show-built-in-properties "Zobrazit vestavěné vlastnosti"
  :query.builder/unwrap-operator "Rozbalit"
  :query.builder/updated-label "Aktualizováno"
  :query.builder/wrap-filter-with-label "Zabalit tento filtr do:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "Upravit settings.json"
+ :plugin.settings/exit-code-mode "Ukončit režim kódu"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "Vkládání..."
  :ai/local-embedding-model "Lokální model embeddingů"
  :ai/model-download-progress "Stahování {1}"
  :ai/model-downloaded "Staženo {1}"
  :ai/model-ready "Model je připraven 🚀"
  :ai/search-label "Hledat"
- :ai/search-result-label "Výsledky hledání:"
+ :ai/search-result-label "Výsledky hledání"
  :ai/search-title "Sémantické vyhledávání:"
  :ai/select-model "Vybrat model"
+ :ai/vector-search-debug-actions "Akce"
+ :ai/vector-search-debug-settings "Nastavení"
+ :ai/vector-search-debug-state "Stav"
  :ai/vector-search-model-placeholder "Vyberte model (je nutné znovu vynutit embedding všech bloků grafu)"
  :ai/webgpu-unsupported "WebGPU není v tomto prohlížeči podporováno, prosím aktualizujte ho nebo použijte jiný prohlížeč."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "Vytváří se vzdálený graf..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "Stahování {1} ..."
  :sync/graph-count-exceed-limit "Překročen limit počtu grafů"
@@ -1745,13 +1767,16 @@
  :help/changelog "Protokol změn"
  :help/community-title "Komunita"
  :help/context-menu "Kontextová nabídka bloku"
+ :help/context-menu-action "Kliknutí pravým tlačítkem na odrážku"
  :help/development-title "Vývoj"
  :help/docs "Dokumentace"
  :help/feature "Požadavek na funkci"
  :help/forum-community "Komunita na fóru"
  :help/handbook "Příručka"
+ :help/learn-more "Zjistit více"
  :help/markdown-syntax "Markdown syntaxe"
  :help/open-link-in-sidebar "Otevřít odkaz v postranním panelu"
+ :help/open-link-in-sidebar-action "Shift+klik na odkaz"
  :help/privacy "Zásady ochrany osobních údajů"
  :help/reference-autocomplete "Automatické dokončování odkazů na stránky"
  :help/release-notes "Poznámky k vydání"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "Zpět"
  :header/go-forward "Vpřed"
+ :header/highlight-recent-blocks "Zvýraznit nedávné bloky"
+ :header/highlight-recent-blocks-days-ago "Zvýraznit nedávné bloky: před {1} dny"
  :header/more "Více"
  :header/quit-highlight-recent-blocks "Ukončit zvýraznění nedávných bloků"
  :header/search "Hledat"

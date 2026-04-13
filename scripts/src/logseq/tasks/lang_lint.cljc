@@ -95,8 +95,6 @@
   #{"Logseq"
     "Logseq "
     "ID: "
-    "DOING"
-    "TODO"
     "http://"
     "https://"
     "{}"

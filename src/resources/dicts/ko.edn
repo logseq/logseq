@@ -182,7 +182,6 @@
  :keymap/already-bound "단축키가 이미 사용 중입니다"
  :keymap/also-used-for-action "다음에도 사용됨 {1}"
  :keymap/also-used-for-action-in-context "다음에도 사용됨 {1} 컨텍스트 내 {2}"
- :keymap/chord-separator " 그 다음 "
  :keymap/clear "지우기"
  :keymap/clear-keystroke-filter "키 입력 필터 지우기"
  :keymap/clear-search "검색 지우기"
@@ -311,6 +310,7 @@
  :ui/refresh "새로고침"
  :ui/relaunch-confirm "이 변경 사항을 적용하려면 앱을 다시 시작해야 합니다. 지금 다시 시작하시겠습니까?"
  :ui/remove-background "배경 제거"
+ :ui/reset "재설정"
  :ui/run "Run"
  :ui/save "저장"
  :ui/show-less "적게 보기"
@@ -682,6 +682,7 @@
  :editor/cut "잘라내기"
  :editor/cycle-todo "TODO 상태 전환"
  :editor/delete-selection "선택 삭제"
+ :editor/display-tag-inline-hint "이 태그를 이 노드의 끝이 아니라 인라인으로 표시합니다."
  :editor/expand-block-children "펼치기"
  :editor/heading "제목 {1}"
  :editor/moving-blocks-count "잘못된 날짜"
@@ -690,6 +691,8 @@
  :editor/paste "붙여넣기"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "제목 제거"
+ :editor/search-for-node "노드 검색"
+ :editor/search-for-tag "태그 검색"
  :editor/search-template-placeholder "템플릿 검색"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "새 속성"
  :view/new-view "새 뷰"
  :view/rename "이름 변경"
+ :view/results "결과:"
  :view/unlinked-references "링크되지 않은 참조"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "내림차순"
  :view.table/drag-to-reorder "드래그로 재정렬"
  :view.table/group-by "그룹화"
+ :view.table/group-journal-date "저널 날짜"
+ :view.table/group-page-created-date "페이지 생성 날짜"
+ :view.table/group-page-name "페이지 이름"
+ :view.table/group-page-updated-date "페이지 업데이트 날짜"
  :view.table/id-column "ID"
  :view.table/live-query-title "라이브 쿼리 ({1})"
  :view.table/name-column "이름"
+ :view.table/no-group-value "{1} 없음"
  :view.table/open "열기"
  :view.table/page "페이지"
+ :view.table/pages "페이지"
  :view.table/pin "고정"
  :view.table/row-number "행 번호"
  :view.table/select-all "모두 선택"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "고정 해제"
 
  ;; Query
+ :query/advanced-results "고급 쿼리 결과"
  :query/custom-view-error "커스텀 뷰 오류: {1}"
  :query/error "쿼리 오류:"
  :query/examples-desc "{{Queries documentation}}에서 더 많은 예제를 확인하세요."
  :query/examples-title "쿼리 예제:"
+ :query/results-for "{1} 결과"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "다음으로 교체:"
  :query.builder/search-label "검색: {1}"
+ :query.builder/show-built-in-properties "내장 속성 표시"
  :query.builder/unwrap-operator "래핑 해제"
  :query.builder/updated-label "수정일"
  :query.builder/wrap-filter-with-label "이 필터를 다음으로 래핑:"
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "settings.json 편집"
+ :plugin.settings/exit-code-mode "코드 모드 종료"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "임베딩 중..."
  :ai/local-embedding-model "로컬 임베딩 모델"
  :ai/model-download-progress "{1} 다운로드 중"
  :ai/model-downloaded "{1} 다운로드 완료"
  :ai/model-ready "모델이 준비되었습니다 🚀"
  :ai/search-label "검색"
- :ai/search-result-label "검색 결과:"
+ :ai/search-result-label "검색 결과"
  :ai/search-title "시맨틱 검색:"
  :ai/select-model "모델 선택"
+ :ai/vector-search-debug-actions "작업"
+ :ai/vector-search-debug-settings "설정"
+ :ai/vector-search-debug-state "상태"
  :ai/vector-search-model-placeholder "모델 선택 (전체 그래프 블록 강제 임베딩 필요)"
  :ai/webgpu-unsupported "이 브라우저에서는 WebGPU가 지원되지 않습니다. 브라우저를 업그레이드하거나 다른 브라우저를 사용해 주세요."
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "원격 그래프를 생성하는 중..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "{1} 다운로드 중 ..."
  :sync/graph-count-exceed-limit "그래프 수가 제한을 초과했습니다"
@@ -1745,13 +1767,16 @@
  :help/changelog "변경 기록"
  :help/community-title "커뮤니티"
  :help/context-menu "블록 컨텍스트 메뉴"
+ :help/context-menu-action "불릿 오른쪽 클릭"
  :help/development-title "개발"
  :help/docs "문서"
  :help/feature "기능 제안"
  :help/forum-community "포럼 커뮤니티"
  :help/handbook "핸드북"
+ :help/learn-more "자세히 알아보기"
  :help/markdown-syntax "Markdown 문법"
  :help/open-link-in-sidebar "사이드바에서 링크 열기"
+ :help/open-link-in-sidebar-action "Shift+참조 클릭"
  :help/privacy "개인정보 처리방침"
  :help/reference-autocomplete "페이지 참조 자동 완성"
  :help/release-notes "릴리스 노트"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "뒤로"
  :header/go-forward "앞으로"
+ :header/highlight-recent-blocks "최근 블록 강조"
+ :header/highlight-recent-blocks-days-ago "최근 블록 강조: {1}일 전"
  :header/more "더 보기"
  :header/quit-highlight-recent-blocks "최근 블록 강조 종료"
  :header/search "검색"

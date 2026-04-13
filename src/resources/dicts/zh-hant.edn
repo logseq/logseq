@@ -182,7 +182,6 @@
  :keymap/already-bound "快速鍵已被佔用"
  :keymap/also-used-for-action "同時用於{1}"
  :keymap/also-used-for-action-in-context "同時用於{1}，上下文：{2}"
- :keymap/chord-separator " 然後 "
  :keymap/clear "清除"
  :keymap/clear-keystroke-filter "清除按鍵篩選"
  :keymap/clear-search "清除搜尋"
@@ -311,6 +310,7 @@
  :ui/refresh "重新整理"
  :ui/relaunch-confirm "此變更需重新啟動應用程式，是否立即重新啟動？"
  :ui/remove-background "移除背景"
+ :ui/reset "重設"
  :ui/run "Run"
  :ui/save "儲存"
  :ui/show-less "顯示較少"
@@ -682,6 +682,7 @@
  :editor/cut "剪下"
  :editor/cycle-todo "切換當前事項的待辦狀態"
  :editor/delete-selection "刪除選定塊"
+ :editor/display-tag-inline-hint "以內嵌方式顯示此標籤，而不是放在此節點末尾。"
  :editor/expand-block-children "展開所有子塊"
  :editor/heading "標題 {1}"
  :editor/moving-blocks-count "正在移動 {1} 個塊"
@@ -690,6 +691,8 @@
  :editor/paste "貼上"
  :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "移除標題"
+ :editor/search-for-node "搜尋節點"
+ :editor/search-for-tag "搜尋標籤"
  :editor/search-template-placeholder "搜尋範本"
  :editor/template-insert-error "Template insert error: {1}"
 
@@ -1061,6 +1064,7 @@
  :view/new-property "新增屬性"
  :view/new-view "新增檢視"
  :view/rename "重新命名"
+ :view/results "結果："
  :view/unlinked-references "未連結的引用"
 
  ;; View filters
@@ -1100,11 +1104,17 @@
  :view.table/descending "降序"
  :view.table/drag-to-reorder "拖曳以重新排序"
  :view.table/group-by "分組"
+ :view.table/group-journal-date "日誌日期"
+ :view.table/group-page-created-date "頁面建立日期"
+ :view.table/group-page-name "頁面名稱"
+ :view.table/group-page-updated-date "頁面更新日期"
  :view.table/id-column "ID"
  :view.table/live-query-title "實時查詢（{1}）"
  :view.table/name-column "名稱"
+ :view.table/no-group-value "無 {1}"
  :view.table/open "開啟"
  :view.table/page "頁面"
+ :view.table/pages "頁面"
  :view.table/pin "釘選"
  :view.table/row-number "列號"
  :view.table/select-all "全選"
@@ -1120,10 +1130,12 @@
  :view.table/unpin "取消釘選"
 
  ;; Query
+ :query/advanced-results "進階查詢結果"
  :query/custom-view-error "自訂檢視錯誤：{1}"
  :query/error "查詢錯誤："
  :query/examples-desc "查看更多範例：{{Queries documentation}}。"
  :query/examples-title "查詢範例："
+ :query/results-for "{1} 的結果"
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
@@ -1140,6 +1152,7 @@
  :query.builder/operator-not-label "非"
  :query.builder/replace-with-label "替換為："
  :query.builder/search-label "搜尋：{1}"
+ :query.builder/show-built-in-properties "顯示內建屬性"
  :query.builder/unwrap-operator "解除包裝"
  :query.builder/updated-label "更新時間"
  :query.builder/wrap-filter-with-label "以下方式包裝此篩選："
@@ -1562,6 +1575,10 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
+ ;; Plugin settings
+ :plugin.settings/edit-settings-json "編輯 settings.json"
+ :plugin.settings/exit-code-mode "退出程式碼模式"
+
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} theme"
@@ -1569,14 +1586,18 @@
  :plugin.themes/light-and-dark "light & dark themes"
 
  ;; AI
+ :ai/embedding "正在嵌入..."
  :ai/local-embedding-model "本機嵌入模型"
  :ai/model-download-progress "正在下載 {1}"
  :ai/model-downloaded "已下載 {1}"
  :ai/model-ready "模型已就緒 🚀"
  :ai/search-label "搜尋"
- :ai/search-result-label "搜尋結果："
+ :ai/search-result-label "搜尋結果"
  :ai/search-title "語意搜尋："
  :ai/select-model "選擇模型"
+ :ai/vector-search-debug-actions "操作"
+ :ai/vector-search-debug-settings "設定"
+ :ai/vector-search-debug-state "狀態"
  :ai/vector-search-model-placeholder "選擇模型（需要重新對所有圖譜區塊進行嵌入）"
  :ai/webgpu-unsupported "此瀏覽器不支援 WebGPU，請升級瀏覽器或使用其他瀏覽器。"
 
@@ -1669,6 +1690,7 @@
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/creating-remote-graph "正在建立遠端圖譜..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "正在下載 {1} ..."
  :sync/graph-count-exceed-limit "同步圖譜數量超出限制"
@@ -1745,13 +1767,16 @@
  :help/changelog "更新紀錄"
  :help/community-title "社群"
  :help/context-menu "區塊內容選單"
+ :help/context-menu-action "右鍵點擊項目符號"
  :help/development-title "開發"
  :help/docs "說明文件"
  :help/feature "功能建議"
  :help/forum-community "論壇社群"
  :help/handbook "使用手冊"
+ :help/learn-more "了解更多"
  :help/markdown-syntax "Markdown 格式"
  :help/open-link-in-sidebar "在側邊欄開啟連結r"
+ :help/open-link-in-sidebar-action "Shift+點擊引用"
  :help/privacy "隱私聲明"
  :help/reference-autocomplete "頁面引用自動完成"
  :help/release-notes "版本說明"
@@ -1844,6 +1869,8 @@
  ;; Header
  :header/go-back "返回"
  :header/go-forward "前進"
+ :header/highlight-recent-blocks "醒目顯示最近的區塊"
+ :header/highlight-recent-blocks-days-ago "醒目顯示最近的區塊：{1} 天前"
  :header/more "更多"
  :header/quit-highlight-recent-blocks "退出醒目標示近期區塊"
  :header/search "搜尋"

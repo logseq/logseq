@@ -116,14 +116,14 @@
         (shui/tabler-icon "player-play") "start")
 
        [:div.my-2.flex
-        [:div.mr-2 (ui/button (str "Toggle auto push updates("
+        [:div.mr-2 (ui/button (str "Toggle auto push updates ("
                                    (if (:auto-push? debug-state*)
                                      "ON" "OFF")
                                    ")")
                               {:on-click
                                (fn []
                                  (state/<invoke-db-worker :thread-api/rtc-toggle-auto-push))})]
-        [:div.mr-2 (ui/button (str "Toggle remote profile("
+        [:div.mr-2 (ui/button (str "Toggle remote profile ("
                                    (if (:remote-profile? debug-state*)
                                      "ON" "OFF")
                                    ")")

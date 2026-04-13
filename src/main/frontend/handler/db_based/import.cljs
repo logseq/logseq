@@ -269,4 +269,4 @@
                       :on-change (fn [^js e] (swap! import-inputs assoc :import-data (util/evalue e)))})
       (shui/button {:class "mt-3"
                     :on-click (partial import-edn-data-from-form import-inputs)}
-                   "Import")])))
+                   (t :import/title))])))
