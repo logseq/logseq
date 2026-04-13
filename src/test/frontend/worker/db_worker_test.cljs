@@ -343,6 +343,23 @@
       (is (< ident-idx data-idx))
       (is (< cardinality-idx data-idx)))))
 
+(deftest import-datoms-batch-transacts-all-db-schema-before-data-test
+  (async done
+         (let [conn (d/create-conn db-schema/schema)
+               attr-eid 8001
+               datoms [{:e attr-eid :a :db/ident :v :user.test/indexed}
+                       {:e 100 :a :user.test/indexed :v "hello"}
+                       {:e attr-eid :a :db/valueType :v :db.type/string}
+                       {:e attr-eid :a :db/cardinality :v :db.cardinality/one}
+                       {:e attr-eid :a :db/index :v true}]]
+           (-> (#'sync-download/import-datoms-batch! conn nil false datoms)
+               (p/then (fn [_]
+                         (is (= 1 (count (d/datoms @conn :avet :user.test/indexed "hello"))))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest thread-api-validate-db-passes-sync-diagnostics-test
   (restoring-worker-state
    (fn []
