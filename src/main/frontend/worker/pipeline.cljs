@@ -125,9 +125,12 @@
                     (not (ldb/inline-tag? (:block/raw-title entity) tag))
                     (not (:db/ident entity)))
                (let [eid (:db/id entity)]
-                 [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db-after (:block/title entity))]
-                  [:db/add eid :logseq.property.class/extends :logseq.class/Root]
-                  [:db/retract eid :block/tags :logseq.class/Page]])
+                 (if (:block/page entity)
+                   ;; Built-in #Tag should never turn a page child block into a class.
+                   [[:db/retract eid :block/tags :logseq.class/Tag]]
+                   [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db-after (:block/title entity))]
+                    [:db/add eid :logseq.property.class/extends :logseq.class/Root]
+                    [:db/retract eid :block/tags :logseq.class/Page]]))
 
              ;; remove #Page from tags/journals etc.
                (= (:db/id page-tag) (:v datom))
