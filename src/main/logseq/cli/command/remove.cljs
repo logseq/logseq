@@ -93,7 +93,7 @@
     nil))
 
 (def ^:private block-id-selector
-  [:db/id :block/uuid])
+  [:db/id :block/uuid :block/name])
 
 (def ^:private page-id-selector
   [:db/id :block/uuid :block/name :block/title :logseq.property/deleted-at])
@@ -131,9 +131,15 @@
 (defn- remove-block-id
   [config repo id]
   (p/let [entity (fetch-block-by-id config repo id)]
-    (if (:db/id entity)
-      (delete-block-ids config repo [id])
-      (throw (ex-info "block not found" {:code :block-not-found})))))
+    (cond
+      (not (:db/id entity))
+      (throw (ex-info "block not found" {:code :block-not-found}))
+
+      (:block/name entity)
+      (throw (ex-info "target is not a block, use 'remove page' instead" {:code :invalid-target}))
+
+      :else
+      (delete-block-ids config repo [id]))))
 
 (defn- remove-block-ids-best-effort
   [config repo ids]
@@ -141,18 +147,24 @@
                                  (fetch-block-by-id config repo id))
                                ids))
           id-entities (map vector ids entities)
-          existing-ids (vec (keep (fn [[id entity]]
-                                    (when (:db/id entity) id))
+          block? (fn [[_id entity]] (and (:db/id entity) (not (:block/name entity))))
+          existing-ids (vec (keep (fn [[id :as pair]] (when (block? pair) id))
                                   id-entities))
           missing-ids (vec (keep (fn [[id entity]]
                                    (when-not (:db/id entity) id))
                                  id-entities))
+          page-ids (vec (keep (fn [[id entity]]
+                                (when (and (:db/id entity) (:block/name entity)) id))
+                              id-entities))
+          _ (when (and (empty? existing-ids) (seq page-ids))
+              (throw (ex-info "target is not a block, use 'remove page' instead" {:code :invalid-target})))
           result (if (seq existing-ids)
                    (delete-block-ids config repo existing-ids)
                    nil)]
-    {:deleted-ids existing-ids
-     :missing-ids missing-ids
-     :result result}))
+    (cond-> {:deleted-ids existing-ids
+             :missing-ids missing-ids
+             :result result}
+      (seq page-ids) (assoc :page-ids page-ids))))
 
 (defn- perform-remove-block
   [config {:keys [repo ids multi-id? uuid]}]
@@ -451,7 +463,11 @@
               result (perform-remove-block cfg action)]
         {:status :ok
          :data (cond-> {:result result}
-                 (map? result) (merge (dissoc result :result)))})))
+                 (map? result) (merge (dissoc result :result)))})
+      (p/catch (fn [e]
+                 {:status :error
+                  :error {:code (or (:code (ex-data e)) :exception)
+                          :message (or (ex-message e) (str e))}}))))
 
 (defn execute-remove-page
   [action config]
