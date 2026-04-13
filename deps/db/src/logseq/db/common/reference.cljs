@@ -50,7 +50,8 @@
   [db id ref-blocks children-ids]
   (when (seq ref-blocks)
     (let [children (->> children-ids
-                        (map (fn [id] (d/entity db id))))]
+                        (map (fn [id] (d/entity db id))))
+          hidden-ref?* (common-initial-data/hidden-ref-pred db id)]
       (->> (concat (mapcat #(get-path-refs db %) ref-blocks)
                    (mapcat :block/refs (concat ref-blocks children)))
            frequencies
@@ -58,7 +59,7 @@
                    (when (and (ldb/page? ref)
                               (not= (:db/id ref) id)
                               (not= :block/tags (:db/ident ref))
-                              (not (common-initial-data/hidden-ref? db ref id)))
+                              (not (hidden-ref?* ref)))
                      [(:block/title ref) size])))
            (sort-by second #(> %1 %2))))))
 
