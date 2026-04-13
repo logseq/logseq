@@ -223,7 +223,7 @@
  :settings-page/enable-flashcards "Flashcards"
  :settings-page/network-proxy "Network proxy"
  :settings-page/sync-server-url "Sync server URL"
- :settings-page/sync-server-url-desc "Set a custom sync server URL for self-hosted sync. Leave empty to use the official Logseq cloud."
+ :settings-page/sync-server-url-desc "Set a custom HTTPS sync server URL for self-hosted sync. Your Logseq authentication tokens will be sent to this server, so only use a trusted URL. Leave empty to use the official Logseq cloud."
  :settings-page/sync-server-url-saved "Sync server URL saved."
  :settings-page/sync-server-url-cleared "Sync server URL cleared. Using official Logseq cloud."
  :settings-page/sync-server-url-default "Logseq Cloud (default)"
