@@ -10,7 +10,9 @@
  :command.command-palette/toggle "Search commands"
 
  ;; Dev commands
+ :command.dev/export-client-ops-sqlite "(Dev) Export client ops sqlite"
  :command.dev/gc-graph "(Dev) Garbage collect graph (remove unused data in SQLite)"
+ :command.dev/recompute-checksum "(Dev) Recompute graph checksum"
  :command.dev/replace-graph-with-db-file "(Dev) Replace graph with its db.sqlite file"
  :command.dev/rtc-start "(Dev) RTC Start"
  :command.dev/rtc-stop "(Dev) RTC Stop"
@@ -2021,4 +2023,4 @@
  :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
  :youtube/player-not-ready "YouTube player isn't ready yet."
  :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
-}
+ }
