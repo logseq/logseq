@@ -11,6 +11,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
+            [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -24,7 +25,55 @@
           now (tc/from-date (js/Date.))]
     (date-time-util/format now formatter)))
 
+(defn find-pages-by-name
+  "Query all live (non-recycled) pages matching a given name. Returns a vector
+   of entity maps. Because :block/name is not unique (a tag, property and page
+   can share the same name), callers should check for ambiguity."
+  [config repo page-name selector]
+  (p/let [results (transport/invoke config :thread-api/q false
+                                    [repo
+                                     [{:find [[(list 'pull '?e selector) '...]]
+                                       :in '[$ ?name]
+                                       :where '[[?e :block/name ?name]]}
+                                      (common-util/page-name-sanity-lc page-name)]])]
+    (vec (remove ldb/recycled? (or results [])))))
+
+(defn throw-ambiguous-page-error!
+  "Throws when multiple pages match the same name. Callers should present the
+   candidates so the user can rerun with --id."
+  [page-name matches]
+  (let [candidates (->> matches
+                        (map (fn [item]
+                               {:id (:db/id item)
+                                :name (or (:block/title item) (:block/name item))}))
+                        (filter :id)
+                        vec)]
+    (throw (ex-info (str "multiple pages match name: " page-name "; rerun with --id")
+                    {:code :ambiguous-page-name
+                     :candidates candidates}))))
+
 (defn- ensure-page!
+  "Ensure a page only if it is unique. Otherwise returns an ambiugous error to let user choose the specific
+   intended page"
+  [config repo page-name]
+  (p/let [live (find-pages-by-name config repo page-name
+                                   [:db/id :block/uuid :block/name :block/title])
+          _ (when (> (count live) 1)
+              (throw-ambiguous-page-error! page-name live))
+          page (first live)]
+    (if (:db/id page)
+      page
+      (let [page-name-lc (common-util/page-name-sanity-lc page-name)]
+        (p/let [_ (transport/invoke config :thread-api/apply-outliner-ops false
+                                    [repo [[:create-page [page-name {}]]] {}])]
+          (transport/invoke config :thread-api/pull false
+                            [repo [:db/id :block/uuid :block/name :block/title] [:block/name page-name-lc]]))))))
+
+;; TODO: Replace uses of this fn with ensure-page! when users are able to specify ids for contexts this
+;; is used in
+(defn- ensure-first-page!
+  "Unlike ensure-page!, chooses the first random page and doesn't ensure the page is unique. Only use this
+   when the user unable to specificy the specific page e.g. page refs in a block/title"
   [config repo page-name]
   (let [page-name-lc (common-util/page-name-sanity-lc page-name)]
     (p/let [page (transport/invoke config :thread-api/pull false
@@ -246,7 +295,7 @@
                          page-refs)]
       (p/let [resolved (p/all
                         (map (fn [[_ page-name]]
-                               (p/let [page (ensure-page! config repo page-name)
+                               (p/let [page (ensure-first-page! config repo page-name)
                                        page-uuid (:block/uuid page)]
                                  (when-not page-uuid
                                    (throw (ex-info "page not found"
@@ -705,7 +754,7 @@
     (and (string? value) (common-util/uuid-string? (string/trim value)))
     (resolve-entity-id config repo [:block/uuid (uuid (string/trim value))])
     (string? value)
-    (p/let [page (ensure-page! config repo value)]
+    (p/let [page (ensure-first-page! config repo value)]
       (or (:db/id page)
           (throw (ex-info "page not found" {:code :page-not-found :value value}))))
     :else

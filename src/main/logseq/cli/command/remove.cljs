@@ -1,12 +1,12 @@
 (ns logseq.cli.command.remove
   "Remove-related CLI commands."
   (:require [clojure.string :as string]
+            [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.command.id :as id-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (def ^:private remove-block-spec
@@ -186,18 +186,7 @@
 
 (defn- resolve-page-by-name
   [config repo name]
-  ;; `:block/name` is not unique — multiple pages can share the same
-  ;; sanity-lc'd name. Query for ALL matches via :thread-api/q rather than
-  ;; using :thread-api/pull (which only returns the first hit via
-  ;; `get-first-page-by-name`), filter out recycled entries, and let the
-  ;; caller error out on ambiguity instead of randomly removing one of them.
-  (p/let [results (transport/invoke config :thread-api/q false
-                                    [repo
-                                     [{:find [[(list 'pull '?e page-id-selector) '...]]
-                                       :in '[$ ?name]
-                                       :where '[[?e :block/name ?name]]}
-                                      (common-util/page-name-sanity-lc name)]])
-          live (vec (remove ldb/recycled? (or results [])))]
+  (p/let [live (add-command/find-pages-by-name config repo name page-id-selector)]
     (cond
       (empty? live) nil
       (> (count live) 1) {:ambiguous? true :matches live}
