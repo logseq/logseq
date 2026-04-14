@@ -99,8 +99,21 @@ test('parseArgs defaults keep today-journal cleanup enabled', () => {
   const args = parseArgs([]);
   assert.equal(args.simulationPage, undefined);
   assert.equal(args.opProfile, 'fast');
+  assert.equal(args.scenario, 'online');
   assert.equal(args.opTimeoutMs, 1000);
   assert.equal(args.cleanupTodayPage, true);
+});
+
+test('parseArgs accepts offline simulation scenario', () => {
+  const args = parseArgs(['--scenario', 'offline']);
+  assert.equal(args.scenario, 'offline');
+});
+
+test('parseArgs rejects unsupported simulation scenario', () => {
+  assert.throws(
+    () => parseArgs(['--scenario', 'invalid-mode']),
+    /--scenario must be one of: online, offline/
+  );
 });
 
 test('cleanup program targets today journal APIs', () => {
