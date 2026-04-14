@@ -709,9 +709,12 @@
 
 (defn- ensure-page-entity!
   [config repo page-name]
-  (p/let [existing (pull-page-by-name config repo page-name
-                                      [:db/id :block/uuid :logseq.property/deleted-at])]
-    (if (and (:db/id existing) (not (ldb/recycled? existing)))
+  (p/let [live (add-command/find-pages-by-name config repo page-name
+                                               [:db/id :block/uuid])
+          _ (when (> (count live) 1)
+              (add-command/throw-ambiguous-page-error! page-name live))
+          existing (first live)]
+    (if (:db/id existing)
       existing
       ;; Either no page exists, or only a recycled one does. Calling
       ;; :create-page in both cases is correct: outliner-page/create has a
@@ -1024,8 +1027,10 @@
            :data {:result created-ids}}))
       (p/catch (fn [e]
                  {:status :error
-                  :error {:code (or (get-in (ex-data e) [:code]) :exception)
-                          :message (or (ex-message e) (str e))}}))))
+                  :error (merge {:code (or (:code (ex-data e)) :exception)
+                                 :message (or (ex-message e) (str e))}
+                                (when-let [candidates (:candidates (ex-data e))]
+                                  {:candidates candidates}))}))))
 
 (defn execute-upsert-page
   [action config]
@@ -1064,8 +1069,10 @@
          :data {:result [page-id]}})
       (p/catch (fn [e]
                  {:status :error
-                  :error {:code (or (get-in (ex-data e) [:code]) :exception)
-                          :message (or (ex-message e) (str e))}}))))
+                  :error (merge {:code (or (:code (ex-data e)) :exception)
+                                 :message (or (ex-message e) (str e))}
+                                (when-let [candidates (:candidates (ex-data e))]
+                                  {:candidates candidates}))}))))
 
 (defn- normalize-status-input
   [value]
@@ -1128,8 +1135,10 @@
                        :message "invalid upsert task mode"}}))))
       (p/catch (fn [e]
                  {:status :error
-                  :error {:code (or (get-in (ex-data e) [:code]) :exception)
-                          :message (or (ex-message e) (str e))}}))))
+                  :error (merge {:code (or (:code (ex-data e)) :exception)
+                                 :message (or (ex-message e) (str e))}
+                                (when-let [candidates (:candidates (ex-data e))]
+                                  {:candidates candidates}))}))))
 
 (defn- asset-file-exists?
   [path]
@@ -1256,8 +1265,10 @@
                    :message "invalid upsert asset mode"}}))
       (p/catch (fn [e]
                  {:status :error
-                  :error {:code (or (get-in (ex-data e) [:code]) :exception)
-                          :message (or (ex-message e) (str e))}}))))
+                  :error (merge {:code (or (:code (ex-data e)) :exception)
+                                 :message (or (ex-message e) (str e))}
+                                (when-let [candidates (:candidates (ex-data e))]
+                                  {:candidates candidates}))}))))
 
 (defn execute-upsert-tag
   [action config]
@@ -1313,8 +1324,10 @@
                  :data {:result [page-id]}})))))
       (p/catch (fn [e]
                  {:status :error
-                  :error {:code (or (get-in (ex-data e) [:code]) :exception)
-                          :message (or (ex-message e) (str e))}}))))
+                  :error (merge {:code (or (:code (ex-data e)) :exception)
+                                 :message (or (ex-message e) (str e))}
+                                (when-let [candidates (:candidates (ex-data e))]
+                                  {:candidates candidates}))}))))
 
 (defn execute-upsert-property
   [action config]
@@ -1354,5 +1367,7 @@
                          :message "property not found after upsert"}})))))
       (p/catch (fn [e]
                  {:status :error
-                  :error {:code (or (get-in (ex-data e) [:code]) :exception)
-                          :message (or (ex-message e) (str e))}}))))
+                  :error (merge {:code (or (:code (ex-data e)) :exception)
+                                 :message (or (ex-message e) (str e))}
+                                (when-let [candidates (:candidates (ex-data e))]
+                                  {:candidates candidates}))}))))
