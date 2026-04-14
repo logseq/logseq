@@ -907,74 +907,85 @@
     :else
     property-id))
 
+(defn- normalize-block-op-entry-ids
+  [id ids op args]
+  (case op
+    :save-block
+    (let [[block opts] args]
+      [op [block opts]])
+
+    :insert-blocks
+    [op [(first args) (id (second args)) (nth args 2)]]
+
+    :apply-template
+    [op [(id (first args)) (id (second args)) (nth args 2)]]
+
+    :delete-blocks
+    [op [(ids (first args)) (second args)]]
+
+    :move-blocks
+    [op [(ids (first args)) (id (second args)) (nth args 2)]]
+
+    :move-blocks-up-down
+    [op [(ids (first args)) (second args)]]
+
+    :indent-outdent-blocks
+    [op [(ids (first args)) (second args) (nth args 2)]]
+
+    nil))
+
+(defn- normalize-property-op-entry-ids
+  [id ids property-id op args]
+  (case op
+    :set-block-property
+    [op [(id (first args)) (property-id (second args)) (nth args 2)]]
+
+    :remove-block-property
+    [op [(id (first args)) (property-id (second args))]]
+
+    :delete-property-value
+    [op [(id (first args)) (property-id (second args)) (nth args 2)]]
+
+    :create-property-text-block
+    [op [(some-> (first args) id) (property-id (second args)) (nth args 2) (nth args 3)]]
+
+    :batch-set-property
+    [op [(ids (first args)) (property-id (second args)) (nth args 2) (nth args 3)]]
+
+    :batch-remove-property
+    [op [(ids (first args)) (property-id (second args))]]
+
+    :batch-delete-property-value
+    [op [(ids (first args)) (property-id (second args)) (nth args 2)]]
+
+    :class-add-property
+    [op [(id (first args)) (property-id (second args))]]
+
+    :class-remove-property
+    [op [(id (first args)) (property-id (second args))]]
+
+    :upsert-property
+    [op [(some-> (first args) property-id) (second args) (nth args 2)]]
+
+    :upsert-closed-value
+    [op [(property-id (first args)) (second args)]]
+
+    :delete-closed-value
+    [op [(property-id (first args)) (id (second args))]]
+
+    :add-existing-values-to-closed-values
+    [op [(property-id (first args)) (second args)]]
+
+    nil))
+
 (defn- normalize-op-entry-ids
   [db [op args :as op-entry]]
   (let [id (fn [v] (canonical-block-id db v))
         property-id (fn [v] (canonical-property-id db v))
-        ids (fn [vs] (mapv id vs))]
-    (case op
-      :save-block
-      (let [[block opts] args]
-        [op [block opts]])
-
-      :insert-blocks
-      [op [(first args) (id (second args)) (nth args 2)]]
-
-      :apply-template
-      [op [(id (first args)) (id (second args)) (nth args 2)]]
-
-      :delete-blocks
-      [op [(ids (first args)) (second args)]]
-
-      :move-blocks
-      [op [(ids (first args)) (id (second args)) (nth args 2)]]
-
-      :move-blocks-up-down
-      [op [(ids (first args)) (second args)]]
-
-      :indent-outdent-blocks
-      [op [(ids (first args)) (second args) (nth args 2)]]
-
-      :set-block-property
-      [op [(id (first args)) (property-id (second args)) (nth args 2)]]
-
-      :remove-block-property
-      [op [(id (first args)) (property-id (second args))]]
-
-      :delete-property-value
-      [op [(id (first args)) (property-id (second args)) (nth args 2)]]
-
-      :create-property-text-block
-      [op [(some-> (first args) id) (property-id (second args)) (nth args 2) (nth args 3)]]
-
-      :batch-set-property
-      [op [(ids (first args)) (property-id (second args)) (nth args 2) (nth args 3)]]
-
-      :batch-remove-property
-      [op [(ids (first args)) (property-id (second args))]]
-
-      :batch-delete-property-value
-      [op [(ids (first args)) (property-id (second args)) (nth args 2)]]
-
-      :class-add-property
-      [op [(id (first args)) (property-id (second args))]]
-
-      :class-remove-property
-      [op [(id (first args)) (property-id (second args))]]
-
-      :upsert-property
-      [op [(some-> (first args) property-id) (second args) (nth args 2)]]
-
-      :upsert-closed-value
-      [op [(property-id (first args)) (second args)]]
-
-      :delete-closed-value
-      [op [(property-id (first args)) (id (second args))]]
-
-      :add-existing-values-to-closed-values
-      [op [(property-id (first args)) (second args)]]
-
-      op-entry)))
+        ids (fn [vs] (mapv id vs))
+        normalized (or (normalize-block-op-entry-ids id ids op args)
+                       (normalize-property-op-entry-ids id ids property-id op args))]
+    (or normalized op-entry)))
 
 (defn- canonicalize-explicit-outliner-ops
   [db tx-data ops]
