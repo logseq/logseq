@@ -236,4 +236,5 @@
   (case (:type opts)
     :global (build-global-graph db opts)
     :block (build-block-graph db (:block/uuid opts) (:theme opts))
-    :page (build-page-graph db (:block/uuid opts) (:theme opts) (:show-journal? opts))))
+    :page (build-page-graph db (:block/uuid opts) (:theme opts) (:show-journal? opts))
+    :setting {:nodes [] :links []}))
