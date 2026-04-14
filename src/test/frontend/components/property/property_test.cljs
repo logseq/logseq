@@ -1,6 +1,6 @@
 (ns frontend.components.property.property-test
   (:require [cljs.test :refer [deftest is]]
-            [frontend.components.property :as property]))
+            [frontend.components.property :as property-component]))
 
 (deftest sanitize-property-values-for-display-filters-recycled-entity-values-test
   (let [active-value {:db/id 101
@@ -9,7 +9,7 @@
                         :block/title "Recycled"
                         :logseq.property/deleted-at 1}
         {:keys [properties recycled-only-property-ids]}
-        (#'property/sanitize-property-values-for-display
+        (#'property-component/sanitize-property-values-for-display
          {:user.property/node #{active-value recycled-value}
           :user.property/single recycled-value
           :user.property/scalar "ok"})]
@@ -28,7 +28,7 @@
                     :block/title "Recycled B"
                     :logseq.property/deleted-at 2}
         {:keys [properties recycled-only-property-ids]}
-        (#'property/sanitize-property-values-for-display
+        (#'property-component/sanitize-property-values-for-display
          {:user.property/nodes [recycled-a recycled-b]})]
     (is (nil? (:user.property/nodes properties)))
     (is (= #{:user.property/nodes}
