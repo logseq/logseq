@@ -23,32 +23,33 @@
 
 (defn- direct-op-entry
   [outliner-op args]
-  (case outliner-op
-    :save-block
-    (let [[_conn block opts] args]
-      [:save-block [block opts]])
+  (letfn [(->block-id [block] (:block/uuid block))]
+    (case outliner-op
+      :save-block
+      (let [[_conn block opts] args]
+        [:save-block [block opts]])
 
-    :insert-blocks
-    (let [[_conn blocks target-block opts] args]
-      [:insert-blocks [blocks (:db/id target-block) opts]])
+      :insert-blocks
+      (let [[_conn blocks target-block opts] args]
+        [:insert-blocks [blocks (->block-id target-block) opts]])
 
-    :delete-blocks
-    (let [[_conn blocks opts] args]
-      [:delete-blocks [(mapv :db/id blocks) opts]])
+      :delete-blocks
+      (let [[_conn blocks opts] args]
+        [:delete-blocks [(mapv ->block-id blocks) opts]])
 
-    :move-blocks
-    (let [[_conn blocks target-block opts] args]
-      [:move-blocks [(mapv :db/id blocks) (:db/id target-block) opts]])
+      :move-blocks
+      (let [[_conn blocks target-block opts] args]
+        [:move-blocks [(mapv ->block-id blocks) (->block-id target-block) opts]])
 
-    :move-blocks-up-down
-    (let [[_conn blocks up?] args]
-      [:move-blocks-up-down [(mapv :db/id blocks) up?]])
+      :move-blocks-up-down
+      (let [[_conn blocks up?] args]
+        [:move-blocks-up-down [(mapv ->block-id blocks) up?]])
 
-    :indent-outdent-blocks
-    (let [[_conn blocks indent? opts] args]
-      [:indent-outdent-blocks [(mapv :db/id blocks) indent? opts]])
+      :indent-outdent-blocks
+      (let [[_conn blocks indent? opts] args]
+        [:indent-outdent-blocks [(mapv ->block-id blocks) indent? opts]])
 
-    nil))
+      nil)))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -944,8 +945,8 @@
                             (map :db/id)
                             (set))
               move-parents-to-child? (some parents' (map :db/id blocks))
-              op-entry [:move-blocks [(mapv :db/id top-level-blocks)
-                                      (:db/id target-block)
+              op-entry [:move-blocks [(mapv :block/uuid top-level-blocks)
+                                      (:block/uuid target-block)
                                       opts]]]
           (when-not move-parents-to-child?
             (ldb/batch-transact-with-temp-conn!

@@ -670,29 +670,30 @@
 (defn batch-delete-property-value!
   "batch delete value when a property has multiple values"
   [conn block-eids property-id property-value]
-  (ldb/batch-transact-with-temp-conn!
-   conn
-   {:outliner-op :batch-delete-property-value}
-   (fn [conn]
-     (when-let [property (d/entity @conn property-id)]
-       (when (and (db-property/many? property)
-                  (not (some #(= property-id (:db/ident (d/entity @conn %))) block-eids)))
-         (when (= property-id :block/tags)
-           (outliner-validate/validate-tags-property-deletion @conn block-eids property-value))
-         (if (= property-id :block/tags)
-           (let [tx-data (map (fn [id] [:db/retract id property-id property-value]) block-eids)]
-             (ldb/transact! conn tx-data {:outliner-op :save-block}))
-           (doseq [block-eid block-eids]
-             (when-let [block (d/entity @conn block-eid)]
-               (let [current-val (get block property-id)
-                     fv (first current-val)]
-                 (if (and (= 1 (count current-val))
-                          (or (= property-value fv)
-                              (= property-value (:db/id fv))))
-                   (remove-block-property! conn (:db/id block) property-id)
-                   (ldb/transact! conn
-                                  [[:db/retract (:db/id block) property-id property-value]]
-                                  {:outliner-op :save-block})))))))))))
+  (let [block-eids (map ->eid block-eids)]
+    (ldb/batch-transact-with-temp-conn!
+     conn
+     {:outliner-op :batch-delete-property-value}
+     (fn [conn]
+       (when-let [property (d/entity @conn property-id)]
+         (when (and (db-property/many? property)
+                    (not (some #(= property-id (:db/ident (d/entity @conn %))) block-eids)))
+           (when (= property-id :block/tags)
+             (outliner-validate/validate-tags-property-deletion @conn block-eids property-value))
+           (if (= property-id :block/tags)
+             (let [tx-data (map (fn [id] [:db/retract id property-id property-value]) block-eids)]
+               (ldb/transact! conn tx-data {:outliner-op :save-block}))
+             (doseq [block-eid block-eids]
+               (when-let [block (d/entity @conn block-eid)]
+                 (let [current-val (get block property-id)
+                       fv (first current-val)]
+                   (if (and (= 1 (count current-val))
+                            (or (= property-value fv)
+                                (= property-value (:db/id fv))))
+                     (remove-block-property! conn (:db/id block) property-id)
+                     (ldb/transact! conn
+                                    [[:db/retract (:db/id block) property-id property-value]]
+                                    {:outliner-op :save-block}))))))))))))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"
@@ -895,7 +896,7 @@
                         :payload {:message "The choice can't be deleted because it's built-in."
                                   :type :warning}}))
        (let [tx-data (conj (:tx-data (outliner-core/delete-blocks @conn [value-block] {}))
-                           (outliner-core/block-with-updated-at {:db/id property-id}))]
+                           (outliner-core/block-with-updated-at {:db/id (:db/id property)}))]
          (ldb/transact! conn tx-data
                         {:outliner-op :delete-closed-value}))))))
 
