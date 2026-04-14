@@ -866,12 +866,19 @@
 
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
-  [shortcut-key _position content]
+  [shortcut-key _position content & [title]]
   (let [shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
-        enabled-tooltip? (state/enable-tooltip?)]
+        enabled-tooltip?  (state/enable-tooltip?)
+        binding           (when shortcut-key (shortcut-dh/shortcut-binding shortcut-key))
+        first-binding     (when (and binding (not (false? binding))) (first binding))]
     (if (and enabled-tooltip? shortcut-tooltip?)
       (tooltip content
-               [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
+               (if title
+                 [:div.flex.flex-col.items-start.gap-1
+                  [:span.text-xs.opacity-80 title]
+                  (when first-binding
+                    (shui/shortcut first-binding {:glow? false}))]
+                 (keyboard-shortcut-from-config shortcut-key))
                {:trigger-props {:as-child true}})
       content)))
 
