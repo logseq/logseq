@@ -1,4 +1,5 @@
 (ns logseq.outliner.template
+  "Template with variables"
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.util.page-ref :as page-ref]

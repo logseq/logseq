@@ -48,7 +48,9 @@
 
 (defn wrap-parse-block
   [{:block/keys [title level] :as block}]
-  (let [block (or (and (:db/id block) (db/entity (:db/id block))) block)
+  (let [block (or (and (:db/id block) (db/entity (:db/id block)))
+                  (and (:block/uuid block) (db/entity [:block/uuid (:block/uuid block)]))
+                  block)
         block (if (nil? title)
                 block
                 (let [ast (mldoc/->edn (string/trim title) :markdown)

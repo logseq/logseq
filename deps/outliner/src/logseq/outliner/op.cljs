@@ -24,33 +24,33 @@
    [:insert-blocks
     [:catn
      [:op :keyword]
-     [:args [:tuple ::blocks ::id ::option]]]]
+     [:args [:tuple ::blocks ::block-id ::option]]]]
    [:apply-template
     [:catn
      [:op :keyword]
-     [:args [:tuple ::id ::id ::option]]]]
+     [:args [:tuple ::block-id ::block-id ::option]]]]
    [:delete-blocks
     [:catn
      [:op :keyword]
-     [:args [:tuple ::ids ::option]]]]
+     [:args [:tuple ::block-ids ::option]]]]
    [:move-blocks
     [:catn
      [:op :keyword]
-     [:args [:tuple ::ids ::id ::option]]]]
+     [:args [:tuple ::block-ids ::block-id ::option]]]]
    [:move-blocks-up-down
     [:catn
      [:op :keyword]
-     [:args [:tuple ::ids :boolean]]]]
+     [:args [:tuple ::block-ids :boolean]]]]
    [:indent-outdent-blocks
     [:catn
      [:op :keyword]
-     [:args [:tuple ::ids :boolean ::option]]]]
+     [:args [:tuple ::block-ids :boolean ::option]]]]
 
    ;; properties
    [:upsert-property
     [:catn
      [:op :keyword]
-     [:args [:tuple ::property-id ::schema ::option]]]]
+     [:args [:tuple ::maybe-property-id ::schema ::option]]]]
    [:set-block-property
     [:catn
      [:op :keyword]
@@ -70,7 +70,7 @@
    [:create-property-text-block
     [:catn
      [:op :keyword]
-     [:args [:tuple ::block-id ::property-id ::value ::option]]]]
+     [:args [:tuple ::maybe-block-id ::property-id ::value ::option]]]]
    [:collapse-expand-block-property
     [:catn
      [:op :keyword]
@@ -98,7 +98,7 @@
    [:delete-closed-value
     [:catn
      [:op :keyword]
-     [:args [:tuple ::property-id ::value]]]]
+     [:args [:tuple ::property-id ::block-id]]]]
    [:add-existing-values-to-closed-values
     [:catn
      [:op :keyword]
@@ -142,22 +142,21 @@
      [:args [:tuple ::uuid ::emoji-id ::maybe-uuid]]]]])
 
 (def ^:private ops-schema
-  [:schema {:registry {::id int?
-                       ::block map?
+  [:schema {:registry {::block map?
                        ::schema map?
-                       ;; FIXME: use eid integer
-                       ::block-id :any
+                       ::block-id uuid?
+                       ::maybe-block-id [:maybe ::block-id]
                        ::block-ids [:sequential ::block-id]
-                       ::class-id int?
+                       ::class-id ::block-id
                        ::emoji-id string?
-                       ::property-id [:or int? keyword? nil?]
+                       ::property-id qualified-keyword?
+                       ::maybe-property-id [:maybe ::property-id]
                        ::maybe-uuid [:maybe :uuid]
                        ::value :any
                        ::values [:sequential ::value]
                        ::option [:maybe map?]
                        ::import-edn map?
                        ::blocks [:sequential ::block]
-                       ::ids [:sequential ::id]
                        ::uuid uuid?
                        ::title string?
                        ::tx-data [:sequential :any]
@@ -217,7 +216,7 @@
 
 (defn- apply-insert-blocks-op!
   [conn *result [blocks target-block-id opts]]
-  (when-let [target-block (d/entity @conn target-block-id)]
+  (when-let [target-block (d/entity @conn [:block/uuid target-block-id])]
     (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
       (reset! *result result))))
 
@@ -237,9 +236,9 @@
 
 (defn- apply-template-op!
   [conn *result [template-id target-block-id opts]]
-  (when-let [target (d/entity @conn target-block-id)]
+  (when-let [target (d/entity @conn [:block/uuid target-block-id])]
     (let [blocks (or (some-> (:template-blocks opts) seq vec)
-                     (template-children-blocks @conn template-id))
+                     (template-children-blocks @conn [:block/uuid template-id]))
           blocks (outliner-template/resolve-dynamic-template-blocks @conn target blocks)]
       (when (seq blocks)
         (let [sibling? (:sibling? opts)
@@ -274,25 +273,25 @@
 
     :delete-blocks
     (let [[block-ids opts] args
-          blocks (keep #(d/entity @conn %) block-ids)]
+          blocks (keep #(d/entity @conn [:block/uuid %]) block-ids)]
       (outliner-core/delete-blocks! conn blocks (merge opts opts')))
 
     :move-blocks
     (let [[block-ids target-block-id opts] args
-          blocks (keep #(d/entity @conn %) block-ids)
-          target-block (d/entity @conn target-block-id)]
+          blocks (keep #(d/entity @conn [:block/uuid %]) block-ids)
+          target-block (d/entity @conn [:block/uuid target-block-id])]
       (when (and target-block (seq blocks))
         (outliner-core/move-blocks! conn blocks target-block opts)))
 
     :move-blocks-up-down
     (let [[block-ids up?] args
-          blocks (keep #(d/entity @conn %) block-ids)]
+          blocks (keep #(d/entity @conn [:block/uuid %]) block-ids)]
       (when (seq blocks)
         (outliner-core/move-blocks-up-down! conn blocks up?)))
 
     :indent-outdent-blocks
     (let [[block-ids indent? opts] args
-          blocks (keep #(d/entity @conn %) block-ids)]
+          blocks (keep #(d/entity @conn [:block/uuid %]) block-ids)]
       (when (seq blocks)
         (outliner-core/indent-outdent-blocks! conn blocks indent? opts)))
 
@@ -310,7 +309,9 @@
     (apply outliner-property/delete-property-value! conn args)
 
     :create-property-text-block
-    (apply outliner-property/create-property-text-block! conn args)
+    (let [[block-id property-id v opts] args
+          block-id' (when block-id [:block/uuid block-id])]
+      (outliner-property/create-property-text-block! conn block-id' property-id v opts))
 
     :batch-set-property
     (apply outliner-property/batch-set-property! conn args)
@@ -322,16 +323,19 @@
     (apply outliner-property/batch-delete-property-value! conn args)
 
     :class-add-property
-    (apply outliner-property/class-add-property! conn args)
+    (let [[class-id property-id] args]
+      (outliner-property/class-add-property! conn [:block/uuid class-id] property-id))
 
     :class-remove-property
-    (apply outliner-property/class-remove-property! conn args)
+    (let [[class-id property-id] args]
+      (outliner-property/class-remove-property! conn [:block/uuid class-id] property-id))
 
     :upsert-closed-value
     (apply outliner-property/upsert-closed-value! conn args)
 
     :delete-closed-value
-    (apply outliner-property/delete-closed-value! conn args)
+    (let [[property-id value-block-id] args]
+      (outliner-property/delete-closed-value! conn property-id [:block/uuid value-block-id]))
 
     :add-existing-values-to-closed-values
     (apply outliner-property/add-existing-values-to-closed-values! conn args)
@@ -377,11 +381,11 @@
                  :insert-blocks
                  (let [[blocks target-block-id insert-opts] (second op)]
                    (outliner-core/insert-blocks db blocks
-                                                (d/entity db target-block-id)
+                                                (d/entity db [:block/uuid target-block-id])
                                                 insert-opts))
                  :delete-blocks
                  (let [[block-ids opts] (second op)
-                       blocks (keep #(d/entity db %) block-ids)]
+                       blocks (keep #(d/entity db [:block/uuid %]) block-ids)]
                    (outliner-core/delete-blocks db blocks (merge opts opts'))))
         additional-tx (:additional-tx opts')
         full-tx (concat (:tx-data result) additional-tx)]
@@ -393,7 +397,7 @@
   (let [save-block-tx (:tx-data (apply outliner-core/save-block @conn (second (first ops))))
         [blocks target-block-id insert-opts] (second (second ops))
         insert-blocks-result (outliner-core/insert-blocks @conn blocks
-                                                          (d/entity @conn target-block-id)
+                                                          (d/entity @conn [:block/uuid target-block-id])
                                                           insert-opts)
         additional-tx (:additional-tx opts')
         full-tx (concat save-block-tx
