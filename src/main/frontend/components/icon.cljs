@@ -61,7 +61,7 @@
           (ldb/class? node-entity)
           "hash"
           (ldb/property? node-entity)
-          "writing"
+          "letter-p"
           (ldb/page? node-entity)
           "file"
           (= asset-type "pdf")

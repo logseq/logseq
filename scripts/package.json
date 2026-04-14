@@ -6,7 +6,7 @@
     "test": "yarn nbb-logseq -cp test -m logseq.tasks.test-runner"
   },
   "devDependencies": {
-    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v33"
+    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v34"
   },
   "dependencies": {
     "better-sqlite3": "12.8.0",

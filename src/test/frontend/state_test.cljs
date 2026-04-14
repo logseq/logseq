@@ -24,3 +24,18 @@
                               {:shortcuts {:ui/toggle-brackets "t b"}}
                               {:shortcuts {:editor/up ["ctrl+p" "up"]}}))
       "Map values get merged across configs"))
+
+(deftest get-editor-info-includes-selection-when-not-editing-test
+  (let [selected-ids [(random-uuid) (random-uuid)]]
+    (with-redefs [state/get-edit-block (constantly nil)
+                  state/get-selection-block-ids (constantly selected-ids)
+                  state/get-selection-direction (constantly :down)]
+      (is (= {:selected-block-uuids selected-ids
+              :selection-direction :down}
+             (state/get-editor-info))))))
+
+(deftest get-editor-info-returns-nil-when-not-editing-and-no-selection-test
+  (with-redefs [state/get-edit-block (constantly nil)
+                state/get-selection-block-ids (constantly nil)
+                state/get-selection-direction (constantly nil)]
+    (is (nil? (state/get-editor-info)))))

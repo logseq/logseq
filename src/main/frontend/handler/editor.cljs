@@ -471,9 +471,9 @@
 
 (defn insert-new-block!
   "Won't save previous block content - remember to save!"
-  ([state]
-   (insert-new-block! state nil))
-  ([_state block-value]
+  ([state right-sibling]
+   (insert-new-block! state nil right-sibling))
+  ([_state block-value right-sibling]
    (->
     (when (not config/publishing?)
       (when-let [state (get-state)]
@@ -488,6 +488,7 @@
               selection-end (util/get-selection-end input)
               [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
               insert-above? (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
+              right-sibling (if insert-above? block right-sibling)
               block' (or (db/entity [:block/uuid block-id]) block)
               original-block (:original-block config)
               block'' (or
@@ -508,7 +509,7 @@
 
                           :else
                           insert-new-block-aux!)
-              [result-promise sibling? next-block] (insert-fn config block'' value)
+              [result-promise sibling? next-block] (insert-fn (assoc config :right-sibling right-sibling) block'' value)
               edit-block-f (fn []
                              (let [next-block' (db/entity [:block/uuid (:block/uuid next-block)])
                                    pos 0
@@ -594,12 +595,14 @@
                                   (into new-block properties)
                                   new-block)]
                  (ui-outliner-tx/transact!
-                  {:outliner-op :insert-blocks}
+                  (cond->
+                   {:outliner-op :insert-blocks}
+                    (not= outliner-op :insert-blocks)
+                    (assoc :source-outliner-op outliner-op))
                   (outliner-insert-block! config target-block new-block'
                                           {:sibling? sibling?
                                            :keep-uuid? true
                                            :ordered-list? ordered-list?
-                                           :outliner-op outliner-op
                                            :replace-empty-target? replace-empty-target?})))
                (when edit-block?
                  (if (and replace-empty-target?
@@ -1346,8 +1349,7 @@
                 (notification/show! [:div (t :asset/size-too-large)]
                                     :warning
                                     false)
-                (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
-            asset (db/entity :logseq.class/Asset)]
+                (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))]
         (p/do!
          (when file
            (let [file-path (str block-id "." ext)]
@@ -1358,7 +1360,9 @@
           :logseq.property.asset/external-url external-url
           :logseq.property.asset/size size
           :logseq.property.asset/checksum checksum
-          :block/tags #{(:db/id asset)}})))))
+          ;; Use stable class ident in tx payload to avoid leaking numeric eids
+          ;; into outliner history ops shared with the worker sync pipeline.
+          :block/tags #{:logseq.class/Asset}})))))
 
 (defn db-based-save-assets!
   "Save incoming(pasted) assets to assets directory.
@@ -1982,51 +1986,26 @@
    (insert-template! element-id db-id {}))
   ([element-id db-id {:keys [target] :as opts}]
    (let [repo (state/get-current-repo)]
-     (p/let [block (db-async/<pull repo db-id)
-             block (when (:block/uuid block)
-                     (db-async/<get-block repo (:block/uuid block)
-                                          {:children? true}))]
+     (p/let [block (db-async/<get-block repo db-id {:children? false})]
        (when (:db/id block)
          (let [journal? (ldb/journal? target)
                target (or target (state/get-edit-block))
-               format (get block :block/format :markdown)
-               block-uuid (:block/uuid block)
-               blocks (db/get-block-and-children repo block-uuid {:include-property-block? true})
-               sorted-blocks (let [blocks' (rest blocks)]
-                               (cons
-                                (-> (first blocks')
-                                    (assoc :logseq.property/used-template (:db/id block)))
-                                (rest blocks')))
-               blocks sorted-blocks]
+               format (get block :block/format :markdown)]
            (when element-id
              (insert-command! element-id "" format {:end-pattern commands/command-trigger}))
-           (let [sibling? (:sibling? opts)
-                 sibling?' (cond
-                             (some? sibling?)
-                             sibling?
+           (try
+             (p/let [result (ui-outliner-tx/transact!
+                             {:outliner-op :apply-template
+                              :created-from-journal-template? journal?}
+                             (when-not (string/blank? (state/get-edit-content))
+                               (save-current-block!))
+                             (outliner-op/apply-template! db-id target opts))]
+               (when result (edit-last-block-after-inserted! result)))
 
-                             (db/has-children? (:block/uuid target))
-                             false
-
-                             :else
-                             true)]
-             (when (seq blocks)
-               (try
-                 (p/let [result (ui-outliner-tx/transact!
-                                 {:outliner-op :insert-blocks
-                                  :created-from-journal-template? journal?}
-                                 (when-not (string/blank? (state/get-edit-content))
-                                   (save-current-block!))
-                                 (outliner-op/insert-blocks! blocks target
-                                                             (assoc opts
-                                                                    :sibling? sibling?'
-                                                                    :insert-template? true)))]
-                   (when result (edit-last-block-after-inserted! result)))
-
-                 (catch :default ^js/Error e
-                   (notification/show!
-                    (t :editor/template-insert-error (.-message e))
-                    :error)))))))))))
+             (catch :default ^js/Error e
+               (notification/show!
+                (t :editor/template-insert-error (.-message e))
+                :error)))))))))
 
 (defn template-on-chosen-handler
   [element-id]
@@ -2095,7 +2074,7 @@
               input (state/get-input)
               config (assoc config :keydown-new-block true)
               content (gobj/get input "value")
-              has-right? (ldb/get-right-sibling block)]
+              right-sibling (ldb/get-right-sibling block)]
           (cond
             (and (string/blank? content)
                  (own-order-number-list? block)
@@ -2105,12 +2084,12 @@
 
             (and
              (string/blank? content)
-             (not has-right?)
+             (not right-sibling)
              (not (last-top-level-child? config block)))
             (indent-outdent false)
 
             :else
-            (insert-new-block! state)))))))
+            (insert-new-block! state right-sibling)))))))
 
 (defn- inside-of-single-block
   "When we are in a single block wrapper, we should always insert a new line instead of new block"
@@ -3111,8 +3090,7 @@
                         (:block/uuid page-entity)))
             repo (state/get-current-repo)
             _ (db-async/<get-block repo (or block-id page-id)
-                                   {:children? true
-                                    :include-collapsed-children? true})
+                                   {:include-collapsed-children? true})
             entity (db/entity [:block/uuid (or block-id page-id)])
             result (or (:block/_page entity)
                        (rest (db/get-block-and-children repo (:block/uuid entity))))
@@ -3188,8 +3166,7 @@
 (defn expand-block! [block-id & {:keys [skip-db-collpsing?]}]
   (let [repo (state/get-current-repo)]
     (p/do!
-     (db-async/<get-block repo block-id {:children? true
-                                         :include-collapsed-children? true})
+     (db-async/<get-block repo block-id {:include-collapsed-children? true})
      (when-not (or skip-db-collpsing? (skip-collapsing-in-db?))
        (set-blocks-collapsed! [block-id] false))
      (state/set-collapsed-block! block-id false))))
@@ -3529,9 +3506,9 @@
         (ui-outliner-tx/transact!
          {:outliner-op :save-block}
          (property-handler/set-block-property! (:db/id block) :block/tags :logseq.class/Query)
-         (save-block-inner! block "" {})
          (when query-block
-           (save-block-inner! query-block current-query {}))))))))
+           (save-block-inner! query-block current-query {}))
+         (save-block-inner! block "" {})))))))
 
 (defn quick-add-ensure-new-block-exists!
   []

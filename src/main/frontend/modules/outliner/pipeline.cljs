@@ -23,12 +23,13 @@
 
 (defn invoke-hooks
   [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
-  ;; (prn :debug
-  ;;      :tx-meta tx-meta
-  ;;      :tx-data tx-data)
   (let [{:keys [initial-pages? end?]} tx-meta
         tx-report {:tx-meta tx-meta
-                   :tx-data tx-data}]
+                   :tx-data tx-data}
+        current-block-id (state/get-current-page)
+        current-block (when (and current-block-id (util/uuid-string? current-block-id))
+                        (let [id (uuid current-block-id)]
+                          (db/entity [:block/uuid id])))]
     (when (= repo (state/get-current-repo))
       (when (seq deleted-block-uuids)
         (let [ids (map (fn [id] (:db/id (db/entity [:block/uuid id]))) deleted-block-uuids)]
@@ -68,7 +69,11 @@
                               tx-data))]
               (d/transact! conn tx-data' tx-meta))
 
-            (when-not (= (:client-id tx-meta) (:client-id @state/state))
+            (when (and current-block (ldb/recycled? (db/entity [:block/uuid (:block/uuid current-block)])))
+              (route-handler/redirect! {:to :home :push false}))
+
+            (when (or (not= (:client-id tx-meta) (:client-id @state/state))
+                      (= :apply-template (:outliner-op tx-meta)))
               (update-editing-block-title-if-changed! tx-data))
 
             ;; (when (seq deleted-assets)
