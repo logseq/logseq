@@ -52,8 +52,9 @@
         (ldb/built-in? page-entity)
         (notification/show! "Built-in pages can't be used as tags" :error)
         :else
+        ;; FIXME: should move to worker
         (let [txs [(db-class/build-new-class (db/get-db)
-                                             {:db/id (:db/id page-entity)
+                                             {:block/uuid [:block/uuid (:block/uuid page-entity)]
                                               :block/title (:block/title page-entity)
                                               :block/created-at (:block/created-at page-entity)})
                    [:db/retract (:db/id page-entity) :block/tags :logseq.class/Page]]]

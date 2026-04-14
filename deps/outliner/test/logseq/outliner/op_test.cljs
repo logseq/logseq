@@ -47,44 +47,44 @@
                 [{:page {:block/title "Test"}
                   :blocks [{:block/title "Block"}]}])
           block (db-test/find-block-by-content @conn "Block")
-          block-id (:db/id block)]
+          block-uuid (:block/uuid block)]
       (outliner-op/apply-ops!
        conn
        [[:upsert-property [:plugin.property._test_plugin/x1 {:logseq.property/type :checkbox
                                                              :db/cardinality :db.cardinality/one}
                            {:property-name :x1}]]
-        [:set-block-property [block-id :plugin.property._test_plugin/x1 true]]
+        [:set-block-property [block-uuid :plugin.property._test_plugin/x1 true]]
         [:upsert-property [:plugin.property._test_plugin/x2 {:logseq.property/type :url
                                                              :db/cardinality :db.cardinality/one}
                            {:property-name :x2}]]
-        [:set-block-property [block-id :plugin.property._test_plugin/x2 "https://logseq.com"]]
+        [:set-block-property [block-uuid :plugin.property._test_plugin/x2 "https://logseq.com"]]
         [:upsert-property [:plugin.property._test_plugin/x3 {:logseq.property/type :number
                                                              :db/cardinality :db.cardinality/one}
                            {:property-name :x3}]]
-        [:set-block-property [block-id :plugin.property._test_plugin/x3 1]]
+        [:set-block-property [block-uuid :plugin.property._test_plugin/x3 1]]
         [:upsert-property [:plugin.property._test_plugin/x4 {:logseq.property/type :number
                                                              :db/cardinality :db.cardinality/many}
                            {:property-name :x4}]]
-        [:set-block-property [block-id :plugin.property._test_plugin/x4 1]]
+        [:set-block-property [block-uuid :plugin.property._test_plugin/x4 1]]
         [:upsert-property [:plugin.property._test_plugin/x5 {:logseq.property/type :json
                                                              :db/cardinality :db.cardinality/one}
                            {:property-name :x5}]]
-        [:set-block-property [block-id :plugin.property._test_plugin/x5 "{\"foo\":\"bar\"}"]]
+        [:set-block-property [block-uuid :plugin.property._test_plugin/x5 "{\"foo\":\"bar\"}"]]
         [:upsert-property [:plugin.property._test_plugin/x6 {:logseq.property/type :page
                                                              :db/cardinality :db.cardinality/one}
                            {:property-name :x6}]]
-        [:set-block-property [block-id :plugin.property._test_plugin/x6 "Page x"]]
+        [:set-block-property [block-uuid :plugin.property._test_plugin/x6 "Page x"]]
         [:upsert-property [:plugin.property._test_plugin/x7 {:logseq.property/type :page
                                                              :db/cardinality :db.cardinality/many}
                            {:property-name :x7}]]
-        [:set-block-property [block-id :plugin.property._test_plugin/x7 "Page y"]]
-        [:set-block-property [block-id :plugin.property._test_plugin/x7 "Page z"]]
+        [:set-block-property [block-uuid :plugin.property._test_plugin/x7 "Page y"]]
+        [:set-block-property [block-uuid :plugin.property._test_plugin/x7 "Page z"]]
         [:upsert-property [:plugin.property._test_plugin/x8 {:logseq.property/type :default
                                                              :db/cardinality :db.cardinality/one}
                            {:property-name :x8}]]
-        [:set-block-property [block-id :plugin.property._test_plugin/x8 "some content"]]]
+        [:set-block-property [block-uuid :plugin.property._test_plugin/x8 "some content"]]]
        {})
-      (let [block' (d/entity @conn block-id)]
+      (let [block' (d/entity @conn [:block/uuid block-uuid])]
         (is (true? (:plugin.property._test_plugin/x1 block')))
         (is (= "https://logseq.com"
                (:block/title (:plugin.property._test_plugin/x2 block'))))
@@ -142,8 +142,8 @@
                                         (assoc (into {} block) :db/id (:db/id block)))
                                       (rest template-blocks)))
           _ (outliner-op/apply-ops! conn
-                                    [[:apply-template [(:db/id template-root)
-                                                       (:db/id target-block)
+                                    [[:apply-template [(:block/uuid template-root)
+                                                       (:block/uuid target-block)
                                                        {:template-blocks blocks-to-insert}]]]
                                     {})
           page-var-block (db-test/find-block-by-content @conn "page is [[Target Page]]")
@@ -164,3 +164,33 @@
       (is (string? time-value))
       (is (not (string/blank? time-value)))
       (is (not (string/includes? time-value "<%"))))))
+
+(deftest apply-ops-requires-uuid-block-ids-and-keyword-property-ids-test
+  (testing "ops reject integer eids and accept UUID/keyword identifiers"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Test"}
+                  :blocks [{:block/title "Block"}]}])
+          block (db-test/find-block-by-content @conn "Block")
+          block-id (:db/id block)
+          block-uuid (:block/uuid block)
+          property-kw :plugin.property._test_plugin/normalized-prop]
+      (outliner-property/upsert-property! conn property-kw
+                                          {:logseq.property/type :checkbox
+                                           :db/cardinality :db.cardinality/one}
+                                          {:property-name :normalized-prop})
+      (let [property-id (:db/id (d/entity @conn property-kw))]
+        (outliner-op/apply-ops!
+         conn
+         [[:set-block-property [block-uuid property-kw true]]]
+         {})
+        (is (true? (property-kw (d/entity @conn [:block/uuid block-uuid]))))
+        (is (thrown? js/Error
+                     (outliner-op/apply-ops!
+                      conn
+                      [[:set-block-property [block-id property-kw true]]]
+                      {})))
+        (is (thrown? js/Error
+                     (outliner-op/apply-ops!
+                      conn
+                      [[:set-block-property [block-uuid property-id true]]]
+                      {})))))))

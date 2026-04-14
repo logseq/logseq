@@ -108,6 +108,121 @@
                   :outliner-ops [[:save-block [{:block/uuid block-uuid
                                                 :block/title title} {}]]]}))))
 
+(defn- block-id->uuid
+  [db block-id]
+  (cond
+    (uuid? block-id)
+    block-id
+
+    (and (vector? block-id) (= :block/uuid (first block-id)))
+    (second block-id)
+
+    (number? block-id)
+    (or (some-> (d/entity db block-id) :block/uuid)
+        block-id)
+
+    :else
+    block-id))
+
+(defn- property-id->ident
+  [db property-id]
+  (cond
+    (qualified-keyword? property-id)
+    property-id
+
+    (number? property-id)
+    (or (some-> (d/entity db property-id) :db/ident)
+        property-id)
+
+    :else
+    property-id))
+
+(defn- normalize-op-block-ids
+  [db [op args :as op-entry]]
+  (let [id (fn [v] (block-id->uuid db v))
+        property-id (fn [v] (property-id->ident db v))
+        ids (fn [vs] (mapv id vs))]
+    (case op
+      :save-block
+      (let [[block opts] args
+            block' (cond-> block
+                     (and (map? block)
+                          (uuid? (:db/id block)))
+                     ((fn [m]
+                        (cond-> (dissoc m :db/id)
+                          (nil? (:block/uuid m))
+                          (assoc :block/uuid (:db/id m)))))
+                     (and (map? block)
+                          (nil? (:block/uuid block))
+                          (number? (:db/id block)))
+                     (assoc :block/uuid (id (:db/id block))))]
+        [op [block' opts]])
+
+      :insert-blocks
+      [op [(first args) (id (second args)) (nth args 2)]]
+
+      :apply-template
+      [op [(id (first args)) (id (second args)) (nth args 2)]]
+
+      :delete-blocks
+      [op [(ids (first args)) (second args)]]
+
+      :move-blocks
+      [op [(ids (first args)) (id (second args)) (nth args 2)]]
+
+      :move-blocks-up-down
+      [op [(ids (first args)) (second args)]]
+
+      :indent-outdent-blocks
+      [op [(ids (first args)) (second args) (nth args 2)]]
+
+      :set-block-property
+      [op [(id (first args)) (property-id (second args)) (nth args 2)]]
+
+      :remove-block-property
+      [op [(id (first args)) (property-id (second args))]]
+
+      :delete-property-value
+      [op [(id (first args)) (property-id (second args)) (nth args 2)]]
+
+      :create-property-text-block
+      [op [(some-> (first args) id) (property-id (second args)) (nth args 2) (nth args 3)]]
+
+      :batch-set-property
+      [op [(ids (first args)) (property-id (second args)) (nth args 2) (nth args 3)]]
+
+      :batch-remove-property
+      [op [(ids (first args)) (property-id (second args))]]
+
+      :batch-delete-property-value
+      [op [(ids (first args)) (property-id (second args)) (nth args 2)]]
+
+      :class-add-property
+      [op [(id (first args)) (property-id (second args))]]
+
+      :class-remove-property
+      [op [(id (first args)) (property-id (second args))]]
+
+      :upsert-property
+      [op [(some-> (first args) property-id) (second args) (nth args 2)]]
+
+      :upsert-closed-value
+      [op [(property-id (first args)) (second args)]]
+
+      :delete-closed-value
+      [op [(property-id (first args)) (id (second args))]]
+
+      :add-existing-values-to-closed-values
+      [op [(property-id (first args)) (second args)]]
+
+      op-entry)))
+
+(defn- apply-ops!
+  [conn ops opts]
+  (outliner-op/apply-ops! conn
+                          (mapv #(normalize-op-block-ids @conn %) ops)
+                          opts))
+
 (deftest undo-redo-selection-editor-info-roundtrip-test
   (testing "undo/redo result keeps block selection editor info when no cursor is recorded"
     (worker-undo-redo/clear-history! test-repo)
@@ -418,7 +533,7 @@
         (is (= inserted-uuid
                (get-in data [:db-sync/forward-outliner-ops 0 1 0 0 :block/uuid])))
         (is (= inserted-uuid
-               (second (first (get-in data [:db-sync/inverse-outliner-ops 0 1 0])))))))))
+               (get-in data [:db-sync/inverse-outliner-ops 0 1 0 0])))))))
 
 (deftest undo-works-for-local-graph-test
   (testing "worker undo/redo works for local changes on local graph"
@@ -438,7 +553,7 @@
     (worker-undo-redo/clear-history! test-repo)
     (let [conn (worker-state/get-datascript-conn test-repo)
           block-uuid (:block/uuid (db-test/find-block-by-content @conn "task"))]
-      (outliner-op/apply-ops! conn
+      (apply-ops! conn
                               [[:set-block-property [[:block/uuid block-uuid]
                                                      :logseq.property/status
                                                      :logseq.property/status.todo]]]
@@ -462,7 +577,7 @@
     (worker-undo-redo/clear-history! test-repo)
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [page-uuid]} (seed-page-parent-child!)]
-      (outliner-op/apply-ops! conn
+      (apply-ops! conn
                               [[:delete-page [page-uuid {}]]]
                               (local-tx-meta {:client-id "test-client"}))
       (let [deleted-page (d/entity @conn [:block/uuid page-uuid])]
@@ -483,14 +598,14 @@
   (testing "undoing delete-page restores hard-retracted class/property pages and today page blocks"
     (let [conn (worker-state/get-datascript-conn test-repo)
           class-title "undo class page movie"
-          [_ class-uuid] (outliner-op/apply-ops! conn
+          [_ class-uuid] (apply-ops! conn
                                                  [[:create-page [class-title
                                                                  {:class? true
                                                                   :redirect? false
                                                                   :split-namespace? true
                                                                   :tags ()}]]]
                                                  (local-tx-meta {:client-id "test-client"}))
-          _ (outliner-op/apply-ops! conn
+          _ (apply-ops! conn
                                     [[:upsert-property [:user.property/undo-rating
                                                         {:logseq.property/type :number}
                                                         {:property-name "undo-rating"}]]]
@@ -502,7 +617,7 @@
                        today-day
                        (:logseq.property.journal/title-format
                         (d/entity @conn :logseq.class/Journal)))
-          [_ today-page-uuid] (outliner-op/apply-ops! conn
+          [_ today-page-uuid] (apply-ops! conn
                                                       [[:create-page [today-title
                                                                       {:today-journal? true
                                                                        :redirect? false
@@ -511,7 +626,7 @@
                                                       (local-tx-meta {:client-id "test-client"}))
           today-page-id (:db/id (d/entity @conn [:block/uuid today-page-uuid]))
           today-child-uuid (random-uuid)
-          _ (outliner-op/apply-ops! conn
+          _ (apply-ops! conn
                                     [[:insert-blocks [[{:block/uuid today-child-uuid
                                                         :block/title "today undo child"}]
                                                       today-page-id
@@ -522,7 +637,7 @@
           property-ident-before (:db/ident (d/entity @conn [:block/uuid property-uuid]))]
       (worker-undo-redo/clear-history! test-repo)
 
-      (outliner-op/apply-ops! conn
+      (apply-ops! conn
                               [[:delete-page [class-uuid {}]]]
                               (local-tx-meta {:client-id "test-client"}))
       (is (nil? (d/entity @conn [:block/uuid class-uuid])))
@@ -531,7 +646,7 @@
              (:db/ident (d/entity @conn [:block/uuid class-uuid]))))
 
       (worker-undo-redo/clear-history! test-repo)
-      (outliner-op/apply-ops! conn
+      (apply-ops! conn
                               [[:delete-page [property-uuid {}]]]
                               (local-tx-meta {:client-id "test-client"}))
       (is (nil? (d/entity @conn :user.property/undo-rating)))
@@ -540,7 +655,7 @@
              (:db/ident (d/entity @conn [:block/uuid property-uuid]))))
 
       (worker-undo-redo/clear-history! test-repo)
-      (outliner-op/apply-ops! conn
+      (apply-ops! conn
                               [[:delete-page [today-page-uuid {}]]]
                               (local-tx-meta {:client-id "test-client"}))
       (is (some? (d/entity @conn [:block/uuid today-page-uuid])))
@@ -553,7 +668,7 @@
     (worker-undo-redo/clear-history! test-repo)
     (let [conn (worker-state/get-datascript-conn test-repo)
           page-title "redo create page alpha"]
-      (outliner-op/apply-ops! conn
+      (apply-ops! conn
                               [[:create-page [page-title {:redirect? false
                                                           :split-namespace? true
                                                           :tags ()}]]]
@@ -582,7 +697,7 @@
           template-a-uuid (random-uuid)
           template-b-uuid (random-uuid)
           empty-target-uuid (random-uuid)]
-      (outliner-op/apply-ops!
+      (apply-ops!
        conn
        [[:insert-blocks [[{:block/uuid template-root-uuid
                            :block/title "template 1"
@@ -597,7 +712,7 @@
                          {:sibling? false
                           :keep-uuid? true}]]]
        (local-tx-meta {:client-id "test-client"}))
-      (outliner-op/apply-ops!
+      (apply-ops!
        conn
        [[:insert-blocks [[{:block/uuid empty-target-uuid
                            :block/title ""}]
@@ -613,7 +728,7 @@
             blocks-to-insert (cons (assoc (first template-blocks)
                                           :logseq.property/used-template (:db/id template-root))
                                    (rest template-blocks))]
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:insert-blocks [blocks-to-insert
                            (:db/id empty-target)
@@ -648,7 +763,7 @@
           template-a-uuid (random-uuid)
           template-b-uuid (random-uuid)
           empty-target-uuid (random-uuid)]
-      (outliner-op/apply-ops!
+      (apply-ops!
        conn
        [[:insert-blocks [[{:block/uuid template-root-uuid
                            :block/title "template 1"
@@ -663,7 +778,7 @@
                          {:sibling? false
                           :keep-uuid? true}]]]
        (local-tx-meta {:client-id "test-client"}))
-      (outliner-op/apply-ops!
+      (apply-ops!
        conn
        [[:insert-blocks [[{:block/uuid empty-target-uuid
                            :block/title ""}]
@@ -679,7 +794,7 @@
             blocks-to-insert (cons (assoc (first template-blocks)
                                           :logseq.property/used-template (:db/id template-root))
                                    (rest template-blocks))]
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:insert-blocks [blocks-to-insert
                            (:db/id empty-target)
@@ -718,7 +833,7 @@
           empty-target-uuid (random-uuid)
           inserted-root-uuid (random-uuid)
           inserted-child-uuid (random-uuid)]
-      (outliner-op/apply-ops!
+      (apply-ops!
        conn
        [[:insert-blocks [[{:block/uuid empty-target-uuid
                            :block/title ""}]
@@ -727,7 +842,7 @@
                           :keep-uuid? true}]]]
        (local-tx-meta {:client-id "test-client"}))
       (let [empty-target (d/entity @conn [:block/uuid empty-target-uuid])]
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:insert-blocks [[{:block/uuid inserted-root-uuid
                              :block/title "insert root"}
@@ -770,7 +885,7 @@
           template-a-uuid (random-uuid)
           template-b-uuid (random-uuid)
           empty-target-uuid (random-uuid)]
-      (outliner-op/apply-ops!
+      (apply-ops!
        conn
        [[:insert-blocks [[{:block/uuid template-root-uuid
                            :block/title "template 1"
@@ -785,7 +900,7 @@
                          {:sibling? false
                           :keep-uuid? true}]]]
        (local-tx-meta {:client-id "test-client"}))
-      (outliner-op/apply-ops!
+      (apply-ops!
        conn
        [[:insert-blocks [[{:block/uuid empty-target-uuid
                            :block/title ""}]
@@ -801,7 +916,7 @@
             blocks-to-insert (cons (assoc (first template-blocks)
                                           :logseq.property/used-template (:db/id template-root))
                                    (rest template-blocks))]
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:apply-template [(:db/id template-root)
                             (:db/id empty-target)
@@ -839,7 +954,7 @@
           template-a-uuid (random-uuid)
           template-b-uuid (random-uuid)
           empty-target-uuid (random-uuid)]
-      (outliner-op/apply-ops!
+      (apply-ops!
        conn
        [[:insert-blocks [[{:block/uuid template-root-uuid
                            :block/title "template 1"
@@ -854,7 +969,7 @@
                          {:sibling? false
                           :keep-uuid? true}]]]
        (local-tx-meta {:client-id "test-client"}))
-      (outliner-op/apply-ops!
+      (apply-ops!
        conn
        [[:insert-blocks [[{:block/uuid empty-target-uuid
                            :block/title ""}]
@@ -880,7 +995,7 @@
                                         [?b :block/title "a"]]
                                       @conn
                                       template-root-uuid))]
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:apply-template [(:db/id template-root)
                             (:db/id empty-target)
@@ -913,7 +1028,7 @@
     (worker-undo-redo/clear-history! test-repo)
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)]
-      (outliner-op/apply-ops! conn
+      (apply-ops! conn
                               [[:save-block [{:block/uuid child-uuid
                                               :block/title "saved via apply-ops"} {}]]]
                               (local-tx-meta {:client-id "test-client"}))
@@ -980,7 +1095,7 @@
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)]
       (doseq [title ["foo" "foo bar"]]
-        (outliner-op/apply-ops! conn
+        (apply-ops! conn
                                 [[:save-block [{:block/uuid child-uuid
                                                 :block/title title} {}]]]
                                 (local-tx-meta {:client-id "test-client"})))
@@ -997,14 +1112,14 @@
           {:keys [child-uuid]} (seed-page-parent-child!)]
       (doseq [[suffix cardinality] [[:one :one] [:many :many]]]
         (let [property-id (keyword (str "user.property/p1-undo-redo-" (name suffix)))]
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:upsert-property [property-id
                                                       {:logseq.property/type :default
                                                        :db/cardinality cardinality}
                                                       {}]]]
                                   (local-tx-meta {:client-id "test-client"}))
           (worker-undo-redo/clear-history! test-repo)
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:set-block-property [[:block/uuid child-uuid]
                                                          property-id
                                                          "value-1"]]]
