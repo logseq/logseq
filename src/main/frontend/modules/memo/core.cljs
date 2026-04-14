@@ -4,7 +4,7 @@
             [frontend.modules.memo.parser :as parser]
             [frontend.modules.memo.index :as index]
             [frontend.state :as state]
-            [frontend.components.left-sidebar :as left-sidebar]
+            [frontend.handler.command-palette :as command-palette]
             [logseq.memo.schema :as schema]))
 
 (defn init!
@@ -15,40 +15,27 @@
 
 (defn register-commands!
   []
-  (commands/register!
-   {:id "logseq.memo/create-setting"
-    :name "创建设定"
-    :callback (fn [] (println "Open create setting modal"))})
+  (command-palette/register
+   {:id :logseq.memo/create-setting
+    :desc "SimpleMem: 创建设定"
+    :action (fn [] (println "Open create setting modal"))})
 
-  (commands/register!
-   {:id "logseq.memo/open-graph"
-    :name "打开设定图谱"
-    :callback (fn [] (println "Open memo graph view"))})
+  (command-palette/register
+   {:id :logseq.memo/open-graph
+    :desc "SimpleMem: 打开设定图谱"
+    :action (fn [] (state/set-state! :ui/memo-graph-open? true))})
 
-  (commands/register!
-   {:id "logseq.memo/open-inspiration"
-    :name "打开灵感建议"
-    :callback (fn [] (println "Open inspiration panel"))})
+  (command-palette/register
+   {:id :logseq.memo/open-inspiration
+    :desc "SimpleMem: 打开灵感建议"
+    :action (fn [] (println "Open inspiration panel"))})
 
-  (commands/register!
-   {:id "logseq.memo/check-consistency"
-    :name "检查一致性"
-    :callback (fn [] (println "Run consistency check"))}))
-
-(defn register-ribbon!
-  []
-  (left-sidebar/add-icon!
-   {:icon "📖"
-    :title "设定面板"
-    :action (fn [] (state/toggle-panel! :memo-sidebar))})
-
-  (left-sidebar/add-icon!
-   {:icon "🕸️"
-    :title "设定图谱"
-    :action (fn [] (state/open-view! :memo-graph))}))
+  (command-palette/register
+   {:id :logseq.memo/check-consistency
+    :desc "SimpleMem: 检查一致性"
+    :action (fn [] (println "Run consistency check"))}))
 
 (defn register!
   []
   (init! (state/get-current-repo))
-  (register-commands!)
-  (register-ribbon!))
+  (register-commands!))

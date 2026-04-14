@@ -176,7 +176,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-navigations
   [{:keys [default-home route-match route-name srs-open?]}]
-  (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
+  (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets :memo]
         [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
                                                             [:flashcards :all-pages :graph-view]))]
 
@@ -270,7 +270,14 @@
                            (keyword "right-side-bar" name''))
                 :href (rfe/href :page {:name tag-uuid})
                 :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
-                :icon "hash"})))))])))
+                :icon "hash"})))
+
+          (= nav :memo)
+          (sidebar-item
+           {:class "memo-nav"
+            :title "Memo"
+            :on-click-handler #(state/toggle-left-sidebar!)
+            :icon "notes"})])))
 
 (rum/defc sidebar-favorites < rum/reactive
   []
