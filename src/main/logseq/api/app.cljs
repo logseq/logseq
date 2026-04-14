@@ -178,8 +178,3 @@
     (some-> (state/get-route-match)
             (dissoc :data)
             (bean/->js))))
-
-(def reset_debug_log_db
-  (fn []
-    (when-let [repo (state/get-current-repo)]
-      (state/<invoke-db-worker-direct-pass :thread-api/reset-debug-log-db repo))))
