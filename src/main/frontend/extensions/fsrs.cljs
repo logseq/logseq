@@ -117,12 +117,11 @@
 
 (defn- <create-cards-block!
   []
-  (let [cards-tag-id (:db/id (db/entity :logseq.class/Cards))]
-    (editor-handler/api-insert-new-block! ""
-                                          {:page (db-model/get-today-journal-title)
-                                           :properties {:block/tags #{cards-tag-id}}
-                                           :sibling? false
-                                           :end? true})))
+  (editor-handler/api-insert-new-block! ""
+                                        {:page (db-model/get-today-journal-title)
+                                         :properties {:block/tags #{:logseq.class/Cards}}
+                                         :sibling? false
+                                         :end? true}))
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text due on-click class]}]
   (let [bg-class (case id

@@ -144,7 +144,7 @@
            (fn [^js e]
              (case (keyword (aget e "name"))
                :IllegalPluginPackageError
-               (notification/show! (t :plugin/invalid-package) :error)
+               (plugin-handler/show-illegal-plugin-package-notification! e)
                :ExistedImportedPluginPackageError
                (notification/show! (t :plugin/existed-package (.-message e)) :error)
                :default)
@@ -1587,6 +1587,34 @@
    {:label   :plugin-settings-modal
     :align   :start
     :id      "ls-focused-settings-modal"}))
+
+;; tools for user registered host renderers
+(rum/defc renderer-container
+  [{:keys [_pid render] :as opts}]
+  (if (fn? render)
+    [:div.lsp-host-renderer-container
+     (render opts)]
+    [:pre (pr-str opts)]))
+
+(rum/defc renderer-resolver < rum/static
+  [key']
+  (when-let [[pid key] (some-> key' (string/split "."))]
+    (let [[renderer set-renderer!] (rum/use-state nil)]
+
+      (hooks/use-effect!
+       (fn []
+         (try
+           (when-let [renderer (plugin-handler/resolve-hosted-render pid key :sidebar)]
+             (let [r (bean/->clj renderer)
+                   title (:title r)]
+               (when-let [^js dom (and title (js/document.getElementById key'))]
+                 (set! (. dom -textContent) title))
+               (set-renderer! r)))
+           (catch js/Error e (js/console.error "Failed to resolve renderer:" key' e))))
+       [pid key])
+
+      (when renderer
+        (renderer-container renderer)))))
 
 (defn hook-custom-routes
   [routes]

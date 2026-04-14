@@ -5,7 +5,6 @@
             [frontend.context.i18n :as i18n]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
-            [frontend.undo-redo :as undo-redo]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]))
 
@@ -43,14 +42,8 @@
   (let [state data]
     (state/pub-event! [:rtc/sync-state state])))
 
-(defmethod handle :vector-search-sync-state [_ _worker data]
-  (state/pub-event! [:vector-search/sync-state data]))
-
 (defmethod handle :sync-db-changes [_ _worker data]
   (state/pub-event! [:db/sync-changes data]))
-
-(defmethod handle :clear-undo-history [_ _worker [repo]]
-  (undo-redo/clear-history! repo))
 
 (defmethod handle :rtc-log [_ _worker log]
   (state/pub-event! [:rtc/log log]))
@@ -64,9 +57,6 @@
 
 (defmethod handle :capture-error [_ _worker data]
   (state/pub-event! [:capture-error data]))
-
-(defmethod handle :vector-search/load-model-progress [_ _ data]
-  (state/pub-event! [:vector-search/load-model-progress data]))
 
 (defmethod handle :backup-file [_ _worker data]
   (state/pub-event! [:graph/backup-file data]))

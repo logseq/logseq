@@ -8,7 +8,7 @@
             [frontend.components.page :as page]
             [frontend.components.profiler :as profiler]
             [frontend.components.shortcut-help :as shortcut-help]
-            [frontend.components.vector-search.sidebar :as vector-search]
+            [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -19,6 +19,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.undo-redo.debug-ui :as undo-redo-debug-ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
@@ -133,6 +134,12 @@
         :page
         (block-render)
 
+        :plugin
+        [[:.flex.items-center.page-title
+          (ui/icon "puzzle" {:class "text-md mr-2"})
+          [:h3 {:id db-id} (str db-id)]]
+         (plugins/renderer-resolver db-id)]
+
         :search
         [[:.flex.items-center.page-title
           (ui/icon "search" {:class "text-md mr-2"})
@@ -147,13 +154,13 @@
         [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) (t :sidebar.right.dev/rtc)]
          (rtc-debug-ui/rtc-debug-ui)]
 
+        :undo-redo
+        [[:.flex.items-center (ui/icon "rotate-clockwise" {:class "text-md mr-2"}) "(Dev) Undo/Redo"]
+         (undo-redo-debug-ui/undo-redo-debug-ui)]
+
         :profiler
         [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) (t :sidebar.right.dev/profiler)]
          (profiler/profiler)]
-
-        :vector-search
-        [[:.flex.items-center (ui/icon "file-search" {:class "text-md mr-2"}) (t :sidebar.right.dev/vector-search)]
-         (vector-search/vector-search-sidebar)]
 
         ["" [:span]])))
    (p/catch (fn [error]
@@ -164,6 +171,18 @@
 
 (defonce *drag-from
   (atom nil))
+
+(defn dev-sidebar-items
+  [developer-mode?]
+  (cond-> []
+    (and developer-mode? (not config/publishing?))
+    (conj {:db-id "rtc" :block-type :rtc :label (t :sidebar.right.dev/rtc)})
+
+    developer-mode?
+    (conj {:db-id "undo-redo" :block-type :undo-redo :label "(Dev) Undo/Redo"})
+
+    developer-mode?
+    (conj {:db-id "profiler" :block-type :profiler :label (t :sidebar.right.dev/profiler)})))
 
 (rum/defc actions-menu-content
   [db-id idx type collapsed? block-count]
@@ -420,7 +439,8 @@
                  state)}
   [state repo t blocks]
   (let [*anim-finished? (get state ::anim-finished?)
-        block-count (count blocks)]
+        block-count (count blocks)
+        developer-mode? (state/sub [:ui/developer-mode?])]
     [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
      [:div.cp__right-sidebar-scrollable
@@ -446,22 +466,12 @@
                                                                      (state/sidebar-add-block! repo "help" :help))}
           (t :nav/help)]]
 
-        (when (and (state/sub [:ui/developer-mode?]) (not config/publishing?))
-          [:div.text-sm
-           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                                       (state/sidebar-add-block! repo "rtc" :rtc))}
-            (t :sidebar.right.dev/rtc)]])
-        (when (state/sub [:ui/developer-mode?])
-          [:div.text-sm
+        (for [{:keys [db-id block-type label]} (dev-sidebar-items developer-mode?)]
+          [:div.text-sm {:key (str "dev-sidebar-item-" (name block-type))}
            [:button.button.cp__right-sidebar-settings-btn
             {:on-click (fn [_e]
-                         (state/sidebar-add-block! repo "vector-search" :vector-search))}
-            (t :sidebar.right.dev/vector-search)]])
-        (when (state/sub [:ui/developer-mode?])
-          [:div.text-sm
-           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                                       (state/sidebar-add-block! repo "profiler" :profiler))}
-            (t :sidebar.right.dev/profiler)]])]]
+                         (state/sidebar-add-block! repo db-id block-type))}
+            label]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (if @*anim-finished?

@@ -2,6 +2,8 @@
 logseq.db-sync.cycle/fix-cycle!
 ;; API
 logseq.db-sync.node.entry/main
+;; API (CLI entrypoint)
+logseq.db-sync.node.show-checksum/main
 ;; API
 logseq.db-sync.order/fix-duplicate-orders!
 ;; TODO: is this ns needed?
@@ -23,3 +25,12 @@ logseq.db-sync.snapshot/finalize-datoms-jsonl-buffer
 logseq.db-sync.worker/worker
 ;; debugging
 logseq.db-sync.worker.timing/summary
+;; API
+logseq.db-sync.checksum/recompute-checksum-diagnostics
+;; API (test runner entrypoint)
+logseq.db-sync.test-runner/main
+;; Disabled FIXME tests in node_adapter_test.cljs
+logseq.db-sync.node-adapter-test/post-json
+logseq.db-sync.node-adapter-test/get-json
+logseq.db-sync.node-adapter-test/parse-json
+logseq.db-sync.node-adapter-test/start-test-server

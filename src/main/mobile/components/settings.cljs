@@ -149,6 +149,14 @@
                     (shui/popup-show! nil (fn [] (log)) {}))}
        [:span.text-base (t :mobile.settings/check-log)]]
 
+      [:div.mobile-setting-item
+       {:on-click #(state/pub-event! [:go/sync-server-settings])}
+       [:span.text-base "Sync server URL"]
+       [:span.text-sm.opacity-70
+        (if-let [custom (config/get-custom-sync-server-url)]
+          custom
+          "Logseq sync (default)")]]
+
       (when login?
         [:div.mobile-setting-item
          {:on-click (fn []

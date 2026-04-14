@@ -157,6 +157,16 @@
     (add-button-inner block (assoc config :editing? editing?))))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
+  {:did-mount (fn [state]
+                (when-let [on-page-blocks-rendered (some-> (last (:rum/args state))
+                                                           :on-page-blocks-rendered)]
+                  (on-page-blocks-rendered))
+                state)
+   :did-update (fn [state]
+                 (when-let [on-page-blocks-rendered (some-> (last (:rum/args state))
+                                                            :on-page-blocks-rendered)]
+                  (on-page-blocks-rendered))
+                state)}
   [state block* {:keys [sidebar? hide-add-button? journals?] :as config}]
   (when-let [id (:db/id block*)]
     (let [block (db/sub-block id)
@@ -338,6 +348,18 @@
   (when-let [path-page-name (get-path-page-name state page-name)]
     (util/page-name-sanity-lc path-page-name)))
 
+(rum/defcs on-mounted <
+  {:did-mount (fn [state]
+                (when-let [f (last (:rum/args state))]
+                  (f))
+                state)
+   :did-update (fn [state]
+                 (when-let [f (last (:rum/args state))]
+                  (f))
+                state)}
+  [state child _on-mounted]
+  child)
+
 (rum/defc lsp-pagebar-slot <
   rum/static
   []
@@ -383,11 +405,13 @@
       (when class?
         (shui/tabs-content
          {:value "tag"}
-         (objects/class-objects page opts)))
+         (on-mounted (objects/class-objects page opts)
+                     (:on-tagged-nodes-rendered opts))))
       (when property?
         (shui/tabs-content
          {:value "property"}
-         (objects/property-related-objects page opts))))]))
+         (on-mounted (objects/property-related-objects page opts)
+                     (:on-tagged-nodes-rendered opts)))))]))
 
 (rum/defc sidebar-page-properties
   [config page]
@@ -409,9 +433,14 @@
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query mixins/container-id
   (rum/local nil   ::current-page)
+  (rum/local nil   ::linked-refs-blocks-ready-page-id)
+  (rum/local nil   ::linked-refs-tagged-ready-page-id)
   [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config journals?] :as option}]
   (let [current-repo (state/sub :git/current-repo)
+        linked-refs-blocks-ready-page-id (get state ::linked-refs-blocks-ready-page-id)
+        linked-refs-tagged-ready-page-id (get state ::linked-refs-tagged-ready-page-id)
         page (or page (some-> (:db/id option) db/entity))
+        page-id (:db/id page)
         config (assoc config
                       :id (str (:block/uuid page)))
         repo (or repo current-repo)
@@ -428,7 +457,14 @@
         recycled? (ldb/recycled? page)
         page-display-title (when (ldb/page? page)
                              (route-handler/built-in-page-title (:block/title page)))
-        show-tabs? (and (or class-page? (ldb/property? page)) (not tag-dialog?))]
+        show-tabs? (and (or class-page? (ldb/property? page)) (not tag-dialog?))
+        blocks-ready? (or journals?
+                          (= page-id @linked-refs-blocks-ready-page-id))
+        tagged-ready? (or (not show-tabs?)
+                          (= page-id @linked-refs-tagged-ready-page-id)
+                          ;; Fallback to avoid blocking refs forever when tab content is reused.
+                          (= page-id @linked-refs-blocks-ready-page-id))
+        linked-refs-ready? (and blocks-ready? tagged-ready?)]
     (if page
       (when (or title block?)
         (if recycled?
@@ -442,9 +478,10 @@
                         {:data-page-tags (text-util/build-data-value page-names)}))
                     {})
 
-                  {:key title
-                   :class (util/classnames [{:is-journals (or journal? fmt-journal?)
-                                             :is-node-page (or class-page? property-page?)}])})
+                {:key title
+                 :class (util/classnames [{:is-journals (or journal? fmt-journal?)
+                                           :is-today-page (and (not home?) (boolean today?))
+                                           :is-node-page (or class-page? property-page?)}])})
 
            [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
             (when-not (or block? sidebar?)
@@ -469,7 +506,10 @@
                (sidebar-page-properties config page)])
 
             (when show-tabs?
-              (tabs page {:current-page? option :sidebar? sidebar?}))
+              (tabs page {:current-page? option
+                          :sidebar? sidebar?
+                          :on-tagged-nodes-rendered #(when-not (= @linked-refs-tagged-ready-page-id page-id)
+                                                       (reset! linked-refs-tagged-ready-page-id page-id))}))
 
             (when (not tag-dialog?)
               (if recycle-page?
@@ -479,6 +519,8 @@
                   :class (when-not (or sidebar? (util/capacitor?))
                            "mt-4")}
                  (page-blocks-cp page (merge option {:sidebar? sidebar?
+                                                     :on-page-blocks-rendered #(when-not (= @linked-refs-blocks-ready-page-id page-id)
+                                                                                 (reset! linked-refs-blocks-ready-page-id page-id))
                                                      :container-id (:container-id state)}))]))]
 
            (when-not (or preview? recycle-page?)
@@ -494,7 +536,9 @@
                 (class-component/class-children page))
 
             ;; referenced blocks
-              (when-not (or tag-dialog? linked-refs?)
+              (when (and linked-refs-ready?
+                         (not tag-dialog?)
+                         (not linked-refs?))
                 [:div.fade-in.delay {:key "page-references"}
                  (rum/with-key
                    (reference/references page {:sidebar? sidebar?

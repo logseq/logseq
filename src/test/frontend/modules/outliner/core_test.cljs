@@ -40,7 +40,9 @@
   #(test-helper/start-and-destroy-db
     %
     {:build-init-data? false
-     :schema {:logseq.property/deleted-at {:db/index true}}})
+     :schema {:logseq.property/deleted-at {:db/index true}
+              :logseq.property/created-from-property {:db/index true}
+              }})
   listen-db-fixture)
 
 (defn get-block
@@ -530,11 +532,7 @@
 
         (is (= [5] (get-children 4)))
 
-        (let [recycled (get-block 3)
-              recycle-page (db/get-page "Recycle")]
-          (is (some? recycled))
-          (is (integer? (:logseq.property/deleted-at recycled)))
-          (is (= (:db/id recycle-page) (:db/id (:block/page recycled)))))))))
+        (is (nil? (get-block 3)))))))
 
 (deftest test-bocks-with-level
   (testing "blocks with level"
