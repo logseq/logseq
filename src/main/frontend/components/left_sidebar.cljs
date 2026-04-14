@@ -24,7 +24,8 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.components.memo.sidebar :as memo-sidebar]))
 
 (defn get-default-home-if-valid
   []
@@ -319,7 +320,7 @@
    [:a.wrap-th [:strong.flex-1 "Memo"]]
    {:class "memo"
     :collapsable? true}
-   [:div.text-sm.opacity-60 "Memo section placeholder"]))
+   [(memo-sidebar/memo-sidebar)]))
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-container
   [route-match close-modal-fn left-sidebar-open? srs-open?
