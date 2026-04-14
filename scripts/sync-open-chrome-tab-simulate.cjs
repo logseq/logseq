@@ -13,6 +13,7 @@ const DEFAULT_CHROME_PROFILE = 'auto';
 const DEFAULT_INSTANCES = 1;
 const DEFAULT_OPS = 50;
 const DEFAULT_OP_PROFILE = 'fast';
+const DEFAULT_SCENARIO = 'online';
 const DEFAULT_OP_TIMEOUT_MS = 1000;
 const DEFAULT_ROUNDS = 1;
 const DEFAULT_UNDO_REDO_DELAY_MS = 350;
@@ -134,6 +135,7 @@ function usage() {
     `  --switch-timeout-ms <n>     Timeout for graph switch/download bootstrap (default: ${DEFAULT_SWITCH_GRAPH_TIMEOUT_MS})`,
     `  --ops <n>                   Total operations across all instances per round (must be >= 1, default: ${DEFAULT_OPS})`,
     `  --op-profile <name>         Operation profile: fast|full (default: ${DEFAULT_OP_PROFILE})`,
+    `  --scenario <name>           Simulation scenario: online|offline (default: ${DEFAULT_SCENARIO})`,
     `  --op-timeout-ms <n>         Timeout per operation in renderer (default: ${DEFAULT_OP_TIMEOUT_MS})`,
     '  --seed <text|number>        Deterministic seed for operation ordering/jitter',
     '  --replay <artifact.json>    Replay a prior captured artifact run',
@@ -182,6 +184,7 @@ function parseArgs(argv) {
     switchTimeoutMs: DEFAULT_SWITCH_GRAPH_TIMEOUT_MS,
     ops: DEFAULT_OPS,
     opProfile: DEFAULT_OP_PROFILE,
+    scenario: DEFAULT_SCENARIO,
     opTimeoutMs: DEFAULT_OP_TIMEOUT_MS,
     seed: null,
     replay: null,
@@ -340,6 +343,19 @@ function parseArgs(argv) {
 
     if (arg === '--op-timeout-ms') {
       result.opTimeoutMs = parsePositiveInteger(next, '--op-timeout-ms');
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--scenario') {
+      if (typeof next !== 'string' || next.length === 0) {
+        throw new Error('--scenario must be a non-empty string');
+      }
+      const normalized = next.toLowerCase();
+      if (normalized !== 'online' && normalized !== 'offline') {
+        throw new Error('--scenario must be one of: online, offline');
+      }
+      result.scenario = normalized;
       i += 1;
       continue;
     }
@@ -2688,6 +2704,25 @@ function buildRendererProgram(config) {
       state: snapshotBlocksToStateMap(initialDb?.blocks),
     };
 
+    const scenarioEvents = [];
+    const isOfflineScenario = config.scenario === 'offline';
+    const recordScenarioEvent = (phase, status, error = null) => {
+      scenarioEvents.push({
+        phase,
+        status,
+        error,
+        createdAt: Date.now(),
+      });
+    };
+    const toggleScenarioNetwork = async (phase, eventType) => {
+      try {
+        window.dispatchEvent(new Event(eventType));
+        recordScenarioEvent(phase, eventType, null);
+      } catch (error) {
+        recordScenarioEvent(phase, 'error', describeError(error));
+      }
+    };
+
     const appendReplayFallbackTxFromSnapshot = async (opIndex) => {
       if (!replayCaptureEnabled) return;
       const nextSnapshot = await captureChecksumStateMap();
@@ -2717,8 +2752,12 @@ function buildRendererProgram(config) {
     };
 
     let executed = 0;
-
-    for (let i = 0; i < config.plan.length; i += 1) {
+    if (isOfflineScenario) {
+      await toggleScenarioNetwork('beforePlanOps', 'offline');
+      await sleep(20);
+    }
+    try {
+      for (let i = 0; i < config.plan.length; i += 1) {
       failIfFatalSignalSeen();
       const requested = config.plan[i];
       const operable = await withTimeout(
@@ -3271,6 +3310,12 @@ function buildRendererProgram(config) {
         replayCaptureState.currentOpIndex = null;
       }
     }
+    } finally {
+      if (isOfflineScenario) {
+        await toggleScenarioNetwork('afterPlanOps', 'online');
+        await sleep(20);
+      }
+    }
 
     let checksum = null;
     const warnings = [];
@@ -3342,6 +3387,8 @@ function buildRendererProgram(config) {
       requestedPlan: Array.isArray(config.plan) ? [...config.plan] : [],
       opLog: operationLog,
       opLogSample: operationLog.slice(0, 20),
+      scenario: config.scenario || 'online',
+      scenarioEvents: scenarioEvents.slice(0, 20),
       outlinerOpCoverage,
       initialDb,
       txCapture: replayTxCapture,
@@ -4259,6 +4306,7 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
       readyPollDelayMs: RENDERER_READY_POLL_DELAY_MS,
       syncSettleTimeoutMs: args.syncSettleTimeoutMs,
       opTimeoutMs: args.opTimeoutMs,
+      scenario: args.scenario,
       fallbackPageName: FALLBACK_PAGE_NAME,
       verifyChecksum: args.verifyChecksum,
       captureReplay: args.captureReplay,
@@ -4369,6 +4417,7 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
     bootstrap,
     rounds: args.rounds,
     opProfile: args.opProfile,
+    scenario: args.scenario,
     opTimeoutMs: args.opTimeoutMs,
     seed: args.seed,
     verifyChecksum: args.verifyChecksum,
@@ -4554,6 +4603,10 @@ function buildRunArtifact({ output, args, runContext, failFastState }) {
         warnings: Array.isArray(round?.warnings)
           ? round.warnings
           : [],
+        scenario: typeof round?.scenario === 'string' ? round.scenario : null,
+        scenarioEvents: Array.isArray(round?.scenarioEvents)
+          ? round.scenarioEvents
+          : [],
         initialDb: round?.initialDb && typeof round.initialDb === 'object'
           ? round.initialDb
           : null,
@@ -4689,6 +4742,8 @@ async function writeRunArtifact(artifact, baseDir = DEFAULT_ARTIFACT_BASE_DIR) {
               : null,
             errors: Array.isArray(round?.errors) ? round.errors : [],
             warnings: Array.isArray(round?.warnings) ? round.warnings : [],
+            scenario: typeof round?.scenario === 'string' ? round.scenario : null,
+            scenarioEvents: Array.isArray(round?.scenarioEvents) ? round.scenarioEvents : [],
           },
           null,
           2
@@ -4771,6 +4826,7 @@ async function main() {
     resetSession: args.resetSession,
     ops: args.ops,
     opProfile: args.opProfile,
+    scenario: args.scenario,
     opTimeoutMs: args.opTimeoutMs,
     seed: args.seed,
     replay: args.replay,

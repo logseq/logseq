@@ -227,6 +227,121 @@
     ;; (prn :debug :delete-block! (:db/id block) (:block/uuid block) (:block/title block))
     (outliner-core/delete-blocks! conn [block] {})))
 
+(defn- block-id->uuid
+  [db block-id]
+  (cond
+    (uuid? block-id)
+    block-id
+
+    (and (vector? block-id) (= :block/uuid (first block-id)))
+    (second block-id)
+
+    (number? block-id)
+    (or (some-> (d/entity db block-id) :block/uuid)
+        block-id)
+
+    :else
+    block-id))
+
+(defn- property-id->ident
+  [db property-id]
+  (cond
+    (qualified-keyword? property-id)
+    property-id
+
+    (number? property-id)
+    (or (some-> (d/entity db property-id) :db/ident)
+        property-id)
+
+    :else
+    property-id))
+
+(defn- normalize-op-block-ids
+  [db [op args :as op-entry]]
+  (let [id (fn [v] (block-id->uuid db v))
+        property-id (fn [v] (property-id->ident db v))
+        ids (fn [vs] (mapv id vs))]
+    (case op
+      :save-block
+      (let [[block opts] args
+            block' (cond-> block
+                     (and (map? block)
+                          (uuid? (:db/id block)))
+                     ((fn [m]
+                        (cond-> (dissoc m :db/id)
+                          (nil? (:block/uuid m))
+                          (assoc :block/uuid (:db/id m)))))
+                     (and (map? block)
+                          (nil? (:block/uuid block))
+                          (number? (:db/id block)))
+                     (assoc :block/uuid (id (:db/id block))))]
+        [op [block' opts]])
+
+      :insert-blocks
+      [op [(first args) (id (second args)) (nth args 2)]]
+
+      :apply-template
+      [op [(id (first args)) (id (second args)) (nth args 2)]]
+
+      :delete-blocks
+      [op [(ids (first args)) (second args)]]
+
+      :move-blocks
+      [op [(ids (first args)) (id (second args)) (nth args 2)]]
+
+      :move-blocks-up-down
+      [op [(ids (first args)) (second args)]]
+
+      :indent-outdent-blocks
+      [op [(ids (first args)) (second args) (nth args 2)]]
+
+      :set-block-property
+      [op [(id (first args)) (property-id (second args)) (nth args 2)]]
+
+      :remove-block-property
+      [op [(id (first args)) (property-id (second args))]]
+
+      :delete-property-value
+      [op [(id (first args)) (property-id (second args)) (nth args 2)]]
+
+      :create-property-text-block
+      [op [(some-> (first args) id) (property-id (second args)) (nth args 2) (nth args 3)]]
+
+      :batch-set-property
+      [op [(ids (first args)) (property-id (second args)) (nth args 2) (nth args 3)]]
+
+      :batch-remove-property
+      [op [(ids (first args)) (property-id (second args))]]
+
+      :batch-delete-property-value
+      [op [(ids (first args)) (property-id (second args)) (nth args 2)]]
+
+      :class-add-property
+      [op [(id (first args)) (property-id (second args))]]
+
+      :class-remove-property
+      [op [(id (first args)) (property-id (second args))]]
+
+      :upsert-property
+      [op [(some-> (first args) property-id) (second args) (nth args 2)]]
+
+      :upsert-closed-value
+      [op [(property-id (first args)) (second args)]]
+
+      :delete-closed-value
+      [op [(property-id (first args)) (id (second args))]]
+
+      :add-existing-values-to-closed-values
+      [op [(property-id (first args)) (second args)]]
+
+      op-entry)))
+
+(defn- apply-ops!
+  [conn ops opts]
+  (outliner-op/apply-ops! conn
+                          (mapv #(normalize-op-block-ids @conn %) ops)
+                          opts))
+
 (defn- existing-entities
   [db uuids]
   (->> uuids
@@ -638,7 +753,7 @@
   [conn title schema]
   (or (find-property-by-title @conn title)
       (do
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:upsert-property [nil schema {:property-name title}]]]
          {})
@@ -820,7 +935,7 @@
     (when block
       (let [block-uuid (:block/uuid block)]
         (try
-          (outliner-op/apply-ops! conn [[:toggle-reaction [block-uuid "+1" nil]]] {})
+          (apply-ops! conn [[:toggle-reaction [block-uuid "+1" nil]]] {})
           {:op :toggle-reaction
            :uuid block-uuid
            :emoji "+1"}
@@ -842,7 +957,7 @@
   (let [title sim-default-property-title
         schema sim-default-property-schema
         existing (find-property-by-title @conn title)]
-    (outliner-op/apply-ops!
+    (apply-ops!
      conn
      [[:upsert-property [(or (:db/ident existing) nil)
                          schema
@@ -867,7 +982,7 @@
     (when-let [property (ensure-property! conn sim-default-property-title sim-default-property-schema)]
       (let [{:keys [value]} (pick-settable-property-input rng conn property "prop-value")]
         (try
-          (outliner-op/apply-ops!
+          (apply-ops!
            conn
            [[:set-block-property [(:db/id block) (:db/ident property) value]]]
            {})
@@ -883,11 +998,11 @@
     (when-let [property (ensure-property! conn sim-default-property-title sim-default-property-schema)]
       (let [{:keys [value]} (pick-settable-property-input rng conn property "remove-prop")]
         (try
-          (outliner-op/apply-ops!
+          (apply-ops!
            conn
            [[:set-block-property [(:db/id block) (:db/ident property) value]]]
            {})
-          (outliner-op/apply-ops!
+          (apply-ops!
            conn
            [[:remove-block-property [(:db/id block) (:db/ident property)]]]
            {})
@@ -899,7 +1014,7 @@
 
 (defn- create-property-text-block-with-uuid!
   [conn property-id value value-uuid]
-  (outliner-op/apply-ops!
+  (apply-ops!
    conn
    [[:create-property-text-block [nil property-id value {:new-block-id value-uuid}]]]
    {})
@@ -931,7 +1046,7 @@
         (let [block-ids (mapv :db/id blocks)
               {:keys [value options]} (pick-settable-property-input rng conn property "batch-prop")]
           (try
-            (outliner-op/apply-ops!
+            (apply-ops!
              conn
              [[:batch-set-property [block-ids (:db/ident property) value options]]]
              {})
@@ -958,11 +1073,11 @@
             (let [block-ids (mapv :db/id blocks)
                   {:keys [value options]} (pick-settable-property-input rng conn property "to-remove")]
               (try
-                (outliner-op/apply-ops!
+                (apply-ops!
                  conn
                  [[:batch-set-property [block-ids (:db/ident property) value options]]]
                  {})
-                (outliner-op/apply-ops!
+                (apply-ops!
                  conn
                  [[:batch-remove-property [block-ids (:db/ident property)]]]
                  {})
@@ -976,7 +1091,7 @@
   (when-let [class (ensure-class! rng conn)]
     (when-let [property (ensure-property! conn sim-default-property-title sim-default-property-schema)]
       (try
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:class-add-property [(:db/id class) (:db/ident property)]]]
          {})
@@ -990,11 +1105,11 @@
   (when-let [class (ensure-class! rng conn)]
     (when-let [property (ensure-property! conn sim-default-property-title sim-default-property-schema)]
       (try
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:class-add-property [(:db/id class) (:db/ident property)]]]
          {})
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:class-remove-property [(:db/id class) (:db/ident property)]]]
          {})
@@ -1008,7 +1123,7 @@
   (when-let [property (ensure-property! conn sim-default-property-title sim-default-property-schema)]
     (let [value (str "choice-" (rand-int! rng 1000000))]
       (try
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:upsert-closed-value [(:db/id property) {:value value}]]]
          {})
@@ -1022,12 +1137,12 @@
   (when-let [property (ensure-property! conn sim-default-property-title sim-default-property-schema)]
     (let [value (str "delete-choice-" (rand-int! rng 1000000))]
       (try
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:upsert-closed-value [(:db/id property) {:value value}]]]
          {})
         (when-let [value-block (first (:block/_closed-value-property (d/entity @conn (:db/id property))))]
-          (outliner-op/apply-ops!
+          (apply-ops!
            conn
            [[:delete-closed-value [(:db/id property) (:db/id value-block)]]]
            {})
@@ -1054,7 +1169,7 @@
                     (rng-uuid rng))
             uuids (vec (remove nil? [uuid-a uuid-b]))]
         (when (seq uuids)
-          (outliner-op/apply-ops!
+          (apply-ops!
            conn
            [[:add-existing-values-to-closed-values [(:db/id property) uuids]]]
            {})
@@ -1068,11 +1183,11 @@
   (when-let [class (ensure-class! rng conn)]
     (when-let [block (ensure-random-block! rng conn state base-uuid gen-uuid)]
       (try
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:set-block-property [(:db/id block) :block/tags (:db/id class)]]]
          {})
-        (outliner-op/apply-ops!
+        (apply-ops!
          conn
          [[:delete-property-value [(:db/id block) :block/tags (:db/id class)]]]
          {})
@@ -1091,11 +1206,11 @@
       (when (seq blocks)
         (let [block-ids (mapv :db/id blocks)]
           (try
-            (outliner-op/apply-ops!
+            (apply-ops!
              conn
              [[:batch-set-property [block-ids :block/tags (:db/id class) {}]]]
              {})
-            (outliner-op/apply-ops!
+            (apply-ops!
              conn
              [[:batch-delete-property-value [block-ids :block/tags (:db/id class)]]]
              {})
@@ -1166,7 +1281,7 @@
             (when (seq copied-tree)
               ;; Simulate "copy + paste tree into empty target block" using
               ;; replace-empty-target paste semantics.
-              (outliner-op/apply-ops!
+              (apply-ops!
                conn
                [[:insert-blocks [copied-tree
                                  (:db/id target)
@@ -1204,7 +1319,7 @@
             (when (seq direct-children)
               ;; Simulate "cut + paste into empty target block" in a single outliner
               ;; transaction to avoid intermediate sync states.
-              (outliner-op/apply-ops!
+              (apply-ops!
                conn
                [[:move-blocks [[(:db/id source)] (:db/id target) {:sibling? true}]]
                 [:delete-blocks [[(:db/id target)] {}]]]
@@ -1824,33 +1939,33 @@
               (let [base-page (d/entity @conn-a [:block/uuid base-uuid])
                     tx-meta {:client-id "db-sync-sim-client"
                              :local-tx? true}]
-                (outliner-op/apply-ops! conn-a
+                (apply-ops! conn-a
                                         [[:insert-blocks [[{:block/uuid block-1-uuid
                                                             :block/title ""}]
                                                           (:db/id base-page)
                                                           {:sibling? false
                                                            :keep-uuid? true}]]]
                                         tx-meta)
-                (outliner-op/apply-ops! conn-a
+                (apply-ops! conn-a
                                         [[:save-block [{:block/uuid block-1-uuid
                                                         :block/title "1"}
                                                        nil]]]
                                         tx-meta)
                 (let [block-1 (d/entity @conn-a [:block/uuid block-1-uuid])]
-                  (outliner-op/apply-ops! conn-a
+                  (apply-ops! conn-a
                                           [[:insert-blocks [[{:block/uuid block-2-uuid
                                                               :block/title ""}]
                                                             (:db/id block-1)
                                                             {:sibling? true
                                                              :keep-uuid? true}]]]
                                           tx-meta))
-                (outliner-op/apply-ops! conn-a
+                (apply-ops! conn-a
                                         [[:save-block [{:block/uuid block-2-uuid
                                                         :block/title "2"}
                                                        nil]]]
                                         tx-meta)
                 (let [block-2 (d/entity @conn-a [:block/uuid block-2-uuid])]
-                  (outliner-op/apply-ops! conn-a
+                  (apply-ops! conn-a
                                           [[:indent-outdent-blocks [[(:db/id block-2)] true {}]]]
                                           tx-meta))
                 (loop [undo-count 0]

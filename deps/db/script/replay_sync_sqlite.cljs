@@ -441,6 +441,39 @@
       :else
       nil)))
 
+(defn template-parent-ref
+  [parent]
+  (cond
+    (and (vector? parent) (= :block/uuid (first parent)))
+    parent
+
+    (uuid? parent)
+    [:block/uuid parent]
+
+    (and (map? parent) (uuid? (:block/uuid parent)))
+    [:block/uuid (:block/uuid parent)]
+
+    :else
+    parent))
+
+(defn sanitize-template-block
+  [current-db rebase-db-before block]
+  (let [m (into {} block)
+        block-id (:db/id m)
+        block-uuid (or (:block/uuid m)
+                       (when (number? block-id)
+                         (or (some-> rebase-db-before (d/entity block-id) :block/uuid)
+                             (some-> (d/entity current-db block-id) :block/uuid)))
+                       (when (and (vector? block-id)
+                                  (= :block/uuid (first block-id))
+                                  (uuid? (second block-id)))
+                         (second block-id)))]
+    (cond-> (-> m
+                (dissoc :db/id :block/order :block/page :block/tx-id)
+                (update :block/parent template-parent-ref))
+      (uuid? block-uuid)
+      (assoc :block/uuid block-uuid))))
+
 (defn replay-canonical-outliner-op!
   [conn [op args] rebase-db-before]
   (case op
@@ -473,12 +506,26 @@
       (when-not (and template-id' (d/entity @conn template-id') target)
         (invalid-rebase-op! op {:args args
                                 :reason :missing-template-or-target-block}))
-      (outliner-op/apply-ops!
-       conn
-       [[:apply-template [template-id'
-                          target-id'
-                          (assoc opts :sibling? sibling?)]]]
-       {:gen-undo-ops? false}))
+      (let [template-uuid (:block/uuid (d/entity @conn template-id'))
+            target-uuid (:block/uuid target)]
+        (when-not (and (uuid? template-uuid) (uuid? target-uuid))
+          (invalid-rebase-op! op {:args args
+                                  :reason :missing-template-or-target-uuid}))
+      (let [template-blocks' (some->> (:template-blocks opts)
+                                      (mapv #(sanitize-template-block @conn rebase-db-before %))
+                                      (filter :block/uuid)
+                                      seq)
+            opts' (cond-> (-> opts
+                              (assoc :sibling? sibling?)
+                              (dissoc :template-blocks))
+                    template-blocks'
+                    (assoc :template-blocks template-blocks'))]
+        (outliner-op/apply-ops!
+         conn
+         [[:apply-template [template-uuid
+                            target-uuid
+                            opts']]]
+         {:gen-undo-ops? false}))))
 
     :move-blocks
     (let [[ids target-id opts] args

@@ -181,11 +181,6 @@
        (and entity-ident
             (some? (get ref-block entity-ident)))))))
 
-(defn hidden-ref?
-  "Whether ref-block (for block with the `id`) should be hidden."
-  [db ref-block id]
-  ((hidden-ref-pred db id) ref-block))
-
 (defn get-block-refs
   [db id]
   (let [with-alias (->> (get-block-alias db id)

@@ -581,7 +581,7 @@
 
 (defn- selected-block-roots
   [db-before ids]
-  (let [resolved-entities (mapv #(d/entity db-before %) ids)
+  (let [resolved-entities (mapv #(block-entity db-before %) ids)
         unresolved-id? (some nil? resolved-entities)
         entities (reduce (fn [acc ent]
                            (if (some #(= (:db/id %) (:db/id ent)) acc)
@@ -875,6 +875,107 @@
       :else
       ops')))
 
+(defn- canonical-block-id
+  [db block-id]
+  (cond
+    (uuid? block-id)
+    block-id
+
+    (and (vector? block-id)
+         (= :block/uuid (first block-id))
+         (uuid? (second block-id)))
+    (second block-id)
+
+    (and (integer? block-id)
+         (not (neg? block-id)))
+    (stable-block-uuid db block-id)
+
+    :else
+    block-id))
+
+(defn- canonical-property-id
+  [db property-id]
+  (cond
+    (qualified-keyword? property-id)
+    property-id
+
+    (and (integer? property-id)
+         (not (neg? property-id)))
+    (or (some-> (d/entity db property-id) :db/ident)
+        property-id)
+
+    :else
+    property-id))
+
+(defn- normalize-op-entry-ids
+  [db [op args :as op-entry]]
+  (let [id (fn [v] (canonical-block-id db v))
+        property-id (fn [v] (canonical-property-id db v))
+        ids (fn [vs] (mapv id vs))]
+    (case op
+      :save-block
+      (let [[block opts] args]
+        [op [block opts]])
+
+      :insert-blocks
+      [op [(first args) (id (second args)) (nth args 2)]]
+
+      :apply-template
+      [op [(id (first args)) (id (second args)) (nth args 2)]]
+
+      :delete-blocks
+      [op [(ids (first args)) (second args)]]
+
+      :move-blocks
+      [op [(ids (first args)) (id (second args)) (nth args 2)]]
+
+      :move-blocks-up-down
+      [op [(ids (first args)) (second args)]]
+
+      :indent-outdent-blocks
+      [op [(ids (first args)) (second args) (nth args 2)]]
+
+      :set-block-property
+      [op [(id (first args)) (property-id (second args)) (nth args 2)]]
+
+      :remove-block-property
+      [op [(id (first args)) (property-id (second args))]]
+
+      :delete-property-value
+      [op [(id (first args)) (property-id (second args)) (nth args 2)]]
+
+      :create-property-text-block
+      [op [(some-> (first args) id) (property-id (second args)) (nth args 2) (nth args 3)]]
+
+      :batch-set-property
+      [op [(ids (first args)) (property-id (second args)) (nth args 2) (nth args 3)]]
+
+      :batch-remove-property
+      [op [(ids (first args)) (property-id (second args))]]
+
+      :batch-delete-property-value
+      [op [(ids (first args)) (property-id (second args)) (nth args 2)]]
+
+      :class-add-property
+      [op [(id (first args)) (property-id (second args))]]
+
+      :class-remove-property
+      [op [(id (first args)) (property-id (second args))]]
+
+      :upsert-property
+      [op [(some-> (first args) property-id) (second args) (nth args 2)]]
+
+      :upsert-closed-value
+      [op [(property-id (first args)) (second args)]]
+
+      :delete-closed-value
+      [op [(property-id (first args)) (id (second args))]]
+
+      :add-existing-values-to-closed-values
+      [op [(property-id (first args)) (second args)]]
+
+      op-entry)))
+
 (defn- canonicalize-explicit-outliner-ops
   [db tx-data ops]
   (let [ops' (normalize-op-entries ops)]
@@ -901,16 +1002,25 @@
   (let [forward-insert-ops* (atom (->> forward-outliner-ops
                                        reverse
                                        (filter #(contains? #{:insert-blocks :apply-template} (first %)))
-                                       vec))]
+                                       vec))
+        op->inserted-ids (fn [[op args]]
+                           (let [blocks (case op
+                                          :insert-blocks
+                                          (first args)
+
+                                          :apply-template
+                                          (get-in args [2 :template-blocks])
+
+                                          nil)]
+                             (->> (or blocks [])
+                                  (keep (fn [block]
+                                          (when-let [block-uuid (:block/uuid block)]
+                                            [:block/uuid block-uuid])))
+                                  vec)))]
     (mapv (fn [[op args :as inverse-op]]
             (if (and (= :delete-blocks op)
                      (seq @forward-insert-ops*))
-              (let [[_ [blocks _target-id _opts]] (first @forward-insert-ops*)
-                    ids (->> blocks
-                             (keep (fn [block]
-                                     (when-let [block-uuid (:block/uuid block)]
-                                       [:block/uuid block-uuid])))
-                             vec)]
+              (let [ids (op->inserted-ids (first @forward-insert-ops*))]
                 (swap! forward-insert-ops* subvec 1)
                 (if (seq ids)
                   [:delete-blocks [ids (second args)]]
@@ -1047,23 +1157,31 @@
   (let [canonical-forward-outliner-ops (patch-forward-delete-block-op-ids
                                         db-before
                                         (canonicalize-outliner-ops db-after tx-meta tx-data))
-        canonical-forward-outliner-ops (some-> canonical-forward-outliner-ops seq vec)
+        canonical-forward-outliner-ops (some-> canonical-forward-outliner-ops
+                                               seq
+                                               vec
+                                               (->> (mapv #(normalize-op-entry-ids db-after %))))
         _ (assert-no-stale-numeric-ids! db-after canonical-forward-outliner-ops :forward-outliner-ops)
         forward-outliner-ops canonical-forward-outliner-ops
         built-inverse-outliner-ops (some-> (build-strict-inverse-outliner-ops db-before db-after tx-data forward-outliner-ops)
                                            seq
-                                           vec)
+                                           vec
+                                           (->> (mapv #(normalize-op-entry-ids db-before %))))
         _ (assert-no-stale-numeric-ids! db-before built-inverse-outliner-ops :built-inverse-outliner-ops)
         explicit-inverse-outliner-ops (some-> (canonicalize-explicit-outliner-ops db-after tx-data (:db-sync/inverse-outliner-ops tx-meta))
                                               (patch-inverse-delete-block-ops forward-outliner-ops)
                                               seq
-                                              vec)
+                                              vec
+                                              (->> (mapv #(normalize-op-entry-ids db-after %))))
         _ (assert-no-stale-numeric-ids! db-after explicit-inverse-outliner-ops :explicit-inverse-outliner-ops)
         inverse-outliner-ops (cond
                                (and (= :apply-template (:outliner-op tx-meta))
                                     (:undo? tx-meta)
                                     (seq (:db-sync/inverse-outliner-ops tx-meta)))
-                               (:db-sync/inverse-outliner-ops tx-meta)
+                               (some-> (:db-sync/inverse-outliner-ops tx-meta)
+                                       seq
+                                       vec
+                                       (->> (mapv #(normalize-op-entry-ids db-before %))))
 
                                (has-replace-empty-target-insert-op? forward-outliner-ops)
                                built-inverse-outliner-ops
@@ -1076,7 +1194,10 @@
 
                                :else
                                explicit-inverse-outliner-ops)
-        inverse-outliner-ops (some-> inverse-outliner-ops seq vec)
+        inverse-outliner-ops (some-> inverse-outliner-ops
+                                     seq
+                                     vec
+                                     (->> (mapv #(normalize-op-entry-ids db-before %))))
         _ (assert-no-stale-numeric-ids! db-before inverse-outliner-ops :inverse-outliner-ops)]
     {:forward-outliner-ops forward-outliner-ops
      :inverse-outliner-ops inverse-outliner-ops}))

@@ -63,7 +63,7 @@
              (get-in forward-outliner-ops [0 1 0 0 :block/uuid])))
       (is (= true (get-in forward-outliner-ops [0 1 2 :keep-uuid?])))
       (is (some #(and (= :delete-blocks (first %))
-                      (= [[:block/uuid (:block/uuid empty-target)]]
+                      (= [(:block/uuid empty-target)]
                          (vec (get-in % [1 0]))))
                 (remove nil? inverse-outliner-ops)))
       (is (not-any? #(= :save-block (first %))
@@ -135,10 +135,10 @@
               (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)
               insert-op (first inverse-outliner-ops)]
           (is (= :insert-blocks (first insert-op)))
-          (is (= [:block/uuid parent-uuid]
+          (is (= parent-uuid
                  (get-in insert-op [1 1])))
           (is (= false (get-in insert-op [1 2 :sibling?])))
-          (is (not= [:block/uuid child-uuid]
+          (is (not= child-uuid
                     (get-in insert-op [1 1]))))))))
 
 (deftest derive-history-outliner-ops-delete-blocks-with-stale-id-keeps-id-test
@@ -155,7 +155,7 @@
                    :outliner-ops [[:delete-blocks [[(:db/id child) stale-id] {}]]]}
           {:keys [forward-outliner-ops]}
           (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)]
-      (is (= [[:delete-blocks [[[:block/uuid child-uuid] stale-id] {}]]]
+      (is (= [[:delete-blocks [[child-uuid stale-id] {}]]]
              forward-outliner-ops)))))
 
 (deftest derive-history-outliner-ops-delete-blocks-prefers-retracted-tx-data-ids-test
@@ -175,7 +175,7 @@
           {:keys [forward-outliner-ops]}
           (op-construct/derive-history-outliner-ops
            @conn (:db-after tx-report) (:tx-data tx-report) tx-meta)]
-      (is (= [[:delete-blocks [[[:block/uuid child-uuid]] {}]]]
+      (is (= [[:delete-blocks [[child-uuid] {}]]]
              forward-outliner-ops)))))
 
 (deftest derive-history-outliner-ops-move-blocks-resolves-target-id-from-tx-data-test
@@ -192,7 +192,7 @@
                    :outliner-ops [[:move-blocks [[(:db/id child)] stale-target-id {:sibling? true}]]]}
           {:keys [forward-outliner-ops]}
           (op-construct/derive-history-outliner-ops @conn @conn tx-data tx-meta)]
-      (is (= [:block/uuid target-uuid]
+      (is (= target-uuid
              (get-in forward-outliner-ops [0 1 1]))))))
 
 (deftest derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page-test
@@ -235,7 +235,7 @@
       (let [today-insert-op (some #(when (= :insert-blocks (first %)) %) today-inverse)]
         (is (some? today-insert-op))
         (is (= (:block/uuid today-page)
-               (second (get-in today-insert-op [1 1]))))
+               (get-in today-insert-op [1 1])))
         (is (= (:block/uuid today-child)
                (get-in today-insert-op [1 0 0 :block/uuid])))))))
 
@@ -276,7 +276,7 @@
                                                                   (:db/id parent)
                                                                   {:sibling? false}]]]})]
         (is (= :delete-blocks (ffirst inverse-outliner-ops)))
-        (is (= [[:block/uuid inserted-uuid]]
+        (is (= [inserted-uuid]
                (vec (get-in inverse-outliner-ops [0 1 0]))))))
 
     (testing ":move-blocks"
@@ -287,7 +287,7 @@
                                                            (:db/id parent)
                                                            {:sibling? false}]]]})]
         (is (= :move-blocks (ffirst inverse-outliner-ops)))
-        (is (= [[:block/uuid (:block/uuid child-b)]]
+        (is (= [(:block/uuid child-b)]
                (get-in inverse-outliner-ops [0 1 0])))))
 
     (testing ":delete-blocks"
@@ -348,12 +348,12 @@
                                                             :logical-outdenting? nil}]]]}
           {:keys [forward-outliner-ops inverse-outliner-ops]}
           (op-construct/derive-history-outliner-ops @conn db-after tx-data tx-meta)]
-      (is (= [[:indent-outdent-blocks [[[:block/uuid (:block/uuid child-3)]]
+      (is (= [[:indent-outdent-blocks [[(:block/uuid child-3)]
                                        false
                                        {:parent-original nil
                                         :logical-outdenting? nil}]]]
              forward-outliner-ops))
-      (is (= [[:indent-outdent-blocks [[[:block/uuid (:block/uuid child-3)]]
+      (is (= [[:indent-outdent-blocks [[(:block/uuid child-3)]
                                        true
                                        {:parent-original nil
                                         :logical-outdenting? nil}]]]
@@ -377,12 +377,12 @@
                                                             :logical-outdenting? nil}]]]}
           {:keys [forward-outliner-ops inverse-outliner-ops]}
           (op-construct/derive-history-outliner-ops @conn db-after tx-data tx-meta)]
-      (is (= [[:indent-outdent-blocks [[[:block/uuid (:block/uuid child-2)]]
+      (is (= [[:indent-outdent-blocks [[(:block/uuid child-2)]
                                        false
                                        {:parent-original nil
                                         :logical-outdenting? nil}]]]
              forward-outliner-ops))
-      (is (= [[:indent-outdent-blocks [[[:block/uuid (:block/uuid child-2)]]
+      (is (= [[:indent-outdent-blocks [[(:block/uuid child-2)]
                                        true
                                        {:parent-original nil
                                         :logical-outdenting? nil}]]]
