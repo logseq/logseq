@@ -270,7 +270,7 @@
     [:rtc/log {:type :rtc.log/download
                :sub-type :download-progress
                :graph-uuid graph-uuid
-               :message (t :sync/preparing-snapshot-download)}])
+               :message "Preparing graph snapshot download"}])
    (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
          base (http-base)]
      (-> (if (and graph-uuid base)
