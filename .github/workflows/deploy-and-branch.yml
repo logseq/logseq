@@ -51,7 +51,7 @@ jobs:
       - name: Build web + workers
         run: |
           yarn gulp:build
-          clojure -M:cljs release app db-worker inference-worker \
+          clojure -M:cljs release app db-worker \
             --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}'
           yarn webpack-app-build
 

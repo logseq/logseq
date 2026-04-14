@@ -571,7 +571,8 @@
                     (if (assets-handler/check-alias-path? href)
                       (assets-handler/normalize-asset-resource-url href)
                       href))]
-         (resizable-image config title href metadata full_text false))))))
+         [:div.as-plain-image-link
+          (resizable-image config title href metadata full_text false)])))))
 
 (defn timestamp [{:keys [active _date _time _repetition _wday] :as t} kind]
   (let [prefix (case kind

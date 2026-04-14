@@ -23,7 +23,7 @@
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (def ^:private rtc-tx-or-download-graph?
-  (let [p (some-fn :rtc-op? :rtc-tx? :rtc-download-graph?)]
+  (let [p (some-fn :rtc-op? :rtc-tx? :rtc-download-graph? :transact-remote?)]
     (fn [tx-meta]
       (p tx-meta))))
 
@@ -125,9 +125,12 @@
                     (not (ldb/inline-tag? (:block/raw-title entity) tag))
                     (not (:db/ident entity)))
                (let [eid (:db/id entity)]
-                 [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db-after (:block/title entity))]
-                  [:db/add eid :logseq.property.class/extends :logseq.class/Root]
-                  [:db/retract eid :block/tags :logseq.class/Page]])
+                 (if (:block/page entity)
+                   ;; Built-in #Tag should never turn a page child block into a class.
+                   [[:db/retract eid :block/tags :logseq.class/Tag]]
+                   [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db-after (:block/title entity))]
+                    [:db/add eid :logseq.property.class/extends :logseq.class/Root]
+                    [:db/retract eid :block/tags :logseq.class/Page]]))
 
              ;; remove #Page from tags/journals etc.
                (= (:db/id page-tag) (:v datom))
@@ -354,7 +357,7 @@
                    ;; add created-by for new-block
                    (and (keyword-identical? :block/uuid attr)
                         (:added datom))
-                   (let [ent (d/entity db-after e)]
+                   (when-let [ent (d/entity db-after e)]
                      (when-not (:logseq.property/created-by-ref ent)
                        [:db/add e :logseq.property/created-by-ref created-by-id]))
 
@@ -364,7 +367,8 @@
                         (let [origin-title (:block/title (d/entity db-before e))]
                           (and (some? origin-title)
                                (string/blank? origin-title))))
-                   [:db/add e :logseq.property/created-by-ref created-by-id])))
+                   (when (d/entity db-after e)
+                     [:db/add e :logseq.property/created-by-ref created-by-id]))))
              tx-data)]
         (cond->> add-created-by-tx-data
           (nil? created-by-ent) (cons created-by-block))))))
@@ -437,7 +441,9 @@
                                         (toggle-page-and-block db tx-report))
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data tx-meta)
         ensure-query-tx-data (ensure-query-property-on-tag-additions tx-report)
-        commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (rtc-tx-or-download-graph? tx-meta))
+        commands-tx (when-not (or (:undo? tx-meta)
+                                  (= :rebase (:outliner-op tx-meta))
+                                  (rtc-tx-or-download-graph? tx-meta))
                       (commands/run-commands tx-report))
         insert-templates-tx (when-not (rtc-tx-or-download-graph? tx-meta)
                               (insert-tag-templates tx-report))
@@ -479,7 +485,9 @@
   doesn't call `d/transact!` or `ldb/transact!`."
   [{:keys [db-after tx-meta _tx-data] :as tx-report}]
   (or
-   (when-not (:sync-download-graph? tx-meta)
+   (when-not (or (:sync-download-graph? tx-meta)
+                 (:reverse? tx-meta)
+                 (:transact-remote? tx-meta))
      (ensure-journal-page-protected-attrs-not-updated! tx-report)
      (let [extra-tx-data (compute-extra-tx-data tx-report)
            tx-report* (if (seq extra-tx-data)

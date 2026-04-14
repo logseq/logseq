@@ -11,6 +11,8 @@
   (doto (js-obj)
     (aset "DB" index-db)
     (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
+    ;; Keep node-adapter snapshot stream uncompressed.
+    (aset "DB_SYNC_SNAPSHOT_STREAM_GZIP" "false")
     (aset "COGNITO_ISSUER" (:cognito-issuer cfg))
     (aset "COGNITO_CLIENT_ID" (:cognito-client-id cfg))
     (aset "COGNITO_JWKS_URL" (:cognito-jwks-url cfg))))
@@ -33,8 +35,19 @@
         (swap! registry assoc graph-id ctx)
         ctx)))
 
+(defn- close-graph-context!
+  [^js ctx]
+  (when-let [^js sql (.-sql ctx)]
+    (when-let [close (.-close sql)]
+      (close))))
+
+(defn delete-graph!
+  [registry deps graph-id]
+  (when-let [^js ctx (get @registry graph-id)]
+    (close-graph-context! ctx)
+    (swap! registry dissoc graph-id))
+  (storage/delete-graph-db! (get-in deps [:config :data-dir]) graph-id))
+
 (defn close-graphs! [registry]
   (doseq [[_ ^js ctx] @registry]
-    (when-let [^js sql (.-sql ctx)]
-      (when-let [close (.-close sql)]
-        (close)))))
+    (close-graph-context! ctx)))

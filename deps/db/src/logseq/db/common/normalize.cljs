@@ -101,53 +101,96 @@
        ;; sort by :tx, use nth to make this fn works on both vector and datom
        (sort-by #(nth % 3))))
 
+(defn- retract-entity-op?
+  [item]
+  (and (= 2 (count item))
+       (= :db/retractEntity (first item))))
+
+(defn- retract-entity-match-keys
+  [e]
+  (if (and (vector? e) (= :block/uuid (first e)))
+    (let [block-uuid (second e)]
+      #{e block-uuid (str block-uuid)})
+    #{e}))
+
+(defn reorder-retract-entity
+  [tx-data]
+  (let [retract-ops (filter retract-entity-op? tx-data)
+        {recreated-block-retract-ops true
+         end-retract-ops false} (->> retract-ops
+                                     (group-by (fn [[_ [_ id]]]
+                                                 (boolean
+                                                  (some (fn [x]
+                                                          (and
+                                                           (vector? x)
+                                                           (>= (count x) 4)
+                                                           (= (first x) :db/add)
+                                                           (= (nth x 2) :block/uuid)
+                                                           (= (nth x 3) id))) tx-data)))))
+        retract-keys (->> retract-ops
+                          (map second)
+                          (mapcat retract-entity-match-keys)
+                          set)
+        datom-for-retracted-eid?
+        (fn [item]
+          (and (vector? item)
+               (>= (count item) 4)
+               (contains? retract-keys (second item))))
+        datoms-for-retracted-eids (filter datom-for-retracted-eid? tx-data)
+        others (remove (fn [item]
+                         (or (retract-entity-op? item)
+                             (datom-for-retracted-eid? item)))
+                       tx-data)]
+    (concat recreated-block-retract-ops datoms-for-retracted-eids others end-retract-ops)))
+
+(defn- resolve-eid
+  [db-before db-after retract? e]
+  (if retract?
+    (eid->lookup db-before e)
+    (or (eid->lookup db-before e)
+        (eid->tempid db-after e))))
+
+(defn- ref-value-type?
+  [db-after db-before attr]
+  (or (= :db.type/ref (:db/valueType (d/entity db-after attr)))
+      (= :db.type/ref (:db/valueType (d/entity db-before attr)))))
+
+(defn normalize-datom
+  [db-after db-before [e a v t added]]
+  (let [retract? (not added)
+        e' (resolve-eid db-before db-after retract? e)
+        v' (if (and (integer? v)
+                    (pos? v)
+                    (ref-value-type? db-after db-before a))
+             (resolve-eid db-before db-after retract? v)
+             v)]
+    (when (and (some? e') (some? v'))
+      (if added
+        [:db/add e' a v' t]
+        [:db/retract e' a v' t]))))
+
+(defn- normalize-retract-entity-item
+  [db-before d]
+  (when-let [[op e] (and (= 2 (count d))
+                         (= :db/retractEntity (first d))
+                         d)]
+    (when-let [e' (eid->lookup db-before e)]
+      [op e'])))
+
+(defn- normalize-tx-item
+  [db-after db-before d]
+  (case (count d)
+    5 (normalize-datom db-after db-before d)
+    2 (normalize-retract-entity-item db-before d)
+    nil))
+
 (defn normalize-tx-data
   [db-after db-before tx-data]
-  (let [title-updated-entities
-        (->> tx-data
-             (keep (fn [d]
-                     (when (= (count d) 5)
-                       (let [[e a _v _t added] d]
-                         (when (and added (= :block/title a))
-                           e)))))
-             set)]
-    (->> tx-data
-         remove-conflict-datoms
-         (replace-attr-retract-with-retract-entity db-after)
-         sort-datoms
-         (keep
-          (fn [d]
-            (if (= (count d) 5)
-              (let [[e a v t added] d
-                    retract? (not added)
-                    drop-retract?
-                    (and retract?
-                         (or (contains? #{:block/created-at :block/updated-at} a)
-                             (and (= :block/title a)
-                                  (contains? title-updated-entities e))))]
-                (when-not drop-retract?
-                  (let [e' (if retract?
-                             (eid->lookup db-before e)
-                             (or (eid->lookup db-before e)
-                                 (eid->tempid db-after e)))
-                        v' (if (and (integer? v)
-                                    (pos? v)
-                                    (or (= :db.type/ref (:db/valueType (d/entity db-after a)))
-                                        (= :db.type/ref (:db/valueType (d/entity db-before a)))))
-                             (if retract?
-                               (eid->lookup db-before v)
-                               (or (eid->lookup db-before v)
-                                   (eid->tempid db-after v)))
-                             v)]
-                    (when (and (some? e') (some? v'))
-                      (if added
-                        [:db/add e' a v' t]
-                        [:db/retract e' a v' t])))))
-              (when-let [[op e] (and (= 2 (count d))
-                                     (= :db/retractEntity (first d))
-                                     d)]
-                (when-let [e' (or (eid->lookup db-before e)
-                                  e)]
-                  [op e'])))))
-         (remove-retract-entity-ref db-after)
-         distinct)))
+  (->> tx-data
+       remove-conflict-datoms
+       (replace-attr-retract-with-retract-entity db-after)
+       sort-datoms
+       (keep #(normalize-tx-item db-after db-before %))
+       (remove-retract-entity-ref db-after)
+       reorder-retract-entity
+       distinct))

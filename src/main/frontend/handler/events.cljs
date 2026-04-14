@@ -32,7 +32,6 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.search :as search-handler]
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.mobile.util :as mobile-util]
@@ -57,6 +56,12 @@
 (defmulti handle first)
 
 (defonce ^:private *search-index-build-timeout (atom nil))
+(def ^:private decrypt-aes-key-failed-notification
+  "Failed to decrypt this graph.")
+
+(defn- decrypt-aes-key-failed?
+  [error]
+  (string/includes? (or (ex-message error) (str error)) "decrypt-aes-key"))
 
 (defn- schedule-search-index-build!
   [repo]
@@ -107,7 +112,6 @@
       (p/delay 5000)
       (p/let [repo (state/get-current-repo)
               _ (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)]
-        (search-handler/rebuild-embeddings! repo)
         (when state/lsp-enabled?
           (doseq [service (state/get-all-plugin-services-with-type :search)]
             (search-plugin/call-service! service "search:rebuildPagesIndice" {})
@@ -133,9 +137,10 @@
     (page-handler/create-today-journal!)
     (page-handler/<create! page-name opts)))
 
-(defmethod handle :page/deleted [[_ page-name tx-meta]]
-  (when-not (util/mobile?)
-    (page-common-handler/after-page-deleted! page-name tx-meta)))
+(defmethod handle :page/deleted [[_ page-name _tx-meta]]
+  (when page-name
+    (when-not (util/mobile?)
+      (page-common-handler/after-page-deleted! page-name))))
 
 (defmethod handle :page/renamed [[_ repo data]]
   (when-not (util/mobile?)
@@ -338,9 +343,6 @@
                       (db/entity [:block/uuid (:block/uuid block)])))]
        (js/setTimeout #(editor-handler/edit-block! block :max) 100)))))
 
-(defmethod handle :vector-search/sync-state [[_ state]]
-  (state/set-state! :vector-search/state state))
-
 (defmethod handle :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
 
@@ -378,8 +380,8 @@
               (println "RTC download graph failed, error:")
               (log/error :rtc-download-graph-failed e)
               (shui/popup-hide! :download-rtc-graph)
-              ;; TODO: notify error
-              ))))
+              (when (decrypt-aes-key-failed? e)
+                (notification/show! decrypt-aes-key-failed-notification :error false))))))
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]
@@ -404,9 +406,6 @@
     (p/all (map (fn [id]
                   (db-async/<get-block (state/get-current-repo) id
                                        {:skip-refresh? false})) ids))))
-
-(defmethod handle :vector-search/load-model-progress [[_ data]]
-  (state/set-state! :vector-search/load-model-progress data))
 
 (defn run!
   []

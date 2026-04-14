@@ -1,27 +1,27 @@
 (ns logseq.db-sync.worker.handler.sync
   (:require [clojure.string :as string]
-            [datascript.core :as d]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.batch :as batch]
+            [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.snapshot :as snapshot]
             [logseq.db-sync.storage :as storage]
+            [logseq.db-sync.tx-sanitize :as tx-sanitize]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
-            [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
 (def ^:private snapshot-download-batch-size 10000)
-(def ^:private snapshot-cache-control "private, max-age=300")
-(def ^:private snapshot-content-type "application/x-ndjson")
+;; (def ^:private snapshot-cache-control "private, max-age=300")
+(def ^:private snapshot-content-type "application/transit+json")
 (def ^:private snapshot-content-encoding "gzip")
 (def ^:private snapshot-uploading-meta-key :snapshot-uploading?)
 ;; 10m
-(def ^:private snapshot-multipart-part-size (* 10 1024 1024))
+;; (def ^:private snapshot-multipart-part-size (* 10 1024 1024))
 
 (defn parse-int [value]
   (when (some? value)
@@ -47,7 +47,8 @@
 (defn- ensure-conn! [^js self]
   (ensure-schema! self)
   (when-not (.-conn self)
-    (set! (.-conn self) (storage/open-conn (.-sql self)))))
+    (set! (.-conn self)
+          (storage/open-conn (.-sql self)))))
 
 (defn t-now [^js self]
   (ensure-schema! self)
@@ -55,9 +56,7 @@
 
 (defn current-checksum [^js self]
   (ensure-conn! self)
-  (let [db @(.-conn self)]
-    (when-not (ldb/get-graph-rtc-e2ee? db)
-      (storage/get-checksum (.-sql self)))))
+  (storage/get-checksum (.-sql self)))
 
 (defn snapshot-upload-finished? [^js self]
   (ensure-schema! self)
@@ -124,12 +123,16 @@
     (when (seq (or header-id param-id))
       (or header-id param-id))))
 
-(defn- snapshot-key [graph-id snapshot-id]
-  (str graph-id "/" snapshot-id ".snapshot"))
+;; (defn- snapshot-key [graph-id snapshot-id]
+;;   (str graph-id "/" snapshot-id ".snapshot"))
 
-(defn- snapshot-url [request graph-id snapshot-id]
+;; (defn- snapshot-url [request graph-id snapshot-id]
+;;   (let [url (js/URL. (.-url request))]
+;;     (str (.-origin url) "/assets/" graph-id "/" snapshot-id ".snapshot")))
+
+(defn- snapshot-stream-url [request graph-id]
   (let [url (js/URL. (.-url request))]
-    (str (.-origin url) "/assets/" graph-id "/" snapshot-id ".snapshot")))
+    (str (.-origin url) "/sync/" graph-id "/snapshot/stream")))
 
 (defn- maybe-decompress-stream [stream encoding]
   (if (and (= encoding snapshot-content-encoding) (exists? js/DecompressionStream))
@@ -137,110 +140,118 @@
     stream))
 
 (defn- maybe-compress-stream [stream]
-  (when-not (exists? js/CompressionStream)
-    (throw (ex-info "gzip compression not supported"
-                    {:type :db-sync/compression-not-supported})))
   (.pipeThrough stream (js/CompressionStream. snapshot-content-encoding)))
 
-(defn- <buffer-stream
-  [stream]
-  (p/let [resp (js/Response. stream)
-          buf (.arrayBuffer resp)]
-    buf))
+(defn- snapshot-stream-gzip-enabled?
+  [^js self]
+  (let [v (some-> self .-env (aget "DB_SYNC_SNAPSHOT_STREAM_GZIP"))]
+    (cond
+      (nil? v) true
+      (false? v) false
+      (string? v) (not (contains? #{"false" "0" "off" "no"}
+                                   (string/lower-case v)))
+      :else (boolean v))))
 
-(defn- ->uint8 [data]
-  (cond
-    (instance? js/Uint8Array data) data
-    (instance? js/ArrayBuffer data) (js/Uint8Array. data)
-    :else (js/Uint8Array. data)))
+;; (defn- <buffer-stream
+;;   [stream]
+;;   (p/let [resp (js/Response. stream)
+;;           buf (.arrayBuffer resp)]
+;;     buf))
 
-(defn- concat-uint8 [^js a ^js b]
-  (cond
-    (nil? a) b
-    (nil? b) a
-    :else
-    (let [out (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
-      (.set out a 0)
-      (.set out b (.-byteLength a))
-      out)))
+;; (defn- ->uint8 [data]
+;;   (cond
+;;     (instance? js/Uint8Array data) data
+;;     (instance? js/ArrayBuffer data) (js/Uint8Array. data)
+;;     :else (js/Uint8Array. data)))
 
-(defn- snapshot-datom->jsonl-datom
-  [datom]
-  {:e (:e datom)
-   :a (:a datom)
-   :v (:v datom)
-   :tx (:tx datom)
-   :added (:added datom)})
+;; (defn- concat-uint8 [^js a ^js b]
+;;   (cond
+;;     (nil? a) b
+;;     (nil? b) a
+;;     :else
+;;     (let [out (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
+;;       (.set out a 0)
+;;       (.set out b (.-byteLength a))
+;;       out)))
 
-(defn- snapshot-datom-count
-  [conn]
-  (count (d/datoms @conn :eavt)))
+(defn- frame-bytes
+  [^js data]
+  (let [len (.-byteLength data)
+        out (js/Uint8Array. (+ 4 len))
+        view (js/DataView. (.-buffer out))]
+    (.setUint32 view 0 len false)
+    (.set out data 4)
+    out))
 
-(defn- snapshot-export-datoms
-  [conn]
-  (let [db @conn
-        schema-version-eid (some-> (d/entity db :logseq.kv/schema-version) :db/id)
-        ident-eids (into #{}
-                         (map :e)
-                         (d/datoms db :avet :db/ident))
-        jsonl-datoms (fn [pred]
-                       (sequence
-                        (comp (filter pred)
-                              (map snapshot-datom->jsonl-datom))
-                        (d/datoms db :eavt)))]
-    (concat (jsonl-datoms #(= schema-version-eid (:e %)))
-            (jsonl-datoms #(and (contains? ident-eids (:e %))
-                                (not= schema-version-eid (:e %))))
-            (jsonl-datoms #(not (contains? ident-eids (:e %)))))))
+(defn- fetch-snapshot-kvs-rows
+  [sql last-addr limit]
+  (let [rows (common/get-sql-rows
+              (common/sql-exec sql
+                               "select addr, content, addresses from kvs where addr > ? order by addr asc limit ?"
+                               last-addr
+                               limit))]
+    (mapv (fn [row]
+            [(aget row "addr")
+             (aget row "content")
+             (aget row "addresses")])
+          rows)))
+
+(defn- snapshot-row-count
+  [sql]
+  (if-let [row (first (common/get-sql-rows
+                       (common/sql-exec sql "select count(*) as row_count from kvs")))]
+    (or (aget row "row_count") 0)
+    0))
 
 (defn- snapshot-export-stream [^js self]
-  (ensure-conn! self)
-  (let [remaining (volatile! (seq (snapshot-export-datoms (.-conn self))))]
+  (ensure-schema! self)
+  (let [sql (.-sql self)
+        last-addr (volatile! -1)]
     (js/ReadableStream.
-     #js {:pull (fn [controller]
-                  (let [batch (vec (take snapshot-download-batch-size @remaining))]
-                    (if (empty? batch)
-                      (.close controller)
-                      (let [remaining' (drop snapshot-download-batch-size @remaining)
-                            payload (snapshot/encode-datoms-jsonl batch)]
-                        (vreset! remaining (seq remaining'))
-                        (.enqueue controller payload)))))})))
+     (clj->js
+      {:pull (fn [controller]
+               (let [batch (fetch-snapshot-kvs-rows sql @last-addr snapshot-download-batch-size)]
+                 (if (empty? batch)
+                   (.close controller)
+                   (let [payload (snapshot/encode-rows batch)]
+                     (vreset! last-addr (first (peek batch)))
+                     (.enqueue controller (frame-bytes payload))))))}))))
 
-(defn- upload-multipart!
-  [^js bucket key stream opts]
-  (p/let [^js upload (.createMultipartUpload bucket key opts)]
-    (let [reader (.getReader stream)]
-      (-> (p/loop [buffer nil
-                   part-number 1
-                   parts []]
-            (p/let [chunk (.read reader)]
-              (if (.-done chunk)
-                (cond
-                  (and buffer (pos? (.-byteLength buffer)))
-                  (p/let [^js resp (.uploadPart upload part-number buffer)
-                          parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
-                    (p/let [_ (.complete upload (clj->js parts))]
-                      {:ok true}))
+;; (defn- upload-multipart!
+;;   [^js bucket key stream opts]
+;;   (p/let [^js upload (.createMultipartUpload bucket key opts)]
+;;     (let [reader (.getReader stream)]
+;;       (-> (p/loop [buffer nil
+;;                    part-number 1
+;;                    parts []]
+;;             (p/let [chunk (.read reader)]
+;;               (if (.-done chunk)
+;;                 (cond
+;;                   (and buffer (pos? (.-byteLength buffer)))
+;;                   (p/let [^js resp (.uploadPart upload part-number buffer)
+;;                           parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
+;;                     (p/let [_ (.complete upload (clj->js parts))]
+;;                       {:ok true}))
 
-                  (seq parts)
-                  (p/let [_ (.complete upload (clj->js parts))]
-                    {:ok true})
+;;                   (seq parts)
+;;                   (p/let [_ (.complete upload (clj->js parts))]
+;;                     {:ok true})
 
-                  :else
-                  (p/let [_ (.abort upload)]
-                    (.put bucket key (js/Uint8Array. 0) opts)))
-                (let [value (.-value chunk)
-                      buffer (concat-uint8 buffer (->uint8 value))]
-                  (if (>= (.-byteLength buffer) snapshot-multipart-part-size)
-                    (let [part (.slice buffer 0 snapshot-multipart-part-size)
-                          rest-parts (.slice buffer snapshot-multipart-part-size (.-byteLength buffer))]
-                      (p/let [^js resp (.uploadPart upload part-number part)
-                              parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
-                        (p/recur rest-parts (inc part-number) parts)))
-                    (p/recur buffer part-number parts))))))
-          (p/catch (fn [error]
-                     (.abort upload)
-                     (throw error)))))))
+;;                   :else
+;;                   (p/let [_ (.abort upload)]
+;;                     (.put bucket key (js/Uint8Array. 0) opts)))
+;;                 (let [value (.-value chunk)
+;;                       buffer (concat-uint8 buffer (->uint8 value))]
+;;                   (if (>= (.-byteLength buffer) snapshot-multipart-part-size)
+;;                     (let [part (.slice buffer 0 snapshot-multipart-part-size)
+;;                           rest-parts (.slice buffer snapshot-multipart-part-size (.-byteLength buffer))]
+;;                       (p/let [^js resp (.uploadPart upload part-number part)
+;;                               parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
+;;                         (p/recur rest-parts (inc part-number) parts)))
+;;                     (p/recur buffer part-number parts))))))
+;;           (p/catch (fn [error]
+;;                      (.abort upload)
+;;                      (throw error)))))))
 
 (declare import-snapshot!)
 (defn- import-snapshot-stream! [^js self stream reset?]
@@ -289,71 +300,58 @@
       (reset-import! sql))
     (import-snapshot-rows! sql "kvs" rows)))
 
-(defn- sanitize-client-tx-data
-  [conn txs]
-  (let [lookup-id (fn [x]
-                    (when (and (vector? x)
-                               (= 2 (count x))
-                               (= :block/uuid (first x)))
-                      (second x)))
-        tx-data* (protocol/transit->tx txs)
-        created-block-uuids (->> tx-data*
-                                 (keep (fn [item]
-                                         (when (and (vector? item)
-                                                    (= :db/add (first item))
-                                                    (>= (count item) 4)
-                                                    (= :block/uuid (nth item 2)))
-                                           (nth item 3))))
-                                 set)
-        missing-lookup-ref? (fn [x]
-                              (when-let [block-uuid (lookup-id x)]
-                                (and (not (contains? created-block-uuids block-uuid))
-                                     (nil? (d/entity @conn x)))))]
-    (remove (fn [item]
-              (when (vector? item)
-                (let [op (first item)
-                      attr (nth item 2 nil)
-                      value (when (>= (count item) 4) (nth item 3))]
-                  (or (and (contains? #{:db/add :db/retract :db/retractEntity} op)
-                           (missing-lookup-ref? (second item)))
-                      (and (contains? #{:db/add :db/retract} op)
-                           (contains? db-schema/ref-type-attributes attr)
-                           (missing-lookup-ref? value))))))
-            tx-data*)))
-
 (defn- apply-tx-entry!
   [conn {:keys [tx outliner-op]}]
-  (let [tx-data (sanitize-client-tx-data conn tx)]
-    (when (seq tx-data)
-      (ldb/transact! conn tx-data (cond-> {:op :apply-client-tx}
-                                    outliner-op (assoc :outliner-op outliner-op))))))
+  (let [tx-data (tx-sanitize/sanitize-tx @conn
+                                         (protocol/transit->tx tx)
+                                         {:drop-missing-retract-ops? (= outliner-op :fix)})]
+    (if (seq tx-data)
+      (try
+        (ldb/transact! conn tx-data (cond-> {:op :apply-client-tx}
+                                      outliner-op (assoc :outliner-op outliner-op)))
+        true
+        (catch :default e
+          ;; Rebase/fix txs are inferred from local history and can become stale
+          ;; when concurrent remote edits remove referenced entities before upload.
+          ;; Treat stale :entity-id/missing rebases/fixes as no-op so sync can continue.
+          (if (and (contains? #{:rebase :fix} outliner-op)
+                   (= :entity-id/missing (:error (ex-data e))))
+            (do
+              (log/warn :db-sync/drop-stale-rebase-tx
+                        {:outliner-op outliner-op
+                         :tx-data tx-data
+                         :error (str e)})
+              false)
+            (throw e))))
+      false)))
 
-(defn- db-transact-failed-response
-  [sql tx-entry]
-  {:type "tx/reject"
-   :reason "db transact failed"
-   :t (storage/get-t sql)
-   :data (common/write-transit tx-entry)})
-
-(defn- apply-tx! [^js self sender tx-entries]
+(defn- apply-tx! [^js self tx-entries]
   (let [sql (.-sql self)]
     (ensure-conn! self)
     (let [conn (.-conn self)]
-      (loop [remaining tx-entries]
+      (loop [remaining tx-entries
+             applied? false
+             successful-tx-ids []]
         (if-let [tx-entry (first remaining)]
-          (let [result (try
-                         (apply-tx-entry! conn tx-entry)
-                         ::ok
-                         (catch :default e
-                           (log/error :db-sync/transact-failed e)
-                           (db-transact-failed-response sql tx-entry)))]
-            (if (= ::ok result)
-              (recur (next remaining))
-              result))
+          (let [tx-id (:tx-id tx-entry)
+                applied-entry? (try
+                                 (boolean (apply-tx-entry! conn tx-entry))
+                                 (catch :default e
+                                   (log/error :db-sync/transact-failed e)
+                                   (throw (ex-info "tx entry apply failed"
+                                                   (cond-> {:type :db-sync/tx-entry-failed
+                                                            :successful-tx-ids successful-tx-ids}
+                                                     tx-id (assoc :failed-tx-id tx-id))
+                                                   e))))
+                next-successful-tx-ids (cond-> successful-tx-ids
+                                         tx-id (conj tx-id))]
+            (recur (next remaining)
+                   (or applied? applied-entry?)
+                   next-successful-tx-ids))
           (let [new-t (storage/get-t sql)]
-            ;; FIXME: no need to broadcast if client tx is less than remote tx
-            (ws/broadcast! self sender {:type "changed" :t new-t})
-            new-t))))))
+            {:t new-t
+             :applied? applied?
+             :successful-tx-ids successful-tx-ids}))))))
 
 (defn handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]
@@ -375,18 +373,28 @@
       :else
       (if (seq txs)
         (try
-          (let [new-t (apply-tx! self sender txs)]
-            (if (and (map? new-t) (= "tx/reject" (:type new-t)))
-              new-t
-              (let [checksum (current-checksum self)]
-                (cond-> {:type "tx/batch/ok"
-                         :t new-t}
-                  (string? checksum) (assoc :checksum checksum)))))
+          (let [{:keys [t applied?]} (apply-tx! self txs)
+                checksum (current-checksum self)]
+            (when applied?
+              ;; Broadcast once per processed batch after tx-log/checksum settle.
+              (ws/broadcast! self sender {:type "changed" :t t}))
+            (cond-> {:type "tx/batch/ok"
+                     :t t}
+              (string? checksum) (assoc :checksum checksum)))
           (catch :default e
-            (log/error :db-sync/transact-failed e)
-            {:type "tx/reject"
-             :reason "db transact failed"
-             :t (t-now self)}))
+            (let [new-t (t-now self)
+                  {:keys [successful-tx-ids failed-tx-id]}
+                  (ex-data e)]
+              (log/error :db-sync/transact-failed e)
+              (when (> new-t current-t)
+                ;; Broadcast once when partial batch writes advanced the graph.
+                (ws/broadcast! self sender {:type "changed" :t new-t}))
+              (cond-> {:type "tx/reject"
+                       :reason "db transact failed"
+                       :error-detail (str e)
+                       :t new-t}
+                (seq successful-tx-ids) (assoc :success-tx-ids successful-tx-ids)
+                failed-tx-id (assoc :failed-tx-id failed-tx-id)))))
         {:type "tx/reject"
          :reason "empty tx data"}))))
 
@@ -402,59 +410,75 @@
           (http/error-response "graph not ready" 409)
           (http/json-response :sync/pull (pull-response self since)))))))
 
+(defn- normalize-diagnostic-block
+  [{:keys [block/uuid block/parent block/page block/order] :as block}]
+  (cond-> block
+    uuid (assoc :block/uuid (str uuid))
+    parent (assoc :block/parent (str parent))
+    page (assoc :block/page (str page))
+    order (assoc :block/order order)))
+
+(defn- checksum-diagnostics-response
+  [^js self]
+  (ensure-conn! self)
+  (-> (sync-checksum/recompute-checksum-diagnostics @(.-conn self))
+      (update :blocks (fn [blocks]
+                        (mapv normalize-diagnostic-block blocks)))))
+
+(defn- handle-sync-checksum-diagnostics
+  [^js self request]
+  (let [graph-id (graph-id-from-request request)]
+    (if (not (seq graph-id))
+      (http/bad-request "missing graph id")
+      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+        (if-not ready-for-sync?
+          (http/error-response "graph not ready" 409)
+          (http/json-response :sync/checksum-diagnostics
+                              (checksum-diagnostics-response self)))))))
+
 (defn- handle-sync-snapshot-stream
   [^js self request]
   (let [graph-id (graph-id-from-request request)]
     (if (not (seq graph-id))
       (http/bad-request "missing graph id")
-      (let [stream (-> (snapshot-export-stream self)
-                       (maybe-compress-stream))
-            conn (or (.-conn self)
-                     (do (ensure-conn! self) (.-conn self)))
-            datom-count (snapshot-datom-count conn)]
+      (let [gzip? (and (snapshot-stream-gzip-enabled? self)
+                       (exists? js/CompressionStream))
+            stream (cond-> (snapshot-export-stream self)
+                     gzip?
+                     (maybe-compress-stream))
+            row-count (snapshot-row-count (.-sql self))
+            headers (cond-> {"content-type" snapshot-content-type}
+                      gzip?
+                      (assoc "content-encoding" snapshot-content-encoding))]
         (js/Response. stream
                       #js {:status 200
                            :headers (js/Object.assign
-                                     #js {"content-type" snapshot-content-type
-                                          "content-encoding" snapshot-content-encoding}
-                                     #js {"x-snapshot-datom-count" (str datom-count)}
+                                     (clj->js headers)
+                                     #js {"x-snapshot-row-count" (str row-count)}
                                      (common/cors-headers))})))))
 
 (defn- handle-sync-snapshot-download
   [^js self request]
-  (let [graph-id (graph-id-from-request request)
-        ^js bucket (.-LOGSEQ_SYNC_ASSETS (.-env self))]
+  (let [graph-id (graph-id-from-request request)]
     (cond
       (not (seq graph-id))
       (http/bad-request "missing graph id")
-
-      (nil? bucket)
-      (http/error-response "missing assets bucket" 500)
 
       :else
       (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
         (if-not ready-for-sync?
           (http/error-response "graph not ready" 409)
-          (p/let [snapshot-id (str (random-uuid))
-                  key (snapshot-key graph-id snapshot-id)
-                  stream (-> (snapshot-export-stream self)
-                             (maybe-compress-stream))
-                  multipart? (and (some? (.-createMultipartUpload bucket))
-                                  (fn? (.-createMultipartUpload bucket)))
-                  opts #js {:httpMetadata #js {:contentType snapshot-content-type
-                                               :contentEncoding snapshot-content-encoding
-                                               :cacheControl snapshot-cache-control}
-                            :customMetadata #js {:purpose "snapshot"
-                                                 :created-at (str (common/now-ms))}}
-                  _ (if multipart?
-                      (upload-multipart! bucket key stream opts)
-                      (p/let [body (<buffer-stream stream)]
-                        (.put bucket key body opts)))
-                  url (snapshot-url request graph-id snapshot-id)]
-            (http/json-response :sync/snapshot-download {:ok true
-                                                         :key key
-                                                         :url url
-                                                         :content-encoding snapshot-content-encoding})))))))
+          (let [key (str "stream/" graph-id ".snapshot")
+                url (snapshot-stream-url request graph-id)
+                content-encoding (when (and (snapshot-stream-gzip-enabled? self)
+                                            (exists? js/CompressionStream))
+                                   snapshot-content-encoding)]
+            (http/json-response :sync/snapshot-download
+                                (cond-> {:ok true
+                                         :key key
+                                         :url url}
+                                  content-encoding
+                                  (assoc :content-encoding content-encoding)))))))))
 
 (defn- handle-sync-admin-reset
   [^js self]
@@ -556,6 +580,9 @@
 
     :sync/pull
     (handle-sync-pull self url)
+
+    :sync/checksum-diagnostics
+    (handle-sync-checksum-diagnostics self request)
 
     :sync/snapshot-stream
     (handle-sync-snapshot-stream self request)

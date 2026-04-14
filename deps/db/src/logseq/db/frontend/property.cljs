@@ -633,13 +633,7 @@
      :logseq.property.sync/large-title-object {:title "Reference to large block title stored in remote object storage"
                                                :schema {:type :map
                                                         :public? false
-                                                        :hide? true}}
-     :logseq.property.embedding/hnsw-label-updated-at {:title "HNSW label updated-at"
-                                                       :schema {:type :datetime
-                                                                :public? false
-                                                                :hide? true}
-                                                       :queryable? false
-                                                       :rtc property-ignore-rtc})))
+                                                        :hide? true}})))
 
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"
@@ -691,7 +685,7 @@
     "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table" "logseq.property.node"
     "logseq.property.code" "logseq.property.repeat"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
-    "logseq.property.user" "logseq.property.history" "logseq.property.embedding"
+    "logseq.property.user" "logseq.property.history"
     "logseq.property.reaction" "logseq.property.sync" "logseq.property.publish"
     "logseq.property.recycle"})
 

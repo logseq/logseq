@@ -6,9 +6,9 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [dommy.core :as dom]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
@@ -70,7 +70,7 @@
          :else
          (when-not (string/blank? title')
            (p/let [existing-page (when-not class? (db/get-page title'))]
-             (if existing-page
+             (if (and existing-page (not (ldb/recycled? existing-page)))
                existing-page
                (p/let [options' (cond-> (update options :tags concat (:block/tags parsed-result))
                                   (nil? (:split-namespace? options))
@@ -162,18 +162,10 @@
 ;; =========
 
 (defn after-page-deleted!
-  [page-name tx-meta]
-    ;; TODO: move favorite && unfavorite to worker too
+  [page-name]
+  ;; TODO: move favorite && unfavorite to worker too
   (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-    (<db-unfavorite-page! page-block-uuid))
-
-  (when (and (not= :rename-page (:real-outliner-op tx-meta))
-             (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
-                (common-util/page-name-sanity-lc page-name)))
-    (route-handler/redirect-to-home!))
-
-    ;; TODO: why need this?
-  (ui-handler/re-render-root!))
+    (<db-unfavorite-page! page-block-uuid)))
 
 (defn after-page-renamed!
   [repo {:keys [page-id old-name new-name]}]
