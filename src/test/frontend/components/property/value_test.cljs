@@ -47,3 +47,21 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest resolved-property-value-for-render-skips-default-for-placeholder-row-test
+  (let [property {:db/ident :logseq.property/status
+                  :logseq.property/default-value {:db/id 3
+                                                  :db/ident :logseq.property/status.todo
+                                                  :block/title "Todo"}}
+        placeholder-block {:db/id 1}]
+    (is (nil? (#'property-value/resolved-property-value-for-render placeholder-block property false)))))
+
+(deftest resolved-property-value-for-render-uses-default-for-loaded-block-test
+  (let [property {:db/ident :logseq.property/status
+                  :logseq.property/default-value {:db/id 3
+                                                  :db/ident :logseq.property/status.todo
+                                                  :block/title "Todo"}}
+        loaded-block {:db/id 1
+                      :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}]
+    (is (= (:logseq.property/default-value property)
+           (#'property-value/resolved-property-value-for-render loaded-block property false)))))

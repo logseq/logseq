@@ -52,8 +52,9 @@
   [{:keys [db-after tx-data tx-meta] :as tx-report} {:keys [closed-schema?]}]
   (binding [db-malli-schema/*skip-strict-url-validate?* true]
     (let [changed-ids (->> tx-data (keep :e) distinct)
-          datoms (d/datoms db-after :eavt)
-          tx-datoms (mapcat (fn [id] (filter (fn [d] (= (:e d) id)) datoms)) changed-ids)
+          tx-datoms (mapcat (fn [id]
+                              (d/datoms db-after :eavt id))
+                            changed-ids)
           ent-maps* (map (fn [[db-id m]]
                          ;; Add :db/id for debugging
                            (assoc m :db/id db-id))

@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const {
   parseArgs,
@@ -13,7 +15,63 @@ const {
   createSeededRng,
   shuffleOperationPlan,
   extractReplayContext,
+  buildSimulationOperationPlan,
+  mergeOutlinerCoverageIntoRound,
+  ALL_OUTLINER_OP_COVERAGE_OPS,
 } = require('../../sync-open-chrome-tab-simulate.cjs');
+
+const OUTLINER_OP_SCHEMA_PATH = path.resolve(
+  __dirname,
+  '../../../deps/outliner/src/logseq/outliner/op.cljs'
+);
+const OUTLINER_OP_CONSTRUCT_PATH = path.resolve(
+  __dirname,
+  '../../../deps/outliner/src/logseq/outliner/op/construct.cljc'
+);
+
+function extractSection(sourceText, startToken, endToken) {
+  const start = sourceText.indexOf(startToken);
+  if (start < 0) {
+    throw new Error(`Missing start token: ${startToken}`);
+  }
+  const end = sourceText.indexOf(endToken, start);
+  if (end < 0) {
+    throw new Error(`Missing end token: ${endToken}`);
+  }
+  return sourceText.slice(start, end);
+}
+
+function parseOpSchemaOps(sourceText) {
+  const section = extractSection(
+    sourceText,
+    '(def ^:private ^:large-vars/data-var op-schema',
+    '(def ^:private ops-schema'
+  );
+  const ops = new Set();
+  for (const match of section.matchAll(/\[\:([a-z0-9-]+)\s*\n\s+\[:catn/g)) {
+    ops.add(match[1]);
+  }
+  return [...ops];
+}
+
+function parseSemanticOps(sourceText) {
+  const section = extractSection(
+    sourceText,
+    '(def ^:api semantic-outliner-ops',
+    '(def ^:private transient-block-keys'
+  );
+  const setStart = section.indexOf('#{');
+  const setEnd = section.indexOf('}', setStart);
+  if (setStart < 0 || setEnd < 0 || setEnd <= setStart) {
+    throw new Error('Failed to parse semantic-outliner-ops set');
+  }
+  const setText = section.slice(setStart + 2, setEnd);
+  const ops = new Set();
+  for (const match of setText.matchAll(/:([a-z0-9-]+)/g)) {
+    ops.add(match[1]);
+  }
+  return [...ops];
+}
 
 test('isRetryableAgentBrowserError treats transient CDP navigation closures as retryable', () => {
   const navigationClosed = new Error(
@@ -69,6 +127,14 @@ test('classifySimulationFailure detects tx-rejected failures', () => {
   assert.equal(classifySimulationFailure(txRejectedError), 'tx_rejected');
 });
 
+test('classifySimulationFailure treats opfs access-handle lock errors as other', () => {
+  const opfsLockError = new Error(
+    "NoModificationAllowedError: Failed to execute 'createSyncAccessHandle' on 'FileSystemFileHandle'"
+  );
+
+  assert.equal(classifySimulationFailure(opfsLockError), 'other');
+});
+
 test('buildRejectedResultEntry marks peer as cancelled after checksum mismatch fail-fast', () => {
   const failFastState = {
     sourceIndex: 0,
@@ -119,6 +185,22 @@ test('buildRejectedResultEntry marks peer as cancelled after tx-rejected fail-fa
   );
   assert.equal(source.cancelled, undefined);
   assert.equal(source.failureType, 'tx_rejected');
+});
+
+test('buildRejectedResultEntry does not cancel peer on opfs lock fail-fast reason', () => {
+  const failFastState = {
+    sourceIndex: 0,
+    reasonType: 'opfs_access_handle_lock',
+  };
+
+  const peer = buildRejectedResultEntry(
+    'logseq-op-sim-2',
+    1,
+    new Error('Command timed out'),
+    failFastState
+  );
+  assert.equal(peer.cancelled, undefined);
+  assert.equal(peer.failureType, 'other');
 });
 
 test('extractChecksumMismatchDetailsFromError parses rtc-log payload JSON', () => {
@@ -229,4 +311,123 @@ test('extractReplayContext returns args override and fixed client plans', () => 
   assert.equal(replay.argsOverride.seed, 'abc');
   assert.deepEqual(replay.fixedPlansByInstance.get(1), ['add', 'move']);
   assert.deepEqual(replay.fixedPlansByInstance.get(2), ['add', 'delete']);
+});
+
+test('buildSimulationOperationPlan full profile includes save, refs, templates, and multi-property ops', () => {
+  const plan = buildSimulationOperationPlan(20, 'full');
+  assert.deepEqual(plan, [
+    'add',
+    'save',
+    'inlineTag',
+    'emptyInlineTag',
+    'pageReference',
+    'blockReference',
+    'propertySet',
+    'batchSetProperty',
+    'propertyValueDelete',
+    'copyPaste',
+    'copyPasteTreeToEmptyTarget',
+    'templateApply',
+    'move',
+    'moveUpDown',
+    'indent',
+    'outdent',
+    'delete',
+    'propertyRemove',
+    'undo',
+    'redo',
+  ]);
+});
+
+test('buildSimulationOperationPlan fast profile cycles through refs, templates, and property variants', () => {
+  const plan = buildSimulationOperationPlan(17, 'fast');
+  assert.deepEqual(plan, [
+    'add',
+    'save',
+    'inlineTag',
+    'emptyInlineTag',
+    'pageReference',
+    'blockReference',
+    'propertySet',
+    'batchSetProperty',
+    'move',
+    'delete',
+    'indent',
+    'outdent',
+    'moveUpDown',
+    'templateApply',
+    'propertyValueDelete',
+    'add',
+    'move',
+  ]);
+});
+
+test('ALL_OUTLINER_OP_COVERAGE_OPS tracks canonical outliner-op definitions', () => {
+  const opSchemaSource = fs.readFileSync(OUTLINER_OP_SCHEMA_PATH, 'utf8');
+  const opConstructSource = fs.readFileSync(OUTLINER_OP_CONSTRUCT_PATH, 'utf8');
+  const expectedOps = [
+    ...new Set([
+      ...parseOpSchemaOps(opSchemaSource),
+      ...parseSemanticOps(opConstructSource),
+    ]),
+  ].sort();
+  const actualOps = [...new Set(ALL_OUTLINER_OP_COVERAGE_OPS)].sort();
+
+  assert.equal(actualOps.length, ALL_OUTLINER_OP_COVERAGE_OPS.length);
+  assert.deepEqual(actualOps, expectedOps);
+});
+
+test('mergeOutlinerCoverageIntoRound prepends all outliner coverage ops to requested plan and op log', () => {
+  const round = {
+    requestedOps: 2,
+    executedOps: 2,
+    counts: { add: 1, move: 1 },
+    requestedPlan: ['add', 'move'],
+    opLog: [
+      { index: 0, requested: 'add', executedAs: 'add', detail: { kind: 'add' } },
+      { index: 1, requested: 'move', executedAs: 'move', detail: { kind: 'move' } },
+    ],
+    outlinerOpCoverage: {
+      expectedOps: ['save-block', 'set-block-property'],
+      failedOps: [],
+      sample: [
+        { op: 'save-block', ok: true, durationMs: 123 },
+        { op: 'set-block-property', ok: true, durationMs: 88 },
+      ],
+    },
+  };
+
+  const merged = mergeOutlinerCoverageIntoRound(round);
+  assert.equal(merged.requestedOps, 4);
+  assert.equal(merged.executedOps, 4);
+  assert.deepEqual(merged.requestedPlan, [
+    'outliner:save-block',
+    'outliner:set-block-property',
+    'add',
+    'move',
+  ]);
+  assert.equal(merged.opLog.length, 4);
+  assert.equal(merged.opLog[0].requested, 'outliner:save-block');
+  assert.equal(merged.opLog[1].requested, 'outliner:set-block-property');
+  assert.equal(merged.opLog[2].index, 2);
+  assert.equal(merged.opLog[3].index, 3);
+  assert.equal(merged.counts.outlinerCoverage, 2);
+  assert.equal(merged.counts.outlinerCoverageFailed, 0);
+});
+
+test('mergeOutlinerCoverageIntoRound is idempotent once outliner ops are already merged', () => {
+  const round = {
+    requestedOps: 2,
+    executedOps: 2,
+    counts: {},
+    requestedPlan: ['outliner:save-block', 'add'],
+    opLog: [],
+    outlinerOpCoverage: {
+      expectedOps: ['save-block'],
+      failedOps: [],
+    },
+  };
+
+  const merged = mergeOutlinerCoverageIntoRound(round);
+  assert.deepEqual(merged, round);
 });

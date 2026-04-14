@@ -3697,6 +3697,21 @@
               (let [pending-after (#'sync-apply/pending-txs test-repo)]
                 (is (empty? pending-after))))))))))
 
+(deftest apply-remote-tx-collapsed-encrypted-title-update-test
+  (testing "decrypted tx that collapses old/new encrypted titles should keep title instead of retracting it"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-uuid (:block/uuid child1)
+          title (:block/title child1)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           nil
+           [[:db/add [:block/uuid child-uuid] :block/title title]
+            [:db/retract [:block/uuid child-uuid] :block/title title]])
+          (is (= title
+                 (:block/title (d/entity @conn [:block/uuid child-uuid])))))))))
+
 (deftest rebase-later-tx-for-new-block-uses-lookup-ref-test
   (testing "rebased tx after creating a block should use lookup ref instead of stale tempid"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
@@ -4110,8 +4125,31 @@
             (when target'
               (is (= "remote-restored" (:block/title target'))))))))))
 
-(deftest apply-remote-txs-local-delete-parent-remote-move-then-delete-parent-repro-test
-  (testing "reproduces transact-remote failure when remote moves blocks under a locally deleted parent and then retracts that parent"
+(deftest apply-remote-txs-delete-parent-with-child-without-local-changes-test
+  (testing "remote delete-blocks tx should retract descendant children on client"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "parent"
+                             :build/children [{:block/title "child"}]}]}]})
+          parent (db-test/find-block-by-content @conn "parent")
+          child (db-test/find-block-by-content @conn "child")
+          parent-uuid (:block/uuid parent)
+          child-uuid (:block/uuid child)]
+      (with-datascript-conns conn nil
+        (fn []
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:tx-data [[:db/retractEntity [:block/uuid parent-uuid]]]}])
+          (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
+          (is (nil? (d/entity @conn [:block/uuid child-uuid])))
+          (let [validation (db-validate/validate-local-db! @conn)]
+            (is (empty? (non-recycle-validation-entities validation))
+                (str (:errors validation)))))))))
+
+(deftest apply-remote-txs-local-delete-parent-remote-move-then-delete-parent-test
+  (testing "remote moves under parent then delete-parent should not fail when local delete is pending"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:block/title "page 1"}
@@ -4147,15 +4185,13 @@
           ;; Local delete creates pending tx requiring reverse before remote apply.
           (outliner-core/delete-blocks! conn [parent] {})
           (is (seq (#'sync-apply/pending-txs test-repo)))
-          (let [result (try
-                         (#'sync-apply/apply-remote-txs! test-repo client remote-txs)
-                         nil
-                         (catch :default e
-                           e))]
-            (is (instance? js/Error result))
-            (is (string/includes? (or (ex-message result) "")
-                                  "DB write failed with invalid data")
-                (str "unexpected error: " (ex-message result)))))))))
+          (#'sync-apply/apply-remote-txs! test-repo client remote-txs)
+          (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
+          (is (nil? (d/entity @conn [:block/uuid mover-1-uuid])))
+          (is (nil? (d/entity @conn [:block/uuid mover-2-uuid])))
+          (let [validation (db-validate/validate-local-db! @conn)]
+            (is (empty? (non-recycle-validation-entities validation))
+                (str (:errors validation)))))))))
 
 (deftest apply-remote-txs-overlap-out-of-order-parent-delete-then-move-repro-test
   (testing "reproduces missing-parent transact-remote failure when overlapping remote slices arrive out of order"
@@ -4480,3 +4516,132 @@
                        (is (= [{:asset-uuid "title-1" :asset-type "txt"}] @download-calls))
                        (is (= "rehydrated-title" (:block/title block))))
                      (p/finally done))))))))
+
+(defn- apply-template-to-empty-target!
+  [conn template-root-uuid empty-target-uuid]
+  (let [template-root (d/entity @conn [:block/uuid template-root-uuid])
+        empty-target (d/entity @conn [:block/uuid empty-target-uuid])
+        template-blocks (->> (ldb/get-block-and-children @conn template-root-uuid
+                                                         {:include-property-block? true})
+                             rest)
+        blocks-to-insert (cons (assoc (first template-blocks)
+                                      :logseq.property/used-template (:db/id template-root))
+                               (rest template-blocks))]
+    (outliner-op/apply-ops!
+     conn
+     [[:apply-template [(:db/id template-root)
+                        (:db/id empty-target)
+                        {:sibling? true
+                         :replace-empty-target? true
+                         :template-blocks blocks-to-insert}]]]
+     local-tx-meta)))
+
+(defn- select-offline-inserted-three
+  [conn template-root-uuid]
+  (let [all-three-ids (d/q '[:find [?b ...]
+                             :in $ ?title
+                             :where
+                             [?b :block/title ?title]]
+                           @conn
+                           "3")
+        all-threes (mapv #(d/entity @conn %) all-three-ids)]
+    (or (some (fn [b]
+                (when (not= template-root-uuid
+                            (some-> b :block/parent :block/uuid))
+                  b))
+              all-threes)
+        (first all-threes))))
+
+(defn- setup-rebase-apply-template-repro-state
+  []
+  (let [template-root-uuid (random-uuid)
+        template-1-uuid (random-uuid)
+        template-2-uuid (random-uuid)
+        template-3-uuid (random-uuid)
+        empty-target-uuid (random-uuid)
+        local-empty-uuid (random-uuid)
+        seed-conn (db-test/create-conn-with-blocks
+                   {:pages-and-blocks
+                    [{:page {:block/title "page 1"}
+                      :blocks [{:block/title "seed"}]}]})
+        seed-page (db-test/find-page-by-title @seed-conn "page 1")
+        page-id (:db/id seed-page)
+        client-ops-conn (new-client-ops-db)]
+    (outliner-op/apply-ops!
+     seed-conn
+     [[:insert-blocks [[{:block/uuid template-root-uuid
+                         :block/title "template 1"
+                         :block/tags #{:logseq.class/Template}}
+                        {:block/uuid template-1-uuid
+                         :block/title "1"
+                         :block/parent [:block/uuid template-root-uuid]}
+                        {:block/uuid template-2-uuid
+                         :block/title "2"
+                         :block/parent [:block/uuid template-1-uuid]}
+                        {:block/uuid template-3-uuid
+                         :block/title "3"
+                         :block/parent [:block/uuid template-root-uuid]}]
+                       page-id
+                       {:sibling? false
+                        :keep-uuid? true}]]
+      [:insert-blocks [[{:block/uuid empty-target-uuid
+                         :block/title ""}]
+                       page-id
+                       {:sibling? false
+                        :keep-uuid? true}]]]
+     local-tx-meta)
+    {:template-root-uuid template-root-uuid
+     :empty-target-uuid empty-target-uuid
+     :local-empty-uuid local-empty-uuid
+     :seed-conn seed-conn
+     :client-ops-conn client-ops-conn}))
+
+(deftest rebase-apply-template-preserves-followup-insert-target-uuid-test
+  (testing "rebase should replay apply-template with stable UUIDs so follow-up insert-blocks is not dropped"
+    (let [{:keys [template-root-uuid empty-target-uuid local-empty-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn-a (d/conn-from-db @seed-conn)
+          conn-b (d/conn-from-db @seed-conn)
+          remote-txs (atom [])]
+      (d/listen! conn-b ::capture-rebase-apply-template
+                 (fn [tx-report]
+                   (swap! remote-txs conj
+                          {:tx-data (db-normalize/normalize-tx-data
+                                     (:db-after tx-report)
+                                     (:db-before tx-report)
+                                     (:tx-data tx-report))
+                           :outliner-op (get-in tx-report [:tx-meta :outliner-op])})))
+      (try
+        (apply-template-to-empty-target! conn-b template-root-uuid empty-target-uuid)
+        (with-datascript-conns conn-a client-ops-conn
+          (fn []
+            (apply-template-to-empty-target! conn-a template-root-uuid empty-target-uuid)
+            (let [inserted-three (select-offline-inserted-three conn-a template-root-uuid)]
+              (is (some? inserted-three))
+              (outliner-core/insert-blocks! conn-a [{:block/uuid local-empty-uuid :block/title ""}]
+                                            inserted-three
+                                            {:sibling? true :keep-uuid? true})
+              (outliner-core/delete-blocks! conn-a [inserted-three] {})
+              (let [pending-before (#'sync-apply/pending-txs test-repo)
+                    insert-tx-id (some->> pending-before
+                                          (filter #(= :insert-blocks (:outliner-op %)))
+                                          last
+                                          :tx-id)
+                    error (try
+                            (#'sync-apply/apply-remote-txs! test-repo nil @remote-txs)
+                            nil
+                            (catch :default e
+                              e))
+                    insert-pending-after (#'sync-apply/pending-tx-by-id test-repo insert-tx-id)
+                    local-empty-block (d/entity @conn-a [:block/uuid local-empty-uuid])]
+                (is (uuid? insert-tx-id))
+                (is (seq @remote-txs))
+                (is (nil? error) (some-> error ex-message))
+                (is (some? insert-pending-after))
+                (is (= :rebase (:outliner-op insert-pending-after)))
+                (is (some? local-empty-block))
+                (let [validation (db-validate/validate-local-db! @conn-a)]
+                  (is (empty? (non-recycle-validation-entities validation))
+                      (str (:errors validation))))))))
+        (finally
+          (d/unlisten! conn-b ::capture-rebase-apply-template))))))

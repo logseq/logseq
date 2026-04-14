@@ -234,7 +234,8 @@
 (defn- apply-template-op!
   [conn *result [template-id target-block-id opts]]
   (when-let [target (d/entity @conn target-block-id)]
-    (let [blocks (template-children-blocks @conn template-id)]
+    (let [blocks (or (some-> (:template-blocks opts) seq vec)
+                     (template-children-blocks @conn template-id))]
       (when (seq blocks)
         (let [sibling? (:sibling? opts)
               sibling?' (cond

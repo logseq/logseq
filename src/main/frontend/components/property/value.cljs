@@ -1579,6 +1579,23 @@
                    (when (some? value) #{value}))]
     (multiple-values-inner block property value' opts)))
 
+(defn- resolved-property-value-for-render
+  [block property multiple-values?]
+  (let [v (get block (:db/ident property))
+        block-loaded? (some? (:block/uuid block))]
+    (or
+     (cond
+       (and multiple-values? (or (set? v) (coll? v) (nil? v)))
+       v
+       multiple-values?
+       #{v}
+       (set? v)
+       (first v)
+       :else
+       v)
+     (when block-loaded?
+       (:logseq.property/default-value property)))))
+
 (rum/defcs ^:large-vars/cleanup-todo property-value < rum/reactive db-mixins/query
   [state block property {:keys [show-tooltip? p-block p-property editing?]
                          :as opts}]
@@ -1595,18 +1612,7 @@
          editor-id (str dom-id "-editor")
          type (:logseq.property/type property)
          multiple-values? (db-property/many? property)
-         v (let [v (get block (:db/ident property))]
-             (or
-              (cond
-                (and multiple-values? (or (set? v) (coll? v) (nil? v)))
-                v
-                multiple-values?
-                #{v}
-                (set? v)
-                (first v)
-                :else
-                v)
-              (:logseq.property/default-value property)))
+         v (resolved-property-value-for-render block property multiple-values?)
          self-value-or-embedded? (fn [v]
                                    (or (= (:db/id v) (:db/id block))
                                        ;; property value self embedded

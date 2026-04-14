@@ -16,6 +16,7 @@
    [frontend.worker.undo-redo :as worker-undo-redo]
    [lambdaisland.glogi :as log]
    [logseq.db :as ldb]
+   [logseq.db-sync.tx-sanitize :as tx-sanitize]
    [logseq.db-sync.order :as sync-order]
    [logseq.db.common.normalize :as db-normalize]
    [logseq.db.sqlite.util :as sqlite-util]
@@ -462,9 +463,10 @@
          results []]
     (let [db @conn]
       (if-let [remote-tx (first remaining)]
-        (let [tx-data (->> (:tx-data remote-tx)
-                           (map (partial resolve-temp-id db))
-                           seq)
+        (let [tx-data (some->> (:tx-data remote-tx)
+                               (map (partial resolve-temp-id db))
+                               (tx-sanitize/sanitize-tx db)
+                               seq)
               report (ldb/transact! conn tx-data {:transact-remote? true
                                                   :t (:t remote-tx)})
               results' (cond-> results
