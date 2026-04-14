@@ -5,5 +5,5 @@
 
 (deftest test-setting-node-color
   (testing "returns correct color for setting types"
-    (is (= (graph-view/setting-color :character) "red"))
-    (is (= (graph-view/setting-color :world) "green"))))
+    (is (= (graph-view/setting-color :character) "#6366f1"))
+    (is (= (graph-view/setting-color :world) "#22c55e"))))

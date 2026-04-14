@@ -2,17 +2,11 @@
 (ns frontend.components.memo.graph-view
   (:require [rum.core :as rum]
             [frontend.modules.memo.graph :as graph]
+            [frontend.modules.memo.graph :refer [type->color]]
             ["d3-force"
              :refer [forceLink forceManyBody forceSimulation forceCenter]
              :as d3-force]
             [cljs-bean.core :as bean]))
-
-(def type->color
-  {:character "red"
-   :world "green"
-   :timeline "blue"
-   :location "yellow"
-   :custom "purple"})
 
 (defn setting-color [type]
   (get type->color type "gray"))

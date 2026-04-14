@@ -19,7 +19,9 @@
         name-a (extract-field content-a #"(?:名字|名称)[:：]\s*([^\n]+)")
         name-b (extract-field content-b #"(?:名字|名称)[:：]\s*([^\n]+)")
         type-a (extract-field content-a #"类型[:：]\s*([^\n]+)")
-        type-b (extract-field content-b #"类型[:：]\s*([^\n]+)")]
+        type-b (extract-field content-b #"类型[:：]\s*([^\n]+)")
+        location-a (extract-field content-a #"地点[:：]\s*([^\n]+)")
+        location-b (extract-field content-b #"地点[:：]\s*([^\n]+)")]
     (cond-> []
       (and age-a age-b (not= age-a age-b))
       (conj {:type :age-conflict :field :age :id-a (:id char-a) :id-b (:id char-b) :value-a age-a :value-b age-b})
@@ -28,7 +30,10 @@
       (conj {:type :name-conflict :field :name :id-a (:id char-a) :id-b (:id char-b) :value-a name-a :value-b name-b})
 
       (and type-a type-b (not= type-a type-b))
-      (conj {:type :type-conflict :field :type :id-a (:id char-a) :id-b (:id char-b) :value-a type-a :value-b type-b}))))
+      (conj {:type :type-conflict :field :type :id-a (:id char-a) :id-b (:id char-b) :value-a type-a :value-b type-b})
+
+      (and location-a location-b (not= location-a location-b))
+      (conj {:type :location-conflict :field :location :id-a (:id char-a) :id-b (:id char-b) :value-a location-a :value-b location-b}))))
 
 (defn check-character-all-conflicts [characters]
   (for [i (range (count characters))
@@ -151,6 +156,17 @@
             relation-groups)))
 
 ;; Main check function
+
+(defn check-conflicts [setting-a setting-b]
+  "Check conflicts between two settings.
+   Dispatches to the appropriate type-specific conflict checker."
+  (let [type (:logseq.memo/type setting-a)]
+    (case type
+      :character (check-character-conflicts setting-a setting-b)
+      :location (check-location-conflicts setting-a setting-b)
+      :timeline (check-timeline-conflicts setting-a setting-b)
+      :world (check-world-conflicts setting-a setting-b)
+      [])))
 
 (defn check-all-settings [settings]
   (let [by-type (group-by :logseq.memo/type settings)
