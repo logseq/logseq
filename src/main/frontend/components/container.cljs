@@ -303,7 +303,9 @@
                                                                          (when (not (or input? popup?))
                                                                            (shui/popup-hide! id)))))
                                                          :data-keep-selection true}
-                                                   content])
+                                                   (if (fn? content)
+                                                     (content {:id id})
+                                                     content)])
                                                 (merge
                                                  {:on-before-hide state/dom-clear-selection!
                                                   :on-after-hide state/state-clear-selection!
@@ -315,7 +317,8 @@
                             (cond
                               (and page (not block-id))
                               (do
-                                (show! (cp-content/page-title-custom-context-menu-content page-entity))
+                                (show! (fn [{:keys [id]}]
+                                         (cp-content/page-title-custom-context-menu-content page-entity id)))
                                 (state/set-state! :page-title/context nil))
 
                               block-ref

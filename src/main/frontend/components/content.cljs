@@ -371,12 +371,18 @@
       (t :reference/replace-with-embed))]))
 
 (rum/defc page-title-custom-context-menu-content
-  [page]
+  [page popup-id]
   (when page
     (let [page-menu-options (page-menu/page-menu page)]
       [:<>
        (for [{:keys [title options]} page-menu-options]
-         (shui/dropdown-menu-item options title))])))
+         (let [on-click (:on-click options)]
+           (shui/dropdown-menu-item
+            (assoc options
+                   :on-click (fn [e]
+                               (when-not (false? (when on-click (on-click e)))
+                                 (shui/popup-hide! popup-id))))
+            title)))])))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
