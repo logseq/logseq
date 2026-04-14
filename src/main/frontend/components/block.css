@@ -158,6 +158,9 @@
 .block-children-container {
   position: relative;
   margin-left: 29px;
+  /* Keep vertical rhythm stable when a sibling becomes a nested child. */
+  padding-top: 0.125rem;
+  margin-bottom: -0.125rem;
 }
 
 .block-children-left-border {
