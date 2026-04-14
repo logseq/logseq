@@ -401,17 +401,18 @@
                           (db/get-short-repo-name repo-name)
                           (t :graph.switch/select-prompt))]
     [:div.cp__graphs-selector.flex.items-center.justify-between
-     [:a.item.flex.items-center.gap-1.select-none
-      {:title current-repo
-       :on-click (fn [^js e]
-                   (shui/popup-show! (.closest (.-target e) "a")
-                                     (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
-                                     {:as-dropdown? true
-                                      :content-props {:class "repos-list"}
-                                      :align :start}))}
-      [:span.thumb (shui/tabler-icon (if remote? "cloud" "topology-star") {:size 16})]
-      [:strong short-repo-name]
-      (shui/tabler-icon "selector" {:size 18})]]))
+     (ui/tooltip
+      [:a.item.flex.items-center.gap-1.select-none
+       {:on-click (fn [^js e]
+                    (shui/popup-show! (.closest (.-target e) "a")
+                                      (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
+                                      {:as-dropdown? true
+                                       :content-props {:class "repos-list"}
+                                       :align :start}))}
+       [:span.thumb (shui/tabler-icon (if remote? "cloud" "topology-star") {:size 16})]
+       [:strong short-repo-name]
+       (shui/tabler-icon "selector" {:size 18})]
+      current-repo)]))
 
 ;; Update invalid-graph-name-warning if characters change
 (def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")

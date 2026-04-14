@@ -32,9 +32,9 @@
   (when-not (util/sm-breakpoint?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
       (shui/button-ghost-icon :layout-sidebar-right
-                              {:title (t :sidebar.right/toggle)
-                               :class "toggle-right-sidebar"
-                               :on-click ui-handler/toggle-right-sidebar!}))))
+                              {:class "toggle-right-sidebar"
+                               :on-click ui-handler/toggle-right-sidebar!})
+      (t :sidebar.right/toggle))))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
@@ -257,23 +257,26 @@
              [:div.ml-1.font-medium.text-sm.overflow-hidden.whitespace-nowrap
               title]]
             [:.item-actions.flex.items-center
-             (shui/button
-              {:title (t :sidebar.right/more)
-               :class "px-2 py-2 h-8 w-8 text-muted-foreground"
-               :variant :ghost
-               :on-click #(shui/popup-show!
-                           (.-target %)
-                           (actions-menu-content db-id idx block-type collapsed? block-count)
-                           {:as-dropdown? true
-                            :content-props {:on-click (fn [] (shui/popup-hide!))}})}
-              (ui/icon "dots"))
+             (ui/tooltip
+              (shui/button
+               {:class "px-2 py-2 h-8 w-8 text-muted-foreground"
+                :variant :ghost
+                :on-click #(shui/popup-show!
+                            (.-target %)
+                            (actions-menu-content db-id idx block-type collapsed? block-count)
+                            {:as-dropdown? true
+                             :content-props {:on-click (fn [] (shui/popup-hide!))}})}
+               (ui/icon "dots"))
+              (t :sidebar.right/more))
 
-             (shui/button
-              {:title (t :sidebar.right/close)
-               :variant :ghost
-               :class "px-2 py-2 h-8 w-8 text-muted-foreground"
-               :on-click #(state/sidebar-remove-block! idx)}
-              (ui/icon "x"))]]
+             (ui/tooltip
+              (shui/button
+               {:variant :ghost
+                :class "px-2 py-2 h-8 w-8 text-muted-foreground"
+                :on-click #(state/sidebar-remove-block! idx)}
+               (ui/icon "x"))
+              (t :sidebar.right/close))]
+            ]
 
            [:div {:role "region"
                   :id (str "sidebar-panel-content-" idx)
