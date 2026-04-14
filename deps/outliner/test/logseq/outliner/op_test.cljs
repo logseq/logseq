@@ -1,5 +1,6 @@
 (ns logseq.outliner.op-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [clojure.string :as string]
+            [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
@@ -116,3 +117,50 @@
       (is (= #{"page y" "page z"}
              (set (map :block/name
                        (:plugin.property._test_plugin/x7 (d/entity @conn block-id)))))))))
+
+(deftest apply-template-op-resolves-dynamic-variables-test
+  (testing "apply-template resolves dynamic variables in block title and property values"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Target Page"}
+                   :blocks [{:block/title "target block"}]}
+                  {:page {:block/title "Templates"}
+                   :blocks [{:block/title "template root"
+                             :build/children [{:block/title "page is <% current page %>"}
+                                              {:block/title "time block"
+                                               :build/properties {:log-time "<%time%>"}}]}]}]
+                 :properties {:log-time {:logseq.property/type :default}}})
+          template-root (db-test/find-block-by-content @conn "template root")
+          target-block (db-test/find-block-by-content @conn "target block")
+          template-blocks (->> (ldb/get-block-and-children @conn (:block/uuid template-root)
+                                                           {:include-property-block? true})
+                               rest)
+          blocks-to-insert (cons (assoc (into {} (first template-blocks))
+                                        :db/id (:db/id (first template-blocks))
+                                        :logseq.property/used-template (:db/id template-root))
+                                 (map (fn [block]
+                                        (assoc (into {} block) :db/id (:db/id block)))
+                                      (rest template-blocks)))
+          _ (outliner-op/apply-ops! conn
+                                    [[:apply-template [(:db/id template-root)
+                                                       (:db/id target-block)
+                                                       {:template-blocks blocks-to-insert}]]]
+                                    {})
+          page-var-block (db-test/find-block-by-content @conn "page is [[Target Page]]")
+          time-block (some->> (d/q '[:find [?b ...]
+                                     :in $ ?title ?page-title
+                                     :where
+                                     [?b :block/title ?title]
+                                     [?b :block/page ?page]
+                                     [?page :block/title ?page-title]]
+                                   @conn "time block" "Target Page")
+                             first
+                             (d/entity @conn))
+          time-value (some (fn [[property-id value]]
+                             (when (= "log-time" (name property-id))
+                               value))
+                           (db-test/readable-properties time-block))]
+      (is (some? page-var-block))
+      (is (string? time-value))
+      (is (not (string/blank? time-value)))
+      (is (not (string/includes? time-value "<%"))))))

@@ -187,3 +187,26 @@
 
     ;; return global fn back to previous behavior
     (ldb/register-transact-pipeline-fn! identity)))
+
+(deftest tag-template-insertion-resolves-dynamic-variable-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Target Page"}
+                 :blocks [{:block/title "target block"}]}
+                {:page {:block/title "Templates"}
+                 :blocks [{:block/title "tag template root"
+                           :build/children [{:block/title "auto <% current page %>"}]}]}]
+               :classes {:DiaryEntry {}}})
+        target-block (db-test/find-block-by-content @conn "target block")
+        template-root (db-test/find-block-by-content @conn "tag template root")
+        diary-entry (ldb/get-page @conn "DiaryEntry")]
+    (ldb/transact! conn [[:db/add (:db/id template-root)
+                          :logseq.property/template-applied-to
+                          (:db/id diary-entry)]])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn [[:db/add (:db/id target-block) :block/tags (:db/id diary-entry)]])
+      (is (some? (db-test/find-block-by-content @conn "auto [[Target Page]]")))
+      (finally
+        ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))
