@@ -546,8 +546,8 @@
            [:div.property-key property-key-cp'])
 
          (let [property-desc (when-not (= (:db/ident property) :logseq.property/description)
-                               (:logseq.property/description property))]
-           (let [block' (assoc block (:db/ident property) v)]
+                               (:logseq.property/description property))
+               block' (assoc block (:db/ident property) v)]
            [:div.ls-block.property-value-container.flex.flex-row.gap-1
             {:class (if (contains? #{:checkbox :date :datetime} type)
                       "items-center"
@@ -561,7 +561,7 @@
              [:div.property-value.flex.flex-1
               (if (:class-schema? opts)
                 (pv/property-value property (db/entity :logseq.property/description) opts)
-                (pv/property-value block' property opts))]]]))]))))
+                (pv/property-value block' property opts))]]])]))))
 
 (defn- entity-ref-value?
   [value]
