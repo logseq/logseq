@@ -3351,6 +3351,10 @@
                                add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
                                transport/invoke (fn [_ method _ args]
                                                   (case method
+                                                    :thread-api/q (let [[_ [_query input]] args]
+                                                                    (if (= input "home")
+                                                                      [{:db/id 50 :block/uuid (uuid "00000000-0000-0000-0000-000000000050")}]
+                                                                      []))
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (cond
                                                                          (= lookup [:block/name "home"])
@@ -3391,6 +3395,12 @@
                                add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
                                transport/invoke (fn [_ method _ args]
                                                   (case method
+                                                    :thread-api/q (let [[_ [_query input]] args]
+                                                                    (if (= input "home")
+                                                                      [{:db/id 50
+                                                                        :block/uuid recycled-uuid
+                                                                        :logseq.property/deleted-at 1712000000000}]
+                                                                      []))
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (cond
                                                                          (= lookup [:block/name "home"])
@@ -3412,6 +3422,37 @@
                                (some #(= [:create-page ["Home" {}]] %) batch))
                              @batches*)
                        "create-page op is invoked, which restores the recycled page in the outliner")))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-upsert-page-errors-on-ambiguous-name
+  (async done
+         (let [action {:type :upsert-page :repo "demo" :page "c1"
+                       :update-tags [:tag/next]}]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               add-command/resolve-tags (fn [_ _ _] (p/resolved nil))
+                               add-command/resolve-properties (fn [_ _ _ & _] (p/resolved nil))
+                               add-command/resolve-property-identifiers (fn [_ _ _ & _] (p/resolved nil))
+                               transport/invoke (fn [_ method _ _]
+                                                  (case method
+                                                    :thread-api/q [{:db/id 21
+                                                                    :block/name "c1"
+                                                                    :block/title "c1"
+                                                                    :block/uuid (uuid "00000000-0000-0000-0000-0000000000c1")}
+                                                                   {:db/id 22
+                                                                    :block/name "c1"
+                                                                    :block/title "c1"
+                                                                    :block/uuid (uuid "00000000-0000-0000-0000-0000000000c2")}]
+                                                    :thread-api/apply-outliner-ops
+                                                    (throw (ex-info "should not modify on ambiguous match" {:method method}))
+                                                    (throw (ex-info "unexpected invoke" {:method method}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :error (:status result)))
+                   (is (= :ambiguous-page-name (get-in result [:error :code])))
+                   (is (= #{21 22}
+                          (set (map :id (get-in result [:error :candidates])))))
+                   (is (string/includes? (get-in result [:error :message]) "rerun with --id"))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 

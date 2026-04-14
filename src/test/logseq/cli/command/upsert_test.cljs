@@ -363,9 +363,12 @@
                           transport/invoke (fn [_ method _ args]
                                              (case method
                                                :thread-api/q
-                                               (p/resolved [:logseq.property/status.todo
-                                                            :logseq.property/status.doing
-                                                            :logseq.property/status.done])
+                                               (let [[_ [_query input]] args]
+                                                 (if (= input "taskhome")
+                                                   (p/resolved [{:db/id 42 :block/uuid (uuid "00000000-0000-0000-0000-000000000042")}])
+                                                   (p/resolved [:logseq.property/status.todo
+                                                                :logseq.property/status.doing
+                                                                :logseq.property/status.done])))
 
                                                :thread-api/pull
                                                (let [[_ selector lookup] args]
@@ -421,6 +424,12 @@
                                                       (p/resolved (assoc config :base-url "http://example")))
                           transport/invoke (fn [_ method _ args]
                                              (case method
+                                               :thread-api/q
+                                               (let [[_ [_query input]] args]
+                                                 (if (= input "taskhome")
+                                                   (p/resolved [{:db/id 42 :block/uuid (uuid "00000000-0000-0000-0000-000000000042")}])
+                                                   (p/resolved [])))
+
                                                :thread-api/pull
                                                (let [[_ selector lookup] args]
                                                  (cond
@@ -474,6 +483,12 @@
                                                       (p/resolved (assoc config :base-url "http://example")))
                           transport/invoke (fn [_ method _ args]
                                              (case method
+                                               :thread-api/q
+                                               (let [[_ [_query input]] args]
+                                                 (if (= input "taskhome")
+                                                   (p/resolved [{:db/id 42 :block/uuid (uuid "00000000-0000-0000-0000-000000000042")}])
+                                                   (p/resolved [])))
+
                                                :thread-api/pull
                                                (let [[_ selector lookup] args]
                                                  (cond
