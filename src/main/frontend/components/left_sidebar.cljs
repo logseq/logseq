@@ -313,6 +313,14 @@
           :title (block-handler/block-unique-title page)}
          (page-name page true)])])))
 
+(rum/defc sidebar-memo
+  []
+  (sidebar-content-group
+   [:a.wrap-th [:strong.flex-1 "Memo"]]
+   {:class "memo"
+    :collapsable? true}
+   [:div.text-sm.opacity-60 "Memo section placeholder"]))
+
 (rum/defc ^:large-vars/cleanup-todo sidebar-container
   [route-match close-modal-fn left-sidebar-open? srs-open?
    *closing? close-signal touching-x-offset]
@@ -404,7 +412,9 @@
         (sidebar-favorites)
 
         (when (not config/publishing?)
-          (sidebar-recent-pages))]]]
+          (sidebar-recent-pages))
+
+        (sidebar-memo)]]
 
      [:span.shade-mask
       (cond-> {:on-click close-fn
