@@ -20,15 +20,18 @@
 
 (defn get-settings-by-type [type]
   (when @conn
-    (d/q '[:find ?e ?v
+    (d/q '[:find (pull ?e [*])
+           :in $ ?type
            :where
-           [?e :logseq.memo/type type]
-           [?e :logseq.memo/id ?v]]
-         @conn)))
+           [?e :logseq.memo/type ?type]]
+         @conn type)))
 
 (defn get-all-settings []
   (when @conn
-    (d/q '[:find ?e
+    (d/q '[:find (pull ?e [*])
            :where
            [?e :logseq.memo/id]]
          @conn)))
+
+(defn get-settings-as-entities []
+  (get-all-settings))
