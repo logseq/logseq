@@ -520,8 +520,8 @@
           [:span.text-sm.opacity-50 (t :settings.advanced/disable-sentry-desc)]))
 
 ;; (defn clear-cache-row [t]
-;;   (row-with-button-action {:left-label   (t :settings.advanced/clear-cache)
-;;                            :button-label (t :settings.advanced/clear)
+;;   (row-with-button-action {:left-label   "Clear cache"
+;;                            :button-label "Clear"
 ;;                            :on-click     #(state/pub-event! [:graph/clear-cache!])
 ;;                            :-for         "clear_cache"}))
 
@@ -697,7 +697,7 @@
 
      ;; (ui/admonition
      ;;  :warning
-     ;;  [:p (t :settings.advanced/clear-cache-warning)])
+     ;;  [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])
      ]))
 
 (rum/defc settings-account-usage-description [pro-account? graph-usage]
