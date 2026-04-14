@@ -27,8 +27,14 @@
 
 (defn parse-setting [file-path content]
   (let [frontmatter (parse-frontmatter content)
-        body (second (split-with #(= % "---\n") content))]
+        ;; Find the end of frontmatter (after second --- line) and extract body
+        lines (string/split content #"\n")
+        frontmatter-end (some->> (range 1 (count lines))
+                                  (some #(when (= (nth lines %) "---") %)))
+        body (if frontmatter-end
+               (string/join "\n" (drop (+ 2 frontmatter-end) lines))
+               content)]
     {:file-path file-path
      :frontmatter frontmatter
-     :body content
+     :body body
      :relations (extract-relations content)}))

@@ -1,6 +1,8 @@
 ;; src/main/frontend/modules/memo/inspiration.cljs
 (ns frontend.modules.memo.inspiration
-  (:require [frontend.modules.memo.ai.provider :as ai-provider]))
+  (:require [frontend.modules.memo.ai.provider :as ai-provider]
+            [cljs.core.async :as async]
+            [cljs-http.client :as http]))
 
 (def prompt-templates
   {:expansion
@@ -28,9 +30,11 @@
 
 (defn generate-inspiration [setting type]
   (let [prompt (build-prompt type setting)
-        response (ai-provider/complete prompt :ollama)]
-    (when response
-      (->> response
-           :body
-           (clojure.string/split-lines)
-           (filter seq)))))
+        ch (ai-provider/complete prompt :ollama)]
+    (when ch
+      (async/go
+        (let [response (async/<! ch)]
+          (when (and response (http/unexceptional-status? (:status response)))
+            (->> (:body response)
+                 (clojure.string/split-lines)
+                 (filter seq))))))))
