@@ -15,12 +15,12 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
@@ -37,13 +37,53 @@
         default-home
         (dissoc default-home :page)))))
 
+(rum/defc page-title-content
+  [page-id display-title tooltip-title untitled? left-sidebar-resized-at]
+  (let [*title-ref (rum/use-ref nil)
+        [truncated? set-truncated?!] (rum/use-state false)
+        sync-truncated! (fn []
+                          (if-let [^js el (rum/deref *title-ref)]
+                            (set-truncated?! (> (.-scrollWidth el)
+                                                (+ (.-clientWidth el) 1)))
+                            (set-truncated?! false)))
+        title-el [:span.page-title {:ref *title-ref
+                                    :class (when untitled? "opacity-50")}
+                  display-title]]
+    (hooks/use-effect!
+     (fn []
+       (if-let [^js el (rum/deref *title-ref)]
+         (let [observer (js/ResizeObserver. (fn [_] (sync-truncated!)))]
+           (.observe observer el)
+           (sync-truncated!)
+           #(.disconnect observer))
+         (do
+           (set-truncated?! false)
+           nil)))
+     [page-id display-title tooltip-title])
+    (hooks/use-effect!
+     (fn []
+       (let [raf-id (js/requestAnimationFrame sync-truncated!)]
+         #(js/cancelAnimationFrame raf-id)))
+     [left-sidebar-resized-at])
+    (if (and truncated? (not (string/blank? tooltip-title)))
+      (ui/tooltip title-el tooltip-title)
+      title-el)))
+
 (rum/defc ^:large-vars/cleanup-todo page-name < rum/reactive db-mixins/query
   [page recent?]
   (when-let [id (:db/id page)]
     (let [page (db/sub-block id)
+          left-sidebar-resized-at (rum/react ui-handler/*left-sidebar-resized-at)
           icon (icon/get-node-icon-cp page {:size 16})
           title (:block/title page)
           untitled? (db-model/untitled-page? title)
+          display-title (cond
+                          (not (db/page? page))
+                          (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))
+                          untitled? (t :ui/untitled)
+                          :else (block-handler/block-unique-title page))
+          tooltip-title (or (block-handler/block-unique-title page)
+                            (when untitled? (t :ui/untitled)))
           ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
           open-in-sidebar #(state/sidebar-add-block!
                             (state/get-current-repo)
@@ -72,28 +112,19 @@
          {:on-pointer-down util/stop-propagation
           :on-pointer-up (fn [_e]
                            (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?}))}
-         (cond->
-          {:on-click
-           (fn [e]
-             (if (gobj/get e "shiftKey")
-               (open-in-sidebar)
-               (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
-           :on-context-menu (fn [^js e]
-                              (shui/popup-show! e (x-menu-content)
-                                                {:as-dropdown? true
-                                                 :content-props {:on-click (fn [] (shui/popup-hide!))
-                                                                 :class "w-60"}})
-                              (util/stop e))}
-           (ldb/object? page)
-           (assoc :title (block-handler/block-unique-title page))))
+         {:on-click
+          (fn [e]
+            (if (gobj/get e "shiftKey")
+              (open-in-sidebar)
+              (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
+          :on-context-menu (fn [^js e]
+                             (shui/popup-show! e (x-menu-content)
+                                               {:as-dropdown? true
+                                                :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                                :class "w-60"}})
+                             (util/stop e))})
        [:span.page-icon {:key "page-icon"} icon]
-       [:span.page-title {:key "title"
-                          :class (when untitled? "opacity-50")}
-        (cond
-          (not (db/page? page))
-          (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))
-          untitled? (t :ui/untitled)
-          :else (block-handler/block-unique-title page))]
+       (page-title-content id display-title tooltip-title untitled? left-sidebar-resized-at)
 
      ;; dots trigger
        (shui/button
@@ -315,8 +346,7 @@
      [:ul.text-sm
       (for [page pages]
         [:li.recent-item.select-none.font-medium
-         {:key (str "recent-" (:db/id page))
-          :title (block-handler/block-unique-title page)}
+         {:key (str "recent-" (:db/id page))}
          (page-name page true)])])))
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-container
@@ -452,7 +482,8 @@
                                   (.. el-doc -classList (add "is-resizing-buf"))))
                (.on "dragend" (fn []
                                 (.. sidebar-el -classList (remove "is-resizing"))
-                                (.. el-doc -classList (remove "is-resizing-buf"))))))
+                                (.. el-doc -classList (remove "is-resizing-buf"))
+                                (reset! ui-handler/*left-sidebar-resized-at (js/Date.now))))))
          #()))
      [])
     [:span.left-sidebar-resizer {:ref *el-ref}]))
