@@ -251,8 +251,7 @@
 
 (defn- save-block-inner!
   [block value opts]
-  (let [block {:db/id (:db/id block)
-               :block/uuid (:block/uuid block)
+  (let [block {:block/uuid (:block/uuid block)
                :block/title value}
         block' (-> (wrap-parse-block block)
                    ;; :block/uuid might be changed when backspace/delete
@@ -1823,7 +1822,7 @@
           (content-update-fn (:block/title block))
           (:block/title block))]
     (merge (apply dissoc block (conj (if-not keep-uuid? [:block/_refs] [])))
-           {:block/page {:db/id (:db/id page)}
+           {:block/page {:db/id [:block/uuid (:block/uuid page)]}
             :block/title new-content})))
 
 (defn- edit-last-block-after-inserted!
@@ -1842,11 +1841,12 @@
 
 (defn- unrecycle-tx-data
   [root]
-  [[:db/retract (:db/id root) :logseq.property/deleted-at]
-   [:db/retract (:db/id root) :logseq.property/deleted-by-ref]
-   [:db/retract (:db/id root) :logseq.property.recycle/original-parent]
-   [:db/retract (:db/id root) :logseq.property.recycle/original-page]
-   [:db/retract (:db/id root) :logseq.property.recycle/original-order]])
+  (let [root-id [:block/uuid (:block/uuid root)]]
+    [[:db/retract root-id :logseq.property/deleted-at]
+     [:db/retract root-id :logseq.property/deleted-by-ref]
+     [:db/retract root-id :logseq.property.recycle/original-parent]
+     [:db/retract root-id :logseq.property.recycle/original-page]
+     [:db/retract root-id :logseq.property.recycle/original-order]]))
 
 (defn paste-blocks
   "Given a vec of blocks, insert them into the target page.

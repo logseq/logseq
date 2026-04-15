@@ -261,6 +261,121 @@
      :a-child-1 (db-test/find-block-by-content @conn "a child 1")
      :b-child-1 (db-test/find-block-by-content @conn "b child 1")}))
 
+(defn- block-id->uuid
+  [db block-id]
+  (cond
+    (uuid? block-id)
+    block-id
+
+    (and (vector? block-id) (= :block/uuid (first block-id)))
+    (second block-id)
+
+    (number? block-id)
+    (or (some-> (d/entity db block-id) :block/uuid)
+        block-id)
+
+    :else
+    block-id))
+
+(defn- property-id->ident
+  [db property-id]
+  (cond
+    (qualified-keyword? property-id)
+    property-id
+
+    (number? property-id)
+    (or (some-> (d/entity db property-id) :db/ident)
+        property-id)
+
+    :else
+    property-id))
+
+(defn- normalize-op-block-ids
+  [db [op args :as op-entry]]
+  (let [id (fn [v] (block-id->uuid db v))
+        property-id (fn [v] (property-id->ident db v))
+        ids (fn [vs] (mapv id vs))]
+    (case op
+      :save-block
+      (let [[block opts] args
+            block' (cond-> block
+                     (and (map? block)
+                          (uuid? (:db/id block)))
+                     ((fn [m]
+                        (cond-> (dissoc m :db/id)
+                          (nil? (:block/uuid m))
+                          (assoc :block/uuid (:db/id m)))))
+                     (and (map? block)
+                          (nil? (:block/uuid block))
+                          (number? (:db/id block)))
+                     (assoc :block/uuid (id (:db/id block))))]
+        [op [block' opts]])
+
+      :insert-blocks
+      [op [(first args) (id (second args)) (nth args 2)]]
+
+      :apply-template
+      [op [(id (first args)) (id (second args)) (nth args 2)]]
+
+      :delete-blocks
+      [op [(ids (first args)) (second args)]]
+
+      :move-blocks
+      [op [(ids (first args)) (id (second args)) (nth args 2)]]
+
+      :move-blocks-up-down
+      [op [(ids (first args)) (second args)]]
+
+      :indent-outdent-blocks
+      [op [(ids (first args)) (second args) (nth args 2)]]
+
+      :set-block-property
+      [op [(id (first args)) (property-id (second args)) (nth args 2)]]
+
+      :remove-block-property
+      [op [(id (first args)) (property-id (second args))]]
+
+      :delete-property-value
+      [op [(id (first args)) (property-id (second args)) (nth args 2)]]
+
+      :create-property-text-block
+      [op [(some-> (first args) id) (property-id (second args)) (nth args 2) (nth args 3)]]
+
+      :batch-set-property
+      [op [(ids (first args)) (property-id (second args)) (nth args 2) (nth args 3)]]
+
+      :batch-remove-property
+      [op [(ids (first args)) (property-id (second args))]]
+
+      :batch-delete-property-value
+      [op [(ids (first args)) (property-id (second args)) (nth args 2)]]
+
+      :class-add-property
+      [op [(id (first args)) (property-id (second args))]]
+
+      :class-remove-property
+      [op [(id (first args)) (property-id (second args))]]
+
+      :upsert-property
+      [op [(some-> (first args) property-id) (second args) (nth args 2)]]
+
+      :upsert-closed-value
+      [op [(property-id (first args)) (second args)]]
+
+      :delete-closed-value
+      [op [(property-id (first args)) (id (second args))]]
+
+      :add-existing-values-to-closed-values
+      [op [(property-id (first args)) (second args)]]
+
+      op-entry)))
+
+(defn- apply-ops!
+  [conn ops opts]
+  (outliner-op/apply-ops! conn
+                          (mapv #(normalize-op-block-ids @conn %) ops)
+                          opts))
+
 (deftest resolve-ws-token-refreshes-when-token-expired-test
   (async done
          (let [refresh-calls (atom 0)
@@ -1199,7 +1314,7 @@
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
                                   local-tx-meta)
           (let [pending (#'sync-apply/pending-txs test-repo)
@@ -1220,7 +1335,7 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (worker-page/create! conn "Rename Me" :uuid page-uuid)
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:rename-page [page-uuid "Renamed"]]]
                                   local-tx-meta)
           (let [{:keys [forward-outliner-ops]} (last (#'sync-apply/pending-txs test-repo))]
@@ -1234,7 +1349,7 @@
     (let [{:keys [conn client-ops-conn child2]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:move-blocks-up-down [[(:db/id child2)] true]]]
                                   local-tx-meta)
           (let [{:keys [forward-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))
@@ -1248,7 +1363,7 @@
     (let [{:keys [conn client-ops-conn child2]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:indent-outdent-blocks [[(:db/id child2)] true {}]]]
                                   local-tx-meta)
           (let [{:keys [forward-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))
@@ -1264,7 +1379,7 @@
           tx-meta (assoc local-tx-meta :outliner-op :move-blocks)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:indent-outdent-blocks [[(:db/id child3)] false {:parent-original nil
                                                                                      :logical-outdenting? nil}]]]
                                   tx-meta)
@@ -1272,15 +1387,15 @@
                 forward-ops (:forward-outliner-ops source-row)
                 inverse-ops (:inverse-outliner-ops source-row)]
             (is (= :move-blocks (ffirst forward-ops)))
-            (is (= [[:block/uuid (:block/uuid child3)]]
+            (is (= [(:block/uuid child3)]
                    (get-in forward-ops [0 1 0])))
-            (is (= [:block/uuid (:block/uuid parent)]
+            (is (= (:block/uuid parent)
                    (get-in forward-ops [0 1 1])))
             (is (= true (get-in forward-ops [0 1 2 :sibling?])))
             (is (= :move-blocks (ffirst inverse-ops)))
-            (is (= [[:block/uuid (:block/uuid child3)]]
+            (is (= [(:block/uuid child3)]
                    (get-in inverse-ops [0 1 0])))
-            (is (= [:block/uuid (:block/uuid child2)]
+            (is (= (:block/uuid child2)
                    (get-in inverse-ops [0 1 1])))
             (is (= true (get-in inverse-ops [0 1 2 :sibling?])))))))))
 
@@ -1290,7 +1405,7 @@
           tx-meta (assoc local-tx-meta :outliner-op :move-blocks)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:indent-outdent-blocks [[(:db/id child2)] false {:parent-original nil
                                                                                      :logical-outdenting? nil}]]]
                                   tx-meta)
@@ -1298,15 +1413,15 @@
                 forward-ops (:forward-outliner-ops source-row)
                 inverse-ops (:inverse-outliner-ops source-row)]
             (is (= :move-blocks (ffirst forward-ops)))
-            (is (= [[:block/uuid (:block/uuid child2)]]
+            (is (= [(:block/uuid child2)]
                    (get-in forward-ops [0 1 0])))
-            (is (= [:block/uuid (:block/uuid parent)]
+            (is (= (:block/uuid parent)
                    (get-in forward-ops [0 1 1])))
             (is (= true (get-in forward-ops [0 1 2 :sibling?])))
             (is (= :move-blocks (ffirst inverse-ops)))
-            (is (= [[:block/uuid (:block/uuid child2)]]
+            (is (= [(:block/uuid child2)]
                    (get-in inverse-ops [0 1 0])))
-            (is (= [:block/uuid (:block/uuid child1)]
+            (is (= (:block/uuid child1)
                    (get-in inverse-ops [0 1 1])))
             (is (= true (get-in inverse-ops [0 1 2 :sibling?])))))))))
 
@@ -1318,7 +1433,7 @@
           child3-uuid (:block/uuid child3)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:indent-outdent-blocks [[(:db/id child2)] false {:parent-original nil
                                                                                      :logical-outdenting? nil}]]]
                                   local-tx-meta)
@@ -1348,7 +1463,7 @@
                     (reset! invalid-payload* {:tx-meta (:tx-meta tx-report)
                                               :errors errors})))
           (try
-            (outliner-op/apply-ops! conn
+            (apply-ops! conn
                                     [[:indent-outdent-blocks [[(:db/id child2)] false {:parent-original nil
                                                                                        :logical-outdenting? nil}]]]
                                     local-tx-meta)
@@ -1385,7 +1500,7 @@
           child-uuid (:block/uuid child1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:save-block [{:block/uuid child-uuid
                                                   :block/title "hello"} nil]]]
                                   local-tx-meta)
@@ -1410,7 +1525,7 @@
           child-uuid (:block/uuid child1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:save-block [{:block/uuid child-uuid
                                                   :block/title "hello"} nil]]]
                                   local-tx-meta)
@@ -1608,7 +1723,7 @@
           (let [{:keys [forward-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
             (is (= :save-block (ffirst forward-outliner-ops)))
             (is (= :indent-outdent-blocks (first (second forward-outliner-ops))))
-            (is (= [[:block/uuid block-uuid]]
+            (is (= [block-uuid]
                    (get-in forward-outliner-ops [1 1 0])))))))))
 
 (deftest apply-history-action-undo-delete-blocks-noops-when-target-missing-test
@@ -1854,7 +1969,7 @@
         (fn []
           (outliner-page/create! conn "Page y" {})
           (let [page-y (db-test/find-page-by-title @conn "Page y")]
-            (outliner-op/apply-ops! conn
+            (apply-ops! conn
                                     [[:batch-set-property [[(:db/id block-1)
                                                             (:db/id block-2)]
                                                            property-id
@@ -2128,7 +2243,7 @@
           requested-uuid (random-uuid)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:insert-blocks [[{:block/title "history insert"
                                                       :block/uuid requested-uuid}]
                                                     (:db/id parent)
@@ -2141,7 +2256,7 @@
             (is (= inserted-uuid
                    (get-in pending [:forward-outliner-ops 0 1 0 0 :block/uuid])))
             (is (= inserted-uuid
-                   (second (first (get-in pending [:inverse-outliner-ops 0 1 0])))))
+                   (get-in pending [:inverse-outliner-ops 0 1 0 0])))
             (is (= true
                    (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
             (is (nil? (d/entity @conn [:block/uuid inserted-uuid])))
@@ -2159,7 +2274,7 @@
           child-uuid (:block/uuid child1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:save-block [{:block/uuid child-uuid
                                                   :block/title "child 1 inline edit"} {}]]]
                                   local-tx-meta)
@@ -2286,7 +2401,7 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (let [before-ids (property-page-ids @conn)]
-            (outliner-op/apply-ops! conn
+            (apply-ops! conn
                                     [[:upsert-property [nil
                                                         {:logseq.property/type :default}
                                                         {:property-name property-name}]]]
@@ -2334,7 +2449,7 @@
           (reset! undo-redo/*apply-history-action! sync-apply/apply-history-action!)
           (try
             (d/transact! conn [[:db/add property-id :logseq.property/classes :logseq.class/Root]])
-            (outliner-op/apply-ops! conn
+            (apply-ops! conn
                                     [[:upsert-property [property-id
                                                         {:logseq.property/type :node
                                                          :db/cardinality :many}
@@ -2370,7 +2485,7 @@
                 right (db-test/find-block-by-content @conn "hello")
                 left-uuid (:block/uuid left)
                 right-uuid (:block/uuid right)]
-            (outliner-op/apply-ops! conn
+            (apply-ops! conn
                                     [[:delete-blocks [[(:db/id right)]
                                                       {:deleted-by-uuid (random-uuid)}]]
                                      [:save-block [{:block/uuid left-uuid
@@ -2399,7 +2514,7 @@
           inserted-uuid (random-uuid)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:save-block [{:block/uuid child-uuid
                                                   :block/title "child 1 edited"} {}]]
                                    [:insert-blocks [[{:block/title "inserted after save"
@@ -2446,7 +2561,7 @@
                           :block/parent [:block/uuid parent-uuid]}]]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:insert-blocks [copied-blocks
                                                     (:db/id empty-target)
                                                     {:sibling? true
@@ -2471,7 +2586,7 @@
                 pasted-uuid (:block/uuid pasted)
                 pasted-child-uuid (:block/uuid (d/entity @conn pasted-child-id))]
             (is (some #(and (= :delete-blocks (first %))
-                            (= [[:block/uuid empty-target-uuid]]
+                            (= [empty-target-uuid]
                                (vec (get-in % [1 0]))))
                       (:inverse-outliner-ops pending)))
             (is (some #(and (= :insert-blocks (first %))
@@ -2498,7 +2613,7 @@
           inserted-uuid (random-uuid)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:insert-blocks [[{:block/title "draft"
                                                       :block/uuid inserted-uuid}]
                                                     (:db/id parent)
@@ -2506,7 +2621,7 @@
                                   local-tx-meta)
           (let [inserted (db-test/find-block-by-content @conn "draft")
                 inserted-uuid' (:block/uuid inserted)]
-            (outliner-op/apply-ops! conn
+            (apply-ops! conn
                                     [[:save-block [{:block/uuid inserted-uuid'
                                                     :block/title "published"} {}]]]
                                     local-tx-meta)
@@ -2560,7 +2675,7 @@
           child-uuid (:block/uuid child1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:save-block [{:block/uuid child-uuid
                                                   :block/title "local-2"} {}]]]
                                   local-tx-meta)
@@ -2644,7 +2759,7 @@
           parent-b-uuid (:block/uuid parent-b)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:move-blocks [[(:db/id a-child-1)
                                                    (:db/id b-child-1)]
                                                   (:db/id parent-b)
@@ -2657,13 +2772,13 @@
             (is (some? move-action))
             (is (= 2 (count inverse-ops)))
             (is (some #(and (= :move-blocks (first %))
-                            (= [[:block/uuid a-child-uuid]] (get-in % [1 0]))
-                            (= [:block/uuid parent-a-uuid] (get-in % [1 1]))
+                            (= [a-child-uuid] (get-in % [1 0]))
+                            (= parent-a-uuid (get-in % [1 1]))
                             (= false (get-in % [1 2 :sibling?])))
                       inverse-ops))
             (is (some #(and (= :move-blocks (first %))
-                            (= [[:block/uuid b-child-uuid]] (get-in % [1 0]))
-                            (= [:block/uuid parent-b-uuid] (get-in % [1 1]))
+                            (= [b-child-uuid] (get-in % [1 0]))
+                            (= parent-b-uuid (get-in % [1 1]))
                             (= false (get-in % [1 2 :sibling?])))
                       inverse-ops))))))))
 
@@ -2676,7 +2791,7 @@
           parent-b-uuid (:block/uuid parent-b)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:move-blocks [[(:db/id a-child-1)
                                                    (:db/id b-child-1)]
                                                   (:db/id parent-b)
@@ -2737,7 +2852,7 @@
                                         {:sibling? false})
           (let [{:keys [forward-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
             (is (= :insert-blocks (ffirst forward-outliner-ops)))
-            (is (= [:block/uuid (:block/uuid parent)]
+            (is (= (:block/uuid parent)
                    (get-in forward-outliner-ops [0 1 1])))))))))
 
 (deftest rebase-create-page-keeps-page-uuid-test
@@ -2746,7 +2861,7 @@
           page-title "rebase page uuid"]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:create-page [page-title {:redirect? false
                                                               :split-namespace? true
                                                               :tags ()}]]]
@@ -2773,7 +2888,7 @@
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:insert-blocks [[{:block/title "rebase uuid block"
                                                       :block/uuid (random-uuid)}]
                                                     (:db/id parent)
@@ -2844,7 +2959,7 @@
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
                                   local-tx-meta)
           (let [reaction-eid (-> (d/datoms @conn :avet :logseq.property.reaction/target (:db/id parent))
@@ -2852,7 +2967,7 @@
                                  :e)
                 before-count (count (#'sync-apply/pending-txs test-repo))]
             (is (some? reaction-eid))
-            (outliner-op/apply-ops! conn
+            (apply-ops! conn
                                     [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
                                     local-tx-meta)
             (let [after-count (count (#'sync-apply/pending-txs test-repo))]
@@ -2865,7 +2980,7 @@
           remote-delete-tx (:tx-data (outliner-core/delete-blocks @conn [parent] {}))]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (outliner-op/apply-ops! conn
+          (apply-ops! conn
                                   [[:toggle-reaction [target-uuid "+1" nil]]]
                                   local-tx-meta)
           (let [pending-before (#'sync-apply/pending-txs test-repo)
@@ -3290,7 +3405,7 @@
           (fn []
             (let [page (db-test/find-page-by-title @conn-a "page 1")
                   tag1 (ldb/get-page @conn-a "tag1")
-                  result (outliner-op/apply-ops!
+                  result (apply-ops!
                           conn-a
                           [[:insert-blocks
                             [[{:block/title (common-util/format "[[%s]]"
@@ -4003,7 +4118,7 @@
                           (orig repo tx-report))))]
         (with-datascript-conns conn client-ops-conn
           (fn []
-            (outliner-op/apply-ops! conn
+            (apply-ops! conn
                                     [[:save-block [{:block/uuid (:block/uuid block)
                                                     :block/title "test"} nil]]]
                                     local-tx-meta)
@@ -4527,7 +4642,7 @@
         blocks-to-insert (cons (assoc (first template-blocks)
                                       :logseq.property/used-template (:db/id template-root))
                                (rest template-blocks))]
-    (outliner-op/apply-ops!
+    (apply-ops!
      conn
      [[:apply-template [(:db/id template-root)
                         (:db/id empty-target)
@@ -4567,7 +4682,7 @@
         seed-page (db-test/find-page-by-title @seed-conn "page 1")
         page-id (:db/id seed-page)
         client-ops-conn (new-client-ops-db)]
-    (outliner-op/apply-ops!
+    (apply-ops!
      seed-conn
      [[:insert-blocks [[{:block/uuid template-root-uuid
                          :block/title "template 1"

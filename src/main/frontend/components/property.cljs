@@ -665,7 +665,7 @@
                                                    (let [prev-order (db-order/get-prev-order (db/get-db) nil (:db/id over))]
                                                      (db-order/gen-key prev-order over-order)))]
                                  (db/transact! (state/get-current-repo)
-                                               [{:db/id (:db/id active)
+                                               [{:block/uuid (:block/uuid active)
                                                  :block/order new-order}
                                                 (outliner-core/block-with-updated-at
                                                  {:db/id (:db/id block)})]
