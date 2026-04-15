@@ -290,7 +290,7 @@
                                                        (apply +)))]
                               :color    "#2563EB"
                               :icon     "command"})]
-        (for [{:keys [key title children color icon] :as category} categories
+        (for [{:keys [key _title children color icon] :as category} categories
               :let [total (if counted? (count children) 0)]]
           [:button.category-card.text-left
            {:key      key
