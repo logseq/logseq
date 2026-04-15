@@ -8,7 +8,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [interpolate-rich-text t]]
+            [frontend.context.i18n :refer [interpolate-rich-text-node t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.assets :as assets-handler]
@@ -144,10 +144,11 @@
                     :else
                     (notification/show!
                      [:div
-                      (interpolate-rich-text
+                      (interpolate-rich-text-node
                        (t :mobile.share/unsupported-import-type)
-                       [application-type {:href "https://github.com/logseq/logseq/issues"
-                                          :target "_blank"}])]
+                       [application-type
+                        [:a {:href "https://github.com/logseq/logseq/issues"
+                             :target "_blank"} "GitHub"]])]
                      :warning false))]
     (when content
       (if (state/get-edit-block)
@@ -195,10 +196,10 @@
       :else
       (notification/show!
        [:div
-        (interpolate-rich-text
+        (interpolate-rich-text-node
          (t :mobile.share/unsupported-content)
          [[:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
-               :target "_blank"} "Github"]])
+               :target "_blank"} "GitHub"]])
         [:pre.code (with-out-str (pprint/pprint resource))]] :warning false))
 
     (cond
@@ -208,10 +209,10 @@
       :else
       (notification/show!
        [:div
-        (interpolate-rich-text
+        (interpolate-rich-text-node
          (t :mobile.share/unsupported-content)
          [[:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
-               :target "_blank"} "Github"]])
+               :target "_blank"} "GitHub"]])
         [:pre.code (with-out-str (pprint/pprint resource))]] :warning false))))
 
 (defn handle-payload
@@ -281,10 +282,10 @@
         :else
         (notification/show!
          [:div
-          "Parsing current shared content are not supported. Please report the following codes on "
-          [:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
-               :target "_blank"} "Github"]
-          ". We will look into it soon."
+          (interpolate-rich-text-node
+           (t :mobile.share/unsupported-content)
+           [[:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
+                 :target "_blank"} "GitHub"]])
           [:pre.code (with-out-str (pprint/pprint result))]] :warning false)))))
 
 (defn handle-received []

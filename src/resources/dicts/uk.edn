@@ -463,6 +463,15 @@
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
 
+ ;; Graph diagnostics
+ :graph.diagnostics/checksum-failed-error "Не вдалося обчислити діагностику контрольної суми графа."
+ :graph.diagnostics/checksum-recomputed-success "Контрольну суму перераховано. Перерахована: {1}, локальна: {2}, віддалена: {3}. Завантажено {4}.edn із {5} блоками та атрибутами контрольної суми {6}."
+ :graph.diagnostics/checksum-unavailable-warning "Не вдалося обчислити діагностику контрольної суми для поточного графа."
+ :graph.diagnostics/client-ops-export-failed-error "Не вдалося експортувати Client ops SQLite."
+ :graph.diagnostics/client-ops-export-invalid-payload-warning "Не вдалося експортувати Client ops SQLite: недійсний тип payload {1}."
+ :graph.diagnostics/client-ops-export-success "Client ops SQLite експортовано: {1}.sqlite"
+ :graph.diagnostics/no-graph-warning "Граф не знайдено."
+
  ;; Graph page views
  :graph.page/show-journals "Показати журнали"
  :graph.page/title "Графік сторінки"
@@ -636,6 +645,11 @@
  ;; Journal default queries
  :journal.default-query/doing "ВИКОНУЄТЬСЯ"
  :journal.default-query/todo "ЗАВДАННЯ"
+
+ ;; Library
+ :library/add-existing-pages "Додати наявні сторінки до Бібліотеки"
+ :library/add-pages "Add pages"
+ :library/title "Бібліотека"
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -890,7 +904,6 @@
  :property.built-in/deleted-at "Видалено"
  :property.built-in/deleted-by-ref "Видалив"
  :property.built-in/description "Опис"
- :property.built-in/embedding-hnsw-label-updated-at "HNSW мітка оновлена"
  :property.built-in/enable-history "Увімкнути історію властивості"
  :property.built-in/exclude-from-graph-view "Виключити з перегляду графа?"
  :property.built-in/fsrs-due "Термін"
@@ -1155,6 +1168,17 @@
  :query.builder/updated-label "Оновлено"
  :query.builder/wrap-filter-with-label "Обгорнути цей фільтр:"
 
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
  ;; Asset
  :asset/acceptable-file-extensions "Допустимі розширення файлів"
  :asset/add-assets "Додати ресурси"
@@ -1257,6 +1281,7 @@
 
  ;; Import
  :import/all-tags "Імпортировать усі теги"
+ :import/asset-too-large-warning "Копіювання ресурсу {1} пропущено, бо він перевищує ліміт 100 MB."
  :import/assets-import-partial "{1}/{2} ресурсов імпортировано. Подробности в консоли."
  :import/assets-imported "{1} ресурсов імпортировано."
  :import/assets-skipped "{1} ресурсов пропущено. Подробности в консоли."
@@ -1472,6 +1497,14 @@
  :settings.general/update-available "Доступно оновлення"
  :settings.general/update-error "⚠️ Упс, щось пішло не так!\nБудь ласка, перевірте {1}."
 
+ ;; Sync server settings
+ :settings.sync-server/clear-success "URL сервера синхронізації очищено. Буде використано офіційний Logseq Sync."
+ :settings.sync-server/reset "Скинути по умолчанию"
+ :settings.sync-server/save-success "URL сервера синхронізації збережено."
+ :settings.sync-server/url "URL сервера синхронізації"
+ :settings.sync-server/url-desc "Налаштуйте власний HTTPS URL сервера синхронізації для self-hosted режиму. Ваші токени автентифікації Logseq будуть надсилатися на цей сервер, тож використовуйте лише довірений URL. Залиште порожнім, щоб використовувати офіційний Logseq Sync."
+ :settings.sync-server/url-invalid-error "URL має починатися з https:// або http://"
+
  ;; Theme
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Перейти на тему {1}"
@@ -1483,6 +1516,7 @@
  :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "Перевірити всі оновлення"
  :plugin/check-update "Перевірити оновлення"
+ :plugin/checked "Перевірено"
  :plugin/checking-for-updates "Перевірка оновлень"
  :plugin/contribute "✨ Написати і відправити новий плагін"
  :plugin/custom-js-alert "Знайденно custom.js файл, це дозволенно до запуску? (Якщо ви не розумієте що знаходитья у файлі, це не рекомедовано до запуску, як може мати певні проблеми із безпекою.)"
@@ -1562,6 +1596,13 @@
  :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
  :plugin.install-from-web-url/theme-label "тема"
 
+ ;; Plugin package config
+ :plugin.package-config/detach-desc "Видалення лише від'єднає плагін від Logseq і залишить вихідну теку без змін."
+ :plugin.package-config/parse-error "Не вдалося розібрати конфігурацію пакета плагіна."
+ :plugin.package-config/remove-error "Не вдалося видалити пошкоджений плагін."
+ :plugin.package-config/remove-external-success "Пошкоджений плагін видалено зі списку плагінів."
+ :plugin.package-config/remove-installed-success "Пошкоджений плагін \"{1}\" видалено."
+
  ;; Plugin proxy
  :plugin.proxy/direct "Пряме з'єднання"
  :plugin.proxy/http "HTTP"
@@ -1580,21 +1621,10 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
- ;; AI
- :ai/embedding "Вбудовування..."
- :ai/local-embedding-model "Локальна модель ембедингів"
- :ai/model-download-progress "Завантаження {1}"
- :ai/model-downloaded "Завантажено {1}"
- :ai/model-ready "Модель готова 🚀"
- :ai/search-label "Пошук"
- :ai/search-result-label "Результат пошуку"
- :ai/search-title "Семантичний пошук:"
- :ai/select-model "Оберіть модель"
- :ai/vector-search-debug-actions "Дії"
- :ai/vector-search-debug-settings "Налаштування"
- :ai/vector-search-debug-state "Стан"
- :ai/vector-search-model-placeholder "Оберіть модель (потрібно повторно виконати force-embedding-all-graph-blocks)"
- :ai/webgpu-unsupported "WebGPU не підтримується у цьому браузері, будь ласка, оновіть його або скористайтеся іншим браузером."
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 
  ;; Zotero
  :zotero/attachments "Вкладення"
@@ -1640,6 +1670,7 @@
 
  ;; Recycle storage
  :storage.recycle/block-deleted-at "Блок видалено {1}"
+ :storage.recycle/delete-permanently "Видалити назавжди"
  :storage.recycle/empty "Кошик порожній."
  :storage.recycle/page-deleted-at "Сторінку видалено {1}"
  :storage.recycle/readonly "Корзина (тільки чтение)"
@@ -1696,10 +1727,7 @@
  :sync/online "Online"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
- :sync/preparing-snapshot-download "Підготовка завантаження знімка графа"
- :sync/snapshot-downloaded "Знімок графа завантажено"
  :sync/something-wrong "Помилка синхронизации"
- :sync/start-downloading-snapshot "Початок завантаження знімка графа"
  :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "Превышен лимит хранилища"
  :sync/uploading "Uploading..."
@@ -1848,6 +1876,9 @@
  :bug-report.main/desc "Сообщить об помилці"
  :bug-report.main/title "Сообщить об помилці"
 
+ ;; Shell
+ :shell/input-command-title "Input command"
+
  ;; Profiler
  :profiler/input-fn-placeholder "введіть назву функції тут"
  :profiler/unregister "Скасувати реєстрацію"
@@ -1894,7 +1925,7 @@
  ;; Sidebar right
  :sidebar.right.dev/profiler "(Dev) Profiler"
  :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/vector-search "(Dev) VectorSearch"
+ :sidebar.right.dev/undo-redo "(Dev) Скасувати зміни/Повторити"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
@@ -1997,28 +2028,4 @@
  :electron/version "Версия {1}"
  :electron/write-file-failed "Не вдалося записати у файл {1}, {2}."
  :electron/write-file-failed-with-backup "Не вдалося записати у файл {1}, {2}. Резервну копію було збережено в {3}."
-
- ;; Icon
- :icon/emojis-count "Emojis ({1})"
- :icon/icons-count "Icons ({1})"
- :icon/matched-count "Matched ({1})"
- :icon/search-all "Search all"
- :icon/search-emojis "Search emojis"
- :icon/search-icons "Search icons"
- :icon/tab-all "All"
- :icon/tab-emojis "Emojis"
- :icon/tab-icons "Icons"
-
- ;; Library
- :library/add-existing-pages "Додати наявні сторінки до Бібліотеки"
- :library/add-pages "Add pages"
- :library/title "Бібліотека"
-
- ;; Shell
- :shell/input-command-title "Input command"
-
- ;; Youtube
- :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
- :youtube/player-not-ready "YouTube player isn't ready yet."
- :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

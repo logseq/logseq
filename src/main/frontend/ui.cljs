@@ -230,6 +230,8 @@
     [:span.keyboard-shortcut
      (shui/shortcut sequence opts)]))
 
+(def ^:private append-no-padding-class " no-padding")
+
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]
   (if only-child?
@@ -238,7 +240,7 @@
     [:a.flex.justify-between.menu-link
      (cond-> options
        (true? no-padding?)
-       (assoc :class (str class " no-padding"))
+       (assoc :class (str class append-no-padding-class))
 
        true
        (dissoc :no-padding?))

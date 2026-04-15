@@ -463,6 +463,15 @@
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
 
+ ;; Graph diagnostics
+ :graph.diagnostics/checksum-failed-error "Kunne ikke beregne sjekksumdiagnostikk for grafen."
+ :graph.diagnostics/checksum-recomputed-success "Sjekksum beregnet på nytt. Ny beregning: {1}, lokal: {2}, ekstern: {3}. {4}.edn ble lastet ned med {5} blokker og sjekksumattributter {6}."
+ :graph.diagnostics/checksum-unavailable-warning "Kan ikke beregne sjekksumdiagnostikk for gjeldende graf."
+ :graph.diagnostics/client-ops-export-failed-error "Kunne ikke eksportere Client ops SQLite."
+ :graph.diagnostics/client-ops-export-invalid-payload-warning "Eksport av Client ops SQLite mislyktes: ugyldig payload-type {1}."
+ :graph.diagnostics/client-ops-export-success "Client ops SQLite eksportert: {1}.sqlite"
+ :graph.diagnostics/no-graph-warning "Fant ingen graf."
+
  ;; Graph page views
  :graph.page/show-journals "Vis dagbøker"
  :graph.page/title "Sidegraf"
@@ -636,6 +645,11 @@
  ;; Journal default queries
  :journal.default-query/doing "GJØR"
  :journal.default-query/todo "Å GJØRE"
+
+ ;; Library
+ :library/add-existing-pages "Legg til eksisterende sider i Bibliotek"
+ :library/add-pages "Add pages"
+ :library/title "Bibliotek"
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -890,7 +904,6 @@
  :property.built-in/deleted-at "Slettet"
  :property.built-in/deleted-by-ref "Slettet av"
  :property.built-in/description "Beskrivelse"
- :property.built-in/embedding-hnsw-label-updated-at "HNSW-etikett oppdatert"
  :property.built-in/enable-history "Aktiver egenskapshistorikk"
  :property.built-in/exclude-from-graph-view "Ekskludert fra grafvisning?"
  :property.built-in/fsrs-due "Forfaller"
@@ -1155,6 +1168,17 @@
  :query.builder/updated-label "Oppdatert"
  :query.builder/wrap-filter-with-label "Pakk dette filteret med:"
 
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
  ;; Asset
  :asset/acceptable-file-extensions "Godkjente filendelser"
  :asset/add-assets "Legg til vedlegg"
@@ -1257,6 +1281,7 @@
 
  ;; Import
  :import/all-tags "Importer alle tagger"
+ :import/asset-too-large-warning "Kopiering av ressursen {1} ble hoppet over fordi den overstiger grensen på 100 MB."
  :import/assets-import-partial "{1}/{2} filer importert. Detaljer i konsollen."
  :import/assets-imported "{1} filer importert."
  :import/assets-skipped "{1} filer hoppet over. Detaljer i konsollen."
@@ -1472,6 +1497,14 @@
  :settings.general/update-available "Oppdatering tilgjengelig"
  :settings.general/update-error "⚠️ Oops, noe gikk galt!\nVennligst sjekk ut {1}."
 
+ ;; Sync server settings
+ :settings.sync-server/clear-success "URL-en til synkroniseringsserveren ble fjernet. Offisiell Logseq Sync brukes."
+ :settings.sync-server/reset "Tilbakestill til standard"
+ :settings.sync-server/save-success "URL-en til synkroniseringsserveren ble lagret."
+ :settings.sync-server/url "URL til synkroniseringsserver"
+ :settings.sync-server/url-desc "Angi en egendefinert HTTPS-URL for en selvhostet synkroniseringsserver. Logseq-autentiseringstokenene dine sendes til denne serveren, så bruk bare en pålitelig URL. La feltet være tomt for å bruke offisiell Logseq Sync."
+ :settings.sync-server/url-invalid-error "URL må starte med https:// eller http://"
+
  ;; Theme
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Bytt til {1}-tema"
@@ -1483,6 +1516,7 @@
  :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "Se etter alle oppdateringer"
  :plugin/check-update "Sjekk etter oppdateringer"
+ :plugin/checked "Sjekket"
  :plugin/checking-for-updates "Sjekker etter oppdateringer"
  :plugin/contribute "✨ Skriv og send inn en ny utvidelse"
  :plugin/custom-js-alert "Fant custom.js fil, får den lov til å kjøre? (Hvis du ikke forstår innholdet i denne filen er det anbefalt å ikke la den kjøre. Dette kan ha sikkerhetsrisiko.)"
@@ -1562,6 +1596,13 @@
  :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
  :plugin.install-from-web-url/theme-label "tema"
 
+ ;; Plugin package config
+ :plugin.package-config/detach-desc "Å fjerne den kobler bare pluginen fra Logseq og lar kildemappen være urørt."
+ :plugin.package-config/parse-error "Kunne ikke tolke konfigurasjonen for plugin-pakken."
+ :plugin.package-config/remove-error "Kunne ikke fjerne den ødelagte pluginen."
+ :plugin.package-config/remove-external-success "Den ødelagte pluginen ble fjernet fra pluginlisten."
+ :plugin.package-config/remove-installed-success "Ødelagt plugin \"{1}\" ble fjernet."
+
  ;; Plugin proxy
  :plugin.proxy/direct "Direkte"
  :plugin.proxy/http "HTTP"
@@ -1580,21 +1621,10 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
- ;; AI
- :ai/embedding "Bygger inn..."
- :ai/local-embedding-model "Lokal innbyggingsmodell"
- :ai/model-download-progress "Laster ned {1}"
- :ai/model-downloaded "Lastet ned {1}"
- :ai/model-ready "Modellen er klar 🚀"
- :ai/search-label "Søk"
- :ai/search-result-label "Søkeresultat"
- :ai/search-title "Semantisk søk:"
- :ai/select-model "Velg en modell"
- :ai/vector-search-debug-actions "Handlinger"
- :ai/vector-search-debug-settings "Innstillinger"
- :ai/vector-search-debug-state "Status"
- :ai/vector-search-model-placeholder "Velg en modell (krever force-embedding-all-graph-blocks på nytt)"
- :ai/webgpu-unsupported "WebGPU støttes ikke i denne nettleseren. Vennligst oppgrader den eller bruk en annen nettleser."
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 
  ;; Zotero
  :zotero/attachments "Vedlegg"
@@ -1640,6 +1670,7 @@
 
  ;; Recycle storage
  :storage.recycle/block-deleted-at "Blokk slettet {1}"
+ :storage.recycle/delete-permanently "Slett permanent"
  :storage.recycle/empty "Papirkurven er tom."
  :storage.recycle/page-deleted-at "Side slettet {1}"
  :storage.recycle/readonly "Papirkurv (skrivebeskyttet)"
@@ -1696,10 +1727,7 @@
  :sync/online "Online"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
- :sync/preparing-snapshot-download "Forbereder nedlasting av grafbilde"
- :sync/snapshot-downloaded "Grafbilde lastet ned"
  :sync/something-wrong "Synkroniseringsfeil"
- :sync/start-downloading-snapshot "Starter nedlasting av grafbilde"
  :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "Lagringsgrense overskredet"
  :sync/uploading "Uploading..."
@@ -1848,6 +1876,9 @@
  :bug-report.main/desc "Rapporter en feil"
  :bug-report.main/title "Rapporter feil"
 
+ ;; Shell
+ :shell/input-command-title "Input command"
+
  ;; Profiler
  :profiler/input-fn-placeholder "skriv inn funksjonsnavn her"
  :profiler/unregister "Avregistrer"
@@ -1894,7 +1925,7 @@
  ;; Sidebar right
  :sidebar.right.dev/profiler "(Dev) Profiler"
  :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/vector-search "(Dev) VectorSearch"
+ :sidebar.right.dev/undo-redo "(Dev) Angre/Gjør om"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
@@ -1997,28 +2028,4 @@
  :electron/version "Versjon {1}"
  :electron/write-file-failed "Skriving til filen {1} mislyktes, {2}."
  :electron/write-file-failed-with-backup "Skriving til filen {1} mislyktes, {2}. En sikkerhetskopi ble lagret i {3}."
-
- ;; Icon
- :icon/emojis-count "Emojis ({1})"
- :icon/icons-count "Icons ({1})"
- :icon/matched-count "Matched ({1})"
- :icon/search-all "Search all"
- :icon/search-emojis "Search emojis"
- :icon/search-icons "Search icons"
- :icon/tab-all "All"
- :icon/tab-emojis "Emojis"
- :icon/tab-icons "Icons"
-
- ;; Library
- :library/add-existing-pages "Legg til eksisterende sider i Bibliotek"
- :library/add-pages "Add pages"
- :library/title "Bibliotek"
-
- ;; Shell
- :shell/input-command-title "Input command"
-
- ;; Youtube
- :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
- :youtube/player-not-ready "YouTube player isn't ready yet."
- :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

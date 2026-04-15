@@ -463,6 +463,15 @@
  :graph/use-sync-beta "使用 Logseq Sync（Beta 测试）"
  :graph/use-sync-label "使用 Logseq Sync？"
 
+ ;; Graph diagnostics
+ :graph.diagnostics/checksum-failed-error "计算图谱校验和诊断失败。"
+ :graph.diagnostics/checksum-recomputed-success "已重新计算校验和。重新计算结果：{1}，本地：{2}，远端：{3}。已下载 {4}.edn，包含 {5} 个 block 和校验和属性 {6}。"
+ :graph.diagnostics/checksum-unavailable-warning "无法为当前图谱计算校验和诊断。"
+ :graph.diagnostics/client-ops-export-failed-error "导出客户端操作 SQLite 失败。"
+ :graph.diagnostics/client-ops-export-invalid-payload-warning "导出客户端操作 SQLite 失败：无效的 payload 类型 {1}。"
+ :graph.diagnostics/client-ops-export-success "已导出客户端操作 SQLite：{1}.sqlite"
+ :graph.diagnostics/no-graph-warning "未找到图谱。"
+
  ;; Graph page views
  :graph.page/show-journals "显示日记"
  :graph.page/title "页面图谱"
@@ -636,6 +645,11 @@
  ;; Journal default queries
  :journal.default-query/doing "进行中"
  :journal.default-query/todo "待办"
+
+ ;; Library
+ :library/add-existing-pages "将现有页面添加到页面库"
+ :library/add-pages "添加页面"
+ :library/title "页面库"
 
  ;; Natural language dates
  :date.nlp/last-friday "上周五"
@@ -890,7 +904,6 @@
  :property.built-in/deleted-at "删除于"
  :property.built-in/deleted-by-ref "删除者"
  :property.built-in/description "描述"
- :property.built-in/embedding-hnsw-label-updated-at "HNSW 标签更新于"
  :property.built-in/enable-history "启用属性历史"
  :property.built-in/exclude-from-graph-view "从图谱视图中排除？"
  :property.built-in/fsrs-due "到期"
@@ -1155,6 +1168,17 @@
  :query.builder/updated-label "更新时间"
  :query.builder/wrap-filter-with-label "将此筛选器包裹为："
 
+ ;; Icon
+ :icon/emojis-count "表情符号（{1}）"
+ :icon/icons-count "图标（{1}）"
+ :icon/matched-count "匹配结果（{1}）"
+ :icon/search-all "搜索全部"
+ :icon/search-emojis "搜索表情符号"
+ :icon/search-icons "搜索图标"
+ :icon/tab-all "全部"
+ :icon/tab-emojis "表情符号"
+ :icon/tab-icons "图标"
+
  ;; Asset
  :asset/acceptable-file-extensions "可接受的文件扩展名"
  :asset/add-assets "添加附件"
@@ -1257,6 +1281,7 @@
 
  ;; Import
  :import/all-tags "导入所有标签"
+ :import/asset-too-large-warning "已跳过复制资源 {1}，因为它超过了 100 MB 限制。"
  :import/assets-import-partial "已导入 {1}/{2} 个资源。详情请查看控制台。"
  :import/assets-imported "已导入 {1} 个资源。"
  :import/assets-skipped "已跳过 {1} 个资源。详情请查看控制台。"
@@ -1472,6 +1497,14 @@
  :settings.general/update-available "发现新版本"
  :settings.general/update-error "⚠️ 哎呀，出了点问题！\n请查看{1}。"
 
+ ;; Sync server settings
+ :settings.sync-server/clear-success "已清除同步服务器 URL。将使用官方 Logseq Sync。"
+ :settings.sync-server/reset "恢复默认值"
+ :settings.sync-server/save-success "已保存同步服务器 URL。"
+ :settings.sync-server/url "同步服务器 URL"
+ :settings.sync-server/url-desc "为自托管同步设置自定义 HTTPS 同步服务器 URL。你的 Logseq 身份验证令牌会发送到该服务器，因此只应使用可信的 URL。留空则使用官方 Logseq Sync。"
+ :settings.sync-server/url-invalid-error "URL 必须以 https:// 或 http:// 开头"
+
  ;; Theme
  :theme/logseq-default "Logseq 默认主题"
  :theme/switch-to "切换到 {1} 主题"
@@ -1483,6 +1516,7 @@
  :plugin/auto-check-for-updates-status "自动检查更新：{1}！"
  :plugin/check-all-updates "一键检查更新"
  :plugin/check-update "检查更新"
+ :plugin/checked "已检查"
  :plugin/checking-for-updates "正在检查插件更新 ..."
  :plugin/contribute "✨编写和提交新插件"
  :plugin/custom-js-alert "发现 custom.js 自定义脚本，是否允许执行？（如果你对该文件的内容不了解 或 来源不可靠，建议不要允许执行）"
@@ -1562,6 +1596,13 @@
  :plugin.install-from-web-url/supports-note "URL 同时支持 GitHub 仓库和本地开发服务器。（例如：{1}、{2}）"
  :plugin.install-from-web-url/theme-label "主题"
 
+ ;; Plugin package config
+ :plugin.package-config/detach-desc "移除它只会将该插件从 Logseq 中解绑，并保留源文件夹不变。"
+ :plugin.package-config/parse-error "解析插件包配置失败。"
+ :plugin.package-config/remove-error "移除损坏的插件失败。"
+ :plugin.package-config/remove-external-success "已从插件列表中移除损坏的插件。"
+ :plugin.package-config/remove-installed-success "已移除损坏的插件“{1}”。"
+
  ;; Plugin proxy
  :plugin.proxy/direct "直连"
  :plugin.proxy/http "HTTP"
@@ -1580,21 +1621,10 @@
  :plugin.themes/group "{1}"
  :plugin.themes/light-and-dark "浅色与深色主题"
 
- ;; AI
- :ai/embedding "正在嵌入..."
- :ai/local-embedding-model "本地嵌入模型"
- :ai/model-download-progress "正在下载 {1}"
- :ai/model-downloaded "已下载 {1}"
- :ai/model-ready "模型已就绪 🚀"
- :ai/search-label "搜索"
- :ai/search-result-label "搜索结果"
- :ai/search-title "语义搜索："
- :ai/select-model "选择模型"
- :ai/vector-search-debug-actions "操作"
- :ai/vector-search-debug-settings "设置"
- :ai/vector-search-debug-state "状态"
- :ai/vector-search-model-placeholder "选择模型（需要重新对所有知识库块进行嵌入）"
- :ai/webgpu-unsupported "当前浏览器不支持 WebGPU，请升级浏览器或使用其他浏览器。"
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "请先嵌入一个 YouTube 视频，然后再使用此图标。\r\n                                      请记住：在移动端，你可以将原始 YouTube URL 直接粘贴为嵌入视频。"
+ :youtube/player-not-ready "YouTube 播放器尚未准备好。"
+ :youtube/timestamps-not-available-mobile "移动端暂不支持 YouTube 时间戳。"
 
  ;; Zotero
  :zotero/attachments "附件"
@@ -1640,6 +1670,7 @@
 
  ;; Recycle storage
  :storage.recycle/block-deleted-at "块已删除 {1}"
+ :storage.recycle/delete-permanently "永久删除"
  :storage.recycle/empty "回收站为空。"
  :storage.recycle/page-deleted-at "页面已删除 {1}"
  :storage.recycle/readonly "回收站是只读的。"
@@ -1696,10 +1727,7 @@
  :sync/online "在线"
  :sync/pending-local-changes "待同步的本地更改"
  :sync/pending-server-changes "待同步的服务器更改"
- :sync/preparing-snapshot-download "正在准备知识库快照下载"
- :sync/snapshot-downloaded "知识库快照已下载"
  :sync/something-wrong "出了点问题，请重试。"
- :sync/start-downloading-snapshot "开始下载知识库快照"
  :sync/start-sync "开始同步"
  :sync/storage-exceed-limit "同步存储超出限制"
  :sync/uploading "上传中..."
@@ -1848,6 +1876,9 @@
  :bug-report.main/desc "你可以帮助我们提交一个错误报告吗？我们会尽快解决。"
  :bug-report.main/title "BUG 上报"
 
+ ;; Shell
+ :shell/input-command-title "输入命令"
+
  ;; Profiler
  :profiler/input-fn-placeholder "在此输入函数名"
  :profiler/unregister "注销"
@@ -1894,7 +1925,7 @@
  ;; Sidebar right
  :sidebar.right.dev/profiler "（开发）Profiler"
  :sidebar.right.dev/rtc "（开发）RTC"
- :sidebar.right.dev/vector-search "（开发）VectorSearch"
+ :sidebar.right.dev/undo-redo "（开发）撤销/重做"
 
  ;; Context Menu
  :context-menu/developer-tools "开发者工具"
@@ -1997,28 +2028,4 @@
  :electron/version "版本 {1}"
  :electron/write-file-failed "写入文件 {1} 失败，{2}。"
  :electron/write-file-failed-with-backup "写入文件 {1} 失败，{2}。备份文件已保存到 {3}。"
-
- ;; Icon
- :icon/emojis-count "表情符号（{1}）"
- :icon/icons-count "图标（{1}）"
- :icon/matched-count "匹配结果（{1}）"
- :icon/search-all "搜索全部"
- :icon/search-emojis "搜索表情符号"
- :icon/search-icons "搜索图标"
- :icon/tab-all "全部"
- :icon/tab-emojis "表情符号"
- :icon/tab-icons "图标"
-
- ;; Library
- :library/add-existing-pages "将现有页面添加到页面库"
- :library/add-pages "添加页面"
- :library/title "页面库"
-
- ;; Shell
- :shell/input-command-title "输入命令"
-
- ;; Youtube
- :youtube/embed-first-reminder-mobile "请先嵌入一个 YouTube 视频，然后再使用此图标。\r\n                                      请记住：在移动端，你可以将原始 YouTube URL 直接粘贴为嵌入视频。"
- :youtube/player-not-ready "YouTube 播放器尚未准备好。"
- :youtube/timestamps-not-available-mobile "移动端暂不支持 YouTube 时间戳。"
 }

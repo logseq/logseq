@@ -591,12 +591,12 @@
                      (config/set-custom-sync-server-url! nil)
                      (set-url! "")
                      (-> (push-sync-config-to-worker!)
-                         (p/then #(notification/show! (t :settings-page/sync-server-url-cleared) :success))
+                         (p/then #(notification/show! (t :settings.sync-server/clear-success) :success))
                          (p/catch #(notification/show! (str "Failed to update worker: " %) :error))))]
     [:div.cp__settings-sync-server-cnt
-     [:h1.mb-2.text-2xl.font-bold (t :settings-page/sync-server-url)]
+     [:h1.mb-2.text-2xl.font-bold (t :settings.sync-server/url)]
      [:div.p-2
-      [:p.text-sm.opacity-70.mb-4 (t :settings-page/sync-server-url-desc)]
+      [:p.text-sm.opacity-70.mb-4 (t :settings.sync-server/url-desc)]
       [:p
        [:label
         [:strong "URL"]
@@ -613,19 +613,19 @@
                        (if (string/blank? trimmed)
                          (reset-url!)
                          (if-not (config/valid-sync-server-url? trimmed)
-                           (notification/show! "URL must start with https:// or http://" :error)
+                           (notification/show! (t :settings.sync-server/url-invalid-error) :error)
                            (do
                              (config/set-custom-sync-server-url! trimmed)
                              (-> (push-sync-config-to-worker!)
-                                 (p/then #(notification/show! (t :settings-page/sync-server-url-saved) :success))
+                                 (p/then #(notification/show! (t :settings.sync-server/save-success) :success))
                                  (p/catch #(notification/show! (str "Failed to update worker: " %) :error))))))))}
-        (t :save))
+        (t :ui/save))
        (when (seq url)
          (shui/button
           {:size :sm
            :variant :outline
            :on-click (fn [] (reset-url!))}
-          (t :settings-page/sync-server-url-reset)))]]]))
+          (t :settings.sync-server/reset)))]]]))
 
 (rum/defc sync-server-url-button
   []
@@ -634,14 +634,14 @@
                 [:span.pr-1
                  (if (seq current-url)
                    current-url
-                   (t :settings-page/sync-server-url-default))]
+                   "Logseq Sync")]
                 (ui/icon "edit")]
                :class "text-sm"
                :on-click #(state/pub-event! [:go/sync-server-settings]))))
 
 (defn sync-server-url-row []
   (row-with-button-action
-   {:left-label (t :settings-page/sync-server-url)
+   {:left-label (t :settings.sync-server/url)
     :action (sync-server-url-button)}))
 
 (rum/defc user-proxy-settings
@@ -1300,30 +1300,30 @@
        [:header.cp__settings-header
         [:h1.cp__settings-modal-title (t :nav/settings)]]
        [:ul.settings-menu
-        (for [[label id text icon]
+        (for [[label text icon]
               [(when config/ENABLE-SETTINGS-ACCOUNT-TAB
-                 [:account "account" (t :settings/account) (ui/icon "user-circle")])
-               [:general "general" (t :settings/general) (ui/icon "adjustments")]
-               [:editor "editor" (t :settings/editor) (ui/icon "writing")]
-               [:keymap "keymap" (t :settings/keymap) (ui/icon "keyboard")]
+                 [:account (t :settings/account) (ui/icon "user-circle")])
+               [:general (t :settings/general) (ui/icon "adjustments")]
+               [:editor (t :settings/editor) (ui/icon "writing")]
+               [:keymap (t :settings/keymap) (ui/icon "keyboard")]
                (when (util/electron?)
-                 [:ai (t :settings-page/tab-ai) (t :settings/ai) (ui/icon "wand")])
+                 [:ai (t :settings/ai) (ui/icon "wand")])
 
-               [:advanced "advanced" (t :settings/advanced) (ui/icon "bulb")]
-               [:features "features" (t :settings/features) (ui/icon "app-feature")]
+               [:advanced (t :settings/advanced) (ui/icon "bulb")]
+               [:features (t :settings/features) (ui/icon "app-feature")]
                (when logged-in?
-                 [:collaboration "collaboration" (t :settings/collaboration) (ui/icon "users")])
+                 [:collaboration (t :settings/collaboration) (ui/icon "users")])
 
                (when logged-in?
-                 [:encryption "encryption" (t :settings/encryption) (ui/icon "lock")])
+                 [:encryption (t :settings/encryption) (ui/icon "lock")])
 
                (when plugins-of-settings
-                 [:plugins-setting "plugins" (t :settings/plugins) (ui/icon "puzzle")])]]
+                 [:plugins-setting (t :settings/plugins) (ui/icon "puzzle")])]]
 
           (when label
             [:li.settings-menu-item
              {:key      text
-              :data-id  id
+              :data-id  (name text)
               :class    (classnames [{:active (= label (first @*active))}])
               :on-click (fn []
                           (if (= label :plugins-setting)

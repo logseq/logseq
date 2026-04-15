@@ -463,6 +463,15 @@
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
 
+ ;; Graph diagnostics
+ :graph.diagnostics/checksum-failed-error "Die Prüfsummen-Diagnose des Graphen konnte nicht berechnet werden."
+ :graph.diagnostics/checksum-recomputed-success "Prüfsumme neu berechnet. Neu berechnet: {1}, lokal: {2}, remote: {3}. {4}.edn wurde mit {5} Blöcken und Prüfsummenattributen {6} heruntergeladen."
+ :graph.diagnostics/checksum-unavailable-warning "Die Prüfsummen-Diagnose für den aktuellen Graphen konnte nicht berechnet werden."
+ :graph.diagnostics/client-ops-export-failed-error "Client ops SQLite konnte nicht exportiert werden."
+ :graph.diagnostics/client-ops-export-invalid-payload-warning "Export von Client ops SQLite fehlgeschlagen: ungültiger Payload-Typ {1}."
+ :graph.diagnostics/client-ops-export-success "Client ops SQLite exportiert: {1}.sqlite"
+ :graph.diagnostics/no-graph-warning "Kein Graph gefunden."
+
  ;; Graph page views
  :graph.page/show-journals "Zeige Journale"
  :graph.page/title "Seiten-Graph"
@@ -636,6 +645,11 @@
  ;; Journal default queries
  :journal.default-query/doing "IN ARBEIT"
  :journal.default-query/todo "ZU ERLEDIGEN"
+
+ ;; Library
+ :library/add-existing-pages "Vorhandene Seiten zur Bibliothek hinzufügen"
+ :library/add-pages "Add pages"
+ :library/title "Bibliothek"
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -890,7 +904,6 @@
  :property.built-in/deleted-at "Gelöscht am"
  :property.built-in/deleted-by-ref "Gelöscht von"
  :property.built-in/description "Beschreibung"
- :property.built-in/embedding-hnsw-label-updated-at "HNSW-Label aktualisiert am"
  :property.built-in/enable-history "Eigenschaftsverlauf aktivieren"
  :property.built-in/exclude-from-graph-view "Von Graphansicht ausgeschlossen?"
  :property.built-in/fsrs-due "Fällig"
@@ -1155,6 +1168,17 @@
  :query.builder/updated-label "Aktualisiert"
  :query.builder/wrap-filter-with-label "Diesen Filter umschließen mit:"
 
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
  ;; Asset
  :asset/acceptable-file-extensions "Zulässige Dateierweiterungen"
  :asset/add-assets "Assets hinzufügen"
@@ -1257,6 +1281,7 @@
 
  ;; Import
  :import/all-tags "Alle Tags importieren"
+ :import/asset-too-large-warning "Das Kopieren des Assets {1} wurde übersprungen, weil es das Limit von 100 MB überschreitet."
  :import/assets-import-partial "{1}/{2} Assets importiert. Details in der Konsole."
  :import/assets-imported "{1} Assets importiert."
  :import/assets-skipped "{1} Assets übersprungen. Details in der Konsole."
@@ -1472,6 +1497,14 @@
  :settings.general/update-available "Neue Version gefunden: "
  :settings.general/update-error "⚠️ Ups, Etwas ist schiefgelaufen!\nÜberprüfen Sie den {1}."
 
+ ;; Sync server settings
+ :settings.sync-server/clear-success "Die URL des Sync-Servers wurde gelöscht. Es wird der offizielle Logseq Sync verwendet."
+ :settings.sync-server/reset "Auf Standard zurücksetzen"
+ :settings.sync-server/save-success "Die URL des Sync-Servers wurde gespeichert."
+ :settings.sync-server/url "URL des Sync-Servers"
+ :settings.sync-server/url-desc "Legen Sie eine benutzerdefinierte HTTPS-URL für einen selbst gehosteten Sync-Server fest. Ihre Logseq-Authentifizierungstokens werden an diesen Server gesendet, daher sollten Sie nur eine vertrauenswürdige URL verwenden. Lassen Sie das Feld leer, um den offiziellen Logseq Sync zu verwenden."
+ :settings.sync-server/url-invalid-error "URL muss mit https:// oder http:// beginnen"
+
  ;; Theme
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Zu {1} Thema wechseln"
@@ -1483,6 +1516,7 @@
  :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "Alle Updates überprüfen"
  :plugin/check-update "Update überprüfen"
+ :plugin/checked "Geprüft"
  :plugin/checking-for-updates "Suche nach Aktualisierungen für Plugins ..."
  :plugin/contribute "✨ Schreiben und veröffentlichen Sie ein neues Plugin"
  :plugin/custom-js-alert "Datei custom.js gefunden. Darf sie ausgeführt werden? (Wenn Sie den Inhalt dieser Datei nicht verstehen, wird empfohlen, die Ausführung nicht zuzulassen, da dies gewisse Sicherheitsrisiken birgt)."
@@ -1562,6 +1596,13 @@
  :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
  :plugin.install-from-web-url/theme-label "Theme"
 
+ ;; Plugin package config
+ :plugin.package-config/detach-desc "Durch das Entfernen wird das Plugin nur von Logseq getrennt, der Quellordner bleibt unberührt."
+ :plugin.package-config/parse-error "Die Paketkonfiguration des Plugins konnte nicht geparst werden."
+ :plugin.package-config/remove-error "Das defekte Plugin konnte nicht entfernt werden."
+ :plugin.package-config/remove-external-success "Das defekte Plugin wurde aus der Plugin-Liste entfernt."
+ :plugin.package-config/remove-installed-success "Defektes Plugin „{1}“ entfernt."
+
  ;; Plugin proxy
  :plugin.proxy/direct "Direkt"
  :plugin.proxy/http "HTTP"
@@ -1580,21 +1621,10 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
- ;; AI
- :ai/embedding "Einbetten..."
- :ai/local-embedding-model "Lokales Embedding-Modell"
- :ai/model-download-progress "Wird heruntergeladen: {1}"
- :ai/model-downloaded "{1} heruntergeladen"
- :ai/model-ready "Modell ist bereit 🚀"
- :ai/search-label "Suche"
- :ai/search-result-label "Suchergebnis"
- :ai/search-title "Semantische Suche:"
- :ai/select-model "Modell auswählen"
- :ai/vector-search-debug-actions "Aktionen"
- :ai/vector-search-debug-settings "Einstellungen"
- :ai/vector-search-debug-state "Status"
- :ai/vector-search-model-placeholder "Modell auswählen (erfordert erneutes force-embedding-all-graph-blocks)"
- :ai/webgpu-unsupported "WebGPU wird von diesem Browser nicht unterstützt. Bitte aktualisieren Sie ihn oder verwenden Sie einen anderen Browser."
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 
  ;; Zotero
  :zotero/attachments "Anhänge"
@@ -1640,6 +1670,7 @@
 
  ;; Recycle storage
  :storage.recycle/block-deleted-at "Block gelöscht {1}"
+ :storage.recycle/delete-permanently "Dauerhaft löschen"
  :storage.recycle/empty "Papierkorb ist leer."
  :storage.recycle/page-deleted-at "Seite gelöscht {1}"
  :storage.recycle/readonly "Papierkorb (Nur Lesen)"
@@ -1696,10 +1727,7 @@
  :sync/online "Online"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
- :sync/preparing-snapshot-download "Graph-Snapshot-Download wird vorbereitet"
- :sync/snapshot-downloaded "Graph-Snapshot heruntergeladen"
  :sync/something-wrong "Synchronisierungsfehler aufgetreten"
- :sync/start-downloading-snapshot "Graph-Snapshot-Download wird gestartet"
  :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "Speicherplatz überschreitet das Limit"
  :sync/uploading "Uploading..."
@@ -1848,6 +1876,9 @@
  :bug-report.main/desc "Können Sie uns mit einer Fehlermeldung helfen? Wir werden es schnellstmöglich beheben."
  :bug-report.main/title "Bug melden"
 
+ ;; Shell
+ :shell/input-command-title "Input command"
+
  ;; Profiler
  :profiler/input-fn-placeholder "Funktionsnamen hier eingeben"
  :profiler/unregister "Abmelden"
@@ -1894,7 +1925,7 @@
  ;; Sidebar right
  :sidebar.right.dev/profiler "(Dev) Profiler"
  :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/vector-search "(Dev) VectorSearch"
+ :sidebar.right.dev/undo-redo "(Dev) Rückgängig/Wiederholen"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
@@ -1997,28 +2028,4 @@
  :electron/version "Version {1}"
  :electron/write-file-failed "Schreiben in die Datei {1} fehlgeschlagen, {2}."
  :electron/write-file-failed-with-backup "Schreiben in die Datei {1} fehlgeschlagen, {2}. Eine Sicherung wurde unter {3} gespeichert."
-
- ;; Icon
- :icon/emojis-count "Emojis ({1})"
- :icon/icons-count "Icons ({1})"
- :icon/matched-count "Matched ({1})"
- :icon/search-all "Search all"
- :icon/search-emojis "Search emojis"
- :icon/search-icons "Search icons"
- :icon/tab-all "All"
- :icon/tab-emojis "Emojis"
- :icon/tab-icons "Icons"
-
- ;; Library
- :library/add-existing-pages "Vorhandene Seiten zur Bibliothek hinzufügen"
- :library/add-pages "Add pages"
- :library/title "Bibliothek"
-
- ;; Shell
- :shell/input-command-title "Input command"
-
- ;; Youtube
- :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
- :youtube/player-not-ready "YouTube player isn't ready yet."
- :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

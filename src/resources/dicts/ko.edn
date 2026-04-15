@@ -463,6 +463,15 @@
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
 
+ ;; Graph diagnostics
+ :graph.diagnostics/checksum-failed-error "그래프 체크섬 진단 계산에 실패했습니다."
+ :graph.diagnostics/checksum-recomputed-success "체크섬을 다시 계산했습니다. 다시 계산한 값: {1}, 로컬: {2}, 원격: {3}. 블록 {5}개와 체크섬 속성 {6}이 포함된 {4}.edn을 다운로드했습니다."
+ :graph.diagnostics/checksum-unavailable-warning "현재 그래프의 체크섬 진단을 계산할 수 없습니다."
+ :graph.diagnostics/client-ops-export-failed-error "Client ops SQLite를 내보내지 못했습니다."
+ :graph.diagnostics/client-ops-export-invalid-payload-warning "Client ops SQLite 내보내기에 실패했습니다: 잘못된 payload 유형 {1}."
+ :graph.diagnostics/client-ops-export-success "Client ops SQLite를 내보냈습니다: {1}.sqlite"
+ :graph.diagnostics/no-graph-warning "그래프를 찾을 수 없습니다."
+
  ;; Graph page views
  :graph.page/show-journals "저널 표시"
  :graph.page/title "페이지 그래프"
@@ -636,6 +645,11 @@
  ;; Journal default queries
  :journal.default-query/doing "진행 중"
  :journal.default-query/todo "할 일"
+
+ ;; Library
+ :library/add-existing-pages "기존 페이지를 라이브러리에 추가"
+ :library/add-pages "Add pages"
+ :library/title "라이브러리"
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -890,7 +904,6 @@
  :property.built-in/deleted-at "삭제 시간"
  :property.built-in/deleted-by-ref "삭제자"
  :property.built-in/description "설명"
- :property.built-in/embedding-hnsw-label-updated-at "HNSW 라벨 업데이트 시간"
  :property.built-in/enable-history "속성 이력 활성화"
  :property.built-in/exclude-from-graph-view "그래프 뷰에서 제외 여부"
  :property.built-in/fsrs-due "예정일"
@@ -1155,6 +1168,17 @@
  :query.builder/updated-label "수정일"
  :query.builder/wrap-filter-with-label "이 필터를 다음으로 래핑:"
 
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
  ;; Asset
  :asset/acceptable-file-extensions "허용되는 파일 확장자"
  :asset/add-assets "자산 추가"
@@ -1257,6 +1281,7 @@
 
  ;; Import
  :import/all-tags "모든 태그 가져오기"
+ :import/asset-too-large-warning "에셋 {1} 복사는 100 MB 제한을 초과하여 건너뛰었습니다."
  :import/assets-import-partial "{1}/{2}개 에셋을 가져왔습니다. 자세한 내용은 콘솔을 확인하세요."
  :import/assets-imported "{1}개 에셋을 가져왔습니다."
  :import/assets-skipped "{1}개 에셋을 건너뛰었습니다. 자세한 내용은 콘솔을 확인하세요."
@@ -1472,6 +1497,14 @@
  :settings.general/update-available "업데이트 가능"
  :settings.general/update-error "⚠️ 이런, 문제가 발생했습니다!\n{1}을 확인해 주세요."
 
+ ;; Sync server settings
+ :settings.sync-server/clear-success "동기화 서버 URL을 지웠습니다. 공식 Logseq Sync를 사용합니다."
+ :settings.sync-server/reset "기본값으로 복원"
+ :settings.sync-server/save-success "동기화 서버 URL을 저장했습니다."
+ :settings.sync-server/url "동기화 서버 URL"
+ :settings.sync-server/url-desc "셀프 호스팅 동기화를 위해 사용자 지정 HTTPS 동기화 서버 URL을 설정합니다. Logseq 인증 토큰이 이 서버로 전송되므로 신뢰할 수 있는 URL만 사용하세요. 비워 두면 공식 Logseq Sync를 사용합니다."
+ :settings.sync-server/url-invalid-error "URL은 https:// 또는 http://로 시작해야 합니다"
+
  ;; Theme
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "{1} 테마로 전환"
@@ -1483,6 +1516,7 @@
  :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "모든 업데이트 확인"
  :plugin/check-update "업데이트 확인"
+ :plugin/checked "확인됨"
  :plugin/checking-for-updates "업데이트 확인 중"
  :plugin/contribute "✨ 새 플러그인을 만들고 기여하기"
  :plugin/custom-js-alert "custom.js 파일을 감지했습니다. 실행을 허용하겠습니까? (파일의 내용을 이해하지 못한다면 보안과 안전 상의 이유로 실행하지 않는 것이 권장됩니다."
@@ -1562,6 +1596,13 @@
  :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
  :plugin.install-from-web-url/theme-label "테마"
 
+ ;; Plugin package config
+ :plugin.package-config/detach-desc "제거해도 Logseq에서 플러그인 연결만 해제되며 원본 폴더는 그대로 유지됩니다."
+ :plugin.package-config/parse-error "플러그인 패키지 설정을 파싱하지 못했습니다."
+ :plugin.package-config/remove-error "손상된 플러그인을 제거하지 못했습니다."
+ :plugin.package-config/remove-external-success "손상된 플러그인을 플러그인 목록에서 제거했습니다."
+ :plugin.package-config/remove-installed-success "손상된 플러그인 \"{1}\"을 제거했습니다."
+
  ;; Plugin proxy
  :plugin.proxy/direct "직접 연결"
  :plugin.proxy/http "HTTP"
@@ -1580,21 +1621,10 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
- ;; AI
- :ai/embedding "임베딩 중..."
- :ai/local-embedding-model "로컬 임베딩 모델"
- :ai/model-download-progress "{1} 다운로드 중"
- :ai/model-downloaded "{1} 다운로드 완료"
- :ai/model-ready "모델이 준비되었습니다 🚀"
- :ai/search-label "검색"
- :ai/search-result-label "검색 결과"
- :ai/search-title "시맨틱 검색:"
- :ai/select-model "모델 선택"
- :ai/vector-search-debug-actions "작업"
- :ai/vector-search-debug-settings "설정"
- :ai/vector-search-debug-state "상태"
- :ai/vector-search-model-placeholder "모델 선택 (전체 그래프 블록 강제 임베딩 필요)"
- :ai/webgpu-unsupported "이 브라우저에서는 WebGPU가 지원되지 않습니다. 브라우저를 업그레이드하거나 다른 브라우저를 사용해 주세요."
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 
  ;; Zotero
  :zotero/attachments "첨부 파일"
@@ -1640,6 +1670,7 @@
 
  ;; Recycle storage
  :storage.recycle/block-deleted-at "차단이 삭제되었습니다. {1}"
+ :storage.recycle/delete-permanently "영구 삭제"
  :storage.recycle/empty "휴지통이 비어 있습니다."
  :storage.recycle/page-deleted-at "페이지가 삭제되었습니다. {1}"
  :storage.recycle/readonly "휴지통 (읽기 전용)"
@@ -1696,10 +1727,7 @@
  :sync/online "Online"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
- :sync/preparing-snapshot-download "그래프 스냅샷 다운로드 준비 중"
- :sync/snapshot-downloaded "그래프 스냅샷 다운로드 완료"
  :sync/something-wrong "동기화 오류가 발생했습니다"
- :sync/start-downloading-snapshot "그래프 스냅샷 다운로드 시작"
  :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "저장 용량이 제한을 초과했습니다"
  :sync/uploading "Uploading..."
@@ -1848,6 +1876,9 @@
  :bug-report.main/desc "버그 보고서를 제출해 도움을 주시면 감사하겠습니다. 가능한 빨리 해결하겠습니다."
  :bug-report.main/title "버그 보고"
 
+ ;; Shell
+ :shell/input-command-title "Input command"
+
  ;; Profiler
  :profiler/input-fn-placeholder "함수 이름을 입력하세요"
  :profiler/unregister "등록 해제"
@@ -1894,7 +1925,7 @@
  ;; Sidebar right
  :sidebar.right.dev/profiler "（개발）Profiler"
  :sidebar.right.dev/rtc "（개발）RTC"
- :sidebar.right.dev/vector-search "（개발）VectorSearch"
+ :sidebar.right.dev/undo-redo "（개발）실행 취소/다시 실행"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
@@ -1997,28 +2028,4 @@
  :electron/version "버전 {1}"
  :electron/write-file-failed "파일 {1}에 쓰지 못했습니다, {2}."
  :electron/write-file-failed-with-backup "파일 {1}에 쓰지 못했습니다, {2}. 백업 파일이 {3}에 저장되었습니다."
-
- ;; Icon
- :icon/emojis-count "Emojis ({1})"
- :icon/icons-count "Icons ({1})"
- :icon/matched-count "Matched ({1})"
- :icon/search-all "Search all"
- :icon/search-emojis "Search emojis"
- :icon/search-icons "Search icons"
- :icon/tab-all "All"
- :icon/tab-emojis "Emojis"
- :icon/tab-icons "Icons"
-
- ;; Library
- :library/add-existing-pages "기존 페이지를 라이브러리에 추가"
- :library/add-pages "Add pages"
- :library/title "라이브러리"
-
- ;; Shell
- :shell/input-command-title "Input command"
-
- ;; Youtube
- :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
- :youtube/player-not-ready "YouTube player isn't ready yet."
- :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

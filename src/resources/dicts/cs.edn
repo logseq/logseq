@@ -463,6 +463,15 @@
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
 
+ ;; Graph diagnostics
+ :graph.diagnostics/checksum-failed-error "Výpočet diagnostiky kontrolního součtu grafu selhal."
+ :graph.diagnostics/checksum-recomputed-success "Kontrolní součet byl přepočítán. Přepočítaný: {1}, lokální: {2}, vzdálený: {3}. Byl stažen soubor {4}.edn s {5} bloky a atributy kontrolního součtu {6}."
+ :graph.diagnostics/checksum-unavailable-warning "Nelze vypočítat diagnostiku kontrolního součtu pro aktuální graf."
+ :graph.diagnostics/client-ops-export-failed-error "Nepodařilo se exportovat Client ops SQLite."
+ :graph.diagnostics/client-ops-export-invalid-payload-warning "Export Client ops SQLite selhal: neplatný typ payloadu {1}."
+ :graph.diagnostics/client-ops-export-success "Client ops SQLite exportován: {1}.sqlite"
+ :graph.diagnostics/no-graph-warning "Nebyl nalezen žádný graf."
+
  ;; Graph page views
  :graph.page/show-journals "Zobrazit deníky"
  :graph.page/title "Graf stránky"
@@ -636,6 +645,11 @@
  ;; Journal default queries
  :journal.default-query/doing "PROBÍHÁ"
  :journal.default-query/todo "K VYŘÍZENÍ"
+
+ ;; Library
+ :library/add-existing-pages "Přidat existující stránky do Knihovny"
+ :library/add-pages "Add pages"
+ :library/title "Knihovna"
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -890,7 +904,6 @@
  :property.built-in/deleted-at "Smazáno"
  :property.built-in/deleted-by-ref "Smazáno uživatelem"
  :property.built-in/description "Popis"
- :property.built-in/embedding-hnsw-label-updated-at "HNSW štítek aktualizován"
  :property.built-in/enable-history "Povolit historii vlastnosti"
  :property.built-in/exclude-from-graph-view "Vyloučeno z pohledu grafu?"
  :property.built-in/fsrs-due "Termín"
@@ -1155,6 +1168,17 @@
  :query.builder/updated-label "Aktualizováno"
  :query.builder/wrap-filter-with-label "Zabalit tento filtr do:"
 
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
  ;; Asset
  :asset/acceptable-file-extensions "Povolené přípony souborů"
  :asset/add-assets "Přidat soubory"
@@ -1257,6 +1281,7 @@
 
  ;; Import
  :import/all-tags "Importovat všechny štítky"
+ :import/asset-too-large-warning "Kopírování assetu {1} bylo přeskočeno, protože překračuje limit 100 MB."
  :import/assets-import-partial "{1}/{2} souborů importováno. Podrobnosti v konzoli."
  :import/assets-imported "{1} souborů importováno."
  :import/assets-skipped "{1} souborů přeskočeno. Podrobnosti v konzoli."
@@ -1472,6 +1497,14 @@
  :settings.general/update-available "Dostupná aktualizace"
  :settings.general/update-error "⚠️ Ups, něco se pokazilo!\nPodívejte se prosím na {1}."
 
+ ;; Sync server settings
+ :settings.sync-server/clear-success "URL synchronizačního serveru bylo vymazáno. Použije se oficiální Logseq Sync."
+ :settings.sync-server/reset "Resetovat na výchozí"
+ :settings.sync-server/save-success "URL synchronizačního serveru bylo uloženo."
+ :settings.sync-server/url "URL synchronizačního serveru"
+ :settings.sync-server/url-desc "Nastavte vlastní URL serveru HTTPS pro samostatně hostovanou synchronizaci. Vaše ověřovací tokeny Logseq budou odesílány na tento server, proto používejte pouze důvěryhodnou URL. Nechte prázdné pro použití oficiálního Logseq Sync."
+ :settings.sync-server/url-invalid-error "URL musí začínat na https:// nebo http://"
+
  ;; Theme
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Přepnout na motiv {1}"
@@ -1483,6 +1516,7 @@
  :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "Zkontrolovat všechny aktualizace"
  :plugin/check-update "Zkontrolovat aktualizaci"
+ :plugin/checked "Zkontrolováno"
  :plugin/checking-for-updates "Kontrola aktualizací"
  :plugin/contribute "✨ Napište a odešlete nový zásuvný modul"
  :plugin/custom-js-alert "Nalezen soubor custom.js, je povoleno jeho spuštění? (Pokud nerozumíte obsahu tohoto souboru, doporučujeme spuštění nepovolit, protože má určitá bezpečnostní rizika)."
@@ -1562,6 +1596,13 @@
  :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
  :plugin.install-from-web-url/theme-label "motiv"
 
+ ;; Plugin package config
+ :plugin.package-config/detach-desc "Jeho odstranění plugin pouze odpojí od Logseq a ponechá zdrojovou složku beze změny."
+ :plugin.package-config/parse-error "Nepodařilo se zpracovat konfiguraci balíčku pluginu."
+ :plugin.package-config/remove-error "Nepodařilo se odstranit poškozený plugin."
+ :plugin.package-config/remove-external-success "Poškozený plugin byl odstraněn ze seznamu pluginů."
+ :plugin.package-config/remove-installed-success "Poškozený plugin „{1}“ byl odstraněn."
+
  ;; Plugin proxy
  :plugin.proxy/direct "Přímé"
  :plugin.proxy/http "HTTP"
@@ -1580,21 +1621,10 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
- ;; AI
- :ai/embedding "Vkládání..."
- :ai/local-embedding-model "Lokální model embeddingů"
- :ai/model-download-progress "Stahování {1}"
- :ai/model-downloaded "Staženo {1}"
- :ai/model-ready "Model je připraven 🚀"
- :ai/search-label "Hledat"
- :ai/search-result-label "Výsledky hledání"
- :ai/search-title "Sémantické vyhledávání:"
- :ai/select-model "Vybrat model"
- :ai/vector-search-debug-actions "Akce"
- :ai/vector-search-debug-settings "Nastavení"
- :ai/vector-search-debug-state "Stav"
- :ai/vector-search-model-placeholder "Vyberte model (je nutné znovu vynutit embedding všech bloků grafu)"
- :ai/webgpu-unsupported "WebGPU není v tomto prohlížeči podporováno, prosím aktualizujte ho nebo použijte jiný prohlížeč."
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 
  ;; Zotero
  :zotero/attachments "Přílohy"
@@ -1640,6 +1670,7 @@
 
  ;; Recycle storage
  :storage.recycle/block-deleted-at "Blok smazán {1}"
+ :storage.recycle/delete-permanently "Smazat trvale"
  :storage.recycle/empty "Koš je prázdný."
  :storage.recycle/page-deleted-at "Stránka smazána {1}"
  :storage.recycle/readonly "Koš (pouze pro čtení)"
@@ -1696,10 +1727,7 @@
  :sync/online "Online"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
- :sync/preparing-snapshot-download "Příprava stažení snímku grafu"
- :sync/snapshot-downloaded "Snímek grafu stažen"
  :sync/something-wrong "Chyba synchronizace"
- :sync/start-downloading-snapshot "Zahájit stahování snímku grafu"
  :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "Překročen limit úložiště"
  :sync/uploading "Uploading..."
@@ -1848,6 +1876,9 @@
  :bug-report.main/desc "Nahlásit chybu"
  :bug-report.main/title "Nahlásit chybu"
 
+ ;; Shell
+ :shell/input-command-title "Input command"
+
  ;; Profiler
  :profiler/input-fn-placeholder "zadejte název funkce"
  :profiler/unregister "Odregistrovat"
@@ -1894,7 +1925,7 @@
  ;; Sidebar right
  :sidebar.right.dev/profiler "(Dev) Profiler"
  :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/vector-search "(Dev) VectorSearch"
+ :sidebar.right.dev/undo-redo "(Dev) Zpátky/Znovu"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
@@ -1997,28 +2028,4 @@
  :electron/version "Verze {1}"
  :electron/write-file-failed "Zápis do souboru {1} selhal, {2}."
  :electron/write-file-failed-with-backup "Zápis do souboru {1} selhal, {2}. Záložní soubor byl uložen do {3}."
-
- ;; Icon
- :icon/emojis-count "Emojis ({1})"
- :icon/icons-count "Icons ({1})"
- :icon/matched-count "Matched ({1})"
- :icon/search-all "Search all"
- :icon/search-emojis "Search emojis"
- :icon/search-icons "Search icons"
- :icon/tab-all "All"
- :icon/tab-emojis "Emojis"
- :icon/tab-icons "Icons"
-
- ;; Library
- :library/add-existing-pages "Přidat existující stránky do Knihovny"
- :library/add-pages "Add pages"
- :library/title "Knihovna"
-
- ;; Shell
- :shell/input-command-title "Input command"
-
- ;; Youtube
- :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
- :youtube/player-not-ready "YouTube player isn't ready yet."
- :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }
