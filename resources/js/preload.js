@@ -135,6 +135,16 @@ contextBridge.exposeInMainWorld('apis', {
     return await ipcRenderer.invoke('call-main-win', type, ...args)
   },
 
+  /**
+   * Write binary data to a file, creating parent dirs as needed.
+   * Used for asset files that can't be transit-serialized through doAction.
+   */
+  writeFileBytes (filePath, data) {
+    const dir = path.dirname(filePath)
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(filePath, Buffer.from(data))
+  },
+
   getFilePathFromClipboard,
 
   getClipboardData,
