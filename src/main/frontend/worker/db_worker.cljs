@@ -73,7 +73,7 @@
   Bump to force a rebuild when the index format changes."
   1)
 
-(def ^:private search-index-build-batch-size 1000)
+(def ^:private search-index-build-batch-size 5000)
 (def ^:private search-index-build-time-budget-ms 8)
 (def ^:private search-index-build-idle-diff-ms 1000)
 (def ^:private search-index-build-pause-ms 300)
@@ -500,6 +500,11 @@
                      :repo repo
                      :build-id build-id}))))
 
+(defn- report-search-index-progress!
+  [repo payload]
+  (-> (worker-state/<invoke-main-thread :thread-api/search-index-build-progress repo payload)
+      (p/catch (fn [_error] nil))))
+
 (comment
   (def-thread-api :thread-api/get-version
     []
@@ -892,26 +897,51 @@
   [repo search-db conn build-id]
   (ensure-active-search-index-build! repo build-id)
   (search/truncate-table! search-db)
-  (let [db @conn]
-    (p/loop [remaining (seq (d/datoms db :avet :block/uuid))]
-      (ensure-active-search-index-build! repo build-id)
-      (p/let [_ (<wait-for-search-index-idle! repo build-id)]
-        (if (seq remaining)
-          (let [[batch remaining'] (take-block-datoms-batch remaining
-                                                            search-index-build-batch-size
-                                                            search-index-build-time-budget-ms)
-                indexed (->> batch
-                             (keep #(d/entity db (:e %)))
-                             (remove search/hidden-entity?)
-                             (keep search/block->index))]
-            (prn :debug :build-search-indice :remaining (count remaining))
-            (when (seq indexed)
-              (search/upsert-blocks! search-db (bean/->js indexed)))
-            (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
-              (p/recur remaining')))
-          (do
-            (ensure-active-search-index-build! repo build-id)
-            (.exec search-db (str "PRAGMA user_version = " search-db-version))))))))
+  (let [db @conn
+        datoms (d/datoms db :avet :block/uuid)
+        total (count datoms)]
+    (p/do!
+     (report-search-index-progress! repo {:build-id build-id
+                                          :status :running
+                                          :progress 0
+                                          :processed 0
+                                          :total total})
+     (<wait-for-search-index-idle! repo build-id)
+     (p/loop [remaining (seq datoms)
+              processed 0
+              last-progress 0]
+       (ensure-active-search-index-build! repo build-id)
+       (if (seq remaining)
+         (let [[batch remaining'] (take-block-datoms-batch remaining
+                                                           search-index-build-batch-size
+                                                           search-index-build-time-budget-ms)
+               processed' (+ processed (count batch))
+               indexed (->> batch
+                            (keep #(d/entity db (:e %)))
+                            (remove search/hidden-entity?)
+                            (keep search/block->index))
+               progress (if (zero? total)
+                          100
+                          (min 100 (int (* 100 (/ processed' total)))))
+               should-report? (> progress last-progress)]
+           (when (seq indexed)
+             (search/upsert-blocks! search-db (bean/->js indexed)))
+           (when should-report?
+             (report-search-index-progress! repo {:build-id build-id
+                                                  :status :running
+                                                  :progress progress
+                                                  :processed processed'
+                                                  :total total}))
+           (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
+             (p/recur remaining' processed' (if should-report? progress last-progress))))
+         (do
+           (ensure-active-search-index-build! repo build-id)
+           (.exec search-db (str "PRAGMA user_version = " search-db-version))
+           (report-search-index-progress! repo {:build-id build-id
+                                                :status :completed
+                                                :progress 100
+                                                :processed total
+                                                :total total})))))))
 
 (def-thread-api :thread-api/search-build-blocks-indice-in-worker
   [repo & [force?]]
@@ -929,6 +959,9 @@
                              (when-not (= :search/stale-index-build (:type (ex-data error)))
                                (throw error))))
                   (p/finally (fn []
+                               (when (= build-id (get @*search-index-build-ids repo))
+                                 (report-search-index-progress! repo {:build-id build-id
+                                                                      :status :idle}))
                                (clear-search-index-build! repo build-id)))))))))))
 
 (def-thread-api :thread-api/search-build-pages-indice

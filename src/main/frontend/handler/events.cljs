@@ -62,6 +62,12 @@
   [error]
   (string/includes? (or (ex-message error) (str error)) "decrypt-aes-key"))
 
+(defn- <build-search-index!
+  [repo]
+  (-> (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
+      (p/catch (fn [error]
+                 (js/console.error "Search index build error:" error)))))
+
 (defn- schedule-search-index-build!
   [repo]
   (when-let [timeout-id @*search-index-build-timeout]
@@ -76,9 +82,7 @@
                (state/input-idle? repo :diff 5000)
                (do
                  (reset! *search-index-build-timeout nil)
-                 (-> (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
-                     (p/catch (fn [error]
-                                (js/console.error "Search index build error:" error)))))
+                 (<build-search-index! repo))
 
                :else
                (schedule-search-index-build! repo)))
@@ -110,7 +114,7 @@
      (p/do!
       (p/delay 5000)
       (p/let [repo (state/get-current-repo)
-              _ (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)]
+              _ (<build-search-index! repo)]
         (when state/lsp-enabled?
           (doseq [service (state/get-all-plugin-services-with-type :search)]
             (search-plugin/call-service! service "search:rebuildPagesIndice" {})

@@ -102,21 +102,43 @@ DROP TRIGGER IF EXISTS blocks_au;
   (str "(" (->> (map (fn [id] (str "'" id "'")) ids)
                 (string/join ", ")) ")"))
 
+(def ^:private upsert-blocks-batch-size 2000)
+
+(def ^:private upsert-blocks-sql
+  (memoize
+   (fn [row-count]
+     (str "INSERT INTO blocks (id, title, page) VALUES "
+          (string/join ", " (repeat row-count "(?, ?, ?)"))
+          " ON CONFLICT (id) DO UPDATE SET (title, page) = (excluded.title, excluded.page)"))))
+
+(defn- valid-upsert-block?
+  [item]
+  (and (common-util/uuid-string? (.-id item))
+       (common-util/uuid-string? (.-page item))))
+
+(defn- throw-upsert-blocks-error!
+  [item]
+  (js/console.error "Upsert blocks wrong data: ")
+  (js/console.dir item)
+  (throw (ex-info "Search upsert-blocks wrong data: "
+                  (bean/->clj item))))
+
+(defn- upsert-bind-params
+  [batch]
+  (into-array
+   (mapcat (fn [item]
+             [(.-id item) (.-title item) (.-page item)])
+           batch)))
+
 (defn upsert-blocks!
   [^Object db blocks]
   (.transaction db (fn [tx]
-                     (doseq [item blocks]
-                       (if (and (common-util/uuid-string? (.-id item))
-                                (common-util/uuid-string? (.-page item)))
-                         (.exec tx #js {:sql "INSERT INTO blocks (id, title, page) VALUES ($id, $title, $page) ON CONFLICT (id) DO UPDATE SET (title, page) = ($title, $page)"
-                                        :bind #js {:$id (.-id item)
-                                                   :$title (.-title item)
-                                                   :$page (.-page item)}})
-                         (do
-                           (js/console.error "Upsert blocks wrong data: ")
-                           (js/console.dir item)
-                           (throw (ex-info "Search upsert-blocks wrong data: "
-                                           (bean/->clj item)))))))))
+                     (doseq [batch (partition-all upsert-blocks-batch-size blocks)]
+                       (doseq [item blocks]
+                         (when-not (valid-upsert-block? item)
+                           (throw-upsert-blocks-error! item)))
+                       (.exec tx #js {:sql (upsert-blocks-sql (count batch))
+                                      :bind (upsert-bind-params batch)})))))
 
 (defn delete-blocks!
   [db ids]
@@ -448,20 +470,18 @@ DROP TRIGGER IF EXISTS blocks_au;
   "Build a block title indice from scratch.
    Incremental page title indice is implemented in frontend.search.sync-search-indice!"
   [repo db]
-  (prn :debug :build-fuzzy-search-indice :graph repo)
-  (time
-    (let [blocks (->> (get-all-fuzzy-supported-blocks db)
-                     (map block->index)
-                     (bean/->js))
-         indice (fuse. blocks
-                       (clj->js {:keys ["title"]
-                                 :shouldSort true
-                                 :tokenize true
-                                 :distance 1024
-                                 :threshold 0.5 ;; search for 50% match from the start
-                                 :minMatchCharLength 1}))]
-     (swap! fuzzy-search-indices assoc repo indice)
-     indice)))
+  (let [blocks (->> (get-all-fuzzy-supported-blocks db)
+                    (map block->index)
+                    (bean/->js))
+        indice (fuse. blocks
+                      (clj->js {:keys ["title"]
+                                :shouldSort true
+                                :tokenize true
+                                :distance 1024
+                                :threshold 0.5 ;; search for 50% match from the start
+                                :minMatchCharLength 1}))]
+    (swap! fuzzy-search-indices assoc repo indice)
+    indice))
 
 (defn fuzzy-search
   "Return a list of blocks (pages && tagged blocks) that match the query. Takes the following
