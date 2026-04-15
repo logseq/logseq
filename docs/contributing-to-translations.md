@@ -1,109 +1,120 @@
 ## Intro
 
-Thanks for your interest in improving our translations! This document provides
-details on how to contribute to a translation. This document assumes you can run
-commandline tools, know how to switch languages within Logseq and basic
-Clojurescript familiarity. We use [tongue](https://github.com/tonsky/tongue), a
-most excellent library, for our translations.
+Thanks for helping improve Logseq translations.
+
+This guide is for contributors who translate existing UI text or add missing
+translations for a locale. It is not the guide for changing application code,
+inventing dictionary keys, or rewriting the English source text in
+`src/resources/dicts/en.edn`.
+
+If the English wording or key name is wrong, ask a developer to update
+`en.edn` and follow [the key naming guide](i18n-key-naming.md).
 
 ## Setup
 
-In order to run the commands in this doc, you will need to install
+To run the commands in this doc, install
 [Babashka](https://github.com/babashka/babashka#installation).
 
-## Where to Contribute
+## Where Translations Live
 
-Language translations are under,
-[src/resources/dicts/](https://github.com/logseq/logseq/blob/master/src/resources/dicts/) with each language having its own file. For example, the es locale is in `es.edn`.
+Translation dictionaries live under
+[src/resources/dicts/](https://github.com/logseq/logseq/blob/master/src/resources/dicts/).
+Each locale has its own EDN file, for example `es.edn`.
 
-## Language Overview
+`en.edn` is the source of truth for keys and English text. Most translation
+contributors only need to edit their locale file.
 
-First, let's get an overview of Logseq's languages and how many translations your
-language has compared to others:
+## Find Missing Translations
 
-```shell
-$ bb lang:list
-
-|  :locale | :percent-translated | :translation-count |              :language |
-|----------+---------------------+--------------------+------------------------|
-|      :es |                 100 |                492 |                Español |
-|      :tr |                 100 |                492 |                 Türkçe |
-|      :en |                 100 |                492 |                English |
-|      :uk |                  95 |                466 |             Українська |
-|      :ru |                  95 |                466 |                Русский |
-|      :ko |                  93 |                459 |                    한국어 |
-|      :de |                  93 |                459 |                Deutsch |
-|      :fr |                  92 |                453 |               Français |
-|   :pt-PT |                  92 |                453 |    Português (Europeu) |
-|   :pt-BR |                  92 |                451 | Português (Brasileiro) |
-|      :sk |                  90 |                445 |             Slovenčina |
-|   :zh-CN |                  90 |                441 |                   简体中文 |
-|   :nb-NO |                  75 |                370 |         Norsk (bokmål) |
-|      :ja |                  75 |                368 |                    日本語 |
-|      :pl |                  72 |                353 |                 Polski |
-|      :nl |                  72 |                353 |     Dutch (Nederlands) |
-| :zh-Hant |                  71 |                349 |                   繁體中文 |
-|      :it |                  71 |                349 |               Italiano |
-|      :af |                  22 |                106 |              Afrikaans |
-Total: 19
-```
-
-Let's try to get your language translated as close to 100% as you can!
-
-## Edit a Language
-
-To see what translations are missing for your language, let's run a command using `es` as the example language:
-
-```shell
-$ bb lang:missing es
-|                      :translation-key |                                  :string-to-translate |         :file |
-|---------------------------------------+-------------------------------------------------------+---------------|
-|    :command.editor/toggle-number-list |                                    Toggle number list | dicts/es.edn  |
-...
-```
-
-Now, manually, add keys for your language to the translation files, save and rerun the above command.
-Over time you're aiming to have this list drop to zero. Since this process can be tedious, there is an option to print the untranslated strings to copy and paste them to the files:
+To see the overall translation status of every locale:
 
 ```sh
-# When pasting this content, be sure to update the indentation to match the file
-$ bb lang:missing es --copy
-
-;; For dicts/es.edn
-:command.editor/toggle-number-list "Toggle number list"
-...
+bb lang:list
 ```
 
-Almost all translations are small. The only exceptions to this are keys that point to files e.g. their value is prefixed with `#resource`. TODO: Update when new tutorials are written
+To see which entries are missing for one locale, use `es` as an example:
+
+```sh
+bb lang:missing es
+```
+
+To print copy/paste-ready entries:
+
+```sh
+bb lang:missing es --copy
+```
+
+That command prints the missing keys and the current English value so you can
+paste them into your locale file and translate them there.
+
+## Edit a Locale
+
+1. Run `bb lang:missing <locale>`.
+2. Add the missing keys to `src/resources/dicts/<locale>.edn`.
+3. Save the file.
+4. Run `bb lang:missing <locale>` again until the list is empty or contains
+   only entries you want to leave for later.
+
+Missing keys are allowed. Logseq falls back to English automatically, so do not
+copy English into your locale file just to make the list shorter.
 
 ### Editing Tips
 
-* Some translations may include punctuation like `:` or `!`. When translating them, please use the punctuation that makes the most sense for your language as you don't have to follow the English ones.
-* Some translations may include arguments/interpolations e.g. `{1}`. If you see them in a translation, be sure to include them. These arguments are substituted in the string and are usually used for something the app needs to calculate e.g. a number. See [these docs](https://github.com/tonsky/tongue#interpolation) for more examples.
-* Rarely, a translation is a function that calls code and look like `(fn ... )`
-    * The logic for these fns must be simple and can only use the following fns: `str`, `when`, `if` and `=`.
-    * These fn translations are usually used to handle pluralization or handle formatted text by returning [hiccup-style HTML](https://github.com/weavejester/hiccup#syntax). For example, a hiccup style translation would look like `(fn [] [:div "FOO"])`. See `:on-boarding/main-title` for more examples.
+- Translate the complete sentence or label owned by the key. Do not rename keys
+  or split one sentence across multiple keys.
+- If the English value is a plain string, keep your locale value a plain
+  string.
+- Keep placeholders exactly aligned with English, for example `{1}` and `{2}`.
+- If the English value uses hiccup or `(fn ...)`, keep the same outer shape and
+  translate only the user-visible strings inside it. If changing that structure
+  seems necessary, ask a developer for help.
+- Preserve emoji and icon glyphs from `en.edn` exactly, but use punctuation
+  that is natural for your language.
+- If a sentence is already correct in your language without plural logic, use a
+  plain string. Do not add function logic just because English does.
 
 ## Fix Mistakes
 
-There is a lint command to catch common translation mistakes - `bb
-lang:validate-translations`. This runs for all contribution pull requests so
-you'll need to ensure it doesn't fail. Mistakes that it catches:
+Run this before submitting translation changes:
 
-* Adding translation entries for nonexistent entries in English.
-    * Most common mistake is mistyping an entry name
-* Adding English entries for translations that don't exist in the UI.
-* Adding translation entries that are just duplicates of the English entry.
-    * This catches contributors copying entries from English and then forgetting to translate. Sometimes you do want to have the translation be the same. For this case, add an entry to `allowed-duplicates` in
-[lang.clj](https://github.com/logseq/logseq/blob/master/scripts/src/logseq/tasks/lang.clj) for your language
-with a list of duplicated entries e.g. `:nb-NO #{:port ...}`.
+```sh
+bb lang:validate-translations
+```
 
-Nonexistent and some invalid entries can be removed by running `bb lang:validate-translations --fix`.
+It checks for:
+
+- locale keys that do not exist in `en.edn`
+- dictionary keys that are no longer used
+- placeholder mismatches such as `{1}` vs `{2}`
+- locale entries that no longer match an English rich-translation shape
+
+To remove stale or invalid keys automatically:
+
+```sh
+bb lang:validate-translations --fix
+```
+
+`--fix` removes invalid or unused keys. It does not repair placeholder mistakes
+or rewrite rich translations for you.
+
+After editing dictionary files, run:
+
+```sh
+bb lang:format-dicts
+```
+
+This restores the repo's canonical key ordering and namespace spacing.
+
+You do not need `bb lang:lint-hardcoded` for translation-only work. That
+command is for developers who are editing UI code.
 
 ## Add a Language
 
 To add a new language:
-* Add an entry to `frontend.dicts/languages`
-* Create a new file under `src/resources/dicts/` and name the file the same as the locale e.g. zz.edn for a hypothetical zz locale.
-* Add an entry in `frontend.dicts/dicts` referencing the file you created.
-* Then start translating for your language and adding entries in your language's EDN file using the `bb lang:missing` workflow.
+
+1. Add an entry to `frontend.dicts/languages`.
+2. Create a new file under `src/resources/dicts/` and name it after the locale,
+   for example `zz.edn`.
+3. Add that file to `frontend.dicts/dicts`.
+4. Use the `bb lang:missing <locale>` workflow to populate translations.
+5. Run `bb lang:validate-translations` and `bb lang:format-dicts`.
