@@ -365,7 +365,7 @@
                               (util/copy-to-clipboard! id))}
          (str "ID: " id)]]]
 
-    ;; Github repo
+    ;; GitHub repo
       [:div.flag.is-top.flex.items-center.space-x-2
        (cond
          (false? (:supportsDB item))
