@@ -433,20 +433,20 @@
   []
   (notification/show!
    [:div
-    [:p (t :graph/name-reserved-characters-warning)]
+    [:p (t :graph.validation/name-reserved-characters-warning)]
     [:ul
-     (reserved-character-item "<" (t :graph.reserved-character/less-than))
-     (reserved-character-item ">" (t :graph.reserved-character/greater-than))
-     (reserved-character-item ":" (t :graph.reserved-character/colon))
-     (reserved-character-item "\"" (t :graph.reserved-character/double-quote))
-     (reserved-character-item "/" (t :graph.reserved-character/forward-slash))
-     (reserved-character-item "\\" (t :graph.reserved-character/backslash))
-     (reserved-character-item "|" (t :graph.reserved-character/pipe))
-     (reserved-character-item "?" (t :graph.reserved-character/question-mark))
-     (reserved-character-item "*" (t :graph.reserved-character/asterisk))
-     (reserved-character-item "#" (t :graph.reserved-character/hash))
+     (reserved-character-item "<" (t :graph.validation/reserved-character-less-than))
+     (reserved-character-item ">" (t :graph.validation/reserved-character-greater-than))
+     (reserved-character-item ":" (t :graph.validation/reserved-character-colon))
+     (reserved-character-item "\"" (t :graph.validation/reserved-character-double-quote))
+     (reserved-character-item "/" (t :graph.validation/reserved-character-forward-slash))
+     (reserved-character-item "\\" (t :graph.validation/reserved-character-backslash))
+     (reserved-character-item "|" (t :graph.validation/reserved-character-pipe))
+     (reserved-character-item "?" (t :graph.validation/reserved-character-question-mark))
+     (reserved-character-item "*" (t :graph.validation/reserved-character-asterisk))
+     (reserved-character-item "#" (t :graph.validation/reserved-character-hash))
       ;; `+` is used to encode path that includes `:` or `/`
-     (reserved-character-item "+" (t :graph.reserved-character/plus))]]
+     (reserved-character-item "+" (t :graph.validation/reserved-character-plus))]]
    :warning false))
 
 (defn invalid-graph-name?
