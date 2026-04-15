@@ -155,7 +155,7 @@
          (rtc-debug-ui/rtc-debug-ui)]
 
         :undo-redo
-        [[:.flex.items-center (ui/icon "rotate-clockwise" {:class "text-md mr-2"}) "(Dev) Undo/Redo"]
+        [[:.flex.items-center (ui/icon "rotate-clockwise" {:class "text-md mr-2"}) (t :sidebar.right.dev/undo-redo)]
          (undo-redo-debug-ui/undo-redo-debug-ui)]
 
         :profiler
@@ -179,7 +179,7 @@
     (conj {:db-id "rtc" :block-type :rtc :label (t :sidebar.right.dev/rtc)})
 
     developer-mode?
-    (conj {:db-id "undo-redo" :block-type :undo-redo :label "(Dev) Undo/Redo"})
+    (conj {:db-id "undo-redo" :block-type :undo-redo :label (t :sidebar.right.dev/undo-redo)})
 
     developer-mode?
     (conj {:db-id "profiler" :block-type :profiler :label (t :sidebar.right.dev/profiler)})))

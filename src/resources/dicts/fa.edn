@@ -463,6 +463,15 @@
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
 
+ ;; Graph diagnostics
+ :graph.diagnostics/checksum-failed-error "محاسبهٔ عیب‌یابی checksum گراف ناموفق بود."
+ :graph.diagnostics/checksum-recomputed-success "Checksum دوباره محاسبه شد. مقدار جدید: {1}، محلی: {2}، راه‌دور: {3}. فایل {4}.edn با {5} بلوک و ویژگی‌های checksum {6} دانلود شد."
+ :graph.diagnostics/checksum-unavailable-warning "محاسبهٔ عیب‌یابی checksum برای گراف فعلی ممکن نشد."
+ :graph.diagnostics/client-ops-export-failed-error "صدور Client ops SQLite ناموفق بود."
+ :graph.diagnostics/client-ops-export-invalid-payload-warning "صدور Client ops SQLite ناموفق بود: نوع payload نامعتبر {1}."
+ :graph.diagnostics/client-ops-export-success "Client ops SQLite صادر شد: {1}.sqlite"
+ :graph.diagnostics/no-graph-warning "هیچ گرافی پیدا نشد."
+
  ;; Graph page views
  :graph.page/show-journals "نمایش روزنامه‌ها"
  :graph.page/title "گراف صفحه"
@@ -636,6 +645,11 @@
  ;; Journal default queries
  :journal.default-query/doing "در حال انجام"
  :journal.default-query/todo "انجام‌دادنی"
+
+ ;; Library
+ :library/add-existing-pages "افزودن صفحه‌های موجود به کتابخانه"
+ :library/add-pages "Add pages"
+ :library/title "کتابخانه"
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -890,7 +904,6 @@
  :property.built-in/deleted-at "تاریخ حذف"
  :property.built-in/deleted-by-ref "حذف شده توسط"
  :property.built-in/description "توضیحات"
- :property.built-in/embedding-hnsw-label-updated-at "تاریخ به‌روزرسانی برچسب HNSW"
  :property.built-in/enable-history "فعال‌سازی تاریخچه ویژگی"
  :property.built-in/exclude-from-graph-view "مستثنی از نمای گراف؟"
  :property.built-in/fsrs-due "موعد"
@@ -1155,6 +1168,17 @@
  :query.builder/updated-label "به‌روزرسانی شده"
  :query.builder/wrap-filter-with-label "بسته‌بندی این فیلتر با:"
 
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
  ;; Asset
  :asset/acceptable-file-extensions "پسوندهای فایل قابل قبول"
  :asset/add-assets "افزودن فایل‌های پیوست"
@@ -1257,6 +1281,7 @@
 
  ;; Import
  :import/all-tags "وارد کردن همه برچسب‌ها"
+ :import/asset-too-large-warning "کپی دارایی {1} رد شد چون از محدودیت 100 مگابایت بیشتر است."
  :import/assets-import-partial "{1}/{2} فایل وارد شد. جزئیات در کنسول."
  :import/assets-imported "{1} فایل وارد شد."
  :import/assets-skipped "{1} فایل نادیده گرفته شد. جزئیات در کنسول."
@@ -1472,6 +1497,14 @@
  :settings.general/update-available "به‌روزرسانی موجود"
  :settings.general/update-error "⚠️ اوه، مشکلی پیش آمد!\nلطفاً {1} را بررسی کنید."
 
+ ;; Sync server settings
+ :settings.sync-server/clear-success "URL سرور همگام‌سازی پاک شد. از Logseq Sync رسمی استفاده می‌شود."
+ :settings.sync-server/reset "بازنشانی به پیش‌فرض"
+ :settings.sync-server/save-success "URL سرور همگام‌سازی ذخیره شد."
+ :settings.sync-server/url "URL سرور همگام‌سازی"
+ :settings.sync-server/url-desc "برای همگام‌سازی خودمیزبان، یک URL سفارشی HTTPS برای سرور همگام‌سازی تنظیم کنید. توکن‌های احراز هویت Logseq شما به این سرور ارسال می‌شوند، پس فقط از URL قابل اعتماد استفاده کنید. برای استفاده از Logseq Sync رسمی، این بخش را خالی بگذارید."
+ :settings.sync-server/url-invalid-error "URL باید با https:// یا http:// شروع شود"
+
  ;; Theme
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "به طرح زمینه {1} بروید"
@@ -1483,6 +1516,7 @@
  :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "بررسی همه به‌روزرسانی‌ها"
  :plugin/check-update "بررسی به‌روزرسانی"
+ :plugin/checked "بررسی شد"
  :plugin/checking-for-updates "در حال بررسی به‌روزرسانی‌ها"
  :plugin/contribute "✨ مشارکت"
  :plugin/custom-js-alert "هشدار JS سفارشی"
@@ -1562,6 +1596,13 @@
  :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
  :plugin.install-from-web-url/theme-label "پوسته"
 
+ ;; Plugin package config
+ :plugin.package-config/detach-desc "حذف آن فقط افزونه را از Logseq جدا می‌کند و پوشهٔ منبع را دست‌نخورده نگه می‌دارد."
+ :plugin.package-config/parse-error "تجزیهٔ پیکربندی بستهٔ افزونه ناموفق بود."
+ :plugin.package-config/remove-error "حذف افزونهٔ خراب ناموفق بود."
+ :plugin.package-config/remove-external-success "افزونهٔ خراب از فهرست افزونه‌ها حذف شد."
+ :plugin.package-config/remove-installed-success "افزونهٔ خراب «{1}» حذف شد."
+
  ;; Plugin proxy
  :plugin.proxy/direct "مستقیم"
  :plugin.proxy/http "HTTP"
@@ -1580,21 +1621,10 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
- ;; AI
- :ai/embedding "در حال تعبیه..."
- :ai/local-embedding-model "مدل تعبیه محلی"
- :ai/model-download-progress "در حال دانلود {1}"
- :ai/model-downloaded "{1} دانلود شد"
- :ai/model-ready "مدل آماده است 🚀"
- :ai/search-label "جستجو"
- :ai/search-result-label "نتیجه جستجو"
- :ai/search-title "جستجوی معنایی:"
- :ai/select-model "انتخاب مدل"
- :ai/vector-search-debug-actions "اقدامات"
- :ai/vector-search-debug-settings "تنظیمات"
- :ai/vector-search-debug-state "وضعیت"
- :ai/vector-search-model-placeholder "یک مدل انتخاب کنید (نیاز به اجرای مجدد force-embedding-all-graph-blocks)"
- :ai/webgpu-unsupported "WebGPU در این مرورگر پشتیبانی نمی‌شود، لطفاً مرورگر را به‌روزرسانی کنید یا از مرورگر دیگری استفاده کنید."
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 
  ;; Zotero
  :zotero/attachments "پیوست‌ها"
@@ -1640,6 +1670,7 @@
 
  ;; Recycle storage
  :storage.recycle/block-deleted-at "بلوک «{1}» حذف شد"
+ :storage.recycle/delete-permanently "حذف دائمی"
  :storage.recycle/empty "سطل بازیافت خالی است."
  :storage.recycle/page-deleted-at "صفحه «{1}» حذف شد"
  :storage.recycle/readonly "سطل بازیافت (فقط خواندنی)"
@@ -1696,10 +1727,7 @@
  :sync/online "Online"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
- :sync/preparing-snapshot-download "آماده‌سازی دانلود نسخه گراف"
- :sync/snapshot-downloaded "نسخه گراف دانلود شد"
  :sync/something-wrong "خطا در همگام‌سازی"
- :sync/start-downloading-snapshot "شروع دانلود نسخه گراف"
  :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "فضای ذخیره‌سازی از حد مجاز فراتر رفت"
  :sync/uploading "Uploading..."
@@ -1848,6 +1876,9 @@
  :bug-report.main/desc "گزارش باگ"
  :bug-report.main/title "گزارش باگ"
 
+ ;; Shell
+ :shell/input-command-title "Input command"
+
  ;; Profiler
  :profiler/input-fn-placeholder "نام تابع را اینجا وارد کنید"
  :profiler/unregister "لغو ثبت"
@@ -1894,7 +1925,7 @@
  ;; Sidebar right
  :sidebar.right.dev/profiler "(Dev) Profiler"
  :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/vector-search "(Dev) VectorSearch"
+ :sidebar.right.dev/undo-redo "(Dev) واگرد/بازانجام"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
@@ -1997,28 +2028,4 @@
  :electron/version "نسخه {1}"
  :electron/write-file-failed "نوشتن در فایل {1} ناموفق بود، {2}."
  :electron/write-file-failed-with-backup "نوشتن در فایل {1} ناموفق بود، {2}. یک فایل پشتیبان در {3} ذخیره شد."
-
- ;; Icon
- :icon/emojis-count "Emojis ({1})"
- :icon/icons-count "Icons ({1})"
- :icon/matched-count "Matched ({1})"
- :icon/search-all "Search all"
- :icon/search-emojis "Search emojis"
- :icon/search-icons "Search icons"
- :icon/tab-all "All"
- :icon/tab-emojis "Emojis"
- :icon/tab-icons "Icons"
-
- ;; Library
- :library/add-existing-pages "افزودن صفحه‌های موجود به کتابخانه"
- :library/add-pages "Add pages"
- :library/title "کتابخانه"
-
- ;; Shell
- :shell/input-command-title "Input command"
-
- ;; Youtube
- :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
- :youtube/player-not-ready "YouTube player isn't ready yet."
- :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

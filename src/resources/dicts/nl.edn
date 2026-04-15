@@ -463,6 +463,15 @@
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
 
+ ;; Graph diagnostics
+ :graph.diagnostics/checksum-failed-error "Kan checksum-diagnostiek voor de grafiek niet berekenen."
+ :graph.diagnostics/checksum-recomputed-success "Checksum opnieuw berekend. Herberekend: {1}, lokaal: {2}, extern: {3}. {4}.edn is gedownload met {5} blokken en checksum-attributen {6}."
+ :graph.diagnostics/checksum-unavailable-warning "Kan geen checksum-diagnostiek voor de huidige grafiek berekenen."
+ :graph.diagnostics/client-ops-export-failed-error "Kan Client ops SQLite niet exporteren."
+ :graph.diagnostics/client-ops-export-invalid-payload-warning "Exporteren van Client ops SQLite mislukt: ongeldig payloadtype {1}."
+ :graph.diagnostics/client-ops-export-success "Client ops SQLite geëxporteerd: {1}.sqlite"
+ :graph.diagnostics/no-graph-warning "Geen grafiek gevonden."
+
  ;; Graph page views
  :graph.page/show-journals "Toon Journaals"
  :graph.page/title "Pagina grafiek"
@@ -636,6 +645,11 @@
  ;; Journal default queries
  :journal.default-query/doing "BEZIG"
  :journal.default-query/todo "TE DOEN"
+
+ ;; Library
+ :library/add-existing-pages "Bestaande pagina's aan de Bibliotheek toevoegen"
+ :library/add-pages "Add pages"
+ :library/title "Bibliotheek"
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -890,7 +904,6 @@
  :property.built-in/deleted-at "Verwijderd op"
  :property.built-in/deleted-by-ref "Verwijderd door"
  :property.built-in/description "Beschrijving"
- :property.built-in/embedding-hnsw-label-updated-at "HNSW-label bijgewerkt op"
  :property.built-in/enable-history "Eigenschapsgeschiedenis inschakelen"
  :property.built-in/exclude-from-graph-view "Uitgesloten van grafiekweergave?"
  :property.built-in/fsrs-due "Vervaldatum"
@@ -1155,6 +1168,17 @@
  :query.builder/updated-label "Bijgewerkt"
  :query.builder/wrap-filter-with-label "Dit filter omhullen met:"
 
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
  ;; Asset
  :asset/acceptable-file-extensions "Toegestane bestandsextensies"
  :asset/add-assets "Bijlagen toevoegen"
@@ -1257,6 +1281,7 @@
 
  ;; Import
  :import/all-tags "Alle tags importeren"
+ :import/asset-too-large-warning "Het kopiëren van asset {1} is overgeslagen omdat deze de limiet van 100 MB overschrijdt."
  :import/assets-import-partial "{1}/{2} bestanden geïmporteerd. Details in console."
  :import/assets-imported "{1} bestanden geïmporteerd."
  :import/assets-skipped "{1} bestanden overgeslagen. Details in console."
@@ -1472,6 +1497,14 @@
  :settings.general/update-available "Update beschikbaar"
  :settings.general/update-error "⚠️ Oeps, er is iets misgegaan!\nBekijk het {1}."
 
+ ;; Sync server settings
+ :settings.sync-server/clear-success "De URL van de synchronisatieserver is gewist. De officiële Logseq Sync wordt gebruikt."
+ :settings.sync-server/reset "Standaard herstellen"
+ :settings.sync-server/save-success "De URL van de synchronisatieserver is opgeslagen."
+ :settings.sync-server/url "URL van de synchronisatieserver"
+ :settings.sync-server/url-desc "Stel een aangepaste HTTPS-URL in voor een zelfgehoste synchronisatieserver. Je Logseq-authenticatietokens worden naar deze server gestuurd, dus gebruik alleen een vertrouwde URL. Laat dit leeg om de officiële Logseq Sync te gebruiken."
+ :settings.sync-server/url-invalid-error "URL moet beginnen met https:// of http://"
+
  ;; Theme
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Schakel over naar het thema {1}"
@@ -1483,6 +1516,7 @@
  :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "Check alle updates"
  :plugin/check-update "Op updates controleren"
+ :plugin/checked "Gecontroleerd"
  :plugin/checking-for-updates "Updates controleren"
  :plugin/contribute "✨ Schrijf en dien nieuwe plugin in"
  :plugin/custom-js-alert "custom.js bestand gevonden, mag deze uitgevoerd worden? (Als je niet begrijpt wat dit bestand inhoud is het aangeraden om het uivoeren hiervan niet toe te staan, dit is in verband met beveiligings risico's.)"
@@ -1562,6 +1596,13 @@
  :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
  :plugin.install-from-web-url/theme-label "thema"
 
+ ;; Plugin package config
+ :plugin.package-config/detach-desc "Door deze te verwijderen wordt de plugin alleen losgekoppeld van Logseq en blijft de bronmap onaangetast."
+ :plugin.package-config/parse-error "Kan de pakketconfiguratie van de plugin niet parseren."
+ :plugin.package-config/remove-error "Kan de beschadigde plugin niet verwijderen."
+ :plugin.package-config/remove-external-success "De beschadigde plugin is uit de pluginlijst verwijderd."
+ :plugin.package-config/remove-installed-success "Beschadigde plugin \"{1}\" verwijderd."
+
  ;; Plugin proxy
  :plugin.proxy/direct "Direct"
  :plugin.proxy/http "HTTP"
@@ -1580,21 +1621,10 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
- ;; AI
- :ai/embedding "Insluiten..."
- :ai/local-embedding-model "Lokaal embeddingmodel"
- :ai/model-download-progress "Downloaden van {1}"
- :ai/model-downloaded "{1} gedownload"
- :ai/model-ready "Model is gereed 🚀"
- :ai/search-label "Zoeken"
- :ai/search-result-label "Zoekresultaat"
- :ai/search-title "Semantisch zoeken:"
- :ai/select-model "Selecteer een model"
- :ai/vector-search-debug-actions "Acties"
- :ai/vector-search-debug-settings "Instellingen"
- :ai/vector-search-debug-state "Status"
- :ai/vector-search-model-placeholder "Selecteer een model (force-embedding-all-graph-blocks opnieuw vereist)"
- :ai/webgpu-unsupported "WebGPU wordt niet ondersteund in deze browser, werk de browser bij of gebruik een andere browser."
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 
  ;; Zotero
  :zotero/attachments "Bijlagen"
@@ -1640,6 +1670,7 @@
 
  ;; Recycle storage
  :storage.recycle/block-deleted-at "Blok verwijderd {1}"
+ :storage.recycle/delete-permanently "Permanent verwijderen"
  :storage.recycle/empty "Prullenbak is leeg."
  :storage.recycle/page-deleted-at "Pagina verwijderd {1}"
  :storage.recycle/readonly "Prullenbak (alleen-lezen)"
@@ -1696,10 +1727,7 @@
  :sync/online "Online"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
- :sync/preparing-snapshot-download "Grafiekmomentopname downloaden voorbereiden"
- :sync/snapshot-downloaded "Grafiekmomentopname gedownload"
  :sync/something-wrong "Synchronisatiefout"
- :sync/start-downloading-snapshot "Beginnen met downloaden van grafiekmomentopname"
  :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "Opslaglimiet overschreden"
  :sync/uploading "Uploading..."
@@ -1848,6 +1876,9 @@
  :bug-report.main/desc "Een bug melden"
  :bug-report.main/title "Bug melden"
 
+ ;; Shell
+ :shell/input-command-title "Input command"
+
  ;; Profiler
  :profiler/input-fn-placeholder "voer hier functienaam in"
  :profiler/unregister "Uitschrijven"
@@ -1894,7 +1925,7 @@
  ;; Sidebar right
  :sidebar.right.dev/profiler "(Dev) Profiler"
  :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/vector-search "(Dev) VectorSearch"
+ :sidebar.right.dev/undo-redo "(Dev) Ongedaan maken/Herhaal"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
@@ -1997,28 +2028,4 @@
  :electron/version "Versie {1}"
  :electron/write-file-failed "Schrijven naar bestand {1} mislukt, {2}."
  :electron/write-file-failed-with-backup "Schrijven naar bestand {1} mislukt, {2}. Er is een back-upbestand opgeslagen in {3}."
-
- ;; Icon
- :icon/emojis-count "Emojis ({1})"
- :icon/icons-count "Icons ({1})"
- :icon/matched-count "Matched ({1})"
- :icon/search-all "Search all"
- :icon/search-emojis "Search emojis"
- :icon/search-icons "Search icons"
- :icon/tab-all "All"
- :icon/tab-emojis "Emojis"
- :icon/tab-icons "Icons"
-
- ;; Library
- :library/add-existing-pages "Bestaande pagina's aan de Bibliotheek toevoegen"
- :library/add-pages "Add pages"
- :library/title "Bibliotheek"
-
- ;; Shell
- :shell/input-command-title "Input command"
-
- ;; Youtube
- :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
- :youtube/player-not-ready "YouTube player isn't ready yet."
- :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

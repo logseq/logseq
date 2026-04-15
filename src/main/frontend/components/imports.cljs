@@ -10,7 +10,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :refer [t t-en]]
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
@@ -332,14 +332,11 @@
 (defn- read-and-copy-asset [repo repo-dir file assets buffer-handler]
   (let [^js file-object (:file-object file)]
     (if (assets-handler/exceed-limit-size? file-object)
-      (do
-        (js/console.log (str "Skipped copying asset " (pr-str (:path file)) " because it is larger than the 100M max."))
+      (let [path (pr-str (:path file))]
+        (log/info :import-asset-skipped-too-large {:msg (t-en :import/asset-too-large-warning path)})
         ;; This asset will also be included in the ignored-assets count. Better to be explicit about ignoring
         ;; these so users are aware of this
-        (notification/show!
-         (str "Skipped copying asset " (pr-str (:path file)) " because it is larger than the 100M max.")
-         :info
-         false))
+        (notification/show! (t :import/asset-too-large-warning path) :info false))
       (p/let [buffer (.arrayBuffer file-object)
               bytes-array (js/Uint8Array. buffer)
               checksum (db-asset/<get-file-array-buffer-checksum buffer)

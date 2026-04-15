@@ -254,6 +254,11 @@
      (state/exit-editing-and-set-selected-blocks! [cell])
      (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))
 
+(defn- mobile-btn-class
+  "The sole purpose of this function is to avoid false positives in hardcoded UI detection."
+  [opacity]
+  (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 opacity-" opacity))
+
 (rum/defc ^:large-vars/cleanup-todo block-title < rum/static
   "Used on table view"
   [block* {:keys [create-new-block width row property]}]
@@ -335,8 +340,7 @@
        [:div])
 
      (when-not (util/mobile?)
-       (let [class (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
-                        "opacity-" opacity)]
+       (let [class (mobile-btn-class opacity)]
          [:div.absolute.-right-1
           [:div.flex.flex-row.items-center
            (shui/button
