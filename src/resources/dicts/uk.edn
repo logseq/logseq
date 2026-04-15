@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "Палітра команд"
 
- ;; Dev commands
- :command.dev/gc-graph "Очистити граф"
- :command.dev/replace-graph-with-db-file "Заменить граф файлом БД"
- :command.dev/rtc-start "Запустити RTC"
- :command.dev/rtc-stop "Зупинити RTC"
- :command.dev/show-block-ast "Показати AST блока"
- :command.dev/show-block-data "Показати данные блока"
- :command.dev/show-page-data "Показати данные сторінки"
- :command.dev/validate-db "Перевірити базу данных"
-
  ;; Editor commands
  :command.editor/add-property "Додати властивість"
  :command.editor/add-property-deadline "Додати крайний срок"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "Обробник зміни розміру правої бічної панелі"
  :sidebar.right/toggle "Перемкнути праву панель"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "(Dev) Profiler"
- :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/undo-redo "(Dev) Скасувати зміни/Повторити"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Створити картку"
  :context-menu/set-icon "Встановити іконку"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Перемкнути нумерований список"
 
  ;; Window

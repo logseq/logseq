@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "Kommandopalett"
 
- ;; Dev commands
- :command.dev/gc-graph "Rens graf"
- :command.dev/replace-graph-with-db-file "Erstatt graf med DB-fil"
- :command.dev/rtc-start "Start RTC"
- :command.dev/rtc-stop "Stopp RTC"
- :command.dev/show-block-ast "Vis blokk-AST"
- :command.dev/show-block-data "Vis blokkdata"
- :command.dev/show-page-data "Vis sidedata"
- :command.dev/validate-db "Valider database"
-
  ;; Editor commands
  :command.editor/add-property "Legg til egenskap"
  :command.editor/add-property-deadline "Legg til frist"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "Skillelinje"
  :sidebar.right/toggle "Slå av/på høyre sidepanel"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "(Dev) Profiler"
- :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/undo-redo "(Dev) Angre/Gjør om"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Lag flashkort"
  :context-menu/set-icon "Sett ikon"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Slå av/på nummerert liste"
 
  ;; Window

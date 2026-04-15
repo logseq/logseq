@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "لوحة الأوامر"
 
- ;; Dev commands
- :command.dev/gc-graph "تنظيف الرسم البياني"
- :command.dev/replace-graph-with-db-file "استبدال الرسم بملف DB"
- :command.dev/rtc-start "بدء RTC"
- :command.dev/rtc-stop "إيقاف RTC"
- :command.dev/show-block-ast "عرض AST الكتلة"
- :command.dev/show-block-data "عرض بيانات الكتلة"
- :command.dev/show-page-data "عرض بيانات الصفحة"
- :command.dev/validate-db "التحقق من قاعدة البيانات"
-
  ;; Editor commands
  :command.editor/add-property "إضافة خاصية"
  :command.editor/add-property-deadline "إضافة موعد نهائي"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "فاصل"
  :sidebar.right/toggle "تبديل الشريط الجانبي الأيمن"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "(Dev) Profiler"
- :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/undo-redo "(Dev) تراجع/إعادة"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "إنشاء بطاقة تعليمية"
  :context-menu/set-icon "تعيين أيقونة"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "تبديل القائمة المرقمة"
 
  ;; Window

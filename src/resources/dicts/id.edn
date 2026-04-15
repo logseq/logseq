@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "Palet perintah"
 
- ;; Dev commands
- :command.dev/gc-graph "Bersihkan grafik"
- :command.dev/replace-graph-with-db-file "Ganti grafik dengan file DB"
- :command.dev/rtc-start "Mulai RTC"
- :command.dev/rtc-stop "Hentikan RTC"
- :command.dev/show-block-ast "(Dev) Tampilkan AST blok"
- :command.dev/show-block-data "(Dev) Tampilkan data blok"
- :command.dev/show-page-data "(Dev) Tampilkan data halaman"
- :command.dev/validate-db "Validasi database"
-
  ;; Editor commands
  :command.editor/add-property "Tambah properti"
  :command.editor/add-property-deadline "Tambah tenggat"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "Pengatur ukuran bilah sisi kanan"
  :sidebar.right/toggle "Beralih ke bilah sisi kanan"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "(Dev) Profiler"
- :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/undo-redo "(Dev) Batal/Lakukan lagi"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Buat Kartu Belajar"
  :context-menu/set-icon "Atur ikon"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Alihkan daftar nomor"
 
  ;; Window

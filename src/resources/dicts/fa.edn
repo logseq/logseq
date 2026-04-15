@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "پالت دستورات"
 
- ;; Dev commands
- :command.dev/gc-graph "پاک‌سازی گراف"
- :command.dev/replace-graph-with-db-file "جایگزینی گراف با فایل DB"
- :command.dev/rtc-start "شروع RTC"
- :command.dev/rtc-stop "توقف RTC"
- :command.dev/show-block-ast "نمایش AST بلوک"
- :command.dev/show-block-data "نمایش داده‌های بلوک"
- :command.dev/show-page-data "نمایش داده‌های صفحه"
- :command.dev/validate-db "اعتبارسنجی پایگاه داده"
-
  ;; Editor commands
  :command.editor/add-property "افزودن ویژگی"
  :command.editor/add-property-deadline "افزودن مهلت"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "جداکننده"
  :sidebar.right/toggle "تغییر نوار کناری راست"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "(Dev) Profiler"
- :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/undo-redo "(Dev) واگرد/بازانجام"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "ایجاد فلش‌کارت"
  :context-menu/set-icon "تنظیم آیکون"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "تغییر لیست شماره‌دار"
 
  ;; Window

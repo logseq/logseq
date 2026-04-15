@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "Alternar paleta de comandos"
 
- ;; Dev commands
- :command.dev/gc-graph "Limpar grafo"
- :command.dev/replace-graph-with-db-file "Substituir grafo por ficheiro DB"
- :command.dev/rtc-start "Iniciar RTC"
- :command.dev/rtc-stop "Parar RTC"
- :command.dev/show-block-ast "Mostrar AST do bloco"
- :command.dev/show-block-data "Mostrar dados do bloco"
- :command.dev/show-page-data "Mostrar dados da página"
- :command.dev/validate-db "Validar banco de dados"
-
  ;; Editor commands
  :command.editor/add-property "Adicionar propriedade"
  :command.editor/add-property-deadline "Adicionar prazo"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "Manipulador de redimensionamento da barra lateral direita"
  :sidebar.right/toggle "Alternar barra lateral direita"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "(Dev) Profiler"
- :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/undo-redo "(Dev) Desfazer/Refazer"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Criar flashcard"
  :context-menu/set-icon "Definir ícone"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Alternar lista numerada"
 
  ;; Window

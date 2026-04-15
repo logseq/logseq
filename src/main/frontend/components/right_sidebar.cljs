@@ -151,15 +151,15 @@
          (shortcut-settings)]
 
         :rtc
-        [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) (t :sidebar.right.dev/rtc)]
+        [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
          (rtc-debug-ui/rtc-debug-ui)]
 
         :undo-redo
-        [[:.flex.items-center (ui/icon "rotate-clockwise" {:class "text-md mr-2"}) (t :sidebar.right.dev/undo-redo)]
+        [[:.flex.items-center (ui/icon "rotate-clockwise" {:class "text-md mr-2"}) "(Dev) Undo/Redo"]
          (undo-redo-debug-ui/undo-redo-debug-ui)]
 
         :profiler
-        [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) (t :sidebar.right.dev/profiler)]
+        [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
          (profiler/profiler)]
 
         ["" [:span]])))
@@ -176,13 +176,13 @@
   [developer-mode?]
   (cond-> []
     (and developer-mode? (not config/publishing?))
-    (conj {:db-id "rtc" :block-type :rtc :label (t :sidebar.right.dev/rtc)})
+    (conj {:db-id "rtc" :block-type :rtc :label "(Dev) RTC"})
 
     developer-mode?
-    (conj {:db-id "undo-redo" :block-type :undo-redo :label (t :sidebar.right.dev/undo-redo)})
+    (conj {:db-id "undo-redo" :block-type :undo-redo :label "(Dev) Undo/Redo"})
 
     developer-mode?
-    (conj {:db-id "profiler" :block-type :profiler :label (t :sidebar.right.dev/profiler)})))
+    (conj {:db-id "profiler" :block-type :profiler :label "(Dev) Profiler"})))
 
 (rum/defc actions-menu-content
   [db-id idx type collapsed? block-count]

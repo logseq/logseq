@@ -38,12 +38,15 @@
 ;; almost everywhere else they are not which could cause needless conflicts
 ;; with other config keys
 
-;; To add a new entry to this map, first add it here and then a description for
-;; it under :commands keys of frontend.dicts.en/dicts
+;; To add a new entry to this map, first add it here and then provide a default
+;; English label either via a matching `:command.*` key in `en.edn` or via
+;; inline `:desc` for developer-only labels that intentionally stay out of i18n.
 ;; A shortcut is a map with the following keys:
 ;;  * :binding - A string representing a keybinding. Avoid using single letter
 ;;    shortcuts to allow chords that start with those characters
 ;;  * :fn - Fn or a qualified keyword that represents a fn
+;;  * :desc - Optional default English label for non-translated developer-only
+;;    shortcuts such as `(Dev)` commands
 ;;  * :inactive - Optional boolean to disable a shortcut for certain conditions
 ;;    e.g. a given platform or feature condition
 (def ^:large-vars/data-var all-built-in-keyboard-shortcuts
@@ -474,22 +477,27 @@
                                              :fn      #(state/pub-event! [:ui/toggle-appearance])}
 
    :dev/gc-graph {:binding []
+                  :desc "(Dev) Garbage collect graph (remove unused data in SQLite)"
                   :inactive (not (state/developer-mode?))
                   :fn #(repo-handler/gc-graph! (state/get-current-repo))}
 
    :dev/replace-graph-with-db-file {:binding []
+                                    :desc "(Dev) Replace graph with its db.sqlite file"
                                     :inactive (or (not (util/electron?)) (not (state/developer-mode?)))
                                     :fn :frontend.handler.common.developer/replace-graph-with-db-file}
 
    :dev/show-block-data {:binding []
+                         :desc "(Dev) Show block data"
                          :inactive (not (state/developer-mode?))
                          :fn :frontend.handler.common.developer/show-block-data}
 
    :dev/show-block-ast {:binding []
+                        :desc "(Dev) Show block AST"
                         :inactive (not (state/developer-mode?))
                         :fn :frontend.handler.common.developer/show-block-ast}
 
    :dev/show-page-data {:binding []
+                        :desc "(Dev) Show page data"
                         :inactive (not (state/developer-mode?))
                         :fn :frontend.handler.common.developer/show-page-data}
 
@@ -506,18 +514,23 @@
                           :fn :frontend.handler.db-based.import/import-edn-data-dialog}
 
    :dev/validate-db   {:binding []
+                       :desc "(Dev) Validate current graph"
                        :inactive (not (state/developer-mode?))
                        :fn :frontend.handler.common.developer/validate-db}
    :dev/recompute-checksum {:binding []
+                            :desc "(Dev) Recompute graph checksum"
                             :inactive (not (state/developer-mode?))
                             :fn :frontend.handler.common.developer/recompute-checksum-diagnostics}
    :dev/export-client-ops-sqlite {:binding []
+                                  :desc "(Dev) Export client ops sqlite"
                                   :inactive (not (state/developer-mode?))
                                   :fn :frontend.handler.common.developer/export-client-ops-sqlite}
    :dev/rtc-stop {:binding []
+                  :desc "(Dev) RTC Stop"
                   :inactive (not (state/developer-mode?))
                   :fn :frontend.handler.common.developer/rtc-stop}
    :dev/rtc-start {:binding []
+                   :desc "(Dev) RTC Start"
                    :inactive (not (state/developer-mode?))
                    :fn :frontend.handler.common.developer/rtc-start}})
 
@@ -525,11 +538,18 @@
       {::commands (->> (keys all-built-in-keyboard-shortcuts)
                        (remove #(= (namespace %) "cards"))
                        set)
-       ::dicts/commands dicts/abbreviated-commands}]
-  (assert (= (::commands keyboard-commands) (::dicts/commands keyboard-commands))
-          (str "Keyboard commands must have an english label"
+       ::dicts/commands dicts/abbreviated-commands
+       ::described-commands (->> all-built-in-keyboard-shortcuts
+                                 (keep (fn [[id opts]]
+                                         (when (:desc opts) id)))
+                                 set)}]
+  (assert (= (::commands keyboard-commands)
+             (into (::dicts/commands keyboard-commands)
+                   (::described-commands keyboard-commands)))
+          (str "Keyboard commands must have a default english label from `en.edn` or inline `:desc`"
                (data/diff (::commands keyboard-commands)
-                          (::dicts/commands keyboard-commands)))))
+                          (into (::dicts/commands keyboard-commands)
+                                (::described-commands keyboard-commands))))))
 
 (defn- resolve-fn
   "Converts a keyword fn to the actual fn. The fn to be resolved needs to be
