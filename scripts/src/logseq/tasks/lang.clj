@@ -29,7 +29,7 @@
     (->> dicts
          (map (fn [[locale dicts]]
                 [locale
-                 (Math/round (* 100.0 (/ (count dicts) en-count)))
+                 (format "%.2f" (* 100.0 (/ (count dicts) en-count)))
                  (count dicts)
                  (langs locale)]))
          (sort-by #(nth % 2) >)
