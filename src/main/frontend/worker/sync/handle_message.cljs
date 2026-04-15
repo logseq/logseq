@@ -152,19 +152,19 @@
 
 (defn- verify-sync-checksum!
   [repo client local-tx remote-tx remote-checksum context]
-  (when (and (string? remote-checksum)
-             (checksum-compare-ready? repo client local-tx remote-tx))
-    (let [local-checksum (local-sync-checksum repo)]
-      (when-not (= local-checksum remote-checksum)
-        (let [mismatch-data (merge context
-                                   {:type :db-sync/checksum-mismatch
-                                    :repo repo
-                                    :message-type (:type context)
-                                    :local-tx local-tx
-                                    :remote-tx remote-tx
-                                    :local-checksum local-checksum
-                                    :remote-checksum remote-checksum})]
-          (when worker-util/dev?
+  (when worker-util/dev-or-test?
+    (when (and (string? remote-checksum)
+               (checksum-compare-ready? repo client local-tx remote-tx))
+      (let [local-checksum (local-sync-checksum repo)]
+        (when-not (= local-checksum remote-checksum)
+          (let [mismatch-data (merge context
+                                     {:type :db-sync/checksum-mismatch
+                                      :repo repo
+                                      :message-type (:type context)
+                                      :local-tx local-tx
+                                      :remote-tx remote-tx
+                                      :local-checksum local-checksum
+                                      :remote-checksum remote-checksum})]
             (sync-log-state/rtc-log :rtc.log/checksum-mismatch mismatch-data)
             (log/warn :db-sync/checksum-mismatch mismatch-data)))))))
 
