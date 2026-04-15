@@ -71,7 +71,9 @@
          {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
                   [:span.top-1.relative
                    (shui/tabler-icon "alert-triangle")]
-                  (t :page/db-delete-confirmation)]
+                  (if (or (ldb/class? page) (ldb/property? page))
+                    (t :page/permanently-delete-confirmation)
+                    (t :page/db-delete-confirmation))]
           :content [:p.opacity-60 (str "- " (:block/title page))]
           :outside-cancel? true})
         (p/then #(delete-page! page))
