@@ -875,7 +875,9 @@
   ([config format v]
    (when (string? v)
      (let [inline-list (gp-mldoc/inline->edn v (mldoc/get-default-config format))]
-       [:div.inline.mr-1 (map-inline config inline-list)]))))
+       [:div.inline
+        (when (get config :add-margin? true) {:class "mr-1"})
+        (map-inline config inline-list)]))))
 
 (defn- <get-block
   [block-id]
@@ -1191,19 +1193,23 @@
 
 (defn- render-macro
   [config name arguments macro-content format]
-  [:div.macro {:data-macro-name name}
-
-   (if macro-content
-     (let [ast (->> (mldoc/->edn macro-content format)
-                    (map first))
-           paragraph? (and (= 1 (count ast))
-                           (= "Paragraph" (ffirst ast)))]
-       (if (and (not paragraph?)
-                (mldoc/block-with-title? (ffirst ast)))
-         (markup-elements-cp (assoc config :block/format format) ast)
-         (inline-text config format macro-content)))
-     [:span.warning {:title (str "Unsupported macro name: " name)}
-      (macro->text name arguments)])])
+  (into
+   [:div.macro]
+   (let [attributes {:data-macro-name name}]
+     (if macro-content
+       (let [ast (->> (mldoc/->edn macro-content (gp-mldoc/default-config format))
+                      (map first))
+             paragraph? (and (= 1 (count ast))
+                             (= "Paragraph" (ffirst ast)))]
+         (if (and (not paragraph?)
+                  (mldoc/block-with-title? (ffirst ast)))
+           [attributes
+            (markup-elements-cp (assoc config :block/format format) ast)]
+           [(assoc attributes :class "inline")
+            (inline-text {:add-margin? false} format macro-content)]))
+       [attributes
+        [:span.warning {:title (str "Unsupported macro name: " name)}
+         (macro->text name arguments)]]))))
 
 (rum/defc nested-link < rum/reactive
   [config html-export? link]
@@ -3795,8 +3801,9 @@
       [:div.warning "#+BEGIN_QUOTE is deprecated. Use '/Quote' command instead."]
       ["Raw_Html" content]
       (when (not html-export?)
-        [:div.raw_html {:dangerouslySetInnerHTML
-                        {:__html (security/sanitize-html content)}}])
+        [:div.raw_html.inline-block
+         {:dangerouslySetInnerHTML
+          {:__html (security/sanitize-html content)}}])
       ["Export" "html" _options content]
       (when (not html-export?)
         [:div.export_html {:dangerouslySetInnerHTML
@@ -3805,8 +3812,9 @@
       (ui/catch-error
        [:div.warning {:title "Invalid hiccup"}
         content]
-       [:div.hiccup_html {:dangerouslySetInnerHTML
-                          {:__html (hiccup->html content)}}])
+       [:div.hiccup_html.inline
+        {:dangerouslySetInnerHTML
+         {:__html (hiccup->html content)}}])
 
       ["Export" "latex" _options content]
       (if html-export?
