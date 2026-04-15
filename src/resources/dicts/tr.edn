@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "Komut paleti"
 
- ;; Dev commands
- :command.dev/gc-graph "Grafiği temizle"
- :command.dev/replace-graph-with-db-file "Grafiği DB dosyasıyla değiştir"
- :command.dev/rtc-start "RTC başlat"
- :command.dev/rtc-stop "RTC durdur"
- :command.dev/show-block-ast "Blok AST'sini göster"
- :command.dev/show-block-data "Blok verilerini göster"
- :command.dev/show-page-data "Sayfa verilerini göster"
- :command.dev/validate-db "Veritabanını doğrula"
-
  ;; Editor commands
  :command.editor/add-property "Özellik ekle"
  :command.editor/add-property-deadline "Son tarih ekle"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "Sağ kenar çubuğu yeniden boyutlandırma işleyicisi"
  :sidebar.right/toggle "Sağ paneli aç/kapat"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "(Dev) Profiler"
- :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/undo-redo "(Dev) Geri al/Yinele"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Bilgi kartı oluştur"
  :context-menu/set-icon "Simge ayarla"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Numaralı listeyi aç/kapat"
 
  ;; Window

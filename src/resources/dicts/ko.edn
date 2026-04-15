@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "명령 팔레트 전환"
 
- ;; Dev commands
- :command.dev/gc-graph "(개발) 그래프 가비지 컬렉션"
- :command.dev/replace-graph-with-db-file "(개발) DB 파일로 그래프 교체"
- :command.dev/rtc-start "(개발) RTC 시작"
- :command.dev/rtc-stop "(개발) RTC 중지"
- :command.dev/show-block-ast "(개발) 블록 AST 표시"
- :command.dev/show-block-data "(개발) 블록 데이터 표시"
- :command.dev/show-page-data "(개발) 페이지 데이터 표시"
- :command.dev/validate-db "(개발) DB 유효성 검사"
-
  ;; Editor commands
  :command.editor/add-property "속성 추가"
  :command.editor/add-property-deadline "마감일 속성 추가"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "구분선"
  :sidebar.right/toggle "오른쪽 사이드바 전환"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "（개발）Profiler"
- :sidebar.right.dev/rtc "（개발）RTC"
- :sidebar.right.dev/undo-redo "（개발）실행 취소/다시 실행"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "플래시카드 만들기"
  :context-menu/set-icon "아이콘 설정"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "번호 목록 전환"
 
  ;; Window

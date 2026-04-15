@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "Commandopalet"
 
- ;; Dev commands
- :command.dev/gc-graph "Grafiek opschonen"
- :command.dev/replace-graph-with-db-file "Grafiek vervangen door DB-bestand"
- :command.dev/rtc-start "RTC starten"
- :command.dev/rtc-stop "RTC stoppen"
- :command.dev/show-block-ast "Blok-AST tonen"
- :command.dev/show-block-data "Blokgegevens tonen"
- :command.dev/show-page-data "Paginagegevens tonen"
- :command.dev/validate-db "Database valideren"
-
  ;; Editor commands
  :command.editor/add-property "Eigenschap toevoegen"
  :command.editor/add-property-deadline "Deadline toevoegen"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "Scheidingslijn"
  :sidebar.right/toggle "Rechter zijbalk in-/uitschakelen"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "(Dev) Profiler"
- :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/undo-redo "(Dev) Ongedaan maken/Herhaal"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Flashcard maken"
  :context-menu/set-icon "Pictogram instellen"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Genummerde lijst in-/uitschakelen"
 
  ;; Window

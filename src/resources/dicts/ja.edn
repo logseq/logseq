@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "検索コマンド"
 
- ;; Dev commands
- :command.dev/gc-graph "（開発）グラフのガベージコレクション"
- :command.dev/replace-graph-with-db-file "（開発）DBファイルでグラフを置換"
- :command.dev/rtc-start "（開発）RTC開始"
- :command.dev/rtc-stop "（開発）RTC停止"
- :command.dev/show-block-ast "(開発) ブロックの抽象構文木の表示"
- :command.dev/show-block-data "(開発) ブロックのデータを表示"
- :command.dev/show-page-data "(開発) ページのデータを表示"
- :command.dev/validate-db "（開発）DB検証"
-
  ;; Editor commands
  :command.editor/add-property "プロパティを追加"
  :command.editor/add-property-deadline "期限プロパティを追加"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "右サイドバーのサイズ変更"
  :sidebar.right/toggle "右サイドバーを開閉"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "（開発）Profiler"
- :sidebar.right.dev/rtc "（開発）RTC"
- :sidebar.right.dev/undo-redo "（開発）元に戻す/やり直し"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "フラッシュカードを作る"
  :context-menu/set-icon "アイコンを設定"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "番号付きリストの切替"
 
  ;; Window

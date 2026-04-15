@@ -9,18 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "Search commands"
 
- ;; Dev commands
- :command.dev/export-client-ops-sqlite "(Dev) Export client ops sqlite"
- :command.dev/gc-graph "(Dev) Garbage collect graph (remove unused data in SQLite)"
- :command.dev/recompute-checksum "(Dev) Recompute graph checksum"
- :command.dev/replace-graph-with-db-file "(Dev) Replace graph with its db.sqlite file"
- :command.dev/rtc-start "(Dev) RTC Start"
- :command.dev/rtc-stop "(Dev) RTC Stop"
- :command.dev/show-block-ast "(Dev) Show block AST"
- :command.dev/show-block-data "(Dev) Show block data"
- :command.dev/show-page-data "(Dev) Show page data"
- :command.dev/validate-db "(Dev) Validate current graph"
-
  ;; Editor commands
  :command.editor/add-property "Add property"
  :command.editor/add-property-deadline "Add task deadline to selected block"
@@ -1924,16 +1912,10 @@
  :sidebar.right/resize-handle "Right sidebar resize handler"
  :sidebar.right/toggle "Toggle right sidebar"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "(Dev) Profiler"
- :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/undo-redo "(Dev) Undo/Redo"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Make a Flashcard"
  :context-menu/set-icon "Set icon"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Toggle number list"
 
  ;; Window

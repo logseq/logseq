@@ -160,11 +160,15 @@ allow_strings = [
 
 # Regex patterns to allow.
 allow_patterns = [
+  # Developer-only English labels intentionally outside i18n scope.
+  # e.g., "(Dev) RTC", "(Dev) Profiler"
+  "^\\(Dev\\)\\s",
+
   # Logseq macro syntax.
   # e.g., {{query ...}}, {{video ...}}
   "^\\{\\{",
 
-# Email addresses.
+  # Email addresses.
   # e.g., user@example.com, tech.support@domain.org
   "^[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$",
 

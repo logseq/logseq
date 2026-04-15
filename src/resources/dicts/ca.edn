@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "Alternar paleta d'ordres"
 
- ;; Dev commands
- :command.dev/gc-graph "Netejar graf"
- :command.dev/replace-graph-with-db-file "Substituir graf per fitxer BD"
- :command.dev/rtc-start "Iniciar RTC"
- :command.dev/rtc-stop "Aturar RTC"
- :command.dev/show-block-ast "Mostrar AST del bloc"
- :command.dev/show-block-data "Mostrar dades del bloc"
- :command.dev/show-page-data "Mostrar dades de la pàgina"
- :command.dev/validate-db "Validar base de dades"
-
  ;; Editor commands
  :command.editor/add-property "Afegir propietat"
  :command.editor/add-property-deadline "Afegir termini"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "Eina per redimensionar panell dret "
  :sidebar.right/toggle "Alternar barra lateral dreta"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "(Dev) Profiler"
- :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/undo-redo "(Dev) Desfer/Refer"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Crear flashcard"
  :context-menu/set-icon "Definir icona"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Alternar llista numerada"
 
  ;; Window

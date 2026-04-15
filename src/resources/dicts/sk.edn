@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "Paleta príkazov"
 
- ;; Dev commands
- :command.dev/gc-graph "Vyčistit graf"
- :command.dev/replace-graph-with-db-file "Nahradiť graf súborem DB"
- :command.dev/rtc-start "Spustiť RTC"
- :command.dev/rtc-stop "Zastaviť RTC"
- :command.dev/show-block-ast "Zobraziť AST bloku"
- :command.dev/show-block-data "Zobraziť data bloku"
- :command.dev/show-page-data "Zobraziť data stránky"
- :command.dev/validate-db "Ověřit databázi"
-
  ;; Editor commands
  :command.editor/add-property "Pridať vlastnosť"
  :command.editor/add-property-deadline "Pridať termín"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "Nástroj na zmenu veľkosti pravého bočného panelu"
  :sidebar.right/toggle "Prepnúť pravý panel"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "(Dev) Profiler"
- :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/undo-redo "(Dev) Späť/Znova"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Vytvoriť kartičku"
  :context-menu/set-icon "Nastaviť ikonu"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Prepnúť číslovaný seznam"
 
  ;; Window
