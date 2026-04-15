@@ -212,18 +212,20 @@
                                                nil)))]
                         (utils/saveToFile blob filename "edn")
                         (notification/show!
-                         (str "Checksum recomputed. Recomputed: " recomputed-checksum
-                              ", local: " (or local-checksum "<nil>")
-                              ", remote: " (or remote-checksum "<nil>")
-                              ". Downloaded " filename ".edn with " (count blocks)
-                              " blocks and checksum attrs " (pr-str checksum-attrs) ".")
+                         (t :graph.diagnostics/checksum-recomputed-success
+                            recomputed-checksum
+                            (or local-checksum "<nil>")
+                            (or remote-checksum "<nil>")
+                            filename
+                            (count blocks)
+                            (pr-str checksum-attrs))
                          :success
                          false)))
-                    (notification/show! "Unable to compute checksum diagnostics for current graph." :warning))))
+                    (notification/show! (t :graph.diagnostics/checksum-unavailable-warning) :warning))))
         (p/catch (fn [error]
                    (js/console.error "recompute-checksum-diagnostics failed:" error)
-                   (notification/show! "Failed to compute graph checksum diagnostics." :error))))
-    (notification/show! "No graph found" :warning)))
+                   (notification/show! (t :graph.diagnostics/checksum-failed-error) :error))))
+    (notification/show! (t :graph.diagnostics/no-graph-warning) :warning)))
 
 (defn ^:export export-client-ops-sqlite
   []
@@ -235,18 +237,17 @@
                           blob (js/Blob. #js [payload] (clj->js {:type "application/octet-stream"}))]
                       (utils/saveToFile blob filename "sqlite")
                       (notification/show!
-                       (str "Client ops SQLite exported: " filename ".sqlite")
+                       (t :graph.diagnostics/client-ops-export-success filename)
                        :success
                        false))
                     (notification/show!
-                     (str "Client ops SQLite export failed: invalid payload type "
-                          (pr-str (type data))
-                          ".")
+                     (t :graph.diagnostics/client-ops-export-invalid-payload-warning
+                        (pr-str (type data)))
                      :warning))))
         (p/catch (fn [error]
                    (js/console.error "export-client-ops-sqlite failed:" error)
-                   (notification/show! "Failed to export client ops SQLite." :error))))
-    (notification/show! "No graph found" :warning)))
+                   (notification/show! (t :graph.diagnostics/client-ops-export-failed-error) :error))))
+    (notification/show! (t :graph.diagnostics/no-graph-warning) :warning)))
 
 (defn import-chosen-graph
   [repo]

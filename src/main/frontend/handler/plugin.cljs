@@ -122,11 +122,11 @@
           uid (keyword (str "plugin-illegal-package-error-" (hash url)))]
       (notification/show!
        [:div.flex.flex-col.gap-2
-        [:div "Failed to parse the plugin package config."]
+        [:div (t :plugin.package-config/parse-error)]
         [:div.text-xs.opacity-70.break-all package-json-path]
         (when (= type :external)
           [:div.text-xs.opacity-70
-           "Removing it only detaches the plugin from Logseq and keeps the source folder untouched."])
+           (t :plugin.package-config/detach-desc)])
         [:div.flex.items-center.gap-2.pt-1
          (shui/button
           {:size :sm
@@ -136,12 +136,12 @@
                                      (notification/clear! uid)
                                      (notification/show!
                                       (if (= type :installed)
-                                        (str "Removed broken plugin \"" id "\".")
-                                        "Removed the broken plugin from the plugin list.")
+                                        (t :plugin.package-config/remove-installed-success id)
+                                        (t :plugin.package-config/remove-external-success))
                                       :success)))
                            (p/catch (fn [error]
                                       (notification/show!
-                                       (str "Failed to remove the broken plugin.\n" error)
+                                       (str (t :plugin.package-config/remove-error) "\n" error)
                                        :error)))))}
           (t :plugin/uninstall))]]
        :error false uid)

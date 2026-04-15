@@ -52,6 +52,12 @@
    :zh-CN "，"
    :zh-Hant "，"})
 
+(defn t-en
+  "Translate using English locale, ignoring user preference.
+   Useful for user-facing text that also requires output to the console."
+  [& args]
+  (apply translate :en args))
+
 (defn t
   [& args]
   (let [preferred-language (preferred-locale)]

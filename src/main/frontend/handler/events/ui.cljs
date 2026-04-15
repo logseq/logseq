@@ -139,7 +139,7 @@
           (if-not error-code
             (plugin/set-updates-sub-content! (str title "...") 0)
             (notification/show!
-             (str "[Checked]<" title "> " error-code) :error)))))
+             (str "[" (t :plugin/checked) "]<" title "> " error-code) :error)))))
 
     (if (and updated? downloading?)
       ;; try to start consume downloading item

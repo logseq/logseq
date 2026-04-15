@@ -463,6 +463,15 @@
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
 
+ ;; Graph diagnostics
+ :graph.diagnostics/checksum-failed-error "Gagal menghitung diagnostik checksum grafik."
+ :graph.diagnostics/checksum-recomputed-success "Checksum dihitung ulang. Hasil perhitungan ulang: {1}, lokal: {2}, remote: {3}. {4}.edn diunduh dengan {5} blok dan atribut checksum {6}."
+ :graph.diagnostics/checksum-unavailable-warning "Tidak dapat menghitung diagnostik checksum untuk grafik saat ini."
+ :graph.diagnostics/client-ops-export-failed-error "Gagal mengekspor Client ops SQLite."
+ :graph.diagnostics/client-ops-export-invalid-payload-warning "Ekspor Client ops SQLite gagal: tipe payload tidak valid {1}."
+ :graph.diagnostics/client-ops-export-success "Client ops SQLite diekspor: {1}.sqlite"
+ :graph.diagnostics/no-graph-warning "Grafik tidak ditemukan."
+
  ;; Graph page views
  :graph.page/show-journals "Tampilkan Jurnal"
  :graph.page/title "Grafik halaman"
@@ -636,6 +645,11 @@
  ;; Journal default queries
  :journal.default-query/doing "SEDANG DIKERJAKAN"
  :journal.default-query/todo "UNTUK DIKERJAKAN"
+
+ ;; Library
+ :library/add-existing-pages "Tambahkan halaman yang ada ke Pustaka"
+ :library/add-pages "Add pages"
+ :library/title "Pustaka"
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -890,7 +904,6 @@
  :property.built-in/deleted-at "Dihapus pada"
  :property.built-in/deleted-by-ref "Dihapus oleh"
  :property.built-in/description "Deskripsi"
- :property.built-in/embedding-hnsw-label-updated-at "Label HNSW diperbarui pada"
  :property.built-in/enable-history "Aktifkan riwayat properti"
  :property.built-in/exclude-from-graph-view "Dikecualikan dari tampilan Graf?"
  :property.built-in/fsrs-due "Jatuh tempo"
@@ -1155,6 +1168,17 @@
  :query.builder/updated-label "Diperbarui"
  :query.builder/wrap-filter-with-label "Bungkus filter ini dengan:"
 
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
  ;; Asset
  :asset/acceptable-file-extensions "Ekstensi file yang diterima"
  :asset/add-assets "Tambah aset"
@@ -1257,6 +1281,7 @@
 
  ;; Import
  :import/all-tags "Impor semua tag"
+ :import/asset-too-large-warning "Penyalinan aset {1} dilewati karena melebihi batas 100 MB."
  :import/assets-import-partial "{1}/{2} berkas diimpor. Detail di konsol."
  :import/assets-imported "{1} berkas diimpor."
  :import/assets-skipped "{1} berkas dilewati. Detail di konsol."
@@ -1472,6 +1497,14 @@
  :settings.general/update-available "Ditemukan rilis baru"
  :settings.general/update-error "⚠️ Ups, Ada Sesuatu yang Salah!\nSilakan cek {1}."
 
+ ;; Sync server settings
+ :settings.sync-server/clear-success "URL server sinkronisasi dihapus. Menggunakan Logseq Sync resmi."
+ :settings.sync-server/reset "Reset ke default"
+ :settings.sync-server/save-success "URL server sinkronisasi disimpan."
+ :settings.sync-server/url "URL Server Sinkronisasi"
+ :settings.sync-server/url-desc "Tetapkan URL server sinkronisasi HTTPS kustom untuk sinkronisasi self-hosted. Token autentikasi Logseq Anda akan dikirim ke server ini, jadi gunakan hanya URL yang tepercaya. Biarkan kosong untuk menggunakan Logseq Sync resmi."
+ :settings.sync-server/url-invalid-error "URL harus diawali dengan https:// atau http://"
+
  ;; Theme
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Beralih ke tema {1}"
@@ -1483,6 +1516,7 @@
  :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "Periksa Semua Pembaruan"
  :plugin/check-update "Periksa Pembaruan"
+ :plugin/checked "Diperiksa"
  :plugin/checking-for-updates "Memeriksa pembaruan plugin ..."
  :plugin/contribute "✨ Tulis dan kirimkan plugin baru"
  :plugin/custom-js-alert "Ditemukan berkas custom.js, izinkan eksekusi? (Jika Anda tidak memahami kontennya, disarankan untuk tidak mengizinkan eksekusi, yang memiliki risiko keamanan tertentu.)"
@@ -1562,6 +1596,13 @@
  :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
  :plugin.install-from-web-url/theme-label "tema"
 
+ ;; Plugin package config
+ :plugin.package-config/detach-desc "Menghapusnya hanya melepaskan plugin dari Logseq dan membiarkan folder sumber tetap utuh."
+ :plugin.package-config/parse-error "Gagal mengurai konfigurasi paket plugin."
+ :plugin.package-config/remove-error "Gagal menghapus plugin rusak."
+ :plugin.package-config/remove-external-success "Plugin rusak telah dihapus dari daftar plugin."
+ :plugin.package-config/remove-installed-success "Plugin rusak \"{1}\" telah dihapus."
+
  ;; Plugin proxy
  :plugin.proxy/direct "Langsung"
  :plugin.proxy/http "HTTP"
@@ -1580,21 +1621,10 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
- ;; AI
- :ai/embedding "Menyematkan..."
- :ai/local-embedding-model "Model embedding lokal"
- :ai/model-download-progress "Mengunduh {1}"
- :ai/model-downloaded "Berhasil mengunduh {1}"
- :ai/model-ready "Model siap digunakan 🚀"
- :ai/search-label "Cari"
- :ai/search-result-label "Hasil Pencarian"
- :ai/search-title "Pencarian semantik:"
- :ai/select-model "Pilih model"
- :ai/vector-search-debug-actions "Tindakan"
- :ai/vector-search-debug-settings "Pengaturan"
- :ai/vector-search-debug-state "Status"
- :ai/vector-search-model-placeholder "Pilih model (perlu force-embedding-all-graph-blocks lagi)"
- :ai/webgpu-unsupported "WebGPU tidak didukung di browser ini, silakan perbarui atau gunakan browser lain."
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 
  ;; Zotero
  :zotero/attachments "Lampiran"
@@ -1640,6 +1670,7 @@
 
  ;; Recycle storage
  :storage.recycle/block-deleted-at "Blok dihapus {1}"
+ :storage.recycle/delete-permanently "Hapus permanen"
  :storage.recycle/empty "Tempat Sampah kosong."
  :storage.recycle/page-deleted-at "Halaman dihapus {1}"
  :storage.recycle/readonly "Tempat sampah (hanya-baca)"
@@ -1696,10 +1727,7 @@
  :sync/online "Online"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
- :sync/preparing-snapshot-download "Menyiapkan unduhan snapshot graf"
- :sync/snapshot-downloaded "Snapshot graf berhasil diunduh"
  :sync/something-wrong "Kesalahan sinkronisasi"
- :sync/start-downloading-snapshot "Mulai mengunduh snapshot graf"
  :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "Penyimpanan melebihi batas"
  :sync/uploading "Uploading..."
@@ -1848,6 +1876,9 @@
  :bug-report.main/desc "Dapatkah Anda membantu kami dengan mengirimkan laporan bug? Kami akan menyelesaikannya sesegera mungkin."
  :bug-report.main/title "Laporan bug"
 
+ ;; Shell
+ :shell/input-command-title "Input command"
+
  ;; Profiler
  :profiler/input-fn-placeholder "masukkan nama fungsi di sini"
  :profiler/unregister "Batalkan pendaftaran"
@@ -1894,7 +1925,7 @@
  ;; Sidebar right
  :sidebar.right.dev/profiler "(Dev) Profiler"
  :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/vector-search "(Dev) VectorSearch"
+ :sidebar.right.dev/undo-redo "(Dev) Batal/Lakukan lagi"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
@@ -1997,28 +2028,4 @@
  :electron/version "Versi {1}"
  :electron/write-file-failed "Penulisan ke berkas {1} gagal, {2}."
  :electron/write-file-failed-with-backup "Penulisan ke berkas {1} gagal, {2}. Berkas cadangan disimpan di {3}."
-
- ;; Icon
- :icon/emojis-count "Emojis ({1})"
- :icon/icons-count "Icons ({1})"
- :icon/matched-count "Matched ({1})"
- :icon/search-all "Search all"
- :icon/search-emojis "Search emojis"
- :icon/search-icons "Search icons"
- :icon/tab-all "All"
- :icon/tab-emojis "Emojis"
- :icon/tab-icons "Icons"
-
- ;; Library
- :library/add-existing-pages "Tambahkan halaman yang ada ke Pustaka"
- :library/add-pages "Add pages"
- :library/title "Pustaka"
-
- ;; Shell
- :shell/input-command-title "Input command"
-
- ;; Youtube
- :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
- :youtube/player-not-ready "YouTube player isn't ready yet."
- :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

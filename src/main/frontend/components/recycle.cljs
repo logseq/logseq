@@ -104,7 +104,7 @@
         :class "!py-0 !px-1 h-4 hover:text-destructive"
         :on-click #(when (js/confirm delete-message)
                      (page-handler/delete-recycled-permanently! root-uuid))}
-       "Delete permanently")]]))
+       (t :storage.recycle/delete-permanently))]]))
 
 (defn- deleted-root-outliner
   [root]

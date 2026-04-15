@@ -465,6 +465,15 @@
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
 
+ ;; Graph diagnostics
+ :graph.diagnostics/checksum-failed-error "Failed to compute graph checksum diagnostics."
+ :graph.diagnostics/checksum-recomputed-success "Checksum recomputed. Recomputed: {1}, local: {2}, remote: {3}. Downloaded {4}.edn with {5} blocks and checksum attributes {6}."
+ :graph.diagnostics/checksum-unavailable-warning "Unable to compute checksum diagnostics for the current graph."
+ :graph.diagnostics/client-ops-export-failed-error "Failed to export client ops SQLite."
+ :graph.diagnostics/client-ops-export-invalid-payload-warning "Client ops SQLite export failed: invalid payload type {1}."
+ :graph.diagnostics/client-ops-export-success "Client ops SQLite exported: {1}.sqlite"
+ :graph.diagnostics/no-graph-warning "No graph found."
+
  ;; Graph page views
  :graph.page/show-journals "Show Journals"
  :graph.page/title "Page graph"
@@ -638,6 +647,11 @@
  ;; Journal default queries
  :journal.default-query/doing "DOING"
  :journal.default-query/todo "TODO"
+
+ ;; Library
+ :library/add-existing-pages "Add existing pages to Library"
+ :library/add-pages "Add pages"
+ :library/title "Library"
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -892,7 +906,6 @@
  :property.built-in/deleted-at "Deleted at"
  :property.built-in/deleted-by-ref "Deleted by"
  :property.built-in/description "Description"
- :property.built-in/embedding-hnsw-label-updated-at "HNSW label updated-at"
  :property.built-in/enable-history "Enable property history"
  :property.built-in/exclude-from-graph-view "Excluded from Graph view?"
  :property.built-in/fsrs-due "Due"
@@ -1157,6 +1170,17 @@
  :query.builder/updated-label "Updated"
  :query.builder/wrap-filter-with-label "Wrap this filter with:"
 
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
  ;; Asset
  :asset/acceptable-file-extensions "Acceptable file extensions"
  :asset/add-assets "Add assets"
@@ -1259,6 +1283,7 @@
 
  ;; Import
  :import/all-tags "Import all tags"
+ :import/asset-too-large-warning "Skipped copying asset {1} because it exceeds the 100 MB limit."
  :import/assets-import-partial "Imported {1} of {2} assets. See console for details."
  :import/assets-imported "Imported {1} assets."
  :import/assets-skipped "Skipped {1} assets. See console for details."
@@ -1474,6 +1499,14 @@
  :settings.general/update-available "Found new release"
  :settings.general/update-error "⚠️ Oops, Something Went Wrong!\nPlease check out the {1}."
 
+ ;; Sync server settings
+ :settings.sync-server/clear-success "Sync server URL cleared. Using official Logseq Sync."
+ :settings.sync-server/reset "Reset to default"
+ :settings.sync-server/save-success "Sync server URL saved."
+ :settings.sync-server/url "Sync Server URL"
+ :settings.sync-server/url-desc "Set a custom HTTPS sync server URL for self-hosted sync. Your Logseq authentication tokens will be sent to this server, so only use a trusted URL. Leave empty to use the official Logseq Sync."
+ :settings.sync-server/url-invalid-error "URL must start with https:// or http://"
+
  ;; Theme
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Switch to {1} theme"
@@ -1485,6 +1518,7 @@
  :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "Check all updates"
  :plugin/check-update "Check update"
+ :plugin/checked "Checked"
  :plugin/checking-for-updates "Checking for plugin updates ..."
  :plugin/contribute "✨ Write and submit new plugin"
  :plugin/custom-js-alert "Found the custom.js file, is it allowed to execute? (If you don't understand the content of this file, it is recommended not to allow execution, which has certain security risks.)"
@@ -1564,6 +1598,13 @@
  :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
  :plugin.install-from-web-url/theme-label "theme"
 
+ ;; Plugin package config
+ :plugin.package-config/detach-desc "Removing it only detaches the plugin from Logseq and keeps the source folder untouched."
+ :plugin.package-config/parse-error "Failed to parse the plugin package config."
+ :plugin.package-config/remove-error "Failed to remove the broken plugin."
+ :plugin.package-config/remove-external-success "Removed the broken plugin from the plugin list."
+ :plugin.package-config/remove-installed-success "Removed broken plugin \"{1}\"."
+
  ;; Plugin proxy
  :plugin.proxy/direct "Direct"
  :plugin.proxy/http "HTTP"
@@ -1582,21 +1623,10 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
- ;; AI
- :ai/embedding "Embedding..."
- :ai/local-embedding-model "Local embedding model"
- :ai/model-download-progress "Downloading {1}"
- :ai/model-downloaded "Downloaded {1}"
- :ai/model-ready "Model is ready 🚀"
- :ai/search-label "Search"
- :ai/search-result-label "Search Result"
- :ai/search-title "Semantic search:"
- :ai/select-model "Select a model"
- :ai/vector-search-debug-actions "Actions"
- :ai/vector-search-debug-settings "Settings"
- :ai/vector-search-debug-state "State"
- :ai/vector-search-model-placeholder "Select a model(need force-embedding-all-graph-blocks again)"
- :ai/webgpu-unsupported "WebGPU is not supported on this browser, please upgrade it or use another browser."
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 
  ;; Zotero
  :zotero/attachments "Attachments"
@@ -1642,6 +1672,7 @@
 
  ;; Recycle storage
  :storage.recycle/block-deleted-at "Block deleted {1}"
+ :storage.recycle/delete-permanently "Delete permanently"
  :storage.recycle/empty "Recycle is empty."
  :storage.recycle/page-deleted-at "Page deleted {1}"
  :storage.recycle/readonly "Recycle is read-only."
@@ -1698,10 +1729,7 @@
  :sync/online "Online"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
- :sync/preparing-snapshot-download "Preparing graph snapshot download"
- :sync/snapshot-downloaded "Graph snapshot downloaded"
  :sync/something-wrong "Something wrong, please try again."
- :sync/start-downloading-snapshot "Start downloading graph snapshot"
  :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "Sync storage exceed limit"
  :sync/uploading "Uploading..."
@@ -1850,6 +1878,9 @@
  :bug-report.main/desc "Can you help us out by submitting a bug report? We'll get it sorted out as soon as we can."
  :bug-report.main/title "Bug report"
 
+ ;; Shell
+ :shell/input-command-title "Input command"
+
  ;; Profiler
  :profiler/input-fn-placeholder "input fn name here"
  :profiler/unregister "Unregister"
@@ -1896,7 +1927,7 @@
  ;; Sidebar right
  :sidebar.right.dev/profiler "(Dev) Profiler"
  :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/vector-search "(Dev) VectorSearch"
+ :sidebar.right.dev/undo-redo "(Dev) Undo/Redo"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
@@ -1999,28 +2030,4 @@
  :electron/version "Version {1}"
  :electron/write-file-failed "Write to the file {1} failed, {2}."
  :electron/write-file-failed-with-backup "Write to the file {1} failed, {2}. A backup file was saved to {3}."
-
- ;; Icon
- :icon/emojis-count "Emojis ({1})"
- :icon/icons-count "Icons ({1})"
- :icon/matched-count "Matched ({1})"
- :icon/search-all "Search all"
- :icon/search-emojis "Search emojis"
- :icon/search-icons "Search icons"
- :icon/tab-all "All"
- :icon/tab-emojis "Emojis"
- :icon/tab-icons "Icons"
-
- ;; Library
- :library/add-existing-pages "Add existing pages to Library"
- :library/add-pages "Add pages"
- :library/title "Library"
-
- ;; Shell
- :shell/input-command-title "Input command"
-
- ;; Youtube
- :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
- :youtube/player-not-ready "YouTube player isn't ready yet."
- :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
- }
+}

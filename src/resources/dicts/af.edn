@@ -463,6 +463,15 @@
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
 
+ ;; Graph diagnostics
+ :graph.diagnostics/checksum-failed-error "Kon nie grafiekkontrolesomdiagnostiek bereken nie."
+ :graph.diagnostics/checksum-recomputed-success "Kontrolesom herbereken. Herbereken: {1}, plaaslik: {2}, afgeleë: {3}. {4}.edn is afgelaai met {5} blokke en kontrolesom-eienskappe {6}."
+ :graph.diagnostics/checksum-unavailable-warning "Kan nie kontrolesomdiagnostiek vir die huidige grafiek bereken nie."
+ :graph.diagnostics/client-ops-export-failed-error "Kon nie Client ops SQLite uitvoer nie."
+ :graph.diagnostics/client-ops-export-invalid-payload-warning "Uitvoer van Client ops SQLite het misluk: ongeldige payload-tipe {1}."
+ :graph.diagnostics/client-ops-export-success "Client ops SQLite uitgevoer: {1}.sqlite"
+ :graph.diagnostics/no-graph-warning "Geen grafiek gevind nie."
+
  ;; Graph page views
  :graph.page/show-journals "Wys joernale"
  :graph.page/title "Bladsygrafiek"
@@ -636,6 +645,11 @@
  ;; Journal default queries
  :journal.default-query/doing "BESIG"
  :journal.default-query/todo "TE DOEN"
+
+ ;; Library
+ :library/add-existing-pages "Voeg bestaande bladsye by Biblioteek"
+ :library/add-pages "Add pages"
+ :library/title "Biblioteek"
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -890,7 +904,6 @@
  :property.built-in/deleted-at "Geskrap op"
  :property.built-in/deleted-by-ref "Geskrap deur"
  :property.built-in/description "Beskrywing"
- :property.built-in/embedding-hnsw-label-updated-at "HNSW-etiket bygewerk op"
  :property.built-in/enable-history "Aktiveer eienskapgeskiedenis"
  :property.built-in/exclude-from-graph-view "Uitgesluit van grafiekaansig?"
  :property.built-in/fsrs-due "Verskuldig"
@@ -1155,6 +1168,17 @@
  :query.builder/updated-label "Bygewerk"
  :query.builder/wrap-filter-with-label "Vou hierdie filter met:"
 
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
  ;; Asset
  :asset/acceptable-file-extensions "Aanvaarbare lêeruitbreidings"
  :asset/add-assets "Voeg bates by"
@@ -1257,6 +1281,7 @@
 
  ;; Import
  :import/all-tags "Alle tags voer in"
+ :import/asset-too-large-warning "Kopiëring van bate {1} is oorgeslaan omdat dit die limiet van 100 MB oorskry."
  :import/assets-import-partial "{1}/{2} lêers geïmporteerd. Details in console."
  :import/assets-imported "{1} lêers geïmporteerd."
  :import/assets-skipped "{1} lêers overgeslagen. Details in console."
@@ -1472,6 +1497,14 @@
  :settings.general/update-available "Opdatering beskikbaar"
  :settings.general/update-error "⚠️ Oeps, iets het verkeerd gegaan!\nGaan na die {1}."
 
+ ;; Sync server settings
+ :settings.sync-server/clear-success "Sinkronisasiebediener-URL uitgevee. Gebruik amptelike Logseq Sync."
+ :settings.sync-server/reset "Verstek herstellen"
+ :settings.sync-server/save-success "Sinkronisasiebediener-URL gestoor."
+ :settings.sync-server/url "Sinkronisasiebediener-URL"
+ :settings.sync-server/url-desc "Stel 'n pasgemaakte HTTPS-sinkronisasiebediener-URL vir self-gehoste sinkronisasie. Jou Logseq-verifikasietokens sal na hierdie bediener gestuur word, gebruik dus slegs 'n betroubare URL. Laat dit leeg om die amptelike Logseq Sync te gebruik."
+ :settings.sync-server/url-invalid-error "URL moet met https:// of http:// begin"
+
  ;; Theme
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Skakel oor na die {1} tema"
@@ -1483,6 +1516,7 @@
  :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "Kyk vir alle opdaterings"
  :plugin/check-update "Kyk vir opdaterings"
+ :plugin/checked "Gekontroleer"
  :plugin/checking-for-updates "Updates controleren"
  :plugin/contribute "✨ Bydra"
  :plugin/custom-js-alert "Pasgemaakte JS-waarskuwing"
@@ -1562,6 +1596,13 @@
  :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
  :plugin.install-from-web-url/theme-label "tema"
 
+ ;; Plugin package config
+ :plugin.package-config/detach-desc "Deur dit te verwyder, word die plugin net van Logseq losgekoppel en die bronmap onaangeraak gelaat."
+ :plugin.package-config/parse-error "Kon nie die plugin-pakketkonfigurasie ontleed nie."
+ :plugin.package-config/remove-error "Kon nie die beskadigde plugin verwyder nie."
+ :plugin.package-config/remove-external-success "Die beskadigde plugin is uit die pluginlys verwyder."
+ :plugin.package-config/remove-installed-success "Beskadigde plugin \"{1}\" verwyder."
+
  ;; Plugin proxy
  :plugin.proxy/direct "Direk"
  :plugin.proxy/http "HTTP"
@@ -1580,21 +1621,10 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
- ;; AI
- :ai/embedding "Besig om in te bed..."
- :ai/local-embedding-model "Plaaslike inbeddingsmodel"
- :ai/model-download-progress "Laai {1} af"
- :ai/model-downloaded "{1} afgelaai"
- :ai/model-ready "Model is gereed 🚀"
- :ai/search-label "Soek"
- :ai/search-result-label "Soekresultaat"
- :ai/search-title "Semantiese soektog:"
- :ai/select-model "Kies 'n model"
- :ai/vector-search-debug-actions "Aksies"
- :ai/vector-search-debug-settings "Instellings"
- :ai/vector-search-debug-state "Status"
- :ai/vector-search-model-placeholder "Kies 'n model (moet force-embedding-all-graph-blocks weer uitvoer)"
- :ai/webgpu-unsupported "WebGPU word nie op hierdie blaaier ondersteun nie, opgradeer dit asseblief of gebruik 'n ander blaaier."
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 
  ;; Zotero
  :zotero/attachments "Aanhangsels"
@@ -1640,6 +1670,7 @@
 
  ;; Recycle storage
  :storage.recycle/block-deleted-at "Blok uitgevee {1}"
+ :storage.recycle/delete-permanently "Vee permanent uit"
  :storage.recycle/empty "Herwinning is leeg."
  :storage.recycle/page-deleted-at "Bladsy uitgevee {1}"
  :storage.recycle/readonly "Prullenbak (alleen-lezen)"
@@ -1696,10 +1727,7 @@
  :sync/online "Online"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
- :sync/preparing-snapshot-download "Berei grafiekmomentopname-aflaai voor"
- :sync/snapshot-downloaded "Grafiekmomentopname afgelaai"
  :sync/something-wrong "Synchronisatiefout"
- :sync/start-downloading-snapshot "Begin om grafiekmomentopname af te laai"
  :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "Opslaglimiet overschreden"
  :sync/uploading "Uploading..."
@@ -1848,6 +1876,9 @@
  :bug-report.main/desc "Een bug melden"
  :bug-report.main/title "Bug melden"
 
+ ;; Shell
+ :shell/input-command-title "Input command"
+
  ;; Profiler
  :profiler/input-fn-placeholder "voer funksienaam hier in"
  :profiler/unregister "Onregistreer"
@@ -1894,7 +1925,7 @@
  ;; Sidebar right
  :sidebar.right.dev/profiler "(Dev) Profiler"
  :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/vector-search "(Dev) VectorSearch"
+ :sidebar.right.dev/undo-redo "(Dev) Ontdoen/Herdoen"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
@@ -1997,28 +2028,4 @@
  :electron/version "Versie {1}"
  :electron/write-file-failed "Skryf na lêer {1} het misluk, {2}."
  :electron/write-file-failed-with-backup "Skryf na lêer {1} het misluk, {2}. 'n Rugsteunlêer is in {3} gestoor."
-
- ;; Icon
- :icon/emojis-count "Emojis ({1})"
- :icon/icons-count "Icons ({1})"
- :icon/matched-count "Matched ({1})"
- :icon/search-all "Search all"
- :icon/search-emojis "Search emojis"
- :icon/search-icons "Search icons"
- :icon/tab-all "All"
- :icon/tab-emojis "Emojis"
- :icon/tab-icons "Icons"
-
- ;; Library
- :library/add-existing-pages "Voeg bestaande bladsye by Biblioteek"
- :library/add-pages "Add pages"
- :library/title "Biblioteek"
-
- ;; Shell
- :shell/input-command-title "Input command"
-
- ;; Youtube
- :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
- :youtube/player-not-ready "YouTube player isn't ready yet."
- :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }
