@@ -73,7 +73,7 @@
   Bump to force a rebuild when the index format changes."
   1)
 
-(def ^:private search-index-build-batch-size 200)
+(def ^:private search-index-build-batch-size 1000)
 (def ^:private search-index-build-time-budget-ms 8)
 (def ^:private search-index-build-idle-diff-ms 1000)
 (def ^:private search-index-build-pause-ms 300)
@@ -904,6 +904,7 @@
                              (keep #(d/entity db (:e %)))
                              (remove search/hidden-entity?)
                              (keep search/block->index))]
+            (prn :debug :build-search-indice :remaining (count remaining))
             (when (seq indexed)
               (search/upsert-blocks! search-db (bean/->js indexed)))
             (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
