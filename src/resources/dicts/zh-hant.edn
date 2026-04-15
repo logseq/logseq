@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "切換指令面板"
 
- ;; Dev commands
- :command.dev/gc-graph "（開發）垃圾回收圖譜"
- :command.dev/replace-graph-with-db-file "（開發）用資料庫檔案取代圖譜"
- :command.dev/rtc-start "（開發）啟動 RTC"
- :command.dev/rtc-stop "（開發）停止 RTC"
- :command.dev/show-block-ast "（開發）顯示區塊 AST"
- :command.dev/show-block-data "（開發）顯示區塊資料"
- :command.dev/show-page-data "（開發）顯示頁面資料"
- :command.dev/validate-db "（開發）驗證資料庫"
-
  ;; Editor commands
  :command.editor/add-property "添加屬性"
  :command.editor/add-property-deadline "新增截止日期屬性"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "右側邊欄調整大小"
  :sidebar.right/toggle "切換右側邊欄"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "（開發）Profiler"
- :sidebar.right.dev/rtc "（開發）RTC"
- :sidebar.right.dev/undo-redo "（開發）復原/重做"
-
  ;; Context Menu
  :context-menu/developer-tools "開發者工具"
  :context-menu/make-a-flashcard "製作閃卡"
  :context-menu/set-icon "設定圖示"
- :context-menu/show-block-content-history "（開發）顯示區塊內容歷史"
  :context-menu/toggle-number-list "切換編號列表"
 
  ;; Window

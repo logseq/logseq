@@ -10,6 +10,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.publish :as publish-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.db :as ldb]
@@ -150,7 +151,7 @@
                                    (db-page-handler/convert-tag-to-page! page))}})
 
           (when developer-mode?
-            {:title   (t :command.dev/show-page-data)
+            {:title   (shortcut-dh/shortcut-desc-by-id :dev/show-page-data)
              :options {:on-click (fn []
                                    (dev-common-handler/show-entity-data (:db/id page)))}})]
          (flatten)

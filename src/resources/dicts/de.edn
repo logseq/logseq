@@ -9,16 +9,6 @@
  ;; Command Palette commands
  :command.command-palette/toggle "Suchbefehle"
 
- ;; Dev commands
- :command.dev/gc-graph "(Dev) Graph bereinigen (ungenutzte Daten in SQLite entfernen)"
- :command.dev/replace-graph-with-db-file "(Dev) Graph mit db.sqlite-Datei ersetzen"
- :command.dev/rtc-start "(Dev) RTC starten"
- :command.dev/rtc-stop "(Dev) RTC stoppen"
- :command.dev/show-block-ast "(Dev) Block-AST anzeigen"
- :command.dev/show-block-data "(Dev) Blockdaten anzeigen"
- :command.dev/show-page-data "(Dev) Seitendaten anzeigen"
- :command.dev/validate-db "(Dev) Aktuellen Graph validieren"
-
  ;; Editor commands
  :command.editor/add-property "Eigenschaft hinzufügen"
  :command.editor/add-property-deadline "Deadline zum ausgewählten Block hinzufügen"
@@ -1922,16 +1912,10 @@
  :sidebar.right/resize-handle "Griff zur Größenänderung der rechten Seitenleiste"
  :sidebar.right/toggle "Rechte Seitenleiste umschalten"
 
- ;; Sidebar right
- :sidebar.right.dev/profiler "(Dev) Profiler"
- :sidebar.right.dev/rtc "(Dev) RTC"
- :sidebar.right.dev/undo-redo "(Dev) Rückgängig/Wiederholen"
-
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Eine Karteikarte erstellen"
  :context-menu/set-icon "Symbol setzen"
- :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Nummeriert/Unnummeriert umschalten"
 
  ;; Window

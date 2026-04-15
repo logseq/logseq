@@ -16,6 +16,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.reaction :as reaction-handler]
+            [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -310,27 +311,27 @@
              (shui/dropdown-menu-sub-trigger
               (t :context-menu/developer-tools))
 
-             (shui/dropdown-menu-sub-content
-              (shui/dropdown-menu-item
-               {:key "(Dev) Show block data"
+              (shui/dropdown-menu-sub-content
+               (shui/dropdown-menu-item
+               {:key :dev/show-block-data
                 :on-click (fn []
                             (dev-common-handler/show-entity-data [:block/uuid block-id]))}
-               (t :command.dev/show-block-data))
+               (shortcut-dh/shortcut-desc-by-id :dev/show-block-data))
               (shui/dropdown-menu-item
-               {:key "(Dev) Show block AST"
+               {:key :dev/show-block-ast
                 :on-click (fn []
                             (let [block (db/entity [:block/uuid block-id])]
                               (dev-common-handler/show-content-ast (:block/title block)
                                                                    (get block :block/format :markdown))))}
-               (t :command.dev/show-block-ast))
+               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast))
               (shui/dropdown-menu-item
-               {:key "(Dev) Show block content history"
+               {:key :dev/show-block-content-history
                 :on-click
                 (fn []
                   (let [token (state/get-auth-id-token)
                         graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
                     (p/let [blocks-versions (state/<invoke-db-worker :thread-api/rtc-get-block-content-versions token graph-uuid block-id)]
-                      (prn :Dev-show-block-content-history)
+                      (prn :dev/show-block-content-history)
                       (doseq [[block-uuid versions] blocks-versions]
                         (prn :block-uuid block-uuid)
                         (pp/print-table [:content :created-at]
@@ -338,7 +339,7 @@
                                                {:created-at (tc/from-long (* (:created-at version) 1000))
                                                 :content (:value version)})
                                              versions))))))}
-               (t :context-menu/show-block-content-history))))])]))))
+               "(Dev) Show block content history")))])]))))
 
 (rum/defc block-ref-custom-context-menu-content
   [block block-ref-id]
