@@ -213,9 +213,21 @@
          (transact-sync repo-or-conn tx-data tx-meta))))))
 
 (defn batch-transact-with-temp-conn!
-  "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
-  however it can't write to the disk.
-  This fn supports nested calls, however, don't rely on the tx-report for undo/redo."
+  "Run batched tx work against a temporary conn, then apply all collected tx-data
+  to `conn` with a single final `transact!`.
+
+  Semantics:
+  - Uses `d/conn-from-db` so batch work runs on an isolated in-memory conn.
+  - Temp conn can still read from storage-backed db state, but cannot write to disk
+    (`:skip-store? true`).
+  - Defers db validation during inner batch ops (`:skip-validate-db? true`), then
+    validates on the final `transact!` to `conn`.
+  - Supports nested usage.
+
+  Notes:
+  - `batch-tx-fn` is called as `(batch-tx-fn temp-conn *batch-tx-data)`.
+  - `listen-db` (if provided) receives each intermediate tx-report from temp conn.
+  - Do not rely on returned tx-report shape for undo/redo behavior."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
   (let [temp-conn (d/conn-from-db @conn)
         *batch-tx-data (volatile! [])
@@ -243,7 +255,22 @@
         (vreset! *batch-tx-data nil)))))
 
 (defn batch-transact!
-  "Store once for a batch transaction, notice that this fn doesn't support nest `batch-transact` calls"
+  "Run batched tx work directly on `conn`, while persisting only once at the end.
+
+  Semantics:
+  - Inner txs are executed on the real conn with `:skip-store? true` to avoid
+    per-tx disk writes.
+  - Collects all intermediate `:tx-data` and emits one final synthetic tx-report
+    (`:batch-final-tx-report? true`) after the batch completes.
+  - Runs `d/store` once at the end (when storage exists).
+
+  Constraints:
+  - Not nestable: throws if called while `:batch-tx?` is already set.
+
+  Notes:
+  - `batch-tx-fn` is called as `(batch-tx-fn conn)`.
+  - `listen-db` (if provided) receives each intermediate tx-report during batch
+    execution."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
   (let [db-before @conn
         *tx-data (atom [])]
