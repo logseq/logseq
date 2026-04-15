@@ -37,6 +37,10 @@
   (when (contains? #{:logseq.property/status :logseq.property/priority} (:db/ident property))
     (state/pub-event! [:init/commands])))
 
+(defn- ->block-lookup-id
+  [block]
+  [:block/uuid (:block/uuid block)])
+
 (defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
   [property item]
@@ -65,7 +69,7 @@
   (if-let [ent (:logseq.property/description property)]
     (db/transact! (state/get-current-repo)
                   [(outliner-core/block-with-updated-at
-                    {:db/id (:db/id ent) :block/title description})]
+                    {:block/uuid (:block/uuid ent) :block/title description})]
                   {:outliner-op :save-block})
     (when-not (string/blank? description)
       (db-property-handler/set-block-property!
@@ -122,8 +126,11 @@
                                       (if (= value :no-tag)
                                         (toggle-fn)
                                         (p/let [result (<create-class-if-not-exists! value)
-                                                value' (or result value)
-                                                tx-data [[(if select? :db/add :db/retract) (:db/id property) :logseq.property/classes [:block/uuid value']]]
+                                                class-uuid (or result value)
+                                                tx-data [[(if select? :db/add :db/retract)
+                                                          (->block-lookup-id property)
+                                                          :logseq.property/classes
+                                                          [:block/uuid class-uuid]]]
                                                 _ (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})]
                                           (when-not multiple-choices? (toggle-fn)))))}]
 
@@ -469,10 +476,10 @@
                                                         (db-order/gen-key prev-order over-order)))]
 
                                       (db/transact! (state/get-current-repo)
-                                                    [{:db/id (:db/id active)
+                                                    [{:block/uuid (:block/uuid active)
                                                       :block/order new-order}
                                                      (outliner-core/block-with-updated-at
-                                                      {:db/id (:db/id property)})]
+                                                      {:block/uuid (:block/uuid property)})]
                                                     {:outliner-op :save-block})))})]
         (shui/dropdown-menu-separator)])
 
