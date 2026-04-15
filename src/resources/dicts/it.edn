@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "Errore di salvataggio SQLiteDB: {1}"
 
  :storage.recycle/block-deleted-at "Blocco eliminato {1}"
- :storage.recycle/delete-permanently "Elimina definitivamente"
  :storage.recycle/empty "Il cestino è vuoto."
  :storage.recycle/page-deleted-at "Pagina eliminata {1}"
  :storage.recycle/readonly "Cestino (solo lettura)"
  :storage.recycle/restore "Ripristina"
- :storage.recycle/retention-desc "Le pagine e i blocchi eliminati restano qui finché non vengono ripristinati o rimossi automaticamente dopo 60 giorni."
+ :storage.recycle/retention-desc "Le pagine e i blocchi eliminati restano qui finché non vengono ripristinati o rimossi automaticamente dopo 30 giorni."
  :storage.recycle/title "Cestino"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

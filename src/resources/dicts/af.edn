@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "SQLiteDB stoor fout: {1}"
 
  :storage.recycle/block-deleted-at "Blok uitgevee {1}"
- :storage.recycle/delete-permanently "Vee permanent uit"
  :storage.recycle/empty "Herwinning is leeg."
  :storage.recycle/page-deleted-at "Bladsy uitgevee {1}"
  :storage.recycle/readonly "Prullenbak (alleen-lezen)"
  :storage.recycle/restore "Herstel"
- :storage.recycle/retention-desc "Geskrapte bladsye en blokke bly hier totdat hulle herstel word of na 60 dae outomaties opgeskoon word."
+ :storage.recycle/retention-desc "Geskrapte bladsye en blokke bly hier totdat hulle herstel word of na 30 dae outomaties opgeskoon word."
  :storage.recycle/title "Herwinning"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "Kesalahan penyimpanan SQLiteDB: {1}"
 
  :storage.recycle/block-deleted-at "Blok dihapus {1}"
- :storage.recycle/delete-permanently "Hapus permanen"
  :storage.recycle/empty "Tempat Sampah kosong."
  :storage.recycle/page-deleted-at "Halaman dihapus {1}"
  :storage.recycle/readonly "Tempat sampah (hanya-baca)"
  :storage.recycle/restore "Pulihkan"
- :storage.recycle/retention-desc "Halaman dan blok yang dihapus tetap di sini sampai dipulihkan atau dibersihkan otomatis setelah 60 hari."
+ :storage.recycle/retention-desc "Halaman dan blok yang dihapus tetap di sini sampai dipulihkan atau dibersihkan otomatis setelah 30 hari."
  :storage.recycle/title "Tempat Sampah"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

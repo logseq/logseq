@@ -513,7 +513,7 @@
 
             (when (not tag-dialog?)
               (if recycle-page?
-                (recycle/recycle-page page)
+                (recycle/recycle-page page {:class "ls-recycle-page-title-compact"})
                 [:div.ls-page-blocks
                  {:style {:margin-left (if (util/mobile?) 0 -20)}
                   :class (when-not (or sidebar? (util/capacitor?))

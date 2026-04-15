@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "SQLiteDB 保存エラー: {1}"
 
  :storage.recycle/block-deleted-at "ブロックが削除されました {1}"
- :storage.recycle/delete-permanently "完全に削除"
  :storage.recycle/empty "ごみ箱は空です。"
  :storage.recycle/page-deleted-at "ページが削除されました {1}"
  :storage.recycle/readonly "ごみ箱（読み取り専用）"
  :storage.recycle/restore "復元"
- :storage.recycle/retention-desc "削除されたページとブロックは、復元されるか、60 日後に自動でガベージコレクトされるまでここに残ります。"
+ :storage.recycle/retention-desc "削除されたページとブロックは、復元されるか、30 日後に自動でガベージコレクトされるまでここに残ります。"
  :storage.recycle/title "ごみ箱"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

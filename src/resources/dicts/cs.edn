@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "Chyba ukládání SQLiteDB: {1}"
 
  :storage.recycle/block-deleted-at "Blok smazán {1}"
- :storage.recycle/delete-permanently "Smazat trvale"
  :storage.recycle/empty "Koš je prázdný."
  :storage.recycle/page-deleted-at "Stránka smazána {1}"
  :storage.recycle/readonly "Koš (pouze pro čtení)"
  :storage.recycle/restore "Obnovit"
- :storage.recycle/retention-desc "Smazané stránky a bloky zde zůstávají, dokud nejsou obnoveny nebo automaticky odstraněny po 60 dnech."
+ :storage.recycle/retention-desc "Smazané stránky a bloky zde zůstávají, dokud nejsou obnoveny nebo automaticky odstraněny po 30 dnech."
  :storage.recycle/title "Koš"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

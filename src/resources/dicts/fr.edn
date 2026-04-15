@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "Erreur de sauvegarde SQLiteDB : {1}"
 
  :storage.recycle/block-deleted-at "Bloc supprimé {1}"
- :storage.recycle/delete-permanently "Supprimer définitivement"
  :storage.recycle/empty "La corbeille est vide."
  :storage.recycle/page-deleted-at "Page supprimée {1}"
  :storage.recycle/readonly "Corbeille (lecture seule)"
  :storage.recycle/restore "Restaurer"
- :storage.recycle/retention-desc "Les pages et blocs supprimés restent ici jusqu'à leur restauration ou leur suppression automatique après 60 jours."
+ :storage.recycle/retention-desc "Les pages et blocs supprimés restent ici jusqu'à leur restauration ou leur suppression automatique après 30 jours."
  :storage.recycle/title "Corbeille"
 
  :sync/assets-downloading-count "Downloading assets ({1})"
