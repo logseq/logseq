@@ -122,6 +122,7 @@
   []
   (let [online? (hooks/use-flow-state flows/network-online-event-flow)
         [expand-debug? set-expand-debug!] (hooks/use-state false)
+        show-checksums? (or config/dev? util/node-test?)
         {:keys [graph-uuid local-tx remote-tx local-checksum remote-checksum rtc-state
                 download-logs upload-logs misc-logs pending-local-ops pending-server-ops]}
         (hooks/use-flow-state (m/watch *detail-info))]
@@ -148,8 +149,8 @@
                graph-uuid (assoc :graph-uuid graph-uuid)
                local-tx (assoc :local-tx local-tx)
                remote-tx (assoc :remote-tx remote-tx)
-               local-checksum (assoc :local-checksum local-checksum)
-               remote-checksum (assoc :remote-checksum remote-checksum)
+               (and show-checksums? local-checksum) (assoc :local-checksum local-checksum)
+               (and show-checksums? remote-checksum) (assoc :remote-checksum remote-checksum)
                rtc-state (assoc :rtc-state rtc-state))
              pprint/pprint
              with-out-str)]])
