@@ -254,44 +254,34 @@
         (reset! temp-conn nil)
         (vreset! *batch-tx-data nil)))))
 
+(defn- batch-transact-listen!
+  [conn *tx-data listen-db]
+  (d/listen! conn ::batch-tx
+             (fn [tx-report]
+               (swap! *tx-data into (:tx-data tx-report))
+               (when (fn? listen-db)
+                 (listen-db tx-report)))))
+
+(defn- batch-transact-cleanup!
+  [conn]
+  (d/unlisten! conn ::batch-tx)
+  (swap! conn dissoc :skip-store? :batch-tx?))
+
 (defn batch-transact!
-  "Run batched tx work directly on `conn`, while persisting only once at the end.
-
-  Semantics:
-  - Inner txs are executed on the real conn with `:skip-store? true` to avoid
-    per-tx disk writes.
-  - Collects all intermediate `:tx-data` and emits one final synthetic tx-report
-    (`:batch-final-tx-report? true`) after the batch completes.
-  - Runs `d/store` once at the end (when storage exists).
-
-  Constraints:
-  - Not nestable: throws if called while `:batch-tx?` is already set.
-
-  Notes:
-  - `batch-tx-fn` is called as `(batch-tx-fn conn)`.
-  - `listen-db` (if provided) receives each intermediate tx-report during batch
-    execution."
+  "Run batched tx work on `conn` and persist once at the end.
+  Not nestable; throws when called inside another `:batch-tx?`."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
   (let [db-before @conn
         *tx-data (atom [])]
     (try
       (when (:batch-tx? @conn)
         (throw (ex-info "batch-transact! can't be nested called" {:tx-meta tx-meta})))
-      (d/listen! conn ::batch-tx
-                 (fn [tx-report]
-                   (swap! *tx-data into (:tx-data tx-report))
-                   (when (fn? listen-db)
-                     (listen-db tx-report))))
+      (batch-transact-listen! conn *tx-data listen-db)
       (swap! conn assoc :skip-store? true :batch-tx? true)
       (batch-tx-fn conn)
-
-      (d/unlisten! conn ::batch-tx)
-
-      (swap! conn dissoc :skip-store? :batch-tx?)
-
+      (batch-transact-cleanup! conn)
       (when-some [_storage (storage/storage @conn)]
         (d/store @conn))
-
       (let [batch-tx-data @*tx-data
             _ (reset! *tx-data nil)
             tx-report {:db-before db-before
@@ -305,8 +295,7 @@
         (reset! conn db-before)
         (throw e))
       (finally
-        (d/unlisten! conn ::batch-tx)
-        (swap! conn dissoc :skip-store? :batch-tx?)
+        (batch-transact-cleanup! conn)
         (reset! *tx-data nil)))))
 
 (def page? entity-util/page?)
