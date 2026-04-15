@@ -103,9 +103,6 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
-      - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
-
       - name: Run clj-kondo lint
         run: clojure -M:clj-kondo --parallel --lint src
 
