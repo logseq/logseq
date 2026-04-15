@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "Błąd zapisu bazy danych SQLiteDB: {1}"
 
  :storage.recycle/block-deleted-at "Blok usunięty {1}"
- :storage.recycle/delete-permanently "Usuń trwale"
  :storage.recycle/empty "Kosz jest pusty."
  :storage.recycle/page-deleted-at "Strona usunięta {1}"
  :storage.recycle/readonly "Kosz (tylko do odczytu)"
  :storage.recycle/restore "Przywróć"
- :storage.recycle/retention-desc "Usunięte strony i bloki pozostają tutaj, dopóki nie zostaną przywrócone lub automatycznie usunięte po 60 dniach."
+ :storage.recycle/retention-desc "Usunięte strony i bloki pozostają tutaj, dopóki nie zostaną przywrócone lub automatycznie usunięte po 30 dniach."
  :storage.recycle/title "Kosz"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

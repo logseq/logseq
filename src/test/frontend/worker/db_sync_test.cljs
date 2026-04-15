@@ -2320,7 +2320,7 @@
                                :block/order "a0"}
                               nil]]]
                :db-sync/inverse-outliner-ops
-               [[:remove-block-property [[:block/uuid source-uuid]
+               [[:remove-block-property [source-uuid
                                          :logseq.property/query]]
                 [:delete-blocks [[[:block/uuid query-block-uuid]]
                                  {}]]]

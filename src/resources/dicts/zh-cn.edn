@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "SQLiteDB 保存错误：{1}"
 
  :storage.recycle/block-deleted-at "块已删除 {1}"
- :storage.recycle/delete-permanently "永久删除"
  :storage.recycle/empty "回收站为空。"
  :storage.recycle/page-deleted-at "页面已删除 {1}"
  :storage.recycle/readonly "回收站是只读的。"
  :storage.recycle/restore "恢复"
- :storage.recycle/retention-desc "已删除的页面和块会保留在此处，直到被恢复或在 60 天后被自动垃圾回收。"
+ :storage.recycle/retention-desc "已删除的页面和块会保留在此处，直到被恢复或在 30 天后被自动垃圾回收。"
  :storage.recycle/title "回收站"
 
  :sync/assets-downloading-count "正在下载资源（{1}）"

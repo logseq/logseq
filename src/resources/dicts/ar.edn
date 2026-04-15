@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "خطأ في حفظ SQLiteDB: {1}"
 
  :storage.recycle/block-deleted-at "تم حذف الكتلة «{1}»"
- :storage.recycle/delete-permanently "حذف نهائي"
  :storage.recycle/empty "سلة المحذوفات فارغة."
  :storage.recycle/page-deleted-at "تم حذف الصفحة «{1}»"
  :storage.recycle/readonly "سلة المهملات (للقراءة فقط)"
  :storage.recycle/restore "استعادة"
- :storage.recycle/retention-desc "تبقى الصفحات والكتل المحذوفة هنا حتى تتم استعادتها أو يتم تنظيفها تلقائياً بعد 60 يوماً."
+ :storage.recycle/retention-desc "تبقى الصفحات والكتل المحذوفة هنا حتى تتم استعادتها أو يتم تنظيفها تلقائياً بعد 30 يوماً."
  :storage.recycle/title "سلة المحذوفات"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "SQLiteDB save error: {1}"
 
  :storage.recycle/block-deleted-at "Block deleted {1}"
- :storage.recycle/delete-permanently "Delete permanently"
  :storage.recycle/empty "Recycle is empty."
  :storage.recycle/page-deleted-at "Page deleted {1}"
  :storage.recycle/readonly "Recycle is read-only."
  :storage.recycle/restore "Restore"
- :storage.recycle/retention-desc "Deleted pages and blocks stay here until restored or automatically garbage collected after 60 days."
+ :storage.recycle/retention-desc "Deleted pages and blocks stay here until restored or automatically garbage collected after 30 days."
  :storage.recycle/title "Recycle"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

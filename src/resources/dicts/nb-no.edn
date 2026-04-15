@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "SQLiteDB-lagringsfeil: {1}"
 
  :storage.recycle/block-deleted-at "Blokk slettet {1}"
- :storage.recycle/delete-permanently "Slett permanent"
  :storage.recycle/empty "Papirkurven er tom."
  :storage.recycle/page-deleted-at "Side slettet {1}"
  :storage.recycle/readonly "Papirkurv (skrivebeskyttet)"
  :storage.recycle/restore "Gjenopprett"
- :storage.recycle/retention-desc "Slettede sider og blokker blir her til de gjenopprettes eller automatisk ryddes opp etter 60 dager."
+ :storage.recycle/retention-desc "Slettede sider og blokker blir her til de gjenopprettes eller automatisk ryddes opp etter 30 dager."
  :storage.recycle/title "Papirkurv"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

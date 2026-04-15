@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "SQLiteDB 儲存錯誤：{1}"
 
  :storage.recycle/block-deleted-at "塊已刪除 {1}"
- :storage.recycle/delete-permanently "永久刪除"
  :storage.recycle/empty "資源回收筒是空的。"
  :storage.recycle/page-deleted-at "頁面已刪除 {1}"
  :storage.recycle/readonly "回收站是唯讀的。"
  :storage.recycle/restore "還原"
- :storage.recycle/retention-desc "已刪除的頁面與區塊會保留在這裡，直到被還原或在 60 天後自動垃圾回收。"
+ :storage.recycle/retention-desc "已刪除的頁面與區塊會保留在這裡，直到被還原或在 30 天後自動垃圾回收。"
  :storage.recycle/title "資源回收筒"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

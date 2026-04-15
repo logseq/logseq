@@ -101,10 +101,10 @@
       (shui/button
        {:variant :ghost
         :size :xs
-        :class "!py-0 !px-1 h-4 hover:text-destructive"
+        :class "!py-0 !px-1 h-4 hover:text-red-rx-09 dark:hover:text-red-rx-10 hover:bg-red-rx-04-alpha dark:hover:bg-red-rx-06-alpha"
         :on-click #(when (js/confirm delete-message)
                      (page-handler/delete-recycled-permanently! root-uuid))}
-       (t :storage.recycle/delete-permanently))]]))
+       (t :ui/delete))]]))
 
 (defn- deleted-root-outliner
   [root]
@@ -120,7 +120,7 @@
    root))
 
 (rum/defc recycle-page < rum/reactive db-mixins/query
-  [_page]
+  [_page {:keys [class]}]
   (let [db* (db/get-db)
         root-ids (or (sub-deleted-root-ids)
                      [])
@@ -134,8 +134,8 @@
                     (sort-by (fn [[_ roots]]
                                (:logseq.property/deleted-at (first roots)))
                              #(compare %2 %1)))]
-    [:div.flex.flex-col.gap-1
-     [:div.text-sm.text-muted-foreground.mb-4
+    [:div {:class (util/classnames ["flex" "flex-col" "gap-8" "ls-recycle-page-content" class])}
+     [:div.text-sm.text-muted-foreground.ls-recycle-page-description.ml-1
       (t :storage.recycle/retention-desc)]
      (if (seq groups)
        (for [[title roots] groups]

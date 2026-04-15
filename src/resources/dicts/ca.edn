@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "Error de desar SQLiteDB: {1}"
 
  :storage.recycle/block-deleted-at "Bloqueig suprimit {1}"
- :storage.recycle/delete-permanently "Suprimeix permanentment"
  :storage.recycle/empty "La paperera és buida."
  :storage.recycle/page-deleted-at "Pàgina suprimida {1}"
  :storage.recycle/readonly "Paperera (només lectura)"
  :storage.recycle/restore "Restaurar"
- :storage.recycle/retention-desc "Les pàgines i els blocs suprimits es queden aquí fins que es restauren o s'eliminen automàticament després de 60 dies."
+ :storage.recycle/retention-desc "Les pàgines i els blocs suprimits es queden aquí fins que es restauren o s'eliminen automàticament després de 30 dies."
  :storage.recycle/title "Paperera"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

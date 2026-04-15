@@ -240,6 +240,16 @@ html.is-native-ios {
   @apply min-h-[60px] overflow-hidden;
 }
 
+/* Recycle page only: reduce the gap between "Recycle" title and its description label.
+   Scoped class so other pages are unaffected. */
+.ls-recycle-page-title-compact {
+  margin-top: var(--ls-recycle-page-title-description-gap-offset, -1.25rem);
+}
+
+.ls-recycle-page-description {
+  margin-bottom: var(--ls-recycle-page-description-margin-bottom, 1rem);
+}
+
 .block-add-button {
   &.selected {
     opacity: 1 !important;
