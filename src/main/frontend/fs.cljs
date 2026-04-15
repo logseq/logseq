@@ -121,7 +121,9 @@
     (if (util/electron?)
       (let [assets-dir (path/path-join repo-dir common-config/local-assets-dir)
             file-path (path/path-join assets-dir file-name)]
-        (write-file! file-path data))
+        ;; Use writeFileBytes directly instead of ipc/ipc (write-file!) because
+        ;; binary data like ArrayBuffer can't be transit-serialized
+        (js/window.apis.writeFileBytes file-path data))
       (let [file-path (path/path-join common-config/local-assets-dir file-name)]
         (write-plain-text-file! repo repo-dir file-path data {:skip-transact? true
                                                               :skip-compare? true})))))
