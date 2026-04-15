@@ -1802,9 +1802,17 @@
               (:library? config)
               (:document/mode? config))))))
 
+;; Progressive root rendering should kick in for pages with either many root
+;; blocks or heavy expanded descendant trees.
+(def ^:private defer-root-render-batch-size 1)
+(def ^:private defer-children-initial-render-budget 12)
+(def ^:private defer-children-render-batch-budget 12)
+
 (defn- should-defer-root-block-render?
-  [config anchor]
-  (let [has-anchor? (not (string/blank? anchor))]
+  [config root-block blocks anchor]
+  (let [has-anchor? (not (string/blank? anchor))
+        page-blocks-count (count (:block/_page root-block))
+        children-blocks-count (count blocks)]
     (and
      (:current-page? config)
      (zero? (or (:level config) 0))
@@ -1814,12 +1822,31 @@
               (:sidebar? config)
               (:embed? config)
               (:library? config)
-              (:document/mode? config))))))
+              (:document/mode? config)))
+     (>= (- page-blocks-count children-blocks-count) 30))))
 
 (defn- defer-placeholder-element
   []
   (js/React.createElement "div"
                           #js {:style #js {:minHeight 28}}))
+
+(defn- deferred-child-render-cost
+  [child]
+  (if (seq (:block/children child)) 4 1))
+
+(defn- deferred-children-visible-count
+  [children ready-budget]
+  (let [children-count (count children)]
+    (loop [idx 0
+           budget (max 0 ready-budget)]
+      (if (or (>= idx children-count)
+              (<= budget 0))
+        idx
+        (let [cost (deferred-child-render-cost (nth children idx))]
+          (if (>= budget cost)
+            (recur (inc idx) (- budget cost))
+            ;; Keep one child visible for progressive feedback.
+            (if (zero? idx) 1 idx)))))))
 
 (rum/defc block-children
   [config block children collapsed?]
@@ -1828,19 +1855,63 @@
         library? (:library? config)
         children (when (coll? children)
                    (let [ref-matched-children-ids (:ref-matched-children-ids config)]
-                     (cond->> (remove nil? children)
-                       ref-matched-children-ids
-                              ;; Block children will not be rendered if the filters do not match them
-                       (filter (fn [b] (ref-matched-children-ids (:db/id b))))
-                       library?
-                       (filter (fn [b] (and (ldb/page? b) (not (or (ldb/class? b) (ldb/property? b)))))))))
+                     (into []
+                           (cond->> (remove nil? children)
+                             ref-matched-children-ids
+                             ;; Block children will not be rendered if the filters do not match them
+                             (filter (fn [b] (ref-matched-children-ids (:db/id b))))
+                             library?
+                             (filter (fn [b] (and (ldb/page? b) (not (or (ldb/class? b) (ldb/property? b))))))))))
         children-count (count children)
         anchor (get-in (state/get-route-match) [:query-params :anchor])
         defer-render? (should-defer-block-children-render? config children-count anchor)
         defer-ready-index (:defer-ready-index config)
         defer-index (or (:defer-top-index config) 0)
         render-children? (or (not defer-render?)
-                             (<= defer-index defer-ready-index))]
+                             (<= defer-index defer-ready-index))
+        *defer-children-render-complete-by-root (:defer-children-render-complete-by-root* config)
+        fallback-children-ready-budget* (hooks/use-memo #(atom defer-children-initial-render-budget) [])
+        *children-ready-budget fallback-children-ready-budget*
+        [children-ready-budget] (hooks/use-atom *children-ready-budget)
+        visible-children-count (if defer-render?
+                                 (deferred-children-visible-count children children-ready-budget)
+                                 children-count)
+        children-max-render-budget (* children-count 4)
+        children-fully-rendered? (or collapsed?
+                                     (>= visible-children-count children-count))
+        children' (if (and defer-render? render-children?)
+                    (subvec children 0 visible-children-count)
+                    children)]
+    (hooks/use-effect!
+     (fn []
+       (when (and defer-render?
+                  render-children?
+                  (number? defer-index)
+                  *defer-children-render-complete-by-root)
+         (swap! *defer-children-render-complete-by-root
+                assoc
+                defer-index
+                children-fully-rendered?))
+       (if (and defer-render?
+                render-children?
+                (< visible-children-count children-count))
+         (let [raf-id (js/requestAnimationFrame
+                       (fn []
+                         (swap! *children-ready-budget
+                                (fn [v]
+                                  (min children-max-render-budget
+                                       (+ v defer-children-render-batch-budget))))))]
+           #(js/cancelAnimationFrame raf-id))
+         (fn [])))
+     [defer-render?
+      render-children?
+      defer-index
+      children-fully-rendered?
+      visible-children-count
+      children-count
+      children-max-render-budget
+      *children-ready-budget
+      *defer-children-render-complete-by-root])
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
@@ -1857,7 +1928,7 @@
                         (integer? (:block-level config))
                         (update :block-level inc))]
           (when render-children?
-            (block-list config' children)))]])))
+            (block-list config' children')))]])))
 
 (defn- block-content-empty?
   [block]
@@ -3972,33 +4043,53 @@
          (when linked-block
            (str "-" (:block/uuid original-block))))))))
 
-(rum/defc block-list
+(rum/defc ^:large-vars/cleanup-todo block-list
   [config blocks]
-  (let [[virtualized? _] (hooks/use-state (not (or (util/rtc-test?)
+  (let [blocks-count (count blocks)
+        root-block (when-let [id (:db/id config)]
+                     (db/entity id))
+        [virtualized? _] (hooks/use-state (not (or (util/rtc-test?)
                                                    (and (util/mobile?) (:journals? config))
                                                    (if (:journals? config)
-                                                     (< (count blocks) 50)
-                                                     (< (count blocks) 10))
+                                                     (< blocks-count 50)
+                                                     (< blocks-count 10))
                                                    (and (:block-children? config)
                                                         ;; zoom-in block's children
                                                         (not (and (:id config) (= (:id config) (str (:block/uuid (:block/parent (first blocks)))))))))))
         root-level? (zero? (or (:level config) 0))
         anchor (get-in (state/get-route-match) [:query-params :anchor])
         fallback-ready-index* (hooks/use-memo #(atom -1) [])
+        fallback-children-complete-by-root* (hooks/use-memo #(atom {}) [])
         *defer-ready-index (or (:defer-children-ready-index* config)
                                fallback-ready-index*)
+        *defer-children-render-complete-by-root (or (:defer-children-render-complete-by-root* config)
+                                                    fallback-children-complete-by-root*)
         [defer-ready-index] (hooks/use-atom *defer-ready-index)
-        defer-root-render? (should-defer-root-block-render? config anchor)
+        [defer-children-render-complete-by-root] (hooks/use-atom *defer-children-render-complete-by-root)
+        defer-root-render? (should-defer-root-block-render? config root-block blocks anchor)
+        current-root-block (when (<= 0 defer-ready-index (dec blocks-count))
+                             (nth blocks defer-ready-index))
+        current-root-children-need-deferring? (and current-root-block
+                                                   (not (util/collapsed? current-root-block))
+                                                   (should-defer-block-children-render?
+                                                    (assoc config :level 1 :defer-ready-index defer-ready-index)
+                                                    (count (:block/children current-root-block))
+                                                    anchor))
+        current-root-children-rendered? (or (neg? defer-ready-index)
+                                            (not current-root-children-need-deferring?)
+                                            (true? (get defer-children-render-complete-by-root
+                                                        defer-ready-index)))
         root-item-visible? (fn [idx]
                              (or (not defer-root-render?)
                                  (<= idx defer-ready-index)))
         render-item (fn [idx]
                       (let [top? (zero? idx)
-                            bottom? (= (dec (count blocks)) idx)
+                            bottom? (= (dec blocks-count) idx)
                             block (nth blocks idx)
                             config' (cond-> (assoc config :top? top?)
-                                      root-level? (assoc :defer-top-index idx)
-                                      root-level? (assoc :defer-ready-index defer-ready-index))]
+                                      (and root-level? defer-root-render?) (assoc :defer-top-index idx)
+                                      (and root-level? defer-root-render?) (assoc :defer-ready-index defer-ready-index)
+                                      (and root-level? defer-root-render?) (assoc :defer-children-render-complete-by-root* *defer-children-render-complete-by-root))]
                         (if (and root-level? (not (root-item-visible? idx)))
                           (defer-placeholder-element)
                           (block-item config'
@@ -4019,14 +4110,15 @@
                         ;; Leave some space for the new inserted block
                         :increase-viewport-by 254
                         :overscan 254
-                        :total-count (count blocks)
+                        :total-count blocks-count
                         :item-content (fn [idx]
                                         (let [top? (zero? idx)
-                                              bottom? (= (dec (count blocks)) idx)
+                                              bottom? (= (dec blocks-count) idx)
                                               block (nth blocks idx)
                                               config' (cond-> (assoc config :top? top?)
-                                                        root-level? (assoc :defer-top-index idx)
-                                                        root-level? (assoc :defer-ready-index defer-ready-index))]
+                                                        (and root-level? defer-root-render?) (assoc :defer-top-index idx)
+                                                        (and root-level? defer-root-render?) (assoc :defer-ready-index defer-ready-index)
+                                                        (and root-level? defer-root-render?) (assoc :defer-children-render-complete-by-root* *defer-children-render-complete-by-root))]
                                           (if (and root-level? (not (root-item-visible? idx)))
                                             (defer-placeholder-element)
                                             (block-item config'
@@ -4036,16 +4128,29 @@
         *wrap-ref (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
-       (let [last-idx (dec (count blocks))]
+       (let [last-idx (dec blocks-count)]
          (if (and defer-root-render?
+                  current-root-children-rendered?
                   (< defer-ready-index last-idx))
-         (let [raf-id (js/requestAnimationFrame
-                       (fn []
-                         (swap! *defer-ready-index
-                                (fn [v] (min (dec (count blocks)) (inc v))))))]
-           #(js/cancelAnimationFrame raf-id))
+           (let [raf-id (js/requestAnimationFrame
+                         (fn []
+                           (swap! *defer-ready-index
+                                  (fn [v]
+                                    (let [next-v (min (dec blocks-count)
+                                                      (+ v defer-root-render-batch-size))]
+                                      (swap! *defer-children-render-complete-by-root
+                                             assoc
+                                             next-v
+                                             false)
+                                      next-v)))))]
+             #(js/cancelAnimationFrame raf-id))
            (fn []))))
-     [defer-root-render? defer-ready-index *defer-ready-index])
+     [defer-root-render?
+      defer-ready-index
+      current-root-children-rendered?
+      blocks-count
+      *defer-ready-index
+      *defer-children-render-complete-by-root])
     (hooks/use-effect!
      (fn []
        (when virtualized?
@@ -4088,11 +4193,13 @@
   {:init (fn [state]
            (assoc state
                   ::id (str (random-uuid))
-                  ::defer-children-ready-index* (atom -1)))}
+                  ::defer-children-ready-index* (atom -1)
+                  ::defer-children-render-complete-by-root* (atom {})))}
   [state config blocks]
   (let [doc-mode? (:document/mode? config)
         id (::id state)
-        *defer-children-ready-index (::defer-children-ready-index* state)]
+        *defer-children-ready-index (::defer-children-ready-index* state)
+        *defer-children-render-complete-by-root (::defer-children-render-complete-by-root* state)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:id id
@@ -4101,6 +4208,7 @@
        (block-list (assoc config
                           :blocks-node-id id
                           :defer-children-ready-index* *defer-children-ready-index
+                          :defer-children-render-complete-by-root* *defer-children-render-complete-by-root
                           :container-id (:container-id state))
                    blocks)])))
 
