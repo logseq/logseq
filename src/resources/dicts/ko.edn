@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "SQLiteDB 저장 오류: {1}"
 
  :storage.recycle/block-deleted-at "차단이 삭제되었습니다. {1}"
- :storage.recycle/delete-permanently "영구 삭제"
  :storage.recycle/empty "휴지통이 비어 있습니다."
  :storage.recycle/page-deleted-at "페이지가 삭제되었습니다. {1}"
  :storage.recycle/readonly "휴지통 (읽기 전용)"
  :storage.recycle/restore "복원"
- :storage.recycle/retention-desc "삭제된 페이지와 블록은 복원되거나 60일 후 자동으로 정리될 때까지 여기에 남아 있습니다。"
+ :storage.recycle/retention-desc "삭제된 페이지와 블록은 복원되거나 30일 후 자동으로 정리될 때까지 여기에 남아 있습니다。"
  :storage.recycle/title "휴지통"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

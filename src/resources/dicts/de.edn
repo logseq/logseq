@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "SQLiteDB-Speicherfehler: {1}"
 
  :storage.recycle/block-deleted-at "Block gelöscht {1}"
- :storage.recycle/delete-permanently "Dauerhaft löschen"
  :storage.recycle/empty "Papierkorb ist leer."
  :storage.recycle/page-deleted-at "Seite gelöscht {1}"
  :storage.recycle/readonly "Papierkorb (Nur Lesen)"
  :storage.recycle/restore "Wiederherstellen"
- :storage.recycle/retention-desc "Gelöschte Seiten und Blöcke bleiben hier, bis sie wiederhergestellt oder nach 60 Tagen automatisch bereinigt werden."
+ :storage.recycle/retention-desc "Gelöschte Seiten und Blöcke bleiben hier, bis sie wiederhergestellt oder nach 30 Tagen automatisch bereinigt werden."
  :storage.recycle/title "Papierkorb"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

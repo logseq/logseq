@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "SQLiteDB kaydetme hatası: {1}"
 
  :storage.recycle/block-deleted-at "Blok silindi {1}"
- :storage.recycle/delete-permanently "Kalıcı olarak sil"
  :storage.recycle/empty "Geri Dönüşüm boş."
  :storage.recycle/page-deleted-at "Sayfa silindi {1}"
  :storage.recycle/readonly "Çöp kutusu (salt okunur)"
  :storage.recycle/restore "Geri yükle"
- :storage.recycle/retention-desc "Silinen sayfalar ve bloklar, geri yüklenene veya 60 gün sonra otomatik olarak temizlenene kadar burada kalır."
+ :storage.recycle/retention-desc "Silinen sayfalar ve bloklar, geri yüklenene veya 30 gün sonra otomatik olarak temizlenene kadar burada kalır."
  :storage.recycle/title "Geri Dönüşüm"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "Erro ao guardar SQLiteDB: {1}"
 
  :storage.recycle/block-deleted-at "Bloco eliminado {1}"
- :storage.recycle/delete-permanently "Eliminar permanentemente"
  :storage.recycle/empty "A reciclagem está vazia."
  :storage.recycle/page-deleted-at "Página eliminada {1}"
  :storage.recycle/readonly "Lixeira (somente leitura)"
  :storage.recycle/restore "Restaurar"
- :storage.recycle/retention-desc "As páginas e blocos eliminados ficam aqui até serem restaurados ou recolhidos automaticamente após 60 dias."
+ :storage.recycle/retention-desc "As páginas e blocos eliminados ficam aqui até serem restaurados ou recolhidos automaticamente após 30 dias."
  :storage.recycle/title "Reciclagem"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

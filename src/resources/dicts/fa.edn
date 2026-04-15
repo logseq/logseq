@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "خطای ذخیره SQLiteDB: {1}"
 
  :storage.recycle/block-deleted-at "بلوک «{1}» حذف شد"
- :storage.recycle/delete-permanently "حذف دائمی"
  :storage.recycle/empty "سطل بازیافت خالی است."
  :storage.recycle/page-deleted-at "صفحه «{1}» حذف شد"
  :storage.recycle/readonly "سطل بازیافت (فقط خواندنی)"
  :storage.recycle/restore "بازیابی"
- :storage.recycle/retention-desc "صفحه‌ها و بلوک‌های حذف‌شده تا زمانی که بازیابی شوند یا پس از ۶۰ روز به‌طور خودکار پاک‌سازی شوند، اینجا می‌مانند。"
+ :storage.recycle/retention-desc "صفحه‌ها و بلوک‌های حذف‌شده تا زمانی که بازیابی شوند یا پس از ۳۰ روز به‌طور خودکار پاک‌سازی شوند، اینجا می‌مانند。"
  :storage.recycle/title "سطل بازیافت"
 
  :sync/assets-downloading-count "Downloading assets ({1})"

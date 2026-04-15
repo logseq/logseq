@@ -1093,9 +1093,9 @@
            (when timeout-id
              (js/clearTimeout timeout-id)))))
      [])
-    [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
+    [:div.cp__cmdk-input-row {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input.cp__cmdk-search-input
-      {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
+      {:class "text-xl bg-transparent !border-none w-full !outline-none !shadow-none px-3 py-3 focus:!border-none focus:!outline-none focus:!shadow-none focus-visible:!outline-none focus-visible:!shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0"
        :auto-focus true
        :autoComplete "off"
        :autoCapitalize "off"

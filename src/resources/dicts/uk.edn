@@ -1699,12 +1699,11 @@
  :storage/sqlitedb-save-error "Помилка збереження SQLiteDB: {1}"
 
  :storage.recycle/block-deleted-at "Блок видалено {1}"
- :storage.recycle/delete-permanently "Видалити назавжди"
  :storage.recycle/empty "Кошик порожній."
  :storage.recycle/page-deleted-at "Сторінку видалено {1}"
  :storage.recycle/readonly "Корзина (тільки чтение)"
  :storage.recycle/restore "Відновити"
- :storage.recycle/retention-desc "Видалені сторінки та блоки залишаються тут, доки їх не буде відновлено або автоматично очищено через 60 днів."
+ :storage.recycle/retention-desc "Видалені сторінки та блоки залишаються тут, доки їх не буде відновлено або автоматично очищено через 30 днів."
  :storage.recycle/title "Кошик"
 
  :sync/assets-downloading-count "Downloading assets ({1})"
