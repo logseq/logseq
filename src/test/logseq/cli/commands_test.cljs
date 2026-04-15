@@ -1149,7 +1149,6 @@
     (let [result (commands/parse-args ["list" "node"
                                        "--tags" "project,work"
                                        "--properties" "status,priority"
-                                       "--expand"
                                        "--fields" "id,title,type,updated-at"
                                        "--limit" "10"
                                        "--offset" "2"
@@ -1159,7 +1158,6 @@
       (is (= :list-node (:command result)))
       (is (= "project,work" (get-in result [:options :tags])))
       (is (= "status,priority" (get-in result [:options :properties])))
-      (is (true? (get-in result [:options :expand])))
       (is (= "id,title,type,updated-at" (get-in result [:options :fields])))
       (is (= 10 (get-in result [:options :limit])))
       (is (= 2 (get-in result [:options :offset])))
@@ -1168,7 +1166,6 @@
 
   (testing "list asset parses with common list options"
     (let [result (commands/parse-args ["list" "asset"
-                                       "--expand"
                                        "--fields" "id,title,asset-type,size,updated-at"
                                        "--limit" "5"
                                        "--offset" "1"
@@ -1176,7 +1173,6 @@
                                        "--order" "desc"])]
       (is (true? (:ok? result)))
       (is (= :list-asset (:command result)))
-      (is (true? (get-in result [:options :expand])))
       (is (= "id,title,asset-type,size,updated-at" (get-in result [:options :fields])))
       (is (= 5 (get-in result [:options :limit])))
       (is (= 1 (get-in result [:options :offset])))
