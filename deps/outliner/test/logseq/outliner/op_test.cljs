@@ -100,6 +100,26 @@
         (is (= "some content"
                (:block/title (:plugin.property._test_plugin/x8 block'))))))))
 
+(deftest remove-block-property-op-rejects-lookup-ref-block-id-test
+  (testing "remove-block-property rejects lookup-ref block ids"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Test"}
+                  :blocks [{:block/title "Block"}]}])
+          block (db-test/find-block-by-content @conn "Block")
+          block-uuid (:block/uuid block)]
+      (outliner-property/set-block-property! conn
+                                             [:block/uuid block-uuid]
+                                             :logseq.property/order-list-type
+                                             "number")
+      (is (some? (:logseq.property/order-list-type
+                  (d/entity @conn [:block/uuid block-uuid]))))
+      (is (thrown? js/Error
+                   (outliner-op/apply-ops!
+                    conn
+                    [[:remove-block-property [[:block/uuid block-uuid]
+                                              :logseq.property/order-list-type]]]
+                    {}))))))
+
 (deftest direct-plugin-many-page-property-appends-values-test
   (testing "direct property operations keep both page values"
     (let [conn (db-test/create-conn-with-blocks

@@ -554,7 +554,7 @@
     (let [conn (worker-state/get-datascript-conn test-repo)
           block-uuid (:block/uuid (db-test/find-block-by-content @conn "task"))]
       (apply-ops! conn
-                              [[:set-block-property [[:block/uuid block-uuid]
+                              [[:set-block-property [block-uuid
                                                      :logseq.property/status
                                                      :logseq.property/status.todo]]]
                               (local-tx-meta {:client-id "test-client"}))
@@ -1120,7 +1120,7 @@
                                   (local-tx-meta {:client-id "test-client"}))
           (worker-undo-redo/clear-history! test-repo)
           (apply-ops! conn
-                                  [[:set-block-property [[:block/uuid child-uuid]
+                                  [[:set-block-property [child-uuid
                                                          property-id
                                                          "value-1"]]]
                                   (local-tx-meta {:client-id "test-client"}))

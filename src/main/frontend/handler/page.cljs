@@ -135,7 +135,7 @@
 
 (defn update-public-attribute!
   [page value]
-  (db-property-handler/set-block-property! [:block/uuid (:block/uuid page)] :logseq.property/publishing-public? value))
+  (db-property-handler/set-block-property! (:block/uuid page) :logseq.property/publishing-public? value))
 
 (defn get-page-ref-text
   [page]
