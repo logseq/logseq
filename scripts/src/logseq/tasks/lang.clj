@@ -8,7 +8,8 @@
             [clojure.string :as string]
             [frontend.dicts :as dicts]
             [logseq.tasks.lang-lint :as lang-lint]
-            [logseq.tasks.util :as task-util]))
+            [logseq.tasks.util :as task-util]
+            [rewrite-clj.node :as node]))
 
 (defn- get-dicts
   []
@@ -83,6 +84,123 @@
                               (rewrite/dissoc result k))
                             result invalid-keys))]
       (spit (fs/file path) new-content))))
+
+(def ^:private dicts-dir
+  (fs/path "src/resources/dicts"))
+
+(def ^:private ignored-dict-node-tags
+  #{:comment :newline :whitespace})
+
+(defn- ignored-dict-node?
+  [node]
+  (contains? ignored-dict-node-tags (node/tag node)))
+
+(defn- dict-map-node
+  [root]
+  (->> (:children root)
+       (remove ignored-dict-node?)
+       first))
+
+(defn- parse-dict-entries
+  [text]
+  (let [root (rewrite/parse-string text)
+        map-node (dict-map-node root)]
+    (when-not (= :map (node/tag map-node))
+      (println "Expected a top-level map in dictionary file.")
+      (System/exit 1))
+    (let [entry-nodes (->> (:children map-node)
+                           (remove ignored-dict-node?))]
+      (when (odd? (count entry-nodes))
+        (println "Encountered an uneven number of top-level dictionary nodes.")
+        (System/exit 1))
+      (mapv (fn [[key-node value-node]]
+              {:key (rewrite/sexpr key-node)
+               :value-node value-node})
+            (partition 2 entry-nodes)))))
+
+(defn- render-dict-entry
+  [{:keys [key value-node]}]
+  (str " " key " " value-node))
+
+(defn- key-namespace-root
+  [key]
+  (some-> key namespace (string/split #"\.") first))
+
+(defn- key-leaf
+  [key]
+  (name key))
+
+(defn- compare-dict-keys
+  [key-a key-b]
+  (let [namespace-a (namespace key-a)
+        namespace-b (namespace key-b)
+        root-a (key-namespace-root key-a)
+        root-b (key-namespace-root key-b)
+        root-diff (compare root-a root-b)]
+    (cond
+      (not= 0 root-diff)
+      root-diff
+
+      (not= namespace-a root-a)
+      (if (= namespace-b root-b) 1
+          (let [namespace-diff (compare namespace-a namespace-b)]
+            (if (zero? namespace-diff)
+              (compare (key-leaf key-a) (key-leaf key-b))
+              namespace-diff)))
+
+      (not= namespace-b root-b)
+      -1
+
+      :else
+      (compare (key-leaf key-a) (key-leaf key-b)))))
+
+(defn- render-dict
+  [entries]
+  (let [sorted-entries (sort #(neg? (compare-dict-keys (:key %1) (:key %2))) entries)
+        lines (loop [remaining sorted-entries
+                     previous-namespace nil
+                     acc ["{"]]
+                (if-let [{:keys [key] :as entry} (first remaining)]
+                  (let [current-namespace (namespace key)
+                        acc (cond-> acc
+                              (and previous-namespace
+                                   (not= previous-namespace current-namespace))
+                              (conj "")
+                              true
+                              (conj (render-dict-entry entry)))]
+                    (recur (next remaining) current-namespace acc))
+                  (conj acc "}")))]
+    (str (string/join "\n" lines) "\n")))
+
+(defn- dict-file-paths
+  []
+  (->> (fs/list-dir dicts-dir)
+       (filter #(string/ends-with? (str %) ".edn"))
+       (sort-by fs/file-name)))
+
+(defn format-dicts
+  "Formats dictionary files by full-key sort order and inserts a blank line
+   between namespace groups. Use --check to fail when any file would change."
+  [& args]
+  (let [check? (contains? (set args) "--check")
+        changed? (volatile! false)]
+    (doseq [path (dict-file-paths)]
+      (let [file-name (fs/file-name path)
+            current-text (slurp (str path))
+            output-text (-> current-text
+                            parse-dict-entries
+                            render-dict)]
+        (if (= current-text output-text)
+          (println file-name ": already formatted")
+          (do
+            (vreset! changed? true)
+            (if check?
+              (println file-name "would change")
+              (do
+                (spit (str path) output-text)
+                (println file-name ": formatted")))))))
+    (when (and check? @changed?)
+      (System/exit 1))))
 
 (defn- validate-non-default-languages
   "This validation finds any translation keys that don't exist in the default
