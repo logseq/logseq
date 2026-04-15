@@ -448,18 +448,20 @@ DROP TRIGGER IF EXISTS blocks_au;
   "Build a block title indice from scratch.
    Incremental page title indice is implemented in frontend.search.sync-search-indice!"
   [repo db]
-  (let [blocks (->> (get-all-fuzzy-supported-blocks db)
-                    (map block->index)
-                    (bean/->js))
-        indice (fuse. blocks
-                      (clj->js {:keys ["title"]
-                                :shouldSort true
-                                :tokenize true
-                                :distance 1024
-                                :threshold 0.5 ;; search for 50% match from the start
-                                :minMatchCharLength 1}))]
-    (swap! fuzzy-search-indices assoc repo indice)
-    indice))
+  (prn :debug :build-fuzzy-search-indice :graph repo)
+  (time
+    (let [blocks (->> (get-all-fuzzy-supported-blocks db)
+                     (map block->index)
+                     (bean/->js))
+         indice (fuse. blocks
+                       (clj->js {:keys ["title"]
+                                 :shouldSort true
+                                 :tokenize true
+                                 :distance 1024
+                                 :threshold 0.5 ;; search for 50% match from the start
+                                 :minMatchCharLength 1}))]
+     (swap! fuzzy-search-indices assoc repo indice)
+     indice)))
 
 (defn fuzzy-search
   "Return a list of blocks (pages && tagged blocks) that match the query. Takes the following
