@@ -273,11 +273,14 @@ if [[ "$SKIP_DESKTOP" == false ]]; then
     fi
 
     # Copy icon to standard location
-    ICON_DIR="/usr/share/icons/hicolor/512x512/apps/"
     if [[ "$USER_INSTALL" == true ]]; then
-        ICON_DIR="$HOME/.local/share/icons/hicolor/512x512/apps/"
-        mkdir -p "$ICON_DIR"
+        ICON_DIR="$HOME/.local/share/icons/hicolor/512x512/apps"
+    else
+        ICON_DIR="/usr/share/icons/hicolor/512x512/apps"
     fi
+    
+    # Ensure the directory exists regardless of install type
+    mkdir -p "$ICON_DIR"
     
     # Create desktop file
     cat > "$DESKTOP_FILE" << DESKTOP_EOF
@@ -297,17 +300,18 @@ DESKTOP_EOF
     # Make desktop file executable
     chmod +x "$DESKTOP_FILE"
     
-    if [[ -f "$INSTALL_DIR/resources/app.asar.unpacked/dist/icon.png" ]]; then
-        
+    # 1. Find and copy the icon (try current paths first, then fallbacks)
+    if [[ -f "$INSTALL_DIR/resources/app/icons/logseq.png" ]]; then
+        cp "$INSTALL_DIR/resources/app/icons/logseq.png" "$ICON_DIR/logseq.png"
+    elif [[ -f "$INSTALL_DIR/resources/app.asar.unpacked/dist/icon.png" ]]; then
         cp "$INSTALL_DIR/resources/app.asar.unpacked/dist/icon.png" "$ICON_DIR/logseq.png"
-        
-        # Update desktop file to use the copied icon
-        if [[ "$USER_INSTALL" == false ]]; then
-            sed -i 's|Icon=$INSTALL_DIR/resources/app.asar.unpacked/dist/icon.png|Icon=logseq|' "$DESKTOP_FILE"
-        fi
-    fi
-    if [[ "$USER_INSTALL" == true && -f "$INSTALL_DIR/resources/app/icon.png" ]]; then
+    elif [[ -f "$INSTALL_DIR/resources/app/icon.png" ]]; then
         cp "$INSTALL_DIR/resources/app/icon.png" "$ICON_DIR/logseq.png"
+    fi
+    
+    # 2. Update desktop file to use purely the icon name for system-wide installs
+    if [[ "$USER_INSTALL" == false ]]; then
+        sed -i "s|Icon=$ICON_DIR/logseq.png|Icon=logseq|" "$DESKTOP_FILE"
     fi
     
     # Update desktop database
@@ -323,7 +327,14 @@ rm -rf "$TEMP_DIR"
 
 # Verify installation
 if command -v logseq >/dev/null 2>&1; then
-    INSTALLED_VERSION=$(logseq --version 2>/dev/null | head -1 || echo "unknown")
+    # Safely extract the version number from `package.json` as a priority, preventing the script from hanging during the launch of the Electron process.
+    if [[ -f "$INSTALL_DIR/resources/app/package.json" ]]; then
+        INSTALLED_VERSION=$(grep -m 1 '"version"' "$INSTALL_DIR/resources/app/package.json" | cut -d'"' -f4 || echo "unknown")
+    else
+        # Fallback Plan: Add a 2-second timeout to forcibly terminate the process, preventing the application from hanging.
+        INSTALLED_VERSION=$(timeout 2 logseq --version 2>/dev/null | head -1 || echo "unknown")
+    fi
+    
     log_info "Logseq installed successfully!"
     log_info "Version: $INSTALLED_VERSION"
     log_info "Location: $INSTALL_DIR"
