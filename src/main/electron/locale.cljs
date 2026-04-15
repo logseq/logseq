@@ -1,4 +1,5 @@
 (ns electron.locale
+  "Electron locale synchronization helpers."
   (:require [electron.ipc :as ipc]))
 
 (defn push-locale!
