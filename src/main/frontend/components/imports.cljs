@@ -486,7 +486,7 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-              [[:strong (t :import/sqlite-title)]
+              [[:strong "SQLite"]
              [:small (t :onboarding.import/sqlite-desc)]]]
            [:input.absolute.hidden
             {:id "import-sqlite-db"

@@ -435,8 +435,8 @@
       [:p [:label [:strong (t :ui/type)]
              (ui/select [{:label (t :plugin.proxy/system) :value "system" :selected (= type "system")}
                          {:label (t :plugin.proxy/direct) :value "direct" :selected (= type "direct")}
-                         {:label (t :plugin.proxy/http) :value "http" :selected (= type "http")}
-                         {:label (t :plugin.proxy/socks5) :value "socks5" :selected (= type "socks5")}]
+                         {:label "HTTP" :value "http" :selected (= type "http")}
+                         {:label "SOCKS5" :value "socks5" :selected (= type "socks5")}]
                       (fn [_e value]
                         (set-opts! (assoc opts :type value :protocol value))))]]
       [:p.flex
