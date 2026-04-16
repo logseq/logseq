@@ -967,6 +967,18 @@
                                            (and (map? entry)
                                                 (contains? entry :block/page)))
                                          %))
+                             @selectors))
+                   (is (some (fn [selector]
+                               (and (some #{:logseq.property/created-from-property} selector)
+                                    (some (fn [entry]
+                                            (and (map? entry)
+                                                 (contains? entry :block/page)))
+                                          selector)
+                                    (some (fn [entry]
+                                            (and (map? entry)
+                                                 (contains? entry :block/tags)
+                                                 (some #{:db/ident} (:block/tags entry))))
+                                          selector)))
                              @selectors))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
