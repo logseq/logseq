@@ -154,6 +154,13 @@ allow_strings = [
   ":END:",
   # Common non-translatable UI labels.
   "URL",
+  "OPML",
+  "EDN",
+  "HTML",
+  "PNG",
+  "SQLite",
+  "HTTP",
+  "SOCKS5",
   # Config directory path shown literally.
   "~/.logseq",
 ]

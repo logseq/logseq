@@ -255,22 +255,22 @@
                   :class "mr-4 w-20"
                   :on-click #(do (reset! *export-block-type :text)
                                  (reset! *content (export-helper top-level-uuids))))
-       (ui/button (t :export/format-opml)
+       (ui/button "OPML"
                   :class "mr-4 w-20"
                   :on-click #(do (reset! *export-block-type :opml)
                                  (reset! *content (export-helper top-level-uuids))))
-       (ui/button (t :export/format-html)
+       (ui/button "HTML"
                   :class "mr-4 w-20"
                   :on-click #(do (reset! *export-block-type :html)
                                  (reset! *content (export-helper top-level-uuids))))
        ;; TODO: Remove if this is no longer used after whiteboard removal
        (when-not (seq? top-level-uuids)
-         (ui/button (t :export/format-png)
+         (ui/button "PNG"
                     :class "mr-4 w-20"
                     :on-click #(do (reset! *export-block-type :png)
                                    (reset! *content nil)
                                    (get-image-blob top-level-uuids (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))
-       (ui/button (t :export/format-edn)
+       (ui/button "EDN"
                   :class "w-20"
                   :on-click #(do (reset! *export-block-type :edn)
                                  (p/let [result (<export-edn-helper top-level-uuids export-type)
