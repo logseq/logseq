@@ -284,8 +284,7 @@
   [repo]
   (mark-pending-txs-false! repo (mapv :tx-id (pending-txs repo))))
 
-(declare replay-canonical-outliner-op!
-         history-action-error-reason)
+(declare history-action-error-reason)
 
 (defn- inline-history-action
   [tx-meta]

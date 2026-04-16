@@ -13,7 +13,7 @@
             [electron.server :as server]
             [electron.updater :refer [init-updater] :as updater]
             [electron.url :refer [logseq-url-handler]]
-            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
+            [electron.utils :refer [*win mac? dev? get-win-from-sender
                                     decode-protected-assets-schema-path send-to-renderer]
              :as utils]
             [electron.window :as win]
