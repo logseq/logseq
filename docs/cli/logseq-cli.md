@@ -369,9 +369,18 @@ JSON key migration (flat -> namespaced):
 - `query` human output returns a plain string (the query result rendered via `pr-str`), which is convenient for pipelines like `logseq query ... | xargs logseq show --id`.
 - Built-in named queries currently include `block-search`, `task-search`, `recent-updated`, `list-status`, and `list-priority`. Use `query list` to see the full set for your config.
 - Show output resolves block reference UUIDs inside text, replacing `[[<uuid>]]` with the referenced block content. Nested references are resolved recursively up to 10 levels to avoid excessive expansion. For example: `[[<uuid1>]]` → `[[some text [[<uuid2>]]]]` and then `<uuid2>` is also replaced.
-- `show` human output prints the `:db/id` as the first column followed by a tree:
+- When `show` targets an ordinary block (`--id` or `--uuid`), human output prepends one breadcrumb line (`page > ... > nearest parent`) above the root block line. Each segment is display-width truncated to `24` with `…`.
 
+```text
+Project Alpha > Milestone 2026 > API rollout
+5137 Implement retry policy for upload worker
+5138 ├── Add timeout backoff guard
+5139 └── Add deterministic retry test
 ```
+
+- `show` tree lines print `:db/id` as the first column:
+
+```text
 id1 block1
 id2 ├── b2
 id3 │   └── b3
