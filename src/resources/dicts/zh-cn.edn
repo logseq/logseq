@@ -1832,7 +1832,6 @@
  :view.table/group-page-created-date "页面创建日期"
  :view.table/group-page-name "页面名称"
  :view.table/group-page-updated-date "页面更新日期"
- :view.table/id-column "ID"
  :view.table/live-query-title "实时查询（{1}）"
  :view.table/name-column "名称"
  :view.table/no-group-value "无 {1}"

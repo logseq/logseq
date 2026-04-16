@@ -1832,7 +1832,6 @@
  :view.table/group-page-created-date "Page created date"
  :view.table/group-page-name "Page name"
  :view.table/group-page-updated-date "Page updated date"
- :view.table/id-column "ID"
  :view.table/live-query-title "Live query ({1})"
  :view.table/name-column "Name"
  :view.table/no-group-value "No {1}"
