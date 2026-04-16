@@ -546,7 +546,8 @@
            [:div.property-key property-key-cp'])
 
          (let [property-desc (when-not (= (:db/ident property) :logseq.property/description)
-                               (:logseq.property/description property))]
+                               (:logseq.property/description property))
+               block' (assoc block (:db/ident property) v)]
            [:div.ls-block.property-value-container.flex.flex-row.gap-1
             {:class (if (contains? #{:checkbox :date :datetime} type)
                       "items-center"
@@ -560,7 +561,67 @@
              [:div.property-value.flex.flex-1
               (if (:class-schema? opts)
                 (pv/property-value property (db/entity :logseq.property/description) opts)
-                (pv/property-value block property opts))]]])]))))
+                (pv/property-value block' property opts))]]])]))))
+
+(defn- entity-ref-value?
+  [value]
+  (and (map? value)
+       (or (contains? value :db/id)
+           (contains? value :block/uuid))))
+
+(defn- contains-recycled-entity-value?
+  [value]
+  (cond
+    (entity-ref-value? value)
+    (ldb/recycled? value)
+
+    (and (coll? value) (not (map? value)))
+    (some (fn [item]
+            (and (entity-ref-value? item)
+                 (ldb/recycled? item)))
+          value)
+
+    :else
+    false))
+
+(defn- filter-recycled-entity-values
+  [value]
+  (let [active-entity-value? (fn [item]
+                               (or (not (entity-ref-value? item))
+                                   (not (ldb/recycled? item))))]
+    (cond
+      (and (entity-ref-value? value) (ldb/recycled? value))
+      nil
+
+      (set? value)
+      (let [value' (set (filter active-entity-value? value))]
+        (when (seq value') value'))
+
+      (vector? value)
+      (let [value' (vec (filter active-entity-value? value))]
+        (when (seq value') value'))
+
+      (and (coll? value) (not (map? value)))
+      (let [value' (vec (filter active-entity-value? value))]
+        (when (seq value') value'))
+
+      :else
+      value)))
+
+(defn- sanitize-property-values-for-display
+  [properties]
+  (reduce-kv
+   (fn [{:keys [properties recycled-only-property-ids] :as result} property-id property-value]
+     (let [property-value' (filter-recycled-entity-values property-value)]
+       (if (and (nil? property-value')
+                (contains-recycled-entity-value? property-value))
+         (assoc result
+                :properties (assoc properties property-id nil)
+                :recycled-only-property-ids (conj recycled-only-property-ids property-id))
+         (assoc result :properties (assoc properties property-id property-value')))))
+   {:properties {}
+    :recycled-only-property-ids #{}}
+   properties))
 
 (rum/defc ordered-properties
   [block properties* sorted-property-entities opts]
@@ -603,7 +664,7 @@
                                                    (let [prev-order (db-order/get-prev-order (db/get-db) nil (:db/id over))]
                                                      (db-order/gen-key prev-order over-order)))]
                                  (db/transact! (state/get-current-repo)
-                                               [{:db/id (:db/id active)
+                                               [{:block/uuid (:block/uuid active)
                                                  :block/order new-order}
                                                 (outliner-core/block-with-updated-at
                                                  {:db/id (:db/id block)})]
@@ -656,11 +717,13 @@
                                             (and show?
                                                  (or (= mode :global)
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))
-        properties (cond-> (:block/properties block)
-                     (and (ldb/class? block)
-                          (not (ldb/built-in? block)))
-                     (assoc :logseq.property.class/enable-bidirectional?
-                            (:logseq.property.class/enable-bidirectional? block)))
+        properties* (cond-> (:block/properties block)
+                      (and (ldb/class? block)
+                           (not (ldb/built-in? block)))
+                      (assoc :logseq.property.class/enable-bidirectional?
+                             (:logseq.property.class/enable-bidirectional? block)))
+        {:keys [properties recycled-only-property-ids]}
+        (sanitize-property-values-for-display properties*)
         remove-built-in-or-other-position-properties
         (fn [properties show-in-hidden-properties?]
           (remove (fn [property]
@@ -686,6 +749,7 @@
         {:keys [all-classes classes-properties]} (outliner-property/get-block-classes-properties (db/get-db) (:db/id block))
         classes-properties-set (set (map :db/ident classes-properties))
         block-own-properties (->> properties
+                                  (remove (fn [[id _]] (contains? recycled-only-property-ids id)))
                                   (remove (fn [[id _]] (classes-properties-set id))))
         state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))
         ;; This section produces own-properties and full-hidden-properties
@@ -696,7 +760,7 @@
                                      show-empty-and-hidden-properties?
                                      false
                                      state-hide-empty-properties?
-                                     (nil? (get block property-id))
+                                     (nil? (get properties property-id))
                                      (and (:logseq.property/hide-empty-value property)
                                           (nil? (get properties property-id)))
                                      true
@@ -732,11 +796,15 @@
                                         (into result cur-properties)
                                         result)))
                              result))
+        class-property-pairs (->> class-properties
+                                  (map (fn [p] [p (get properties p)]))
+                                  (remove (fn [[property-id _]]
+                                            (contains? recycled-only-property-ids property-id))))
         full-properties (-> (concat block-own-properties'
-                                    (remove property-hide-f (map (fn [p] [p (get block p)]) class-properties)))
+                                    (remove property-hide-f class-property-pairs))
                             (remove-built-in-or-other-position-properties false))
         hidden-properties (-> (concat block-hidden-properties
-                                      (filter property-hide-f (map (fn [p] [p (get block p)]) class-properties)))
+                                      (filter property-hide-f class-property-pairs))
                               (remove-built-in-or-other-position-properties true))
         root-block? (or (= (str (:block/uuid block))
                            (state/get-current-page))

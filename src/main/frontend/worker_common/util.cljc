@@ -22,7 +22,11 @@
         (do ~@body))))
 
 #?(:cljs
-   (def dev? js/goog.DEBUG))
+   (do
+     (goog-define NODETEST false)
+     (def dev? js/goog.DEBUG)
+     (def node-test? NODETEST)
+     (def dev-or-test? (or dev? node-test?))))
 
 #?(:cljs
    (do

@@ -20,7 +20,6 @@
             [frontend.db :as db]
             [frontend.handler :as handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
-            [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
@@ -359,34 +358,24 @@
                (ldb/page? page) (:block/parent page))
       [:div.ls-block-breadcrumb
        [:div.text-sm
-        (component-block/breadcrumb {}
+       (component-block/breadcrumb {}
                                     (state/get-current-repo)
                                     (:block/uuid page)
                                     {:header? true})]])))
 
-(rum/defc semantic-search-progressing
-  [repo]
-  (let [[vec-search-state set-vec-search-state] (hooks/use-state nil)
-        {:keys [indexing?]} (get-in vec-search-state [:repo->index-info repo])]
-    (hooks/use-effect!
-     (fn []
-       (c.m/run-task
-         ::update-vec-search-state
-         (m/reduce
-          (fn [_ v]
-            (set-vec-search-state v))
-          (m/ap
-            (m/?> vector-search-flows/infer-worker-ready-flow)
-            (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-update-index-info repo))
-            (m/?> vector-search-flows/vector-search-state-flow)))
-         :succ (constantly nil)))
-     [])
-    (when indexing?
-      (shui/button
-       {:class   "opacity-50"
-        :variant :ghost
-        :size    :sm}
-       "Embedding..."))))
+(rum/defc search-index-progress < rum/reactive
+  []
+  (let [current-repo (state/get-current-repo)
+        {:keys [running? repo progress]} (or (state/sub :search/index-build) {})
+        progress' (-> (or progress 0)
+                      (max 0)
+                      (min 100))]
+    (when (and running? (= repo current-repo))
+      [:div.search-index-progress
+       [ui/loading ""]
+       [:span.search-index-progress__text (str "Indexing " progress' "%")]
+       [:div.search-index-progress__bar
+        [:div.search-index-progress__bar-fill {:style {:width (str progress' "%")}}]]])))
 
 (rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
   [{:keys [current-repo default-home new-block-mode]}]
@@ -450,8 +439,7 @@
          (rtc-indicator/downloading-detail))
        (when (user-handler/logged-in?)
          (rtc-indicator/uploading-detail))
-
-       (semantic-search-progressing current-repo)
+       (search-index-progress)
 
        (when (and (not= (state/get-current-route) :home)
                   (not custom-home-page?))

@@ -142,5 +142,4 @@
             :logseq.kv/graph-local-tx   ;rtc related
             :logseq.kv/remote-schema-version ;rtc related
             :logseq.kv/graph-rtc-e2ee?  ;rtc related
-            :logseq.kv/graph-text-embedding-model-name ;embedding
             ])))

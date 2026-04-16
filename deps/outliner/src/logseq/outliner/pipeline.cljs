@@ -65,7 +65,7 @@
   (let [property-ent (d/entity db property)
         allowed-datetime? (and (= :datetime (:logseq.property/type property-ent))
                                ;; Only allow a few built-in properties as some built-in properties
-                               ;; like :logseq.property.embedding/hnsw-label-updated-at create undesirable refs
+                               ;; can create undesirable refs
                                (if (db-property/internal-property? (:db/ident property-ent))
                                  (contains? #{:logseq.property/scheduled :logseq.property/deadline} (:db/ident property-ent))
                                  ;; All user properties are allowed to create refs but not plugin properties

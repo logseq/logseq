@@ -89,6 +89,12 @@
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
 
+  dev:create-clojure-log-graph
+  {:doc "Import local clojure-log chats into a DB graph"
+   :task (apply shell {:dir "deps/outliner"}
+                "yarn -s nbb-logseq ../../scripts/src/logseq/tasks/db_graph/create_graph_with_clojure_irc_history.cljs"
+                *command-line-args*)}
+
   dev:import
   {:doc "Import a file graph to db graph"
    :requires ([babashka.fs :as fs])
@@ -158,6 +164,9 @@
 
   dev:lint-and-test
   logseq.tasks.dev/lint-and-test
+
+  dev:lint-test-deps
+  logseq.tasks.dev.lint-test-deps/run
 
   dev:e2e-basic-test
   logseq.tasks.dev/e2e-basic-test

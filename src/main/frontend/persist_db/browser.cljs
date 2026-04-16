@@ -6,7 +6,6 @@
             [electron.ipc :as ipc]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.config :as config]
-            [frontend.db :as db]
             [frontend.db.transact :as db-transact]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
@@ -21,6 +20,38 @@
 (def-thread-api :thread-api/input-idle?
   [repo diff]
   (state/input-idle? repo :diff diff))
+
+(def-thread-api :thread-api/search-index-build-progress
+  [repo {:keys [status progress processed total]}]
+  (let [prev-state (get @state/state :search/index-build)
+        current-repo (state/get-current-repo)
+        visible-repo? (or (= repo current-repo)
+                          (= repo (:repo prev-state)))]
+    (when visible-repo?
+      (case status
+        :idle
+        (state/set-state! :search/index-build
+                          (assoc (or prev-state {})
+                                 :running? false
+                                 :repo repo))
+
+        :running
+        (state/set-state! :search/index-build
+                          {:running? true
+                           :repo repo
+                           :progress (or progress 0)
+                           :processed (or processed 0)
+                           :total (or total 0)})
+
+        :completed
+        (state/set-state! :search/index-build
+                          {:running? false
+                           :repo repo
+                           :progress (or progress 0)
+                           :processed (or processed 0)
+                           :total (or total 0)})
+        nil))
+    nil))
 
 (defn- ask-persist-permission!
   []
@@ -48,7 +79,9 @@
                        old-state (f prev)
                        new-state (f current)]
                    (when (not= new-state old-state)
-                     (undo-redo/record-ui-state! (state/get-current-repo) (ldb/write-transit-str {:old-state old-state :new-state new-state}))))))))
+                     (let [repo (state/get-current-repo)
+                           ui-state-str (ldb/write-transit-str {:old-state old-state :new-state new-state})]
+                       (undo-redo/record-ui-state! repo ui-state-str))))))))
 
 (defn transact!
   [repo tx-data tx-meta]
@@ -96,14 +129,6 @@
   (reset! state/*db-worker-thread nil)
   (reset! state/*db-worker nil))
 
-(defn stop-inference-worker!
-  []
-  (when-let [^js port @state/*infer-worker-port]
-    (set! (.-onmessage port) nil)
-    (.close port))
-  (reset! state/*infer-worker-port nil)
-  (reset! state/*infer-worker nil))
-
 (defn start-db-worker!
   []
   (when-not util/node-test?
@@ -122,12 +147,8 @@
                             (p/let [result (.remoteInvoke ^js wrapped-worker*
                                                           (str (namespace qkw) "/" (name qkw))
                                                           direct-pass?
-                                                          (cond
-                                                            (= qkw :thread-api/set-infer-worker-proxy)
-                                                            (first args)
-                                                            direct-pass?
+                                                          (if direct-pass?
                                                             (into-array args)
-                                                            :else
                                                             (ldb/write-transit-str args)))]
                               (if direct-pass?
                                 result
@@ -140,8 +161,8 @@
        (-> (p/let [_ (state/<invoke-db-worker :thread-api/init)
                    _ (state/<invoke-db-worker :thread-api/set-db-sync-config
                                               {:enabled? true
-                                               :ws-url config/db-sync-ws-url
-                                               :http-base config/db-sync-http-base})
+                                               :ws-url (config/db-sync-ws-url)
+                                               :http-base (config/db-sync-http-base)})
                    _ (state/pub-event! [:rtc/sync-app-state])
                    _ (log/info "init worker spent" (str (- (util/time-ms) t1) "ms"))
                    _ (sync-ui-state!)
@@ -156,38 +177,6 @@
                                       (assoc tx-meta :client-id (:client-id @state/state))))))
            (p/catch (fn [error]
                       (log/error :init-sqlite-wasm-error ["Can't init SQLite wasm" error]))))))))
-
-(defn <check-webgpu-available?
-  []
-  (if (some? js/navigator.gpu)
-    (p/chain (js/navigator.gpu.requestAdapter) some?)
-    (p/promise false)))
-
-(defn start-inference-worker!
-  []
-  (when-not util/node-test?
-    (stop-inference-worker!)
-    (let [worker-url "js/inference-worker.js"
-          ^js worker (js/SharedWorker.
-                      (str worker-url
-                           "?electron=" (util/electron?)
-                           "&capacitor=" (util/capacitor?)
-                           "&publishing=" config/publishing?))
-          ^js port (.-port worker)
-          wrapped-worker (Comlink/wrap port)
-          t1 (util/time-ms)]
-      (worker-handler/handle-message! port wrapped-worker)
-      (reset! state/*infer-worker-port port)
-      (reset! state/*infer-worker wrapped-worker)
-      (p/do!
-       (let [embedding-model-name (ldb/get-key-value (db/get-db) :logseq.kv/graph-text-embedding-model-name)]
-         (.init wrapped-worker embedding-model-name))
-       (log/info "init infer-worker spent:" (str (- (util/time-ms) t1) "ms"))))))
-
-(defn <connect-db-worker-and-infer-worker!
-  []
-  (assert (and @state/*infer-worker @state/*db-worker))
-  (state/<invoke-db-worker-direct-pass :thread-api/set-infer-worker-proxy (Comlink/proxy @state/*infer-worker)))
 
 (defn <export-db!
   [repo data]

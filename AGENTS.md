@@ -5,7 +5,7 @@
   - `src/main/` contains core application logic.
   - `src/main/mobile/` is the mobile app code.
   - `src/main/frontend/components/` houses UI components.
-  - `src/main/frontend/inference_worker/` and `src/main/frontend/worker/` hold webworker code, including RTC in `src/main/frontend/worker/rtc/`.
+  - `src/main/frontend/worker/` holds webworker code, including RTC in `src/main/frontend/worker/rtc/`.
 - `src/electron/` is Electron-specific code.
 - `src/test/` contains unit tests.
 - `deps/` contains internal dependencies/modules.

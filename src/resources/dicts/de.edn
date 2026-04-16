@@ -196,7 +196,6 @@
  :page/created-at "Erstellt am"
  :page/db-delete-confirmation "Diese Seite wirklich entfernen?"
  :page/delete "Seite löschen"
- :page/delete-confirmation "Diese Seite wirklich entfernen?"
  :page/logseq-is-having-a-problem "Logseq hat ein Problem festgestellt. Versuche zurückzukehren ..."
  :page/make-private "Privat machen"
  :page/make-public "Beim Export in HTML veröffentlichen"

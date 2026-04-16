@@ -57,6 +57,16 @@
         (outliner-op/transact! tx-data nil))
        true))))
 
+(defn delete-recycled-permanently!
+  [root-uuid]
+  (when-let [root (db/entity [:block/uuid root-uuid])]
+    (when (seq (outliner-recycle/permanently-delete-tx-data (db/get-db) root))
+      (p/do!
+       (ui-outliner-tx/transact!
+        {:outliner-op :recycle-delete-permanently}
+        (outliner-op/recycle-delete-permanently! root-uuid))
+       true))))
+
 (defn <unfavorite-page!
   [page-name]
   (p/do!
@@ -125,7 +135,7 @@
 
 (defn update-public-attribute!
   [page value]
-  (db-property-handler/set-block-property! [:block/uuid (:block/uuid page)] :logseq.property/publishing-public? value))
+  (db-property-handler/set-block-property! (:block/uuid page) :logseq.property/publishing-public? value))
 
 (defn get-page-ref-text
   [page]

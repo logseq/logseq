@@ -16,6 +16,33 @@ const {
   runWranglerQuery,
 } = require("./graph_user_lib");
 
+function escapeSqlValue(value) {
+  return value.replaceAll("'", "''");
+}
+
+function ensureMutationSuccess(output, context) {
+  if (!Array.isArray(output) || output.length === 0) {
+    fail(`Unexpected empty response from wrangler while ${context}.`);
+  }
+
+  output.forEach((statement, index) => {
+    if (!statement.success) {
+      fail(`Wrangler mutation failed while ${context} (statement ${index + 1}).`);
+    }
+  });
+}
+
+function deleteGraphAesKeys(options, graphId) {
+  const sql = `delete from graph_aes_keys where graph_id = '${escapeSqlValue(graphId)}'`;
+  const wranglerArgs = buildWranglerArgs({
+    database: options.database,
+    config: options.config,
+    env: options.env,
+    sql,
+  });
+  ensureMutationSuccess(runWranglerQuery(wranglerArgs), `deleting graph_aes_keys for ${graphId}`);
+}
+
 function printHelp() {
   console.log(`Delete db-sync graphs owned by a user from a remote D1 environment.
 
@@ -134,6 +161,8 @@ async function main() {
       const body = await response.text();
       fail(`Delete failed for ${graph.graph_id}: ${response.status} ${body}`);
     }
+
+    deleteGraphAesKeys(options, graph.graph_id);
   }
 
   console.log(`Deleted ${result.graphs.length} owned graph(s).`);
