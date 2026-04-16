@@ -85,3 +85,36 @@
                   en-dicts)))
          (sort-by (juxt :lang :translation-key))
          vec)))
+
+(defn identical-translation-findings
+  "Return localized translation findings whose defined value is identical to
+  English for the same key."
+  [dicts lang]
+  (let [en-dicts (:en dicts)
+        lang-dicts (get dicts lang)]
+    (->> lang-dicts
+         (keep (fn [[translation-key localized-value]]
+                 (let [default-value (get en-dicts translation-key ::missing)]
+                   (when (= default-value localized-value)
+                     {:lang lang
+                      :translation-key translation-key
+                      :default-value default-value}))))
+         (sort-by :translation-key)
+         vec)))
+
+(defn identical-translation-stats
+  "Return per-locale identical-to-English counts for defined translations."
+  [dicts]
+  (let [en-dicts (:en dicts)]
+    (->> dicts
+         (map (fn [[lang lang-dicts]]
+                {:lang lang
+                 :translation-count (count lang-dicts)
+                 :same-as-en-count
+                 (count
+                  (filter (fn [[translation-key localized-value]]
+                            (= (get en-dicts translation-key ::missing)
+                               localized-value))
+                          lang-dicts))}))
+         (sort-by (juxt (comp - :same-as-en-count) (comp - :translation-count) :lang))
+         vec)))

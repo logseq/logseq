@@ -48,3 +48,37 @@
              :zh-Hant {:on-boarding/main-title "歡迎使用 Logseq"
                        :e2ee/cloud-password-rich "雲端密碼"
                        :e2ee/remember-password-rich (fn [] [[:span "請記住"] "你的密碼。"])}})))))
+
+(deftest identical-translation-findings-report-defined-values-equal-to-english
+  (is (= [{:lang :ko
+           :translation-key :ui/cancel
+           :default-value "Cancel"}
+          {:lang :ko
+           :translation-key :ui/save
+           :default-value "Save"}]
+         (lang-lint/identical-translation-findings
+          {:en {:ui/cancel "Cancel"
+                :ui/save "Save"
+                :ui/close "Close"}
+           :ko {:ui/cancel "Cancel"
+                :ui/save "Save"
+                :ui/close "닫기"}
+           :fr {:ui/cancel "Annuler"}}
+          :ko))))
+
+(deftest identical-translation-stats-count-defined-values-equal-to-english
+  (is (= [{:lang :en
+           :translation-count 2
+           :same-as-en-count 2}
+          {:lang :ko
+           :translation-count 2
+           :same-as-en-count 1}
+          {:lang :fr
+           :translation-count 1
+           :same-as-en-count 0}]
+         (lang-lint/identical-translation-stats
+          {:en {:ui/cancel "Cancel"
+                :ui/save "Save"}
+           :ko {:ui/cancel "Cancel"
+                :ui/save "저장"}
+           :fr {:ui/cancel "Annuler"}}))))
