@@ -212,6 +212,23 @@
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
 
+(defn- make-conn [opts]
+  ;; `datascript.conn/->Conn` is not exposed in nbb runtime.
+  ;; Start from a fresh conn and merge the desired internal state.
+  (let [conn (d/create-conn)]
+    (swap! (:atom conn) merge opts)
+    conn))
+
+(defn- conn-from-db
+  "Forked conn-from-db to not invoke `d/store`, it's unsafe to store during nested batch tx."
+  [db]
+  (if-some [_storage (storage/storage db)]
+    (make-conn
+     {:db db
+      :tx-tail []
+      :db-last-stored db})
+    (make-conn {:db db})))
+
 (defn batch-transact-with-temp-conn!
   "Run batched tx work against a temporary conn, then apply all collected tx-data
   to `conn` with a single final `transact!`.
@@ -229,7 +246,7 @@
   - `listen-db` (if provided) receives each intermediate tx-report from temp conn.
   - Do not rely on returned tx-report shape for undo/redo behavior."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
-  (let [temp-conn (d/conn-from-db @conn)
+  (let [temp-conn (conn-from-db @conn)
         *batch-tx-data (volatile! [])
         *complete? (volatile! false)]
     ;; can read from disk, write is disallowed
