@@ -32,6 +32,9 @@ To see the overall translation status of every locale:
 bb lang:list
 ```
 
+That table includes `:same-as-en-count`, which helps you spot locales that
+still contain entries copied from English.
+
 To see which entries are missing for one locale, use `es` as an example:
 
 ```sh
@@ -48,12 +51,6 @@ That command prints the missing keys and the current English value so you can
 paste them into your locale file and translate them there.
 
 ## Find Entries Still Matching English
-
-To see how many entries in each locale still match English exactly:
-
-```sh
-bb lang:pseudo
-```
 
 To list them for one locale, use `es` as an example:
 

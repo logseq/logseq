@@ -118,3 +118,33 @@
                           lang-dicts))}))
          (sort-by (juxt (comp - :same-as-en-count) (comp - :translation-count) :lang))
          vec)))
+
+(defn translation-summary-stats
+  "Return per-locale translation summary stats for overview tables."
+  [dicts]
+  (let [en-count (count (:en dicts))
+        same-as-en-counts (->> (identical-translation-stats dicts)
+                               (map (juxt :lang :same-as-en-count))
+                               (into {}))]
+    (->> dicts
+         (map (fn [[lang lang-dicts]]
+                {:lang lang
+                 :percent-translated (if (zero? en-count)
+                                       0.0
+                                       (* 100.0 (/ (count lang-dicts) en-count)))
+                 :translation-count (count lang-dicts)
+                 :same-as-en-count (when-not (= lang :en)
+                                     (get same-as-en-counts lang 0))}))
+         vec)))
+
+(defn sort-translation-summary-stats
+  "Sort translation summary stats with English first, then by translated
+  percent descending, then by identical-to-English count descending."
+  [stats]
+  (let [en-stats (filter #(= :en (:lang %)) stats)
+        other-stats (remove #(= :en (:lang %)) stats)]
+    (into (vec en-stats)
+          (sort-by (juxt (comp - :percent-translated)
+                         (comp - :same-as-en-count)
+                         :lang)
+                   other-stats))))
