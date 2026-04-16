@@ -383,7 +383,7 @@
             :resizable? false}
            (when with-id?
              {:id :id
-              :name (t :view.table/id-column)
+              :name "#"
               :header (fn [_table _column] (header-index))
               :cell (fn [table row _column]
                       (inc (.indexOf (:rows table) (:db/id row))))
