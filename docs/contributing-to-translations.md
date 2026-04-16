@@ -47,6 +47,23 @@ bb lang:missing es --copy
 That command prints the missing keys and the current English value so you can
 paste them into your locale file and translate them there.
 
+## Find Entries Still Matching English
+
+To see how many entries in each locale still match English exactly:
+
+```sh
+bb lang:pseudo
+```
+
+To list them for one locale, use `es` as an example:
+
+```sh
+bb lang:pseudo es
+```
+
+This is a review tool, not a hard error. Some entries may legitimately match
+English, but many are unfinished translations copied from `en.edn`.
+
 ## Edit a Locale
 
 1. Run `bb lang:missing <locale>`.
@@ -87,6 +104,9 @@ It checks for:
 - dictionary keys that are no longer used
 - placeholder mismatches such as `{1}` vs `{2}`
 - locale entries that no longer match an English rich-translation shape
+
+`bb lang:validate-translations` does not flag entries that still match English.
+Use `bb lang:pseudo <locale>` when you want to review those separately.
 
 To remove stale or invalid keys automatically:
 
