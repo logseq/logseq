@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "A page with the name \"{1}\" already exists."
  :page.convert/tag-to-page-has-children "This tag cannot be converted because it has tag children. All tag children must be removed or converted before converting this tag."
 
+ :page.delete/batch-confirm-title "Are you sure you want to delete these pages? Properties and tags will be permanently deleted and pages will be moved to Recycle."
  :page.delete/confirm-title "Are you sure you want to delete this page?"
+ :page.delete/permanent-confirm-title "Are you sure you want to permanently delete this page?"
  :page.delete/success "Page \"{1}\" was deleted successfully!"
  :page.delete/total "Total: {1}"
  :page.delete/warning "These pages had their content deleted but were unable to be deleted: {1}. See javascript console for more details."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Blank input"
  :search/full-text-placeholder "Full text search"
+ :search/index-progress "Indexing {1}%"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "No matched result"
  :search/result-count (fn [n] (str n (if (> n 1) " results" " result")))

@@ -1034,7 +1034,7 @@
         (ui/icon "alert-triangle")]]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium
-        (t :page.delete/confirm-title)]]]
+        (t :page.delete/batch-confirm-title)]]]
 
      [:ol.p-2.pt-4
       (for [page-item pages]

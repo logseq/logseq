@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "頁面「{1}」已存在。"
  :page.convert/tag-to-page-has-children "此標籤無法轉換，因為它仍有子標籤。必須先移除或轉換所有子標籤，才能轉換此標籤。"
 
+ :page.delete/batch-confirm-title "確定要刪除這些頁面嗎？屬性與標籤將被永久刪除，頁面將被移入資源回收筒。"
  :page.delete/confirm-title "確認要刪除此頁面嗎？"
+ :page.delete/permanent-confirm-title "確定要永久刪除此頁面嗎？"
  :page.delete/success "頁面「{1}」已成功刪除！"
  :page.delete/total "總計: {1}"
  :page.delete/warning "這些頁面的內容已刪除，但無法刪除：{1}。有關更多詳細信息，請參閱 JavaScript 控制台。"
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "空白輸入"
  :search/full-text-placeholder "全文搜尋"
+ :search/index-progress "正在建立索引 {1}%"
  :search/indices-rebuilt-success "搜尋索引已成功重建！"
  :search/no-result "未找到匹配項"
  :search/result-count "{1} 個結果"

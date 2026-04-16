@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "Ja existeix una pàgina amb el nom \"{1}\"."
  :page.convert/tag-to-page-has-children "L'etiqueta té fills i no es pot convertir"
 
+ :page.delete/batch-confirm-title "Esteu segur que voleu suprimir aquestes pàgines? Les propietats i les etiquetes se suprimiran permanentment i les pàgines es mouran a la Paperera."
  :page.delete/confirm-title "Esteu segur que voleu suprimir aquesta pàgina?"
+ :page.delete/permanent-confirm-title "Esteu segur que voleu suprimir permanentment aquesta pàgina?"
  :page.delete/success "La pàgina \"{1}\" s'ha suprimit correctament!"
  :page.delete/total "Total: {1}"
  :page.delete/warning "S'ha suprimit el contingut d'aquestes pàgines, però no s'han pogut suprimir: {1}. Vegeu la consola javascript per a més detalls."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Entrada buida"
  :search/full-text-placeholder "Cerca de text complet"
+ :search/index-progress "Indexant {1}%"
  :search/indices-rebuilt-success "Índexs de recerca reconstruïts correctament!"
  :search/no-result "Sense resultats"
  :search/result-count "{1} resultats"

@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "이름이 \"{1}\"인 페이지가 이미 존재합니다."
  :page.convert/tag-to-page-has-children "자식 요소가 있는 태그는 변환할 수 없습니다"
 
+ :page.delete/batch-confirm-title "이 페이지들을 삭제하시겠습니까? 속성과 태그는 영구적으로 삭제되고 페이지는 휴지통으로 이동됩니다."
  :page.delete/confirm-title "이 페이지를 삭제하시겠습니까?"
+ :page.delete/permanent-confirm-title "이 페이지를 영구적으로 삭제하시겠습니까?"
  :page.delete/success "페이지 \"{1}\"이(가) 성공적으로 삭제되었습니다!"
  :page.delete/total "합계: {1}"
  :page.delete/warning "다음 페이지의 콘텐츠가 삭제되었지만 삭제할 수 없습니다. {1}. 자세한 내용은 자바스크립트 콘솔을 참조하세요."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "빈 입력"
  :search/full-text-placeholder "전문 검색"
+ :search/index-progress "인덱싱 {1}%"
  :search/indices-rebuilt-success "검색 인덱스가 성공적으로 재구성되었습니다!"
  :search/no-result "결과 없음"
  :search/result-count "{1}개 결과"

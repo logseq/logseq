@@ -1597,9 +1597,10 @@
     [:pre (pr-str opts)]))
 
 (rum/defc renderer-resolver < rum/static
-  [key']
-  (when-let [[pid key] (some-> key' (string/split "."))]
-    (let [[renderer set-renderer!] (rum/use-state nil)]
+  [nskey']
+  (when-let [pid (some-> nskey' (namespace))]
+    (let [key (name nskey')
+          [renderer set-renderer!] (rum/use-state nil)]
 
       (hooks/use-effect!
        (fn []
@@ -1607,10 +1608,10 @@
            (when-let [renderer (plugin-handler/resolve-hosted-render pid key :sidebar)]
              (let [r (bean/->clj renderer)
                    title (:title r)]
-               (when-let [^js dom (and title (js/document.getElementById key'))]
+               (when-let [^js dom (and title (js/document.getElementById nskey'))]
                  (set! (. dom -textContent) title))
                (set-renderer! r)))
-           (catch js/Error e (js/console.error "Failed to resolve renderer:" key' e))))
+           (catch js/Error e (js/console.error "Failed to resolve renderer:" nskey' e))))
        [pid key])
 
       (when renderer
