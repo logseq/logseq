@@ -36,6 +36,22 @@
                 (rest parts)))
      (string/join " #"))))
 
+(defn- find-page-add-button
+  [page-id]
+  (when page-id
+    (->> (dom/sel ".block-add-button")
+      (filter #(= (str page-id) (dom/attr % "parentblockid")))
+      first)))
+
+(defn- click-page-add-button-with-retry!
+  [page-id]
+  (letfn [(poll! [remaining-ms]
+            (if-let [block-add-button (find-page-add-button page-id)]
+              (.click block-add-button)
+              (when (pos? remaining-ms)
+                (js/setTimeout #(poll! (- remaining-ms 100)) 100))))]
+    (poll! 500)))
+
 (defn <create!
   ([title]
    (<create! title {}))
@@ -82,13 +98,7 @@
                  (when redirect?
                    (route-handler/redirect-to-page! page-uuid)
                    (when-not today-journal?
-                     (js/setTimeout
-                      (fn []
-                        (when-let [block-add-button (->> (dom/sel ".block-add-button")
-                                                         (filter #(= (str (:db/id page)) (dom/attr % "parentblockid")))
-                                                         first)]
-                          (.click block-add-button)))
-                      200)))
+                     (click-page-add-button-with-retry! (:db/id page))))
                  page)))))))))
 
 ;; favorite fns
