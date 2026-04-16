@@ -936,7 +936,7 @@
            [:div {:class "w-1/2 bg-black/50 rounded-lg p-4 pt-10 relative flex flex-col gap-4"}
             [:div.absolute.top-0.left-4.bg-gray-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs (t :account/plan-free)]
             [:div
-             [:strong.text-white.text-xl.font-normal (t :account/price-free)]]
+             [:strong.text-white.text-xl.font-normal "$0"]]
             [:div.text-white.font-bold {:class "h-[2.5rem] "} (t :account/plan-free-summary)]
             [:ul.text-xs.list-none.m-0.flex.flex-col.gap-0.5
              [:li (t :account/unlimited-unsynced-graphs)]
