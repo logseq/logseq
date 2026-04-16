@@ -32,47 +32,37 @@
   "List translated languages with their number of translations"
   []
   (let [dicts (get-dicts)
-        en-count (count (dicts :en))
         langs (get-languages)]
-    (->> dicts
-         (map (fn [[locale dicts]]
-                [locale
-                 (format "%.2f" (* 100.0 (/ (count dicts) en-count)))
-                 (count dicts)
-                 (langs locale)]))
-         (sort-by #(nth % 2) >)
-         (map #(zipmap [:locale :percent-translated :translation-count :language] %))
+    (->> (lang-lint/translation-summary-stats dicts)
+         (lang-lint/sort-translation-summary-stats)
+         (map (fn [{:keys [lang percent-translated translation-count same-as-en-count]}]
+                {:locale lang
+                 :percent-translated (format "%.2f" percent-translated)
+                 :translation-count translation-count
+                 :same-as-en-count (if (= lang :en) "-" same-as-en-count)
+                 :language (langs lang)}))
          task-util/print-table)))
 
 (defn list-pseudo
-  "List translations whose localized value is identical to English.
-   Without arguments prints per-locale summary; with LOCALE prints the keys."
+  "List translations for LOCALE whose localized value is identical to English."
   [& args]
-  (let [lang (some-> (first args) keyword)
+  (let [lang (or (some-> (first args) keyword)
+                 (task-util/print-usage "LOCALE"))
         langs (get-languages)
         dicts (get-dicts)]
-    (if lang
-      (do
-        (when-not (contains? langs lang)
-          (println "Language" lang "does not have an entry in frontend.dicts/languages")
-          (System/exit 1))
-        (let [findings (->> (lang-lint/identical-translation-findings dicts lang)
-                            (map (fn [{:keys [translation-key default-value]}]
-                                   {:translation-key translation-key
-                                    :same-as-en-value default-value
-                                    :file (str "dicts/" (-> lang name string/lower-case) ".edn")}))
-                            (sort-by (juxt :file :translation-key)))]
-          (if (empty? findings)
-            (println "Language" lang "does not contain translations identical to English!")
-            (task-util/print-table
-             (map #(update % :same-as-en-value shorten 50) findings)))))
-      (->> (lang-lint/identical-translation-stats dicts)
-           (map (fn [{:keys [lang translation-count same-as-en-count]}]
-                  {:locale lang
-                   :translation-count translation-count
-                   :same-as-en-count same-as-en-count
-                   :language (langs lang)}))
-           task-util/print-table))))
+    (when-not (contains? langs lang)
+      (println "Language" lang "does not have an entry in frontend.dicts/languages")
+      (System/exit 1))
+    (let [findings (->> (lang-lint/identical-translation-findings dicts lang)
+                        (map (fn [{:keys [translation-key default-value]}]
+                               {:translation-key translation-key
+                                :same-as-en-value default-value
+                                :file (str "dicts/" (-> lang name string/lower-case) ".edn")}))
+                        (sort-by (juxt :file :translation-key)))]
+      (if (empty? findings)
+        (println "Language" lang "does not contain translations identical to English!")
+        (task-util/print-table
+         (map #(update % :same-as-en-value shorten 50) findings))))))
 
 (defn list-missing
   "List missing translations for a given language"

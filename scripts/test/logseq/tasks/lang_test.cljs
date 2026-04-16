@@ -82,3 +82,46 @@
            :ko {:ui/cancel "Cancel"
                 :ui/save "저장"}
            :fr {:ui/cancel "Annuler"}}))))
+
+(deftest translation-summary-stats-report-percent-and-same-as-en-count
+  (is (= [{:lang :en
+           :percent-translated 100.0
+           :translation-count 4
+           :same-as-en-count nil}
+          {:lang :fr
+           :percent-translated 50.0
+           :translation-count 2
+           :same-as-en-count 1}
+          {:lang :ko
+           :percent-translated 75.0
+           :translation-count 3
+           :same-as-en-count 2}]
+         (->> (lang-lint/translation-summary-stats
+               {:en {:ui/cancel "Cancel"
+                     :ui/save "Save"
+                     :ui/close "Close"
+                     :ui/delete "Delete"}
+                :ko {:ui/cancel "Cancel"
+                     :ui/save "저장"
+                     :ui/close "Close"}
+                :fr {:ui/cancel "Annuler"
+                     :ui/save "Save"}})
+              (sort-by :lang)
+              vec))))
+
+(deftest sort-translation-summary-stats-keeps-en-first-then-sorts-by-percent-and-same-as-en-count
+  (is (= [:en :ko :fr :zh-Hant]
+         (->> [{:lang :fr
+                :percent-translated 90.0
+                :same-as-en-count 1}
+               {:lang :en
+                :percent-translated 100.0
+                :same-as-en-count nil}
+               {:lang :zh-Hant
+                :percent-translated 80.0
+                :same-as-en-count 3}
+               {:lang :ko
+                :percent-translated 90.0
+                :same-as-en-count 2}]
+              lang-lint/sort-translation-summary-stats
+              (mapv :lang)))))
