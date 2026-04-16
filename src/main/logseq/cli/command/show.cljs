@@ -14,7 +14,8 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            ["string-width" :default string-width]))
 
 (def ^:private show-spec
   {:id {:desc "Block db/id or EDN vector of ids"}
@@ -39,6 +40,84 @@
                                    "logseq show --graph my-graph --uuid 11111111-1111-1111-1111-111111111111"]})])
 
 (def ^:private multi-id-delimiter "\n================================================================\n")
+(def ^:private show-breadcrumb-segment-max-display-width 24)
+(def ^:private breadcrumb-separator " > ")
+(def ^:private breadcrumb-truncation-suffix "…")
+(def ^:private breadcrumb-truncation-suffix-width (string-width breadcrumb-truncation-suffix))
+(def ^:private schema-definition-class-idents
+  #{:logseq.class/Tag
+    :logseq.class/Property
+    :logseq.class/Page})
+
+(defn- breadcrumb-label
+  [entity]
+  (or (:block/title entity)
+      (:block/name entity)
+      (some-> (:block/uuid entity) str)
+      (some-> (:db/id entity) str)))
+
+(defn- breadcrumb-display-width
+  [value]
+  (string-width (str (or value ""))))
+
+(defn- take-to-display-width
+  [text max-width]
+  (loop [remaining-chars (seq (js/Array.from (or text "")))
+         acc ""]
+    (if-let [ch (first remaining-chars)]
+      (let [candidate (str acc ch)]
+        (if (<= (breadcrumb-display-width candidate) max-width)
+          (recur (next remaining-chars) candidate)
+          acc))
+      acc)))
+
+(defn- truncate-breadcrumb-segment
+  ([value]
+   (truncate-breadcrumb-segment value show-breadcrumb-segment-max-display-width))
+  ([value max-width]
+   (let [value (str (or value ""))
+         max-width (max 1 max-width)]
+     (if (<= (breadcrumb-display-width value) max-width)
+       value
+       (if (<= max-width breadcrumb-truncation-suffix-width)
+         (take-to-display-width breadcrumb-truncation-suffix max-width)
+         (str (take-to-display-width value (- max-width breadcrumb-truncation-suffix-width))
+              breadcrumb-truncation-suffix))))))
+
+(defn- schema-definition-root?
+  [root]
+  (boolean (some schema-definition-class-idents
+                 (keep :db/ident (:block/tags root)))))
+
+(declare property-value-block?)
+
+(defn- ordinary-block-root?
+  [root]
+  (and (map? root)
+       (some? (get-in root [:block/page :db/id]))
+       (not (property-value-block? root))
+       (not (schema-definition-root? root))))
+
+(defn- fetch-breadcrumb-parents
+  [config repo root]
+  (if (and (ordinary-block-root? root)
+           (:db/id root))
+    (-> (transport/invoke config :thread-api/get-block-parents false [repo (:db/id root)])
+        (p/then (fn [parents]
+                  (or parents [])))
+        (p/catch (fn [_error]
+                   [])))
+    (p/resolved [])))
+
+(defn- render-breadcrumb-line
+  [parents]
+  (let [segments (->> parents
+                      (map breadcrumb-label)
+                      (remove string/blank?)
+                      (map truncate-breadcrumb-segment)
+                      vec)]
+    (when (seq segments)
+      (string/join breadcrumb-separator segments))))
 
 (defn read-stdin
   []
@@ -89,6 +168,17 @@
 
       :else
       nil)))
+
+(def ^:private show-root-selector
+  [:db/id
+   :db/ident
+   :block/name
+   :block/uuid
+   :block/title
+   :logseq.property/created-from-property
+   {:logseq.property/status [:db/ident :block/title]}
+   {:block/page [:db/id :block/title :block/name :block/uuid]}
+   {:block/tags [:db/id :db/ident :block/name :block/title :block/uuid]}])
 
 (def ^:private tree-block-selector
   [:db/id
@@ -726,10 +816,7 @@
     (cond
       (some? id)
       (p/let [entity (transport/invoke config :thread-api/pull false
-                                       [repo [:db/id :db/ident :block/name :block/uuid :block/title
-                                              {:logseq.property/status [:db/ident :block/title]}
-                                              {:block/page [:db/id :block/title]}
-                                              {:block/tags [:db/id :block/name :block/title :block/uuid]}] id])]
+                                       [repo show-root-selector id])]
         (p/let [entity (attach-user-properties-to-entity config repo entity)]
           (if (missing-show-entity? entity)
             (throw (ex-info "entity not found" {:code :entity-not-found}))
@@ -745,18 +832,12 @@
 
       (seq uuid-str)
       (p/let [entity (transport/invoke config :thread-api/pull false
-                                       [repo [:db/id :db/ident :block/name :block/uuid :block/title
-                                              {:logseq.property/status [:db/ident :block/title]}
-                                              {:block/page [:db/id :block/title]}
-                                              {:block/tags [:db/id :block/name :block/title :block/uuid]}]
+                                       [repo show-root-selector
                                         [:block/uuid (uuid uuid-str)]])
               entity (if (:db/id entity)
                        entity
                        (transport/invoke config :thread-api/pull false
-                                         [repo [:db/id :db/ident :block/name :block/uuid :block/title
-                                                {:logseq.property/status [:db/ident :block/title]}
-                                                {:block/page [:db/id :block/title]}
-                                                {:block/tags [:db/id :block/name :block/title :block/uuid]}]
+                                         [repo show-root-selector
                                           [:block/uuid uuid-str]]))]
         (p/let [entity (attach-user-properties-to-entity config repo entity)]
           (if (missing-show-entity? entity)
@@ -989,6 +1070,10 @@
   (let [tree-text (if (false? (:linked-references? action))
                     (tree->text tree-data)
                     (tree->text-with-linked-refs tree-data))
+        breadcrumb-line (:breadcrumb-line tree-data)
+        tree-text (if (seq breadcrumb-line)
+                    (str breadcrumb-line "\n" tree-text)
+                    tree-text)
         footer-enabled? (not= false (:ref-id-footer? action))
         linked-refs (when (not= false (:linked-references? action))
                       (:linked-references tree-data))
@@ -1000,9 +1085,18 @@
       (str tree-text "\n\n" footer)
       tree-text)))
 
+(defn- attach-breadcrumb-line
+  [config action tree-data]
+  (p/let [parents (fetch-breadcrumb-parents config (:repo action) (:root tree-data))
+          breadcrumb-line (render-breadcrumb-line parents)]
+    (if (seq breadcrumb-line)
+      (assoc tree-data :breadcrumb-line breadcrumb-line)
+      tree-data)))
+
 (defn- render-tree-text-with-properties
   [config action tree-data]
-  (p/let [tree-data (attach-property-titles config (:repo action) tree-data)]
+  (p/let [tree-data (attach-property-titles config (:repo action) tree-data)
+          tree-data (attach-breadcrumb-line config action tree-data)]
     (render-tree-text tree-data action)))
 
 (defn- sanitize-structured-tree

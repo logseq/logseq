@@ -171,7 +171,12 @@
     (apply @v args)))
 
 (defn- make-show-invoke-mock
-  [{:keys [entities-by-id children-by-page-id uuid-entities linked-refs-by-root-id]}]
+  [{:keys [entities-by-id
+           entities-by-page-name
+           children-by-page-id
+           uuid-entities
+           linked-refs-by-root-id
+           parents-by-block-id]}]
   (fn [_ method _ args]
     (case method
       :thread-api/pull
@@ -183,6 +188,9 @@
           (and (vector? target) (= :block/uuid (first target)))
           (let [uuid-str (some-> (second target) str string/lower-case)]
             (p/resolved (get uuid-entities uuid-str)))
+
+          (and (vector? target) (= :block/name (first target)))
+          (p/resolved (get entities-by-page-name (second target)))
 
           :else
           (p/resolved nil)))
@@ -200,6 +208,10 @@
       (let [[_repo root-id] args]
         (p/resolved (get linked-refs-by-root-id root-id [])))
 
+      :thread-api/get-block-parents
+      (let [[_repo block-id] args]
+        (p/resolved (get parents-by-block-id block-id [])))
+
       (p/resolved nil))))
 
 (defn- contains-block-uuid?
@@ -209,6 +221,214 @@
                      (some contains-block-uuid? (vals value)))
     (sequential? value) (some contains-block-uuid? value)
     :else false))
+
+(deftest test-truncate-breadcrumb-segment
+  (let [truncate (fn [value]
+                   (call-private 'truncate-breadcrumb-segment value))
+        exact-cjk (apply str (repeat 12 "界"))
+        one-over-cjk (str exact-cjk "界")]
+    (testing "keeps short ASCII segments unchanged"
+      (is (= "Project Alpha"
+             (truncate "Project Alpha"))))
+
+    (testing "keeps exact-width segment unchanged"
+      (is (= "123456789012345678901234"
+             (truncate "123456789012345678901234"))))
+
+    (testing "truncates one-over-width ASCII segment with ellipsis"
+      (is (= "12345678901234567890123…"
+             (truncate "1234567890123456789012345"))))
+
+    (testing "truncates CJK by display width"
+      (is (= exact-cjk
+             (truncate exact-cjk)))
+      (is (= (str (apply str (repeat 11 "界")) "…")
+             (truncate one-over-cjk))))))
+
+(deftest test-ordinary-block-root-classification
+  (let [ordinary-root? (fn [root]
+                         (call-private 'ordinary-block-root? root))]
+    (testing "ordinary block root returns true"
+      (is (true? (ordinary-root? {:db/id 1
+                                  :block/title "Task"
+                                  :block/page {:db/id 10}
+                                  :block/tags [{:db/ident :user.class/Task}]}))))
+
+    (testing "page root returns false"
+      (is (false? (ordinary-root? {:db/id 10
+                                   :db/ident :block/name
+                                   :block/title "Home"}))))
+
+    (testing "property-value pseudo block returns false"
+      (is (false? (ordinary-root? {:db/id 2
+                                   :block/title "Property value"
+                                   :block/page {:db/id 10}
+                                   :logseq.property/created-from-property {:db/id 999}}))))
+
+    (testing "tag/property schema roots return false"
+      (is (false? (ordinary-root? {:db/id 3
+                                   :block/title "Tag schema"
+                                   :block/page {:db/id 10}
+                                   :block/tags [{:db/ident :logseq.class/Tag}]})))
+      (is (false? (ordinary-root? {:db/id 4
+                                   :block/title "Property schema"
+                                   :block/page {:db/id 10}
+                                   :block/tags [{:db/ident :logseq.class/Property}]}))))))
+
+(deftest test-render-breadcrumb-line
+  (let [render-line (fn [parents]
+                      (call-private 'render-breadcrumb-line parents))]
+    (testing "joins labels from page to nearest parent"
+      (is (= "Project Alpha > Milestone 2026 > API rollout"
+             (render-line [{:block/title "Project Alpha"}
+                           {:block/title "Milestone 2026"}
+                           {:block/title "API rollout"}]))))
+
+    (testing "falls back to db/id when title and name are absent"
+      (is (= "42"
+             (render-line [{:db/id 42}]))))))
+
+(deftest test-execute-show-human-adds-breadcrumb-for-ordinary-block
+  (async done
+         (let [invoke-mock (make-show-invoke-mock
+                            {:entities-by-id {1 {:db/id 1
+                                                 :block/title "Implement retry policy"
+                                                 :block/page {:db/id 100}}}
+                             :children-by-page-id {100 [{:db/id 2
+                                                         :block/title "Add deterministic retry test"
+                                                         :block/order 0
+                                                         :block/parent {:db/id 1}}]}
+                             :parents-by-block-id {1 [{:block/title "Project Alpha"}
+                                                      {:block/title "Milestone 2026"}
+                                                      {:block/title "API rollout"}]}})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [result (show-command/execute-show {:type :show
+                                                           :repo "demo"
+                                                           :id 1
+                                                           :linked-references? false
+                                                           :ref-id-footer? false}
+                                                          {:output-format nil})
+                         plain (-> result :data :message style/strip-ansi)
+                         lines (string/split-lines plain)]
+                   (is (= :ok (:status result)))
+                   (is (= "Project Alpha > Milestone 2026 > API rollout"
+                          (first lines)))
+                   (is (string/includes? (second lines) "Implement retry policy"))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-human-skips-breadcrumb-for-page-target
+  (async done
+         (let [method-calls (atom [])
+               base-invoke (make-show-invoke-mock
+                            {:entities-by-page-name {"Home" {:db/id 100
+                                                              :db/ident :block/name
+                                                              :block/title "Home"}}
+                             :children-by-page-id {100 [{:db/id 101
+                                                         :block/title "Welcome"
+                                                         :block/order 0
+                                                         :block/parent {:db/id 100}}]}
+                             :parents-by-block-id {100 [{:block/title "Should not be used"}]}})
+               invoke-mock (fn [config method silent? args]
+                             (swap! method-calls conj method)
+                             (base-invoke config method silent? args))
+               task (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                                    transport/invoke invoke-mock]
+                      (p/let [result (show-command/execute-show {:type :show
+                                                                :repo "demo"
+                                                                :page "Home"
+                                                                :linked-references? false
+                                                                :ref-id-footer? false}
+                                                               {:output-format nil})
+                              plain (-> result :data :message style/strip-ansi)
+                              lines (string/split-lines plain)]
+                        (is (= :ok (:status result)))
+                        (is (not (string/includes? (first lines) " > ")))
+                        (is (string/includes? (first lines) "Home"))
+                        (is (not (some #{:thread-api/get-block-parents} @method-calls)))))]
+           (-> task
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-human-skips-breadcrumb-for-non-ordinary-block-targets
+  (async done
+         (let [method-calls (atom [])
+               base-invoke (make-show-invoke-mock
+                            {:entities-by-id {2 {:db/id 2
+                                                 :block/title "Tag schema"
+                                                 :block/page {:db/id 100}
+                                                 :block/tags [{:db/ident :logseq.class/Tag}]}
+                                              3 {:db/id 3
+                                                 :block/title "Property value"
+                                                 :block/page {:db/id 100}
+                                                 :logseq.property/created-from-property {:db/id 999}}}
+                             :children-by-page-id {100 []}
+                             :parents-by-block-id {2 [{:block/title "Should not be used"}]
+                                                   3 [{:block/title "Should not be used"}]}})
+               invoke-mock (fn [config method silent? args]
+                             (swap! method-calls conj method)
+                             (base-invoke config method silent? args))
+               task (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                                    transport/invoke invoke-mock]
+                      (p/let [tag-result (show-command/execute-show {:type :show
+                                                                    :repo "demo"
+                                                                    :id 2
+                                                                    :linked-references? false
+                                                                    :ref-id-footer? false}
+                                                                   {:output-format nil})
+                              property-result (show-command/execute-show {:type :show
+                                                                         :repo "demo"
+                                                                         :id 3
+                                                                         :linked-references? false
+                                                                         :ref-id-footer? false}
+                                                                        {:output-format nil})
+                              tag-plain (-> tag-result :data :message style/strip-ansi)
+                              property-plain (-> property-result :data :message style/strip-ansi)]
+                        (is (= :ok (:status tag-result)))
+                        (is (= :ok (:status property-result)))
+                        (is (not (string/includes? (first (string/split-lines tag-plain)) " > ")))
+                        (is (not (string/includes? (first (string/split-lines property-plain)) " > ")))
+                        (is (not (some #{:thread-api/get-block-parents} @method-calls)))))]
+           (-> task
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-human-multi-id-renders-breadcrumb-per-ordinary-block
+  (async done
+         (let [invoke-mock (make-show-invoke-mock
+                            {:entities-by-id {1 {:db/id 1
+                                                 :block/title "Root A"
+                                                 :block/page {:db/id 100}}
+                                              2 {:db/id 2
+                                                 :block/title "Root B"
+                                                 :block/page {:db/id 200}}}
+                             :children-by-page-id {100 []
+                                                   200 []}
+                             :parents-by-block-id {1 [{:block/title "Project Alpha"}
+                                                      {:block/title "Milestone 2026"}]
+                                                   2 [{:block/title "Project Beta"}
+                                                      {:block/title "Initiative Z"}]}})
+               task (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                                    transport/invoke invoke-mock]
+                      (p/let [result (show-command/execute-show {:type :show
+                                                                :repo "demo"
+                                                                :ids [1 2]
+                                                                :multi-id? true
+                                                                :linked-references? false
+                                                                :ref-id-footer? false}
+                                                               {:output-format nil})
+                              plain (-> result :data :message style/strip-ansi)]
+                        (is (= :ok (:status result)))
+                        (is (string/includes? plain "Project Alpha > Milestone 2026"))
+                        (is (string/includes? plain "Project Beta > Initiative Z"))
+                        (is (< (.indexOf plain "Project Alpha > Milestone 2026")
+                               (.indexOf plain "Root A")))
+                        (is (< (.indexOf plain "Project Beta > Initiative Z")
+                               (.indexOf plain "Root B")))))]
+           (-> task
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-render-referenced-entities-footer
   (let [render-footer (fn [ordered-uuids uuid->entity]
