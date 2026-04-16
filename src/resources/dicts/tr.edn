@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "\"{1}\" adında bir sayfa zaten mevcut."
  :page.convert/tag-to-page-has-children "Etiketin alt öğeleri var ve dönüştürülemez"
 
+ :page.delete/batch-confirm-title "Bu sayfaları silmek istediğinizden emin misiniz? Özellikler ve etiketler kalıcı olarak silinecek ve sayfalar Geri Dönüşüm'e taşınacaktır."
  :page.delete/confirm-title "Bu sayfayı silmek istediğinizden emin misiniz?"
+ :page.delete/permanent-confirm-title "Bu sayfayı kalıcı olarak silmek istediğinizden emin misiniz?"
  :page.delete/success "Sayfa \"{1}\" başarıyla silindi!"
  :page.delete/total "Toplam: {1}"
  :page.delete/warning "Bu sayfaların içeriği silindi ancak silinemedi: {1}. Daha fazla ayrıntı için javascript konsoluna bakın."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Boş giriş"
  :search/full-text-placeholder "Tam metin araması"
+ :search/index-progress "Dizinleniyor {1}%"
  :search/indices-rebuilt-success "Arama dizinleri başarıyla yeniden oluşturuldu!"
  :search/no-result "Sonuç yok"
  :search/result-count "{1} sonuç"

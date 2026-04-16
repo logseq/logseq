@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "Une page portant le nom « {1} » existe déjà."
  :page.convert/tag-to-page-has-children "Le tag a des éléments enfants et ne peut pas être converti"
 
+ :page.delete/batch-confirm-title "Etes-vous sûr de vouloir supprimer ces pages ? Les propriétés et les tags seront supprimés définitivement et les pages seront déplacées dans la Corbeille."
  :page.delete/confirm-title "Etes-vous sûr de vouloir supprimer cette page ?"
+ :page.delete/permanent-confirm-title "Etes-vous sûr de vouloir supprimer définitivement cette page ?"
  :page.delete/success "La page « {1} » a été supprimée avec succès !"
  :page.delete/total "Total : {1}"
  :page.delete/warning "Le contenu de ces pages a été supprimé mais n'a pas pu être supprimé : {1}. Voir la console javascript pour plus de détails."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Entrée vide"
  :search/full-text-placeholder "Recherche en texte intégral"
+ :search/index-progress "Indexation {1} %"
  :search/indices-rebuilt-success "Les indices de recherche ont été reconstruits avec succès !"
  :search/no-result "Aucun résultat correspondant"
  :search/result-count "{1} résultats"

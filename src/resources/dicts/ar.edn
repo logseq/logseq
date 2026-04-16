@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "توجد صفحة بالاسم \"{1}\" بالفعل."
  :page.convert/tag-to-page-has-children "الوسم له عناصر فرعية ولا يمكن تحويله"
 
+ :page.delete/batch-confirm-title "هل أنت متأكد أنك تريد حذف هذه الصفحات؟ سيتم حذف الخصائص والوسوم نهائياً وستُنقل الصفحات إلى سلة المحذوفات."
  :page.delete/confirm-title "هل أنت متأكد أنك تريد حذف هذه الصفحة؟"
+ :page.delete/permanent-confirm-title "هل أنت متأكد أنك تريد حذف هذه الصفحة نهائياً؟"
  :page.delete/success "تم حذف الصفحة «{1}» بنجاح!"
  :page.delete/total "الإجمالي: {1}"
  :page.delete/warning "تم حذف محتواها من هذه الصفحات ولكن تعذر حذفها: {1}. راجع وحدة تحكم جافا سكريبت لمزيد من التفاصيل."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "إدخال فارغ"
  :search/full-text-placeholder "بحث في النص الكامل"
+ :search/index-progress "جارٍ فهرسة {1}%"
  :search/indices-rebuilt-success "تم إعادة بناء فهارس البحث بنجاح!"
  :search/no-result "لا توجد نتائج"
  :search/result-count "{1} نتيجة"

@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "页面“{1}”已存在。"
  :page.convert/tag-to-page-has-children "此标签无法转换，因为它仍有子标签。必须先移除或转换所有子标签，才能转换此标签。"
 
+ :page.delete/batch-confirm-title "确定要删除这些页面吗？属性和标签将被永久删除，页面将被移入回收站。"
  :page.delete/confirm-title "确认要删除此页面吗？"
+ :page.delete/permanent-confirm-title "确定要永久删除此页面吗？"
  :page.delete/success "页面“{1}”已成功删除！"
  :page.delete/total "总计: {1}"
  :page.delete/warning "这些页面的内容已删除，但无法删除：{1}。有关更多详细信息，请参阅 JavaScript 控制台。"
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "空白输入"
  :search/full-text-placeholder "全文搜索"
+ :search/index-progress "正在索引 {1}%"
  :search/indices-rebuilt-success "搜索索引已成功重建！"
  :search/no-result "未找到匹配项"
  :search/result-count "{1} 个结果"

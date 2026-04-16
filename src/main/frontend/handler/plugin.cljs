@@ -36,6 +36,13 @@
            (uuid? x) (str x)
            :else x)) input))))
 
+(defn- normalize-user-key-without-ns
+  [k]
+  (some-> k (name)
+    (string/replace "/" "$")
+    (string/replace " " "_")
+    (string/replace #"^[:_\s]+" "")))
+
 (defn invoke-exported-api
   [type & args]
   (try
@@ -528,7 +535,7 @@
 (defn- create-local-renderer-register
   [type *providers]
   (fn [pid key {subs' :subs :keys [render] :as opts}]
-    (when-let [key (and key (keyword key))]
+    (when-let [key (some-> key (normalize-user-key-without-ns) (keyword))]
       (register-plugin-resources pid type
                                  (merge opts {:key key :subs subs' :render render}))
       (swap! *providers conj pid)
@@ -539,7 +546,7 @@
   ([type *providers many?]
    (fn [key]
      (when (seq @*providers)
-       (if key
+       (if-let [key (some-> key (normalize-user-key-without-ns) (keyword))]
          (when-let [rs (->> @*providers
                             (map (fn [pid] (state/get-plugin-resource pid type key)))
                             (remove nil?)

@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "Eine Seite mit dem Namen „{1}“ existiert bereits."
  :page.convert/tag-to-page-has-children "Tag mit Unterelementen kann nicht konvertiert werden"
 
+ :page.delete/batch-confirm-title "Diese Seiten wirklich entfernen? Eigenschaften und Tags werden dauerhaft gelöscht und Seiten werden in den Papierkorb verschoben."
  :page.delete/confirm-title "Diese Seite wirklich entfernen?"
+ :page.delete/permanent-confirm-title "Diese Seite wirklich dauerhaft entfernen?"
  :page.delete/success "Seite „{1}“ wurde erfolgreich gelöscht!"
  :page.delete/total "Gesamt: {1}"
  :page.delete/warning "Der Inhalt dieser Seiten wurde gelöscht, konnte aber nicht gelöscht werden: {1}. Weitere Informationen finden Sie in der Javascript-Konsole."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Leere Eingabe"
  :search/full-text-placeholder "Volltextsuche"
+ :search/index-progress "Indexierung {1} %"
  :search/indices-rebuilt-success "Suchindizes erfolgreich neu aufgebaut!"
  :search/no-result "Keine übereinstimmenden Treffer"
  :search/result-count "{1} Ergebnisse"

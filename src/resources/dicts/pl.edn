@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "Strona o nazwie „{1}” już istnieje."
  :page.convert/tag-to-page-has-children "Tag ma elementy podrzędne i nie może być przekonwertowany"
 
+ :page.delete/batch-confirm-title "Czy na pewno chcesz usunąć te strony? Właściwości i tagi zostaną trwale usunięte, a strony trafią do Kosza."
  :page.delete/confirm-title "Czy na pewno chcesz usunąć tę stronę?"
+ :page.delete/permanent-confirm-title "Czy na pewno chcesz trwale usunąć tę stronę?"
  :page.delete/success "Strona „{1}” została pomyślnie usunięta!"
  :page.delete/total "Łącznie: {1}"
  :page.delete/warning "Treść tych stron została usunięta, ale nie udało się ich usunąć: {1}. Więcej szczegółów znajdziesz w konsoli JavaScript."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Puste wejście"
  :search/full-text-placeholder "Wyszukiwanie pełnotekstowe"
+ :search/index-progress "Indeksowanie {1}%"
  :search/indices-rebuilt-success "Indeksy wyszukiwania zostały pomyślnie przebudowane!"
  :search/no-result "Brak wyników"
  :search/result-count "{1} wyników"

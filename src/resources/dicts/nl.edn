@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "Er bestaat al een pagina met de naam \"{1}\"."
  :page.convert/tag-to-page-has-children "Tag heeft onderliggende elementen en kan niet worden geconverteerd"
 
+ :page.delete/batch-confirm-title "Weet u zeker dat u deze pagina's wilt verwijderen? Eigenschappen en tags worden permanent verwijderd en pagina's worden naar de Prullenbak verplaatst."
  :page.delete/confirm-title "Weet u zeker dat u deze pagina wilt verwijderen?"
+ :page.delete/permanent-confirm-title "Weet u zeker dat u deze pagina permanent wilt verwijderen?"
  :page.delete/success "Pagina \"{1}\" is succesvol verwijderd!"
  :page.delete/total "Totaal: {1}"
  :page.delete/warning "Van deze pagina's is de inhoud verwijderd, maar deze kon niet worden verwijderd: {1}. Zie JavaScript-console voor meer details."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Lege invoer"
  :search/full-text-placeholder "Zoeken in volledige tekst"
+ :search/index-progress "Indexeren {1}%"
  :search/indices-rebuilt-success "Zoekindexen zijn opnieuw opgebouwd!"
  :search/no-result "Geen resultaten"
  :search/result-count "{1} resultaten"

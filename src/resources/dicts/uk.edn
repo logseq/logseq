@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "Сторінка з назвою \"{1}\" вже існує."
  :page.convert/tag-to-page-has-children "Тег имеет дочірние элементы и не может быть преобразован"
 
+ :page.delete/batch-confirm-title "Ви впевнені, що хочете видалити ці сторінки? Властивості й теги буде видалено назавжди, а сторінки буде переміщено до Кошика."
  :page.delete/confirm-title "Ви впевнені, що хочете видалити цю сторінку?"
+ :page.delete/permanent-confirm-title "Ви впевнені, що хочете назавжди видалити цю сторінку?"
  :page.delete/success "Сторінка \"{1}\" успішно видалена!"
  :page.delete/total "Усього: {1}"
  :page.delete/warning "Вміст цих сторінок було видалено, але його не вдалося видалити: {1}. Дивіться консоль javascript для отримання додаткової інформації."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Порожнє введення"
  :search/full-text-placeholder "Повнотекстовий пошук"
+ :search/index-progress "Індексація {1}%"
  :search/indices-rebuilt-success "Індекси пошуку успішно перебудовані!"
  :search/no-result "Немає результатів"
  :search/result-count "{1} результатів"

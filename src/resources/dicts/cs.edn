@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "Stránka s názvem „{1}“ již existuje."
  :page.convert/tag-to-page-has-children "Štítek má podřízené prvky a nelze ho převést"
 
+ :page.delete/batch-confirm-title "Opravdu chcete smazat tyto stránky? Vlastnosti a štítky budou trvale smazány a stránky budou přesunuty do Koše."
  :page.delete/confirm-title "Opravdu chcete smazat tuto stránku?"
+ :page.delete/permanent-confirm-title "Opravdu chcete trvale smazat tuto stránku?"
  :page.delete/success "Stránka „{1}“ byla úspěšně smazána!"
  :page.delete/total "Celkem: {1}"
  :page.delete/warning "Obsah těchto stránek byl smazán, ale nepodařilo se je smazat: {1}. Další podrobnosti naleznete v konzole javascript."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Prázdný vstup"
  :search/full-text-placeholder "Fulltextové vyhledávání"
+ :search/index-progress "Indexování {1} %"
  :search/indices-rebuilt-success "Indexy vyhledávání byly úspěšně znovu vytvořeny!"
  :search/no-result "Žádné výsledky"
  :search/result-count "{1} výsledků"
