@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "Halaman dengan nama \"{1}\" sudah ada."
  :page.convert/tag-to-page-has-children "Tag memiliki anak dan tidak bisa diubah"
 
+ :page.delete/batch-confirm-title "Apakah Anda yakin ingin menghapus halaman-halaman ini? Properti dan tag akan dihapus secara permanen dan halaman akan dipindahkan ke Tempat Sampah."
  :page.delete/confirm-title "Apakah Anda yakin ingin menghapus halaman ini?"
+ :page.delete/permanent-confirm-title "Apakah Anda yakin ingin menghapus halaman ini secara permanen?"
  :page.delete/success "Halaman \"{1}\" berhasil dihapus!"
  :page.delete/total "Total: {1}"
  :page.delete/warning "Halaman-halaman ini telah dihapus isinya tetapi tidak dapat dihapus: {1}. Lihat konsol javascript untuk detail selengkapnya."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Input kosong"
  :search/full-text-placeholder "Pencarian teks lengkap"
+ :search/index-progress "Mengindeks {1}%"
  :search/indices-rebuilt-success "Indeks pencarian berhasil dibangun kembali!"
  :search/no-result "Tidak ada hasil yang cocok"
  :search/result-count "{1} hasil"

@@ -361,7 +361,7 @@
 
     :delete-page
     (let [[page-uuid opts] args]
-      (outliner-page/delete! conn page-uuid (merge opts opts')))
+      (reset! *result (outliner-page/delete! conn page-uuid (merge opts opts'))))
 
     :recycle-delete-permanently
     (let [[root-uuid] args]

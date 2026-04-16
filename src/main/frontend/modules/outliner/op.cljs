@@ -1,6 +1,7 @@
 (ns frontend.modules.outliner.op
   "Build outliner ops"
   (:require [datascript.impl.entity :as de]
+            [frontend.db.utils :as db-utils]
             [frontend.handler.user :as user-handler]))
 
 (defn- current-user-delete-opts
@@ -30,8 +31,20 @@
     (map? block-or-id)
     (:block/uuid block-or-id)
 
+    (number? block-or-id)
+    (:block/uuid (db-utils/entity block-or-id))
+
     :else
     block-or-id))
+
+(defn- ->property-id
+  [property-id]
+  (cond
+    (number? property-id)
+    (:db/ident (db-utils/entity property-id))
+
+    :else
+    property-id))
 
 (defn save-block!
   [block & {:as opts}]
@@ -83,67 +96,67 @@
 (defn upsert-property!
   [property-id schema property-opts]
   (op-transact!
-   [:upsert-property [property-id schema property-opts]]))
+   [:upsert-property [(->property-id property-id) schema property-opts]]))
 
 (defn set-block-property!
   [block-eid property-id value]
   (op-transact!
-   [:set-block-property [(->block-id block-eid) property-id value]]))
+   [:set-block-property [(->block-id block-eid) (->property-id property-id) value]]))
 
 (defn remove-block-property!
   [block-eid property-id]
   (op-transact!
-   [:remove-block-property [(->block-id block-eid) property-id]]))
+   [:remove-block-property [(->block-id block-eid) (->property-id property-id)]]))
 
 (defn delete-property-value!
   [block-eid property-id property-value]
   (op-transact!
-   [:delete-property-value [(->block-id block-eid) property-id property-value]]))
+   [:delete-property-value [(->block-id block-eid) (->property-id property-id) property-value]]))
 
 (defn batch-delete-property-value!
   [block-eids property-id property-value]
   (op-transact!
-   [:batch-delete-property-value [(mapv ->block-id block-eids) property-id property-value]]))
+   [:batch-delete-property-value [(mapv ->block-id block-eids) (->property-id property-id) property-value]]))
 
 (defn create-property-text-block!
   [block-id property-id value opts]
   (op-transact!
-   [:create-property-text-block [(->block-id block-id) property-id value opts]]))
+   [:create-property-text-block [(->block-id block-id) (->property-id property-id) value opts]]))
 
 (defn batch-set-property!
   [block-ids property-id value opts]
   (op-transact!
-   [:batch-set-property [(mapv ->block-id block-ids) property-id value opts]]))
+   [:batch-set-property [(mapv ->block-id block-ids) (->property-id property-id) value opts]]))
 
 (defn batch-remove-property!
   [block-ids property-id]
   (op-transact!
-   [:batch-remove-property [(mapv ->block-id block-ids) property-id]]))
+   [:batch-remove-property [(mapv ->block-id block-ids) (->property-id property-id)]]))
 
 (defn class-add-property!
   [class-id property-id]
   (op-transact!
-   [:class-add-property [(->block-id class-id) property-id]]))
+   [:class-add-property [(->block-id class-id) (->property-id property-id)]]))
 
 (defn class-remove-property!
   [class-id property-id]
   (op-transact!
-   [:class-remove-property [(->block-id class-id) property-id]]))
+   [:class-remove-property [(->block-id class-id) (->property-id property-id)]]))
 
 (defn upsert-closed-value!
   [property-id closed-value-config]
   (op-transact!
-   [:upsert-closed-value [property-id closed-value-config]]))
+   [:upsert-closed-value [(->property-id property-id) closed-value-config]]))
 
 (defn delete-closed-value!
   [property-id value-block-id]
   (op-transact!
-   [:delete-closed-value [property-id (->block-id value-block-id)]]))
+   [:delete-closed-value [(->property-id property-id) (->block-id value-block-id)]]))
 
 (defn add-existing-values-to-closed-values!
   [property-id values]
   (op-transact!
-   [:add-existing-values-to-closed-values [property-id values]]))
+   [:add-existing-values-to-closed-values [(->property-id property-id) values]]))
 
 (defn toggle-reaction!
   [target-uuid emoji-id user-uuid]

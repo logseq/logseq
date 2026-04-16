@@ -102,21 +102,43 @@ DROP TRIGGER IF EXISTS blocks_au;
   (str "(" (->> (map (fn [id] (str "'" id "'")) ids)
                 (string/join ", ")) ")"))
 
+(def ^:private upsert-blocks-batch-size 2000)
+
+(def ^:private upsert-blocks-sql
+  (memoize
+   (fn [row-count]
+     (str "INSERT INTO blocks (id, title, page) VALUES "
+          (string/join ", " (repeat row-count "(?, ?, ?)"))
+          " ON CONFLICT (id) DO UPDATE SET (title, page) = (excluded.title, excluded.page)"))))
+
+(defn- valid-upsert-block?
+  [item]
+  (and (common-util/uuid-string? (.-id item))
+       (common-util/uuid-string? (.-page item))))
+
+(defn- throw-upsert-blocks-error!
+  [item]
+  (js/console.error "Upsert blocks wrong data: ")
+  (js/console.dir item)
+  (throw (ex-info "Search upsert-blocks wrong data: "
+                  (bean/->clj item))))
+
+(defn- upsert-bind-params
+  [batch]
+  (into-array
+   (mapcat (fn [item]
+             [(.-id item) (.-title item) (.-page item)])
+           batch)))
+
 (defn upsert-blocks!
   [^Object db blocks]
   (.transaction db (fn [tx]
-                     (doseq [item blocks]
-                       (if (and (common-util/uuid-string? (.-id item))
-                                (common-util/uuid-string? (.-page item)))
-                         (.exec tx #js {:sql "INSERT INTO blocks (id, title, page) VALUES ($id, $title, $page) ON CONFLICT (id) DO UPDATE SET (title, page) = ($title, $page)"
-                                        :bind #js {:$id (.-id item)
-                                                   :$title (.-title item)
-                                                   :$page (.-page item)}})
-                         (do
-                           (js/console.error "Upsert blocks wrong data: ")
-                           (js/console.dir item)
-                           (throw (ex-info "Search upsert-blocks wrong data: "
-                                           (bean/->clj item)))))))))
+                     (doseq [batch (partition-all upsert-blocks-batch-size blocks)]
+                       (doseq [item blocks]
+                         (when-not (valid-upsert-block? item)
+                           (throw-upsert-blocks-error! item)))
+                       (.exec tx #js {:sql (upsert-blocks-sql (count batch))
+                                      :bind (upsert-bind-params batch)})))))
 
 (defn delete-blocks!
   [db ids]

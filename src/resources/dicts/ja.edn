@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "「{1}」という名前のページはすでに存在します。"
  :page.convert/tag-to-page-has-children "子要素を持つタグは変換できません"
 
+ :page.delete/batch-confirm-title "これらのページを削除してもよろしいですか？プロパティとタグは完全に削除され、ページはごみ箱に移動されます。"
  :page.delete/confirm-title "このページを削除してもよろしいですか?"
+ :page.delete/permanent-confirm-title "このページを完全に削除してもよろしいですか?"
  :page.delete/success "ページ「{1}」は正常に削除されました。"
  :page.delete/total "合計: {1}"
  :page.delete/warning "これらのページのコンテンツは削除されましたが、削除できませんでした: {1}。詳細については、JavaScript コンソールを参照してください。"
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "空の入力"
  :search/full-text-placeholder "全文検索"
+ :search/index-progress "索引作成中 {1}%"
  :search/indices-rebuilt-success "検索インデックスが正常に再構築されました！"
  :search/no-result "結果なし"
  :search/result-count "{1} 件の結果"

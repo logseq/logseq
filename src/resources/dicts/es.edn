@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "Ya existe una página con el nombre \"{1}\"."
  :page.convert/tag-to-page-has-children "La etiqueta tiene elementos hijos y no se puede convertir"
 
+ :page.delete/batch-confirm-title "¿Está seguro de que desea eliminar estas páginas? Las propiedades y etiquetas se eliminarán permanentemente y las páginas se moverán a la Papelera."
  :page.delete/confirm-title "¿Está seguro de que desea eliminar esta página?"
+ :page.delete/permanent-confirm-title "¿Está seguro de que desea eliminar permanentemente esta página?"
  :page.delete/success "¡La página \"{1}\" se eliminó correctamente!"
  :page.delete/total "Total: {1}"
  :page.delete/warning "Se eliminó el contenido de estas páginas pero no se pudo eliminar: {1}. Consulte la consola de JavaScript para obtener más detalles."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Entrada vacía"
  :search/full-text-placeholder "Búsqueda de texto completo"
+ :search/index-progress "Indexando {1}%"
  :search/indices-rebuilt-success "¡Índices de búsqueda reconstruidos exitosamente!"
  :search/no-result "Sin resultados que coincidan"
  :search/result-count "{1} resultados"

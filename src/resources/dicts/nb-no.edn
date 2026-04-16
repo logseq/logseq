@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "En side med navnet \"{1}\" eksisterer allerede."
  :page.convert/tag-to-page-has-children "Tagg har underordnede elementer og kan ikke konverteres"
 
+ :page.delete/batch-confirm-title "Er du sikker på at du vil slette disse sidene? Egenskaper og tagger blir slettet permanent, og sidene blir flyttet til Papirkurv."
  :page.delete/confirm-title "Er du sikker på at du vil slette denne siden?"
+ :page.delete/permanent-confirm-title "Er du sikker på at du vil slette denne siden permanent?"
  :page.delete/success "Side \"{1}\" ble slettet!"
  :page.delete/total "Totalt: {1}"
  :page.delete/warning "Innholdet på disse sidene ble slettet, men kunne ikke slettes: {1}. Se javascript-konsollen for mer informasjon."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Tom inndata"
  :search/full-text-placeholder "Fulltekstsøk"
+ :search/index-progress "Indekserer {1} %"
  :search/indices-rebuilt-success "Søkeindekser bygget på nytt!"
  :search/no-result "Ingen resultater"
  :search/result-count "{1} resultater"

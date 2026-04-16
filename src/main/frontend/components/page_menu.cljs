@@ -72,7 +72,9 @@
          {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
                   [:span.top-1.relative
                    (shui/tabler-icon "alert-triangle")]
-                  (t :page.delete/confirm-title)]
+                  (if (or (ldb/class? page) (ldb/property? page))
+                    (t :page.delete/permanent-confirm-title)
+                    (t :page.delete/confirm-title))]
           :content [:p.opacity-60 (str "- " (:block/title page))]
           :outside-cancel? true
           :cancel-label (t :ui/cancel)

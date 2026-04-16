@@ -1093,7 +1093,9 @@
  :page.convert/tag-to-page-duplicate "Страница с названием «{1}» уже существует."
  :page.convert/tag-to-page-has-children "Тег имеет дочерние элементы и не может быть преобразован"
 
+ :page.delete/batch-confirm-title "Вы уверены, что хотите удалить эти страницы? Свойства и теги будут удалены навсегда, а страницы будут перемещены в Корзину."
  :page.delete/confirm-title "Вы уверены, что хотите удалить эту страницу?"
+ :page.delete/permanent-confirm-title "Вы уверены, что хотите удалить эту страницу навсегда?"
  :page.delete/success "Страница «{1}» успешно удалена!"
  :page.delete/total "Всего: {1}"
  :page.delete/warning "Содержимое этих страниц было удалено, но удалить их не удалось: {1}. Дополнительную информацию см. в консоли JavaScript."
@@ -1528,6 +1530,7 @@
 
  :search/blank-input "Пустой ввод"
  :search/full-text-placeholder "Полнотекстовый поиск"
+ :search/index-progress "Индексация {1}%"
  :search/indices-rebuilt-success "Индексы поиска успешно перестроены!"
  :search/no-result "Нет результатов"
  :search/result-count "{1} результатов"
