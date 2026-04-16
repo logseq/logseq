@@ -125,7 +125,7 @@
 (defn- ws-open? [ws]
   (sync-transport/ws-open? ws))
 
-(defn- upload-large-title! [repo graph-id title aes-key]
+(defn upload-large-title! [repo graph-id title aes-key]
   (sync-large-title/upload-large-title!
    {:repo repo
     :graph-id graph-id
