@@ -259,10 +259,32 @@
          [:<>
           (let [handle-copy!
                 (fn [_e]
-                  (-> (util/copy-image-to-clipboard image-src)
-                      (p/then #(notification/show! "Copied!" :success))
-                      (p/catch (fn [error]
-                                 (js/console.error error)))))
+                  ;; Electron renderer cannot fetch file:// URLs; read the
+                  ;; file via IPC and copy the blob directly.
+                  (if (util/electron?)
+                    (let [ext (some-> (util/get-file-ext image-src) string/lower-case)
+                          ;; Should support all exts in common-config/img-formats
+                          ext->mime {"png" "image/png"
+                                     "jpg" "image/jpeg"
+                                     "jpeg" "image/jpeg"
+                                     "gif" "image/gif"
+                                     "webp" "image/webp"
+                                     "bmp" "image/bmp"
+                                     "svg" "image/svg+xml"
+                                     "ico" "image/x-icon"}
+                          mime (get ext->mime ext)]
+                      (if-not mime
+                        (notification/show! (str "Copy image is not supported for ." ext " files") :warning)
+                        (-> (p/let [binary (fs/read-file-raw nil image-src {})
+                                    blob (js/Blob. (array binary) (clj->js {:type mime}))]
+                              (util/copy-image-blob-to-clipboard blob))
+                            (p/then #(notification/show! "Copied!" :success))
+                            (p/catch (fn [error]
+                                       (js/console.error error))))))
+                    (-> (util/copy-image-to-clipboard src')
+                        (p/then #(notification/show! "Copied!" :success))
+                        (p/catch (fn [error]
+                                   (js/console.error error))))))
                 handle-delete!
                 (fn [_e]
                   (when-let [block-id (get-blockid)]
