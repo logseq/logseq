@@ -221,6 +221,9 @@
   lang:missing
   logseq.tasks.lang/list-missing
 
+  lang:pseudo
+  logseq.tasks.lang/list-pseudo
+
   lang:format-dicts
   logseq.tasks.lang/format-dicts
 

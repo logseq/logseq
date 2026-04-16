@@ -21,6 +21,13 @@
        (map (juxt :value :label))
        (into {})))
 
+(defn- shorten [s length]
+  (if (< (count s) length)
+    s
+    (string/replace (str (subs s 0 length) "...")
+                    ;; Keep shortened table rows single-line for multi-line translations.
+                    "\n" "\\n")))
+
 (defn list-langs
   "List translated languages with their number of translations"
   []
@@ -37,12 +44,35 @@
          (map #(zipmap [:locale :percent-translated :translation-count :language] %))
          task-util/print-table)))
 
-(defn- shorten [s length]
-  (if (< (count s) length)
-    s
-    (string/replace (str (subs s 0 length) "...")
-                    ;; Keep shortened table rows single-line for multi-line translations.
-                    "\n" "\\n")))
+(defn list-pseudo
+  "List translations whose localized value is identical to English.
+   Without arguments prints per-locale summary; with LOCALE prints the keys."
+  [& args]
+  (let [lang (some-> (first args) keyword)
+        langs (get-languages)
+        dicts (get-dicts)]
+    (if lang
+      (do
+        (when-not (contains? langs lang)
+          (println "Language" lang "does not have an entry in frontend.dicts/languages")
+          (System/exit 1))
+        (let [findings (->> (lang-lint/identical-translation-findings dicts lang)
+                            (map (fn [{:keys [translation-key default-value]}]
+                                   {:translation-key translation-key
+                                    :same-as-en-value default-value
+                                    :file (str "dicts/" (-> lang name string/lower-case) ".edn")}))
+                            (sort-by (juxt :file :translation-key)))]
+          (if (empty? findings)
+            (println "Language" lang "does not contain translations identical to English!")
+            (task-util/print-table
+             (map #(update % :same-as-en-value shorten 50) findings)))))
+      (->> (lang-lint/identical-translation-stats dicts)
+           (map (fn [{:keys [lang translation-count same-as-en-count]}]
+                  {:locale lang
+                   :translation-count translation-count
+                   :same-as-en-count same-as-en-count
+                   :language (langs lang)}))
+           task-util/print-table))))
 
 (defn list-missing
   "List missing translations for a given language"
