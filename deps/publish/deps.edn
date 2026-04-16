@@ -9,7 +9,7 @@
   datascript-transit/datascript-transit {:mvn/version "0.3.0"
                                          :exclusions [datascript/datascript]}
   funcool/promesa                       {:mvn/version "11.0.678"}
-  thheller/shadow-cljs                  {:mvn/version "3.3.6"}
+  thheller/shadow-cljs                  {:mvn/version "3.4.4"}
   logseq/common                         {:local/root "../common"}
   logseq/graph-parser                   {:local/root "../graph-parser"}
   logseq/db                             {:local/root "../db"}
