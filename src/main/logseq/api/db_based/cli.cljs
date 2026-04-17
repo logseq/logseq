@@ -56,7 +56,7 @@
 (defn import-edn
   "Given EDN data as a transitized string, converts to EDN and imports it."
   [edn-data*]
-  (p/let [edn-data (sqlite-util/transit-read edn-data*)
+  (p/let [edn-data (sqlite-util/read-transit-str edn-data*)
           {:keys [error]} (ui-outliner-tx/transact!
                            {:outliner-op :batch-import-edn}
                            (outliner-op/batch-import-edn! edn-data {}))]
@@ -72,5 +72,5 @@
           result (state/<invoke-db-worker :thread-api/export-edn (state/get-current-repo) options)]
     (when (:export-edn-error result)
       (throw (ex-info (str "Export EDN Error: " (:export-edn-error result)) {})))
-    {:export-body (sqlite-util/transit-write result)
+    {:export-body (sqlite-util/write-transit-str result)
      :graph (string/replace-first (state/get-current-repo) common-config/db-version-prefix "")}))

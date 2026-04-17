@@ -17,22 +17,6 @@
 
 (def ^:private write-handlers (cljs-bean.transit/writer-handlers))
 (def ^:private read-handlers {})
-
-(def transit-w (transit/writer :json {:handlers write-handlers}))
-(def transit-r (transit/reader :json {:handlers read-handlers}))
-(defn transit-write
-  [data]
-  (try
-    (transit/write transit-w data)
-    (catch :default e
-      (prn ::transit-write-failed data)
-      (js/console.error e)
-      (throw e))))
-
-(defn transit-read
-  [s]
-  (transit/read transit-r s))
-
 (def write-transit-str
   (let [write-handlers* (->> (assoc dt/write-handlers
                                     de/Entity (transit/write-handler (constantly "datascript/Entity")
