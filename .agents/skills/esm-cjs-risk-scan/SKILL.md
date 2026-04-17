@@ -183,7 +183,7 @@ In the actual Electron runtime, the `electron` module IS the framework, so `Brow
 
 **How the scanner detects this:** If every probe failure contains `'electron'` in the error message (the named-export failure pattern), the package is reclassified from `module-unloadable` → `module-electron-dep` and from MEDIUM/HIGH → **OK**. Probe column shows `ERR(e-dep)` to mark the probe location.
 
-**When to verify manually:** If a new package shows `esm-edep` unexpectedly, inspect its source — it should contain `import ... from 'electron'` or use Electron APIs directly. You can also check the compiled `static/shadow-cljs/` shim files after a build to confirm `require("pkg")` is generated.
+**When to verify manually:** If a new package shows `esm-edep` unexpectedly, inspect its source — it should contain `import ... from 'electron'` or use Electron APIs directly. You can also check the compiled Electron shim cache at `.shadow-cljs/builds/electron/dev/goog-js/` (Transit JSON, dev build) or `.shadow-cljs/builds/electron/release/closure-inputs/` (plain JS, release build) for `shadow.js.shim.module$<package>.js` files — their content will show `require("pkg")` if shadow-cljs successfully resolved the package for the Node/Electron target.
 
 ### Understanding the plain-Node probe limitation
 
@@ -192,7 +192,9 @@ The scanner runs `require()` and `import()` probes in a plain Node.js process (`
 - The scanner uses the `module-electron-dep` heuristic to handle this case automatically
 - For packages that use Electron APIs in unusual ways (not just `import ... from 'electron'`), a manual check may be needed
 
-If a build has already been compiled, you can inspect `static/shadow-cljs/` for `shadow.js.shim.module$<package>` files. The presence of `require("pkg")` in a shim confirms shadow-cljs successfully resolved the package for Electron. This is the definitive ground truth; the scanner's probe is a pre-build approximation.
+If a build has already been compiled, you can inspect `.shadow-cljs/builds/electron/release/closure-inputs/` for `shadow.js.shim.module$<package>.js` files (plain JS, immediately readable). The presence of `require("pkg")` in the shim content confirms shadow-cljs successfully resolved the package for the Electron Node target. This is the definitive ground truth; the scanner's probe is a pre-build approximation.
+
+> **Note:** `static/js/cljs-runtime/` contains shims for browser worker targets that use `:js-provider :external` (currently `:db-worker` and `:inference-worker`). Those shims use `shadow$bridge("pkg")` — not `require()` — delegating actual module loading to the Webpack-bundled worker bundle. The `:app` target does not use `:js-provider :external` and its missing modules throw `"Module not provided"` at runtime instead. Electron (`:node-script`) shims never appear in this directory either.
 
 ## Recommended Fixes
 
