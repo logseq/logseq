@@ -563,6 +563,45 @@
     (testing "uniform options like --cardinality are not varied"
       (is (not (contains? varied :cardinality))))))
 
+(deftest test-zsh-nested-subcommand-completion
+  (let [output (gen/generate-completions "zsh" full-table)]
+    (testing "zsh generates subgroup dispatcher for graph backup"
+      (is (string/includes? output "_logseq_graph_backup()"))
+      (is (re-find #"(?s)_logseq_graph_backup\(\).*?'list:" output)
+          "graph backup dispatcher lists 'list' subcommand")
+      (is (re-find #"(?s)_logseq_graph_backup\(\).*?'create:" output)
+          "graph backup dispatcher lists 'create' subcommand")
+      (is (re-find #"(?s)_logseq_graph_backup\(\).*?'restore:" output)
+          "graph backup dispatcher lists 'restore' subcommand")
+      (is (re-find #"(?s)_logseq_graph_backup\(\).*?'remove:" output)
+          "graph backup dispatcher lists 'remove' subcommand"))
+    (testing "graph dispatcher dispatches backup to subgroup function"
+      (is (re-find #"(?s)_logseq_graph\(\).*?backup\) _logseq_graph_backup" output)))
+    (testing "graph backup remove leaf has its own function with --src option"
+      (is (string/includes? output "_logseq_graph_backup_remove()"))
+      (is (re-find #"(?s)_logseq_graph_backup\(\).*?remove\) _logseq_graph_backup_remove" output)))))
+
+(deftest test-bash-nested-subcommand-completion
+  (let [output (gen/generate-completions "bash" full-table)]
+    (testing "bash subcmd completion for graph includes backup (deduplicated)"
+      (is (re-find #"graph\) COMPREPLY=.*backup" output))
+      ;; backup should appear only once, not repeated per sub-subcommand
+      (let [graph-case (re-find #"graph\) COMPREPLY=\( \$\(compgen -W '([^']*)'" output)
+            subcmds (when graph-case (string/split (second graph-case) #" "))]
+        (is (= (count (filter #(= "backup" %) subcmds)) 1)
+            "backup appears exactly once in graph subcmd list")))
+    (testing "bash sub-subcommand dispatch for graph:backup"
+      (is (string/includes? output "graph:backup)")))
+    (testing "bash sub-subcommand completions for graph backup include list, create, restore, remove"
+      (let [case-match (re-find #"graph:backup\) COMPREPLY=\( \$\(compgen -W '([^']*)'" output)]
+        (is (some? case-match) "graph:backup case exists")
+        (when case-match
+          (let [sub-subcmds (set (string/split (second case-match) #" "))]
+            (is (contains? sub-subcmds "list"))
+            (is (contains? sub-subcmds "create"))
+            (is (contains? sub-subcmds "restore"))
+            (is (contains? sub-subcmds "remove"))))))))
+
 (deftest test-e2e-generated-header
   (testing "zsh output includes do-not-edit header"
     (let [output (gen/generate-completions "zsh" full-table)]
