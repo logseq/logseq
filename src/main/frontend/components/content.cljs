@@ -2,11 +2,13 @@
   (:require [cljs-time.coerce :as tc]
             [cljs.pprint :as pp]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.components.editor :as editor]
             [frontend.components.export :as export]
             [frontend.components.icon :as icon-component]
             [frontend.components.page-menu :as page-menu]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
@@ -24,6 +26,7 @@
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
@@ -240,6 +243,16 @@
                                        (url-util/get-logseq-graph-uuid-url nil current-repo block-id))]
                            (editor-handler/copy-block-ref! block-id tap-f)))}
             (t :block/copy-url)))
+
+         (when (and (util/electron?) (ldb/asset? block))
+           (shui/dropdown-menu-item
+            {:key "Show asset in folder"
+             :on-click (fn [_e]
+                         (let [assets-dir (config/get-current-repo-assets-root)
+                               ext (name (:logseq.property.asset/type block))
+                               file-path (path/path-join assets-dir (str (:block/uuid block) "." ext))]
+                           (ipc/ipc "openFileInFolder" file-path)))}
+            (t :asset/show-file-in-folder)))
 
          (shui/dropdown-menu-item
           {:key "Copy as"
