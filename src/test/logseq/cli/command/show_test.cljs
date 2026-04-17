@@ -278,14 +278,26 @@
 (deftest test-render-breadcrumb-line
   (let [render-line (fn [parents]
                       (call-private 'render-breadcrumb-line parents))]
-    (testing "joins labels from page to nearest parent"
-      (is (= "Project Alpha > Milestone 2026 > API rollout"
-             (render-line [{:block/title "Project Alpha"}
-                           {:block/title "Milestone 2026"}
-                           {:block/title "API rollout"}]))))
+    (testing "renders parent chain as multi-line tree rows"
+      (is (= (str "100 > Project Alpha\n"
+                  "101   > Milestone 2026\n"
+                  "102     > API rollout")
+             (render-line [{:db/id 100 :block/title "Project Alpha"}
+                           {:db/id 101 :block/title "Milestone 2026"}
+                           {:db/id 102 :block/title "API rollout"}]))))
+
+    (testing "dims breadcrumb id column like normal block ids"
+      (let [output (binding [style/*color-enabled?* true]
+                     (render-line [{:db/id 100 :block/title "Project Alpha"}
+                                   {:db/id 101 :block/title "Milestone 2026"}]))]
+        (is (string/includes? output (style/dim "100")))
+        (is (string/includes? output (style/dim "101")))
+        (is (= (str "100 > Project Alpha\n"
+                    "101   > Milestone 2026")
+               (style/strip-ansi output)))))
 
     (testing "falls back to db/id when title and name are absent"
-      (is (= "42"
+      (is (= "42 > 42"
              (render-line [{:db/id 42}]))))))
 
 (deftest test-execute-show-human-adds-breadcrumb-for-ordinary-block
@@ -298,9 +310,9 @@
                                                          :block/title "Add deterministic retry test"
                                                          :block/order 0
                                                          :block/parent {:db/id 1}}]}
-                             :parents-by-block-id {1 [{:block/title "Project Alpha"}
-                                                      {:block/title "Milestone 2026"}
-                                                      {:block/title "API rollout"}]}})]
+                             :parents-by-block-id {1 [{:db/id 100 :block/title "Project Alpha"}
+                                                      {:db/id 101 :block/title "Milestone 2026"}
+                                                      {:db/id 102 :block/title "API rollout"}]}})]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
                                transport/invoke invoke-mock]
                  (p/let [result (show-command/execute-show {:type :show
@@ -312,9 +324,13 @@
                          plain (-> result :data :message style/strip-ansi)
                          lines (string/split-lines plain)]
                    (is (= :ok (:status result)))
-                   (is (= "Project Alpha > Milestone 2026 > API rollout"
+                   (is (= "100 > Project Alpha"
                           (first lines)))
-                   (is (string/includes? (second lines) "Implement retry policy"))))
+                   (is (= "101   > Milestone 2026"
+                          (second lines)))
+                   (is (= "102     > API rollout"
+                          (nth lines 2)))
+                   (is (string/includes? (nth lines 3) "Implement retry policy"))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
@@ -405,10 +421,10 @@
                                                  :block/page {:db/id 200}}}
                              :children-by-page-id {100 []
                                                    200 []}
-                             :parents-by-block-id {1 [{:block/title "Project Alpha"}
-                                                      {:block/title "Milestone 2026"}]
-                                                   2 [{:block/title "Project Beta"}
-                                                      {:block/title "Initiative Z"}]}})
+                             :parents-by-block-id {1 [{:db/id 100 :block/title "Project Alpha"}
+                                                      {:db/id 101 :block/title "Milestone 2026"}]
+                                                   2 [{:db/id 200 :block/title "Project Beta"}
+                                                      {:db/id 201 :block/title "Initiative Z"}]}})
                task (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
                                     transport/invoke invoke-mock]
                       (p/let [result (show-command/execute-show {:type :show
@@ -420,11 +436,13 @@
                                                                {:output-format nil})
                               plain (-> result :data :message style/strip-ansi)]
                         (is (= :ok (:status result)))
-                        (is (string/includes? plain "Project Alpha > Milestone 2026"))
-                        (is (string/includes? plain "Project Beta > Initiative Z"))
-                        (is (< (.indexOf plain "Project Alpha > Milestone 2026")
+                        (is (string/includes? plain (str "100 > Project Alpha\n"
+                                                         "101   > Milestone 2026")))
+                        (is (string/includes? plain (str "200 > Project Beta\n"
+                                                         "201   > Initiative Z")))
+                        (is (< (.indexOf plain "100 > Project Alpha")
                                (.indexOf plain "Root A")))
-                        (is (< (.indexOf plain "Project Beta > Initiative Z")
+                        (is (< (.indexOf plain "200 > Project Beta")
                                (.indexOf plain "Root B")))))]
            (-> task
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
