@@ -693,6 +693,39 @@
 (def ^:private pull-tag-by-name add-command/pull-tag-by-name)
 (def ^:private pull-property-by-name add-command/pull-property-by-name)
 
+(defn- enrich-exception
+  [error context]
+  (let [message (or (ex-message error) (str error))
+        data (merge (or (ex-data error) {}) context)
+        cause (when (instance? js/Error error) error)]
+    (if cause
+      (ex-info message data cause)
+      (ex-info message data))))
+
+(defn- with-error-context
+  [promise context]
+  (-> promise
+      (p/catch (fn [error]
+                 (p/rejected (enrich-exception error context))))))
+
+(defn- with-option-error-context
+  [promise option phase context]
+  (with-error-context promise (merge {:option option
+                                      :phase phase}
+                                     context)))
+
+(defn- exception->error
+  [error]
+  (let [data (or (ex-data error) {})
+        code (or (:code data) :exception)
+        message (or (:message data)
+                    (ex-message error)
+                    (str error))]
+    (-> data
+        (dissoc :code :message)
+        (assoc :code code
+               :message message))))
+
 (defn- ensure-property-identifiers-exist!
   [config repo property-idents]
   (if (seq property-idents)
@@ -947,24 +980,15 @@
 (declare append-tag-and-property-ops)
 
 (defn- execute-upsert-task-ops!
-  [action cfg block-ids]
+  [repo cfg block-ids task-op-plan]
   (if (seq block-ids)
-    (p/let [task-tag-id (ensure-task-tag-id! cfg (:repo action))
-            update-properties (merge (or (:update-properties action) {})
-                                     (task-property-overrides action))
-            clear-properties (vec (distinct (or (:clear-properties action) [])))
-            ;; Currently only built-in properties is supported. If user properties are
-            ;; supported, resolution needs to happen before this fn to avoid partial update failures
-            _ (assert (every? db-property/logseq-property? (keys update-properties)))
-            _ (assert (every? db-property/logseq-property? clear-properties))
-            ops (append-tag-and-property-ops []
-                                             block-ids
-                                             {:update-tag-ids [task-tag-id]
-                                              :update-properties update-properties
-                                              :remove-properties clear-properties})]
-      (when (seq ops)
+    (let [ops (append-tag-and-property-ops []
+                                           block-ids
+                                           task-op-plan)]
+      (if (seq ops)
         (transport/invoke cfg :thread-api/apply-outliner-ops false
-                          [(:repo action) ops {}])))
+                          [repo ops {}])
+        (p/resolved nil)))
     (p/resolved nil)))
 
 (defn- append-tag-and-property-ops
@@ -990,61 +1014,76 @@
                  [:batch-set-property [block-ids k v {}]])
                update-properties))))
 
-(defn- execute-extra-upsert-block-ops!
-  [action config block-ids]
-  (if (seq block-ids)
-    (p/let [cfg (cli-server/ensure-server! config (:repo action))
-            update-tags (add-command/resolve-tags cfg (:repo action) (:update-tags action))
-            update-properties (add-command/resolve-properties
-                               cfg (:repo action) (:update-properties action)
-                               {:allow-non-built-in? true})
-            update-property-idents (keys (or update-properties {}))
-            _ (ensure-property-identifiers-exist! cfg (:repo action) update-property-idents)
-            ops (append-tag-and-property-ops []
-                                             block-ids
-                                             {:update-tag-ids (->> update-tags (map :db/id) (remove nil?) distinct vec)
-                                              :update-properties update-properties})]
-      (when (seq ops)
-        (transport/invoke cfg :thread-api/apply-outliner-ops false
-                          [(:repo action) ops {}])))
-    (p/resolved nil)))
-
 (defn execute-upsert-block
   [action config]
   (-> (if (= :update (:mode action))
         (update-command/execute-update (assoc action :type :update-block) config)
         (p/let [cfg (cli-server/ensure-server! config (:repo action))
-                ;; Resolve tags/properties before creating block so creation is
-                ;; skipped when resolution fails (e.g. tag doesn't exist)
-                _ (add-command/resolve-tags cfg (:repo action) (:update-tags action))
-                _ (add-command/resolve-properties
-                   cfg (:repo action) (:update-properties action)
-                   {:allow-non-built-in? true})
-                result (add-command/execute-add-block (assoc action :type :add-block) config)
-                created-ids (vec (or (get-in result [:data :result]) []))
-                _ (execute-extra-upsert-block-ops! action config created-ids)]
+                update-tags (with-option-error-context
+                              (add-command/resolve-tags cfg (:repo action) (:update-tags action))
+                              "--update-tags"
+                              :resolve-options
+                              {:command :upsert-block})
+                update-properties (with-option-error-context
+                                    (add-command/resolve-properties cfg (:repo action) (:update-properties action)
+                                                                    {:allow-non-built-in? true})
+                                    "--update-properties"
+                                    :resolve-options
+                                    {:command :upsert-block})
+                _ (with-option-error-context
+                    (ensure-property-identifiers-exist! cfg (:repo action) (keys (or update-properties {})))
+                    "--update-properties"
+                    :resolve-options
+                    {:command :upsert-block})
+                result (add-command/execute-add-block (-> action
+                                                          (assoc :type :add-block
+                                                                 :resolved-tags update-tags
+                                                                 :resolved-properties update-properties))
+                                                      config)
+                created-ids (vec (or (get-in result [:data :result]) []))]
           {:status :ok
            :data {:result created-ids}}))
-      (p/catch (fn [e]
+      (p/catch (fn [error]
                  {:status :error
-                  :error (merge {:code (or (:code (ex-data e)) :exception)
-                                 :message (or (ex-message e) (str e))}
-                                (when-let [candidates (:candidates (ex-data e))]
-                                  {:candidates candidates}))}))))
+                  :error (exception->error error)}))))
 
 (defn execute-upsert-page
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               update-by-id? (= :update (:mode action))
-              update-tags (add-command/resolve-tags cfg (:repo action) (:update-tags action))
-              remove-tags (add-command/resolve-tags cfg (:repo action) (:remove-tags action))
-              update-properties (add-command/resolve-properties cfg (:repo action) (:update-properties action)
-                                                                {:allow-non-built-in? true})
-              remove-properties (add-command/resolve-property-identifiers cfg (:repo action)
-                                                                          (:remove-properties action)
-                                                                          {:allow-non-built-in? true})
-              _ (ensure-property-identifiers-exist! cfg (:repo action) (keys (or update-properties {})))
-              _ (ensure-property-identifiers-exist! cfg (:repo action) remove-properties)
+              update-tags (with-option-error-context
+                            (add-command/resolve-tags cfg (:repo action) (:update-tags action))
+                            "--update-tags"
+                            :resolve-options
+                            {:command :upsert-page})
+              remove-tags (with-option-error-context
+                            (add-command/resolve-tags cfg (:repo action) (:remove-tags action))
+                            "--remove-tags"
+                            :resolve-options
+                            {:command :upsert-page})
+              update-properties (with-option-error-context
+                                  (add-command/resolve-properties cfg (:repo action) (:update-properties action)
+                                                                  {:allow-non-built-in? true})
+                                  "--update-properties"
+                                  :resolve-options
+                                  {:command :upsert-page})
+              remove-properties (with-option-error-context
+                                  (add-command/resolve-property-identifiers cfg (:repo action)
+                                                                            (:remove-properties action)
+                                                                            {:allow-non-built-in? true})
+                                  "--remove-properties"
+                                  :resolve-options
+                                  {:command :upsert-page})
+              _ (with-option-error-context
+                  (ensure-property-identifiers-exist! cfg (:repo action) (keys (or update-properties {})))
+                  "--update-properties"
+                  :resolve-options
+                  {:command :upsert-page})
+              _ (with-option-error-context
+                  (ensure-property-identifiers-exist! cfg (:repo action) remove-properties)
+                  "--remove-properties"
+                  :resolve-options
+                  {:command :upsert-page})
               page (if update-by-id?
                      (ensure-page-by-id! cfg (:repo action) (:id action))
                      (ensure-page-entity! cfg (:repo action) (:page action)))
@@ -1067,12 +1106,9 @@
                                     [(:repo action) ops {}]))]
         {:status :ok
          :data {:result [page-id]}})
-      (p/catch (fn [e]
+      (p/catch (fn [error]
                  {:status :error
-                  :error (merge {:code (or (:code (ex-data e)) :exception)
-                                 :message (or (ex-message e) (str e))}
-                                (when-let [candidates (:candidates (ex-data e))]
-                                  {:candidates candidates}))}))))
+                  :error (exception->error error)}))))
 
 (defn- normalize-status-input
   [value]
@@ -1106,39 +1142,66 @@
               status-check (resolve-task-status-action action cfg)]
         (if-not (:ok? status-check)
           {:status :error
-           :error (:error status-check)}
-          (let [action* (:action status-check)]
+           :error (merge (:error status-check)
+                         {:option "--status"
+                          :phase :validate-options
+                          :command :upsert-task})}
+          (p/let [action* (:action status-check)
+                  update-properties (merge (or (:update-properties action*) {})
+                                           (task-property-overrides action*))
+                  clear-properties (vec (distinct (or (:clear-properties action*) [])))
+                  _ (with-option-error-context
+                      (ensure-property-identifiers-exist! cfg (:repo action*) (keys update-properties))
+                      "--update-properties"
+                      :resolve-options
+                      {:command :upsert-task})
+                  _ (with-option-error-context
+                      (ensure-property-identifiers-exist! cfg (:repo action*) clear-properties)
+                      "--no-status/--no-priority/--no-scheduled/--no-deadline"
+                      :resolve-options
+                      {:command :upsert-task})
+                  task-tag-id (with-error-context
+                                (ensure-task-tag-id! cfg (:repo action*))
+                                {:phase :resolve-options
+                                 :context :task-tag
+                                 :command :upsert-task})
+                  task-op-plan {:update-tag-ids [task-tag-id]
+                                :update-properties update-properties
+                                :remove-properties clear-properties}]
             (case (:mode action*)
               :create
-              (p/let [result (add-command/execute-add-block (assoc action* :type :add-block) config)
-                      created-ids (vec (or (get-in result [:data :result]) []))
-                      _ (execute-upsert-task-ops! action* cfg created-ids)]
+              (p/let [result (add-command/execute-add-block
+                              (-> action*
+                                  (assoc :type :add-block
+                                         :resolved-tags [{:db/id task-tag-id}]
+                                         :resolved-properties update-properties
+                                         :resolved-remove-properties clear-properties)
+                                  (dissoc :status))
+                              config)
+                      created-ids (vec (or (get-in result [:data :result]) []))]
                 {:status :ok
                  :data {:result created-ids}})
 
               :page
               (p/let [page (ensure-page-entity! cfg (:repo action*) (:page action*))
                       page-id (:db/id page)
-                      _ (execute-upsert-task-ops! action* cfg [page-id])]
+                      _ (execute-upsert-task-ops! (:repo action*) cfg [page-id] task-op-plan)]
                 {:status :ok
                  :data {:result [page-id]}})
 
               :update
               (p/let [entity (ensure-task-node! cfg (:repo action*) action*)
                       node-id (:db/id entity)
-                      _ (execute-upsert-task-ops! action* cfg [node-id])]
+                      _ (execute-upsert-task-ops! (:repo action*) cfg [node-id] task-op-plan)]
                 {:status :ok
                  :data {:result [node-id]}})
 
               {:status :error
                :error {:code :invalid-options
                        :message "invalid upsert task mode"}}))))
-      (p/catch (fn [e]
+      (p/catch (fn [error]
                  {:status :error
-                  :error (merge {:code (or (:code (ex-data e)) :exception)
-                                 :message (or (ex-message e) (str e))}
-                                (when-let [candidates (:candidates (ex-data e))]
-                                  {:candidates candidates}))}))))
+                  :error (exception->error error)}))))
 
 (defn- asset-file-exists?
   [path]
