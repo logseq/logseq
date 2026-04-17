@@ -215,7 +215,7 @@ jobs:
             mv static/dist/*.blockmap     ./builds/
           fi
           mv static/dist/latest-linux.yml ./builds/latest-linux.yml
-          mv static/dist/*.zip            ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
+          mv static/dist/*.zip            ./builds/Logseq-linux-x86_64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -306,7 +306,21 @@ jobs:
         working-directory: ./static
 
       - name: Build/Release Electron app
-        run: yarn electron:make
+        shell: pwsh
+        run: |
+          $signCfg = @'
+          {
+            "win": {
+              "azureSignOptions": {
+                "publisherName": "Logseq, Inc.",
+                "endpoint": "https://eus.codesigning.azure.net/",
+                "certificateProfileName": "Logseq",
+                "codeSigningAccountName": "logseqwin"
+              }
+            }
+          }
+          '@
+          node_modules/.bin/electron-builder --config electron-builder.yml --config $signCfg --publish never
         working-directory: ./static
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -358,7 +372,21 @@ jobs:
         working-directory: ./static
 
       - name: Build/Release Electron app
-        run: yarn electron:make-win-arm64
+        shell: pwsh
+        run: |
+          $signCfg = @'
+          {
+            "win": {
+              "azureSignOptions": {
+                "publisherName": "Logseq, Inc.",
+                "endpoint": "https://eus.codesigning.azure.net/",
+                "certificateProfileName": "Logseq",
+                "codeSigningAccountName": "logseqwin"
+              }
+            }
+          }
+          '@
+          node_modules/.bin/electron-builder --config electron-builder.yml --config $signCfg --win nsis zip --arm64 --publish never
         working-directory: ./static
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
