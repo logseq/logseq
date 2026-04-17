@@ -47,6 +47,30 @@
       (is (= :add-id-resolution-failed (-> error ex-data :code)))
       (is (= [uuid-b] (-> error ex-data :missing-uuids))))))
 
+(deftest test-partition-ref-values
+  (testing "partitions uuid, integer id, and page-name refs"
+    (let [result (#'add-command/partition-ref-values
+                  ["some page"
+                   "550e8400-e29b-41d4-a716-446655440000"
+                   "101"
+                   " 42 "
+                   "another page"
+                   ""
+                   "  "])]
+      (is (= ["550e8400-e29b-41d4-a716-446655440000"] (:uuid-refs result)))
+      (is (= ["101" "42"] (:id-refs result)))
+      (is (= ["some page" "another page"] (:page-refs result)))))
+
+  (testing "negative integers are recognized as id refs"
+    (let [result (#'add-command/partition-ref-values ["-5"])]
+      (is (= ["-5"] (:id-refs result)))
+      (is (empty? (:page-refs result)))))
+
+  (testing "non-integer numbers stay as page refs"
+    (let [result (#'add-command/partition-ref-values ["3.14" "1e5"])]
+      (is (empty? (:id-refs result)))
+      (is (= ["3.14" "1e5"] (:page-refs result))))))
+
 (def ^:private mock-transport-invoke
   (fn [_ method _ args]
     (case method
@@ -76,6 +100,26 @@
            :else {})))
 
       (p/rejected (ex-info "unexpected method" {:method method :args args})))))
+
+(deftest test-resolve-id-ref-entities
+  (testing "resolves integer id refs to uuid+title maps"
+    (async done
+           (let [page-uuid (random-uuid)
+                 mock-invoke (fn [_ _ _ args]
+                               (let [[_ _ lookup] args]
+                                 (p/resolved
+                                  (cond
+                                    (= lookup 101)
+                                    {:db/id 101 :block/uuid page-uuid :block/title "My Page"}
+                                    :else {}))))]
+             (-> (p/with-redefs [transport/invoke mock-invoke]
+                   (p/let [result (#'add-command/resolve-id-ref-entities {} "demo" ["101"])]
+                     (is (= 1 (count result)))
+                     (is (= page-uuid (:block/uuid (first result))))
+                     (is (= "101" (:block/title (first result)))
+                         "title is the original id string for title-ref->id-ref replacement")))
+                 (p/catch (fn [e] (is false (str "unexpected error: " e))))
+                 (p/finally done))))))
 
 (deftest test-resolve-tags-accepts-valid-tag
   (async done
