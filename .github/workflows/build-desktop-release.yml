@@ -310,6 +310,7 @@ jobs:
         run: |
           $signCfg = @'
           {
+            "extends": "./electron-builder.yml",
             "win": {
               "azureSignOptions": {
                 "publisherName": "Logseq, Inc.",
@@ -320,7 +321,9 @@ jobs:
             }
           }
           '@
-          node_modules/.bin/electron-builder --config electron-builder.yml --config $signCfg --publish never
+          $signCfgPath = Join-Path $PWD "electron-builder.sign-win.json"
+          $signCfg | Out-File -FilePath $signCfgPath -Encoding utf8NoBOM
+          node_modules/.bin/electron-builder --config $signCfgPath --publish never
         working-directory: ./static
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -376,6 +379,7 @@ jobs:
         run: |
           $signCfg = @'
           {
+            "extends": "./electron-builder.yml",
             "win": {
               "azureSignOptions": {
                 "publisherName": "Logseq, Inc.",
@@ -386,7 +390,9 @@ jobs:
             }
           }
           '@
-          node_modules/.bin/electron-builder --config electron-builder.yml --config $signCfg --win nsis zip --arm64 --publish never
+          $signCfgPath = Join-Path $PWD "electron-builder.sign-win.json"
+          $signCfg | Out-File -FilePath $signCfgPath -Encoding utf8NoBOM
+          node_modules/.bin/electron-builder --config $signCfgPath --win nsis zip --arm64 --publish never
         working-directory: ./static
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
