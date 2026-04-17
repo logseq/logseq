@@ -525,3 +525,113 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
+
+(deftest test-execute-upsert-block-create-invalid-update-properties-is-atomic
+  (async done
+    (let [mutation-called?* (atom false)
+          action {:type :upsert-block
+                  :mode :create
+                  :repo "demo-repo"
+                  :graph "demo-graph"
+                  :target-page-name "Home"
+                  :blocks [{:block/title "Atomic block" :block/uuid (random-uuid)}]
+                  :update-tags ["TagOne"]
+                  :update-properties {:missing-prop "value"}
+                  :pos "last-child"}]
+      (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                      (p/resolved (assoc config :base-url "http://example")))
+                          add-command/resolve-tags (fn [_ _ _]
+                                                     (p/resolved [{:db/id 100}]))
+                          add-command/resolve-properties (fn [_ _ _ _]
+                                                           (p/rejected (ex-info "property not found"
+                                                                                {:code :property-not-found
+                                                                                 :property :missing-prop})))
+                          add-command/execute-add-block (fn [_ _]
+                                                          (reset! mutation-called?* true)
+                                                          (p/resolved {:status :ok
+                                                                       :data {:result [1001]}}))]
+            (p/let [result (upsert-command/execute-upsert-block action {})]
+              (is (= :error (:status result)))
+              (is (= :property-not-found (get-in result [:error :code])))
+              (is (= "--update-properties" (get-in result [:error :option])))
+              (is (= :resolve-options (get-in result [:error :phase])))
+              (is (= :missing-prop (get-in result [:error :property])))
+              (is (false? @mutation-called?*)
+                  "must not mutate when one option fails")))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-upsert-page-create-invalid-update-properties-is-atomic
+  (async done
+    (let [mutation-called?* (atom false)
+          action {:type :upsert-page
+                  :mode :create
+                  :repo "demo-repo"
+                  :graph "demo-graph"
+                  :page "AtomicPage"
+                  :update-tags ["TagOne"]
+                  :update-properties {:missing-prop "value"}}]
+      (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                      (p/resolved (assoc config :base-url "http://example")))
+                          add-command/resolve-tags (fn [_ _ tags]
+                                                     (if (seq tags)
+                                                       (p/resolved [{:db/id 100}])
+                                                       (p/resolved nil)))
+                          add-command/resolve-properties (fn [_ _ _ _]
+                                                           (p/rejected (ex-info "property not found"
+                                                                                {:code :property-not-found
+                                                                                 :property :missing-prop})))
+                          transport/invoke (fn [_ method _ _]
+                                             (when (= :thread-api/apply-outliner-ops method)
+                                               (reset! mutation-called?* true))
+                                             (throw (ex-info "unexpected invoke"
+                                                             {:method method})))]
+            (p/let [result (upsert-command/execute-upsert-page action {})]
+              (is (= :error (:status result)))
+              (is (= :property-not-found (get-in result [:error :code])))
+              (is (= "--update-properties" (get-in result [:error :option])))
+              (is (= :resolve-options (get-in result [:error :phase])))
+              (is (= :missing-prop (get-in result [:error :property])))
+              (is (false? @mutation-called?*)
+                  "must not mutate page when one option fails")))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-upsert-task-page-invalid-status-fails-before-mutation
+  (async done
+    (let [calls* (atom [])
+          action {:type :upsert-task
+                  :mode :page
+                  :repo "demo-repo"
+                  :graph "demo-graph"
+                  :page "TaskHome"
+                  :status-input "invalid-status"
+                  :priority :logseq.property/priority.high}]
+      (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                      (p/resolved (assoc config :base-url "http://example")))
+                          transport/invoke (fn [_ method _ _]
+                                             (swap! calls* conj method)
+                                             (case method
+                                               :thread-api/q
+                                               (p/resolved [:logseq.property/status.todo
+                                                            :logseq.property/status.doing
+                                                            :logseq.property/status.done])
+
+                                               (throw (ex-info "unexpected invoke"
+                                                               {:method method}))))]
+            (p/let [result (upsert-command/execute-upsert-task action {})
+                    message (or (get-in result [:error :message]) "")]
+              (is (= :error (:status result)))
+              (is (= :invalid-options (get-in result [:error :code])))
+              (is (= "--status" (get-in result [:error :option])))
+              (is (= :validate-options (get-in result [:error :phase])))
+              (is (string/includes? message "invalid-status"))
+              (is (= [:thread-api/q] @calls*)
+                  "must fail before page resolution or mutation")))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+

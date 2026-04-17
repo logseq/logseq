@@ -282,23 +282,31 @@
       (is (= (str "100 > Project Alpha\n"
                   "101   > Milestone 2026\n"
                   "102     > API rollout")
-             (render-line [{:db/id 100 :block/title "Project Alpha"}
-                           {:db/id 101 :block/title "Milestone 2026"}
-                           {:db/id 102 :block/title "API rollout"}]))))
+             (style/strip-ansi
+              (render-line [{:db/id 100 :block/title "Project Alpha"}
+                            {:db/id 101 :block/title "Milestone 2026"}
+                            {:db/id 102 :block/title "API rollout"}])))))
 
     (testing "dims breadcrumb id column like normal block ids"
       (let [output (binding [style/*color-enabled?* true]
                      (render-line [{:db/id 100 :block/title "Project Alpha"}
-                                   {:db/id 101 :block/title "Milestone 2026"}]))]
-        (is (string/includes? output (style/dim "100")))
-        (is (string/includes? output (style/dim "101")))
+                                   {:db/id 101 :block/title "Milestone 2026"}]))
+            plain-lines (-> output style/strip-ansi string/split-lines)
+            first-column-id (fn [line]
+                              (some-> line
+                                      string/trim
+                                      (string/split #"\s+" 2)
+                                      first))]
+        (is (re-find style/ansi-pattern output))
+        (is (= ["100" "101"]
+               (mapv first-column-id plain-lines)))
         (is (= (str "100 > Project Alpha\n"
                     "101   > Milestone 2026")
-               (style/strip-ansi output)))))
+               (string/join "\n" plain-lines)))))
 
     (testing "falls back to db/id when title and name are absent"
       (is (= "42 > 42"
-             (render-line [{:db/id 42}]))))))
+             (style/strip-ansi (render-line [{:db/id 42}])))))))
 
 (deftest test-execute-show-human-adds-breadcrumb-for-ordinary-block
   (async done

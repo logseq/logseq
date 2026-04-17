@@ -1146,8 +1146,16 @@
                        (:blocks action))
               blocks-for-insert (flatten-block-tree blocks)
               status (:status action)
-              tags (resolve-tags cfg (:repo action) (:tags action))
-              properties (resolve-properties cfg (:repo action) (:properties action))
+              tags (if (contains? action :resolved-tags)
+                     (:resolved-tags action)
+                     (resolve-tags cfg (:repo action) (:tags action)))
+              properties (if (contains? action :resolved-properties)
+                           (:resolved-properties action)
+                           (resolve-properties cfg (:repo action) (:properties action)))
+              remove-properties (if (contains? action :resolved-remove-properties)
+                                  (:resolved-remove-properties action)
+                                  (resolve-property-identifiers cfg (:repo action) (:remove-properties action)
+                                                                {:allow-non-built-in? true}))
               pos (:pos action)
               keep-uuid? true
               opts (case pos
@@ -1157,37 +1165,33 @@
               opts (cond-> opts
                      keep-uuid?
                      (assoc :keep-uuid? true))
-              ops [[:insert-blocks [blocks-for-insert
-                                    target-id
-                                    (assoc opts :outliner-op :insert-blocks)]]]
-              insert-result (transport/invoke cfg :thread-api/apply-outliner-ops false [(:repo action) ops {}])
-              block-ids (->> blocks-for-insert
-                             (map :block/uuid)
-                             (remove nil?)
-                             vec)
-              tag-ids (when (seq tags)
-                        (->> tags (map :db/id) (remove nil?) vec))
-              _ (when (and status (seq block-ids))
-                  (transport/invoke cfg :thread-api/apply-outliner-ops false
-                                    [(:repo action)
-                                     [[:batch-set-property [block-ids :logseq.property/status status {}]]]
-                                     {}]))
-              _ (when (and (seq tag-ids) (seq block-ids))
-                  (p/all
-                   (map (fn [tag-id]
-                          (transport/invoke cfg :thread-api/apply-outliner-ops false
-                                            [(:repo action)
-                                             [[:batch-set-property [block-ids :block/tags tag-id {}]]]
-                                             {}]))
-                        tag-ids)))
-              _ (when (and (seq properties) (seq block-ids))
-                  (p/all
-                   (map (fn [[k v]]
-                          (transport/invoke cfg :thread-api/apply-outliner-ops false
-                                            [(:repo action)
-                                             [[:batch-set-property [block-ids k v {}]]]
-                                             {}]))
-                        properties)))
-              created-ids (resolve-created-block-ids cfg (:repo action) blocks-for-insert insert-result)]
+              block-refs (->> blocks-for-insert
+                              (map :block/uuid)
+                              (remove nil?)
+                              (mapv (fn [block-uuid] [:block/uuid block-uuid])))
+              tag-ids (->> (or tags [])
+                           (map :db/id)
+                           (remove nil?)
+                           distinct
+                           vec)
+              ops (cond-> [[:insert-blocks [blocks-for-insert
+                                            target-id
+                                            (assoc opts :outliner-op :insert-blocks)]]]
+                    (and (seq block-refs) (seq remove-properties))
+                    (into (map (fn [property-id]
+                                 [:batch-remove-property [block-refs property-id]])
+                               remove-properties))
+                    (and status (seq block-refs))
+                    (conj [:batch-set-property [block-refs :logseq.property/status status {}]])
+                    (and (seq tag-ids) (seq block-refs))
+                    (into (map (fn [tag-id]
+                                 [:batch-set-property [block-refs :block/tags tag-id {}]])
+                               tag-ids))
+                    (and (seq properties) (seq block-refs))
+                    (into (map (fn [[k v]]
+                                 [:batch-set-property [block-refs k v {}]])
+                               properties)))
+              apply-result (transport/invoke cfg :thread-api/apply-outliner-ops false [(:repo action) ops {}])
+              created-ids (resolve-created-block-ids cfg (:repo action) blocks-for-insert apply-result)]
         {:status :ok
          :data {:result created-ids}})))

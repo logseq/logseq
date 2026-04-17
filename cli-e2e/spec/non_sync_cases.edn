@@ -271,6 +271,26 @@
      :upsert ["--page" "--status" "--no-status"]}},
    :tags [:upsert],
    :extends :non-sync/graph-json-env}
+  {:id "page-upsert-invalid-update-properties-atomic-json",
+   :setup
+   ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name AtomicTag >/dev/null"],
+   :cmds
+   ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page AtomicPage --update-tags '[\"AtomicTag\"]' --update-properties '{:missing-prop \"value\"}'"],
+   :expect
+   {:exit 1,
+    :stdout-json-paths
+    {[:status] "error",
+     [:error :code] "property-not-found",
+     [:error :option] "--update-properties",
+     [:error :phase] "resolve-options"},
+    :stdout-contains ["missing-prop"]},
+   :covers
+   {:commands ["upsert page"],
+    :options
+    {:global ["--config" "--graph" "--data-dir" "--output"],
+     :upsert ["--page" "--update-tags" "--update-properties"]}},
+   :tags [:upsert],
+   :extends :non-sync/graph-json-env}
   {:id "node-list-by-tags-properties-json",
    :cmds
    ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name NodeTag >/dev/null"
