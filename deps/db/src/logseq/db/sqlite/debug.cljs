@@ -11,7 +11,7 @@
                                        :rowMode "array"})
                         bean/->clj
                         ffirst
-                        sqlite-util/transit-read)
+                        sqlite-util/read-transit-str)
         result (->> (.exec db #js {:sql "select addr, addresses from kvs"
                                    :rowMode "array"})
                     bean/->clj
@@ -26,7 +26,7 @@
   [^Object db]
   (let [schema (let [stmt (.prepare db "select content from kvs where addr = ?")
                      content (.-content (.get stmt 0))]
-                 (sqlite-util/transit-read content))
+                 (sqlite-util/read-transit-str content))
         stmt (.prepare db "select addr, addresses from kvs")
         result (->> (.all ^Object stmt)
                     bean/->clj
