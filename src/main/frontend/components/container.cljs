@@ -220,7 +220,6 @@
 
 (rum/defc help-menu-popup
   []
-
   (hooks/use-effect!
    (fn []
      (state/set-state! :ui/handbooks-open? false))

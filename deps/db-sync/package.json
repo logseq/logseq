@@ -29,7 +29,7 @@
     "@sentry/cloudflare": "^10.45.0",
     "@sentry/node": "^10.45.0",
     "better-sqlite3": "^12.8.0",
-    "shadow-cljs": "^3.3.4",
+    "shadow-cljs": "^3.4.4",
     "transit-js": "^0.8.874",
     "ws": "^8.19.0"
   },

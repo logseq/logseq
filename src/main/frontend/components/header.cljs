@@ -4,6 +4,7 @@
             [cljs-time.core :as t]
             [clojure.string :as string]
             [dommy.core :as d]
+            [electron.ipc :as ipc]
             [frontend.common.missionary :as c.m]
             [frontend.components.block :as component-block]
             [frontend.components.export :as export]
@@ -35,6 +36,7 @@
             [logseq.shui.ui :as shui]
             [logseq.shui.util :as shui-util]
             [missionary.core :as m]
+            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
@@ -244,8 +246,17 @@
   (let [[downloaded, set-downloaded] (rum/use-state nil)
         _ (hooks/use-effect!
            (fn []
-             (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
-               (let [callback (fn [_ args]
+             (when (util/electron?)
+               (-> (ipc/invoke "get-downloaded-update")
+                   (p/then
+                    (fn [args]
+                      (when args
+                        (let [args (bean/->clj args)]
+                          (set-downloaded args)
+                          (state/set-state! :electron/auto-updater-downloaded args)))))
+                   (p/catch (fn [_] nil)))
+               (let [channel "auto-updater-downloaded"
+                     callback (fn [_ args]
                                 (js/console.debug "[new-version downloaded] args:" args)
                                 (let [args (bean/->clj args)]
                                   (set-downloaded args)

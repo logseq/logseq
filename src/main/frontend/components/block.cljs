@@ -2137,8 +2137,6 @@
                        item-content (.. target -nextSibling -data)]
                    (editor-handler/toggle-list-checkbox block item-content)))}))
 
-(declare block-content)
-
 (declare src-cp)
 
 (rum/defc ^:large-vars/cleanup-todo text-block-title
@@ -3788,8 +3786,6 @@
   (map-inline config
               (gp-mldoc/inline->edn title
                                     (mldoc/get-default-config :markdown))))
-
-(declare ->hiccup)
 
 (defn- get-code-mode-by-lang
   [lang]

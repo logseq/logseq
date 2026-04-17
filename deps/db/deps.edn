@@ -14,10 +14,11 @@
   logseq/clj-fractional-indexing        {:git/url "https://github.com/logseq/clj-fractional-indexing"
                                          :sha     "1087f0fb18aa8e25ee3bbbb0db983b7a29bce270"}
   borkdude/rewrite-edn                  {:mvn/version "0.5.9"}
-  metosin/malli                         {:mvn/version "0.16.1"}
+  metosin/malli                         {:git/url "https://github.com/metosin/malli"
+                                         :sha     "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}
   medley/medley                         {:mvn/version "1.4.0"}}
 
  :aliases
  {:clj-kondo
-  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.01.19"}}
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
    :main-opts  ["-m" "clj-kondo.main"]}}}
