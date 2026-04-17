@@ -49,6 +49,24 @@
     :logseq.class/Property
     :logseq.class/Page})
 
+(defn- entity-id-text
+  [entity]
+  (str (or (:db/id entity) "-")))
+
+(defn- id-column-width
+  [entities]
+  (apply max (map (comp count entity-id-text) entities)))
+
+(defn- render-id-column
+  [entity id-width]
+  (let [id-text (entity-id-text entity)
+        padding (max 0 (- id-width (count id-text)))]
+    (style/dim (str id-text (apply str (repeat padding " "))))))
+
+(defn- render-id-column-padding
+  [id-width]
+  (style/dim (apply str (repeat (inc id-width) " "))))
+
 (defn- breadcrumb-label
   [entity]
   (or (:block/title entity)
@@ -111,13 +129,24 @@
 
 (defn- render-breadcrumb-line
   [parents]
-  (let [segments (->> parents
-                      (map breadcrumb-label)
-                      (remove string/blank?)
-                      (map truncate-breadcrumb-segment)
-                      vec)]
-    (when (seq segments)
-      (string/join breadcrumb-separator segments))))
+  (let [rows (->> parents
+                  (map (fn [parent]
+                         (let [label (-> parent breadcrumb-label truncate-breadcrumb-segment)]
+                           (when-not (string/blank? label)
+                             {:parent parent
+                              :label label}))))
+                  (remove nil?)
+                  vec)]
+    (when (seq rows)
+      (let [id-width (id-column-width (map :parent rows))]
+        (->> rows
+             (map-indexed (fn [idx {:keys [parent label]}]
+                            (let [tree-indent (apply str (repeat (* idx 2) " "))]
+                              (str (render-id-column parent id-width)
+                                   tree-indent
+                                   breadcrumb-separator
+                                   label))))
+             (string/join "\n"))))))
 
 (defn read-stdin
   []
@@ -875,19 +904,13 @@
   [{:keys [root uuid->label property-titles property-value-labels]}]
   (let [label (fn [node]
                 (or (block-label (assoc node :uuid->label uuid->label)) "-"))
-        node-id (fn [node]
-                  (or (:db/id node) "-"))
         collect-nodes (fn collect-nodes [node]
                         (if-let [children (:block/children node)]
                           (into [node] (mapcat collect-nodes children))
                           [node]))
         nodes (collect-nodes root)
-        id-width (apply max (map (fn [node] (count (str (node-id node)))) nodes))
-        pad-id (fn [node]
-                 (let [id-str (str (node-id node))
-                       padding (max 0 (- id-width (count id-str)))]
-                   (str id-str (apply str (repeat padding " ")))))
-        id-padding (style/dim (apply str (repeat (inc id-width) " ")))
+        id-width (id-column-width nodes)
+        id-padding (render-id-column-padding id-width)
         split-lines (fn [value]
                       (string/split (or value "") #"\n"))
         style-glyph (fn [value]
@@ -910,7 +933,7 @@
                          rows (split-lines (label child))
                          first-row (first rows)
                          rest-rows (rest rows)
-                         line (str (style/dim (pad-id child)) " "
+                         line (str (render-id-column child id-width) " "
                                    (style-glyph prefix)
                                    (style-glyph branch)
                                    first-row)]
@@ -922,7 +945,7 @@
     (let [rows (split-lines (label root))
           first-row (first rows)
           rest-rows (rest rows)]
-      (swap! lines conj (str (style/dim (pad-id root)) " " first-row))
+      (swap! lines conj (str (render-id-column root id-width) " " first-row))
       (doseq [row rest-rows]
         (swap! lines conj (str id-padding row))))
     (append-property-lines root "")
