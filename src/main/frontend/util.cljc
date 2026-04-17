@@ -1315,15 +1315,19 @@
                          (js/console.error "Web clipboard failed" err)))))))))
 
 #?(:cljs
+   (defn copy-image-blob-to-clipboard
+     [blob]
+     (if (= (.-type blob) "image/png")
+       (write-blob-to-clipboard blob)
+       (image-blob->png blob write-blob-to-clipboard))))
+
+#?(:cljs
    (defn copy-image-to-clipboard
      [src]
      (-> (js/fetch src)
          (.then (fn [data]
                   (-> (.blob data)
-                      (.then (fn [blob]
-                               (if (= (.-type blob) "image/png")
-                                 (write-blob-to-clipboard blob)
-                                 (image-blob->png blob write-blob-to-clipboard))))
+                      (.then copy-image-blob-to-clipboard)
                       (.catch js/console.error)))))))
 
 (defn memoize-last
