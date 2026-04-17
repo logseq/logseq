@@ -76,7 +76,7 @@
                 (if update-pending? (t :settings-page/checking) (t :settings-page/check-for-updates))
                 :class "text-sm mr-1"
                 :disabled update-pending?
-                :on-click #(js/window.apis.checkForUpdates false))
+                :on-click #(js/window.apis.checkForUpdates true))
 
                :else
                nil)]
@@ -101,6 +101,9 @@
                    (string/blank? type))
        [:div.update-state.text-sm
         (case type
+          "checking-for-update"
+          [:p (t :settings-page/checking)]
+
           "update-not-available"
           [:p (t :settings-page/app-updated)]
 
@@ -114,6 +117,21 @@
                  (util/stop e))}
               svg/external-link name " 🎉"]])
 
+          "download-progress"
+          (let [percent (some-> payload :percent js/Math.round)]
+            [:p (str "Downloading update"
+                     (when (number? percent)
+                       (str " " percent "%"))
+                     "...")])
+
+          "update-downloaded"
+          [:div.flex.items-center.gap-2.flex-wrap
+           [:p (t :updater/new-version-install)]
+           (ui/button
+            (t :updater/quit-and-install)
+            :class "text-sm"
+            :on-click #(ipc/ipc :quitAndInstall))]
+
           "error"
           [:p (t :settings-page/update-error-1) [:br] (t :settings-page/update-error-2)
            [:a.link
@@ -121,7 +139,9 @@
              (fn [e]
                (js/window.apis.openExternal "https://github.com/logseq/logseq/releases")
                (util/stop e))}
-            svg/external-link " release channel"]])])]))
+            svg/external-link " release channel"]]
+
+          nil)])]))
 
 (rum/defc outdenting-hint
   []

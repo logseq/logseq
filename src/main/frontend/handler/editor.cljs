@@ -1083,8 +1083,6 @@
            (:db/id page)
            :page))))))
 
-(declare save-current-block!)
-
 ;; FIXME: shortcut `mod+.` doesn't work on Web (Chrome)
 (defn zoom-in! []
   (if (state/editing?)

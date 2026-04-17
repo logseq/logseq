@@ -11,6 +11,6 @@
     "deploy": "yarn bump-publish-version && yarn clean && yarn release && cd ./worker && wrangler deploy --env prod"
   },
   "dependencies": {
-    "shadow-cljs": "^3.3.4"
+    "shadow-cljs": "^3.4.4"
   }
 }

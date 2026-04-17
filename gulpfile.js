@@ -19,7 +19,6 @@ const rawCopySrc = (globs, options = {}) =>
   gulp.src(globs, { encoding: false, ...options })
 const staticCleanKeep = new Set([
   'entitlements.plist',
-  'forge.config.js',
   'node_modules',
   'package.json',
   'yarn.lock',
