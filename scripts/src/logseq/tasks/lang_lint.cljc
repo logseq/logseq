@@ -129,22 +129,21 @@
     (->> dicts
          (map (fn [[lang lang-dicts]]
                 {:lang lang
-                 :percent-translated (if (zero? en-count)
-                                       0.0
-                                       (* 100.0 (/ (count lang-dicts) en-count)))
                  :translation-count (count lang-dicts)
+                 :untranslated-count (when-not (= lang :en)
+                                       (max 0 (- en-count (count lang-dicts))))
                  :same-as-en-count (when-not (= lang :en)
                                      (get same-as-en-counts lang 0))}))
          vec)))
 
 (defn sort-translation-summary-stats
-  "Sort translation summary stats with English first, then by translated
-  percent descending, then by identical-to-English count descending."
+  "Sort translation summary stats with English first, then by untranslated
+  count descending, then by identical-to-English count descending."
   [stats]
   (let [en-stats (filter #(= :en (:lang %)) stats)
         other-stats (remove #(= :en (:lang %)) stats)]
     (into (vec en-stats)
-          (sort-by (juxt (comp - :percent-translated)
+          (sort-by (juxt (comp - :untranslated-count)
                          (comp - :same-as-en-count)
                          :lang)
                    other-stats))))
