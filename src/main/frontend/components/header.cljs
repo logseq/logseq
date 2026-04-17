@@ -272,10 +272,10 @@
 
     (when downloaded
       [:div.cp__header-tips
-       [:p (t :updater/new-version-install)
+       [:p (t :settings.general/update-ready-to-install)
         [:a.restart.ml-2
          {:on-click #(handler/quit-and-install-new-version!)}
-         (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
+         (svg/reload 16) [:strong (t :settings.general/quit-and-install)]]]])))
 
 (defn- clear-recent-highlight!
   []
