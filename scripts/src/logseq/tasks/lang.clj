@@ -35,10 +35,10 @@
         langs (get-languages)]
     (->> (lang-lint/translation-summary-stats dicts)
          (lang-lint/sort-translation-summary-stats)
-         (map (fn [{:keys [lang percent-translated translation-count same-as-en-count]}]
+         (map (fn [{:keys [lang translation-count untranslated-count same-as-en-count]}]
                 {:locale lang
-                 :percent-translated (format "%.2f" percent-translated)
                  :translation-count translation-count
+                 :untranslated-count (if (= lang :en) "-" untranslated-count)
                  :same-as-en-count (if (= lang :en) "-" same-as-en-count)
                  :language (langs lang)}))
          task-util/print-table)))
