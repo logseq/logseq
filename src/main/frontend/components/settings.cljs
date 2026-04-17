@@ -71,7 +71,7 @@
 
                (util/electron?)
                (ui/button
-                (if update-pending? (t :settings.general/checking) (t :settings.general/check-for-updates))
+                (if update-pending? (t :settings.general/checking-for-updates) (t :settings.general/check-for-updates))
                 :class "text-sm mr-1"
                 :disabled update-pending?
                 :on-click #(js/window.apis.checkForUpdates true))
@@ -97,12 +97,11 @@
          :href "https://docs.logseq.com/#/page/changelog"}
         (t :settings.general/changelog)]]]
 
-     (when-not (or update-pending?
-                   (string/blank? type))
+     (when-not (string/blank? type)
        [:div.update-state.text-sm
         (case type
           "checking-for-update"
-          [:p (t :settings-page/checking)]
+          [:p (t :settings.general/checking-for-updates)]
 
           "update-not-available"
           [:p (t :settings.general/app-updated)]
@@ -121,16 +120,13 @@
 
           "download-progress"
           (let [percent (some-> payload :percent js/Math.round)]
-            [:p (str "Downloading update"
-                     (when (number? percent)
-                       (str " " percent "%"))
-                     "...")])
+            [:p (t :settings.general/downloading-progress (or percent 0))])
 
           "update-downloaded"
           [:div.flex.items-center.gap-2.flex-wrap
-           [:p (t :updater/new-version-install)]
+           [:p (t :settings.general/update-ready-to-install)]
            (ui/button
-            (t :updater/quit-and-install)
+            (t :settings.general/quit-and-install)
             :class "text-sm"
             :on-click #(ipc/ipc :quitAndInstall))]
 
