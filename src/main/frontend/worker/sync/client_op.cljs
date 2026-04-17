@@ -311,15 +311,15 @@
       {:tx-id tx-id
        :outliner-op (str->kw (aget row "outliner_op"))
        :forward-outliner-ops (or (normalize-op-entries
-                                  (sqlite-util/transit-read (aget row "forward_outliner_ops")))
+                                  (sqlite-util/read-transit-str (aget row "forward_outliner_ops")))
                                  [])
        :inverse-outliner-ops (or (normalize-op-entries
-                                  (sqlite-util/transit-read (aget row "inverse_outliner_ops")))
+                                  (sqlite-util/read-transit-str (aget row "inverse_outliner_ops")))
                                  [])
        :inferred-outliner-ops? (int->bool (aget row "inferred_outliner_ops"))
        :db-sync/undo-redo (str->kw (aget row "undo_redo"))
-       :tx (sqlite-util/transit-read (aget row "normalized_tx_data"))
-       :reversed-tx (sqlite-util/transit-read (aget row "reversed_tx_data"))})))
+       :tx (sqlite-util/read-transit-str (aget row "normalized_tx_data"))
+       :reversed-tx (sqlite-util/read-transit-str (aget row "reversed_tx_data"))})))
 
 (defn upsert-local-tx-entry!
   [repo {:keys [tx-id created-at pending? failed? outliner-op undo-redo
@@ -362,11 +362,11 @@
                     (bool->int failed?)
                     (kw->str outliner-op)
                     (kw->str undo-redo)
-                    (sqlite-util/transit-write forward-outliner-ops')
-                    (sqlite-util/transit-write inverse-outliner-ops')
+                    (sqlite-util/write-transit-str forward-outliner-ops')
+                    (sqlite-util/write-transit-str inverse-outliner-ops')
                     (bool->int inferred-outliner-ops?)
-                    (sqlite-util/transit-write (or normalized-tx-data []))
-                    (sqlite-util/transit-write (or reversed-tx-data []))])
+                    (sqlite-util/write-transit-str (or normalized-tx-data []))
+                    (sqlite-util/write-transit-str (or reversed-tx-data []))])
       {:tx-id tx-id
        :created-at created-at'
        :should-inc-pending? should-inc-pending?})))
@@ -458,7 +458,7 @@
                              [(str block-uuid)])]
     (let [op-type (str->kw (aget row "asset_op"))
           t (aget row "asset_t")
-          value (or (some-> (aget row "asset_value") sqlite-util/transit-read)
+          value (or (some-> (aget row "asset_value") sqlite-util/read-transit-str)
                     {:block-uuid block-uuid})]
       (local-asset-op-map op-type t value))))
 
@@ -478,7 +478,7 @@
                      (str block-uuid)
                      (kw->str op-type)
                      t
-                     (sqlite-util/transit-write value)])))))
+                     (sqlite-util/write-transit-str value)])))))
 
 ;;; asset ops
 (defn add-asset-ops
@@ -538,7 +538,7 @@
          (keep (fn [row]
                  (let [op-type (str->kw (aget row "asset_op"))
                        t (aget row "asset_t")
-                       value (some-> (aget row "asset_value") sqlite-util/transit-read)]
+                       value (some-> (aget row "asset_value") sqlite-util/read-transit-str)]
                    (when (and op-type (map? value) (:block-uuid value))
                      (local-asset-op-map op-type t value)))))
          vec)))

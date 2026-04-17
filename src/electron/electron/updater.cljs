@@ -1,161 +1,163 @@
 (ns electron.updater
-  (:require [electron.utils :refer [mac? win32? prod? open fetch *win]]
-            [electron.logger :as logger]
-            [frontend.version :refer [version]]
-            [clojure.string :as string]
-            [promesa.core :as p]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
             [electron.configs :as cfgs]
-            ["semver" :as semver]
-            ["os" :as os]
-            ["fs" :as fs]
-            ["path" :as node-path]
-            ["electron" :refer [ipcMain app autoUpdater]]))
+            [electron.logger :as logger]
+            [electron.utils :refer [*win prod?]]
+            [frontend.version :refer [version]]
+            ["electron" :refer [ipcMain]]
+            ["electron-updater" :refer [autoUpdater]]))
 
-(def *update-ready-to-install (atom nil))
 (def *update-pending (atom nil))
+(def *downloaded-update (atom nil))
 (def debug (partial logger/debug "[updater]"))
+(def electron-version version)
 
-;Event: 'error'
-;Event: 'checking-for-update'
-;Event: 'update-available'
-;Event: 'update-not-available'
-;Event: 'download-progress'
-;Event: 'update-downloaded'
-;Event: 'completed'
+(defn- updater-channel
+  []
+  (let [platform (.-platform js/process)
+        arch (.-arch js/process)]
+    (case platform
+      "win32" (when (#{"x64" "arm64"} arch)
+                (str "latest-" arch))
+      "darwin" (when (#{"x64" "arm64"} arch)
+                 (str "latest-" arch))
+      nil)))
 
-(def electron-version
-  (let [parts (string/split version #"\.")
-        parts (take 3 parts)]
-    (string/join "." parts)))
+(defn- emit-update!
+  [^js win type payload]
+  (when-let [web-contents (and win (. ^js win -webContents))]
+    (.send web-contents "updates-callback"
+           (bean/->js {:type type :payload payload}))))
 
-(defn get-latest-artifact-info
-  [repo]
-  (let [endpoint (str "https://update.electronjs.org/" repo "/" js/process.platform "-" js/process.arch "/" electron-version)]
-    (debug "checking" endpoint)
-    (p/catch
-     (p/let [res (fetch endpoint)
-             status (.-status res)
-             text (.text res)]
-       (if (.-ok res)
-         (let [info (when-not (string/blank? text) (js/JSON.parse text))]
-           (bean/->clj info))
-         (throw (js/Error. (str "[" status "] " text)))))
-     (fn [e]
-       (logger/warn "[update server error]" e)
-       (throw e)))))
+(defn- emit-completed!
+  [^js win]
+  (emit-update! win "completed" nil))
 
-(defn check-for-updates
-  [{:keys           [repo ^js win]
-    [auto-download] :args}]
-  (let [emit (fn [type payload]
-               (.. win -webContents
-                   (send "updates-callback" (bean/->js {:type type :payload payload}))))]
-    (debug "check for updates #" repo version)
-    (p/create
-     (fn [resolve reject]
-       (emit "checking-for-update" nil)
-       (-> (p/let
-            [artifact (get-latest-artifact-info repo)
+(defn- normalize-payload
+  [payload]
+  (when payload
+    (bean/->clj payload)))
 
-             artifact (when-let [remote-version (and artifact (re-find #"\d+\.\d+\.\d+" (:url artifact)))]
-                        (when (and (. semver valid remote-version)
-                                   (. semver lt electron-version remote-version)) artifact))
+(defn- normalize-error
+  [^js e]
+  {:message (or (.-message e) (str e))})
 
-             url (if-not artifact (do (emit "update-not-available" nil) (throw (js/Error. "update not available"))) (:url artifact))
-             _ (if url (emit "update-available" (bean/->js artifact)) (throw (js/Error. "download url not exists")))
-               ;; start download FIXME: user's preference about auto download
-             _ (when-not auto-download (throw (js/Error. "no auto download")))
-             ^js dl-res (fetch url)
-             _ (when-not (.-ok dl-res) (throw (js/Error. "download resource not available")))
-             dest-info (p/create
-                        (fn [resolve1 reject1]
-                          (let [headers (. dl-res -headers)
-                                total-size (js/parseInt (.get headers "content-length"))
-                                body (.-body dl-res)
-                                start-at (.now js/Date)
-                                *downloaded (atom 0)
-                                dest-basename (node-path/basename url)
-                                tmp-dest-file (node-path/join (os/tmpdir) (str dest-basename ".pending"))
-                                dest-file (.createWriteStream fs tmp-dest-file)]
-                            (doto body
-                              (.on "data" (fn [chunk]
-                                            (let [downloaded (+ @*downloaded (.-length chunk))
-                                                  percent (.toFixed (/ (* 100 downloaded) total-size) 2)
-                                                  elapsed (/ (- (js/Date.now) start-at) 1000)]
-                                              (.write dest-file chunk)
-                                              (emit "download-progress" {:total      total-size
-                                                                         :downloaded downloaded
-                                                                         :percent    percent
-                                                                         :elapsed    elapsed})
-                                              (reset! *downloaded downloaded))))
-                              (.on "error" (fn [e]
-                                             (reject1 e)))
-                              (.on "end" (fn [_e]
-                                           (.close dest-file)
-                                           (let [dest-file (string/replace tmp-dest-file ".pending" "")]
-                                             (fs/renameSync tmp-dest-file dest-file)
-                                             (resolve1 (merge artifact {:dest-file dest-file})))))))))]
-             (reset! *update-ready-to-install dest-info)
-             (emit "update-downloaded" dest-info)
-             (resolve nil))
-           (p/catch
-            (fn [e]
-              (if e
-                (do
-                  (emit "error" e)
-                  (reject e))
-                (resolve nil))))
-           (p/finally
-             (fn []
-               (emit "completed" nil))))))))
-
-(defn- new-version-downloaded-cb
-  [_ notes name date url]
-  (logger/info "[update-downloaded]" name notes date url)
+(defn- emit-update-downloaded!
+  [payload]
   (when-let [web-contents (and @*win (. ^js @*win -webContents))]
-    (.send web-contents "auto-updater-downloaded"
-           (bean/->js {:notes notes :name name :date date :url url}))))
+    (.send web-contents "auto-updater-downloaded" (bean/->js payload))))
 
-(defn init-auto-updater
-  [repo]
-  (when (.valid semver electron-version)
-    (p/let [info (get-latest-artifact-info repo)]
-      (when-let [remote-version (and info (re-find #"\d+\.\d+\.\d+" (:url info)))]
-        (if (and (. semver valid remote-version)
-                 (. semver lt electron-version remote-version))
+(defn- configure-auto-updater!
+  []
+  (let [channel (updater-channel)]
+    (when channel
+      (set! (.-channel autoUpdater) channel)
+      ;; Keep the original downgrade policy even though setting channel flips it on.
+      (set! (.-allowDowngrade autoUpdater) false))
+    (debug "configure-auto-updater" {:platform (.-platform js/process)
+                                     :arch (.-arch js/process)
+                                     :channel channel}))
+  (set! (.-autoInstallOnAppQuit autoUpdater) false)
+  (set! (.-autoDownload autoUpdater) false))
 
-           ;; start auto updater
-          (do
-            (debug "Found remote version" remote-version)
-            (when (or mac? win32?)
-              (debug "forward update to autoUpdater")
-              ;; FIXME: It seems that update-electron-app doesn't work on linux
-              (when-let [f (js/require "update-electron-app")]
-                (f #js{:notifyUser false})
-                (.once autoUpdater "update-downloaded"
-                       new-version-downloaded-cb))))
+(defn- register-auto-updater-listeners!
+  [^js win]
+  (let [checking-handler
+        (fn []
+          (emit-update! win "checking-for-update" nil))
 
-          (debug "Skip remote version [ahead of pre-release]" remote-version))))))
+        available-handler
+        (fn [info]
+          (emit-update! win "update-available" (normalize-payload info)))
+
+        not-available-handler
+        (fn [info]
+          (emit-update! win "update-not-available" (normalize-payload info))
+          (emit-completed! win))
+
+        progress-handler
+        (fn [progress]
+          (emit-update! win "download-progress" (normalize-payload progress)))
+
+        downloaded-handler
+        (fn [info]
+          (let [payload (normalize-payload info)]
+            (reset! *downloaded-update payload)
+            (logger/info "[update-downloaded]" payload)
+            (emit-update! win "update-downloaded" payload)
+            (emit-update-downloaded! payload)
+            (emit-completed! win)))
+
+        error-handler
+        (fn [error]
+          (logger/warn "[updater/error]" error)
+          (emit-update! win "error" (normalize-error error))
+          (emit-completed! win))]
+    (.on autoUpdater "checking-for-update" checking-handler)
+    (.on autoUpdater "update-available" available-handler)
+    (.on autoUpdater "update-not-available" not-available-handler)
+    (.on autoUpdater "download-progress" progress-handler)
+    (.on autoUpdater "update-downloaded" downloaded-handler)
+    (.on autoUpdater "error" error-handler)
+    #(do
+       (.off autoUpdater "checking-for-update" checking-handler)
+       (.off autoUpdater "update-available" available-handler)
+       (.off autoUpdater "update-not-available" not-available-handler)
+       (.off autoUpdater "download-progress" progress-handler)
+       (.off autoUpdater "update-downloaded" downloaded-handler)
+       (.off autoUpdater "error" error-handler))))
+
+(defn- <check-for-updates!
+  [^js win auto-download?]
+  (debug "check-for-updates" {:auto-download? auto-download?})
+  (set! (.-autoDownload autoUpdater) auto-download?)
+  (-> (.checkForUpdates autoUpdater)
+      (.then
+       (fn [_]
+         ;; Manual checks without auto download need an explicit terminal event.
+         (when-not auto-download?
+           (emit-completed! win))))
+      (.catch
+       (fn [error]
+         (logger/warn "[updater/check]" error)
+         (emit-update! win "error" (normalize-error error))
+         (emit-completed! win)))))
+
+(defn- init-auto-updater!
+  [^js win]
+  (when (and prod? (not= false (cfgs/get-item :auto-update)))
+    (debug "init-auto-updater")
+    (set! (.-autoDownload autoUpdater) true)
+    (-> (.checkForUpdates autoUpdater)
+        (.catch (fn [error]
+                  (logger/warn "[updater/auto-check]" error)
+                  (emit-update! win "error" (normalize-error error))
+                  (emit-completed! win))))))
 
 (defn init-updater
-  [{:keys [repo ^js _win] :as opts}]
-  (and prod? (not= false (cfgs/get-item :auto-update)) (init-auto-updater repo))
-  (let [check-channel "check-for-updates"
+  [{:keys [^js win] :as _opts}]
+  (configure-auto-updater!)
+  (let [dispose-listeners! (register-auto-updater-listeners! win)
+        check-channel "check-for-updates"
         install-channel "install-updates"
+        get-downloaded-channel "get-downloaded-update"
         check-listener (fn [_e & args]
                          (when-not @*update-pending
                            (reset! *update-pending true)
-                           (p/finally
-                             (check-for-updates (merge opts {:args args}))
-                             #(reset! *update-pending nil))))
-        install-listener (fn [_e quit-app?]
-                           (when-let [dest-file (:dest-file @*update-ready-to-install)]
-                             (open dest-file)
-                             (and quit-app? (js/setTimeout #(.quit app) 1000))))]
+                           (let [auto-download? (true? (first args))]
+                             (-> (<check-for-updates! win auto-download?)
+                                 (.finally #(reset! *update-pending nil))))))
+        install-listener (fn [_e _quit-app?]
+                           (.quitAndInstall autoUpdater false true))
+        get-downloaded-listener (fn [_e]
+                                  (some-> @*downloaded-update bean/->js))]
+    (init-auto-updater! win)
     (.handle ipcMain check-channel check-listener)
     (.handle ipcMain install-channel install-listener)
+    (.handle ipcMain get-downloaded-channel get-downloaded-listener)
     #(do
+       (dispose-listeners!)
        (.removeHandler ipcMain install-channel)
        (.removeHandler ipcMain check-channel)
+       (.removeHandler ipcMain get-downloaded-channel)
        (reset! *update-pending nil))))

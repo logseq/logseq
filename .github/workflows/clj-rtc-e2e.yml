@@ -19,9 +19,10 @@ on:
       - packages/**
 
 env:
-  CLOJURE_VERSION: '1.11.1.1413'
+  CLOJURE_VERSION: '1.12.4.1618'
+  JAVA_VERSION: '21'
   # This is the latest node version we can run.
-  NODE_VERSION: '22'
+  NODE_VERSION: '24'
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
@@ -40,6 +41,12 @@ jobs:
           cache: 'yarn'
           cache-dependency-path: |
             yarn.lock
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Clojure
         uses: DeLaGuardo/setup-clojure@13.5
@@ -105,6 +112,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Clojure
         uses: DeLaGuardo/setup-clojure@13.5
