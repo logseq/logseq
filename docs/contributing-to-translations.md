@@ -32,8 +32,9 @@ To see the overall translation status of every locale:
 bb lang:list
 ```
 
-That table includes `:same-as-en-count`, which helps you spot locales that
-still contain entries copied from English.
+That table includes `:untranslated-count`, which shows how many English keys
+are still missing for each locale, and `:same-as-en-count`, which helps you
+spot locales that still contain entries copied from English.
 
 To see which entries are missing for one locale, use `es` as an example:
 
