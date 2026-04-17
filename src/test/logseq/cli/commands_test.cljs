@@ -3309,15 +3309,19 @@
              (p/catch (fn [e] (is false (str "unexpected error: " e))))
              (p/finally done))))
 
-(deftest test-execute-upsert-block-create-applies-extra-tag-property-ops
+(deftest test-execute-upsert-block-create-resolves-options-before-add-block
   (async done
-         (let [ops* (atom nil)
+         (let [add-action* (atom nil)
+               property-lookups* (atom [])
+               apply-called?* (atom false)
                action {:type :upsert-block :mode :create :repo "demo"
                        :update-tags [:tag/new]
                        :update-properties {:logseq.property/deadline "2026-01-25T12:00:00Z"}}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               add-command/execute-add-block (fn [_ _] (p/resolved {:status :ok :data {:result [11 12]}}))
+                               add-command/execute-add-block (fn [add-action _]
+                                                               (reset! add-action* add-action)
+                                                               (p/resolved {:status :ok :data {:result [11 12]}}))
                                add-command/resolve-tags (fn [_ _ tags]
                                                           (p/resolved (cond (= tags [:tag/new]) [{:db/id 101}]
                                                                             :else nil)))
@@ -3325,19 +3329,24 @@
                                transport/invoke (fn [_ method _ args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (swap! property-lookups* conj lookup)
                                                                        (if (and (vector? lookup) (= :db/ident (first lookup)))
                                                                          {:db/id 99}
                                                                          {}))
-                                                    :thread-api/apply-outliner-ops (let [[_ ops _] args]
-                                                                                     (reset! ops* ops)
+                                                    :thread-api/apply-outliner-ops (do
+                                                                                     (reset! apply-called?* true)
                                                                                      {:result :ok})
                                                     (throw (ex-info "unexpected invoke" {:method method :args args}))))]
                  (p/let [result (commands/execute action {})]
                    (is (= :ok (:status result)))
                    (is (= [11 12] (get-in result [:data :result])))
-                   (is (= [[:batch-set-property [[11 12] :block/tags 101 {}]]
-                           [:batch-set-property [[11 12] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]]]
-                          @ops*))))
+                   (is (= :add-block (:type @add-action*)))
+                   (is (= [{:db/id 101}] (:resolved-tags @add-action*)))
+                   (is (= {:logseq.property/deadline "2026-01-25T12:00:00Z"}
+                          (:resolved-properties @add-action*)))
+                   (is (some #{[:db/ident :logseq.property/deadline]} @property-lookups*))
+                   (is (false? @apply-called?*)
+                       "upsert layer should not perform extra post-create mutations")))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
