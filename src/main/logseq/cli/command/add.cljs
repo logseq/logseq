@@ -754,7 +754,7 @@
     (and (string? value) (common-util/uuid-string? (string/trim value)))
     (resolve-entity-id config repo [:block/uuid (uuid (string/trim value))])
     (string? value)
-    (p/let [page (ensure-first-page! config repo value)]
+    (p/let [page (ensure-page! config repo value)]
       (or (:db/id page)
           (throw (ex-info "page not found" {:code :page-not-found :value value}))))
     :else
