@@ -71,3 +71,30 @@
       (is (= @actual-ops 4))
       (is (= (m+ 3 5) 8))
       (is (= @actual-ops 4)))))
+
+(deftest test-get-nodes-between-two-nodes-scopes-to-container
+  (let [container-1 (.createElement js/document "div")
+        container-2 (.createElement js/document "div")
+        block-1 (.createElement js/document "div")
+        block-2 (.createElement js/document "div")
+        block-3 (.createElement js/document "div")
+        other-block (.createElement js/document "div")]
+    (doseq [node [block-1 block-2 block-3 other-block]]
+      (.add (.-classList node) "ls-block"))
+    (with-redefs [util/rec-get-blocks-container (fn [node]
+                                                  (cond
+                                                    (identical? node other-block) container-2
+                                                    (some #(identical? node %) [block-1 block-2 block-3]) container-1
+                                                    :else nil))
+                  util/get-blocks-noncollapse (fn [container]
+                                                (if (identical? container container-1)
+                                                  [block-1 block-2 block-3]
+                                                  [other-block]))]
+      (is (= [block-1 block-2 block-3]
+             (util/get-nodes-between-two-nodes block-1 block-3 "ls-block")))
+      (is (= [other-block]
+             (util/get-nodes-between-two-nodes block-1 other-block "ls-block")))
+      (is (= :up
+             (util/get-direction-between-two-nodes block-3 block-1 "ls-block")))
+      (is (= :down
+             (util/get-direction-between-two-nodes block-1 other-block "ls-block"))))))

@@ -662,24 +662,54 @@
     (subvec xs start end)))
 
 #?(:cljs
+   (defn- node-index
+     [nodes target]
+     (first (keep-indexed (fn [idx node]
+                            (when (identical? node target)
+                              idx))
+                          nodes))))
+
+#?(:cljs
+   (defn- selection-scope-nodes
+     [node-1 node-2 class]
+     (let [container-1 (some-> node-1 rec-get-blocks-container)
+           container-2 (some-> node-2 rec-get-blocks-container)]
+       (cond
+         (and container-1 container-2)
+         (if (identical? container-1 container-2)
+           (->> (get-blocks-noncollapse container-1)
+                (filter #(d/has-class? % class))
+                vec)
+           [])
+
+         :else
+         (->> (array-seq (js/document.getElementsByClassName class))
+              (filter #(some? (gobj/get % "offsetParent")))
+              vec)))))
+
+#?(:cljs
    (defn get-nodes-between-two-nodes
      [node-1 node-2 class]
-     (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
-       (let [idx-1 (.indexOf nodes node-1)
-             idx-2 (.indexOf nodes node-2)
-             start (min idx-1 idx-2)
-             end (inc (max idx-1 idx-2))]
-         (safe-subvec (vec nodes) start end)))))
+     (let [nodes (selection-scope-nodes node-1 node-2 class)
+           idx-1 (node-index nodes node-1)
+           idx-2 (node-index nodes node-2)]
+       (if (and (some? idx-1) (some? idx-2))
+         (let [start (min idx-1 idx-2)
+               end (inc (max idx-1 idx-2))]
+           (safe-subvec nodes start end))
+         (cond-> []
+           node-2
+           (conj node-2))))))
 
 #?(:cljs
    (defn get-direction-between-two-nodes
      [node-1 node-2 class]
-     (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
-       (let [idx-1 (.indexOf nodes node-1)
-             idx-2 (.indexOf nodes node-2)]
-         (if (>= idx-1 idx-2)
-           :up
-           :down)))))
+     (let [nodes (selection-scope-nodes node-1 node-2 class)
+           idx-1 (node-index nodes node-1)
+           idx-2 (node-index nodes node-2)]
+       (if (and (some? idx-1) (some? idx-2) (>= idx-1 idx-2))
+         :up
+         :down))))
 
 #?(:cljs
    (defn rec-get-node

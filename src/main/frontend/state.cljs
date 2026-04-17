@@ -985,6 +985,27 @@ Similar to re-frame subscriptions"
 (def ^:private block-selected-flow
   (m/watch (:selection/blocks @state)))
 
+(defonce ^:private *selection-load-timeout (atom nil))
+(def ^:private selection-load-delay-ms 100)
+
+(defn- cancel-selection-load!
+  []
+  (when-let [timeout @*selection-load-timeout]
+    (js/clearTimeout timeout)
+    (reset! *selection-load-timeout nil)))
+
+(defn- schedule-selection-load!
+  [ids]
+  (cancel-selection-load!)
+  (when (seq ids)
+    (let [ids (vec ids)]
+      (reset! *selection-load-timeout
+              (js/setTimeout
+               (fn []
+                 (reset! *selection-load-timeout nil)
+                 (pub-event! [:editor/load-blocks ids]))
+               selection-load-delay-ms)))))
+
 (defn sub-block-selected?
   [block-id]
   (assert (uuid? block-id))
@@ -1026,6 +1047,8 @@ Similar to re-frame subscriptions"
 
 (defn- set-selection-blocks-aux!
   [blocks]
+  (when-not (seq blocks)
+    (cancel-selection-load!))
   (set-state! :view/selected-blocks nil)
   (let [selected-blocks @(:selection/blocks @state)
         selected-ids (set (get-selected-block-ids selected-blocks))
@@ -1053,10 +1076,11 @@ Similar to re-frame subscriptions"
        (set-selection-blocks-aux! blocks)
        (when direction (set-state! :selection/direction direction))
        (let [ids (get-selection-block-ids)]
-         (when (seq ids) (pub-event! [:editor/load-blocks ids])))))))
+         (schedule-selection-load! ids))))))
 
 (defn state-clear-selection!
   []
+  (cancel-selection-load!)
   (set-state! :selection/blocks nil)
   (set-state! :selection/direction nil)
   (set-state! :selection/start-block nil)

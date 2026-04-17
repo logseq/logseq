@@ -362,6 +362,9 @@
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "pointerdown" hide-context-menu-and-clear-selection)
+     (mixins/listen state js/window "pointerup"
+                    (fn [_e]
+                      (editor-handler/clear-selection-pointer!)))
      (mixins/listen state js/window "keydown"
                     (fn [e]
                       (cond

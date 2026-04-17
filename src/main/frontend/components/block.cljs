@@ -2342,6 +2342,7 @@
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
   (when-not @(:ui/scrolling? @state/state)
+    (editor-handler/track-selection-pointer! e)
     (let [target (.-target e)
           selection-blocks (state/get-selection-blocks)
           starting-block (state/get-selection-start-block-or-first)
@@ -3441,7 +3442,8 @@
          :on-mouse-enter (fn [e]
                            (block-mouse-over e block *control-show? block-id doc-mode?))
          :on-mouse-move (fn [e]
-                          (reset! *block-last-mouse-event e))
+                          (reset! *block-last-mouse-event e)
+                          (editor-handler/track-selection-pointer! e))
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
