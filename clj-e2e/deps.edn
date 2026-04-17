@@ -1,5 +1,5 @@
 {:paths ["src" "resources"]
- :deps {org.clojure/clojure {:mvn/version "1.12.0"}
+ :deps {org.clojure/clojure {:mvn/version "1.12.4"}
         ;; io.github.pfeodrippe/wally {:local/root "../../../wally"}
         io.github.pfeodrippe/wally {:git/url "https://github.com/logseq/wally"
                                     :sha "8571fae7c51400ac61c8b1026cbfba68279bc461"

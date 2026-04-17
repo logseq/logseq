@@ -1,18 +1,19 @@
 {:deps
  ;; These nbb-logseq deps are kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
- {datascript/datascript {:git/url "https://github.com/logseq/datascript" ;; fork
-                         :sha     "f91fec561ee2c11d6bf323feae365e9033585411"}
+ {datascript/datascript       {:git/url "https://github.com/logseq/datascript" ;; fork
+                               :sha     "f91fec561ee2c11d6bf323feae365e9033585411"}
   ;; datascript/datascript {:local/root "../../../../datascript"}
-  com.cognitect/transit-cljs {:mvn/version "0.8.280"}
+  com.cognitect/transit-cljs  {:mvn/version "0.8.280"}
 
   ;; Any other deps should be added here and to nbb.edn
-  logseq/db             {:local/root "../db"}
-  logseq/graph-parser   {:local/root "../graph-parser"}
-  metosin/malli {:mvn/version "0.16.1"}
+  logseq/db                   {:local/root "../db"}
+  logseq/graph-parser         {:local/root "../graph-parser"}
+  metosin/malli               {:git/url "https://github.com/metosin/malli"
+                               :sha     "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}
   ;; stubbed via logseq.common.log
   com.lambdaisland/glogi      {:git/url "https://github.com/lambdaisland/glogi"
                                :git/sha "30328a045141717aadbbb693465aed55f0904976"}}
  :aliases
  {:clj-kondo
-  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.01.19"}}
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
    :main-opts  ["-m" "clj-kondo.main"]}}}

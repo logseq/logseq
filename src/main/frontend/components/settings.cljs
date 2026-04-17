@@ -74,7 +74,7 @@
                 (if update-pending? (t :settings.general/checking) (t :settings.general/check-for-updates))
                 :class "text-sm mr-1"
                 :disabled update-pending?
-                :on-click #(js/window.apis.checkForUpdates false))
+                :on-click #(js/window.apis.checkForUpdates true))
 
                :else
                nil)]
@@ -101,6 +101,9 @@
                    (string/blank? type))
        [:div.update-state.text-sm
         (case type
+          "checking-for-update"
+          [:p (t :settings-page/checking)]
+
           "update-not-available"
           [:p (t :settings.general/app-updated)]
 
@@ -115,6 +118,21 @@
                  (util/stop e))
                :style {:margin-inline-start "0.25rem"}}
               svg/external-link name " 🎉"]])
+
+          "download-progress"
+          (let [percent (some-> payload :percent js/Math.round)]
+            [:p (str "Downloading update"
+                     (when (number? percent)
+                       (str " " percent "%"))
+                     "...")])
+
+          "update-downloaded"
+          [:div.flex.items-center.gap-2.flex-wrap
+           [:p (t :updater/new-version-install)]
+           (ui/button
+            (t :updater/quit-and-install)
+            :class "text-sm"
+            :on-click #(ipc/ipc :quitAndInstall))]
 
           "error"
           (let [release-channel-link

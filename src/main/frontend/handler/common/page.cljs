@@ -160,8 +160,8 @@
               (config-handler/set-config! :feature/enable-journals? true)
               (notification/show! (t :settings.features/journals-enabled) :success)))
            (-> (p/let [res (ui-outliner-tx/transact!
-                            {:outliner-op :delete-page}
-                            (outliner-op/delete-page! page-uuid))]
+                             {:outliner-op :delete-page}
+                             (outliner-op/delete-page! page-uuid))]
                  (if res
                    (when ok-handler (ok-handler))
                    (when error-handler (error-handler))))

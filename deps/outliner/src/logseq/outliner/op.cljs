@@ -388,7 +388,7 @@
         *result (atom nil)]
 
     (outliner-tx/transact!
-        opts'
+      opts'
       (doseq [op-entry ops]
         (apply-op! conn opts' *result op-entry)))
 
