@@ -2460,7 +2460,7 @@
                      (ffirst inverse-outliner-ops)))
               (is (= property-id
                      (get-in inverse-outliner-ops [0 1 0])))
-              (is (string? (sqlite-util/transit-write inverse-outliner-ops)))
+              (is (string? (sqlite-util/write-transit-str inverse-outliner-ops)))
               (is (= :db.cardinality/many
                      (:db/cardinality (d/entity @conn property-id))))
               (let [undo-result (undo-redo/undo test-repo)]

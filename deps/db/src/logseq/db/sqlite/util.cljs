@@ -22,7 +22,12 @@
 (def transit-r (transit/reader :json {:handlers read-handlers}))
 (defn transit-write
   [data]
-  (transit/write transit-w data))
+  (try
+    (transit/write transit-w data)
+    (catch :default e
+      (prn ::transit-write-failed data)
+      (js/console.error e)
+      (throw e))))
 
 (defn transit-read
   [s]
