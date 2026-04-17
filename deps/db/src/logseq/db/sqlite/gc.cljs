@@ -30,7 +30,7 @@
                                        :rowMode "array"})
                         bean/->clj
                         ffirst
-                        sqlite-util/transit-read)
+                        sqlite-util/read-transit-str)
           ;; 0: Datascript sets 0 as the address to store the db's meta, including addresses for :eavt, :avet, and aevt index.
           ;; 1: Datascript sets 1 for tail, to improve the performance
         internal-addrs (set [0 1 (:eavt schema) (:avet schema) (:aevt schema)])
@@ -60,7 +60,7 @@
   [^object db]
   (let [schema (let [^object stmt (.prepare db "select content from kvs where addr = ?")
                      content (.-content (.get ^object stmt 0))]
-                 (sqlite-util/transit-read content))
+                 (sqlite-util/read-transit-str content))
         internal-addrs (set [0 1 (:eavt schema) (:avet schema) (:aevt schema)])
         non-refed-addrs (let [^object stmt (.prepare db get-non-refed-addrs-sql)]
                           (->> (.all stmt)
@@ -73,7 +73,7 @@
   [^object db]
   (let [schema (let [^object stmt (.prepare db "select content from kvs where addr = ?")
                      content (.-content (.get ^object stmt 0))]
-                 (sqlite-util/transit-read content))
+                 (sqlite-util/read-transit-str content))
         set-addresses #{(:eavt schema) (:avet schema) (:aevt schema)}
         internal-addresses (conj set-addresses 0 1)
         parent->children (let [^object stmt (.prepare db "select addr, addresses from kvs")]

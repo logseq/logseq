@@ -47,9 +47,9 @@ on:
   #   - cron: '0 14 * * MON-FRI'
 
 env:
-  CLOJURE_VERSION: '1.11.1.1413'
-  NODE_VERSION: '22'
-  JAVA_VERSION: '11'
+  CLOJURE_VERSION: '1.12.4.1618'
+  NODE_VERSION: '24'
+  JAVA_VERSION: '21'
 
 jobs:
   compile-cljs:
@@ -170,6 +170,7 @@ jobs:
         with:
           name: static
           path: static
+
   build-linux-x64:
     runs-on: ubuntu-22.04
     needs: [ compile-cljs ]
@@ -206,9 +207,15 @@ jobs:
         run: |
           mkdir -p builds
           # NOTE: save VERSION file to builds directory
-          cp static/VERSION ./builds/VERSION
-          mv static/out/make/*-*.AppImage ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.AppImage
-          mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
+          cp static/VERSION               ./builds/VERSION
+          mv static/dist/*.AppImage       ./builds/
+          shopt -s nullglob
+          blockmaps=(static/dist/*.blockmap)
+          if [ ${#blockmaps[@]} -gt 0 ]; then
+            mv static/dist/*.blockmap     ./builds/
+          fi
+          mv static/dist/latest-linux.yml ./builds/latest-linux.yml
+          mv static/dist/*.zip            ./builds/Logseq-linux-x86_64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -252,9 +259,15 @@ jobs:
         run: |
           mkdir -p builds
           # NOTE: save VERSION file to builds directory
-          cp static/VERSION ./builds/VERSION
-          # mv static/out/make/*-*.AppImage ./builds/Logseq-linux-arm64-${{ steps.ref.outputs.version }}.AppImage
-          mv static/out/make/zip/linux/arm64/*-linux-arm64-*.zip ./builds/Logseq-linux-arm64-${{ steps.ref.outputs.version }}.zip
+          cp static/VERSION                     ./builds/VERSION
+          mv static/dist/*.AppImage             ./builds/Logseq-linux-arm64-${{ steps.ref.outputs.version }}.AppImage
+          shopt -s nullglob
+          blockmaps=(static/dist/*.blockmap)
+          if [ ${#blockmaps[@]} -gt 0 ]; then
+            mv static/dist/*.blockmap           ./builds/
+          fi
+          mv static/dist/latest-linux-arm64.yml ./builds/latest-linux-arm64.yml
+          mv static/dist/*.zip                  ./builds/Logseq-linux-arm64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -293,34 +306,37 @@ jobs:
         working-directory: ./static
 
       - name: Build/Release Electron app
-        run: yarn electron:make
+        shell: pwsh
+        run: |
+          $signCfg = @'
+          {
+            "extends": "./electron-builder.yml",
+            "win": {
+              "azureSignOptions": {
+                "publisherName": "Logseq, Inc.",
+                "endpoint": "https://eus.codesigning.azure.net/",
+                "certificateProfileName": "Logseq",
+                "codeSigningAccountName": "logseqwin"
+              }
+            }
+          }
+          '@
+          $signCfgPath = Join-Path $PWD "electron-builder.sign-win.json"
+          $signCfg | Out-File -FilePath $signCfgPath -Encoding utf8NoBOM
+          node_modules/.bin/electron-builder --config $signCfgPath --publish never
         working-directory: ./static
         env:
-          DEBUG: electron-packager
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
 
       - name: Save Artifact
         run: |
           mkdir builds
-          mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
-          mv static\out\make\squirrel.windows\x64\*.exe    builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
-          mv static\out\make\zip\win32\x64\*.zip           builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.zip
-          mv static\out\make\wix\x64\Logseq.msi            builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.msi
-          mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
-
-      - name: Sign
-        uses: azure/trusted-signing-action@v0.5.9
-        with:
-          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          endpoint: https://eus.codesigning.azure.net/
-          trusted-signing-account-name: logseqwin
-          certificate-profile-name: Logseq
-          files-folder: builds
-          files-folder-filter: exe,msi
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
+          mv static\dist\*-nsis.exe   builds\Logseq-win-x64-${{ steps.ref.outputs.version }}-nsis.exe
+          mv static\dist\*.blockmap   builds\
+          mv static\dist\latest.yml   builds\latest-x64.yml
+          mv static\dist\*.zip        builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -359,34 +375,37 @@ jobs:
         working-directory: ./static
 
       - name: Build/Release Electron app
-        run: yarn electron:make-win-arm64
+        shell: pwsh
+        run: |
+          $signCfg = @'
+          {
+            "extends": "./electron-builder.yml",
+            "win": {
+              "azureSignOptions": {
+                "publisherName": "Logseq, Inc.",
+                "endpoint": "https://eus.codesigning.azure.net/",
+                "certificateProfileName": "Logseq",
+                "codeSigningAccountName": "logseqwin"
+              }
+            }
+          }
+          '@
+          $signCfgPath = Join-Path $PWD "electron-builder.sign-win.json"
+          $signCfg | Out-File -FilePath $signCfgPath -Encoding utf8NoBOM
+          node_modules/.bin/electron-builder --config $signCfgPath --win nsis zip --arm64 --publish never
         working-directory: ./static
         env:
-          DEBUG: electron-packager
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
 
       - name: Save Artifact
         run: |
           mkdir builds
-          mv static\out\make\squirrel.windows\arm64\*.nupkg  builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}-full.nupkg
-          mv static\out\make\squirrel.windows\arm64\*.exe    builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.exe
-          mv static\out\make\zip\win32\arm64\*.zip           builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.zip
-          mv static\out\make\wix\arm64\Logseq.msi            builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.msi
-          mv static\out\make\squirrel.windows\arm64\RELEASES builds\RELEASES
-
-      - name: Sign
-        uses: azure/trusted-signing-action@v0.5.9
-        with:
-          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          endpoint: https://eus.codesigning.azure.net/
-          trusted-signing-account-name: logseqwin
-          certificate-profile-name: Logseq
-          files-folder: builds
-          files-folder-filter: exe,msi
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
+          mv static\dist\*-nsis.exe   builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}-nsis.exe
+          mv static\dist\*.blockmap   builds\
+          mv static\dist\latest.yml   builds\latest-arm64.yml
+          mv static\dist\*.zip        builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -397,7 +416,6 @@ jobs:
   build-macos-x64:
     needs: [ compile-cljs ]
     runs-on: macos-15-intel
-
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
@@ -427,6 +445,7 @@ jobs:
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
+
       - name: Cache yarn cache directory
         uses: actions/cache@v4
         id: yarn-cache
@@ -455,14 +474,17 @@ jobs:
         working-directory: ./static
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Save x64 artifacts
         run: |
           mkdir -p builds
-          mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.dmg
-          mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.zip
+          cp static/VERSION              ./builds/VERSION
+          mv static/dist/*.dmg           ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.dmg
+          mv static/dist/*.zip           ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.zip
+          mv static/dist/*.blockmap      ./builds/
+          mv static/dist/latest-mac.yml  ./builds/latest-x64-mac.yml
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -473,7 +495,6 @@ jobs:
   build-macos-arm64:
     needs: [ compile-cljs ]
     runs-on: macos-14
-
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
@@ -495,6 +516,7 @@ jobs:
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
+
       - name: Cache yarn cache directory
         uses: actions/cache@v4
         id: yarn-cache
@@ -532,14 +554,17 @@ jobs:
         working-directory: ./static
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Save arm64 artifacts
         run: |
           mkdir -p builds
-          mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
-          mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
+          cp static/VERSION              ./builds/VERSION
+          mv static/dist/*.dmg           ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
+          mv static/dist/*.zip           ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
+          mv static/dist/*.blockmap      ./builds/
+          mv static/dist/latest-mac.yml  ./builds/latest-arm64-mac.yml
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -635,14 +660,15 @@ jobs:
             ./*.zip
             ./*.dmg
             ./*.exe
-            ./*.msi
+            ./*.yml
+            ./*.blockmap
             ./*.AppImage
             ./*.apk
 
   release:
     # NOTE: For now, we only have beta channel to be released on GitHub
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -697,17 +723,12 @@ jobs:
           pkgver=$(cat VERSION)
           echo "version=$pkgver" >> $GITHUB_OUTPUT
 
-      - name: Fix .nupkg name in RELEASES file
-        run: |
-          sed -i "s/Logseq-.*.nupkg/Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg/g" RELEASES
-
       - name: Generate SHA256 checksums
         run: |
           sha256sum *-darwin-* > SHA256SUMS.txt
           sha256sum *-win-* >> SHA256SUMS.txt
           sha256sum *-linux-* >> SHA256SUMS.txt
           sha256sum *.apk >> SHA256SUMS.txt
-          sha256sum RELEASES >> SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create Release Draft
@@ -726,8 +747,7 @@ jobs:
             ./*.zip
             ./*.dmg
             ./*.exe
-            ./*.msi
-            ./*.nupkg
-            ./RELEASES
+            ./*.yml
+            ./*.blockmap
             ./*.AppImage
             ./*.apk

@@ -8,18 +8,15 @@
   "description": "A privacy-first, open-source platform for knowledge management and collaboration.",
   "repository": "https://github.com/logseq/logseq",
   "scripts": {
-    "electron:dev": "electron-forge start",
-    "electron:debug": "electron-forge start --inspect-electron",
-    "electron:make": "electron-forge make",
-    "electron:make-linux-arm64": "electron-forge make --platform=linux --arch=arm64",
-    "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
-    "electron:make-win-arm64": "electron-forge make --platform=win32 --arch=arm64",
-    "electron:publish:github": "electron-forge publish",
-    "rebuild:all": "electron-rebuild -v 38.4.0 -f",
+    "electron:dev": "electron .",
+    "electron:debug": "electron --inspect=9229 .",
+    "electron:make": "electron-builder --config electron-builder.yml --publish never",
+    "electron:make-linux-arm64": "electron-builder --config electron-builder.yml --linux AppImage zip --arm64 --publish never",
+    "electron:make-macos-arm64": "electron-builder --config electron-builder.yml --mac dmg zip --arm64 --publish never",
+    "electron:make-win-arm64": "electron-builder --config electron-builder.yml --win nsis zip --arm64 --publish never",
+    "electron:publish:github": "electron-builder --config electron-builder.yml --publish always",
+    "rebuild:all": "install-app-deps",
     "postinstall": "install-app-deps"
-  },
-  "config": {
-    "forge": "./forge.config.js"
   },
   "dependencies": {
     "@fastify/cors": "11.2.0",
@@ -29,7 +26,6 @@
     "diff-match-patch": "1.0.5",
     "electron-dl": "4.0.0",
     "electron-log": "5.4.3",
-    "electron-squirrel-startup": "1.0.1",
     "electron-window-state": "5.0.3",
     "extract-zip": "2.0.1",
     "fastify": "5.8.2",
@@ -39,22 +35,16 @@
     "open": "11.0.0",
     "semver": "7.7.4",
     "socks-proxy-agent": "9.0.0",
-    "update-electron-app": "3.1.2",
+    "electron-updater": "6.8.3",
     "zod": "^4.3.6",
     "keytar": "^7.9.0"
   },
   "devDependencies": {
-    "@electron-forge/cli": "^7.8.3",
-    "@electron-forge/maker-deb": "^7.8.3",
-    "@electron-forge/maker-dmg": "^7.8.3",
-    "@electron-forge/maker-rpm": "^7.8.3",
-    "@electron-forge/maker-squirrel": "^7.8.3",
-    "@electron-forge/maker-wix": "^7.8.3",
-    "@electron-forge/maker-zip": "^7.8.3",
-    "@electron/rebuild": "4.0.1",
-    "electron": "38.4.0",
-    "electron-builder": "26.0.12",
-    "electron-devtools-installer": "4.0.0",
-    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git"
+    "electron": "41.2.1",
+    "electron-builder": "26.8.2",
+    "electron-devtools-installer": "4.0.0"
+  },
+  "resolutions": {
+    "node-abi": "4.28.0"
   }
 }
