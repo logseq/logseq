@@ -4,6 +4,7 @@
             [cljs-time.core :as t]
             [clojure.string :as string]
             [dommy.core :as d]
+            [electron.ipc :as ipc]
             [frontend.common.missionary :as c.m]
             [frontend.components.block :as component-block]
             [frontend.components.export :as export]
@@ -35,6 +36,7 @@
             [logseq.shui.ui :as shui]
             [logseq.shui.util :as shui-util]
             [missionary.core :as m]
+            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
@@ -244,8 +246,17 @@
   (let [[downloaded, set-downloaded] (rum/use-state nil)
         _ (hooks/use-effect!
            (fn []
-             (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
-               (let [callback (fn [_ args]
+             (when (util/electron?)
+               (-> (ipc/invoke "get-downloaded-update")
+                   (p/then
+                    (fn [args]
+                      (when args
+                        (let [args (bean/->clj args)]
+                          (set-downloaded args)
+                          (state/set-state! :electron/auto-updater-downloaded args)))))
+                   (p/catch (fn [_] nil)))
+               (let [channel "auto-updater-downloaded"
+                     callback (fn [_ args]
                                 (js/console.debug "[new-version downloaded] args:" args)
                                 (let [args (bean/->clj args)]
                                   (set-downloaded args)
@@ -347,10 +358,24 @@
                (ldb/page? page) (:block/parent page))
       [:div.ls-block-breadcrumb
        [:div.text-sm
-        (component-block/breadcrumb {}
+       (component-block/breadcrumb {}
                                     (state/get-current-repo)
                                     (:block/uuid page)
                                     {:header? true})]])))
+
+(rum/defc search-index-progress < rum/reactive
+  []
+  (let [current-repo (state/get-current-repo)
+        {:keys [running? repo progress]} (or (state/sub :search/index-build) {})
+        progress' (-> (or progress 0)
+                      (max 0)
+                      (min 100))]
+    (when (and running? (= repo current-repo))
+      [:div.search-index-progress
+       [ui/loading ""]
+       [:span.search-index-progress__text (str "Indexing " progress' "%")]
+       [:div.search-index-progress__bar
+        [:div.search-index-progress__bar-fill {:style {:width (str progress' "%")}}]]])))
 
 (rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
   [{:keys [current-repo default-home new-block-mode]}]
@@ -414,6 +439,7 @@
          (rtc-indicator/downloading-detail))
        (when (user-handler/logged-in?)
          (rtc-indicator/uploading-detail))
+       (search-index-progress)
 
        (when (and (not= (state/get-current-route) :home)
                   (not custom-home-page?))

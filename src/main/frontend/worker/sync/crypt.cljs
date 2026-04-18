@@ -25,6 +25,13 @@
   [platform']
   (get-in platform' [:env :runtime]))
 
+(defn- read-transit-safe
+  [value]
+  (try
+    (ldb/read-transit-str value)
+    (catch :default _
+      invalid-transit)))
+
 (defn- browser-runtime?
   [platform']
   (= :browser (runtime platform')))
@@ -569,12 +576,17 @@
 (defn <decrypt-text-value
   [aes-key value]
   (assert (string? value) (str "encrypted value should be a string, value: " value))
-  (let [decoded (ldb/read-transit-str value)]
+  (let [decoded (read-transit-safe value)]
     (if (= decoded invalid-transit)
       (p/resolved value)
-      (p/let [value (crypt/<decrypt-text-if-encrypted aes-key decoded)
-              value' (ldb/read-transit-str value)]
-        value'))))
+      (p/let [value (or (crypt/<decrypt-text-if-encrypted aes-key decoded)
+                        decoded)
+              value' (if (string? value)
+                       (read-transit-safe value)
+                       value)]
+        (if (= value' invalid-transit)
+          value
+          value')))))
 
 (defn- encrypt-tx-item
   [aes-key item]

@@ -975,3 +975,7 @@ body[data-page=plugins] {
     padding-right: 30px;
   }
 }
+
+.lsp-host-renderer-container {
+  user-select: text;
+}

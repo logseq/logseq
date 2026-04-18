@@ -133,6 +133,16 @@
 
 (defonce *last-header-action-target (atom nil))
 
+(defn- header-dropdown-click-should-hide?
+  [target]
+  (let [menu-item (some-> target (.closest "[role='menuitem']"))
+        submenu-trigger? (= "menu" (some-> menu-item (.getAttribute "aria-haspopup")))]
+    (boolean
+     (and target
+          (not (util/input? target))
+          menu-item
+          (not submenu-trigger?)))))
+
 (defn header-cp
   [{:keys [view-entity column-set-sorting! state]} column]
   (let [sorting (:sorting state)
@@ -194,6 +204,10 @@
                                            :align "start"
                                            :as-dropdown? true
                                            :dropdown-menu? true
+                                           :content-props {:on-click (fn [^js e]
+                                                                       (when-let [target (.-target e)]
+                                                                         (when (header-dropdown-click-should-hide? target)
+                                                                           (shui/popup-hide! popup-id))))}
                                            :on-before-hide (fn []
                                                              (reset! *last-header-action-target el)
                                                              (js/setTimeout #(reset! *last-header-action-target nil) 128))})))))}
@@ -1863,7 +1877,8 @@
                                                          (cond->
                                                           {:page (:block/uuid page)
                                                            :properties properties
-                                                           :edit-block? false}
+                                                           :edit-block? false
+                                                           :outliner-op :create-view}
                                                            auto-triggered?
                                                            (assoc :custom-uuid view-block-id)))]
       (db/entity [:block/uuid (:block/uuid result)]))))

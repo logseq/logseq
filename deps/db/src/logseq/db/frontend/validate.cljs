@@ -21,13 +21,40 @@
   [closed-schema?]
   (if closed-schema? closed-db-schema-explainer db-schema-explainer))
 
+(defn- block-uuid-immutability-errors
+  [{:keys [db-before db-after tx-data tx-meta]}]
+  (let [uuid-touched-existing-eids
+        (->> tx-data
+             (keep (fn [{:keys [e a]}]
+                     (when (and (= :block/uuid a)
+                                (number? e)
+                                (some? (:block/uuid (d/entity db-before e))))
+                       e)))
+             distinct)]
+    (->> uuid-touched-existing-eids
+         (keep (fn [eid]
+                 (let [before-uuid (:block/uuid (d/entity db-before eid))
+                       after-ent (d/entity db-after eid)
+                       after-uuid (:block/uuid after-ent)
+                       deleted? (nil? after-ent)]
+                   (when (and (not deleted?)
+                              (not= before-uuid after-uuid))
+                     {:entity-map {:db/id eid
+                                   :block/uuid before-uuid
+                                   :block/uuid-after after-uuid}
+                      :errors {:block/uuid ["immutable for existing entities; use :db/retractEntity to delete entities"]}
+                      :tx-meta tx-meta}))))
+         vec)))
+
 (defn validate-tx-report
   "Validates the datascript tx-report for entities that have changed. Returns
   boolean indicating if db is valid"
-  [{:keys [db-after tx-data tx-meta]} {:keys [closed-schema?]}]
+  [{:keys [db-after tx-data tx-meta] :as tx-report} {:keys [closed-schema?]}]
   (binding [db-malli-schema/*skip-strict-url-validate?* true]
     (let [changed-ids (->> tx-data (keep :e) distinct)
-          tx-datoms (mapcat #(d/datoms db-after :eavt %) changed-ids)
+          tx-datoms (mapcat (fn [id]
+                              (d/datoms db-after :eavt id))
+                            changed-ids)
           ent-maps* (map (fn [[db-id m]]
                          ;; Add :db/id for debugging
                            (assoc m :db/id db-id))
@@ -36,30 +63,34 @@
           validator (get-schema-validator closed-schema?)]
       (binding [db-malli-schema/*db-for-validate-fns* db-after]
         (let [invalid-ent-maps (remove
-                              ;; remove :db/id as it adds needless declarations to schema
-                                #(validator [(dissoc % :db/id)])
-                                ent-maps)]
-          (if (seq invalid-ent-maps)
-            (do
-              (prn "Invalid datascript entities detected amongst changed entity ids:" changed-ids :tx-meta tx-meta)
-              (let [explainer (get-schema-explainer closed-schema?)
-                    errors (doall
-                            (map
-                             (fn [m]
-                               (let [m' (update m :block/properties (fn [properties]
-                                                                      (map (fn [[p v]]
-                                                                             [(:db/ident p) v])
-                                                                           properties)))
-                                     data {:entity-map m'
-                                           :errors (me/humanize (explainer [(dissoc m :db/id)]))}]
-                                 (try
-                                   (pprint/pprint data)
-                                   (catch :default _e
-                                     (prn data)))
-                                 data))
-                             invalid-ent-maps))]
-
-                [false errors]))
+                                ;; remove :db/id as it adds needless declarations to schema
+                                 #(validator [(dissoc % :db/id)])
+                                 ent-maps)
+              schema-errors
+              (when (seq invalid-ent-maps)
+                (prn "Invalid datascript entities detected amongst changed entity ids:" changed-ids :tx-meta tx-meta)
+                (let [explainer (get-schema-explainer closed-schema?)]
+                  (doall
+                   (map
+                    (fn [m]
+                      (let [m' (update m :block/properties (fn [properties]
+                                                             (map (fn [[p v]]
+                                                                    [(:db/ident p) v])
+                                                                  properties)))
+                            data {:entity-map m'
+                                  :errors (me/humanize (explainer [(dissoc m :db/id)]))}]
+                        (try
+                          (pprint/pprint data)
+                          (catch :default _e
+                            (prn data)))
+                        data))
+                    invalid-ent-maps))))
+              uuid-errors (block-uuid-immutability-errors tx-report)
+              errors (->> (concat schema-errors uuid-errors)
+                          (remove nil?)
+                          vec)]
+          (if (seq errors)
+            [false errors]
             [true nil]))))))
 
 (defn- group-errors-by-entity

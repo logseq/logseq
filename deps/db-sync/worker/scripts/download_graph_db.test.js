@@ -4,10 +4,12 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const transit = require("transit-js");
 
 const Database = require("better-sqlite3");
 
 const {
+  parseFramedRows,
   parseCliArgs,
   sanitizeGraphIdForFilename,
   writeSnapshotSqlite,
@@ -59,18 +61,42 @@ test("CLI rejects missing admin-token when env is absent", () => {
   assert.match(result.stderr, /Missing admin token/);
 });
 
+test("parseFramedRows decodes framed transit batches", () => {
+  const writer = transit.writer("json");
+  const rowsA = [
+    [1, "line-1", null],
+    [2, "line-2", null],
+  ];
+  const rowsB = [
+    [1000606, "line-1000606", "{\"1\":[2,3]}"],
+  ];
+
+  const encodeFrame = (rows) => {
+    const payload = Buffer.from(writer.write(rows), "utf8");
+    const frame = Buffer.allocUnsafe(4 + payload.length);
+    frame.writeUInt32BE(payload.length, 0);
+    payload.copy(frame, 4);
+    return frame;
+  };
+
+  const framed = Buffer.concat([encodeFrame(rowsA), encodeFrame(rowsB)]);
+  const parsed = parseFramedRows(framed);
+
+  assert.deepEqual(parsed, [...rowsA, ...rowsB]);
+});
+
 test("writeSnapshotSqlite writes kvs-only sqlite like local dbs", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "db-sync-download-test-"));
   const dbPath = path.join(tmpDir, "graph-debug.sqlite");
+  const rows = [
+    [1, "line-1", null],
+    [2, "line-2", null],
+    [1000606, "line-1000606", "{\"1\":[2,3]}"],
+  ];
 
   writeSnapshotSqlite({
     outputPath: dbPath,
-    graphId: "graph-1",
-    snapshotKey: "graph-1/snapshot-123.snapshot",
-    snapshotUrl: "https://api.logseq.com/assets/graph-1/snapshot-123.snapshot",
-    contentEncoding: "gzip",
-    rawBytes: 512,
-    lines: ["line-1", "line-2", "line-3"],
+    rows,
   });
 
   const db = new Database(dbPath, { readonly: true });
@@ -79,13 +105,13 @@ test("writeSnapshotSqlite writes kvs-only sqlite like local dbs", () => {
     .all()
     .map((row) => row.name);
   const rowCount = db.prepare("select count(1) as count from kvs").get().count;
-  const row3 = db.prepare("select addr, content, addresses from kvs where addr = 3").get();
+  const row1000606 = db.prepare("select addr, content, addresses from kvs where addr = 1000606").get();
 
   assert.deepEqual(tableNames, ["kvs"]);
   assert.equal(rowCount, 3);
-  assert.equal(row3.addr, 3);
-  assert.equal(row3.content, "line-3");
-  assert.equal(row3.addresses, null);
+  assert.equal(row1000606.addr, 1000606);
+  assert.equal(row1000606.content, "line-1000606");
+  assert.equal(row1000606.addresses, "{\"1\":[2,3]}");
 
   db.close();
 });

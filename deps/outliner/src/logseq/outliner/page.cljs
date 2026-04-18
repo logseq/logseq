@@ -121,7 +121,7 @@
                              [:delete-page [page-uuid {:deleted-by-uuid deleted-by-uuid
                                                        :now-ms now-ms}]])
                       rename?
-                      (assoc :real-outliner-op :rename-page))]
+                      (assoc :source-outliner-op :rename-page))]
         ;; TODO: maybe we should add $$$favorites to built-in pages?
         (cond
           (or (ldb/built-in? page) (ldb/hidden? page))
@@ -407,7 +407,7 @@
 
 (defn create!
   [conn title opts]
-  (let [{:keys [tx-meta tx-data title' page-uuid]} (create @conn title opts)]
+  (let [{:keys [tx-meta tx-data title page-uuid]} (create @conn title opts)]
     (when (seq tx-data)
       (ldb/transact! conn tx-data tx-meta))
-    [title' page-uuid]))
+    [title page-uuid]))

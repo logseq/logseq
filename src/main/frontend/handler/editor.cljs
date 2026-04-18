@@ -250,8 +250,7 @@
 
 (defn- save-block-inner!
   [block value opts]
-  (let [block {:db/id (:db/id block)
-               :block/uuid (:block/uuid block)
+  (let [block {:block/uuid (:block/uuid block)
                :block/title value}
         block' (-> (wrap-parse-block block)
                    ;; :block/uuid might be changed when backspace/delete
@@ -320,7 +319,6 @@
      {:outliner-op :insert-blocks}
      (save-current-block! {:current-block current-block})
      (outliner-op/insert-blocks! [new-block'] current-block {:sibling? sibling?
-                                                             :right-sibling-id (:db/id (:right-sibling config))
                                                              :keep-uuid? keep-uuid?
                                                              :ordered-list? ordered-list?
                                                              :replace-empty-target? replace-empty-target?
@@ -595,12 +593,14 @@
                                   (into new-block properties)
                                   new-block)]
                  (ui-outliner-tx/transact!
-                  {:outliner-op :insert-blocks}
+                  (cond->
+                   {:outliner-op :insert-blocks}
+                    (not= outliner-op :insert-blocks)
+                    (assoc :source-outliner-op outliner-op))
                   (outliner-insert-block! config target-block new-block'
                                           {:sibling? sibling?
                                            :keep-uuid? true
                                            :ordered-list? ordered-list?
-                                           :outliner-op outliner-op
                                            :replace-empty-target? replace-empty-target?})))
                (when edit-block?
                  (if (and replace-empty-target?
@@ -1083,8 +1083,6 @@
            (:db/id page)
            :page))))))
 
-(declare save-current-block!)
-
 ;; FIXME: shortcut `mod+.` doesn't work on Web (Chrome)
 (defn zoom-in! []
   (if (state/editing?)
@@ -1348,8 +1346,7 @@
                 (notification/show! [:div "Asset size shouldn't be larger than 100M"]
                                     :warning
                                     false)
-                (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
-            asset (db/entity :logseq.class/Asset)]
+                (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))]
         (p/do!
          (when file
            (let [file-path (str block-id "." ext)]
@@ -1360,7 +1357,9 @@
           :logseq.property.asset/external-url external-url
           :logseq.property.asset/size size
           :logseq.property.asset/checksum checksum
-          :block/tags #{(:db/id asset)}})))))
+          ;; Use stable class ident in tx payload to avoid leaking numeric eids
+          ;; into outliner history ops shared with the worker sync pipeline.
+          :block/tags #{:logseq.class/Asset}})))))
 
 (defn db-based-save-assets!
   "Save incoming(pasted) assets to assets directory.
@@ -1821,7 +1820,7 @@
           (content-update-fn (:block/title block))
           (:block/title block))]
     (merge (apply dissoc block (conj (if-not keep-uuid? [:block/_refs] [])))
-           {:block/page {:db/id (:db/id page)}
+           {:block/page {:db/id [:block/uuid (:block/uuid page)]}
             :block/title new-content})))
 
 (defn- edit-last-block-after-inserted!
@@ -1840,11 +1839,12 @@
 
 (defn- unrecycle-tx-data
   [root]
-  [[:db/retract (:db/id root) :logseq.property/deleted-at]
-   [:db/retract (:db/id root) :logseq.property/deleted-by-ref]
-   [:db/retract (:db/id root) :logseq.property.recycle/original-parent]
-   [:db/retract (:db/id root) :logseq.property.recycle/original-page]
-   [:db/retract (:db/id root) :logseq.property.recycle/original-order]])
+  (let [root-id [:block/uuid (:block/uuid root)]]
+    [[:db/retract root-id :logseq.property/deleted-at]
+     [:db/retract root-id :logseq.property/deleted-by-ref]
+     [:db/retract root-id :logseq.property.recycle/original-parent]
+     [:db/retract root-id :logseq.property.recycle/original-page]
+     [:db/retract root-id :logseq.property.recycle/original-order]]))
 
 (defn paste-blocks
   "Given a vec of blocks, insert them into the target page.

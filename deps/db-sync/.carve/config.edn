@@ -1,0 +1,5 @@
+{:paths ["src"]
+ :api-namespaces [;; CLI entry points
+                  logseq.db-sync.node.find-checksum-drift
+                  logseq.db-sync.node.recompute-log-checksum]
+ :report {:format :ignore}}

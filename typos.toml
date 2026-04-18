@@ -24,5 +24,6 @@ extend-exclude = ["resources/*",
                   "src/resources/*",
                   "scripts/resources/*",
                   "src/test/fixtures/*",
+                  "deps/db-sync/test/logseq/db_sync/fixtures/*.edn",
                   "clj-e2e/resources/*",
                   "deps/common/src/logseq/common/plural.cljs"]

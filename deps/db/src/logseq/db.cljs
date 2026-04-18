@@ -96,29 +96,56 @@
     (throw (ex-info "Page can't have block as parent"
                     {:tx-data tx-data}))))
 
-(defn debounced-store-db
-  [conn]
-  (when-some [_storage (storage/storage @conn)]
-    (when-not (:batch-tx? @conn)
-      (let [f (if (exists? js/process)
-                d/store
-                (or @*debounce-fn d/store))]
-        (f @conn)))))
+(comment
+  (defn debounced-store-db
+   [conn]
+   (when-some [_storage (storage/storage @conn)]
+     (when-not (:batch-tx? @conn)
+       (let [f (if (exists? js/process)
+                 d/store
+                 (or @*debounce-fn d/store))]
+         (f @conn))))))
+
+(defn- should-validate-tx?
+  [conn db tx-meta]
+  (and (entity-plus/db-based-graph? db)
+       (not
+        (or (:rtc-download-graph? tx-meta)
+            (:reset-conn! tx-meta)
+            (:initial-db? tx-meta)
+            (:skip-validate-db? tx-meta false)
+            ;; used by `batch-transact-with-temp-conn!`
+            (:skip-validate-db? @conn)
+            (:logseq.graph-parser.exporter/new-graph? tx-meta)))))
+
+(defn- tx-report-pipeline-data
+  [tx-report]
+  (map (fn [[e a v t]]
+         [e a v t])
+       (:tx-data tx-report)))
+
+(defn- invalid-tx-debug-data
+  [tx-meta tx-data errors tx-report]
+  {:tx-meta tx-meta
+   :tx-data tx-data
+   :errors errors
+   :pipeline-tx-data (tx-report-pipeline-data tx-report)})
+
+(defn- throw-invalid-tx!
+  [tx-meta tx-data errors tx-report]
+  ;; notify ui
+  (when-let [f @*transact-invalid-callback]
+    (f tx-report errors))
+  (let [debug-data (invalid-tx-debug-data tx-meta tx-data errors tx-report)]
+    (prn :debug :invalid-data debug-data)
+    (throw (ex-info "DB write failed with invalid data" debug-data))))
 
 (defn- transact-sync
   [conn tx-data tx-meta]
   (try
     (let [db @conn
-          db-based? (entity-plus/db-based-graph? db)]
-      (if (and db-based?
-               (not
-                (or (:rtc-download-graph? tx-meta)
-                    (:reset-conn! tx-meta)
-                    (:initial-db? tx-meta)
-                    (:skip-validate-db? tx-meta false)
-                    ;; used by `batch-transact-with-temp-conn!`
-                    (:skip-validate-db? @conn)
-                    (:logseq.graph-parser.exporter/new-graph? tx-meta))))
+          validate? (should-validate-tx? conn db tx-meta)]
+      (if validate?
         (let [tx-report* (d/with db tx-data tx-meta)
               pipeline-f @*transact-pipeline-fn
               tx-report (if pipeline-f (pipeline-f tx-report*) tx-report*)
@@ -130,26 +157,21 @@
                        (seq (:tx-data tx-report)))
               ;; perf enhancement: avoid repeated call on `d/with`
               (reset! conn (:db-after tx-report))
-              (debounced-store-db conn)
+              (dc/store-after-transact! conn tx-report)
               (dc/run-callbacks conn tx-report))
 
             :else
-            (do
-              ;; notify ui
-              (when-let [f @*transact-invalid-callback]
-                (f tx-report errors))
-              (throw (ex-info "DB write failed with invalid data" {:tx-meta tx-meta
-                                                                   :tx-data tx-data
-                                                                   :errors errors
-                                                                   :pipeline-tx-data (map
-                                                                                      (fn [[e a v t]]
-                                                                                        [e a v t])
-                                                                                      (:tx-data tx-report))}))))
+            (throw-invalid-tx! tx-meta tx-data errors tx-report))
           tx-report)
         (d/transact! conn tx-data tx-meta)))
     (catch :default e
-      (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
-      (js/console.error e)
+      (when-not (and (:db-sync/suppress-stale-rebase-transact-failed-log? tx-meta)
+                     (= :entity-id/missing (:error (ex-data e))))
+        (prn :debug :transact-failed
+             :tx-meta tx-meta
+             :tx-data tx-data
+             :error (str e))
+        (js/console.error e))
       (throw e))))
 
 (defn transact!
@@ -190,12 +212,41 @@
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
 
+(defn- make-conn [opts]
+  ;; `datascript.conn/->Conn` is not exposed in nbb runtime.
+  ;; Start from a fresh conn and merge the desired internal state.
+  (let [conn (d/create-conn)]
+    (swap! (:atom conn) merge opts)
+    conn))
+
+(defn- conn-from-db
+  "Forked conn-from-db to not invoke `d/store`, it's unsafe to store during nested batch tx."
+  [db]
+  (if-some [_storage (storage/storage db)]
+    (make-conn
+     {:db db
+      :tx-tail []
+      :db-last-stored db})
+    (make-conn {:db db})))
+
 (defn batch-transact-with-temp-conn!
-  "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
-  however it can't write to the disk.
-  This fn supports nested calls, however, don't rely on the tx-report for undo/redo."
+  "Run batched tx work against a temporary conn, then apply all collected tx-data
+  to `conn` with a single final `transact!`.
+
+  Semantics:
+  - Uses `d/conn-from-db` so batch work runs on an isolated in-memory conn.
+  - Temp conn can still read from storage-backed db state, but cannot write to disk
+    (`:skip-store? true`).
+  - Defers db validation during inner batch ops (`:skip-validate-db? true`), then
+    validates on the final `transact!` to `conn`.
+  - Supports nested usage.
+
+  Notes:
+  - `batch-tx-fn` is called as `(batch-tx-fn temp-conn *batch-tx-data)`.
+  - `listen-db` (if provided) receives each intermediate tx-report from temp conn.
+  - Do not rely on returned tx-report shape for undo/redo behavior."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
-  (let [temp-conn (d/conn-from-db @conn)
+  (let [temp-conn (conn-from-db @conn)
         *batch-tx-data (volatile! [])
         *complete? (volatile! false)]
     ;; can read from disk, write is disallowed
@@ -213,48 +264,56 @@
       (vreset! *complete? true)
       (let [tx-data @*batch-tx-data]
         (when (and @*complete? (seq tx-data))
-            ;; transact tx-data to `conn` and validate db
+          ;; transact tx-data to `conn` and validate db
           (transact! conn tx-data tx-meta)))
       (finally
         (d/unlisten! temp-conn ::temp-conn-batch-tx)
         (reset! temp-conn nil)
         (vreset! *batch-tx-data nil)))))
 
+(defn- batch-transact-listen!
+  [conn *tx-data listen-db]
+  (d/listen! conn ::batch-tx
+             (fn [tx-report]
+               (swap! *tx-data into (:tx-data tx-report))
+               (when (fn? listen-db)
+                 (listen-db tx-report)))))
+
+(defn- batch-transact-cleanup!
+  [conn]
+  (d/unlisten! conn ::batch-tx)
+  (swap! conn dissoc :skip-store? :batch-tx?))
+
 (defn batch-transact!
-  "Store once for a batch transaction, notice that this fn doesn't support nest `batch-transact` calls"
+  "Run batched tx work on `conn` and persist once at the end.
+  Not nestable; throws when called inside another `:batch-tx?`."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
   (let [db-before @conn
         *tx-data (atom [])]
     (try
-      (when (:batch-tx @conn)
+      (when (:batch-tx? @conn)
         (throw (ex-info "batch-transact! can't be nested called" {:tx-meta tx-meta})))
-      (when (fn? listen-db) (d/listen! conn ::batch-tx
-                                       (fn [tx-report]
-                                         (swap! *tx-data into (:tx-data tx-report))
-                                         (listen-db tx-report))))
+      (batch-transact-listen! conn *tx-data listen-db)
       (swap! conn assoc :skip-store? true :batch-tx? true)
       (batch-tx-fn conn)
-      (when (fn? listen-db) (d/unlisten! conn ::batch-tx))
-
-      (swap! conn dissoc :skip-store? :batch-tx?)
-
+      (batch-transact-cleanup! conn)
       (when-some [_storage (storage/storage @conn)]
-       (d/store @conn))
-
+        (d/store @conn))
       (let [batch-tx-data @*tx-data
             _ (reset! *tx-data nil)
             tx-report {:db-before db-before
                        :db-after @conn
-                       :tx-meta tx-meta
+                       :tx-meta (assoc tx-meta :batch-final-tx-report? true)
                        :tx-data batch-tx-data}]
         (dc/run-callbacks conn tx-report)
         tx-report)
       (catch :default e
         (log/error e)
         (reset! conn db-before)
-        (swap! conn dissoc :skip-store? :batch-tx?)
-        (reset! *tx-data nil)
-        (throw e)))))
+        (throw e))
+      (finally
+        (batch-transact-cleanup! conn)
+        (reset! *tx-data nil)))))
 
 (def page? entity-util/page?)
 (def internal-page? entity-util/internal-page?)

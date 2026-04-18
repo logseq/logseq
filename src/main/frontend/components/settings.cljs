@@ -76,7 +76,7 @@
                 (if update-pending? (t :settings-page/checking) (t :settings-page/check-for-updates))
                 :class "text-sm mr-1"
                 :disabled update-pending?
-                :on-click #(js/window.apis.checkForUpdates false))
+                :on-click #(js/window.apis.checkForUpdates true))
 
                :else
                nil)]
@@ -101,6 +101,9 @@
                    (string/blank? type))
        [:div.update-state.text-sm
         (case type
+          "checking-for-update"
+          [:p (t :settings-page/checking)]
+
           "update-not-available"
           [:p (t :settings-page/app-updated)]
 
@@ -114,6 +117,21 @@
                  (util/stop e))}
               svg/external-link name " 🎉"]])
 
+          "download-progress"
+          (let [percent (some-> payload :percent js/Math.round)]
+            [:p (str "Downloading update"
+                     (when (number? percent)
+                       (str " " percent "%"))
+                     "...")])
+
+          "update-downloaded"
+          [:div.flex.items-center.gap-2.flex-wrap
+           [:p (t :updater/new-version-install)]
+           (ui/button
+            (t :updater/quit-and-install)
+            :class "text-sm"
+            :on-click #(ipc/ipc :quitAndInstall))]
+
           "error"
           [:p (t :settings-page/update-error-1) [:br] (t :settings-page/update-error-2)
            [:a.link
@@ -121,7 +139,9 @@
              (fn [e]
                (js/window.apis.openExternal "https://github.com/logseq/logseq/releases")
                (util/stop e))}
-            svg/external-link " release channel"]])])]))
+            svg/external-link " release channel"]]
+
+          nil)])]))
 
 (rum/defc outdenting-hint
   []
@@ -547,6 +567,76 @@
                  (config-handler/set-config! :feature/enable-flashcards? value)))
              true))
 
+(defn- push-sync-config-to-worker!
+  "Push the current sync URL config to the db worker so changes take effect
+   without restarting the app."
+  []
+  (state/<invoke-db-worker :thread-api/set-db-sync-config
+                           {:enabled? true
+                            :ws-url (config/db-sync-ws-url)
+                            :http-base (config/db-sync-http-base)}))
+
+(rum/defc sync-server-url-settings-container
+  []
+  (let [current-url (config/get-custom-sync-server-url)
+        [url set-url!] (rum/use-state (or current-url ""))
+        reset-url! (fn []
+                     (config/set-custom-sync-server-url! nil)
+                     (set-url! "")
+                     (-> (push-sync-config-to-worker!)
+                         (p/then #(notification/show! (t :settings-page/sync-server-url-cleared) :success))
+                         (p/catch #(notification/show! (str "Failed to update worker: " %) :error))))]
+    [:div.cp__settings-sync-server-cnt
+     [:h1.mb-2.text-2xl.font-bold (t :settings-page/sync-server-url)]
+     [:div.p-2
+      [:p.text-sm.opacity-70.mb-4 (t :settings-page/sync-server-url-desc)]
+      [:p
+       [:label
+        [:strong "URL"]
+        [:input.form-input.is-small
+         {:value url
+          :placeholder config/default-db-sync-http-base
+          :style {:width "100%"}
+          :on-change #(set-url! (util/evalue %))}]]]
+      [:p.pt-2.flex.gap-2
+       (shui/button
+        {:size :sm
+         :on-click (fn []
+                     (let [trimmed (string/trim url)]
+                       (if (string/blank? trimmed)
+                         (reset-url!)
+                         (if-not (config/valid-sync-server-url? trimmed)
+                           (notification/show! "URL must start with https:// or http://" :error)
+                           (do
+                             (config/set-custom-sync-server-url! trimmed)
+                             (-> (push-sync-config-to-worker!)
+                                 (p/then #(notification/show! (t :settings-page/sync-server-url-saved) :success))
+                                 (p/catch #(notification/show! (str "Failed to update worker: " %) :error))))))))}
+        (t :save))
+       (when (seq url)
+         (shui/button
+          {:size :sm
+           :variant :outline
+           :on-click (fn [] (reset-url!))}
+          (t :settings-page/sync-server-url-reset)))]]]))
+
+(rum/defc sync-server-url-button
+  []
+  (let [current-url (config/get-custom-sync-server-url)]
+    (ui/button [:span.flex.items-center
+                [:span.pr-1
+                 (if (seq current-url)
+                   current-url
+                   (t :settings-page/sync-server-url-default))]
+                (ui/icon "edit")]
+               :class "text-sm"
+               :on-click #(state/pub-event! [:go/sync-server-settings]))))
+
+(defn sync-server-url-row []
+  (row-with-button-action
+   {:left-label (t :settings-page/sync-server-url)
+    :action (sync-server-url-button)}))
+
 (rum/defc user-proxy-settings
   [{:keys [type protocol host port] :as agent-opts}]
   (ui/button [:span.flex.items-center
@@ -661,6 +751,7 @@
      (when (and (or util/mac? util/win32?) (util/electron?)) (app-auto-update-row t))
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
+     (sync-server-url-row)
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (when (util/electron?) (auto-chmod-row t))
      ;; (clear-cache-row t)
@@ -1174,6 +1265,9 @@
    :did-mount
    (fn [state]
      (let [active-tab (first (:rum/args state))
+           active-tab (if (and (= active-tab :ai) (not (util/electron?)))
+                        :advanced
+                        active-tab)
            *active (::active state)]
        (when (keyword? active-tab)
          (reset! *active [active-tab nil])))
@@ -1203,8 +1297,8 @@
                [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
                [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
-
-               [:ai (t :settings-page/tab-ai) (t :settings-page/ai) (ui/icon "wand")]
+               (when (util/electron?)
+                 [:ai (t :settings-page/tab-ai) (t :settings-page/ai) (ui/icon "wand")])
 
                [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
                [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature")]
@@ -1269,6 +1363,8 @@
          (encryption)
 
          :ai
-         (settings-ai)
+         (if (util/electron?)
+           (settings-ai)
+           (settings-advanced))
 
          nil)]]]))
