@@ -52,7 +52,7 @@
                                    :enabled (.-canCut edit-flags)
                                    :role "cut"}))
                 (. menu append
-                   (MenuItem. #js {:label (t :editor/copy)
+                   (MenuItem. #js {:label (t :ui/copy)
                                    :enabled (.-canCopy edit-flags)
                                    :role "copy"})))
 

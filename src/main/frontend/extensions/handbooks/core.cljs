@@ -283,7 +283,7 @@
       (let [categories (:children root)
             categories (conj (vec categories)
                              {:key      :ls-shortcuts
-                              :title    [:span (t :help.handbook/keyboard-shortcuts)]
+                              :title    [:span (t :help.shortcuts/label)]
                               :children [:span (t :help.handbook/shortcuts-count
                                                   (->> (vals @shortcut-config/*config)
                                                        (map count)
@@ -622,11 +622,11 @@
                               [:label.opacity-50 s]] :success)))}
            (ui/icon "copy")])
         (when (state/developer-mode?)
-          [:a.flex.items-center {:aria-label (t :help.handbook/settings)
+          [:a.flex.items-center {:aria-label (t :nav/settings)
                                  :tabIndex   "0"
-                                 :on-click   #(nav-to-pane! [:settings nil (t :help.handbook/settings)] active-pane-state)}
+                                 :on-click   #(nav-to-pane! [:settings nil (t :nav/settings)] active-pane-state)}
            (ui/icon "settings")])
-        [:a.flex.items-center {:aria-label (t :help.handbook/close) :tabIndex "0" :on-click #(state/toggle! :ui/handbooks-open?)}
+        [:a.flex.items-center {:aria-label (t :ui/close) :tabIndex "0" :on-click #(state/toggle! :ui/handbooks-open?)}
          (ui/icon "x")]]]
 
       (when (and (not pane-settings?) (not handbooks-loaded?))

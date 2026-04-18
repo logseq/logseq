@@ -691,7 +691,7 @@
        (log/error :exception error)
        (notification/show!
         [:div.flex.flex-col.gap-2
-         [:div (t :ui/error-boundary-message error)]
+         [:div (t :ui/error-boundary-error error)]
          (str (.-stack error))] `:error)
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]
@@ -1113,7 +1113,7 @@
                               (if-let [date (and result (doto (goog.date.DateTime.) (.setTime (.getTime result))))]
                                 (let [on-select' (or (:on-select opts) (:on-day-click opts))]
                                   (on-select' date))
-                                (notification/show! (t :notification/invalid-date (pr-str value)) :warning)))))))})]))
+                                (notification/show! (t :date/invalid-date-warning (pr-str value)) :warning)))))))})]))
 
 (comment
   (rum/defc skeleton

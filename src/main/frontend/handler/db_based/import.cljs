@@ -170,7 +170,7 @@
          (js/console.error e)
          (state/set-state! :graph/importing nil)
          (state/set-state! :graph/importing-state nil)
-         (notification/show! (t :import/zip-import-failed (.-message e)) :error)))))
+         (notification/show! (t :import/zip-import-error (.-message e)) :error)))))
 
 (defn import-from-debug-transit!
   [bare-graph-name raw finished-ok-handler]
@@ -233,7 +233,7 @@
                       {:error (t :import/cannot-import-block-into-non-block-entity)}
                       (merge (select-keys ent [:block/uuid])
                              {:block/page (select-keys (:block/page ent) [:block/uuid])})))
-                  (notification/show! (t :notification/no-block-found) :warning)))]
+                  (notification/show! (t :block/not-found-warning) :warning)))]
     (cond (or (= ::invalid-import export-map) (not (map? export-map)))
           (notification/show! (t :import/submitted-edn-invalid) :warning)
           (:error block)

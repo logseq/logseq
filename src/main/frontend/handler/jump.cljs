@@ -85,7 +85,7 @@
                 block (when block-id (db/entity [:block/uuid block-id]))]
             (when block (editor-handler/edit-block! block :max {:container-id container-id})))
           (.click trigger))
-        (notification/show! (t :notification/invalid-jump) :error true)))))
+        (notification/show! (t :nav/invalid-jump-error) :error true)))))
 
 (defn jump-to
   []

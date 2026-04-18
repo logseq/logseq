@@ -121,12 +121,14 @@ When adding or changing user-facing text:
 1. Use `.i18n-lint.toml` to confirm the text is in i18n scope.
 2. Search `src/resources/dicts/en.edn` for an exact semantic match.
 3. If no exact match exists, name the key with `docs/i18n-key-naming.md`.
-4. Add or update the English source text in `en.edn`.
-5. Replace the literal with the appropriate helper from
+4. If the naming guide still does not yield one clear key, stop and ask for
+   human guidance instead of guessing.
+5. Add or update the English source text in `en.edn`.
+6. Replace the literal with the appropriate helper from
    `frontend.context.i18n`.
-6. Add/update locale translations only where actual translations are being
+7. Add/update locale translations only where actual translations are being
    supplied.
-7. If you introduced a new linted helper/attribute/surface, update
+8. If you introduced a new linted helper/attribute/surface, update
    `.i18n-lint.toml`.
 
 ## Validation

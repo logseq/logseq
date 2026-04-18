@@ -127,7 +127,7 @@
     (-> (embed-asset-file url format)
         (p/catch (fn [error]
                    (log/error :share-import-media-failed {:error error :url url})
-                   (notification/show! (t :mobile.share/media-import-failed) :error false))))))
+                   (notification/show! (t :mobile.share/media-import-error) :error false))))))
 
 (defn- handle-received-application [result]
   (p/let [{:keys [url type]} result
@@ -183,7 +183,7 @@
         result)
       (p/catch (fn [error]
                  (log/error :handle-asset-file {:error error :url url})
-                 (notification/show! (t :mobile.share/file-import-failed) :error false)))))
+                 (notification/show! (t :mobile.share/file-import-error) :error false)))))
 
 (defn- handle-payload-resource
   [{:keys [type name ext url] :as resource} format]
@@ -197,7 +197,7 @@
       (notification/show!
        [:div
         (interpolate-rich-text-node
-         (t :mobile.share/unsupported-content)
+         (t :mobile.share/unsupported-content-warning)
          [[:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
                :target "_blank"} "GitHub"]])
         [:pre.code (with-out-str (pprint/pprint resource))]] :warning false))
@@ -210,7 +210,7 @@
       (notification/show!
        [:div
         (interpolate-rich-text-node
-         (t :mobile.share/unsupported-content)
+         (t :mobile.share/unsupported-content-warning)
          [[:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
                :target "_blank"} "GitHub"]])
         [:pre.code (with-out-str (pprint/pprint resource))]] :warning false))))
@@ -283,7 +283,7 @@
         (notification/show!
          [:div
           (interpolate-rich-text-node
-           (t :mobile.share/unsupported-content)
+           (t :mobile.share/unsupported-content-warning)
            [[:a {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
                  :target "_blank"} "GitHub"]])
           [:pre.code (with-out-str (pprint/pprint result))]] :warning false)))))

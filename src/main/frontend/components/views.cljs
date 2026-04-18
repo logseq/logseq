@@ -345,7 +345,7 @@
           [:div.flex.flex-row.items-center
            (shui/button
             {:variant :ghost
-             :title (t :view.table/open)
+             :title (t :ui/open)
              :on-click (fn [e]
                          (util/stop-propagation e)
                          (redirect!))

@@ -272,10 +272,10 @@
 
     (when downloaded
       [:div.cp__header-tips
-       [:p (t :settings.general/update-ready-to-install)
+       [:p (t :updater/update-ready-to-install)
         [:a.restart.ml-2
          {:on-click #(handler/quit-and-install-new-version!)}
-         (svg/reload 16) [:strong (t :settings.general/quit-and-install)]]]])))
+         (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
 
 (defn- clear-recent-highlight!
   []
@@ -423,7 +423,7 @@
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
               (ui/icon "search" {:size ui/icon-size})]
-             (t :header/search))))]]
+             (t :nav/search))))]]
 
      [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
       [:div.flex.flex-1

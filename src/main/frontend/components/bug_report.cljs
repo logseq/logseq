@@ -111,8 +111,8 @@
    [:div.flex.flex-col.items-center
     [:div.flex.items-center.mb-2
      (ui/icon "bug")
-     [:h1.text-3xl.ml-2 (t :bug-report.main/title)]]
-    [:div.opacity-60 (t :bug-report.main/desc)]]
+     [:h1.text-3xl.ml-2 (t :bug-report/title)]]
+    [:div.opacity-60 (t :bug-report/desc)]]
    [:div.cp__bug-report-reporter.rounded-lg.p-8.mt-8
     [:h1.text-2xl (t :bug-report.clipboard/title)]
     [:div.opacity-60 (t :bug-report.clipboard/desc)]
