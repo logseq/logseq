@@ -21,6 +21,38 @@
   [repo diff]
   (state/input-idle? repo :diff diff))
 
+(def-thread-api :thread-api/search-index-build-progress
+  [repo {:keys [status progress processed total]}]
+  (let [prev-state (get @state/state :search/index-build)
+        current-repo (state/get-current-repo)
+        visible-repo? (or (= repo current-repo)
+                          (= repo (:repo prev-state)))]
+    (when visible-repo?
+      (case status
+        :idle
+        (state/set-state! :search/index-build
+                          (assoc (or prev-state {})
+                                 :running? false
+                                 :repo repo))
+
+        :running
+        (state/set-state! :search/index-build
+                          {:running? true
+                           :repo repo
+                           :progress (or progress 0)
+                           :processed (or processed 0)
+                           :total (or total 0)})
+
+        :completed
+        (state/set-state! :search/index-build
+                          {:running? false
+                           :repo repo
+                           :progress (or progress 0)
+                           :processed (or processed 0)
+                           :total (or total 0)})
+        nil))
+    nil))
+
 (defn- ask-persist-permission!
   []
   (p/let [persistent? (.persist js/navigator.storage)]
@@ -132,8 +164,8 @@
        (-> (p/let [_ (state/<invoke-db-worker :thread-api/init)
                    _ (state/<invoke-db-worker :thread-api/set-db-sync-config
                                               {:enabled? true
-                                               :ws-url config/db-sync-ws-url
-                                               :http-base config/db-sync-http-base})
+                                               :ws-url (config/db-sync-ws-url)
+                                               :http-base (config/db-sync-http-base)})
                    _ (state/pub-event! [:rtc/sync-app-state])
                    _ (log/info "init worker spent" (str (- (util/time-ms) t1) "ms"))
                    _ (sync-ui-state!)

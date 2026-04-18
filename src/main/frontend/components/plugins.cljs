@@ -141,7 +141,7 @@
            (fn [^js e]
              (case (keyword (aget e "name"))
                :IllegalPluginPackageError
-               (notification/show! "Illegal Logseq plugin package." :error)
+                (plugin-handler/show-illegal-plugin-package-notification! e)
                :ExistedImportedPluginPackageError
                (notification/show! (str "Existed plugin package (" (.-message e) ").") :error)
                :default)
@@ -1579,6 +1579,35 @@
    {:label   "plugin-settings-modal"
     :align   :start
     :id      "ls-focused-settings-modal"}))
+
+;; tools for user registered host renderers
+(rum/defc renderer-container
+  [{:keys [_pid render] :as opts}]
+  (if (fn? render)
+    [:div.lsp-host-renderer-container
+     (render opts)]
+    [:pre (pr-str opts)]))
+
+(rum/defc renderer-resolver < rum/static
+  [nskey']
+  (when-let [pid (some-> nskey' (namespace))]
+    (let [key (name nskey')
+          [renderer set-renderer!] (rum/use-state nil)]
+
+      (hooks/use-effect!
+       (fn []
+         (try
+           (when-let [renderer (plugin-handler/resolve-hosted-render pid key :sidebar)]
+             (let [r (bean/->clj renderer)
+                   title (:title r)]
+               (when-let [^js dom (and title (js/document.getElementById nskey'))]
+                 (set! (. dom -textContent) title))
+               (set-renderer! r)))
+           (catch js/Error e (js/console.error "Failed to resolve renderer:" nskey' e))))
+       [pid key])
+
+      (when renderer
+        (renderer-container renderer)))))
 
 (defn hook-custom-routes
   [routes]

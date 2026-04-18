@@ -172,6 +172,7 @@
   :test {:target :node-test
          :output-to "static/tests.js"
          :closure-defines {frontend.util/NODETEST true
+                           frontend.worker-common.util/NODETEST true
                            logseq.shui.util/NODETEST true
                            frontend.worker.version/BUILD_TIME "test-worker-build-time"
                            frontend.worker.version/REVISION "test-worker-revision"
@@ -185,6 +186,7 @@
   :test-no-worker {:target :node-test
                    :output-to "static/tests-no-worker.js"
                    :closure-defines {frontend.util/NODETEST true
+                                     frontend.worker-common.util/NODETEST true
                                      logseq.shui.util/NODETEST true}
                    :devtools {:enabled false}
                    :build-options {:ns-exclude-regexp "^(frontend\\.worker|logseq\\.db-sync\\.worker)"}

@@ -1,7 +1,8 @@
 {:paths ["scripts/src" "src/main" "src/resources"]
  :deps
  {metosin/malli
-  {:mvn/version "0.16.1"}
+  {:git/url "https://github.com/metosin/malli"
+   :sha     "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}
   borkdude/rewrite-edn {:mvn/version "0.5.9"}
   logseq/bb-tasks
   #_{:local/root "../bb-tasks"}
@@ -14,7 +15,7 @@
   cheshire/cheshire
   {:mvn/version "6.2.0"}}
  :pods
- {clj-kondo/clj-kondo {:version "2026.01.19"}
+ {clj-kondo/clj-kondo {:version "2026.04.15"}
   org.babashka/fswatcher {:version "0.0.7"}
   org.babashka/go-sqlite3 {:version "0.3.13"}}
  :tasks
@@ -90,6 +91,12 @@
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
 
+  dev:create-clojure-log-graph
+  {:doc "Import local clojure-log chats into a DB graph"
+   :task (apply shell {:dir "deps/outliner"}
+                "yarn -s nbb-logseq ../../scripts/src/logseq/tasks/db_graph/create_graph_with_clojure_irc_history.cljs"
+                *command-line-args*)}
+
   dev:import
   {:doc "Import a file graph to db graph"
    :requires ([babashka.fs :as fs])
@@ -159,6 +166,9 @@
 
   dev:lint-and-test
   logseq.tasks.dev/lint-and-test
+
+  dev:lint-test-deps
+  logseq.tasks.dev.lint-test-deps/run
 
   dev:e2e-basic-test
   logseq.tasks.dev/e2e-basic-test

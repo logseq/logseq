@@ -102,7 +102,6 @@
  :page/logseq-is-having-a-problem "Logseq يواجه مشكلة. لمحاولة إعادته إلى حالة العمل، يرجى اتباع الخطوات الآمنة التالية بالترتيب:"
  :page/step "الخطوة {1}"
  :page/try "حاول"
- :page/delete-confirmation "هل أنت متأكد من رغبتك في حذف هذه الصفحة؟"
  :page/db-delete-confirmation "هل أنت متأكد من رغبتك في حذف هذه الصفحة؟"
  :page/make-public "اجعلها متاحة للنشر"
  :page/make-private "اجعله خاصاً"

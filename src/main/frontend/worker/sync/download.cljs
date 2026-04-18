@@ -60,22 +60,53 @@
       (<decompress-gzip-bytes chunk)
       chunk)))
 
-(defn- response-body-stream
-  [^js resp]
-  (let [encoding (some-> resp .-headers (.get "content-encoding"))]
-    (cond
-      (nil? (.-body resp))
-      nil
+(defn- <stream-starts-with-gzip?
+  [^js stream]
+  (let [reader (.getReader stream)]
+    (-> (.read reader)
+        (p/then (fn [result]
+                  (if (.-done result)
+                    false
+                    (gzip-bytes? (->uint8 (.-value result))))))
+        (p/catch (fn [_] false))
+        (p/finally (fn []
+                     (try
+                       (.releaseLock reader)
+                       (catch :default _)))))))
 
-      ;; NOTE: Some runtimes (e.g. Node fetch) may auto-decompress while still
-      ;; keeping `content-encoding: gzip` in headers. Avoid stream-level manual
-      ;; decompression here to prevent double-decompression failures. For gzip,
-      ;; fall back to arrayBuffer path where we detect gzip by magic bytes.
+(defn- <response-body-stream
+  [^js resp]
+  (let [body (.-body resp)
+        encoding (some-> resp .-headers (.get "content-encoding"))]
+    (cond
+      (nil? body)
+      (p/resolved nil)
+
+      ;; Never trust `content-encoding` alone.
+      ;; Some runtimes (e.g. Node/undici fetch) may auto-decompress body while
+      ;; still exposing `content-encoding: gzip` in headers.
+      ;; We only stream-decompress when the first bytes are actual gzip magic.
+      (and (= "gzip" encoding)
+           (exists? js/DecompressionStream)
+           (fn? (.-tee body)))
+      (let [branches (.tee body)
+            probe (aget branches 0)
+            payload (aget branches 1)]
+        (-> (<stream-starts-with-gzip? probe)
+            (p/then (fn [gzip?]
+                      (if gzip?
+                        (.pipeThrough payload (js/DecompressionStream. "gzip"))
+                        payload)))
+            ;; If probing fails, keep original payload stream.
+            (p/catch (fn [_] payload))))
+
+      ;; If we cannot safely probe (no tee support), do not guess.
+      ;; Fall back to the arrayBuffer path where we inspect magic bytes first.
       (= "gzip" encoding)
-      nil
+      (p/resolved nil)
 
       :else
-      (.-body resp))))
+      (p/resolved body))))
 
 (defn- <flush-row-batches!
   [rows batch-size on-batch]
@@ -89,29 +120,30 @@
 
 (defn- <stream-snapshot-row-batches!
   [^js resp batch-size on-batch]
-  (if-let [stream (response-body-stream resp)]
-    (let [reader (.getReader stream)]
-      (p/loop [buffer nil
-               pending []]
-        (p/let [result (.read reader)]
-          (if (.-done result)
-            (let [pending (if (and buffer (pos? (.-byteLength buffer)))
-                            (into pending (snapshot/finalize-framed-buffer buffer))
-                            pending)]
-              (if (seq pending)
-                (p/let [_ (on-batch pending)]
-                  {:chunk-count 1})
-                {:chunk-count 0}))
-            (let [{rows :rows next-buffer :buffer} (snapshot/parse-framed-chunk buffer (->uint8 (.-value result)))
-                  pending (into pending rows)]
-              (p/let [pending (<flush-row-batches! pending batch-size on-batch)]
-                (p/recur next-buffer pending)))))))
-    (p/let [snapshot-bytes (<snapshot-response-bytes resp)
-            rows (vec (snapshot/finalize-framed-buffer snapshot-bytes))]
-      (if (seq rows)
-        (p/let [_ (on-batch rows)]
-          {:chunk-count 1})
-        {:chunk-count 0}))))
+  (p/let [stream (<response-body-stream resp)]
+    (if stream
+      (let [reader (.getReader stream)]
+        (p/loop [buffer nil
+                 pending []]
+          (p/let [result (.read reader)]
+            (if (.-done result)
+              (let [pending (if (and buffer (pos? (.-byteLength buffer)))
+                              (into pending (snapshot/finalize-framed-buffer buffer))
+                              pending)]
+                (if (seq pending)
+                  (p/let [_ (on-batch pending)]
+                    {:chunk-count 1})
+                  {:chunk-count 0}))
+              (let [{rows :rows next-buffer :buffer} (snapshot/parse-framed-chunk buffer (->uint8 (.-value result)))
+                    pending (into pending rows)]
+                (p/let [pending (<flush-row-batches! pending batch-size on-batch)]
+                  (p/recur next-buffer pending)))))))
+      (p/let [snapshot-bytes (<snapshot-response-bytes resp)
+              rows (vec (snapshot/finalize-framed-buffer snapshot-bytes))]
+        (if (seq rows)
+          (p/let [_ (on-batch rows)]
+            {:chunk-count 1})
+          {:chunk-count 0})))))
 
 (defn- with-auth-headers
   [opts]
@@ -183,6 +215,14 @@
     (when (= import-id (:import-id state))
       (close-import-state! state)
       (reset! *import-state nil))))
+
+(defn close-import-state-for-repo!
+  [repo]
+  (when-let [state @*import-state]
+    (when (= repo (:repo state))
+      (close-import-state! state)
+      (reset! *import-state nil)))
+  nil)
 
 (defn- require-import-state!
   [repo graph-id import-id]
@@ -262,13 +302,13 @@
   (p/let [datoms-batch (if graph-e2ee?
                          (sync-crypt/<decrypt-snapshot-datoms-batch aes-key datoms)
                          datoms)
-          ident-tx-data (into [] (comp (filter #(= :db/ident (:a %)))
-                                       (map datom->tx))
-                              datoms-batch)
-          regular-tx-data (into [] (comp (remove #(= :db/ident (:a %)))
+          schema-tx-data (into [] (comp (filter #(= "db" (namespace (:a %))))
+                                        (map datom->tx))
+                               datoms-batch)
+          regular-tx-data (into [] (comp (remove #(= "db" (namespace (:a %))))
                                          (map datom->tx))
                                 datoms-batch)
-          tx-data (into ident-tx-data regular-tx-data)]
+          tx-data (into schema-tx-data regular-tx-data)]
     (when (seq tx-data)
       (d/transact! conn tx-data {:sync-download-graph? true}))))
 
@@ -346,6 +386,7 @@
   [repo reset? graph-id graph-e2ee? & [total-datoms]]
   (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
     (-> (p/let [close-db-f (require-thread-api-f! :thread-api/db-sync-close-db)
+                unlink-db-f (require-thread-api-f! :thread-api/unsafe-unlink-db)
                 invalidate-search-db-f (require-thread-api-f! :thread-api/db-sync-invalidate-search-db)
                 create-or-open-db-f (require-thread-api-f! :thread-api/create-or-open-db)
                 _ (when-let [state @*import-state]
@@ -353,6 +394,7 @@
                     (close-db-f (:repo state)))
                 _ (reset! *import-state nil)
                 _ (when reset? (close-db-f repo))
+                _ (when reset? (unlink-db-f repo))
                 _ (when reset? (invalidate-search-db-f repo))
                 import-id (str (random-uuid))
                 aes-key (when graph-e2ee?

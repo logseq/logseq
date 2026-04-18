@@ -112,6 +112,34 @@
                                     :block/tags :logseq.class/Property}])
          (ldb/transact! temp-conn [[:db/retract :logseq.class/Task :block/tags :logseq.class/Property]]))))))
 
+(deftest block-uuid-is-immutable-for-existing-entity-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "page1"}}]})
+        page (db-test/find-page-by-title @conn "page1")
+        db-id (:db/id page)
+        old-uuid (:block/uuid page)
+        new-uuid (random-uuid)]
+    (testing "cannot replace :block/uuid on existing entity"
+      (is (thrown? js/Error
+                   (db-test/silence-stderr
+                    (ldb/transact! conn [[:db/add db-id :block/uuid new-uuid]]))))
+      (is (= old-uuid (:block/uuid (d/entity @conn db-id)))))
+    (testing "cannot retract :block/uuid on existing entity"
+      (is (thrown? js/Error
+                   (db-test/silence-stderr
+                    (ldb/transact! conn [[:db/retract db-id :block/uuid old-uuid]]))))
+      (is (= old-uuid (:block/uuid (d/entity @conn db-id)))))))
+
+(deftest block-uuid-immutability-allows-retract-entity-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "page1"}}]})
+        page (db-test/find-page-by-title @conn "page1")
+        db-id (:db/id page)]
+    (ldb/transact! conn [[:db/retractEntity db-id]])
+    (is (nil? (d/entity @conn db-id)))))
+
 (deftest get-bidirectional-properties
   (testing "disabled by default"
     (let [conn (db-test/create-conn-with-blocks

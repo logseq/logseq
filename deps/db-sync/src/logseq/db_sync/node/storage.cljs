@@ -48,3 +48,11 @@
     (ensure-dir! (node-path/dirname db-path))
     {:graph-name graph-name
      :sql (wrap-db (new sqlite db-path nil))}))
+
+(defn delete-graph-db!
+  [data-dir graph-id]
+  (let [[_graph-name db-path] (common-sqlite/get-db-full-path (node-path/join data-dir "graphs") graph-id)
+        graph-dir (node-path/dirname db-path)]
+    (when (.existsSync fs graph-dir)
+      (.rmSync fs graph-dir #js {:recursive true
+                                 :force true}))))

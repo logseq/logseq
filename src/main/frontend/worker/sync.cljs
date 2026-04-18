@@ -13,6 +13,7 @@
    [frontend.worker.sync.transport :as sync-transport]
    [frontend.worker.sync.upload :as sync-upload]
    [frontend.worker.sync.util :as sync-util]
+   [frontend.worker-common.util :as worker-util]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
    [logseq.db-sync.checksum :as sync-checksum]
@@ -50,10 +51,22 @@
 
 (defn update-local-sync-checksum!
   [repo tx-report]
-  (when (worker-state/get-client-ops-conn repo)
-    (client-op/update-local-checksum
-     repo
-     (sync-checksum/update-checksum (client-op/get-local-checksum repo) tx-report))))
+  (when (and worker-util/dev-or-test?
+             (worker-state/get-client-ops-conn repo))
+    (let [current-checksum (client-op/get-local-checksum repo)
+          new-checksum (sync-checksum/update-checksum current-checksum tx-report)]
+      ;; (let [full-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
+      ;;   (when (not= new-checksum full-checksum)
+      ;;    (prn :debug
+      ;;         "checksum-doesn't match"
+      ;;         {:current-checksum current-checksum
+      ;;          :new-checksum new-checksum
+      ;;          :full-checksum full-checksum
+      ;;          :db-before (ldb/write-transit-str (:db-before tx-report))
+      ;;          :db-after (ldb/write-transit-str (:db-after tx-report))
+      ;;          :tx-data (ldb/write-transit-str (:tx-data tx-report))
+      ;;          :tx-meta (ldb/write-transit-str (:tx-meta tx-report))})))
+      (client-op/update-local-checksum repo new-checksum))))
 
 (defn- broadcast-rtc-state!
   [client]
@@ -129,6 +142,21 @@
   [ws message]
   (sync-transport/send! sync-transport/coerce-ws-client-message ws message))
 
+(defn- enqueue-receive-message!
+  [client task]
+  (if-let [queue (:receive-queue client)]
+    (swap! queue
+           (fn [prev]
+             (-> (or prev (p/resolved nil))
+                 ;; Keep queue alive even if one message handler fails.
+                 (p/catch (fn [_] nil))
+                 (p/then (fn [_] (task)))
+                 (p/catch (fn [error]
+                            (log/error :db-sync/ws-handle-message-failed
+                                       {:repo (:repo client)
+                                        :error error}))))))
+    (task)))
+
 (defn update-presence!
   [editing-block-uuid]
   (when-let [client @worker-state/*db-sync-client]
@@ -147,7 +175,9 @@
   [repo]
   {:repo repo
    :send-queue (atom (p/resolved nil))
+   :receive-queue (atom (p/resolved nil))
    :asset-queue (atom (p/resolved nil))
+   :pending-pull-since (atom nil)
    :inflight (atom [])
    :last-sync-error (atom nil)
    :reconnect (atom {:attempt 0 :timer nil})
@@ -186,7 +216,9 @@
   (set! (.-onmessage ws)
         (fn [event]
           (touch-last-ws-message! client)
-          (sync-handle-message/handle-message! repo client (.-data event))))
+          (enqueue-receive-message! client
+                                    (fn []
+                                      (sync-handle-message/handle-message! repo client (.-data event))))))
   (set! (.-onerror ws) (fn [error] (log/error :db-sync/ws-error error)))
   (set! (.-onclose ws)
         (fn [_]
@@ -360,3 +392,15 @@
   (sync-upload/upload-graph! repo))
 
 (def list-remote-graphs! sync-upload/list-remote-graphs!)
+
+(defn stop-upload!
+  [repo]
+  (sync-apply/set-upload-stopped! repo true))
+
+(defn resume-upload!
+  [repo]
+  (sync-apply/set-upload-stopped! repo false))
+
+(defn upload-stopped?
+  [repo]
+  (sync-apply/upload-stopped? repo))

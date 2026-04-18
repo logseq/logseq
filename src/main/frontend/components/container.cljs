@@ -220,7 +220,6 @@
 
 (rum/defc help-menu-popup
   []
-
   (hooks/use-effect!
    (fn []
      (state/set-state! :ui/handbooks-open? false))
@@ -273,6 +272,16 @@
      (when handbooks-open?
        (handbooks/handbooks-popup))]))
 
+(defn- context-menu-click-should-hide?
+  [target]
+  (let [menu-item (some-> target (.closest "[role='menuitem']"))
+        submenu-trigger? (= "menu" (some-> menu-item (.getAttribute "aria-haspopup")))]
+    (boolean
+     (and target
+          (not (util/input? target))
+          menu-item
+          (not submenu-trigger?)))))
+
 (rum/defc app-context-menu-observer
   < rum/static
   (mixins/event-mixin
@@ -292,10 +301,8 @@
                                                 (fn [{:keys [id]}]
                                                   [:div {:on-click (fn [^js e]
                                                                      (when-let [target (.-target e)]
-                                                                       (let [input? (util/input? target)
-                                                                             popup? (.closest target "[data-radix-popper-content-wrapper]")]
-                                                                         (when (not (or input? popup?))
-                                                                           (shui/popup-hide! id)))))
+                                                                       (when (context-menu-click-should-hide? target)
+                                                                         (shui/popup-hide! id))))
                                                          :data-keep-selection true}
                                                    content])
                                                 (merge

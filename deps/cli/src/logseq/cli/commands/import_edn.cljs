@@ -14,7 +14,7 @@
   (println (str "Imported " (cli-util/summarize-build-edn import-map) "!")))
 
 (defn- api-import [{:keys [api-server-token]} import-map]
-  (-> (p/let [resp (cli-util/api-fetch api-server-token "logseq.cli.import_edn" [(sqlite-util/transit-write import-map)])]
+  (-> (p/let [resp (cli-util/api-fetch api-server-token "logseq.cli.import_edn" [(sqlite-util/write-transit-str import-map)])]
         (if (= 200 (.-status resp))
           (print-success import-map)
           (cli-util/api-handle-error-response resp)))

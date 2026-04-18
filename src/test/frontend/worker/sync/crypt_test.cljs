@@ -595,3 +595,16 @@
                           (is (= "decrypt-aes-key" (ex-message e)))
                           (is (zero? @clear-user-rsa-cache-calls*))
                           (done)))))))
+
+(deftest decrypt-text-value-legacy-plaintext-test
+  (async done
+         (-> (p/let [aes-key (crypt/<generate-aes-key)
+                     plaintext "$$$favorites"
+                     encrypted (crypt/<encrypt-uint8array aes-key (.encode (js/TextEncoder.) plaintext))
+                     encrypted-str (ldb/write-transit-str encrypted)
+                     decrypted (sync-crypt/<decrypt-text-value aes-key encrypted-str)]
+               (is (= plaintext decrypted))
+               (done))
+             (p/catch (fn [e]
+                        (is false (str e))
+                        (done))))))

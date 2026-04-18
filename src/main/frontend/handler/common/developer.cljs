@@ -95,11 +95,30 @@
       (string/replace #"[\\/]+" "_")
       (str "_checksum_" (quot (util/time-ms) 1000))))
 
-(defn- client-server-checksum-mismatch?
-  [local-checksum remote-checksum]
-  (and (string? local-checksum)
-       (string? remote-checksum)
-       (not= local-checksum remote-checksum)))
+(defn- client-ops-export-file-name
+  [repo]
+  (-> (or repo "graph")
+      (string/replace #"^/+" "")
+      (string/replace #"[\\/]+" "_")
+      (str "_client_ops_" (quot (util/time-ms) 1000))))
+
+(defn- ->uint8array
+  [data]
+  (cond
+    (instance? js/Uint8Array data)
+    data
+
+    (js/ArrayBuffer.isView data)
+    (js/Uint8Array. (.-buffer data) (.-byteOffset data) (.-byteLength data))
+
+    (instance? js/ArrayBuffer data)
+    (js/Uint8Array. data)
+
+    (array? data)
+    (js/Uint8Array. data)
+
+    :else
+    nil))
 
 (defn- <fetch-server-checksum-diagnostics
   [repo]
@@ -164,7 +183,9 @@
                      :server-checksum (:checksum server-diagnostics)
                      :different-blocks diff-blocks}]
     (pprint/pprint diff-data)
-    (js/console.warn "Checksum mismatch between client and server. Diff data:" diff-data)))
+    (when (seq diff-blocks)
+      (js/console.warn "Checksum mismatch between client and server. Diff data:" diff-data))))
+
 
 (defn ^:export recompute-checksum-diagnostics
   []
@@ -184,11 +205,10 @@
                           content (with-out-str (pprint/pprint export-edn))
                           blob (js/Blob. #js [content] (clj->js {:type "text/edn;charset=utf-8"}))
                           filename (checksum-export-file-name repo)]
-                      (p/let [_ (when (client-server-checksum-mismatch? local-checksum remote-checksum)
-                                  (-> (<log-checksum-mismatch-diff! repo export-edn)
-                                      (p/catch (fn [error]
-                                                 (js/console.error "checksum mismatch diff fetch failed:" error)
-                                                 nil))))]
+                      (p/let [_ (-> (<log-checksum-mismatch-diff! repo export-edn)
+                                    (p/catch (fn [error]
+                                               (js/console.error "checksum mismatch diff fetch failed:" error)
+                                               nil)))]
                         (utils/saveToFile blob filename "edn")
                         (notification/show!
                          (str "Checksum recomputed. Recomputed: " recomputed-checksum
@@ -202,6 +222,29 @@
         (p/catch (fn [error]
                    (js/console.error "recompute-checksum-diagnostics failed:" error)
                    (notification/show! "Failed to compute graph checksum diagnostics." :error))))
+    (notification/show! "No graph found" :warning)))
+
+(defn ^:export export-client-ops-sqlite
+  []
+  (if-let [repo (state/get-current-repo)]
+    (-> (state/<invoke-db-worker-direct-pass :thread-api/export-client-ops-db repo)
+        (p/then (fn [data]
+                  (if-let [payload (->uint8array data)]
+                    (let [filename (client-ops-export-file-name repo)
+                          blob (js/Blob. #js [payload] (clj->js {:type "application/octet-stream"}))]
+                      (utils/saveToFile blob filename "sqlite")
+                      (notification/show!
+                       (str "Client ops SQLite exported: " filename ".sqlite")
+                       :success
+                       false))
+                    (notification/show!
+                     (str "Client ops SQLite export failed: invalid payload type "
+                          (pr-str (type data))
+                          ".")
+                     :warning))))
+        (p/catch (fn [error]
+                   (js/console.error "export-client-ops-sqlite failed:" error)
+                   (notification/show! "Failed to export client ops SQLite." :error))))
     (notification/show! "No graph found" :warning)))
 
 (defn import-chosen-graph

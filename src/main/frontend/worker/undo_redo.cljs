@@ -2,6 +2,7 @@
   "Undo redo new implementation"
   (:require [datascript.core :as d]
             [frontend.worker.state :as worker-state]
+            [frontend.worker.sync.client-op :as client-op]
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [malli.core :as m]
@@ -45,8 +46,10 @@
        [:added-ids [:set :int]]
        [:retracted-ids [:set :int]]
        [:db-sync/tx-id {:optional true} :uuid]
-       [:db-sync/forward-outliner-ops {:optional true} [:sequential :any]]
-       [:db-sync/inverse-outliner-ops {:optional true} [:sequential :any]]]]]
+       [:db-sync/forward-outliner-ops {:optional true}
+        [:maybe [:sequential :any]]]
+       [:db-sync/inverse-outliner-ops {:optional true}
+        [:maybe [:sequential :any]]]]]]
 
     [::record-editor-info
      [:cat :keyword
@@ -206,7 +209,7 @@
   [repo undo?]
   (undo-redo-aux repo undo?))
 
-(defn- run-worker-path
+(defn- apply-history-action
   [repo conn undo? op tx-meta' tx-id]
   (if-let [apply-action @*apply-history-action!]
     (try
@@ -253,14 +256,10 @@
                            (second %))
                         op)]
     (let [tx-id (:db-sync/tx-id data)
-          forward-outliner-ops (:db-sync/forward-outliner-ops data)
-          inverse-outliner-ops (:db-sync/inverse-outliner-ops data)
-          tx-meta' (-> (undo-redo-action-meta data undo?)
-                       (assoc :forward-outliner-ops forward-outliner-ops
-                              :inverse-outliner-ops inverse-outliner-ops
-                              :db-sync/forward-outliner-ops forward-outliner-ops
-                              :db-sync/inverse-outliner-ops inverse-outliner-ops))]
-      (run-worker-path repo conn undo? op tx-meta' tx-id))))
+          tx-meta' (merge (undo-redo-action-meta data undo?)
+                          (select-keys data [:db-sync/forward-outliner-ops
+                                             :db-sync/inverse-outliner-ops]))]
+      (apply-history-action repo conn undo? op tx-meta' tx-id))))
 
 (defn- undo-redo-aux
   [repo undo?]
@@ -302,10 +301,7 @@
 (defn- pending-history-action-ops
   [repo tx-id]
   (when (uuid? tx-id)
-    (when-let [conn (get @worker-state/*client-ops-conns repo)]
-      (when-let [ent (d/entity @conn [:db-sync/tx-id tx-id])]
-        {:db-sync/forward-outliner-ops (some-> (:db-sync/forward-outliner-ops ent) seq vec)
-         :db-sync/inverse-outliner-ops (some-> (:db-sync/inverse-outliner-ops ent) seq vec)}))))
+    (client-op/history-action-ops-by-tx-id repo tx-id)))
 
 (defn gen-undo-ops!
   [repo {:keys [tx-data tx-meta db-after db-before]} tx-id
@@ -319,8 +315,7 @@
            outliner-op
            (not (false? (:gen-undo-ops? tx-meta)))
            (not (:create-today-journal? tx-meta))
-           (seq forward-outliner-ops)
-           (seq inverse-outliner-ops))
+           (not (contains? #{:create-view} (:source-outliner-op tx-meta))))
       (let [all-ids (distinct (map :e tx-data))
             retracted-ids (set
                            (filter
