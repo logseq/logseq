@@ -4,7 +4,7 @@
   "packageManager": "pnpm@10.33.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "git+https://github.com/logseq/nbb-logseq.git#feat-db-v33",
+    "@logseq/nbb-logseq": "git+https://github.com/logseq/nbb-logseq.git#feat-db-v34",
     "fs-extra": "^11.3.4"
   },
   "dependencies": {

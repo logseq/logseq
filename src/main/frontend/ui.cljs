@@ -298,8 +298,6 @@
                           (notification/clear! uid))
               :icon "x"})]]]]]])))
 
-(declare button)
-
 (rum/defc notification-clear-all
   []
   [:div.ui__notifications-content
@@ -953,7 +951,6 @@
       ""
       :icon "h-auto"
       :disabled? (and (some? heading) (true? heading))
-      :icon-props {:extension? true}
       :class "to-heading-button"
       :title (t :auto-heading)
       :on-click auto-heading-fn
@@ -963,7 +960,6 @@
       ""
       :icon "heading-off"
       :disabled? (and (some? heading) (not heading))
-      :icon-props {:extension? true}
       :class "to-heading-button"
       :title (t :remove-heading)
       :on-click rm-heading-fn

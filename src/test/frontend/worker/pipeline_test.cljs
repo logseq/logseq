@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [frontend.worker.pipeline :as worker-pipeline]
             [logseq.db :as ldb]
+            [logseq.db.common.order :as db-order]
             [logseq.db.test.helper :as db-test]))
 
 (deftest test-built-in-page-updates-that-should-be-reverted
@@ -143,3 +144,69 @@
                                    :block/title "page1-renamed"}])]
         (is (= "page1-renamed"
                (:block/title (d/entity (:db-after result) (:db/id page1)))))))))
+
+(deftest built-in-tag-must-not-convert-page-child-block-to-class-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page1"}}]})
+        page1 (ldb/get-page @conn "page1")
+        now (js/Date.now)
+        bad-block-uuid (random-uuid)
+        new-tag-uuid (random-uuid)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+
+    (testing "page-child block with built-in #Tag stays a block"
+      (ldb/transact! conn [{:block/uuid bad-block-uuid
+                            :block/title "charlie"
+                            :block/created-at now
+                            :block/updated-at now
+                            :block/page (:db/id page1)
+                            :block/parent (:db/id page1)
+                            :block/order (db-order/gen-key)
+                            :block/tags [:logseq.class/Tag]}])
+      (let [block (d/entity @conn [:block/uuid bad-block-uuid])]
+        (is (some? block))
+        (is (nil? (:db/ident block)))
+        (is (nil? (:logseq.property.class/extends block)))
+        (is (not (ldb/class? block)))
+        (is (= (:db/id page1) (:db/id (:block/parent block))))
+        (is (empty? (:block/tags block)))))
+
+    (testing "standalone candidate is still converted to a class page"
+      (ldb/transact! conn [{:block/uuid new-tag-uuid
+                            :block/name "standalone-tag"
+                            :block/title "standalone-tag"
+                            :block/created-at now
+                            :block/updated-at now
+                            :block/tags [:logseq.class/Tag]}])
+      (let [tag-page (d/entity @conn [:block/uuid new-tag-uuid])]
+        (is (ldb/class? tag-page))
+        (is (keyword? (:db/ident tag-page)))
+        (is (= "user.class" (namespace (:db/ident tag-page))))
+        (is (= [:logseq.class/Root]
+               (map :db/ident (:logseq.property.class/extends tag-page))))))
+
+    ;; return global fn back to previous behavior
+    (ldb/register-transact-pipeline-fn! identity)))
+
+(deftest tag-template-insertion-resolves-dynamic-variable-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Target Page"}
+                 :blocks [{:block/title "target block"}]}
+                {:page {:block/title "Templates"}
+                 :blocks [{:block/title "tag template root"
+                           :build/children [{:block/title "auto <% current page %>"}]}]}]
+               :classes {:DiaryEntry {}}})
+        target-block (db-test/find-block-by-content @conn "target block")
+        template-root (db-test/find-block-by-content @conn "tag template root")
+        diary-entry (ldb/get-page @conn "DiaryEntry")]
+    (ldb/transact! conn [[:db/add (:db/id template-root)
+                          :logseq.property/template-applied-to
+                          (:db/id diary-entry)]])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn [[:db/add (:db/id target-block) :block/tags (:db/id diary-entry)]])
+      (is (some? (db-test/find-block-by-content @conn "auto [[Target Page]]")))
+      (finally
+        ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))

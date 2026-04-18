@@ -39,6 +39,13 @@
      (keyword pid) key (reduce #(assoc %1 %2 (aget opts (name %2))) {}
                                [:before :subs :render]))))
 
+(defn ^:export register_hosted_renderer
+  [pid key ^js opts]
+  (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
+    (plugin-handler/register-hosted-renderer
+     (keyword pid) key (reduce #(assoc %1 %2 (aget opts (name %2))) {}
+                               [:title :type :mode :subs :render]))))
+
 (defn ^:export register_extensions_enhancer
   [pid type enhancer]
   (when-let [^js _pl (and (fn? enhancer) (plugin-handler/get-plugin-inst pid))]

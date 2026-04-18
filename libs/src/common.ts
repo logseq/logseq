@@ -21,7 +21,7 @@ export const PROTOCOL_FILE = 'file://'
 export const PROTOCOL_LSP = 'lsp://'
 export const URL_LSP = PROTOCOL_LSP + 'logseq.io/'
 
-let _appPathRoot
+let _appPathRoot: string
 
 // TODO: snakeCase of lodash is incompatible with `snake-case`
 export const safeSnakeCase = snakeCase
@@ -169,10 +169,6 @@ export function safetyPathNormalize(basePath: string) {
   return basePath
 }
 
-/**
- * @param timeout milliseconds
- * @param tag string
- */
 export function deferred<T = any>(timeout?: number, tag?: string) {
   let resolve: any, reject: any
   let settled = false
@@ -240,25 +236,6 @@ export function invokeHostExportedApi(method: string, ...args: Array<any>) {
     throw new Error(`Not existed method #${method}`)
   }
   return typeof fn !== 'function' ? fn : fn.apply(this, args)
-}
-
-export function setupIframeSandbox(
-  props: Record<string, any>,
-  target: HTMLElement
-) {
-  const iframe = document.createElement('iframe')
-
-  iframe.classList.add('lsp-iframe-sandbox')
-
-  Object.entries(props).forEach(([k, v]) => {
-    iframe.setAttribute(k, v)
-  })
-
-  target.appendChild(iframe)
-
-  return async () => {
-    target.removeChild(iframe)
-  }
 }
 
 export function setupInjectedStyle(

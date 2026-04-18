@@ -22,6 +22,27 @@
                                                :redef false}}
                  :devtools {:enabled false}
                  :closure-defines {goog.debug.LOGGING_ENABLED true}}
+  :db-sync-show-checksum {:target :node-script
+                          :output-to "worker/dist/show-sqlite-checksum.js"
+                          :main logseq.db-sync.node.show-checksum/main
+                          :compiler-options {:source-map true
+                                             :warnings {:fn-deprecated false
+                                                        :redef false}}
+                          :devtools {:enabled false}}
+  :db-sync-find-checksum-drift {:target :node-script
+                                :output-to "worker/dist/find-checksum-drift.js"
+                                :main logseq.db-sync.node.find-checksum-drift/main
+                                :compiler-options {:source-map true
+                                                   :warnings {:fn-deprecated false
+                                                              :redef false}}
+                                :devtools {:enabled false}}
+  :db-sync-recompute-log-checksum {:target :node-script
+                                   :output-to "worker/dist/recompute-log-checksum.js"
+                                   :main logseq.db-sync.node.recompute-log-checksum/main
+                                   :compiler-options {:source-map true
+                                                      :warnings {:fn-deprecated false
+                                                                 :redef false}}
+                                   :devtools {:enabled false}}
   :db-sync-test {:target :node-test
                  :output-to "worker/dist/worker-test.js"
                  :devtools {:enabled false}

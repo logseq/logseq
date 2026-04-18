@@ -6,5 +6,7 @@
                   logseq.outliner.core
                   logseq.outliner.db-pipeline
                   logseq.outliner.property
+                  logseq.outliner.op.construct
+                  logseq.outliner.recycle
                   logseq.outliner.tree]
  :report {:format :ignore}}

@@ -27,7 +27,7 @@
                 (cond-> (into {} e)
                   true
                   (dissoc e :block/tags :block/order :block/refs :block/name :db/index
-                          :logseq.property.embedding/hnsw-label-updated-at :logseq.property/default-value)
+                          :logseq.property/default-value)
                   true
                   (update :block/uuid str)
                   (:logseq.property/classes e)
@@ -46,8 +46,7 @@
               (if expand
                 (cond-> (into {} e)
                   true
-                  (dissoc e :block/tags :block/order :block/refs :block/name
-                          :logseq.property.embedding/hnsw-label-updated-at)
+                  (dissoc e :block/tags :block/order :block/refs :block/name)
                   true
                   (update :block/uuid str)
                   (:logseq.property.class/extends e)
@@ -75,7 +74,7 @@
   [m]
   (->> (remove (fn [[k _v]]
                  (or (= "block.temp" (namespace k))
-                     (contains? #{:logseq.property.embedding/hnsw-label-updated-at :block/tx-id} k))) m)
+                     (contains? #{:block/tx-id} k))) m)
        (into {})))
 
 (defn get-page-data

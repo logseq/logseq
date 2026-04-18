@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
 
 # install NodeJS & pnpm
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
     apt-get update && apt-get install -y nodejs && \
     corepack enable && corepack prepare pnpm@10.33.0 --activate
 

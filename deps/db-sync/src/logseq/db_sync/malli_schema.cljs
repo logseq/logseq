@@ -4,6 +4,7 @@
 
 (def tx-entry-schema
   [:map
+   [:tx-id {:optional true} :uuid]
    [:tx :string]
    [:outliner-op {:optional true} [:maybe :keyword]]])
 
@@ -37,13 +38,21 @@
      [:type [:= "ping"]]]]])
 
 (def tx-reject-reason-schema
-  [:enum "stale" "empty tx data" "invalid tx" "invalid t-before" "db transact failed"])
+  [:enum "stale"
+   "empty tx data"
+   "invalid tx"
+   "invalid t-before"
+   "db transact failed"
+   "snapshot upload in progress"])
 
 (def tx-reject-schema
   [:map
    [:type [:= "tx/reject"]]
    [:reason tx-reject-reason-schema]
    [:t {:optional true} :int]
+   [:success-tx-ids {:optional true} [:sequential :uuid]]
+   [:failed-tx-id {:optional true} :uuid]
+   [:error-detail {:optional true} :string]
    [:data {:optional true} :string]])
 
 (def user-presence-schema
@@ -138,7 +147,8 @@
 
 (def graphs-list-response-schema
   [:map
-   [:graphs [:sequential graph-info-schema]]])
+   [:graphs [:sequential graph-info-schema]]
+   [:user-rsa-keys-exists? :boolean]])
 
 (def graph-create-request-schema
   [:map

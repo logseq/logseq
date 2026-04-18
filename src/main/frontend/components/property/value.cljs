@@ -313,6 +313,22 @@
          (when done-choice
            (db-property/property-value-content done-choice))]])]))
 
+(defn- <resolve-journal-page-for-date
+  ([^js d]
+   (<resolve-journal-page-for-date d
+                                   state/get-current-repo
+                                   db-async/<get-block
+                                   page-handler/<create!
+                                   date/js-date->journal-title))
+  ([^js d get-current-repo-f get-block-f create-page-f journal-title-f]
+   (p/let [journal (journal-title-f d)
+           page (get-block-f (get-current-repo-f) journal {:children? false})
+           journal-page (when (:block/journal-day page)
+                          page)]
+     (if journal-page
+       journal-page
+       (create-page-f journal {:redirect? false})))))
+
 (rum/defcs calendar-inner < rum/reactive db-mixins/query
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
   {:init (fn [state]
@@ -353,12 +369,10 @@
         select-handler!
         (fn [^js d]
           (when d
-            (let [journal (date/js-date->journal-title d)]
+            (p/let [journal-page (<resolve-journal-page-for-date d)]
               (p/do!
-               (when-not (model/get-journal-page journal)
-                 (page-handler/<create! journal {:redirect? false}))
                (when (fn? on-change)
-                 (let [value (if datetime? (tc/to-long d) (model/get-journal-page journal))]
+                 (let [value (if datetime? (tc/to-long d) journal-page)]
                    (on-change value)))
                (when-not datetime?
                  (shui/popup-hide! id)
@@ -1565,6 +1579,23 @@
                    (when (some? value) #{value}))]
     (multiple-values-inner block property value' opts)))
 
+(defn- resolved-property-value-for-render
+  [block property multiple-values?]
+  (let [v (get block (:db/ident property))
+        block-loaded? (some? (:block/uuid block))]
+    (or
+     (cond
+       (and multiple-values? (or (set? v) (coll? v) (nil? v)))
+       v
+       multiple-values?
+       #{v}
+       (set? v)
+       (first v)
+       :else
+       v)
+     (when block-loaded?
+       (:logseq.property/default-value property)))))
+
 (rum/defcs ^:large-vars/cleanup-todo property-value < rum/reactive db-mixins/query
   [state block property {:keys [show-tooltip? p-block p-property editing?]
                          :as opts}]
@@ -1581,18 +1612,7 @@
          editor-id (str dom-id "-editor")
          type (:logseq.property/type property)
          multiple-values? (db-property/many? property)
-         v (let [v (get block (:db/ident property))]
-             (or
-              (cond
-                (and multiple-values? (or (set? v) (coll? v) (nil? v)))
-                v
-                multiple-values?
-                #{v}
-                (set? v)
-                (first v)
-                :else
-                v)
-              (:logseq.property/default-value property)))
+         v (resolved-property-value-for-render block property multiple-values?)
          self-value-or-embedded? (fn [v]
                                    (or (= (:db/id v) (:db/id block))
                                        ;; property value self embedded

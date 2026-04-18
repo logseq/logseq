@@ -75,9 +75,15 @@ The DB version is in beta status while the new mobile app and RTC is in alpha. T
 To get started with the DB version:
 * To try the latest web version, go to https://test.logseq.com/.
 * To try the latest desktop version, login to Github and go to https://github.com/logseq/logseq/actions/workflows/build-desktop-release.yml and click on the latest release. Scroll to the bottom and under the `Artifacts` section download the artifact for your operating system.
+* To try the latest by building from the source code
+    * Use `test/db` for stable releases. Fewer bugs and slower updates. Update frequency: days or weeks.
+    * Use `master` for the latest updates as they are developed. Expect more bugs and faster changes. Update frequency: hours or days.
 * To report bugs, please file them at https://github.com/logseq/db-test/issues.
 * For feature or enhancement requests, please file them on Discord on the `#db-feedback` channel.
-* For discussion, see the `#db-chat` channel in Discord.
+* For discussions:
+    *  General ==> see the `#db-chat` channel in Discord.
+    *  Sync and RTC ==> see the `#sync-test` channel in Discord.
+    *  Mobile ==> see the `#mobile-test` channel in Discord.
 
 ## 🤔 Why Logseq?
 

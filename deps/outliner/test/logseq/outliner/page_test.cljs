@@ -116,6 +116,9 @@
       (is (some? b1'))
       (is (= (:block/uuid recycle-page) (:block/uuid (:block/parent d1'))))
       (is (integer? (:logseq.property/deleted-at d1')))
+      (is (nil? (:block/raw-title b1')))
+      (is (contains? (set (map :db/id (:block/refs b1')))
+                     (:db/id d1)))
       (is (= (:block/uuid d1') (:block/uuid (:block/page b1')))))))
 
 (deftest delete-class-page-hard-retracts-page-tree

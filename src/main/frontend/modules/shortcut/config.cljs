@@ -508,6 +508,12 @@
    :dev/validate-db   {:binding []
                        :inactive (not (state/developer-mode?))
                        :fn :frontend.handler.common.developer/validate-db}
+   :dev/recompute-checksum {:binding []
+                            :inactive (not (state/developer-mode?))
+                            :fn :frontend.handler.common.developer/recompute-checksum-diagnostics}
+   :dev/export-client-ops-sqlite {:binding []
+                                  :inactive (not (state/developer-mode?))
+                                  :fn :frontend.handler.common.developer/export-client-ops-sqlite}
    :dev/rtc-stop {:binding []
                   :inactive (not (state/developer-mode?))
                   :fn :frontend.handler.common.developer/rtc-stop}
@@ -710,6 +716,8 @@
           :dev/show-page-data
           :dev/replace-graph-with-db-file
           :dev/validate-db
+          :dev/recompute-checksum
+          :dev/export-client-ops-sqlite
           :dev/gc-graph
           :dev/rtc-stop
           :dev/rtc-start
@@ -873,6 +881,8 @@
      :dev/show-page-data
      :dev/replace-graph-with-db-file
      :dev/validate-db
+     :dev/recompute-checksum
+     :dev/export-client-ops-sqlite
      :dev/gc-graph
      :dev/rtc-stop
      :dev/rtc-start

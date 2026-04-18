@@ -20,9 +20,9 @@
  ;; with karma, shadow-cljs.edn and headless mode on CI
  {:test {:extra-paths ["test"]
          :extra-deps  {olical/cljs-test-runner   {:mvn/version "3.8.1"}
-                       org.clojure/clojurescript {:mvn/version "1.11.132"}
+                       org.clojure/clojurescript {:mvn/version "1.12.134"}
                        logseq/outliner {:local/root "../outliner"}}
          :main-opts   ["-m" "cljs-test-runner.main"]}
 
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.01.19"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
               :main-opts    ["-m" "clj-kondo.main"]}}}

@@ -7,7 +7,7 @@
         updates (->> tx-data
                      (filter (fn [[e a v _tx added]]
                                (and (= a :block/order) added e v
-                                    (:block/uuid (d/entity @conn e))))))
+                                    (:block/uuid (d/entity db e))))))
         groups (group-by (fn [{:keys [e v]}]
                            (let [parent (:block/parent (d/entity db e))]
                              [(:db/id parent) v]))

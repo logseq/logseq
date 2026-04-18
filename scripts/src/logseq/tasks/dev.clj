@@ -81,7 +81,7 @@
                                                     (fs/glob "." "{src/main,deps/graph-parser/src}/**")))))]
     (do
       (println "Building publishing js asset...")
-      (shell "clojure -M:cljs release publishing db-worker inference-worker"))
+      (shell "clojure -M:cljs release publishing db-worker"))
     (println "Publishing js asset is up to date")))
 
 (defn publishing-backend
