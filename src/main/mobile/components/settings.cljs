@@ -77,7 +77,7 @@
                     (util/copy-to-clipboard! (str (string/join "\n\n" @mobile-state/*log)
                                                   "\n\n================================================================\n\n"
                                                   (string/join "\n\n" worker-records))))}
-       (t :mobile.log/copy))]
+       (t :ui/copy))]
 
      [:div.flex.flex-row.gap-2
       (shui/button

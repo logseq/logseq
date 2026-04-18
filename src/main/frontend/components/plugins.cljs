@@ -571,7 +571,7 @@
 (rum/defc auto-check-for-updates-control
   []
   (let [[enabled, set-enabled!] (rum/use-state (plugin-handler/get-enabled-auto-check-for-updates?))
-        text (t :plugin/auto-check-for-updates)]
+        text (t :plugin/auto-update-check)]
 
     [:div.flex.items-center.justify-between.px-3.py-2
      {:on-click (fn []
@@ -581,7 +581,7 @@
                     (notification/show!
                      (into [:span]
                            (interpolate-rich-text
-                            (t :plugin/auto-check-for-updates-status)
+                            (t :plugin/auto-update-check-feedback)
                             [[:strong.pl-1 (t (if next-enabled :ui/on :ui/off))]]))
                      (if next-enabled :success :info))))}
      [:span.pr-3.opacity-80 text]
@@ -1101,7 +1101,7 @@
               (ui/tooltip [:span.opacity-30.hover:opacity-80 (ui/icon "info-circle")] [:p notes]))]])]
 
        ;; all done
-       [:div.py-4 [:strong.text-4xl (str "🎉 " (t :plugin/all-updated))]])
+       [:div.py-4 [:strong.text-4xl (str "🎉 " (t :plugin/update-all-success))]])
 
      ;; actions
      (when (seq updates)
@@ -1496,7 +1496,7 @@
       (when nav?
         [:aside.md:w-64 {:style {:min-width "10rem"}}
          [:header.cp__settings-header
-          [:h1.cp__settings-modal-title (or title (t :nav/settings-of-plugins))]]
+          [:h1.cp__settings-modal-title (or title (t :plugin.settings/title))]]
          (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)]
            [:ul.settings-plugin-list
             (for [{:keys [id name title icon]} plugins]
@@ -1551,7 +1551,7 @@
                                 (notification/clear! pid)
                                 (notification/show!
                                  (interpolate-rich-text-node
-                                  (t :plugin/perf-disabled)
+                                  (t :plugin/disable-for-performance-feedback)
                                   [[:strong.text-error (str "#" name)]])
                                  :success
                                  true nil 3000 nil)))

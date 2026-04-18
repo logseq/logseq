@@ -348,7 +348,7 @@
                                                 (t :plugin/installed-plugin name) :success))))
                                    (p/catch (fn [^js e]
                                               (notification/show!
-                                               (t :plugin/install-failed name (.-message e))
+                                               (t :plugin/install-error name (.-message e))
                                                :error)))))))
 
                          :error
@@ -376,7 +376,7 @@
                                ;; notify human tips
                                (notification/show!
                                 (str
-                                 (if (= :error type) (t :plugin/update-status-error) "")
+                                 (if (= :error type) (t :ui/error) "")
                                  "<" (:id payload) "> "
                                  msg)
                                 type)))
@@ -693,7 +693,7 @@
                                {:label :plugin-readme
                                 :content-props {:class "max-h-[86vh] overflow-auto"}}))
           (p/catch #(do (js/console.warn %)
-                        (notification/show! (t :plugin/no-readme-content) :warning))))
+                        (notification/show! (t :plugin/readme-empty-warning) :warning))))
       ;; market
       (shui/dialog-open! (fn [_] (display item nil)) {:label :plugin-readme}))))
 

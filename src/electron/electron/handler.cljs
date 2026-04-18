@@ -126,11 +126,11 @@
                                  (if backup-path
                                    {:type "error"
                                     :payload (str "Write to the file " path " failed, " e ". A backup file was saved to " backup-path ".")
-                                    :i18n-key :electron/write-file-failed-with-backup
+                                    :i18n-key :electron/write-file-error-with-backup
                                     :i18n-args [path e backup-path]}
                                    {:type "error"
                                     :payload (str "Write to the file " path " failed, " e)
-                                    :i18n-key :electron/write-file-failed
+                                    :i18n-key :electron/write-file-error
                                     :i18n-args [path e]})))))))
 (defmethod handle :rename [_window [_ old-path new-path]]
   (logger/info ::rename "from" old-path "to" new-path)
@@ -187,7 +187,7 @@
                                    {:type "error"
                                     :payload (str "Opening the specified directory failed.\n"
                                                   (or (pretty-print-js-error e) (str "Unexpected error: " e)))
-                                    :i18n-key :electron/open-dir-failed
+                                    :i18n-key :electron/open-dir-error
                                     :i18n-args [(or (pretty-print-js-error e) (str "Unexpected error: " e))]})
             (p/rejected e))))
 

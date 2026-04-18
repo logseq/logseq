@@ -222,7 +222,7 @@
                            (t :graph.switch/select-prompt))
 
                          (= tab "search")
-                         (t :header/search)
+                         (t :nav/search)
 
                          :else
                          (string/capitalize tab))

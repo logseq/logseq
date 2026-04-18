@@ -15,5 +15,5 @@
       (ui-outliner-tx/transact! {:outliner-op :toggle-reaction}
                                 (outliner-op/toggle-reaction! target-uuid emoji-id user-uuid)))
     (do
-      (notification/show! (t :notification/unsupported-reaction-emoji) :warning)
+      (notification/show! (t :block.reaction/unsupported-emoji-warning) :warning)
       false)))

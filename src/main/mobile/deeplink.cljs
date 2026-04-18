@@ -51,7 +51,7 @@
               (if graph-url
                 (do (state/pub-event! [:graph/switch graph-url])
                     (reset! *link-to-another-graph true))
-                (notification/show! (t :deeplink/open-graph-failed graph-name) :error false))))
+                (notification/show! (t :deeplink/open-graph-error graph-name) :error false))))
 
           (when (or (= graph-name current-graph-name)
                     @*link-to-another-graph)
@@ -62,13 +62,13 @@
                  (p/let [block (db-async/<get-block (state/get-current-repo) page-name {:children? false})]
                    (if block
                      (route-handler/redirect-to-page! block-uuid)
-                     (notification/show! (t :deeplink/open-page-failed page-name) :error false)))
+                     (notification/show! (t :deeplink/open-page-error page-name) :error false)))
 
                  block-uuid
                  (p/let [block (db-async/<get-block (state/get-current-repo) block-uuid {:children? false})]
                    (if block
                      (route-handler/redirect-to-page! block-uuid)
-                     (notification/show! (t :deeplink/open-block-failed block-uuid) :error false)))
+                     (notification/show! (t :deeplink/open-block-error block-uuid) :error false)))
 
                  :else
                  nil)

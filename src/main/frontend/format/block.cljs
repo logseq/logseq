@@ -41,7 +41,7 @@ and handles unexpected failure."
         (log/error :exception e)
         (state/pub-event! [:capture-error {:error e
                                            :payload {:type "Extract-blocks"}}])
-        (notification/show! (t :notification/block-extraction-error) :error)
+        (notification/show! (t :block/extraction-error) :error)
         []))))
 
 (defn parse-block

@@ -184,7 +184,7 @@
                                                   (notification/show! (t :graph/left) :success)
                                                   (rtc-handler/<get-remote-graphs)))
                                         (p/catch (fn [e]
-                                                   (notification/show! (t :graph/leave-failed) :error)
+                                                   (notification/show! (t :graph/leave-error) :error)
                                                    (log/error :db-sync/leave-graph-failed
                                                               {:error e
                                                                :graph-uuid GraphUUID})))

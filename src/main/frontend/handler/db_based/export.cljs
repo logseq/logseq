@@ -33,7 +33,7 @@
         (.writeText js/navigator.clipboard pull-data)
         (println pull-data)
         (notification/show! (t :export/block-data-copied) :success)))
-    (notification/show! (t :notification/no-block-found) :warning)))
+    (notification/show! (t :block/not-found-warning) :warning)))
 
 (defn export-view-nodes-data [rows {:keys [group-by?]}]
   (p/let [result (<export-edn-helper {:export-type :view-nodes
@@ -55,7 +55,7 @@
         (do (.writeText js/navigator.clipboard pull-data)
             (println pull-data)
             (notification/show! (t :export/page-data-copied) :success))))
-    (notification/show! (t :notification/no-page-found) :warning)))
+    (notification/show! (t :page/not-found-warning) :warning)))
 
 (defn ^:export export-graph-ontology-data []
   (p/let [result (state/<invoke-db-worker :thread-api/export-edn

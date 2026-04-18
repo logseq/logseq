@@ -164,6 +164,6 @@
       :role "normal"}]
      (mobile-util/native-android?)
      (conj {:id "search"
-        :title (t :header/search)
+        :title (t :nav/search)
             :systemImage "search"
             :role "search"}))))
