@@ -48,7 +48,7 @@
       [:pre.code (str "ID: " (:db/id result) "\n"
                       pull-data)]
       [:br]
-      (ui/button (t :notification/copy-to-clipboard)
+      (ui/button (t :ui/copy-to-clipboard)
                  :on-click #(.writeText js/navigator.clipboard pull-data))]
      :success
      false)))
@@ -62,7 +62,7 @@
     (notification/show!
      [:div.ls-wrap-widen
       ;; Show clipboard at top since content is really long for pages
-      (ui/button (t :notification/copy-to-clipboard)
+      (ui/button (t :ui/copy-to-clipboard)
                  :on-click #(.writeText js/navigator.clipboard ast-data))
       [:br]
       [:pre.code ast-data]]
@@ -74,17 +74,17 @@
   ;; Use editor state to locate most recent block
   (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
     (show-entity-data [:block/uuid block-uuid])
-    (notification/show! (t :notification/no-block-found) :warning)))
+    (notification/show! (t :block/not-found-warning) :warning)))
 
 (defn ^:export show-block-ast []
   (if-let [{:block/keys [title format]} (:block (first (state/get-editor-args)))]
     (show-content-ast title (or format :markdown))
-    (notification/show! (t :notification/no-block-found) :warning)))
+    (notification/show! (t :block/not-found-warning) :warning)))
 
 (defn ^:export show-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
     (show-entity-data page-id)
-    (notification/show! (t :notification/no-page-found) :warning)))
+    (notification/show! (t :page/not-found-warning) :warning)))
 
 (defn ^:export validate-db []
   (state/<invoke-db-worker :thread-api/validate-db (state/get-current-repo)))

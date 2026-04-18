@@ -191,7 +191,7 @@
             nil)                           ; do nothing
 
           (not (http/unexceptional-status? (:status resp)))
-          (notification/show! (t :notification/refresh-token-exceptional-status) :warning true)
+          (notification/show! (t :account/refresh-token-warning) :warning true)
 
           :else                         ; ok
           (when (and (:id_token (:body resp)) (:access_token (:body resp)))

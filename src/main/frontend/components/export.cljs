@@ -92,11 +92,11 @@
       [:div
        [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
         (t :export/sqlite-db)]
-       [:p.text-sm.opacity-70.mb-0 (t :export.backup/sqlite-description)]]
+       [:p.text-sm.opacity-70.mb-0 (t :export.backup/sqlite-desc)]]
       [:div
        [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
         (t :export/zip)]
-       [:p.text-sm.opacity-70.mb-0 (t :export.backup/zip-description)]]
+       [:p.text-sm.opacity-70.mb-0 (t :export.backup/zip-desc)]]
 
       (when-not (util/mobile?)
         [:div
@@ -399,7 +399,7 @@
 
       (when @*content
         [:div.mt-4.flex.flex-row.gap-2
-         (ui/button (if @*copied? (t :export/copied-to-clipboard) (t :export/copy-to-clipboard))
+         (ui/button (if @*copied? (t :export/copied-to-clipboard) (t :ui/copy-to-clipboard))
                     :class "mr-4"
                     :on-click (fn []
                                 (if (= tp :png)

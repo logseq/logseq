@@ -71,7 +71,7 @@
 
                (util/electron?)
                (ui/button
-                (if update-pending? (t :settings.general/checking-for-updates) (t :settings.general/check-for-updates))
+                (if update-pending? (t :updater/checking-for-updates) (t :settings.general/check-for-updates))
                 :class "text-sm mr-1"
                 :disabled update-pending?
                 :on-click #(js/window.apis.checkForUpdates true))
@@ -83,7 +83,7 @@
         {:title (t :settings.general/revision config/revision)
          :on-click (fn []
                      (notification/show! [:div
-                                          [:span (t :notification/current-revision)]
+                                          [:span (t :settings.general/current-revision-label)]
                                           [:a {:target "_blank"
                                                :style {:margin-inline-start "0.25rem"}
                                                :href (str "https://github.com/logseq/logseq/commit/" config/revision)}
@@ -101,15 +101,15 @@
        [:div.update-state.text-sm
         (case type
           "checking-for-update"
-          [:p (t :settings.general/checking-for-updates)]
+          [:p (t :updater/checking-for-updates)]
 
           "update-not-available"
-          [:p (t :settings.general/app-updated)]
+          [:p (t :updater/up-to-date)]
 
           "update-available"
           (let [{:keys [name url]} payload]
             [:p
-             [:span (t :settings.general/update-available)]
+             [:span (t :updater/update-available)]
              [:a.link
               {:on-click
                (fn [e]
@@ -120,13 +120,13 @@
 
           "download-progress"
           (let [percent (some-> payload :percent js/Math.round)]
-            [:p (t :settings.general/downloading-progress (or percent 0))])
+            [:p (t :updater/downloading-progress (or percent 0))])
 
           "update-downloaded"
           [:div.flex.items-center.gap-2.flex-wrap
-           [:p (t :settings.general/update-ready-to-install)]
+           [:p (t :updater/update-ready-to-install)]
            (ui/button
-            (t :settings.general/quit-and-install)
+            (t :updater/quit-and-install)
             :class "text-sm"
             :on-click #(ipc/ipc :quitAndInstall))]
 
@@ -141,7 +141,7 @@
                  (t :settings.general/release-channel)]]
             [:p
              (interpolate-rich-text-node
-              (t :settings.general/update-error)
+              (t :updater/update-error)
               [release-channel-link]
               true)]))])]))
 
@@ -435,7 +435,7 @@
                          (property-handler/set-block-property! :logseq.class/Journal
                                                                :logseq.property.journal/title-format
                                                                format)
-                         (notification/show! (t :notification/refresh-required)))
+                         (notification/show! (t :settings.general/refresh-required-feedback)))
                         (shui/dialog-close-all!))))}
       (for [format (sort (date/journal-title-formatters))]
         [:option {:key format} format])]]]])
@@ -494,14 +494,14 @@
         (p/do!
          (config-handler/set-config! :default-home new-home)
          (config-handler/set-config! :feature/enable-journals? true)
-         (notification/show! (t :settings.features/journals-enabled) :success)))
+         (notification/show! (t :settings.features/journals-enable-success) :success)))
 
       ;; FIXME: home page should be db id instead of page name
       (ldb/get-page (db/get-db) value)
       (let [home (get (state/get-config) :default-home {})
             new-home (assoc home :page value)]
         (config-handler/set-config! :default-home new-home)
-        (notification/show! (t :settings.features/home-default-page-updated) :success))
+        (notification/show! (t :settings.features/home-default-page-update-success) :success))
 
       :else
       (notification/show! (t :settings.features/page-not-found value) :warning))))

@@ -200,7 +200,7 @@
                                                            (:db/id (db/entity :block/page))
                                                            {:entity-id? entity-id?})))))
         (when (seq (:view/selected-blocks @state/state))
-          (notification/show! (t :property/updated) :success))
+          (notification/show! (t :property/update-success) :success))
         (when-not many?
           (cond
             exit-edit?

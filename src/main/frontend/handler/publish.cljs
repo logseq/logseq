@@ -404,9 +404,9 @@
                                  false))))))
                 (p/catch (fn [error]
                            (js/console.error error)
-                           (notification/show! (t :publish/failed) :error))))
-            (notification/show! (t :publish/failed) :error)))
-        (notification/show! (t :publish/invalid-page) :error)))))
+                           (notification/show! (t :publish/publish-error) :error))))
+            (notification/show! (t :publish/publish-error) :error)))
+        (notification/show! (t :publish/invalid-page-error) :error)))))
 
 (defn unpublish-page!
   [page]
@@ -434,5 +434,5 @@
                                    :body body})))))
             (p/catch (fn [error]
                        (js/console.error error)
-                       (notification/show! (t :publish/unpublish-failed) :error))))
+                       (notification/show! (t :publish/unpublish-error) :error))))
         (notification/show! (t :publish/unpublish-missing-page-id) :error)))))

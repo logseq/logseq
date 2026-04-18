@@ -96,7 +96,7 @@
      (shui/dropdown-menu-item
       {:key "copy"
        :on-click #(editor-handler/copy-selection-blocks true)}
-      (t :editor/copy)
+      (t :ui/copy)
       (ui/dropdown-shortcut :editor/copy))
 
      (shui/dropdown-menu-item
@@ -192,7 +192,7 @@
                                  (reaction-handler/toggle-reaction! block-id emoji-id)
                                  (state/hide-custom-context-menu!)
                                  (shui/popup-hide!))
-                               (notification/show! (t :notification/emoji-required) :warning))))
+                               (notification/show! (t :block.reaction/emoji-required-warning) :warning))))
               :tabs [[:emoji (t :icon/tab-emojis)]]
               :default-tab :emoji
               :show-used? true

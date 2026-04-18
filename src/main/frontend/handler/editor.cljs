@@ -824,7 +824,7 @@
                                                  (state/pub-event! [:editor/hide-action-bar])
                                                  (state/clear-selection!)
                                                  (move-blocks! blocks (:source-block chosen) {:bottom? true}))}))
-      (notification/show! (t :notification/no-block-selected) :warning))))
+      (notification/show! (t :editor/no-block-selected-warning) :warning))))
 
 (defn delete-block!
   [repo]
@@ -3549,7 +3549,7 @@
           (state/close-modal!)
           (shui/popup-hide!)
           (when (seq children)
-            (notification/show! (t :notification/blocks-added-today) :success))))))))
+            (notification/show! (t :journal/add-blocks-to-today-success) :success))))))))
 
 (defn quick-add
   []

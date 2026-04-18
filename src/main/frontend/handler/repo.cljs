@@ -154,7 +154,7 @@
      (prn "New db created: " full-graph-name)
      full-graph-name)
    (p/catch (fn [error]
-              (notification/show! (t :graph/create-failed) :error)
+              (notification/show! (t :graph/create-error) :error)
               (js/console.error error)))))
 
 (defn new-db!

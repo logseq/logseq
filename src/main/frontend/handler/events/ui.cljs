@@ -252,7 +252,7 @@
                       (do
                         (reaction-handler/toggle-reaction! target-block-id emoji-id)
                         (shui/popup-hide! popup-id))
-                      (notification/show! (t :notification/emoji-required) :warning))))]
+                      (notification/show! (t :block.reaction/emoji-required-warning) :warning))))]
     (when (and target-block-id target')
       (shui/popup-show!
        target'

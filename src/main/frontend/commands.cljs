@@ -666,7 +666,7 @@
        (contains? #{:scheduled :deadline} type)
        (string/blank? (gobj/get (state/get-input) "value")))
     (do
-      (notification/show! [:div (t :notification/add-content-first)] :warning)
+      (notification/show! [:div (t :editor/add-content-first-warning)] :warning)
       (restore-state))
     (do
       (state/set-timestamp-block! nil)

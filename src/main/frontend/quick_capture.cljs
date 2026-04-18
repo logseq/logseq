@@ -98,4 +98,4 @@
                                                                         :edit-block? true
                                                                         :replace-empty-target? true})
                         100))))
-    (notification/show! (t :notification/parse-to-journal-name-failed) :error)))
+    (notification/show! (t :journal/parse-date-to-name-error) :error)))

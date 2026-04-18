@@ -78,7 +78,7 @@
           (.click anchor)))
       (p/catch (fn [error]
                  (js/console.error error)
-                 (notification/show! (t :export/zip-failed) :error)))
+                 (notification/show! (t :export/zip-error) :error)))
       (p/finally (fn []
                    (state/pub-event! [:dialog/close-export-zip])))))
 
@@ -210,7 +210,7 @@
                       (js/console.error error))))
           (p/do!
             ;; handle cleared
-           (notification/show! (t :export/db-backup-failed) :error)
+           (notification/show! (t :export/db-backup-error) :error)
            false))))))
 
 (defn backup-db-graph
