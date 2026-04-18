@@ -199,9 +199,18 @@
   "Get class objects including children classes'"
   [db class-id]
   (let [class-children (get-structured-children db class-id)
-        class-ids (distinct (conj class-children class-id))
-        datoms (mapcat (fn [id] (d/datoms db :avet :block/tags id)) class-ids)
-        non-hidden-e (fn [id] (let [e (d/entity db id)]
-                                (when-not (entity-util/hidden? e)
-                                  e)))]
-    (keep (fn [d] (non-hidden-e (:e d))) datoms)))
+        class-ids (distinct (conj class-children class-id))]
+    (->> class-ids
+         (mapcat (fn [id] (d/datoms db :avet :block/tags id)))
+         (reduce (fn [[seen result] d]
+                   (let [eid (:e d)]
+                     (if (contains? seen eid)
+                       [seen result]
+                       (let [e (d/entity db eid)
+                             seen' (conj seen eid)]
+                         (if (entity-util/hidden? e)
+                           [seen' result]
+                           [seen' (conj! result e)])))))
+                 [#{} (transient [])])
+         second
+         persistent!)))

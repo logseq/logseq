@@ -12,6 +12,7 @@
             [frontend.fs :as fs]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.idb :as idb]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
@@ -35,6 +36,13 @@
            (uuid? x) (str x)
            :else x)) input))))
 
+(defn- normalize-user-key-without-ns
+  [k]
+  (some-> k (name)
+    (string/replace "/" "$")
+    (string/replace " " "_")
+    (string/replace #"^[:_\s]+" "")))
+
 (defn invoke-exported-api
   [type & args]
   (try
@@ -53,7 +61,99 @@
 (defonce central-endpoint "https://raw.githubusercontent.com/logseq/marketplace/master/")
 (defonce plugins-url (str central-endpoint "plugins.json"))
 (defonce stats-url (str central-endpoint "stats.json"))
-(declare select-a-plugin-theme)
+(declare select-a-plugin-theme get-ls-dotdir-root)
+
+(def ^:private illegal-plugin-package-error-pattern
+  #"^Parse package config error #(.+)[/\\]package\.json$")
+
+(defn- illegal-plugin-package-error->data
+  [^js e]
+  (let [name (some-> e (aget "name"))
+        message (some-> e (aget "message"))
+        url (or (some-> e (aget "url"))
+                (some->> message (re-matches illegal-plugin-package-error-pattern) second))
+        url (some-> url util/node-path.normalize)
+        package-json-path (or (some-> e (aget "packageJsonPath"))
+                              (some-> url (util/node-path.join "package.json")))]
+    (when (and (= "IllegalPluginPackageError" name)
+               (not (string/blank? url)))
+      {:url url
+       :package-json-path package-json-path})))
+
+(defn- problematic-plugin-source
+  [url]
+  (let [url (util/node-path.normalize url)
+        dotroot (some-> (get-ls-dotdir-root) util/node-path.normalize)
+        dotplugins-root (some-> dotroot (util/node-path.join "plugins"))]
+    (if (and dotplugins-root
+             (string/starts-with? url dotplugins-root))
+      {:type :installed
+       :id (util/node-path.basename url)
+       :url url}
+      {:type :external
+       :url url})))
+
+(defn- remove-external-plugin-path!
+  [url]
+  (p/let [prefs (invoke-exported-api :load_user_preferences)
+          prefs (if prefs (js->clj prefs :keywordize-keys true) {})
+          url (util/node-path.normalize url)
+          externals (mapv util/node-path.normalize (or (:externals prefs) []))
+          updated-externals (vec (remove #(= % url) externals))
+          removed? (not= externals updated-externals)
+          _ (when removed?
+              (invoke-exported-api :save_user_preferences
+                                   (clj->js (assoc prefs :externals updated-externals))))]
+    removed?))
+
+(defn- remove-problematic-plugin!
+  [url]
+  (let [{:keys [type id] :as source} (problematic-plugin-source url)]
+    (case type
+      :installed
+      (p/let [_ (when (util/electron?)
+                  (ipc/ipc :uninstallMarketPlugin id))
+              _ (-> (plugin-config-handler/remove-plugin id)
+                    (p/catch (fn [error]
+                               (log/warn :remove-broken-plugin-config-error error))))]
+        source)
+
+      :external
+      (p/let [removed? (remove-external-plugin-path! url)]
+        (assoc source :removed? removed?)))))
+
+(defn show-illegal-plugin-package-notification!
+  [^js e]
+  (if-let [{:keys [url package-json-path]} (illegal-plugin-package-error->data e)]
+    (let [{:keys [type id]} (problematic-plugin-source url)
+          uid (keyword (str "plugin-illegal-package-error-" (hash url)))]
+      (notification/show!
+       [:div.flex.flex-col.gap-2
+        [:div "Failed to parse the plugin package config."]
+        [:div.text-xs.opacity-70.break-all package-json-path]
+        (when (= type :external)
+          [:div.text-xs.opacity-70
+           "Removing it only detaches the plugin from Logseq and keeps the source folder untouched."])
+        [:div.flex.items-center.gap-2.pt-1
+         (shui/button
+          {:size :sm
+           :on-click (fn []
+                       (-> (remove-problematic-plugin! url)
+                           (p/then (fn [_]
+                                     (notification/clear! uid)
+                                     (notification/show!
+                                      (if (= type :installed)
+                                        (str "Removed broken plugin \"" id "\".")
+                                        "Removed the broken plugin from the plugin list.")
+                                      :success)))
+                           (p/catch (fn [error]
+                                      (notification/show!
+                                       (str "Failed to remove the broken plugin.\n" error)
+                                       :error)))))}
+          (t :plugin/uninstall))]]
+       :error false uid)
+      true)
+    (notification/show! "Illegal Logseq plugin package." :error)))
 
 (defn setup-global-apis-for-web!
   []
@@ -71,8 +171,8 @@
   [theme]
   (when theme
     (cond-> theme
-      (util/electron?)
-      (update :url #(some-> % (string/replace-first "assets://" "file://"))))))
+            (util/electron?)
+            (update :url #(some-> % (string/replace-first "assets://" "file://"))))))
 
 (defn load-plugin-preferences
   []
@@ -108,7 +208,7 @@
                      (if-let [res (and res (bean/->clj res))]
                        (let [pkgs (:packages res)
                              pkgs (if (util/electron?) pkgs
-                                      (some->> pkgs (filterv #(or (true? (:web %)) (not (true? (:effect %)))))))]
+                                                       (some->> pkgs (filterv #(or (true? (:web %)) (not (true? (:effect %)))))))]
                          (state/set-state! :plugin/marketplace-pkgs pkgs)
                          (resolve pkgs))
                        (reject nil)))]
@@ -131,8 +231,8 @@
                           :plugin/marketplace-stats
                           (into {} (map (fn [[k stat]]
                                           [k (assoc stat
-                                                    :total_downloads
-                                                    (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
+                                               :total_downloads
+                                               (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))])
                                         res)))
                          (resolve nil))
                        (reject nil)))]
@@ -293,8 +393,8 @@
 (defn- normalize-plugin-metadata
   [metadata]
   (cond-> metadata
-    (not (string? (:author metadata)))
-    (assoc :author (or (get-in metadata [:author :name]) ""))))
+          (not (string? (:author metadata)))
+          (assoc :author (or (get-in metadata [:author :name]) ""))))
 
 (defn register-plugin
   [plugin-metadata]
@@ -431,7 +531,7 @@
 (defn- create-local-renderer-register
   [type *providers]
   (fn [pid key {subs' :subs :keys [render] :as opts}]
-    (when-let [key (and key (keyword key))]
+    (when-let [key (some-> key (normalize-user-key-without-ns) (keyword))]
       (register-plugin-resources pid type
                                  (merge opts {:key key :subs subs' :render render}))
       (swap! *providers conj pid)
@@ -442,7 +542,7 @@
   ([type *providers many?]
    (fn [key]
      (when (seq @*providers)
-       (if key
+       (if-let [key (some-> key (normalize-user-key-without-ns) (keyword))]
          (when-let [rs (->> @*providers
                             (map (fn [pid] (state/get-plugin-resource pid type key)))
                             (remove nil?)
@@ -494,6 +594,24 @@
   ;; [key]
   (create-local-renderer-getter
    :daemon-renderers *daemon-renderer-providers true))
+
+(defonce *hosted-renderer-providers (atom #{}))
+(def register-hosted-renderer
+  ;; [pid key payload]
+  (create-local-renderer-register
+   :hosted-renderers *hosted-renderer-providers))
+(def get-hosted-renderers
+  ;; [key]
+  (create-local-renderer-getter
+   :hosted-renderers *hosted-renderer-providers true))
+
+(defn resolve-hosted-render
+  [pid key type]
+  (some->> (get-hosted-renderers)
+           (medley/find-first #(and (some-> (:pid %) (name) (= pid))
+                                    (or (some-> (:key %) (name) (= key))
+                                        (some-> (:key %) (str) (string/includes? (str "." key))))
+                                    (some->> type (name) (= (:type %)))))))
 
 (defn select-a-plugin-theme
   [pid]
@@ -562,7 +680,7 @@
   (let [repo (:repo item)]
     (if (nil? repo)
       ;; local
-      (-> (p/let [content (invoke-exported-api "load_plugin_readme" url)
+      (-> (p/let [content (invoke-exported-api :load_plugin_readme url)
                   content (parse-user-md-content content item)]
             (and (string/blank? (string/trim content)) (throw (js/Error. "blank readme content")))
             (state/set-state! :plugin/active-readme [content item])
@@ -822,8 +940,8 @@
                     :theme theme?
                     :web-pkg (cond-> package
 
-                               (not github?)
-                               (assoc :installedFromUserWebUrl url))}}))
+                                     (not github?)
+                                     (assoc :installedFromUserWebUrl url))}}))
       url)))
 
 ;; components
@@ -851,8 +969,8 @@
               clear-commands! (fn [pid]
                                 ;; commands
                                 (unregister-plugin-slash-command pid)
-                                (invoke-exported-api "unregister_plugin_simple_command" pid)
-                                (invoke-exported-api "uninstall_plugin_hook" pid)
+                                (invoke-exported-api :unregister_plugin_simple_command pid)
+                                (invoke-exported-api :uninstall_plugin_hook pid)
                                 (unregister-plugin-ui-items pid)
                                 (unregister-plugin-resources pid)
                                 (unregister-plugin-search-services pid))
@@ -862,6 +980,11 @@
                        (fn [^js pl]
                          (register-plugin
                           (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
+
+                  (.on "error"
+                       (fn [^js e]
+                         (when (illegal-plugin-package-error->data e)
+                           (show-illegal-plugin-package-notification! e))))
 
                   (.on "beforeload"
                        (fn [^js pl]
@@ -916,7 +1039,10 @@
                   (.on "reset-custom-theme" (fn [^js themes]
                                               (let [themes (bean/->clj themes)
                                                     custom-theme (dissoc themes :mode)
-                                                    mode (:mode themes)]
+                                                    ;; Fall back to the user's current theme so that
+                                                    ;; installing a non-theme plugin does not flash
+                                                    ;; the UI back to light mode (#12434).
+                                                    mode (or (:mode themes) (:ui/theme @state/state))]
                                                 (state/set-custom-theme! {:light (if (nil? (:light custom-theme)) {:mode "light"} (:light custom-theme))
                                                                           :dark (if (nil? (:dark custom-theme)) {:mode "dark"} (:dark custom-theme))})
                                                 (state/set-theme-mode! mode))))
@@ -978,8 +1104,8 @@
     (init-plugins!)))
 
 (comment
-  {:pending (count (:plugin/updates-pending @state/state))
-   :auto-checking? (boolean (:plugin/updates-auto-checking? @state/state))
-   :coming (count (:plugin/updates-coming @state/state))
-   :installing (:plugin/installing @state/state)
-   :downloading? (boolean (:plugin/updates-downloading? @state/state))})
+ {:pending (count (:plugin/updates-pending @state/state))
+  :auto-checking? (boolean (:plugin/updates-auto-checking? @state/state))
+  :coming (count (:plugin/updates-coming @state/state))
+  :installing (:plugin/installing @state/state)
+  :downloading? (boolean (:plugin/updates-downloading? @state/state))})

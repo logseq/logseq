@@ -38,7 +38,7 @@
     (let [{:keys [content addresses]} (bean/->clj result)
           addresses (when addresses
                       (js/JSON.parse addresses))
-          data (sqlite-util/transit-read content)]
+          data (sqlite-util/read-transit-str content)]
       (if (and addresses (map? data))
         (assoc data :addresses addresses)
         data))))
@@ -56,7 +56,7 @@
                                       (when-let [addresses (:addresses data)]
                                         (js/JSON.stringify (bean/->js addresses))))]
                       #js {:addr addr
-                           :content (sqlite-util/transit-write data')
+                           :content (sqlite-util/write-transit-str data')
                            :addresses addresses}))
                   addr+data-seq)]
         (upsert-addr-content! db data)))

@@ -53,9 +53,23 @@
 (defn coerce-ws-server-message
   [message]
   (when message
-    (let [coerced (coerce db-sync-schema/ws-server-message-coercer message {:schema :ws/server})]
-      (when-not (= coerced invalid-coerce)
-        coerced))))
+    (letfn [(uuid-like->string [value]
+              (cond
+                (uuid? value) (str value)
+                (and (map? value) (string? (:uuid value))) (:uuid value)
+                :else value))
+            (normalize-legacy-tx-reject [m]
+              (if (= "tx/reject" (:type m))
+                (cond-> m
+                  (contains? m :failed-tx-id) (update :failed-tx-id uuid-like->string)
+                  (contains? m :success-tx-ids) (update :success-tx-ids
+                                                        (fn [ids]
+                                                          (mapv uuid-like->string (or ids [])))))
+                m))]
+      (let [message* (normalize-legacy-tx-reject message)
+            coerced (coerce db-sync-schema/ws-server-message-coercer message* {:schema :ws/server})]
+        (when-not (= coerced invalid-coerce)
+          coerced)))))
 
 (defn parse-transit
   [fail-fast-f value context]
@@ -82,5 +96,14 @@
   [coerce-ws-client-message-f ws message]
   (when (ws-open? ws)
     (if-let [coerced (coerce-ws-client-message-f message)]
-      (.send ws (js/JSON.stringify (clj->js coerced)))
+      (let [message* (if (= "tx/batch" (:type coerced))
+                       (update coerced :txs
+                               (fn [txs]
+                                 (mapv (fn [tx-entry]
+                                         (if-let [tx-id (:tx-id tx-entry)]
+                                           (assoc tx-entry :tx-id (str tx-id))
+                                           tx-entry))
+                                       txs)))
+                       coerced)]
+        (.send ws (js/JSON.stringify (clj->js message*))))
       (log/error :db-sync/ws-request-invalid {:message message}))))

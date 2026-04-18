@@ -13,7 +13,7 @@
             [electron.server :as server]
             [electron.updater :refer [init-updater] :as updater]
             [electron.url :refer [logseq-url-handler]]
-            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
+            [electron.utils :refer [*win mac? dev? get-win-from-sender
                                     decode-protected-assets-schema-path send-to-renderer]
              :as utils]
             [electron.window :as win]
@@ -33,14 +33,10 @@
 (defonce *teardown-fn (volatile! nil))
 (defonce *quit-dirty? (volatile! true))
 
-;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
-(when (js/require "electron-squirrel-startup") (.quit app))
-
 (defn setup-updater! [^js win]
   ;; manual/auto updater
-  (when-not linux?
-    (init-updater {:repo   "logseq/logseq"
-                   :win    win})))
+  (init-updater {:repo   "logseq/logseq"
+                 :win    win}))
 
 (defn open-url-handler
   "win - the main window instance (first renderer process)

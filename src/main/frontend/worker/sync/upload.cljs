@@ -100,7 +100,7 @@
               :process-batch-f
               (fn [batch]
                 (p/let [datoms* (sync-large-title/offload-large-titles-in-datoms-batch
-                                 repo graph-id batch aes-key sync-large-title/upload-large-title!)
+                                 repo graph-id batch aes-key sync-apply/upload-large-title!)
                         encrypted-datoms (if aes-key
                                            (sync-crypt/<encrypt-datoms aes-key datoms*)
                                            datoms*)

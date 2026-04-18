@@ -113,7 +113,7 @@
       #{e block-uuid (str block-uuid)})
     #{e}))
 
-(defn- reorder-retract-entity
+(defn reorder-retract-entity
   [tx-data]
   (let [retract-ops (filter retract-entity-op? tx-data)
         {recreated-block-retract-ops true
@@ -122,7 +122,8 @@
                                                  (boolean
                                                   (some (fn [x]
                                                           (and
-                                                           (= 5 (count x))
+                                                           (vector? x)
+                                                           (>= (count x) 4)
                                                            (= (first x) :db/add)
                                                            (= (nth x 2) :block/uuid)
                                                            (= (nth x 3) id))) tx-data)))))
@@ -132,7 +133,8 @@
                           set)
         datom-for-retracted-eid?
         (fn [item]
-          (and (= 5 (count item))
+          (and (vector? item)
+               (>= (count item) 4)
                (contains? retract-keys (second item))))
         datoms-for-retracted-eids (filter datom-for-retracted-eid? tx-data)
         others (remove (fn [item]
@@ -140,16 +142,6 @@
                              (datom-for-retracted-eid? item)))
                        tx-data)]
     (concat recreated-block-retract-ops datoms-for-retracted-eids others end-retract-ops)))
-
-(defn- collect-title-updated-entities
-  [tx-data]
-  (->> tx-data
-       (keep (fn [d]
-               (when (= (count d) 5)
-                 (let [[e a _v _t added] d]
-                   (when (and added (= :block/title a))
-                     e)))))
-       set))
 
 (defn- resolve-eid
   [db-before db-after retract? e]
@@ -163,25 +155,19 @@
   (or (= :db.type/ref (:db/valueType (d/entity db-after attr)))
       (= :db.type/ref (:db/valueType (d/entity db-before attr)))))
 
-(defn- normalize-datom-item
-  [db-after db-before title-updated-entities [e a v t added]]
+(defn normalize-datom
+  [db-after db-before [e a v t added]]
   (let [retract? (not added)
-        drop-retract?
-        (and retract?
-             (or (contains? #{:block/created-at :block/updated-at} a)
-                 (and (= :block/title a)
-                      (contains? title-updated-entities e))))]
-    (when-not drop-retract?
-      (let [e' (resolve-eid db-before db-after retract? e)
-            v' (if (and (integer? v)
-                        (pos? v)
-                        (ref-value-type? db-after db-before a))
-                 (resolve-eid db-before db-after retract? v)
-                 v)]
-        (when (and (some? e') (some? v'))
-          (if added
-            [:db/add e' a v' t]
-            [:db/retract e' a v' t]))))))
+        e' (resolve-eid db-before db-after retract? e)
+        v' (if (and (integer? v)
+                    (pos? v)
+                    (ref-value-type? db-after db-before a))
+             (resolve-eid db-before db-after retract? v)
+             v)]
+    (when (and (some? e') (some? v'))
+      (if added
+        [:db/add e' a v' t]
+        [:db/retract e' a v' t]))))
 
 (defn- normalize-retract-entity-item
   [db-before d]
@@ -192,20 +178,19 @@
       [op e'])))
 
 (defn- normalize-tx-item
-  [db-after db-before title-updated-entities d]
+  [db-after db-before d]
   (case (count d)
-    5 (normalize-datom-item db-after db-before title-updated-entities d)
+    5 (normalize-datom db-after db-before d)
     2 (normalize-retract-entity-item db-before d)
     nil))
 
 (defn normalize-tx-data
   [db-after db-before tx-data]
-  (let [title-updated-entities (collect-title-updated-entities tx-data)]
-    (->> tx-data
-         remove-conflict-datoms
-         (replace-attr-retract-with-retract-entity db-after)
-         sort-datoms
-         (keep #(normalize-tx-item db-after db-before title-updated-entities %))
-         (remove-retract-entity-ref db-after)
-         reorder-retract-entity
-         distinct)))
+  (->> tx-data
+       remove-conflict-datoms
+       (replace-attr-retract-with-retract-entity db-after)
+       sort-datoms
+       (keep #(normalize-tx-item db-after db-before %))
+       (remove-retract-entity-ref db-after)
+       reorder-retract-entity
+       distinct))

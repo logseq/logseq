@@ -160,35 +160,56 @@
         (with-raw-title entity)
         (assoc :db/id (:db/id entity)))))
 
-(defn hidden-ref?
-  "Whether ref-block (for block with the `id`) should be hidden."
-  [db ref-block id]
-  (let [entity (d/entity db id)]
-    (or
-     (= (:db/id ref-block) id)
-     (= id (:db/id (:block/page ref-block)))
-     (= id (:db/id (:logseq.property/view-for ref-block)))
-     (entity-util/hidden? (:block/page ref-block))
-     (entity-util/hidden? ref-block)
-     (and (entity-util/class? entity)
-          (let [children (db-class/get-structured-children db id)
-                class-ids (set (conj children id))]
-            (some class-ids (map :db/id (:block/tags ref-block)))))
-     (some? (get ref-block (:db/ident entity))))))
+(defn hidden-ref-pred
+  "Build a predicate that determines if a ref block should be hidden for `id`.
+   Reuses cached class/tag context so callers can check many refs efficiently."
+  [db id]
+  (let [entity (d/entity db id)
+        entity-ident (:db/ident entity)
+        class-ids (when (entity-util/class? entity)
+                    (let [children (db-class/get-structured-children db id)]
+                      (set (conj children id))))]
+    (fn [ref-block]
+      (or
+       (= (:db/id ref-block) id)
+       (= id (:db/id (:block/page ref-block)))
+       (= id (:db/id (:logseq.property/view-for ref-block)))
+       (entity-util/hidden? (:block/page ref-block))
+       (entity-util/hidden? ref-block)
+       (and class-ids
+            (some class-ids (map :db/id (:block/tags ref-block))))
+       (and entity-ident
+            (some? (get ref-block entity-ident)))))))
 
 (defn get-block-refs
   [db id]
   (let [with-alias (->> (get-block-alias db id)
                         (cons id)
-                        distinct)]
+                        distinct)
+        hidden-ref?* (hidden-ref-pred db id)]
     (some->> with-alias
              (map #(d/entity db %))
              (mapcat :block/_refs)
-             (remove (fn [ref-block] (hidden-ref? db ref-block id))))))
+             (remove hidden-ref?*))))
 
 (defn get-block-refs-count
   [db id]
-  (count (get-block-refs db id)))
+  (let [with-alias (->> (get-block-alias db id)
+                        (cons id)
+                        distinct)
+        hidden-ref?* (hidden-ref-pred db id)
+        entity-by-id (memoize (fn [eid] (d/entity db eid)))]
+    (reduce
+     (fn [total alias-id]
+       (+ total
+          (reduce (fn [n datom]
+                    (if (hidden-ref?* (entity-by-id (:e datom)))
+                      n
+                      (inc n)))
+                  0
+                  (d/datoms db :avet :block/refs alias-id))))
+     0
+     with-alias)))
 
 (defn ^:large-vars/cleanup-todo get-block-and-children
   [db id-or-page-name {:keys [children? properties include-collapsed-children?]
@@ -256,7 +277,9 @@
          (keep (fn [d]
                  (when (<= (:v d) today)
                    (let [e (d/entity db (:e d))]
-                     (when (and (entity-util/journal? e) (:db/id e))
+                     (when (and (entity-util/journal? e)
+                                (:db/id e)
+                                (not (entity-util/recycled? e)))
                        e))))))))
 
 (defn- get-structured-datoms

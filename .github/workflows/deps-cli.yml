@@ -45,11 +45,11 @@ defaults:
     working-directory: deps/cli
 
 env:
-  CLOJURE_VERSION: '1.11.1.1413'
+  CLOJURE_VERSION: '1.12.4.1618'
   # This is the same as 1.8.
-  JAVA_VERSION: '11'
+  JAVA_VERSION: '21'
   # This is the latest node version we can run.
-  NODE_VERSION: '22'
+  NODE_VERSION: '24'
   BABASHKA_VERSION: '1.12.215'
 
 jobs:

@@ -101,7 +101,6 @@
  :page/logseq-is-having-a-problem "Logseq está com um problema. Para tentar fazê-lo voltar a funcionar, siga as etapas seguras a seguir:"
  :page/step "Etapa {1}"
  :page/try "Tentar"
- :page/delete-confirmation "Você tem certeza que quer deletar essa página?"
  :page/db-delete-confirmation "Você tem certeza que quer deletar essa página?"
  :page/make-public "Torná-la pública para publicação"
  :page/make-private "Tornar privado"

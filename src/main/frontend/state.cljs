@@ -89,6 +89,11 @@
       :search/result                         nil
       :search/graph-filters                  []
       :search/engines                        {}
+      :search/index-build                    {:running? false
+                                              :repo nil
+                                              :progress 0
+                                              :processed 0
+                                              :total 0}
 
       ;; modals
       :modal/dropdowns                       {}

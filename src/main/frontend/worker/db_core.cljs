@@ -124,6 +124,7 @@
       nil)))
 
 (def repo-path "/db.sqlite")
+(def client-ops-repo-path (str "client-ops" repo-path))
 
 (defn- resolve-db-path
   [repo pool path]
@@ -140,6 +141,44 @@
      (when pool
        (let [storage (platform/storage (platform/current))]
          ((:export-file storage) pool path))))))
+
+(defn- ->uint8array
+  [data]
+  (cond
+    (instance? js/Uint8Array data)
+    data
+
+    (js/ArrayBuffer.isView data)
+    (js/Uint8Array. (.-buffer data) (.-byteOffset data) (.-byteLength data))
+
+    (instance? js/ArrayBuffer data)
+    (js/Uint8Array. data)
+
+    (array? data)
+    (js/Uint8Array. data)
+
+    :else
+    data))
+
+(defn- <export-db-file-with-paths
+  [repo path-candidates]
+  (let [paths (->> path-candidates
+                   (filter string?)
+                   (remove string/blank?)
+                   distinct
+                   vec)]
+    (letfn [(try-export [remaining-paths]
+              (if-let [path (first remaining-paths)]
+                (-> (<export-db-file repo path)
+                    (p/then (fn [result]
+                              (let [payload (->uint8array result)]
+                                (if (instance? js/Uint8Array payload)
+                                  payload
+                                  (try-export (subvec remaining-paths 1))))))
+                    (p/catch (fn [_]
+                               (try-export (subvec remaining-paths 1)))))
+                (p/resolved nil)))]
+      (try-export paths))))
 
 (defn- <import-db
   [^js pool data]
@@ -514,6 +553,18 @@
   [repo]
   (db-sync/upload-graph! repo))
 
+(def-thread-api :thread-api/db-sync-stop-upload
+  [repo]
+  (db-sync/stop-upload! repo))
+
+(def-thread-api :thread-api/db-sync-resume-upload
+  [repo]
+  (db-sync/resume-upload! repo))
+
+(def-thread-api :thread-api/db-sync-upload-stopped?
+  [repo]
+  (db-sync/upload-stopped? repo))
+
 (def-thread-api :thread-api/db-sync-download-graph
   [repo]
   (sync-download/download-graph! repo))
@@ -777,6 +828,26 @@
     (.exec db "PRAGMA wal_checkpoint(2)"))
   (p/let [data (<export-db-file repo)]
     (platform/transfer (platform/current) data #js [(.-buffer data)])))
+
+(def-thread-api :thread-api/export-client-ops-db
+  [repo]
+  (when-let [^js db (worker-state/get-sqlite-conn repo :client-ops)]
+    (.exec db "PRAGMA wal_checkpoint(2)"))
+  (let [^js client-ops-db (worker-state/get-sqlite-conn repo :client-ops)
+        ^js pool (get-storage-pool repo)
+        db-filename (some-> client-ops-db .-filename)
+        resolved-client-ops-path (when pool
+                                   (resolve-db-path repo pool (str "client-ops-" repo-path)))
+        export-paths [db-filename
+                      resolved-client-ops-path
+                      client-ops-repo-path
+                      (str "/" client-ops-repo-path)
+                      (str "client-ops" repo-path)
+                      (str "/client-ops" repo-path)
+                      (str "client-ops-" repo-path)]]
+    (p/let [payload (<export-db-file-with-paths repo export-paths)]
+      (when (instance? js/Uint8Array payload)
+        (platform/transfer (platform/current) payload #js [(.-buffer payload)])))))
 
 (def-thread-api :thread-api/export-db-base64
   [repo]
