@@ -103,9 +103,12 @@
                            :targeted-run? targeted-run?}))
         (let [suite-context (when sync-suite?
                               (sync-fixture/before-suite! {:run-command run-command}))
+              sync-context (if sync-suite?
+                             (assoc suite-context :e2ee-password (:e2ee-password opts))
+                             suite-context)
               run-case* (if sync-suite?
                           (fn [case case-opts]
-                            (run-case (sync-fixture/prepare-case case suite-context)
+                            (run-case (sync-fixture/prepare-case case sync-context)
                                       case-opts))
                           run-case)]
           (try
@@ -232,22 +235,27 @@
     (flush)))
 
 (defn- print-test-help!
-  [command-name]
-  (println (str "Usage: bb -f cli-e2e/bb.edn " command-name " [options]"))
-  (println)
-  (println "Options:")
-  (println "  -h, --help           Show this help and exit")
-  (println "      --skip-build     Skip build preflight steps")
-  (println "  -i, --include TAG    Run only cases with matching tag (repeatable)")
-  (println "      --case ID        Run a single case by id")
-  (println "      --verbose        Enable verbose output")
-  (println "      --timings        Print per-step timings and slow-step summary")
-  (println)
-  (println "Examples:")
-  (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build"))
-  (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build -i smoke"))
-  (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build --case global-help"))
-  (flush))
+  [command-name suite]
+  (let [sync-suite? (= suite :sync)]
+    (println (str "Usage: bb -f cli-e2e/bb.edn " command-name " [options]"))
+    (println)
+    (println "Options:")
+    (println "  -h, --help           Show this help and exit")
+    (println "      --skip-build     Skip build preflight steps")
+    (println "  -i, --include TAG    Run only cases with matching tag (repeatable)")
+    (println "      --case ID        Run a single case by id")
+    (when sync-suite?
+      (println "      --e2ee-password VALUE  E2EE password for sync commands (Default: 11111)"))
+    (println "      --verbose        Enable verbose output")
+    (println "      --timings        Print per-step timings and slow-step summary")
+    (println)
+    (println "Examples:")
+    (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build"))
+    (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build -i smoke"))
+    (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build --case global-help"))
+    (when sync-suite?
+      (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build --e2ee-password 'my-secret'")))
+    (flush)))
 
 (defn- test-suite!
   [opts {:keys [suite command-name]
@@ -257,7 +265,7 @@
         opts (assoc opts :suite suite)]
     (if (:help opts)
       (do
-        (print-test-help! command-name)
+        (print-test-help! command-name suite)
         {:status :help})
       (let [started-at (System/nanoTime)
             passed (atom 0)
