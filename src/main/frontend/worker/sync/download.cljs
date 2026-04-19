@@ -216,14 +216,6 @@
       (close-import-state! state)
       (reset! *import-state nil))))
 
-(defn close-import-state-for-repo!
-  [repo]
-  (when-let [state @*import-state]
-    (when (= repo (:repo state))
-      (close-import-state! state)
-      (reset! *import-state nil)))
-  nil)
-
 (defn- require-import-state!
   [repo graph-id import-id]
   (let [state @*import-state]

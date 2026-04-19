@@ -801,7 +801,7 @@
 
 (deftest test-human-output-sync-config-get-ws-url
   (testing "sync config get ws-url renders value in human output"
-    (let [value "wss://api-staging.logseq.io/sync/%s"
+    (let [value "wss://api.logseq.io/sync/%s"
           result (format/format-result {:status :ok
                                         :command :sync-config-get
                                         :data {:key :ws-url

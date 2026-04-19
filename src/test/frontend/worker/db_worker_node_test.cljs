@@ -1102,22 +1102,34 @@
            (-> (p/let [{:keys [host port stop!]}
                        (start-daemon! {:data-dir data-dir :repo repo})
                        _ (reset! daemon {:stop! stop!})
-                       ;; Find a block to use as target and Journal tag's db/id
+                       ;; Build a deterministic block to use as target and fetch Journal tag db/id
                        journal (invoke host port "thread-api/pull"
                                        [repo [:db/id] [:db/ident :logseq.class/Journal]])
                        journal-id (:db/id journal)
-                       blocks (invoke host port "thread-api/q"
-                                      [repo
-                                       ['[:find ?e
-                                          :where
-                                          [?e :block/title]
-                                          [(missing? $ ?e :logseq.property/created-from-property)]
-                                          [(missing? $ ?e :block/name)]]]])
-                       block-id (ffirst blocks)
+                       now (js/Date.now)
+                       page-uuid (random-uuid)
+                       block-uuid (random-uuid)
+                       _ (invoke host port "thread-api/transact"
+                                 [repo
+                                  [{:block/uuid page-uuid
+                                    :block/title "Validation Target Page"
+                                    :block/name "validation-target-page"
+                                    :block/tags #{:logseq.class/Page}
+                                    :block/created-at now
+                                    :block/updated-at now}
+                                   {:block/uuid block-uuid
+                                    :block/title "Validation Target Block"
+                                    :block/page [:block/uuid page-uuid]
+                                    :block/parent [:block/uuid page-uuid]
+                                    :block/order "a0"
+                                    :block/created-at now
+                                    :block/updated-at now}]
+                                  {}
+                                  nil])
                        ;; Try to set the built-in Journal tag on the block
                        {:keys [status body]}
                        (invoke-raw host port "thread-api/apply-outliner-ops"
-                                   [repo [[:batch-set-property [[block-id] :block/tags journal-id {}]]] {}])
+                                   [repo [[:batch-set-property [[block-uuid] :block/tags journal-id {}]]] {}])
                        parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
                  (is (= 400 status)
                      "validation errors should return 400, not 500")

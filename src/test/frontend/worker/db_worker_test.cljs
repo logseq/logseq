@@ -460,9 +460,13 @@
              export-calls (atom [])
              expected-data (js/Uint8Array. #js [1 2 3])
              expected-buffer (.-buffer expected-data)
-             fake-pool #js {:exportFile (fn [path]
-                                          (swap! export-calls conj path)
-                                          expected-buffer)}]
+             fake-pool #js {}
+             platform' (assoc-in (build-test-platform)
+                                 [:storage :export-file]
+                                 (fn [_pool path]
+                                   (swap! export-calls conj path)
+                                   (p/resolved expected-buffer)))]
+         (platform/set-platform! platform')
          (reset! worker-state/*opfs-pools {test-repo fake-pool})
          (with-redefs [worker-state/get-sqlite-conn (fn [_repo which-db]
                                                       (when (= :client-ops which-db)
@@ -471,7 +475,10 @@
            (-> (export-client-ops-db test-repo)
                (p/then (fn [result]
                          (is (= ["PRAGMA wal_checkpoint(2)"] @sql-calls))
-                         (is (= ["client-ops/db.sqlite"] @export-calls))
+                         (is (= 1 (count @export-calls)))
+                         (is (contains? #{"client-ops/db.sqlite"
+                                          "client-ops-/db.sqlite"}
+                                        (first @export-calls)))
                          (is (instance? js/Uint8Array result))
                          (is (= [1 2 3] (vec result)))
                          (done)))

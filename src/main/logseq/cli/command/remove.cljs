@@ -117,10 +117,10 @@
       (transport/invoke config :thread-api/pull false
                         [repo block-id-selector [:block/uuid uuid-str]]))))
 
-(defn- delete-block-ids
-  [config repo ids]
+(defn- delete-block-uuids
+  [config repo block-uuids]
   (transport/invoke config :thread-api/apply-outliner-ops false
-                    [repo [[:delete-blocks [ids {}]]] {}]))
+                    [repo [[:delete-blocks [block-uuids {}]]] {}]))
 
 (defn- delete-page-by-uuid
   [config repo page-uuid]
@@ -138,8 +138,11 @@
       (:block/name entity)
       (throw (ex-info "target is not a block, use 'remove page' instead" {:code :invalid-target}))
 
+      (nil? (:block/uuid entity))
+      (throw (ex-info "block uuid not found" {:code :block-not-found}))
+
       :else
-      (delete-block-ids config repo [id]))))
+      (delete-block-uuids config repo [(:block/uuid entity)]))))
 
 (defn- remove-block-ids-best-effort
   [config repo ids]
@@ -150,6 +153,11 @@
           block? (fn [[_id entity]] (and (:db/id entity) (not (:block/name entity))))
           existing-ids (vec (keep (fn [[id :as pair]] (when (block? pair) id))
                                   id-entities))
+          existing-uuids (vec (keep (fn [[_id entity]]
+                                      (when (and (:db/id entity)
+                                                 (not (:block/name entity)))
+                                        (:block/uuid entity)))
+                                    id-entities))
           missing-ids (vec (keep (fn [[id entity]]
                                    (when-not (:db/id entity) id))
                                  id-entities))
@@ -158,8 +166,8 @@
                               id-entities))
           _ (when (and (empty? existing-ids) (seq page-ids))
               (throw (ex-info "target is not a block, use 'remove page' instead" {:code :invalid-target})))
-          result (if (seq existing-ids)
-                   (delete-block-ids config repo existing-ids)
+          result (if (seq existing-uuids)
+                   (delete-block-uuids config repo existing-uuids)
                    nil)]
     (cond-> {:deleted-ids existing-ids
              :missing-ids missing-ids
@@ -177,8 +185,8 @@
 
     (seq uuid)
     (p/let [entity (fetch-block-by-uuid config repo uuid)]
-      (if-let [id (:db/id entity)]
-        (delete-block-ids config repo [id])
+      (if-let [block-uuid (:block/uuid entity)]
+        (delete-block-uuids config repo [block-uuid])
         (throw (ex-info "block not found" {:code :block-not-found}))))
 
     :else
