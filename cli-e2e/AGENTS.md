@@ -5,6 +5,10 @@ Shell-first end-to-end tests for logseq CLI.
 ## Test cli-e2e itself
 - Run internal cli-e2e harness unit tests: `bb unit-test`
 
+## cleanup first
+- Execute cleanup: terminate stale db-worker-node processes and remove cli-e2e temp graph directories: `bb cleanup`
+- Preview cleanup actions only (no kill/delete): `bb cleanup --dry-run`
+
 ## Run non-sync suite
 - List declared non-sync case ids: `bb list-cases`
 - Run non-sync cases with build preflight unless `--skip-build` is provided: `bb test`
@@ -24,6 +28,3 @@ Shell-first end-to-end tests for logseq CLI.
 - If artifact is missing, build it before running sync suite:
   - `yarn --cwd deps/db-sync build:node-adapter`
 
-## Clean up
-- Execute cleanup: terminate stale db-worker-node processes and remove cli-e2e temp graph directories: `bb cleanup`
-- Preview cleanup actions only (no kill/delete): `bb cleanup --dry-run`

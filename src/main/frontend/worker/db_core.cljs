@@ -90,7 +90,8 @@
 (defn- get-storage-pool
   [graph]
   (if (node-runtime?)
-    (get @*node-pools graph)
+    (or (get @*node-pools graph)
+        (worker-state/get-opfs-pool graph))
     (worker-state/get-opfs-pool graph)))
 
 (defn- remember-storage-pool!
@@ -102,7 +103,9 @@
 (defn- forget-storage-pool!
   [graph]
   (if (node-runtime?)
-    (swap! *node-pools dissoc graph)
+    (do
+      (swap! *node-pools dissoc graph)
+      (swap! *opfs-pools dissoc graph))
     (swap! *opfs-pools dissoc graph)))
 
 (defn- <get-opfs-pool
@@ -207,7 +210,7 @@
     (let [[content addresses] (bean/->clj result)
           addresses (when addresses
                       (js/JSON.parse addresses))
-          data (sqlite-util/transit-read content)]
+          data (sqlite-util/read-transit-str content)]
       (if (and addresses (map? data))
         (assoc data :addresses addresses)
         data))))
@@ -224,7 +227,7 @@
                                       (when-let [addresses (:addresses data)]
                                         (js/JSON.stringify (bean/->js addresses))))]
                       #js {:$addr addr
-                           :$content (sqlite-util/transit-write data')
+                           :$content (sqlite-util/write-transit-str data')
                            :$addresses addresses}))
                   addr+data-seq)]
         (upsert-addr-content! db data)))
@@ -384,9 +387,7 @@
   [repo {:keys [config datoms sync-download-graph?] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
-            storage (new-sqlite-storage db)
-            client-ops-storage (when-not @*publishing?
-                                 (new-sqlite-storage client-ops-db))]
+            storage (new-sqlite-storage db)]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
                                        :client-ops client-ops-db})
@@ -419,16 +420,14 @@
                                              (partition-all batch-size))]
                   (doseq [batch non-ident-batches]
                     (d/transact! conn batch {:initial-db? true}))))
-            client-ops-conn (when-not @*publishing? (common-sqlite/get-storage-conn
-                                                     client-ops-storage
-                                                     client-op/schema-in-db))
+            client-ops-conn (when-not @*publishing? client-ops-db)
             initial-data-exists? (when (nil? datoms)
                                    (and (d/entity @conn :logseq.class/Root)
                                         (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type)))))]
         (swap! *datascript-conns assoc repo conn)
         (swap! *client-ops-conns assoc repo client-ops-conn)
-        (when (and (not @*publishing?) (not= client-op/schema-in-db (d/schema @client-ops-conn)))
-          (d/reset-schema! client-ops-conn client-op/schema-in-db))
+        (when-not @*publishing?
+          (client-op/ensure-sqlite-schema! client-ops-db))
         (ensure-client-ops-cleanup-timer! repo)
         (let [initial-tx-report (when-not (or initial-data-exists?
                                               (seq datoms)

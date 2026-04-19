@@ -236,7 +236,6 @@
                    {:block/page [:db/id :block/name :block/title :block/uuid]}]}])
 
 (declare tree->text
-         property-value-block?
          attach-user-properties
          attach-user-properties-to-entity)
 

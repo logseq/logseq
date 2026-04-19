@@ -32,7 +32,6 @@
 
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *repo->latest-remote-checksum (atom {}))
-(defonce *upload-temp-opfs-pool (atom nil))
 ;; Debug-only gate to reproduce one-way sync:
 ;; still pull/rebase remote txs, but skip local tx batch uploads.
 (defonce *repo->upload-stopped? (atom {}))

@@ -3353,6 +3353,8 @@
 (deftest test-execute-upsert-page-applies-ops-on-existing-page
   (async done
          (let [ops* (atom nil)
+               page-uuid (uuid "00000000-0000-0000-0000-000000000050")
+               block-uuids [page-uuid]
                action {:type :upsert-page :repo "demo" :page "Home"
                        :update-tags [:tag/next]
                        :remove-tags [:tag/old]
@@ -3370,12 +3372,15 @@
                                                   (case method
                                                     :thread-api/q (let [[_ [_query input]] args]
                                                                     (if (= input "home")
-                                                                      [{:db/id 50 :block/uuid (uuid "00000000-0000-0000-0000-000000000050")}]
+                                                                      [{:db/id 50 :block/uuid page-uuid}]
                                                                       []))
-                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                    :thread-api/pull (let [[_ selector lookup] args]
                                                                        (cond
                                                                          (= lookup [:block/name "home"])
-                                                                         {:db/id 50 :block/uuid (uuid "00000000-0000-0000-0000-000000000050")}
+                                                                         {:db/id 50 :block/uuid page-uuid}
+                                                                         (and (= selector [:db/id :block/uuid])
+                                                                              (= lookup 50))
+                                                                         {:db/id 50 :block/uuid page-uuid}
                                                                          (and (vector? lookup) (= :db/ident (first lookup)))
                                                                          {:db/id 888}
                                                                          :else {}))
@@ -3388,10 +3393,10 @@
                    (is (= :ok (:status result)))
                    (is (= [50] (get-in result [:data :result])))
                    (is (= 4 (count ops)))
-                   (is (some #(= [:batch-delete-property-value [[50] :block/tags 202]] %) ops))
-                   (is (some #(= [:batch-remove-property [[50] :logseq.property/deadline]] %) ops))
-                   (is (some #(= [:batch-set-property [[50] :block/tags 303 {}]] %) ops))
-                   (is (some #(= [:batch-set-property [[50] :logseq.property/publishing-public? true {}]] %) ops))))
+                   (is (some #(= [:batch-delete-property-value [block-uuids :block/tags 202]] %) ops))
+                   (is (some #(= [:batch-remove-property [block-uuids :logseq.property/deadline]] %) ops))
+                   (is (some #(= [:batch-set-property [block-uuids :block/tags 303 {}]] %) ops))
+                   (is (some #(= [:batch-set-property [block-uuids :logseq.property/publishing-public? true {}]] %) ops))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
@@ -3418,13 +3423,16 @@
                                                                         :block/uuid recycled-uuid
                                                                         :logseq.property/deleted-at 1712000000000}]
                                                                       []))
-                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                    :thread-api/pull (let [[_ selector lookup] args]
                                                                        (cond
                                                                          (= lookup [:block/name "home"])
                                                                          {:db/id 50
                                                                           :block/uuid recycled-uuid
                                                                           :logseq.property/deleted-at 1712000000000}
                                                                          (= lookup [:block/uuid recycled-uuid])
+                                                                         {:db/id 50 :block/uuid recycled-uuid}
+                                                                         (and (= selector [:db/id :block/uuid])
+                                                                              (= lookup 50))
                                                                          {:db/id 50 :block/uuid recycled-uuid}
                                                                          (and (vector? lookup) (= :db/ident (first lookup)))
                                                                          {:db/id 999}
@@ -3741,13 +3749,28 @@
                                                     (throw (ex-info "unexpected invoke" {:method method :calls @calls*}))))]
                  (p/let [result (commands/execute action {})]
                    (is (= :ok (:status result)))
-                   (is (= [[:save-block [{:db/id 1 :block/title "Updated heading"} {}]]
-                           [:move-blocks [[1] 2 {:sibling? false :bottom? true}]]
-                           [:batch-delete-property-value [[1] :block/tags 202]]
-                           [:batch-remove-property [[1] :logseq.property/publishing-public?]]
-                           [:batch-set-property [[1] :block/tags 101 {}]]
-                           [:batch-set-property [[1] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]]
-                           [:batch-set-property [[1] :logseq.property/status :logseq.property/status.done {}]]]
+                   (is (= [[:save-block [{:block/uuid (uuid "00000000-0000-0000-0000-000000000001")
+                                           :block/title "Updated heading"} {}]]
+                           [:move-blocks [[(uuid "00000000-0000-0000-0000-000000000001")]
+                                          (uuid "00000000-0000-0000-0000-000000000002")
+                                          {:sibling? false :bottom? true}]]
+                           [:batch-delete-property-value [[(uuid "00000000-0000-0000-0000-000000000001")]
+                                                          :block/tags
+                                                          202]]
+                           [:batch-remove-property [[(uuid "00000000-0000-0000-0000-000000000001")]
+                                                    :logseq.property/publishing-public?]]
+                           [:batch-set-property [[(uuid "00000000-0000-0000-0000-000000000001")]
+                                                 :block/tags
+                                                 101
+                                                 {}]]
+                           [:batch-set-property [[(uuid "00000000-0000-0000-0000-000000000001")]
+                                                 :logseq.property/deadline
+                                                 "2026-01-25T12:00:00Z"
+                                                 {}]]
+                           [:batch-set-property [[(uuid "00000000-0000-0000-0000-000000000001")]
+                                                 :logseq.property/status
+                                                 :logseq.property/status.done
+                                                 {}]]]
                           @ops*))))
                (p/catch (fn [e] (is false (str "unexpected error: " e " calls: " @calls*))))
                (p/finally done)))))

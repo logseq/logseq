@@ -1042,21 +1042,21 @@
     (some? target-id)
     (p/let [block (transport/invoke config :thread-api/pull false
                                     [repo [:db/id :block/uuid :block/title] target-id])]
-      (if-let [id (:db/id block)]
-        id
+      (if-let [block-uuid (:block/uuid block)]
+        block-uuid
         (throw (ex-info "target block not found" {:code :target-not-found}))))
 
     (seq target-uuid)
     (p/let [block (transport/invoke config :thread-api/pull false
                                     [repo [:db/id :block/uuid :block/title] [:block/uuid (uuid target-uuid)]])]
-      (if-let [id (:db/id block)]
-        id
+      (if-let [block-uuid (:block/uuid block)]
+        block-uuid
         (throw (ex-info "target block not found" {:code :target-not-found}))))
 
     :else
     (p/let [page-name (if (seq target-page-name) target-page-name (today-page-title config repo))
             page-entity (ensure-page! config repo page-name)]
-      (or (:db/id page-entity)
+      (or (:block/uuid page-entity)
           (throw (ex-info "page not found" {:code :page-not-found}))))))
 
 (defn- read-blocks
@@ -1136,7 +1136,7 @@
 (defn execute-add-block
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              target-id (resolve-add-target cfg action)
+              target-block-uuid (resolve-add-target cfg action)
               ref-values (collect-page-refs (:blocks action))
               {:keys [uuid-refs page-refs]} (partition-ref-values ref-values)
               _ (ensure-block-refs-exist! cfg (:repo action) uuid-refs)
@@ -1165,31 +1165,31 @@
               opts (cond-> opts
                      keep-uuid?
                      (assoc :keep-uuid? true))
-              block-refs (->> blocks-for-insert
-                              (map :block/uuid)
-                              (remove nil?)
-                              (mapv (fn [block-uuid] [:block/uuid block-uuid])))
+              block-uuids (->> blocks-for-insert
+                               (map :block/uuid)
+                               (remove nil?)
+                               vec)
               tag-ids (->> (or tags [])
                            (map :db/id)
                            (remove nil?)
                            distinct
                            vec)
               ops (cond-> [[:insert-blocks [blocks-for-insert
-                                            target-id
+                                            target-block-uuid
                                             (assoc opts :outliner-op :insert-blocks)]]]
-                    (and (seq block-refs) (seq remove-properties))
+                    (and (seq block-uuids) (seq remove-properties))
                     (into (map (fn [property-id]
-                                 [:batch-remove-property [block-refs property-id]])
+                                 [:batch-remove-property [block-uuids property-id]])
                                remove-properties))
-                    (and status (seq block-refs))
-                    (conj [:batch-set-property [block-refs :logseq.property/status status {}]])
-                    (and (seq tag-ids) (seq block-refs))
+                    (and status (seq block-uuids))
+                    (conj [:batch-set-property [block-uuids :logseq.property/status status {}]])
+                    (and (seq tag-ids) (seq block-uuids))
                     (into (map (fn [tag-id]
-                                 [:batch-set-property [block-refs :block/tags tag-id {}]])
+                                 [:batch-set-property [block-uuids :block/tags tag-id {}]])
                                tag-ids))
-                    (and (seq properties) (seq block-refs))
+                    (and (seq properties) (seq block-uuids))
                     (into (map (fn [[k v]]
-                                 [:batch-set-property [block-refs k v {}]])
+                                 [:batch-set-property [block-uuids k v {}]])
                                properties)))
               apply-result (transport/invoke cfg :thread-api/apply-outliner-ops false [(:repo action) ops {}])
               created-ids (resolve-created-block-ids cfg (:repo action) blocks-for-insert apply-result)]

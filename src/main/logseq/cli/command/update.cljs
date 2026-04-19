@@ -225,6 +225,12 @@
                           :target target-label}
                    content-provided? (assoc :content content))}))))
 
+(defn- ensure-block-uuid!
+  [entity {:keys [code message]}]
+  (if-let [block-uuid (:block/uuid entity)]
+    block-uuid
+    (throw (ex-info message {:code code}))))
+
 (defn execute-update
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
@@ -233,6 +239,14 @@
                                (:target-uuid action)
                                (seq (:target-page action)))
                        (resolve-target cfg (:repo action) action))
+              source-uuid (ensure-block-uuid! source
+                                              {:code :source-not-found
+                                               :message "source block uuid not found"})
+              target-uuid (when target
+                            (ensure-block-uuid! target
+                                                {:code :target-not-found
+                                                 :message "target block uuid not found"}))
+              block-uuids [source-uuid]
               opts (when target (pos->opts (:pos action)))
               update-tags (add-command/resolve-tags cfg (:repo action) (:update-tags action))
               remove-tags (add-command/resolve-tags cfg (:repo action) (:remove-tags action))
@@ -242,8 +256,6 @@
               remove-properties (add-command/resolve-property-identifiers
                                  cfg (:repo action) (:remove-properties action)
                                  {:allow-non-built-in? true})
-              block-id (:db/id source)
-              block-ids [block-id]
               content-provided? (contains? action :content)
               content (:content action)
               update-tag-ids (when (seq update-tags)
@@ -252,25 +264,25 @@
                                (->> remove-tags (map :db/id) (remove nil?) vec))
               ops (cond-> []
                     content-provided?
-                    (conj [:save-block [{:db/id block-id :block/title content} {}]])
+                    (conj [:save-block [{:block/uuid source-uuid :block/title content} {}]])
                     target
-                    (conj [:move-blocks [[(:db/id source)] (:db/id target) opts]]))
+                    (conj [:move-blocks [block-uuids target-uuid opts]]))
               ops (cond-> ops
                     (seq remove-tag-ids)
                     (into (map (fn [tag-id]
-                                 [:batch-delete-property-value [block-ids :block/tags tag-id]])
+                                 [:batch-delete-property-value [block-uuids :block/tags tag-id]])
                                remove-tag-ids))
                     (seq remove-properties)
                     (into (map (fn [property-id]
-                                 [:batch-remove-property [block-ids property-id]])
+                                 [:batch-remove-property [block-uuids property-id]])
                                remove-properties))
                     (seq update-tag-ids)
                     (into (map (fn [tag-id]
-                                 [:batch-set-property [block-ids :block/tags tag-id {}]])
+                                 [:batch-set-property [block-uuids :block/tags tag-id {}]])
                                update-tag-ids))
                     (seq update-properties)
                     (into (map (fn [[k v]]
-                                 [:batch-set-property [block-ids k v {}]])
+                                 [:batch-set-property [block-uuids k v {}]])
                                update-properties)))
               result (if (seq ops)
                        (transport/invoke cfg :thread-api/apply-outliner-ops false

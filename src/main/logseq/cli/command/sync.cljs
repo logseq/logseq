@@ -82,8 +82,8 @@
   #{:inactive :stopped})
 
 (def ^:private sync-config-defaults
-  {:ws-url "wss://api-staging.logseq.io/sync/%s"
-   :http-base "https://api-staging.logseq.io"})
+  {:ws-url "wss://api.logseq.io/sync/%s"
+   :http-base "https://api.logseq.io"})
 
 (def ^:private required-sync-config-keys-by-action
   {:sync-start [:ws-url]
