@@ -19,13 +19,13 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 ## Command groups (from `logseq --help`)
 
 - Graph inspect/edit:
-- `list page`, `list tag`, `list property`
-- `upsert block`, `upsert page`, `upsert tag`, `upsert property`
+- `list node`, `list page`, `list tag`, `list property`, `list task`, `list asset`
+- `upsert block`, `upsert page`, `upsert tag`, `upsert property`, `upsert task`, `upsert assert`
 - `remove block`, `remove page`, `remove tag`, `remove property`
-- `query`, `query list`, `show`
-- Graph management: `graph list|create|switch|remove|validate|info|export|import`
-- Server management: `server list|status|start|stop|restart`
-- Diagnostics: `doctor`
+- `query`, `query list`, `show`, `search`
+- Graph management: `graph list|create|switch|remove|validate|info|export|import|backup`
+- Server management: `server list|cleanup|start|stop|restart`
+- Diagnostics: `doctor`, `debug`
 
 ## Global options
 
@@ -85,7 +85,3 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - Always verify command flags with `logseq --help` and `logseq <...> --help` before execution.
 - If `logseq` reports that it doesn’t have read/write permission for data-dir, then add read/write permission for data-dir in the agent’s config.
 - In sandboxed environments, `graph create` may print a process-scan warning to stderr; if command status is `ok`, the graph is still created.
-
-## References
-
-- Built-in tags and properties: See `references/logseq-builtins.md` when you need canonical built-ins for `list ... --include-built-in` or for tag/property upsert fields.
