@@ -18,6 +18,7 @@ Shell-first end-to-end tests for logseq CLI.
 - List declared sync case ids: `bb list-sync-cases`
 - Run sync cases with build preflight unless `--skip-build` is provided: `bb test-sync`
   - `bb test-sync --help` for options
+  - Configure sync E2EE password: `--e2ee-password <value>` (default: `11111`)
   - Run only sync MVP case: `bb test-sync --skip-build --case sync-upload-download-mvp`
 
 ### Sync suite prerequisites

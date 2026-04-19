@@ -28,7 +28,23 @@
     (is (= ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
            (:cleanup prepared)))
     (is (= "/tmp/suite/auth.json" (get-in prepared [:vars :suite-auth-path])))
-    (is (= "http://127.0.0.1:18080" (get-in prepared [:vars :sync-http-base])))))
+    (is (= "http://127.0.0.1:18080" (get-in prepared [:vars :sync-http-base])))
+    (is (= "11111" (get-in prepared [:vars :e2ee-password])))
+    (is (= "11111" (get-in prepared [:vars :e2ee-password-arg])))))
+
+(deftest prepare-case-accepts-custom-e2ee-password
+  (let [suite-context {:suite-auth-path "/tmp/suite/auth.json"
+                       :suite-config-path "/tmp/suite/config.edn"
+                       :sync-port "18080"
+                       :sync-http-base "http://127.0.0.1:18080"
+                       :sync-ws-url "ws://127.0.0.1:18080/sync/%s"
+                       :e2ee-password "pass word"}
+        prepared (sync-fixture/prepare-case {:id "sync-case"
+                                             :setup []
+                                             :cleanup []}
+                                            suite-context)]
+    (is (= "pass word" (get-in prepared [:vars :e2ee-password])))
+    (is (= "'pass word'" (get-in prepared [:vars :e2ee-password-arg])))))
 
 (deftest before-and-after-suite-run-expected-commands
   (let [calls (atom [])
