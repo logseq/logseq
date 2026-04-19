@@ -6,6 +6,7 @@
             [logseq.cli.e2e.shell :as shell]))
 
 (def default-sync-port "18080")
+(def default-e2ee-password "11111")
 
 (def ^:private heavy-setup-patterns
   [#"^mkdir -p '\{\{tmp-dir\}\}/home/logseq'$"
@@ -71,8 +72,9 @@
      :sync-ws-url sync-ws-url}))
 
 (defn prepare-case
-  [case {:keys [suite-auth-path suite-config-path sync-port sync-http-base sync-ws-url]}]
-  (let [lightweight-setup-prefix ["mkdir -p '{{tmp-dir}}/home/logseq'"
+  [case {:keys [suite-auth-path suite-config-path sync-port sync-http-base sync-ws-url e2ee-password]}]
+  (let [e2ee-password (or e2ee-password default-e2ee-password)
+        lightweight-setup-prefix ["mkdir -p '{{tmp-dir}}/home/logseq'"
                                   "cp '{{suite-auth-path}}' '{{tmp-dir}}/home/logseq/auth.json'"
                                   "cp '{{suite-config-path}}' '{{config-path}}'"
                                   "cp '{{suite-config-path}}' '{{tmp-dir}}/cli-b.edn'"]
@@ -87,7 +89,9 @@
                              :suite-config-path suite-config-path
                              :sync-port sync-port
                              :sync-http-base sync-http-base
-                             :sync-ws-url sync-ws-url})
+                             :sync-ws-url sync-ws-url
+                             :e2ee-password e2ee-password
+                             :e2ee-password-arg (shell-quote e2ee-password)})
         (assoc :setup (vec (concat lightweight-setup-prefix setup')))
         (assoc :cleanup cleanup'))))
 
