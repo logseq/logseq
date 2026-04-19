@@ -112,6 +112,30 @@
   [value context]
   (sync-transport/parse-transit fail-fast value context))
 
+(defn- expected-pull-ts
+  [local-tx remote-tx]
+  (vec (range (inc local-tx) (inc remote-tx))))
+
+(defn- normalize-pull-window
+  [repo local-tx remote-tx remote-txs]
+  (doseq [{:keys [t]} remote-txs]
+    (require-non-negative t {:repo repo :type "pull/ok" :field :txs}))
+  (let [remote-txs' (->> remote-txs
+                         (filter (fn [{:keys [t]}]
+                                   (> t local-tx)))
+                         vec)
+        actual-ts (mapv :t remote-txs')
+        expected-ts (expected-pull-ts local-tx remote-tx)]
+    (when-not (= actual-ts expected-ts)
+      (log/warn :db-sync/pull-window-noncontiguous
+                {:repo repo
+                 :local-tx local-tx
+                 :remote-tx remote-tx
+                 :actual-ts actual-ts
+                 :expected-ts expected-ts}))
+    (when (= actual-ts expected-ts)
+      remote-txs')))
+
 (defn- request-pull!
   [client since]
   (when (and (:ws client) (ws-open? (:ws client)))
@@ -340,7 +364,7 @@
                                 :outliner-op (:outliner-op data)
                                 :tx-data (parse-transit (:tx data) {:repo repo :type "pull/ok"})})
                              txs)]
-        (when (seq remote-txs)
+        (if-let [remote-txs' (normalize-pull-window repo local-tx remote-tx remote-txs)]
           (->
            (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
                    aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
@@ -351,8 +375,8 @@
                                                 (p/let [tx-data* (sync-crypt/<decrypt-tx-data aes-key tx-data)]
                                                   {:t t
                                                    :tx-data tx-data*}))
-                                              remote-txs))
-                                 (p/resolved remote-txs))]
+                                              remote-txs'))
+                                 (p/resolved remote-txs'))]
              (try
                (sync-apply/apply-remote-txs! repo client remote-txs*)
                (catch :default e
@@ -365,7 +389,8 @@
            (p/then (fn [_]
                      (sync-util/clear-last-sync-error! client)))
            (p/catch (fn [error]
-                      (sync-util/set-last-sync-error! client error)))))))))
+                      (sync-util/set-last-sync-error! client error))))
+          (request-pull! client local-tx))))))
 
 (defn- handle-changed!
   [repo client local-tx remote-tx]

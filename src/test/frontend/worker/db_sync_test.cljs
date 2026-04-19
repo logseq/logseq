@@ -735,7 +735,8 @@
                           (clj->js {:type "pull/ok"
                                     :t 2
                                     :checksum new-checksum
-                                    :txs [{:t 2 :tx new-tx}]}))
+                                    :txs [{:t 1 :tx stale-tx}
+                                          {:t 2 :tx new-tx}]}))
                  raw-stale (js/JSON.stringify
                             (clj->js {:type "pull/ok"
                                       :t 1
@@ -750,6 +751,7 @@
              (reset! db-sync/*repo->latest-remote-tx {})
              (with-datascript-conns conn client-ops-conn
                (fn []
+                 (client-op/update-local-tx test-repo 1)
                  (-> (p/let [_ (sync-handle-message/handle-message! test-repo client raw-new)
                              _ (sync-handle-message/handle-message! test-repo client raw-stale)
                              parent' (d/entity @conn parent-id)]
@@ -758,6 +760,38 @@
                      (p/finally (fn []
                                   (reset! db-sync/*repo->latest-remote-tx latest-prev)
                                   (done))))))))))
+
+(deftest pull-ok-overlapping-window-applies-only-newer-txs-test
+  (testing "pull/ok may include already-applied older txs, but should only apply newer contiguous txs"
+    (async done
+           (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+                 parent-id (:db/id parent)
+                 stale-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "stale-title"]])
+                 new-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "remote-new-title"]])
+                 raw-message (js/JSON.stringify
+                              (clj->js {:type "pull/ok"
+                                        :t 2
+                                        :txs [{:t 1 :tx stale-tx}
+                                              {:t 2 :tx new-tx}]}))
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)}]
+             (with-datascript-conns conn client-ops-conn
+               (fn []
+                 (client-op/update-local-tx test-repo 1)
+                 (-> (p/let [_ (sync-handle-message/handle-message! test-repo client raw-message)
+                             parent' (d/entity @conn parent-id)]
+                       (is (= "remote-new-title" (:block/title parent')))
+                       (is (= 2 (client-op/get-local-tx test-repo))))
+                     (p/finally done))))))))
+
+(deftest pull-ok-gapful-window-repulls-instead-of-applying-test
+  (testing "non-contiguous pull/ok window is rejected before apply"
+    (let [window [{:t 3 :tx-data [[:db/add 1 :block/title "remote-new-title"]]}]]
+      (is (nil? (#'sync-handle-message/normalize-pull-window
+                 test-repo 0 3 window))))))
 
 (deftest tx-reject-db-transact-failed-surfaces-rejected-tx-test
   (testing "tx/reject with db transact failed includes parsed rejected tx and emits rtc-log"
@@ -1099,6 +1133,7 @@
              (reset! db-sync/*repo->latest-remote-tx {})
              (with-datascript-conns conn client-ops-conn
                (fn []
+                 (client-op/update-local-tx test-repo 1)
                  (-> (p/let [_ (sync-handle-message/handle-message! test-repo client raw-message)
                              parent' (d/entity @conn parent-id)]
                        (is (= "remote-new-title" (:block/title parent')))
