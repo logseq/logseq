@@ -358,41 +358,30 @@ _logseq_multi_values() {
   [cmds]
   (str "_logseq_" (string/join "_" cmds)))
 
-(defn- zsh-group-function
-  "Generate a group dispatcher function.
-   Handles groups that have both a root command (e.g. [\"query\"]) and
-   subcommands (e.g. [\"query\" \"list\"])."
-  [group-name subentries global-spec]
-  (let [func-name (str "_logseq_" group-name)
-        ;; Separate root entry from subcommand entries
-        root-entry (first (filter #(= 1 (count (:cmds %))) subentries))
-        sub-entries (filter #(> (count (:cmds %)) 1) subentries)
-        ;; Root-level options (global + root command's own spec if present)
-        root-spec (if root-entry
-                    (:spec root-entry)
-                    global-spec)
+(defn- zsh-subgroup-function
+  "Generate a dispatcher for a 3-level subgroup (e.g. graph backup)."
+  [parent-name subgroup-name sub-entries global-spec]
+  (let [func-name (str "_logseq_" parent-name "_" subgroup-name)
         global-keys (set (keys global-spec))
-        root-tokens (zsh-arguments-tokens root-spec global-keys)
-        root-lines (string/join " \\\n    " root-tokens)
+        tokens (zsh-arguments-tokens global-spec global-keys)
+        options-lines (string/join " \\\n    " tokens)
         subcmds (->> sub-entries
                      (mapv (fn [entry]
-                             (let [subcmd (second (:cmds entry))
+                             (let [sub-subcmd (nth (:cmds entry) 2)
                                    desc (or (:desc entry) "")]
-                               (str "        '" subcmd ":" desc "'")))))
+                               (str "        '" sub-subcmd ":" desc "'")))))
         subcmd-lines (string/join "\n" subcmds)
         dispatches (->> sub-entries
                         (mapv (fn [entry]
-                                (let [subcmd (second (:cmds entry))
-                                      sub-func (cmd->func-name (:cmds entry))]
-                                  (str "        " subcmd ") " sub-func " ;;"))))
-                        )
-        dispatch-lines (string/join "\n" dispatches)]
+                                (let [sub-subcmd (nth (:cmds entry) 2)
+                                      leaf-func (cmd->func-name (:cmds entry))]
+                                  (str "        " sub-subcmd ") " leaf-func " ;;")))))]
     (str func-name "() {\n"
          "  local curcontext=\"$curcontext\" state line\n"
          "  typeset -A opt_args\n"
          "\n"
          "  _arguments -C -s \\\n"
-         "    " root-lines " \\\n"
+         "    " options-lines " \\\n"
          "    '1:subcommand:->subcmd' \\\n"
          "    '*::args:->args'\n"
          "\n"
@@ -406,11 +395,89 @@ _logseq_multi_values() {
          "      ;;\n"
          "    args)\n"
          "      case $line[1] in\n"
-         dispatch-lines "\n"
+         (string/join "\n" dispatches) "\n"
          "      esac\n"
          "      ;;\n"
          "  esac\n"
          "}\n")))
+
+(defn- zsh-group-function
+  "Generate a group dispatcher function.
+   Handles groups that have both a root command (e.g. [\"query\"]) and
+   subcommands (e.g. [\"query\" \"list\"]).
+   Also handles nested subgroups (e.g. [\"graph\" \"backup\" \"list\"])."
+  [group-name subentries global-spec]
+  (let [func-name (str "_logseq_" group-name)
+        ;; Separate root entry from subcommand entries
+        root-entry (first (filter #(= 1 (count (:cmds %))) subentries))
+        sub-entries (filter #(> (count (:cmds %)) 1) subentries)
+        ;; Partition into leaf subcmds (2 elements) and nested (3+ elements)
+        leaf-entries (filter #(= 2 (count (:cmds %))) sub-entries)
+        nested-entries (filter #(> (count (:cmds %)) 2) sub-entries)
+        ;; Group nested entries by their 2nd element to find subgroups
+        nested-groups (group-by #(second (:cmds %)) nested-entries)
+        ;; Generate subgroup dispatcher functions
+        subgroup-fns (when (seq nested-groups)
+                       (->> nested-groups
+                            (mapv (fn [[sg-name sg-entries]]
+                                    (zsh-subgroup-function group-name sg-name sg-entries global-spec)))
+                            (string/join "\n")))
+        ;; Root-level options (global + root command's own spec if present)
+        root-spec (if root-entry
+                    (:spec root-entry)
+                    global-spec)
+        global-keys (set (keys global-spec))
+        root-tokens (zsh-arguments-tokens root-spec global-keys)
+        root-lines (string/join " \\\n    " root-tokens)
+        ;; Build subcmd descriptions: leaf entries + subgroup names
+        leaf-subcmds (->> leaf-entries
+                          (mapv (fn [entry]
+                                  (let [subcmd (second (:cmds entry))
+                                        desc (or (:desc entry) "")]
+                                    (str "        '" subcmd ":" desc "'")))))
+        subgroup-subcmds (->> (keys nested-groups)
+                              sort
+                              (mapv (fn [sg-name]
+                                      (str "        '" sg-name ":" sg-name " commands'"))))
+        subcmd-lines (string/join "\n" (concat leaf-subcmds subgroup-subcmds))
+        ;; Build dispatch: leaf entries dispatch to leaf fns, subgroups to subgroup fns
+        leaf-dispatches (->> leaf-entries
+                             (mapv (fn [entry]
+                                     (let [subcmd (second (:cmds entry))
+                                           sub-func (cmd->func-name (:cmds entry))]
+                                       (str "        " subcmd ") " sub-func " ;;")))))
+        subgroup-dispatches (->> (keys nested-groups)
+                                 sort
+                                 (mapv (fn [sg-name]
+                                         (str "        " sg-name ") _logseq_" group-name "_" sg-name " ;;"))))
+        dispatch-lines (string/join "\n" (concat leaf-dispatches subgroup-dispatches))
+        group-fn (str func-name "() {\n"
+                      "  local curcontext=\"$curcontext\" state line\n"
+                      "  typeset -A opt_args\n"
+                      "\n"
+                      "  _arguments -C -s \\\n"
+                      "    " root-lines " \\\n"
+                      "    '1:subcommand:->subcmd' \\\n"
+                      "    '*::args:->args'\n"
+                      "\n"
+                      "  case $state in\n"
+                      "    subcmd)\n"
+                      "      local -a subcmds\n"
+                      "      subcmds=(\n"
+                      subcmd-lines "\n"
+                      "      )\n"
+                      "      _describe 'subcommand' subcmds\n"
+                      "      ;;\n"
+                      "    args)\n"
+                      "      case $line[1] in\n"
+                      dispatch-lines "\n"
+                      "      esac\n"
+                      "      ;;\n"
+                      "  esac\n"
+                      "}\n")]
+    (if subgroup-fns
+      (str subgroup-fns "\n" group-fn)
+      group-fn)))
 
 (defn- zsh-toplevel-function
   "Generate the _logseq() root dispatcher."
@@ -434,8 +501,7 @@ _logseq_multi_values() {
                                                     (= 1 (count (:cmds (first entries)))))
                                              (cmd->func-name (:cmds (first entries)))
                                              (str "_logseq_" g))]
-                                  (str "        " g ") " func " ;;"))))
-                        )
+                                  (str "        " g ") " func " ;;")))))
         dispatch-lines (string/join "\n" dispatches)
         global-keys (set (keys global-spec))
         global-tokens (zsh-arguments-tokens global-spec global-keys)
@@ -686,7 +752,7 @@ _logseq_multi_values_bash() {
   []
   "_logseq_cmd_and_subcmd() {
   local i skip=0
-  __cmd='' __subcmd=''
+  __cmd='' __subcmd='' __subsubcmd=''
   for (( i = 1; i < COMP_CWORD; i++ )); do
     local w=\"${COMP_WORDS[i]}\"
     if (( skip )); then skip=0; continue; fi
@@ -698,6 +764,8 @@ _logseq_multi_values_bash() {
       __cmd=\"$w\"
     elif [[ -z \"$__subcmd\" ]]; then
       __subcmd=\"$w\"
+    elif [[ -z \"$__subsubcmd\" ]]; then
+      __subsubcmd=\"$w\"
     fi
   done
 }\n")
@@ -739,31 +807,52 @@ _logseq_multi_values_bash() {
                        (let [;; Root entry opts go at group level, sub-entries get case branches
                              root-entry (first (filter #(= 1 (count (:cmds %))) entries))
                              sub-entries (filter #(> (count (:cmds %)) 1) entries)
+                             leaf-subs (filter #(= 2 (count (:cmds %))) sub-entries)
+                             nested-subs (filter #(> (count (:cmds %)) 2) sub-entries)
+                             nested-groups (group-by #(second (:cmds %)) nested-subs)
                              root-opts (when root-entry
                                          (let [cmd-spec (apply dissoc (:spec root-entry) (keys global-spec))]
                                            (->> (keys cmd-spec)
                                                 (mapcat (fn [k] (bash-option-names k (get cmd-spec k))))
                                                 (string/join " "))))
-                             sub-branches
-                             (->> sub-entries
+                             leaf-branches
+                             (->> leaf-subs
                                   (mapv (fn [entry]
                                           (let [subcmd (second (:cmds entry))
                                                 cmd-spec (apply dissoc (:spec entry) (keys global-spec))
                                                 cmd-opts (->> (keys cmd-spec)
                                                               (mapcat (fn [k] (bash-option-names k (get cmd-spec k))))
                                                               (string/join " "))]
-                                            (str "        " subcmd ") opts+=' " cmd-opts "' ;;"))))
-                                  (string/join "\n"))]
+                                            (str "        " subcmd ") opts+=' " cmd-opts "' ;;")))))
+                             ;; For nested subgroups, dispatch on subsubcmd
+                             nested-branches
+                             (->> (sort-by first nested-groups)
+                                  (mapv (fn [[sg-name sg-entries]]
+                                          (let [inner (->> sg-entries
+                                                           (mapv (fn [entry]
+                                                                   (let [sub-subcmd (nth (:cmds entry) 2)
+                                                                         cmd-spec (apply dissoc (:spec entry) (keys global-spec))
+                                                                         cmd-opts (->> (keys cmd-spec)
+                                                                                       (mapcat (fn [k] (bash-option-names k (get cmd-spec k))))
+                                                                                       (string/join " "))]
+                                                                     (str "            " sub-subcmd ") opts+=' " cmd-opts "' ;;"))))
+                                                           (string/join "\n"))]
+                                            (str "        " sg-name ")\n"
+                                                 "          case \"$subsubcmd\" in\n"
+                                                 inner "\n"
+                                                 "          esac\n"
+                                                 "          ;;")))))
+                             all-branches (concat leaf-branches nested-branches)
+                             sub-branches (string/join "\n" all-branches)]
                          (str "    " group-name ")\n"
                               (when (seq root-opts)
                                 (str "      opts+=' " root-opts "'\n"))
                               "      case \"$subcmd\" in\n"
                               sub-branches "\n"
                               "      esac\n"
-                              "      ;;"))))
-                        ))]
+                              "      ;;"))))))]
     (str "_logseq_opts_for() {\n"
-         "  local cmd=\"$1\" subcmd=\"$2\"\n"
+         "  local cmd=\"$1\" subcmd=\"$2\" subsubcmd=\"$3\"\n"
          "  local opts=\"" global-str "\"\n"
          "\n"
          "  case \"$cmd\" in\n"
@@ -841,7 +930,9 @@ _logseq_multi_values_bash() {
       nil)))
 
 (defn- bash-subcommand-cases
-  "Generate subcommand completion for each group."
+  "Generate subcommand completion for each group.
+   Deduplicates subcmd names so that 3-level commands like
+   [\"graph\" \"backup\" \"list\"] produce a single \"backup\" entry."
   [table]
   (let [groups (extract-groups table)
         cases (->> (sort-by first groups)
@@ -850,11 +941,34 @@ _logseq_multi_values_bash() {
                                      (> (count (:cmds (first entries))) 1))
                              (let [subcmds (->> entries
                                                 (keep #(second (:cmds %)))
+                                                distinct
                                                 (string/join " "))]
                                (when (seq subcmds)
                                  (str "      " group-name ") COMPREPLY=( $(compgen -W '"
                                       subcmds "' -- \"$cur\") ) ;;")))))))]
     (string/join "\n" cases)))
+
+(defn- bash-sub-subcommand-cases
+  "Generate sub-subcommand completion for 3-level command groups.
+   Produces cases like: graph:backup) COMPREPLY=( $(compgen -W 'list create ...' ...) ) ;;"
+  [table]
+  (let [groups (extract-groups table)
+        cases (->> (sort-by first groups)
+                   (mapcat (fn [[group-name entries]]
+                             (let [nested (filter #(> (count (:cmds %)) 2) entries)
+                                   nested-groups (group-by #(second (:cmds %)) nested)]
+                               (->> (sort-by first nested-groups)
+                                    (mapv (fn [[sg-name sg-entries]]
+                                            (let [sub-subcmds (->> sg-entries
+                                                                   (map #(nth (:cmds %) 2))
+                                                                   distinct
+                                                                   (string/join " "))]
+                                              (str "      " group-name ":" sg-name
+                                                   ") COMPREPLY=( $(compgen -W '"
+                                                   sub-subcmds "' -- \"$cur\") ) ;;")))))))))
+        cases (remove nil? cases)]
+    (when (seq cases)
+      (string/join "\n" cases))))
 
 (defn- bash-toplevel-commands
   "Get all top-level command names."
@@ -1003,6 +1117,8 @@ _logseq_multi_values_bash() {
         varied-cases (bash-varied-prev-cases table varied-keys global-keys)
         ;; Subcommand completion
         subcmd-cases (bash-subcommand-cases table)
+        ;; Sub-subcommand completion for 3-level commands
+        sub-subcmd-cases (bash-sub-subcommand-cases table)
         ;; Top-level commands
         top-cmds (bash-toplevel-commands table)]
     (str "_logseq() {\n"
@@ -1011,7 +1127,7 @@ _logseq_multi_values_bash() {
          "  prev=\"${COMP_WORDS[COMP_CWORD-1]}\"\n"
          "  COMPREPLY=()\n"
          "\n"
-         "  local __cmd __subcmd\n"
+         "  local __cmd __subcmd __subsubcmd\n"
          "  _logseq_cmd_and_subcmd\n"
          "\n"
          "  # --- Option value completion ---\n"
@@ -1024,7 +1140,7 @@ _logseq_multi_values_bash() {
          "  # --- Flag / positional completion ---\n"
          "  if [[ \"$cur\" == -* ]]; then\n"
          "    # shellcheck disable=SC2046\n"
-         "    COMPREPLY=( $(compgen -W \"$(_logseq_opts_for \"$__cmd\" \"$__subcmd\")\" -- \"$cur\") )\n"
+         "    COMPREPLY=( $(compgen -W \"$(_logseq_opts_for \"$__cmd\" \"$__subcmd\" \"$__subsubcmd\")\" -- \"$cur\") )\n"
          "    return\n"
          "  fi\n"
          "\n"
@@ -1039,6 +1155,14 @@ _logseq_multi_values_bash() {
          "    esac\n"
          "    return\n"
          "  fi\n"
+         "\n"
+         (when (seq sub-subcmd-cases)
+           (str "  if [[ -z \"$__subsubcmd\" ]]; then\n"
+                "    case \"$__cmd:$__subcmd\" in\n"
+                sub-subcmd-cases "\n"
+                "    esac\n"
+                "    return\n"
+                "  fi\n"))
          "}\n")))
 
 (defn generate-bash

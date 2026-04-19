@@ -406,9 +406,8 @@
                :close-db (fn [db] (.close db))
                :exec (fn [db sql-or-opts] (.exec db sql-or-opts))
                :transaction (fn [db f] (.transaction db f))
-               :backup-db (fn [db path]
-                            (let [backup-fn (gobj/get db "backup")]
-                              (backup-fn path)))}
+               :backup-db (fn [^js db path]
+                            (.backup db path))}
       :crypto {:save-secret-text! (fn [key text]
                                     ((:set! kv) (secret-key key) text))
                :read-secret-text (fn [key]

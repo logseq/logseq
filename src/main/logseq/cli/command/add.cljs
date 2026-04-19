@@ -69,22 +69,6 @@
           (transport/invoke config :thread-api/pull false
                             [repo [:db/id :block/uuid :block/name :block/title] [:block/name page-name-lc]]))))))
 
-;; TODO: Replace uses of this fn with ensure-page! when users are able to specify ids for contexts this
-;; is used in
-(defn- ensure-first-page!
-  "Unlike ensure-page!, chooses the first random page and doesn't ensure the page is unique. Only use this
-   when the user unable to specificy the specific page e.g. page refs in a block/title"
-  [config repo page-name]
-  (let [page-name-lc (common-util/page-name-sanity-lc page-name)]
-    (p/let [page (transport/invoke config :thread-api/pull false
-                                   [repo [:db/id :block/uuid :block/name :block/title] [:block/name page-name-lc]])]
-      (if (:db/id page)
-        page
-        (p/let [_ (transport/invoke config :thread-api/apply-outliner-ops false
-                                    [repo [[:create-page [page-name {}]]] {}])]
-          (transport/invoke config :thread-api/pull false
-                            [repo [:db/id :block/uuid :block/name :block/title] [:block/name page-name-lc]]))))))
-
 (defn pull-tag-by-name
   "Look up a tag by name, constrained to entities tagged with :logseq.class/Tag."
   [config repo tag-name selector]
@@ -266,6 +250,10 @@
        (remove string/blank?)
        vec))
 
+(defn- integer-string?
+  [s]
+  (boolean (re-matches #"-?\d+" s)))
+
 (defn- partition-ref-values
   [refs]
   (reduce
@@ -278,9 +266,12 @@
          (common-util/uuid-string? value)
          (update acc :uuid-refs conj value)
 
+         (integer-string? value)
+         (update acc :id-refs conj value)
+
          :else
          (update acc :page-refs conj value))))
-   {:uuid-refs [] :page-refs []}
+   {:uuid-refs [] :page-refs [] :id-refs []}
    refs))
 
 (defn- resolve-page-ref-entities
@@ -295,7 +286,7 @@
                          page-refs)]
       (p/let [resolved (p/all
                         (map (fn [[_ page-name]]
-                               (p/let [page (ensure-first-page! config repo page-name)
+                               (p/let [page (ensure-page! config repo page-name)
                                        page-uuid (:block/uuid page)]
                                  (when-not page-uuid
                                    (throw (ex-info "page not found"
@@ -319,6 +310,26 @@
                                 {:code :block-ref-not-found
                                  :uuid uuid-ref})))))
           (distinct uuid-refs)))))
+
+(defn- resolve-id-ref-entities
+  "Resolve integer id refs (db/id values) to entity maps with :block/uuid and
+   :block/title so they can be normalized like page-name refs."
+  [config repo id-refs]
+  (if (seq id-refs)
+    (p/let [entities (p/all
+                      (map (fn [id-str]
+                             (let [id (parse-long id-str)]
+                               (p/let [entity (transport/invoke config :thread-api/pull false
+                                                                [repo [:db/id :block/uuid :block/title] id])]
+                                 (when-not (:db/id entity)
+                                   (throw (ex-info (str "id ref not found: " id-str)
+                                                   {:code :id-ref-not-found
+                                                    :id id-str})))
+                                 {:block/uuid (:block/uuid entity)
+                                  :block/title id-str})))
+                           (distinct id-refs)))]
+      (vec entities))
+    (p/resolved nil)))
 
 (defn- normalize-block-title-refs
   [blocks refs]
@@ -754,7 +765,7 @@
     (and (string? value) (common-util/uuid-string? (string/trim value)))
     (resolve-entity-id config repo [:block/uuid (uuid (string/trim value))])
     (string? value)
-    (p/let [page (ensure-first-page! config repo value)]
+    (p/let [page (ensure-page! config repo value)]
       (or (:db/id page)
           (throw (ex-info "page not found" {:code :page-not-found :value value}))))
     :else
@@ -1138,9 +1149,11 @@
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               target-block-uuid (resolve-add-target cfg action)
               ref-values (collect-page-refs (:blocks action))
-              {:keys [uuid-refs page-refs]} (partition-ref-values ref-values)
+              {:keys [uuid-refs page-refs id-refs]} (partition-ref-values ref-values)
               _ (ensure-block-refs-exist! cfg (:repo action) uuid-refs)
-              refs (or (resolve-page-ref-entities cfg (:repo action) page-refs) [])
+              page-refs' (or (resolve-page-ref-entities cfg (:repo action) page-refs) [])
+              id-refs' (or (resolve-id-ref-entities cfg (:repo action) id-refs) [])
+              refs (into page-refs' id-refs')
               blocks (if (seq refs)
                        (normalize-block-title-refs (:blocks action) refs)
                        (:blocks action))
