@@ -633,7 +633,7 @@
   [{:keys [cli-revision checked mismatched eligible skipped-owner skipped-owner-targets killed failed]}]
   (let [failed (vec (or failed []))
         skipped-owner-targets (vec (or skipped-owner-targets []))
-        header-lines [(str "Server cleanup summary")
+        header-lines ["Server cleanup summary"
                       (str "CLI revision: " (normalize-cell cli-revision))
                       (str "Checked: " (cli-humanize/format-count (or checked 0)))
                       (str "Mismatched: " (cli-humanize/format-count (or mismatched 0)))
