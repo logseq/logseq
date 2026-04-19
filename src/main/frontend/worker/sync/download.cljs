@@ -9,17 +9,19 @@
    [frontend.worker.shared-service :as shared-service]
    [frontend.worker.state :as worker-state]
    [frontend.worker.sync.auth :as sync-auth]
+   [frontend.worker.sync.assets :as sync-assets]
    [frontend.worker.sync.client-op :as client-op]
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.log-and-state :as rtc-log-and-state]
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
    [frontend.worker.sync.util :refer [fail-fast] :as sync-util]
    [lambdaisland.glogi :as log]
+   [logseq.common.util :as common-util]
    [logseq.db-sync.snapshot :as snapshot]
    [logseq.db.common.sqlite :as common-sqlite]
    [logseq.db.frontend.schema :as db-schema]
-   [promesa.core :as p]
-   [logseq.db :as ldb]))
+   [logseq.db :as ldb]
+   [promesa.core :as p]))
 
 (defn- ->uint8 [data]
   (cond
@@ -159,6 +161,66 @@
 (defonce ^:private *import-state (atom nil))
 (def ^:private snapshot-import-datoms-batch-size 10000)
 
+(defn- restorable-assets
+  [db]
+  (->> (d/datoms db :avet :logseq.property.asset/type)
+       (keep (fn [datom]
+               (let [ent (d/entity db (:e datom))
+                     asset-uuid (:block/uuid ent)
+                     asset-type (:logseq.property.asset/type ent)
+                     external-url (:logseq.property.asset/external-url ent)]
+                 (when (and asset-uuid (seq asset-type) (nil? external-url))
+                   {:asset-uuid asset-uuid
+                    :asset-type asset-type}))))
+       (common-util/distinct-by :asset-uuid)
+       vec))
+
+(defn- <restore-missing-assets!
+  [repo graph-id]
+  (p/let [conn (worker-state/get-datascript-conn repo)
+          db (some-> conn deref)
+          assets (when db (restorable-assets db))
+          total (count assets)
+          _ (when (pos? total)
+              (rtc-log-and-state/rtc-log :rtc.asset.log/initial-download-missing-assets
+                                         {:sub-type :download-progress
+                                          :graph-uuid graph-id
+                                          :message (str "Checking " total " assets")}))]
+    (when (pos? total)
+      (p/loop [remaining assets
+               downloaded 0]
+        (if (empty? remaining)
+          (rtc-log-and-state/rtc-log :rtc.asset.log/initial-download-missing-assets
+                                     {:sub-type :download-completed
+                                      :graph-uuid graph-id
+                                      :message (str "Downloaded missing assets: " downloaded)})
+          (let [batch (take 10 remaining)
+                remaining* (drop 10 remaining)]
+            (p/let [results
+                    (p/all
+                     (mapv
+                      (fn [{:keys [asset-uuid asset-type]}]
+                        (-> (sync-assets/<download-remote-asset-if-missing!
+                             repo
+                             {:graph-id graph-id
+                              :asset-uuid asset-uuid
+                              :asset-type asset-type})
+                            (p/catch
+                             (fn [error]
+                               (js/console.error "restore asset failed"
+                                                 repo
+                                                 asset-uuid
+                                                 asset-type
+                                                 error)
+                               false))))
+                      batch))
+                    downloaded (+ downloaded (count (filter true? results)))]
+              (rtc-log-and-state/rtc-log :rtc.asset.log/initial-download-missing-assets
+                                         {:sub-type :download-progress
+                                          :graph-uuid graph-id
+                                          :message (str "Downloading missing assets: " downloaded "/" total)})
+              (p/recur (vec remaining*) downloaded))))))))
+
 (defn complete-datoms-import!
   [repo graph-id remote-tx]
   (-> (p/do!
@@ -171,6 +233,7 @@
        (if-let [rehydrate-f (@thread-api/*thread-apis :thread-api/db-sync-rehydrate-large-titles)]
          (rehydrate-f repo graph-id)
          (fail-fast :db-sync/missing-field {:field :thread-api/db-sync-rehydrate-large-titles}))
+       (<restore-missing-assets! repo graph-id)
        (rtc-log-and-state/rtc-log :rtc.log/download
                                   {:sub-type :download-completed
                                    :graph-uuid graph-id

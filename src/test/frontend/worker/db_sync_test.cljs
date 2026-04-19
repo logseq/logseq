@@ -17,6 +17,7 @@
    [frontend.worker.sync.auth :as sync-auth]
    [frontend.worker.sync.client-op :as client-op]
    [frontend.worker.sync.crypt :as sync-crypt]
+   [frontend.worker.sync.download :as sync-download]
    [frontend.worker.sync.handle-message :as sync-handle-message]
    [frontend.worker.sync.large-title :as sync-large-title]
    [frontend.worker.sync.log-and-state :as sync-log-state]
@@ -1582,6 +1583,26 @@
             (is (= 1 (client-op/get-unpushed-asset-ops-count test-repo)))
             (is (= asset-uuid (get-in asset-op [:update-asset 2 :block-uuid])))
             (is (= :update-asset (first (:update-asset asset-op))))))))))
+
+(deftest snapshot-restore-restorable-assets-test
+  (testing "snapshot restore only preloads local asset files for internal assets"
+    (let [conn (db-test/create-conn)
+          internal-asset-uuid (random-uuid)
+          external-asset-uuid (random-uuid)
+          duplicate-datom-uuid internal-asset-uuid]
+      (d/transact! conn
+                   [{:block/uuid internal-asset-uuid
+                     :block/title "internal.png"
+                     :logseq.property.asset/type "png"}
+                    {:block/uuid external-asset-uuid
+                     :block/title "external.png"
+                     :logseq.property.asset/type "png"
+                     :logseq.property.asset/external-url "https://example.com/external.png"}
+                    {:block/uuid duplicate-datom-uuid
+                     :logseq.property.asset/type "png"}])
+      (is (= [{:asset-uuid internal-asset-uuid
+               :asset-type "png"}]
+             (#'sync-download/restorable-assets @conn))))))
 
 (deftest apply-history-action-does-not-reuse-original-tx-id-test
   (testing "undo/redo history actions should not overwrite the original pending tx row"

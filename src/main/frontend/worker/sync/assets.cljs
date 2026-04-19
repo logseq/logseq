@@ -10,6 +10,7 @@
    [frontend.worker.sync.client-op :as client-op]
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.large-title :as sync-large-title]
+   [frontend.worker.sync.util :as sync-util]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
@@ -338,36 +339,58 @@
                             :base base
                             :graph-id graph-id})))))
 
+(defn <download-remote-asset-if-missing!
+  "Downloads a remote asset when the DB references it but the local file is absent.
+
+  Returns `true` when a download ran, `false` when the asset already exists."
+  [repo {:keys [graph-id asset-uuid asset-type]}]
+  (let [graph-id (or graph-id (sync-util/get-graph-id repo))
+        asset-id (some-> asset-uuid str)
+        asset-type (some-> asset-type str)]
+    (if (and (seq graph-id) (seq asset-id) (seq asset-type))
+      (p/let [meta (platform/asset-stat (platform/current)
+                                        repo
+                                        (asset-file-name asset-id asset-type))]
+        (if meta
+          false
+          (p/let [_ (download-remote-asset! repo graph-id asset-id asset-type)]
+            true)))
+      (p/rejected (ex-info "missing asset download info"
+                           {:repo repo
+                            :asset-uuid asset-uuid
+                            :asset-type asset-type
+                            :graph-id graph-id})))))
+
 (defn request-asset-download!
   [repo asset-uuid {:keys [current-client-f enqueue-asset-task-f broadcast-rtc-state!-f]}]
-  (when-let [client (current-client-f repo)]
-    (when-let [graph-id (:graph-id client)]
-      (enqueue-asset-task-f
-       client
-       #(when-let [conn (worker-state/get-datascript-conn repo)]
-          (when-let [ent (d/entity @conn [:block/uuid asset-uuid])]
-            (let [asset-type (:logseq.property.asset/type ent)
-                  asset-id (str asset-uuid)
-                  should-download? (and (seq asset-type)
-                                        (:logseq.property.asset/remote-metadata ent))]
-              (-> (p/let [meta (when should-download?
-                                 (platform/asset-stat (platform/current)
-                                                      repo
-                                                      (asset-file-name asset-id asset-type)))
-                          missing-local? (and should-download? (nil? meta))
-                          _ (when missing-local?
-                              (download-remote-asset! repo graph-id asset-uuid asset-type))
-                          _ (when missing-local?
-                              (when-let [target-ent (d/entity @conn [:block/uuid asset-uuid])]
-                                (ldb/transact!
-                                 conn
-                                 [[:db/retract (:db/id target-ent)
-                                   :logseq.property.asset/remote-metadata]]
-                                 {:persist-op? true})))
-                          _ (when missing-local?
-                              (client-op/remove-asset-op repo asset-uuid))
-                          _ (when missing-local?
-                              (broadcast-rtc-state!-f client))]
-                    nil)
-                  (p/catch (fn [e]
-                             (js/console.error e)))))))))))
+  ;; Asset downloads are pure HTTP, so they should also work before the WS sync
+  ;; loop is connected, for example right after restoring a graph from a snapshot.
+  (let [client (current-client-f repo)
+        graph-id (or (some-> client :graph-id)
+                     (sync-util/get-graph-id repo))
+        runner (fn []
+                 (when-let [conn (worker-state/get-datascript-conn repo)]
+                   (when-let [ent (d/entity @conn [:block/uuid asset-uuid])]
+                     (let [asset-type (:logseq.property.asset/type ent)
+                           external-url (:logseq.property.asset/external-url ent)]
+                       (-> (p/let [downloaded? (when (nil? external-url)
+                                                 (<download-remote-asset-if-missing!
+                                                  repo
+                                                  {:graph-id graph-id
+                                                   :asset-uuid asset-uuid
+                                                   :asset-type asset-type}))]
+                             (when downloaded?
+                               (when (d/entity @conn [:block/uuid asset-uuid])
+                                 (ldb/transact!
+                                  conn
+                                  [{:block/uuid asset-uuid
+                                    :logseq.property.asset/remote-metadata nil}]
+                                  {:persist-op? true}))
+                               (client-op/remove-asset-op repo asset-uuid)
+                               (when client
+                                 (broadcast-rtc-state!-f client))))
+                           (p/catch (fn [error]
+                                      (js/console.error error))))))))]
+    (if client
+      (enqueue-asset-task-f client runner)
+      (runner))))
