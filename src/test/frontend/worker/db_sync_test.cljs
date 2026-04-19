@@ -4843,6 +4843,48 @@
                        (is (= "rehydrated-title" (:block/title block))))
                      (p/finally done))))))))
 
+(deftest rehydrate-large-title-skips-missing-object-test
+  (testing "rehydrate keeps going when a large-title object is missing remotely"
+    (async done
+           (let [conn (db-test/create-conn-with-blocks
+                       {:pages-and-blocks
+                        [{:page {:block/title "rehydrate-page"}
+                          :blocks [{:block/title "missing-large-title-block"}]}]})
+                 block (db-test/find-block-by-content @conn "missing-large-title-block")
+                 block-id (:db/id block)
+                 obj {:asset-uuid "missing-title-1" :asset-type "txt"}
+                 tx-data [[:db/add block-id :block/title ""]
+                          [:db/add block-id :logseq.property.sync/large-title-object obj]]
+                 download-fn (fn [_repo _graph-id _obj _aes-key]
+                               (p/rejected
+                                (ex-info "missing large title"
+                                         {:type :db-sync/large-title-download-failed
+                                          :status 404})))]
+             (with-datascript-conns conn nil
+               (fn []
+                 (d/transact! conn tx-data)
+                 (-> (p/let [result (sync-large-title/rehydrate-large-titles!
+                                     test-repo
+                                     {:tx-data tx-data
+                                      :conn conn
+                                      :graph-id "graph-1"
+                                      :download-fn download-fn
+                                      :aes-key nil
+                                      :get-conn-f worker-state/get-datascript-conn
+                                      :get-graph-id-f (fn [repo]
+                                                        (sync-large-title/get-graph-id
+                                                         worker-state/get-datascript-conn repo))
+                                      :graph-e2ee?-f sync-crypt/graph-e2ee?
+                                      :ensure-graph-aes-key-f sync-crypt/<ensure-graph-aes-key
+                                      :fail-fast-f db-sync/fail-fast})
+                             _ (is (some? result))
+                             block' (d/entity @conn block-id)
+                             obj-datoms (filter #(= :logseq.property.sync/large-title-object (:a %))
+                                                (d/datoms @conn :eavt))]
+                       (is (= "" (:block/title block')))
+                       (is (empty? obj-datoms)))
+                     (p/finally done))))))))
+
 (defn- apply-template-to-empty-target!
   [conn template-root-uuid empty-target-uuid]
   (let [template-root (d/entity @conn [:block/uuid template-root-uuid])

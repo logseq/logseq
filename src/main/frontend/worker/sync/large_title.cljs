@@ -1,6 +1,7 @@
 (ns frontend.worker.sync.large-title
   "Large title offload and rehydration helpers for db sync."
   (:require [datascript.core :as d]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]
             [frontend.worker.sync.util :refer [get-graph-id]]))
@@ -90,7 +91,12 @@
                                     :headers (clj->js auth-headers)})]
       (when-not (.-ok resp)
         (fail-fast-f :db-sync/large-title-download-failed
-                     {:repo repo :status (.-status resp)}))
+                     {:type :db-sync/large-title-download-failed
+                      :repo repo
+                      :graph-id graph-id
+                      :status (.-status resp)
+                      :url url
+                      :object obj}))
       (p/let [buf (.arrayBuffer resp)
               payload (js/Uint8Array. buf)
               payload-str (.decode text-decoder payload)
@@ -99,6 +105,12 @@
                          (p/catch (fn [_] payload-str)))
                      (p/resolved payload-str))]
         data))))
+
+(defn missing-large-title-error?
+  [error]
+  (let [{:keys [type status]} (ex-data error)]
+    (and (= :db-sync/large-title-download-failed type)
+         (= 404 status))))
 
 (defn offload-large-titles
   [tx-data {:keys [repo graph-id upload-fn aes-key]}]
@@ -160,12 +172,28 @@
                     (fail-fast-f :db-sync/missing-field {:repo repo :field :aes-key}))]
           (p/all
            (mapv (fn [{:keys [e obj]}]
-                   (p/let [title (download-fn repo graph-id* obj aes-key*)]
-                     (ldb/transact! conn*
-                                    [[:db/add e :block/title title]]
-                                    {:rtc-tx? true
-                                     :persist-op? false
-                                     :op :large-title-rehydrate})))
+                   (-> (p/let [title (download-fn repo graph-id* obj aes-key*)]
+                         (ldb/transact! conn*
+                                        [[:db/add e :block/title title]]
+                                        {:rtc-tx? true
+                                         :persist-op? false
+                                         :op :large-title-rehydrate}))
+                       (p/catch
+                        (fn [error]
+                          (if (missing-large-title-error? error)
+                            (do
+                              (log/warn :db-sync/large-title-missing
+                                        {:repo repo
+                                         :graph-id graph-id*
+                                         :entity e
+                                         :object obj
+                                         :error error})
+                              (ldb/transact! conn*
+                                             [[:db/retract e large-title-object-attr obj]]
+                                             {:rtc-tx? true
+                                              :persist-op? false
+                                              :op :large-title-missing-cleanup}))
+                            (p/rejected error))))))
                  items)))))))
 
 (defn offload-large-titles-in-datoms-batch
