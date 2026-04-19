@@ -77,21 +77,23 @@
                                                [:h1.text-3xl.-mt-2.-ml-2 (t :collaboration/members)]
                                                (settings/settings-collaboration)])
                                             {:id :rtc-collaborators})})
-
        (when (seq online-users)
-         (for [{user-email :user/email
-                user-name :user/name
-                user-uuid :user/uuid} online-users
-               :let [color (shui-util/uuid-color user-uuid)]]
-           (when user-name
-             (shui/avatar
-              {:class "w-5 h-5"
-               :style {:app-region "no-drag"}
-               :title user-email}
-              (shui/avatar-fallback
-               {:style {:background-color (str color "50")
-                        :font-size 11}}
-               (some-> (subs user-name 0 2) (string/upper-case)))))))])))
+         (mapv (fn [{user-email :user/email
+                     user-name :user/name
+                     user-uuid :user/uuid}]
+                 (when user-name
+                   (let [color (shui-util/uuid-color user-uuid)]
+                     (rum/with-key
+                       (shui/avatar
+                         {:class "w-5 h-5"
+                          :style {:app-region "no-drag"}
+                          :title user-email}
+                         (shui/avatar-fallback
+                           {:style {:background-color (str color "50")
+                                    :font-size 11}}
+                           (some-> (subs user-name 0 2) (string/upper-case))))
+                       (str user-uuid)))))
+               online-users))])))
 
 (rum/defc left-menu-button < rum/reactive
   < {:key-fn #(identity "left-menu-toggle-button")}
