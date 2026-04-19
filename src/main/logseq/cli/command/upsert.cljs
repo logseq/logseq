@@ -979,12 +979,38 @@
 
 (declare append-tag-and-property-ops)
 
+(def ^:private block-uuid-selector
+  [:db/id :block/uuid])
+
+(defn- ensure-block-uuid-by-id!
+  [config repo block-id]
+  (p/let [entity (pull-entity-by-id config repo block-uuid-selector block-id)
+          block-uuid (:block/uuid entity)]
+    (if block-uuid
+      block-uuid
+      (throw (ex-info "block uuid not found for id"
+                      {:code upsert-id-not-found-code
+                       :entity-type "block"
+                       :id block-id})))))
+
+(defn- resolve-block-uuids-by-id!
+  [config repo block-ids]
+  (if (seq block-ids)
+    (let [unique-block-ids (vec (distinct block-ids))
+          block-uuid-promises (mapv (fn [block-id]
+                                      (ensure-block-uuid-by-id! config repo block-id))
+                                    unique-block-ids)]
+      (-> (p/all block-uuid-promises)
+          (p/then vec)))
+    (p/resolved [])))
+
 (defn- execute-upsert-task-ops!
   [repo cfg block-ids task-op-plan]
   (if (seq block-ids)
-    (let [ops (append-tag-and-property-ops []
-                                           block-ids
-                                           task-op-plan)]
+    (p/let [block-uuids (resolve-block-uuids-by-id! cfg repo block-ids)
+            ops (append-tag-and-property-ops []
+                                             block-uuids
+                                             task-op-plan)]
       (if (seq ops)
         (transport/invoke cfg :thread-api/apply-outliner-ops false
                           [repo ops {}])
@@ -992,26 +1018,26 @@
     (p/resolved nil)))
 
 (defn- append-tag-and-property-ops
-  [ops block-ids {:keys [update-tag-ids remove-tag-ids update-properties remove-properties]}]
+  [ops block-uuids {:keys [update-tag-ids remove-tag-ids update-properties remove-properties]}]
   (cond-> ops
     (seq remove-tag-ids)
     (into (map (fn [tag-id]
-                 [:batch-delete-property-value [block-ids :block/tags tag-id]])
+                 [:batch-delete-property-value [block-uuids :block/tags tag-id]])
                remove-tag-ids))
 
     (seq remove-properties)
     (into (map (fn [property-id]
-                 [:batch-remove-property [block-ids property-id]])
+                 [:batch-remove-property [block-uuids property-id]])
                remove-properties))
 
     (seq update-tag-ids)
     (into (map (fn [tag-id]
-                 [:batch-set-property [block-ids :block/tags tag-id {}]])
+                 [:batch-set-property [block-uuids :block/tags tag-id {}]])
                update-tag-ids))
 
     (seq update-properties)
     (into (map (fn [[k v]]
-                 [:batch-set-property [block-ids k v {}]])
+                 [:batch-set-property [block-uuids k v {}]])
                update-properties))))
 
 (defn execute-upsert-block
@@ -1088,7 +1114,7 @@
                      (ensure-page-by-id! cfg (:repo action) (:id action))
                      (ensure-page-entity! cfg (:repo action) (:page action)))
               page-id (:db/id page)
-              block-ids [page-id]
+              block-uuids (resolve-block-uuids-by-id! cfg (:repo action) [page-id])
               update-tag-ids (->> (or update-tags [])
                                   (map :db/id)
                                   (remove nil?)
@@ -1096,7 +1122,7 @@
                                   vec)
               remove-tag-ids (->> remove-tags (map :db/id) (remove nil?) distinct vec)
               ops (append-tag-and-property-ops []
-                                               block-ids
+                                               block-uuids
                                                {:update-tag-ids update-tag-ids
                                                 :remove-tag-ids remove-tag-ids
                                                 :update-properties update-properties

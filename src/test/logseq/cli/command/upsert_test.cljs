@@ -347,6 +347,8 @@
 (deftest test-execute-upsert-task-page-applies-task-ops
   (async done
     (let [ops* (atom nil)
+          page-uuid (uuid "00000000-0000-0000-0000-000000000042")
+          block-uuids [page-uuid]
           scheduled-ms (.getTime (js/Date. "2026-02-10T08:00:00.000Z"))
           deadline-ms (.getTime (js/Date. "2026-02-12T18:00:00.000Z"))
           action {:type :upsert-task
@@ -365,7 +367,7 @@
                                                :thread-api/q
                                                (let [[_ [_query input]] args]
                                                  (if (= input "taskhome")
-                                                   (p/resolved [{:db/id 42 :block/uuid (uuid "00000000-0000-0000-0000-000000000042")}])
+                                                   (p/resolved [{:db/id 42 :block/uuid page-uuid}])
                                                    (p/resolved [:logseq.property/status.todo
                                                                 :logseq.property/status.doing
                                                                 :logseq.property/status.done])))
@@ -374,7 +376,11 @@
                                                (let [[_ selector lookup] args]
                                                  (cond
                                                    (= lookup [:block/name "taskhome"])
-                                                   (p/resolved {:db/id 42 :block/uuid (uuid "00000000-0000-0000-0000-000000000042")})
+                                                   (p/resolved {:db/id 42 :block/uuid page-uuid})
+
+                                                   (and (= selector [:db/id :block/uuid])
+                                                        (= lookup 42))
+                                                   (p/resolved {:db/id 42 :block/uuid page-uuid})
 
                                                    (= lookup [:db/ident :logseq.class/Task])
                                                    (p/resolved {:db/id 900})
@@ -396,11 +402,11 @@
             (p/let [result (upsert-command/execute-upsert-task action {})]
               (is (= :ok (:status result)))
               (is (= [42] (get-in result [:data :result])))
-              (is (= [[:batch-set-property [[42] :block/tags 900 {}]]
-                      [:batch-set-property [[42] :logseq.property/status :logseq.property/status.todo {}]]
-                      [:batch-set-property [[42] :logseq.property/priority :logseq.property/priority.high {}]]
-                      [:batch-set-property [[42] :logseq.property/scheduled scheduled-ms {}]]
-                      [:batch-set-property [[42] :logseq.property/deadline deadline-ms {}]]]
+              (is (= [[:batch-set-property [block-uuids :block/tags 900 {}]]
+                      [:batch-set-property [block-uuids :logseq.property/status :logseq.property/status.todo {}]]
+                      [:batch-set-property [block-uuids :logseq.property/priority :logseq.property/priority.high {}]]
+                      [:batch-set-property [block-uuids :logseq.property/scheduled scheduled-ms {}]]
+                      [:batch-set-property [block-uuids :logseq.property/deadline deadline-ms {}]]]
                      @ops*))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
@@ -409,6 +415,8 @@
 (deftest test-execute-upsert-task-page-applies-update-properties-map
   (async done
     (let [ops* (atom nil)
+          page-uuid (uuid "00000000-0000-0000-0000-000000000042")
+          block-uuids [page-uuid]
           scheduled-ms (.getTime (js/Date. "2026-02-10T08:00:00.000Z"))
           deadline-ms (.getTime (js/Date. "2026-02-12T18:00:00.000Z"))
           action {:type :upsert-task
@@ -427,14 +435,18 @@
                                                :thread-api/q
                                                (let [[_ [_query input]] args]
                                                  (if (= input "taskhome")
-                                                   (p/resolved [{:db/id 42 :block/uuid (uuid "00000000-0000-0000-0000-000000000042")}])
+                                                   (p/resolved [{:db/id 42 :block/uuid page-uuid}])
                                                    (p/resolved [])))
 
                                                :thread-api/pull
                                                (let [[_ selector lookup] args]
                                                  (cond
                                                    (= lookup [:block/name "taskhome"])
-                                                   (p/resolved {:db/id 42 :block/uuid (uuid "00000000-0000-0000-0000-000000000042")})
+                                                   (p/resolved {:db/id 42 :block/uuid page-uuid})
+
+                                                   (and (= selector [:db/id :block/uuid])
+                                                        (= lookup 42))
+                                                   (p/resolved {:db/id 42 :block/uuid page-uuid})
 
                                                    (= lookup [:db/ident :logseq.class/Task])
                                                    (p/resolved {:db/id 900})
@@ -457,11 +469,11 @@
             (p/let [result (upsert-command/execute-upsert-task action {})]
               (is (= :ok (:status result)))
               (is (= [42] (get-in result [:data :result])))
-              (is (= [[:batch-set-property [[42] :block/tags 900 {}]]
-                      [:batch-set-property [[42] :logseq.property/status :logseq.property/status.todo {}]]
-                      [:batch-set-property [[42] :logseq.property/priority :logseq.property/priority.high {}]]
-                      [:batch-set-property [[42] :logseq.property/scheduled scheduled-ms {}]]
-                      [:batch-set-property [[42] :logseq.property/deadline deadline-ms {}]]]
+              (is (= [[:batch-set-property [block-uuids :block/tags 900 {}]]
+                      [:batch-set-property [block-uuids :logseq.property/status :logseq.property/status.todo {}]]
+                      [:batch-set-property [block-uuids :logseq.property/priority :logseq.property/priority.high {}]]
+                      [:batch-set-property [block-uuids :logseq.property/scheduled scheduled-ms {}]]
+                      [:batch-set-property [block-uuids :logseq.property/deadline deadline-ms {}]]]
                      @ops*))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
@@ -470,6 +482,8 @@
 (deftest test-execute-upsert-task-page-clears-task-properties
   (async done
     (let [ops* (atom nil)
+          page-uuid (uuid "00000000-0000-0000-0000-000000000042")
+          block-uuids [page-uuid]
           action {:type :upsert-task
                   :mode :page
                   :repo "demo-repo"
@@ -486,14 +500,18 @@
                                                :thread-api/q
                                                (let [[_ [_query input]] args]
                                                  (if (= input "taskhome")
-                                                   (p/resolved [{:db/id 42 :block/uuid (uuid "00000000-0000-0000-0000-000000000042")}])
+                                                   (p/resolved [{:db/id 42 :block/uuid page-uuid}])
                                                    (p/resolved [])))
 
                                                :thread-api/pull
                                                (let [[_ selector lookup] args]
                                                  (cond
                                                    (= lookup [:block/name "taskhome"])
-                                                   (p/resolved {:db/id 42 :block/uuid (uuid "00000000-0000-0000-0000-000000000042")})
+                                                   (p/resolved {:db/id 42 :block/uuid page-uuid})
+
+                                                   (and (= selector [:db/id :block/uuid])
+                                                        (= lookup 42))
+                                                   (p/resolved {:db/id 42 :block/uuid page-uuid})
 
                                                    (= lookup [:db/ident :logseq.class/Task])
                                                    (p/resolved {:db/id 900})
@@ -516,11 +534,67 @@
             (p/let [result (upsert-command/execute-upsert-task action {})]
               (is (= :ok (:status result)))
               (is (= [42] (get-in result [:data :result])))
-              (is (= [[:batch-remove-property [[42] :logseq.property/status]]
-                      [:batch-remove-property [[42] :logseq.property/priority]]
-                      [:batch-remove-property [[42] :logseq.property/scheduled]]
-                      [:batch-remove-property [[42] :logseq.property/deadline]]
-                      [:batch-set-property [[42] :block/tags 900 {}]]]
+              (is (= [[:batch-remove-property [block-uuids :logseq.property/status]]
+                      [:batch-remove-property [block-uuids :logseq.property/priority]]
+                      [:batch-remove-property [block-uuids :logseq.property/scheduled]]
+                      [:batch-remove-property [block-uuids :logseq.property/deadline]]
+                      [:batch-set-property [block-uuids :block/tags 900 {}]]]
+                     @ops*))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-upsert-task-update-applies-task-ops
+  (async done
+    (let [ops* (atom nil)
+          node-uuid (uuid "00000000-0000-0000-0000-000000000243")
+          block-uuids [node-uuid]
+          action {:type :upsert-task
+                  :mode :update
+                  :repo "demo-repo"
+                  :graph "demo-graph"
+                  :id 243
+                  :status :logseq.property/status.todo
+                  :priority :logseq.property/priority.high}]
+      (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                      (p/resolved (assoc config :base-url "http://example")))
+                          transport/invoke (fn [_ method _ args]
+                                             (case method
+                                               :thread-api/q
+                                               (p/resolved [:logseq.property/status.todo
+                                                            :logseq.property/status.doing
+                                                            :logseq.property/status.done])
+
+                                               :thread-api/pull
+                                               (let [[_ selector lookup] args]
+                                                 (cond
+                                                   (= lookup 243)
+                                                   (p/resolved {:db/id 243 :block/uuid node-uuid})
+
+                                                   (= lookup [:db/ident :logseq.class/Task])
+                                                   (p/resolved {:db/id 900})
+
+                                                   (and (vector? selector) (= selector [:db/id])
+                                                        (vector? lookup) (= :db/ident (first lookup)))
+                                                   (p/resolved {:db/id 1})
+
+                                                   :else
+                                                   (p/resolved {})))
+
+                                               :thread-api/apply-outliner-ops
+                                               (let [[_ ops _] args]
+                                                 (reset! ops* ops)
+                                                 (p/resolved nil))
+
+                                               (throw (ex-info "unexpected invoke"
+                                                               {:method method
+                                                                :args args}))))]
+            (p/let [result (upsert-command/execute-upsert-task action {})]
+              (is (= :ok (:status result)))
+              (is (= [243] (get-in result [:data :result])))
+              (is (= [[:batch-set-property [block-uuids :block/tags 900 {}]]
+                      [:batch-set-property [block-uuids :logseq.property/status :logseq.property/status.todo {}]]
+                      [:batch-set-property [block-uuids :logseq.property/priority :logseq.property/priority.high {}]]]
                      @ops*))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))

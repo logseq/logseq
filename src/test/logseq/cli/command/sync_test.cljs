@@ -291,7 +291,7 @@
                                                        :graph "demo"}
                                                       {:base-url "http://example"
                                                        :data-dir "/tmp"
-                                                       :http-base "https://api-staging.logseq.io"
+                                                       :http-base "https://api.logseq.io"
                                                        :id-token "runtime-token"
                                                        :refresh-token "refresh-token"})]
                    (is (= :error (:status result)))

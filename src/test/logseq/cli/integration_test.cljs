@@ -302,8 +302,8 @@
                  (is (= "created-graph-id" (get-in upload-payload [:data :graph-id])))
                  (is (= :thread-api/sync-app-state (ffirst @invoke-calls)))
                  (is (= "runtime-token" (get-in (first @invoke-calls) [1 0 :auth/id-token])))
-                 (is (= [:thread-api/set-db-sync-config [{:ws-url "wss://api-staging.logseq.io/sync/%s"
-                                                          :http-base "https://api-staging.logseq.io"}]]
+                 (is (= [:thread-api/set-db-sync-config [{:ws-url "wss://api.logseq.io/sync/%s"
+                                                          :http-base "https://api.logseq.io"}]]
                         (second @invoke-calls)))
                  (is (= [:thread-api/db-sync-upload-graph ["logseq_db_sync-upload-graph"]]
                         (nth @invoke-calls 2)))
@@ -364,4 +364,3 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
-

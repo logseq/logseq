@@ -108,8 +108,8 @@
                   :list-title-max-display-width list-title-max-display-width-default
                   :output-format nil
                   :data-dir (common-graph/get-default-graphs-dir)
-                  :ws-url "wss://api-staging.logseq.io/sync/%s"
-                  :http-base "https://api-staging.logseq.io"
+                  :ws-url "wss://api.logseq.io/sync/%s"
+                  :http-base "https://api.logseq.io"
                   :config-path (default-config-path)}
         env (env-config)
         config-path (or (:config-path opts)
