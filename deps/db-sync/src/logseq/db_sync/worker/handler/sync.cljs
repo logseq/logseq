@@ -274,9 +274,9 @@
              (let [value (.-value chunk)
                    {:keys [rows buffer]} (snapshot/parse-framed-chunk buffer value)
                    rows-count (count rows)
-                   reset? (and @reset-pending? (seq rows))]
+                   reset? (boolean (and @reset-pending? (seq rows)))]
                (when (seq rows)
-                 (import-snapshot! self rows (true? reset?))
+                 (import-snapshot! self rows reset?)
                  (vreset! reset-pending? false))
                (vswap! total-count + rows-count)
                (p/recur buffer)))))
@@ -569,7 +569,12 @@
                       (when (seq checksum-param)
                         (storage/set-checksum! (.-sql self) checksum-param)))
                   _ (when finished?
-                      (<set-graph-ready-for-use! self graph-id true))]
+                      (<set-graph-ready-for-use! self graph-id true))
+                  _ (when finished?
+                      ;; Snapshot replacement resets tx history (`t` may drop to 0).
+                      ;; Broadcast current `t` so connected clients can recover.
+                      (ws/broadcast! self nil {:type "changed"
+                                               :t (t-now self)}))]
             (http/json-response :sync/snapshot-upload {:ok true
                                                        :count count})))))))
 

@@ -269,26 +269,51 @@
 
 (defn- update-latest-remote-state!
   [repo message]
-  (let [remote-tx (:t message)
+  (let [message-type (:type message)
+        remote-tx (:t message)
         remote-checksum (:checksum message)
         has-checksum? (contains? message :checksum)
         latest-remote-tx (get @sync-apply/*repo->latest-remote-tx repo)
+        authoritative? (contains? #{"hello" "changed"} message-type)
         stale-remote-tx? (and (number? remote-tx)
                               (number? latest-remote-tx)
-                              (< remote-tx latest-remote-tx))]
+                              (< remote-tx latest-remote-tx)
+                              (not authoritative?))]
     (when (number? remote-tx)
-      (swap! sync-apply/*repo->latest-remote-tx
-             update repo
-             (fn [prev]
-               (if (number? prev)
-                 (max prev remote-tx)
-                 remote-tx))))
+      (if authoritative?
+        (swap! sync-apply/*repo->latest-remote-tx assoc repo remote-tx)
+        (swap! sync-apply/*repo->latest-remote-tx
+               update repo
+               (fn [prev]
+                 (if (number? prev)
+                   (max prev remote-tx)
+                   remote-tx)))))
     (when (and has-checksum? (not stale-remote-tx?))
       (swap! sync-apply/*repo->latest-remote-checksum assoc repo remote-checksum))
     {:stale-remote-tx? stale-remote-tx?
      :latest-remote-tx-before latest-remote-tx}))
 
 (declare handle-pull-ok! handle-changed!)
+
+(defn- recover-from-remote-tx-reset!
+  [repo client local-tx remote-tx remote-checksum message-type]
+  (when (pending-local-tx? repo)
+    (fail-fast :db-sync/remote-tx-reset-with-pending-local
+               {:repo repo
+                :type message-type
+                :local-tx local-tx
+                :remote-tx remote-tx}))
+  (log/warn :db-sync/remote-tx-reset-detected
+            {:repo repo
+             :type message-type
+             :local-tx local-tx
+             :remote-tx remote-tx})
+  (client-op/update-local-tx repo remote-tx)
+  (when (string? remote-checksum)
+    (client-op/update-local-checksum repo remote-checksum))
+  (clear-pending-pull! client)
+  (request-pull! client remote-tx)
+  (broadcast-rtc-state! client))
 
 (defn handle-message!
   [repo client raw]
@@ -299,18 +324,24 @@
       (fail-fast :db-sync/response-parse-failed {:repo repo :raw raw}))
     (let [local-tx (or (client-op/get-local-tx repo) 0)
           remote-tx (:t message)
-          remote-checksum (:checksum message)]
+          remote-checksum (:checksum message)
+          message-type (:type message)]
       (update-latest-remote-state! repo message)
-      (case (:type message)
-        "hello" (handle-hello! repo client local-tx remote-tx remote-checksum)
-        "online-users" (handle-online-users! repo client message)
-        "presence" (handle-presence! client message)
-        "tx/batch/ok" (handle-tx-batch-ok! repo client remote-tx remote-checksum)
-        "pull/ok" (handle-pull-ok! repo client local-tx remote-tx remote-checksum message)
-        "changed" (handle-changed! repo client local-tx remote-tx)
-        "tx/reject" (handle-tx-reject! repo client message local-tx)
-        (fail-fast :db-sync/invalid-field
-                   {:repo repo :type (:type message)})))))
+      (if (and (contains? #{"hello" "changed"} message-type)
+               (number? local-tx)
+               (number? remote-tx)
+               (> local-tx remote-tx))
+        (recover-from-remote-tx-reset! repo client local-tx remote-tx remote-checksum message-type)
+        (case message-type
+          "hello" (handle-hello! repo client local-tx remote-tx remote-checksum)
+          "online-users" (handle-online-users! repo client message)
+          "presence" (handle-presence! client message)
+          "tx/batch/ok" (handle-tx-batch-ok! repo client remote-tx remote-checksum)
+          "pull/ok" (handle-pull-ok! repo client local-tx remote-tx remote-checksum message)
+          "changed" (handle-changed! repo client local-tx remote-tx)
+          "tx/reject" (handle-tx-reject! repo client message local-tx)
+          (fail-fast :db-sync/invalid-field
+                     {:repo repo :type message-type}))))))
 
 (defn- handle-pull-ok!
   [repo client local-tx remote-tx remote-checksum message]
