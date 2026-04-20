@@ -29,7 +29,8 @@
 (defonce command-ask "\\")
 (defonce *current-command (atom nil))
 
-(def query-doc
+(defn query-doc
+  []
   [:div {:on-pointer-down (fn [e] (.stopPropagation e))}
    [:div.font-medium.text-lg.mb-2 (t :query/examples-title)]
    [:ul.mb-1
@@ -41,7 +42,6 @@
     [:li.mb-1 [:code "{{query (and (between -7d +7d) (task Done))}}"]]
     [:li.mb-1 [:code "{{query (property key value)}}"]]
     [:li.mb-1 [:code "{{query (tags #tag)}}"]]]
-
    [:p
     (interpolate-sentence
      (t :query/examples-desc)
@@ -293,7 +293,7 @@
         :icon/numberedChildren]]
 
       ;; advanced
-      [[(t :property.built-in/query) (query-steps) query-doc :icon/query (t :editor.slash/group-advanced)]
+      [[(t :property.built-in/query) (query-steps) (query-doc) :icon/query (t :editor.slash/group-advanced)]
        [(t :editor.slash/advanced-query) (advanced-query-steps) (t :editor.slash/advanced-query-desc) :icon/query]
        [(t :editor.slash/query-function) [[:editor/input "{{function }}" {:backward-pos 2}]] (t :editor.slash/query-function-desc) :icon/queryCode]
        [(t :editor.slash/calculator)
