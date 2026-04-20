@@ -31,6 +31,7 @@
    "MM_dd_yyyy"
    "yyyy/MM/dd"
    "yyyy-MM-dd"
+   "yyyy-MM-dd EEE"
    "yyyy-MM-dd EEEE"
    "yyyy_MM_dd"
    "yyyyMMdd"

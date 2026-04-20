@@ -1,6 +1,7 @@
 (ns mobile.components.selection-toolbar
   "Selection action bar, activated when swipe on a block"
   (:require [frontend.db :as db]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -30,35 +31,35 @@
   []
   (let [close! close-selection-bar!]
     [{:id "copy"
-      :label "Copy"
+      :label (t :ui/copy)
       :system-icon "doc.on.doc"
       :handler (fn []
                  (editor-handler/copy-selection-blocks false)
                  (close!))}
      {:id "outdent"
-      :label "Outdent"
+      :label (t :mobile.toolbar/outdent)
       :system-icon "arrow.left"
       :handler (fn []
                  (editor-handler/on-tab :left))}
      {:id "indent"
-      :label "Indent"
+      :label (t :mobile.toolbar/indent)
       :system-icon "arrow.right"
       :handler (fn []
                  (editor-handler/on-tab :right))}
      {:id "delete"
-      :label "Delete"
+      :label (t :ui/delete)
       :system-icon "trash"
       :handler (fn []
                  (editor-handler/cut-selection-blocks false {:mobile-action-bar? true})
                  (close!))}
      {:id "copy-ref"
-      :label "Copy ref"
+      :label (t :mobile.toolbar/copy-ref)
       :system-icon "r.square"
       :handler (fn []
                  (editor-handler/copy-block-refs)
                  (close!))}
      {:id "copy-url"
-      :label "Copy url"
+      :label (t :mobile.toolbar/copy-url)
       :system-icon "link"
       :handler (fn []
                  (let [current-repo (state/get-current-repo)
@@ -68,7 +69,7 @@
                      (editor-handler/copy-block-ref! block-id tap-f)))
                  (close!))}
      {:id "unselect"
-      :label "Unselect"
+      :label (t :mobile.toolbar/unselect)
       :system-icon "xmark"
       :handler (fn []
                  (state/clear-selection!)

@@ -3,6 +3,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.fs :as fs]
@@ -393,17 +394,19 @@
                               (when url
                                 (notification/show!
                                  [:div.inline
-                                  [:span "Published to: "]
-                                  [:a {:target "_blank"
-                                       :href url}
-                                   url]]
+                                  (into [:span]
+                                        (i18n/interpolate-rich-text
+                                         (t :publish/published-to)
+                                         [[:a {:target "_blank"
+                                               :href url}
+                                           url]]))]
                                  :success
                                  false))))))
                 (p/catch (fn [error]
                            (js/console.error error)
-                           (notification/show! "Publish failed." :error))))
-            (notification/show! "Publish failed." :error)))
-        (notification/show! "Publish failed: invalid page." :error)))))
+                           (notification/show! (t :publish/publish-error) :error))))
+            (notification/show! (t :publish/publish-error) :error)))
+        (notification/show! (t :publish/invalid-page-error) :error)))))
 
 (defn unpublish-page!
   [page]
@@ -424,12 +427,12 @@
                 (do
                   (property-handler/remove-block-property! (:db/id page)
                                                            :logseq.property.publish/published-url)
-                  (notification/show! "Unpublished." :success false))
+                  (notification/show! (t :publish/unpublished) :success false))
                 (p/let [body (.text resp)]
                   (throw (ex-info "Unpublish failed"
                                   {:status (.-status resp)
                                    :body body})))))
             (p/catch (fn [error]
                        (js/console.error error)
-                       (notification/show! "Unpublish failed." :error))))
-        (notification/show! "Unpublish failed: missing page id." :error)))))
+                       (notification/show! (t :publish/unpublish-error) :error))))
+        (notification/show! (t :publish/unpublish-missing-page-id) :error)))))

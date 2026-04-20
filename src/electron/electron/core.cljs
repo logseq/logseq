@@ -9,6 +9,7 @@
             [electron.db :as db]
             [electron.exceptions :as exceptions]
             [electron.handler :as handler]
+            [electron.i18n :as i18n :refer [t]]
             [electron.logger :as logger]
             [electron.server :as server]
             [electron.updater :refer [init-updater] :as updater]
@@ -173,7 +174,7 @@
   (let [about-fn (fn []
                    (.showMessageBox dialog (clj->js {:title "Logseq"
                                                      :icon (node-path/join js/__dirname "icons/logseq.png")
-                                                     :message (str "Version " updater/electron-version)})))
+                                                     :message (t :electron/version updater/electron-version)})))
         template (if mac?
                    [{:label (.-name app)
                      :submenu [{:role "about"}
@@ -188,7 +189,7 @@
                    [])
         template (conj template
                        {:role "fileMenu"
-                        :submenu [{:label "New Window"
+                        :submenu [{:label (t :electron/new-window)
                                    :click (fn [] (handler/open-new-window! nil))
                                    :accelerator (if mac?
                                                   "CommandOrControl+N"
@@ -211,13 +212,13 @@
         template (conj template
                        (if mac?
                          {:role "help"
-                          :submenu [{:label "Official Documentation"
+                          :submenu [{:label (t :electron/official-docs)
                                      :click #(.openExternal shell "https://docs.logseq.com/")}]}
                          {:role "help"
-                          :submenu [{:label "Official Documentation"
+                          :submenu [{:label (t :electron/official-docs)
                                      :click #(.openExternal shell "https://docs.logseq.com/")}
                                     {:role "about"
-                                     :label "About Logseq"
+                                     :label (t :electron/about)
                                      :click about-fn}]}))
         ;; Enable Cmd/Ctrl+= Zoom In
         template (conj template
@@ -334,6 +335,7 @@
 
       (register-default-protocol-client! app)
       (set-app-menu!)
+      (i18n/on-locale-change! set-app-menu!)
       (setup-deeplink!)
 
       (.on app "second-instance"

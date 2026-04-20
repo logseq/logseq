@@ -239,22 +239,24 @@
             :entity (:entity error)
             :error (dissoc error :entity)))
 
-     (if errors
-       (do
-         (fix-invalid-blocks! conn errors)
-         (shared-service/broadcast-to-clients! :log [:db-invalid :error
-                                                     {:msg "Validation errors"
-                                                      :errors errors}])
-         (shared-service/broadcast-to-clients! :notification
-                                               [(str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed.")
-                                                :warning false]))
+    (if errors
+      (do
+        (fix-invalid-blocks! conn errors)
+        (shared-service/broadcast-to-clients! :log [:db-invalid :error
+                                                    {:msg "Validation errors"
+                                                     :errors errors}])
+        (shared-service/broadcast-to-clients! :notification
+                                              [nil :warning false nil nil
+                                               {:i18n-key :graph.validation/invalid-blocks-detected
+                                                :i18n-args [(count errors)]}]))
 
-       (shared-service/broadcast-to-clients! :notification
-                                             [(str "Your graph is valid! " (assoc (db-validate/graph-counts db entities) :datoms datom-count))
-                                              :success false]))
-     {:errors errors
-      :datom-count datom-count
-      :invalid-entity-ids invalid-entity-ids})))
+      (shared-service/broadcast-to-clients! :notification
+                                            [nil :success false nil nil
+                                             {:i18n-key :graph.validation/valid
+                                              :i18n-args [(assoc (db-validate/graph-counts db entities) :datoms datom-count)]}]))
+    {:errors errors
+     :datom-count datom-count
+     :invalid-entity-ids invalid-entity-ids})))
 
 (defn recompute-checksum-diagnostics
   [_repo conn {:keys [local-checksum remote-checksum] :as _sync-diagnostics}]

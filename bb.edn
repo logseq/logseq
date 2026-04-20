@@ -222,8 +222,17 @@
   lang:missing
   logseq.tasks.lang/list-missing
 
+  lang:pseudo
+  logseq.tasks.lang/list-pseudo
+
+  lang:format-dicts
+  logseq.tasks.lang/format-dicts
+
   lang:validate-translations
   logseq.tasks.lang/validate-translations
+
+  lang:lint-hardcoded
+  logseq.tasks.lang/lint-hardcoded
 
   ai:check-common-errors
   logseq.tasks.common-errors/check-common-errors}

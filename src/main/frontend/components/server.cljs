@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as string]
    [electron.ipc :as ipc]
+  [frontend.context.i18n :refer [t]]
    [frontend.handler.notification :as notification]
    [frontend.state :as state]
    [frontend.ui :as ui]
@@ -25,7 +26,7 @@
         *tokens (::tokens _state)
         changed? (not= @*tokens (:tokens server-state))]
     [:div.cp__server-tokens-panel.pt-6
-     [:h2.text-3xl.-translate-y-4 "Authorization tokens"]
+     [:h2.text-3xl.-translate-y-4 (t :server.token/title)]
      ;; items
      (let [update-value! (fn [idx k v] (swap! *tokens assoc-in [idx k] v))]
        (for [[idx {:keys [value name]}] (medley/indexed @*tokens)]
@@ -33,12 +34,12 @@
           {:key idx}
           [:input.form-input.basis-36
            {:auto-focus true
-            :placeholder "name"
+            :placeholder (t :server.token/name-placeholder)
             :value name
             :on-change #(let [value (.-value (.-target %))]
                           (update-value! idx :name value))}]
           [:input.form-input
-           {:placeholder "value"
+           {:placeholder (t :server.token/value-placeholder)
             :value value
             :on-change #(let [value (.-value (.-target %))]
                           (update-value! idx :value value))}]
@@ -49,19 +50,19 @@
                          (update-value! idx :value new-token)
                          (when input-el
                            (js/setTimeout (fn [] (.select input-el)) 64)))
-            :title "Regenerate token value"}
+            :title (t :server.token/regenerate-value)}
            [:span.flex.items-center (ui/icon "refresh")]]
           [:button.px-2.opacity-50.hover:opacity-90.active:opacity-100
            {:on-click #(reset! *tokens (into [] (medley/remove-nth idx @*tokens)))}
            [:span.flex.items-center (ui/icon "trash-x")]]]))
 
      [:p.flex.justify-end.pt-6.space-x-3
-      (ui/button "+ Add new token"
+      (ui/button (t :server.token/add-new)
                  :on-click #(swap! *tokens conj {})
                  :variant :outline)
-      (ui/button "Save"
+      (ui/button (t :ui/save)
                  :on-click (fn [] (-> (ipc/ipc :server/set-config {:tokens @*tokens})
-                                      (p/then #(notification/show! "Update tokens successfully!" :success))
+                                      (p/then #(notification/show! (t :server.token/update-success) :success))
                                       (p/catch #(js/console.error %))
                                       (p/finally #(close-panel))))
                  :disabled (not changed?))]]))
@@ -86,26 +87,29 @@
                                           (apply not=)))]
 
     [:div.cp__server-configs-panel.pt-5
-     [:h2.text-3xl.-translate-y-4 "Server configurations"]
+     [:h2.text-3xl.-translate-y-4 (t :server.config/title)]
 
-     [:div.item.flex.items-center.space-x-3
-      [:label.basis-96
-       [:strong "Host"]
+     [:div.flex.items-end.gap-3
+      [:div.flex.flex-col.gap-1.flex-1
+       [:strong (t :ui/host)]
        [:input.form-input
-        {:value     host
+        {:value     (or host "")
          :on-change #(let [value (.-value (.-target %))]
                        (swap! *configs assoc :host value))}]]
-
-      [:label
-       [:strong "Port (1 ~ 65535)"]
+      [:div.flex.flex-col.gap-1
+       {:class "w-40"}
+       [:strong (t :server.config/port-label)]
        [:input.form-input
         {:auto-focus true
-         :value      port
-         :min        "1"
-         :max        "65535"
-         :type       "number"
-         :on-change  #(let [value (.-value (.-target %))]
-                        (swap! *configs assoc :port value))}]]]
+         :value      (or port "")
+         :type       "text"
+         :inputMode  "numeric"
+         :pattern    "[0-9]*"
+         :on-change  #(let [value (util/evalue %)
+                            port (if (string/blank? value) 1 (util/sanitize-port-input value))]
+                        (swap! *configs assoc :port port))
+         :on-blur    #(let [value (.-value (.-target %))]
+                        (swap! *configs assoc :port (util/normalize-port-input value)))}]]]
 
      [:p.py-3.px-1
       [:label.flex.space-x-2.items-center
@@ -114,12 +118,12 @@
                        (swap! *configs assoc :autostart checked))
          :checked   (not (false? autostart))})
 
-       [:strong.select-none "Auto start server with the app launched"]]]
+       [:strong.select-none (t :server.config/auto-start-label)]]]
 
      [:p.flex.justify-end.pt-6.space-x-3
-      (ui/button "Reset" :variant :outline
+      (ui/button (t :server.config/reset) :variant :outline
                  :on-click #(reset! *configs (select-keys server-state [:host :port :autostart])))
-      (ui/button "Save & Apply"
+      (ui/button (t :server.config/save-and-apply)
                  :disabled (not changed?)
                  :on-click (fn []
                              (let [configs (select-keys @*configs [:host :port :autostart])]
@@ -129,6 +133,17 @@
                                               (when hp-changed?
                                                 (ipc/ipc :server/do :restart))))
                                    (p/catch #(notification/show! (str %) :error))))))]]))
+
+(defn- server-status-label
+  [status]
+  (-> (case status
+        :starting (t :server.status/starting)
+        :running (t :server.status/running)
+        :closing (t :server.status/closing)
+        :closed (t :server.status/closed)
+        :error (t :server.status/error)
+        (t :server.status/stopped))
+      string/upper-case))
 
 (rum/defc server-indicator
   [server-state]
@@ -149,7 +164,7 @@
 
     (hooks/use-effect!
      #(when error
-        (notification/show! (str "[Server] " error) :error))
+        (notification/show! (t :server/error-notification error) :error))
      [error])
 
     [:div.cp__server-indicator
@@ -162,22 +177,22 @@
 
                                                           (cond
                                                             running?
-                                                            {:title "Stop server"
+                                                            {:title (t :server/stop)
                                                              :options {:on-click #(ipc/ipc :server/do :stop)}
                                                              :icon [:span.text-red-500.flex.items-center (ui/icon "player-stop")]}
 
                                                             :else
-                                                            {:title "Start server"
+                                                            {:title (t :server/start)
                                                              :options {:on-click #(ipc/ipc :server/do :restart)}
                                                              :icon [:span.text-green-500.flex.items-center (ui/icon "player-play")]})
 
-                                                          {:title "Authorization tokens"
+                                                          {:title (t :server.token/title)
                                                            :options {:on-click #(shui/dialog-open!
                                                                                  (fn []
                                                                                    (panel-of-tokens shui/dialog-close!)))}
                                                            :icon (ui/icon "key")}
 
-                                                          {:title "Server configurations"
+                                                          {:title (t :server.config/title)
                                                            :options {:on-click #(shui/dialog-open!
                                                                                  (fn []
                                                                                    (panel-of-configs shui/dialog-close!)))}
@@ -187,7 +202,7 @@
                                                 [:div.links-header.flex.justify-center.py-2
                                                  [:span.ml-1.text-sm.opacity-70
                                                   (if-not running?
-                                                    (string/upper-case (or (:status server-state) "stopped"))
+                                                    (server-status-label status)
                                                     [:span.flex.flex-col.gap-1.text-xs.font-mono
                                                      [:a.hover:underline.flex.items-center {:href href}
                                                       href (shui/tabler-icon "external-link" {:size 12 :class "inline-block ml-1 pt-[1px]"})]
@@ -195,7 +210,7 @@
                                                        [:a.hover:underline.flex.items-center
                                                         {:on-click (fn []
                                                                      (util/copy-to-clipboard! (str href "/mcp"))
-                                                                     (notification/show! "MCP URL copied to clipboard!" :success))}
+                                                                     (notification/show! (t :server/mcp-url-copied) :success))}
                                                         (str href "/mcp")
                                                         (shui/tabler-icon "copy" {:size 12 :class "inline-block ml-1 mt-[1px]"})])])]]
                                                 (for [{:keys [hr? title options icon]} items]

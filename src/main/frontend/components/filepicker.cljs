@@ -1,9 +1,10 @@
 (ns frontend.components.filepicker
   "File picker"
-  (:require [rum.core :as rum]
+  (:require [cljs-drag-n-drop.core :as dnd]
+            [frontend.context.i18n :refer [t]]
+            [goog.dom :as gdom]
             [logseq.shui.ui :as shui]
-            [cljs-drag-n-drop.core :as dnd]
-            [goog.dom :as gdom]))
+            [rum.core :as rum]))
 
 (rum/defcs picker <
   (rum/local nil ::input)
@@ -43,4 +44,4 @@
                                              :height 28}})]
         [:div {:class "flex flex-col gap-px"}
          [:div {:class "font-medium text-muted-foreground"}
-          "Drag 'n' drop files here, or click to select files"]]]]]]))
+          (t :asset/drop-hint)]]]]]]))

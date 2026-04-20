@@ -7,7 +7,9 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.dicts :as dicts]
-            [logseq.tasks.util :as task-util]))
+            [logseq.tasks.lang-lint :as lang-lint]
+            [logseq.tasks.util :as task-util]
+            [rewrite-clj.node :as node]))
 
 (defn- get-dicts
   []
@@ -19,28 +21,48 @@
        (map (juxt :value :label))
        (into {})))
 
-(defn list-langs
-  "List translated languages with their number of translations"
-  []
-  (let [dicts (get-dicts)
-        en-count (count (dicts :en))
-        langs (get-languages)]
-    (->> dicts
-         (map (fn [[locale dicts]]
-                [locale
-                 (Math/round (* 100.0 (/ (count dicts) en-count)))
-                 (count dicts)
-                 (langs locale)]))
-         (sort-by #(nth % 2) >)
-         (map #(zipmap [:locale :percent-translated :translation-count :language] %))
-         task-util/print-table)))
-
 (defn- shorten [s length]
   (if (< (count s) length)
     s
     (string/replace (str (subs s 0 length) "...")
-                    ;; Escape newlines for multi-line translations like tutorials
+                    ;; Keep shortened table rows single-line for multi-line translations.
                     "\n" "\\n")))
+
+(defn list-langs
+  "List translated languages with their number of translations"
+  []
+  (let [dicts (get-dicts)
+        langs (get-languages)]
+    (->> (lang-lint/translation-summary-stats dicts)
+         (lang-lint/sort-translation-summary-stats)
+         (map (fn [{:keys [lang translation-count untranslated-count same-as-en-count]}]
+                {:locale lang
+                 :translation-count translation-count
+                 :untranslated-count (if (= lang :en) "-" untranslated-count)
+                 :same-as-en-count (if (= lang :en) "-" same-as-en-count)
+                 :language (langs lang)}))
+         task-util/print-table)))
+
+(defn list-pseudo
+  "List translations for LOCALE whose localized value is identical to English."
+  [& args]
+  (let [lang (or (some-> (first args) keyword)
+                 (task-util/print-usage "LOCALE"))
+        langs (get-languages)
+        dicts (get-dicts)]
+    (when-not (contains? langs lang)
+      (println "Language" lang "does not have an entry in frontend.dicts/languages")
+      (System/exit 1))
+    (let [findings (->> (lang-lint/identical-translation-findings dicts lang)
+                        (map (fn [{:keys [translation-key default-value]}]
+                               {:translation-key translation-key
+                                :same-as-en-value default-value
+                                :file (str "dicts/" (-> lang name string/lower-case) ".edn")}))
+                        (sort-by (juxt :file :translation-key)))]
+      (if (empty? findings)
+        (println "Language" lang "does not contain translations identical to English!")
+        (task-util/print-table
+         (map #(update % :same-as-en-value shorten 50) findings))))))
 
 (defn list-missing
   "List missing translations for a given language"
@@ -49,7 +71,7 @@
                  (task-util/print-usage "LOCALE [--copy]"))
         options (cli/parse-opts (rest args) {:coerce {:copy :boolean}})
         _ (when-not (contains? (get-languages) lang)
-            (println "Language" lang "does not have an entry in dicts/core.cljs")
+            (println "Language" lang "does not have an entry in frontend.dicts/languages")
             (System/exit 1))
         dicts (get-dicts)
         all-missing (select-keys (dicts :en)
@@ -83,21 +105,138 @@
                             result invalid-keys))]
       (spit (fs/file path) new-content))))
 
+(def ^:private dicts-dir
+  (fs/path "src/resources/dicts"))
+
+(def ^:private ignored-dict-node-tags
+  #{:comment :newline :whitespace})
+
+(defn- ignored-dict-node?
+  [node]
+  (contains? ignored-dict-node-tags (node/tag node)))
+
+(defn- dict-map-node
+  [root]
+  (->> (:children root)
+       (remove ignored-dict-node?)
+       first))
+
+(defn- parse-dict-entries
+  [text]
+  (let [root (rewrite/parse-string text)
+        map-node (dict-map-node root)]
+    (when-not (= :map (node/tag map-node))
+      (println "Expected a top-level map in dictionary file.")
+      (System/exit 1))
+    (let [entry-nodes (->> (:children map-node)
+                           (remove ignored-dict-node?))]
+      (when (odd? (count entry-nodes))
+        (println "Encountered an uneven number of top-level dictionary nodes.")
+        (System/exit 1))
+      (mapv (fn [[key-node value-node]]
+              {:key (rewrite/sexpr key-node)
+               :value-node value-node})
+            (partition 2 entry-nodes)))))
+
+(defn- render-dict-entry
+  [{:keys [key value-node]}]
+  (str " " key " " value-node))
+
+(defn- key-namespace-root
+  [key]
+  (some-> key namespace (string/split #"\.") first))
+
+(defn- key-leaf
+  [key]
+  (name key))
+
+(defn- compare-dict-keys
+  [key-a key-b]
+  (let [namespace-a (namespace key-a)
+        namespace-b (namespace key-b)
+        root-a (key-namespace-root key-a)
+        root-b (key-namespace-root key-b)
+        root-diff (compare root-a root-b)]
+    (cond
+      (not= 0 root-diff)
+      root-diff
+
+      (not= namespace-a root-a)
+      (if (= namespace-b root-b) 1
+          (let [namespace-diff (compare namespace-a namespace-b)]
+            (if (zero? namespace-diff)
+              (compare (key-leaf key-a) (key-leaf key-b))
+              namespace-diff)))
+
+      (not= namespace-b root-b)
+      -1
+
+      :else
+      (compare (key-leaf key-a) (key-leaf key-b)))))
+
+(defn- render-dict
+  [entries]
+  (let [sorted-entries (sort #(neg? (compare-dict-keys (:key %1) (:key %2))) entries)
+        lines (loop [remaining sorted-entries
+                     previous-namespace nil
+                     acc ["{"]]
+                (if-let [{:keys [key] :as entry} (first remaining)]
+                  (let [current-namespace (namespace key)
+                        acc (cond-> acc
+                              (and previous-namespace
+                                   (not= previous-namespace current-namespace))
+                              (conj "")
+                              true
+                              (conj (render-dict-entry entry)))]
+                    (recur (next remaining) current-namespace acc))
+                  (conj acc "}")))]
+    (str (string/join "\n" lines) "\n")))
+
+(defn- dict-file-paths
+  []
+  (->> (fs/list-dir dicts-dir)
+       (filter #(string/ends-with? (str %) ".edn"))
+       (sort-by fs/file-name)))
+
+(defn format-dicts
+  "Formats dictionary files by full-key sort order and inserts a blank line
+   between namespace groups. Use --check to fail when any file would change."
+  [& args]
+  (let [check? (contains? (set args) "--check")
+        changed? (volatile! false)]
+    (doseq [path (dict-file-paths)]
+      (let [file-name (fs/file-name path)
+            current-text (slurp (str path))
+            output-text (-> current-text
+                            parse-dict-entries
+                            render-dict)]
+        (if (= current-text output-text)
+          (println file-name ": already formatted")
+          (do
+            (vreset! changed? true)
+            (if check?
+              (println file-name "would change")
+              (do
+                (spit (str path) output-text)
+                (println file-name ": formatted")))))))
+    (when (and check? @changed?)
+      (System/exit 1))))
+
 (defn- validate-non-default-languages
   "This validation finds any translation keys that don't exist in the default
   language English. Logseq needs to work out of the box with its default
   language. This catches mistakes where another language has accidentally typoed
   keys or added ones without updating :en"
-  [{:keys [fix?]}]
+  [fix?]
   (let [dicts (get-dicts)
         ;; For now defined as :en but clj-kondo analysis could be more thorough
         valid-keys (set (keys (dicts :en)))
         invalid-dicts
         (->> (dissoc dicts :en)
-             (mapcat (fn [[lang get-dicts]]
+             (mapcat (fn [[lang lang-dicts]]
                        (map
                         #(hash-map :language lang :invalid-key %)
-                        (set/difference (set (keys get-dicts))
+                        (set/difference (set (keys lang-dicts))
                                         valid-keys)))))]
     (if (empty? invalid-dicts)
       (println "All non-default translations have valid keys!")
@@ -107,131 +246,83 @@
         (when fix?
           (delete-invalid-non-default-languages
            (update-vals (group-by :language invalid-dicts) #(map :invalid-key %)))
-          (println "These invalid non-language keys have been removed."))
+          (println "These invalid translation keys have been removed from non-default dictionaries."))
         (System/exit 1)))))
 
-;; Command to check for manual entries:
-;; grep -E -oh  '\(t [^ ):]+' -r src/main
-(def manual-ui-dicts
-  "Manual list of ui translations because they are dynamic i.e. keyword isn't
-  first arg. Only map values are used in linter as keys are for easily scanning
-  grep result."
+(def ^:private i18n-lint-launcher-path
+  (fs/absolutize "bin/logseq-i18n-lint"))
 
-  {"(t (shortcut-helper/decorate-namespace" [] ;; shortcuts related so can ignore
-   "(t (keyword" [:color/yellow :color/red :color/pink :color/green :color/blue
-                  :color/purple :color/gray]
-   "(tt (keyword" [:left-side-bar/assets :left-side-bar/tasks]
+(def ^:private i18n-lint-config-path
+  (fs/absolutize ".i18n-lint.toml"))
 
-   ;; from 3 files
-   "(t (if" [:asset/show-in-folder :asset/open-in-browser
-             :search-item/page
-             :page/make-private :page/make-public]
-   "(t (name" [] ;; shortcuts related
-   "(t (dh/decorate-namespace" [] ;; shortcuts related
-   "(t prompt-key" [:select/default-prompt :select/default-select-multiple :select.graph/prompt]
-   ;; All args to ui/make-confirm-modal are not keywords
-   "(t title" []
-   "(t (or title-key" [:views.table/live-query-title :views.table/default-title :all-pages/table-title]
-   "(t subtitle" [:asset/physical-delete]})
-
-(defn- delete-not-used-key-from-dict-file
-  [invalid-keys]
-  (let [paths (fs/list-dir "src/resources/dicts")]
-    (doseq [path paths]
-      (let [result (rewrite/parse-string (String. (fs/read-all-bytes path)))
-            new-content (str (reduce
-                              (fn [result k]
-                                (rewrite/dissoc result k))
-                              result invalid-keys))]
-        (spit (fs/file path) new-content)))))
-
-(defn- validate-ui-translations-are-used
-  "This validation checks to see that translations done by (t ...) are equal to
-  the ones defined for the default :en lang. This catches translations that have
-  been added in UI but don't have an entry or translations no longer used in the UI"
-  [{:keys [fix?]}]
-  (let [actual-dicts (->> (shell {:out :string}
-                                 ;; This currently assumes all ui translations
-                                 ;; use (t and src/main. This can easily be
-                                 ;; tweaked as needed
-                                 "grep -E -oh '\\(tt? :[^ )]+' -r src/main")
-                          :out
-                          string/split-lines
-                          (map #(keyword (subs % 4)))
-                          (concat (mapcat val manual-ui-dicts))
-                          ;; Temporarily unused as they will be brought back soon
-                          (concat [:download])
-                          set)
-        expected-dicts (set (remove #(re-find #"^(command|shortcut)\." (str (namespace %)))
-                                    (keys (:en (get-dicts)))))
-        actual-only (set/difference actual-dicts expected-dicts)
-        expected-only (set/difference expected-dicts actual-dicts)]
-    (if (and (empty? actual-only) (empty? expected-only))
-      (println "All defined :en translation keys match the ones that are used!")
-      (do
-        (when (seq actual-only)
-          (println "\nThese translation keys are invalid because they are used in the UI but not defined:")
-          (task-util/print-table (map #(hash-map :invalid-key %) actual-only)))
-        (when (seq expected-only)
-          (println "\nThese translation keys are invalid because they are not used in the UI:")
-          (task-util/print-table (map #(hash-map :invalid-key %) expected-only))
-          (when fix?
-            (delete-not-used-key-from-dict-file expected-only)
-            (println "These invalid ui keys have been removed.")))
-        (System/exit 1)))))
-
-(def allowed-duplicates
-  "Allows certain keys in a language to have the same translation
-   as English. Happens more in romance languages but pretty rare otherwise"
-  {:fr #{:port :type :help/docs :search-item/page :shortcut.category/navigating :text/image
-         :settings-of-plugins :code :shortcut.category/plugins}
-   :de #{:graph :host :plugins :port
-         :settings-of-plugins :shortcut.category/navigating
-         :settings-page/enable-tooltip :settings-page/plugin-system}
-   :ca #{:port :settings-page/tab-editor :settings-page/tab-general}
-   :es #{:settings-page/tab-general :settings-page/tab-editor}
-   :it #{:home :handbook/home :host :help/awesome-logseq
-         :settings-page/tab-account :settings-page/tab-editor}
-   :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
-   :pl #{:port :home :host :plugin/marketplace}
-   :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards :page/backlinks
-            :host :settings-page/tab-editor :shortcut.category/plugins :settings-of-plugins
-            :on-boarding/quick-tour-journal-page-desc-2 :plugin/downloads :plugin/popular
-            :settings-page/plugin-system}
-   :pt-PT #{:plugins :settings-of-plugins :plugin/downloads :right-side-bar/flashcards
-            :settings-page/enable-flashcards :settings-page/plugin-system}
-   :nb-NO #{:port :type :right-side-bar/flashcards :settings-page/enable-flashcards
-            :settings-page/tab-editor :linked-references/filter-heading}
-   :tr #{:help/awesome-logseq}
-   :id #{:host :port}
-   :cs #{:host :port :help/blog :settings-page/tab-editor}})
-
-(defn- validate-languages-dont-have-duplicates
-  "Looks up duplicates for all languages"
+(defn- ensure-i18n-lint-ready!
   []
-  (let [dicts (get-dicts)
-        en-dicts (dicts :en)
-        invalid-dicts
-        (->> (dissoc dicts :en)
-             (mapcat
-              (fn [[lang lang-dicts]]
-                (keep
-                 #(when (= (en-dicts %) (lang-dicts %))
-                    {:translation-key %
-                     :lang lang
-                     :duplicate-value (shorten (lang-dicts %) 70)})
-                 (keys (apply dissoc lang-dicts (allowed-duplicates lang))))))
-             (sort-by (juxt :lang :translation-key)))]
+  (when-not (fs/exists? i18n-lint-launcher-path)
+    (println "logseq-i18n-lint launcher not found at" (str i18n-lint-launcher-path))
+    (System/exit 1))
+  (when-not (fs/exists? i18n-lint-config-path)
+    (println "i18n lint config not found at" (str i18n-lint-config-path))
+    (System/exit 1)))
+
+(defn- run-i18n-lint-command!
+  [subcommand cli-args]
+  (ensure-i18n-lint-ready!)
+  (let [cmd (into ["bash"
+                   (str i18n-lint-launcher-path)
+                   "-c"
+                   (str i18n-lint-config-path)
+                   subcommand]
+                  cli-args)
+        result (apply shell {:continue true
+                             :out :inherit
+                             :err :inherit}
+                      cmd)]
+    (when (pos? (:exit result))
+      (System/exit (:exit result)))))
+
+(defn- check-translation-keys
+  "Use logseq-i18n-lint to detect unused translation keys."
+  [args]
+  (run-i18n-lint-command! "check-keys" args))
+
+(defn- validate-rich-translations
+  "Checks that localized rich translations remain rich zero-arg functions.
+   Missing translations are allowed, but once a locale defines a rich key it
+   must preserve the same renderable contract as English."
+  []
+  (let [invalid-dicts (lang-lint/rich-translation-mismatch-findings (get-dicts))]
     (if (empty? invalid-dicts)
-      (println "All languages have no duplicate English values!")
+      (println "All rich translations preserve English render contracts!")
       (do
-        (println "These translations keys are invalid because they are just copying the English value:")
+        (println "These translation keys are invalid because they no longer preserve English rich render contracts:")
         (task-util/print-table invalid-dicts)
+        (System/exit 1)))))
+
+(defn- validate-translation-placeholders
+  "Checks that every localized string uses the same placeholder set as English.
+   Missing translations are allowed because Tongue falls back to :en, but once
+   a locale defines a string it must preserve the placeholder contract."
+  []
+  (let [invalid-dicts (lang-lint/placeholder-mismatch-findings (get-dicts))]
+    (if (empty? invalid-dicts)
+      (println "All translations preserve English placeholder contracts!")
+      (do
+        (println "These translation keys are invalid because their placeholders do not match English:")
+        (task-util/print-table
+         (map #(dissoc % :default-value :localized-value) invalid-dicts))
         (System/exit 1)))))
 
 (defn validate-translations
   "Runs multiple translation validations that fail fast if one of them is invalid"
   [& args]
-  (validate-non-default-languages {:fix? (contains? (set args) "--fix")})
-  (validate-ui-translations-are-used {:fix? (contains? (set args) "--fix")})
-  (validate-languages-dont-have-duplicates))
+  (validate-non-default-languages (contains? (set args) "--fix"))
+  (check-translation-keys args)
+  (validate-rich-translations)
+  (validate-translation-placeholders))
+
+(defn lint-hardcoded
+  "Run logseq-i18n-lint to lint likely hardcoded user-facing strings in UI-oriented source files.
+   Use -w or --warn-only to report findings without failing and -g or --git-changed to scan
+   only files changed in git status."
+  [& args]
+  (run-i18n-lint-command! "lint" args))
