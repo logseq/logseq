@@ -69,18 +69,18 @@
                         (do (set-dir! val dir nil)
                             (shui/dialog-close!))
                         (notification/show!
-                         (util/format "Alias name of [%s] already exists!" val) :warning))))]
+                         (t :asset/alias-already-exists val) :warning))))]
 
     [:div.cp__assets-alias-name-content
-     [:h1.text-2xl.opacity-90.mb-6 "What's the alias name of this selected directory?"]
-     [:p [:strong "Directory path:"]
+     [:h1.text-2xl.opacity-90.mb-6 (t :asset/alias-name-dialog-title)]
+     [:p [:strong (t :asset/alias-directory-path-label)]
       [:a {:on-click #(when (util/electron?)
                         (js/apis.openPath dir))} dir]]
-     [:p [:strong "Alias name:"]
+     [:p [:strong (t :asset/alias-name-label)]
       [:input.px-1.border.rounded
        {:autoFocus   true
         :value       val
-        :placeholder "eg. Books"
+        :placeholder (t :asset/alias-name-placeholder)
         :on-change   (fn [^js e]
                        (set-val! (util/trim-safe (.. e -target -value))))
         :on-key-up   (fn [^js e]
@@ -90,7 +90,7 @@
 
      [:div.pt-6.flex.justify-end
       (ui/button
-       "Save"
+       (t :ui/save)
        :disabled (string/blank? val)
        :on-click on-submit)]]))
 
@@ -181,20 +181,20 @@
 
                                    :dune)))
                :input-opts   {:class       "cp__assets-alias-ext-input"
-                              :placeholder "E.g. mp3"
+                              :placeholder (t :asset/file-extension-placeholder)
                               :on-blur
                               #(reset! *ext-editing-dir nil)}})
 
              [:small.ext-label.is-plus
               {:on-click #(reset! *ext-editing-dir dir)}
-              (ui/icon "plus") "Acceptable file extensions"])]
+              (ui/icon "plus") (t :asset/acceptable-file-extensions)])]
 
           [:span.ctrls.flex.space-x-3.text-xs.opacity-30.hover:opacity-100.whitespace-nowrap.hidden.mt-1
            [:a {:on-click #(rm-dir dir)} (ui/icon "trash-x")]]]])]
 
      [:p.pt-2
       (ui/button
-       "+ Add directory"
+       (t :asset/add-directory)
        :on-click #(p/let [path (ipc/ipc :openDialog)]
                     (when-not (or (string/blank? path)
                                   (pick-exist path))
@@ -213,7 +213,7 @@
     [:div.cp__assets-settings.panel-wrap
      [:div.it
       [:label.block.text-sm.font-medium.leading-5.opacity-70
-       "Alias directories"]
+      (t :asset/alias-directories)]
       [:div (ui/toggle
              alias-enabled?
              #(state/set-assets-alias-enabled! (not alias-enabled?))
@@ -223,7 +223,7 @@
 
      (when alias-enabled?
        [:div.pt-4
-        [:h2.font-bold.opacity-80 "Selected directories:"]
+        [:h2.font-bold.opacity-80 (t :asset/selected-directories)]
         (alias-directories)])]))
 
 (rum/defc edit-external-url-form
@@ -261,9 +261,9 @@
                            (p/then #(when on-saved (on-saved asset-block false)))
                            (p/catch err-handle)
                            (p/finally #(set-saving? false))))))}
-     [:label [:span.block.pb-2.text-sm.opacity-60 "Asset title:"]
+     [:label [:span.block.pb-2.text-sm.opacity-60 (t :asset/title-label)]
       (shui/input {:small true :default-value title :name "title"})]
-     [:label [:span.block.pb-2.text-sm.opacity-60 "Asset external url:"]
+     [:label [:span.block.pb-2.text-sm.opacity-60 (t :asset/external-url-label)]
       [:span.flex.items-center.gap-2
        (shui/input {:small true :default-value url :name "src"})
        (when (util/electron?)
@@ -272,14 +272,14 @@
            :on-click (fn [^js e]
                        (.preventDefault e)
                        (p/let [^js ret (ipc/ipc :showOpenDialog {:properties ["openFile"]
-                                                                 :title "Select Asset File"})]
+                                                                 :title (t :asset/select-file)})]
                          (let [file-path (some-> ret (bean/->clj) :filePaths (first))]
                            (when (not (string/blank? file-path))
                              (let [^js input (-> (.-target e) (.closest "form") (.querySelector "input[name='src']"))]
                                (set! (.-value input) file-path))))))}
-          "Select from disk"))]]
+          (t :asset/select-from-disk)))]]
      [:div.flex.justify-end.pt-3
-      (ui/button (if create? "Create" "Save") {:disabled saving?})]]))
+      (ui/button (if create? (t :ui/create) (t :ui/save)) {:disabled saving?})]]))
 
 (rum/defc edit-external-url-content
   [asset-block pdf-current]
@@ -300,7 +300,7 @@
           (shui/alert
            {:variant "warning"}
            (shui/alert-description
-            "Creating a local asset from an external one. PDF annotations require a local asset to work properly."))
+            (t :asset/create-local-copy-warning)))
 
           (let [title (util/node-path.basename url)]
             (edit-external-url-form asset-block {:url url :title title :on-saved on-saved!}))])))])

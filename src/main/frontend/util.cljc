@@ -1385,3 +1385,19 @@
    (defn rtc-test?
      []
      (string/includes? js/window.location.search "?rtc-test=true")))
+
+#?(:cljs
+   (defn sanitize-port-input
+     "Strips all non-digit characters from a port input string."
+     [value]
+     (some-> value
+             trim-safe
+             (string/replace #"\D" ""))))
+
+#?(:cljs
+   (defn normalize-port-input
+     "Normalizes a port input to a valid port number string (1–65535), or nil."
+     [value]
+     (let [digits (sanitize-port-input value)]
+       (when (seq digits)
+         (str (-> digits js/parseInt (max 1) (min 65535)))))))

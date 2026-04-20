@@ -85,7 +85,7 @@
   []
   (shui/dialog-open!
    (fn [_close] (modal-inner))
-   {:label "user-login"
+   {:label :user-login
     :content-props {:onPointerDownOutside #(if (by-id "#user-auth-login")
                                              (let [inputs (sel ".ls-authenticator-content form input:not([type=checkbox])")
                                                    inputs (some->> inputs (map (fn [^js e] (.-value e))) (remove string/blank?))]

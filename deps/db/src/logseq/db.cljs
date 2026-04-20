@@ -522,6 +522,14 @@
   (when db
     (d/entity db (get-first-page-by-name db page-name))))
 
+(defn get-journal-page-by-day
+  "Get a journal page given its :block/journal-day value."
+  [db journal-day]
+  (when (and db journal-day)
+    (when-let [eid (some-> (first (d/datoms db :avet :block/journal-day journal-day))
+                           :e)]
+      (d/entity db eid))))
+
 (def get-built-in-page db-db/get-built-in-page)
 
 (def library? db-db/library?)

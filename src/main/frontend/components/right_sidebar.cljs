@@ -11,7 +11,6 @@
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
@@ -35,9 +34,9 @@
   (when-not (util/sm-breakpoint?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
       (shui/button-ghost-icon :layout-sidebar-right
-                              {:title (t :right-side-bar/toggle-right-sidebar)
-                               :class "toggle-right-sidebar"
-                               :on-click ui-handler/toggle-right-sidebar!}))))
+                              {:class "toggle-right-sidebar"
+                               :on-click ui-handler/toggle-right-sidebar!})
+      (t :sidebar.right/toggle))))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
@@ -76,7 +75,7 @@
 (rum/defc search-title < rum/reactive
   [*input]
   (let [input (rum/react *input)
-        input' (if (string/blank? input) "Blank input" input)]
+        input' (if (string/blank? input) (t :search/blank-input) input)]
     [:span.overflow-hidden.text-ellipsis input']))
 
 (rum/defc sidebar-search
@@ -114,20 +113,20 @@
       (case (keyword block-type)
         :contents
         (when-let [page (db/get-page "Contents")]
-          [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
+          [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :page/contents)]
            (page-cp repo (str (:block/uuid page)))])
 
         :help
-        [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :right-side-bar/help)] (onboarding/help)]
+        [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :nav/help)] (onboarding/help)]
 
         :page-graph
-        [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :right-side-bar/page-graph)]
+        [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :graph.page/title)]
          (page/page-graph)]
 
         :block-ref
         (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
           (when-let [block (db/entity repo lookup)]
-            [(t :right-side-bar/block-ref)
+            [(t :reference/blocks)
              (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
 
         :block
@@ -149,7 +148,7 @@
          (sidebar-search repo block-type init-key db-id *db-id)]
 
         :shortcut-settings
-        [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help/shortcuts)]
+        [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help.shortcuts/label)]
          (shortcut-settings)]
 
         :rtc
@@ -193,22 +192,22 @@
         block (when (integer? db-id) (db/entity db-id))
         page? (or (contains? #{:page :contents} type) (ldb/page? block))]
     [:<>
-     (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close))
-     (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-close-others)))
+     (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :sidebar.right/close))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :sidebar.right/close-others)))
      (when multi-items? (menu-item {:on-click (fn []
                                                 (state/clear-sidebar-blocks!)
-                                                (state/hide-right-sidebar!))} (t :right-side-bar/pane-close-all)))
+                                                (state/hide-right-sidebar!))} (t :sidebar.right/close-all)))
      (when (and (not collapsed?) multi-items?) [:hr.menu-separator])
-     (when-not collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-collapse)))
-     (when multi-items? (menu-item {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :right-side-bar/pane-collapse-others)))
-     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :right-side-bar/pane-collapse-all)))
+     (when-not collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :sidebar.right/collapse)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :sidebar.right/collapse-others)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :sidebar.right/collapse-all)))
      (when (and collapsed? multi-items?) [:hr.menu-separator])
-     (when collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand)))
-     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :right-side-bar/pane-expand-all)))
+     (when collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :sidebar.right/expand)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :sidebar.right/expand-all)))
      (when page? [:hr.menu-separator])
      (when page?
        (menu-item {:on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
-                  (t :right-side-bar/pane-open-as-page)))]))
+                  (t :sidebar.right/open-as-page)))]))
 
 (rum/defc drop-indicator
   [idx drag-to]
@@ -278,23 +277,26 @@
              [:div.ml-1.font-medium.text-sm.overflow-hidden.whitespace-nowrap
               title]]
             [:.item-actions.flex.items-center
-             (shui/button
-              {:title (t :right-side-bar/pane-more)
-               :class "px-2 py-2 h-8 w-8 text-muted-foreground"
-               :variant :ghost
-               :on-click #(shui/popup-show!
-                           (.-target %)
-                           (actions-menu-content db-id idx block-type collapsed? block-count)
-                           {:as-dropdown? true
-                            :content-props {:on-click (fn [] (shui/popup-hide!))}})}
-              (ui/icon "dots"))
+             (ui/tooltip
+              (shui/button
+               {:class "px-2 py-2 h-8 w-8 text-muted-foreground"
+                :variant :ghost
+                :on-click #(shui/popup-show!
+                            (.-target %)
+                            (actions-menu-content db-id idx block-type collapsed? block-count)
+                            {:as-dropdown? true
+                             :content-props {:on-click (fn [] (shui/popup-hide!))}})}
+               (ui/icon "dots"))
+              (t :sidebar.right/more))
 
-             (shui/button
-              {:title (t :right-side-bar/pane-close)
-               :variant :ghost
-               :class "px-2 py-2 h-8 w-8 text-muted-foreground"
-               :on-click #(state/sidebar-remove-block! idx)}
-              (ui/icon "x"))]]
+             (ui/tooltip
+              (shui/button
+               {:variant :ghost
+                :class "px-2 py-2 h-8 w-8 text-muted-foreground"
+                :on-click #(state/sidebar-remove-block! idx)}
+               (ui/icon "x"))
+              (t :sidebar.right/close))]
+            ]
 
            [:div {:role "region"
                   :id (str "sidebar-panel-content-" idx)
@@ -335,7 +337,7 @@
                :file
                (get-in match [:path-params :path])
 
-               (date/journal-name))]
+               (db/get-today-journal-title))]
     (when page
       (string/lower-case page))))
 
@@ -424,7 +426,7 @@
      {:ref              el-ref
       :role             "separator"
       :aria-orientation "vertical"
-      :aria-label       (t :right-side-bar/separator)
+      :aria-label       (t :sidebar.right/resize-handle)
       :aria-valuemin    (* min-ratio 100)
       :aria-valuemax    (* max-ratio 100)
       :aria-valuenow    50
@@ -477,7 +479,7 @@
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                      (state/sidebar-add-block! repo "contents" :contents))}
-          (t :right-side-bar/contents)]]
+          (t :page/contents)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn []
@@ -486,12 +488,12 @@
                                                                         repo
                                                                         page
                                                                         :page-graph)))}
-          (t :right-side-bar/page-graph)]]
+          (t :graph.page/title)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                      (state/sidebar-add-block! repo "help" :help))}
-          (t :right-side-bar/help)]]
+          (t :nav/help)]]
 
         (for [{:keys [db-id block-type label]} (dev-sidebar-items developer-mode?)]
           [:div.text-sm {:key (str "dev-sidebar-item-" (name block-type))}
@@ -507,7 +509,7 @@
              (sidebar-item repo idx db-id block-type block-count)
              (str "sidebar-block-" db-id)))
          [:div.p-4
-          [:span.font-medium.opacity-50 "Loading ..."]])]]]))
+          [:span.font-medium.opacity-50 (t :ui/loading)]])]]]))
 
 (rum/defcs sidebar < rum/reactive
   [state]

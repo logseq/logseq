@@ -7,7 +7,7 @@
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :refer [interpolate-rich-text t]]
             [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.handler.common.plugin :as plugin-common-handler]
@@ -129,11 +129,11 @@
           uid (keyword (str "plugin-illegal-package-error-" (hash url)))]
       (notification/show!
        [:div.flex.flex-col.gap-2
-        [:div "Failed to parse the plugin package config."]
+        [:div (t :plugin.package-config/parse-error)]
         [:div.text-xs.opacity-70.break-all package-json-path]
         (when (= type :external)
           [:div.text-xs.opacity-70
-           "Removing it only detaches the plugin from Logseq and keeps the source folder untouched."])
+           (t :plugin.package-config/detach-desc)])
         [:div.flex.items-center.gap-2.pt-1
          (shui/button
           {:size :sm
@@ -143,17 +143,17 @@
                                      (notification/clear! uid)
                                      (notification/show!
                                       (if (= type :installed)
-                                        (str "Removed broken plugin \"" id "\".")
-                                        "Removed the broken plugin from the plugin list.")
+                                        (t :plugin.package-config/remove-installed-success id)
+                                        (t :plugin.package-config/remove-external-success))
                                       :success)))
                            (p/catch (fn [error]
                                       (notification/show!
-                                       (str "Failed to remove the broken plugin.\n" error)
+                                       (str (t :plugin.package-config/remove-error) "\n" error)
                                        :error)))))}
           (t :plugin/uninstall))]]
        :error false uid)
       true)
-    (notification/show! "Illegal Logseq plugin package." :error)))
+    (notification/show! (t :plugin/invalid-package) :error)))
 
 (defn setup-global-apis-for-web!
   []
@@ -320,7 +320,7 @@
                        (case (keyword status)
                          :completed
                          (let [{:keys [id dst name title theme web-pkg]} payload
-                               name (or title name "Untitled")]
+                               name (or title name (t :ui/untitled))]
                            (if only-check
                              (state/consume-updates-from-coming-plugin! payload false)
                              (if (plugin-common-handler/installed? id)
@@ -348,7 +348,7 @@
                                                 (t :plugin/installed-plugin name) :success))))
                                    (p/catch (fn [^js e]
                                               (notification/show!
-                                               (str "Install failed: " name "\n" (.-message e))
+                                               (t :plugin/install-error name (.-message e))
                                                :error)))))))
 
                          :error
@@ -360,6 +360,9 @@
                                             [(t :plugin/up-to-date ":)") :success]
 
                                             [error-code :error])
+                               msg (cond-> msg
+                                     (keyword? msg)
+                                     name)
                                pending? (seq (:plugin/updates-pending @state/state))]
 
                            (if (and only-check pending?)
@@ -373,9 +376,10 @@
                                ;; notify human tips
                                (notification/show!
                                 (str
-                                 (if (= :error type) "[Error]" "")
+                                 (if (= :error type) (t :ui/error) "")
                                  "<" (:id payload) "> "
-                                 msg) type)))
+                                 msg)
+                                type)))
 
                            (when-not fake-error?
                              (js/console.error "Update Error:" (:error-code payload))))
@@ -651,12 +655,13 @@
        [:h1.opacity-90.font-bold.pb-1.flex.item-center.gap-1
         [:span.text-red-rx-10.flex.items-center (shui/tabler-icon "alert-triangle-filled" {:size 20})]
         [:span name "  " [:code "#" (str pid)]]])
-     [:p
-      "If any plugin is unavailable or you think it contains malicious code,
-        please email " [:a.hover:underline {:href (str "mailto://support@logseq.com?subject=Report plugin from Logseq Marketplace"
-                                                       (when pid (str " (#" pid ")")))} "support@logseq.com"]
-      " . Mention the name of the plugin and the URL of its GitHub repository.
-       The Logseq team usually responds within a business day."]])))
+     (into [:p]
+           (interpolate-rich-text
+            (t :plugin/report-modal-desc)
+            [[:a.hover:underline
+              {:href (str "mailto://support@logseq.com?subject=Report plugin from Logseq Marketplace"
+                          (when pid (str " (#" pid ")")))}
+              "support@logseq.com"]]))])))
 
 (defn parse-user-md-content
   [content {:keys [url]}]
@@ -685,12 +690,12 @@
             (and (string/blank? (string/trim content)) (throw (js/Error. "blank readme content")))
             (state/set-state! :plugin/active-readme [content item])
             (shui/dialog-open! (fn [_] (display))
-                               {:label "plugin-readme"
+                               {:label :plugin-readme
                                 :content-props {:class "max-h-[86vh] overflow-auto"}}))
           (p/catch #(do (js/console.warn %)
-                        (notification/show! "No README content." :warning))))
+                        (notification/show! (t :plugin/readme-empty-warning) :warning))))
       ;; market
-      (shui/dialog-open! (fn [_] (display item nil)) {:label "plugin-readme"}))))
+      (shui/dialog-open! (fn [_] (display item nil)) {:label :plugin-readme}))))
 
 (defn load-unpacked-plugin
   []
@@ -847,7 +852,7 @@
     (when auto-checking?
       (set-auto-checking! false))
     (when (or auto-checking? (not user-checking?))
-      ;; TODO: too many requests may be limited by Github api
+      ;; TODO: too many requests may be limited by GitHub api
       (when-let [plugins (seq (take 32 (state/get-enabled?-installed-plugins theme?)))]
         (->> plugins
              (map (fn [v] [(keyword (:id v)) v]))
@@ -947,7 +952,7 @@
 ;; components
 (rum/defc lsp-indicator < rum/reactive
   []
-  (let [text (or (state/sub :plugin/indicator-text) (when (not (util/electron?)) "LOADING"))]
+  (let [text (or (state/sub :plugin/indicator-text) (when (not (util/electron?)) (t :plugin/loading-indicator)))]
     (when-not (true? text)
       [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
        [:span.flex.items-center.justify-center.flex-col
@@ -989,7 +994,7 @@
                   (.on "beforeload"
                        (fn [^js pl]
                          (let [text (when (util/electron?)
-                                      (util/format "Load plugin: %s..." (.-id pl)))]
+                                      (t :plugin/load-plugin-indicator (.-id pl)))]
                            (some->> text (state/set-state! :plugin/indicator-text)))))
 
                   (.on "reloaded"
@@ -1094,7 +1099,7 @@
       (p/catch
        (fn [^js e]
          (log/error :setup-plugin-system-error e)
-         (state/set-state! :plugin/indicator-text (str "Fatal: " e))))))
+         (state/set-state! :plugin/indicator-text (t :plugin/fatal-error (str e)))))))
 
 (defn setup!
   "setup plugin core handler"

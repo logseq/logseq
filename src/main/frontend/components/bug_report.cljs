@@ -9,6 +9,10 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
+(defn paste-shortcut-label
+  [mac?]
+  (if mac? "⌘+V" "Ctrl+V"))
+
 (defn parse-clipboard-data-transfer
   "parse dataTransfer
 
@@ -44,7 +48,7 @@
 
         copy-result-to-clipboard! (fn [result]
                                     (util/copy-to-clipboard! result)
-                                    (notification/show! (t :bug-report/inspector-page-copy-notif)))
+                                    (notification/show! (t :bug-report.inspector/copied)))
 
         reset-step! (fn []
                       (set-step! 0)
@@ -58,26 +62,27 @@
 
     [:div.flex.flex-col
      (when (= step 0)
-       (list [:div.mx-auto (t :bug-report/inspector-page-desc-1)]
-             [:div.mx-auto (t :bug-report/inspector-page-desc-2)]
+       (list (for [line (string/split-lines (t :bug-report.inspector/desc
+                                               (paste-shortcut-label util/mac?)))]
+               [:div.mx-auto line])
              ;; for mobile
-             [:input.form-input.is-large.transition.duration-150.ease-in-out {:type "text" :placeholder (t :bug-report/inspector-page-placeholder)}]
+             [:input.form-input.is-large.transition.duration-150.ease-in-out {:type "text" :placeholder (t :bug-report.inspector/placeholder)}]
              [:div.flex.justify-between.items-center.mt-2
-              [:div (t :bug-report/inspector-page-tip)]
-              (ui/button (t :bug-report/inspector-page-btn-back) :on-click #(util/open-url (rfe/href :bug-report)))]))
+              [:div (t :bug-report.inspector/tip)]
+              (ui/button (t :bug-report.inspector/back) :on-click #(util/open-url (rfe/href :bug-report)))]))
 
      (when (= step 1)
        (list
-        [:div (t :bug-report/inspector-page-desc-clipboard)]
+        [:div (t :bug-report.inspector/clipboard-desc)]
         [:div.flex.justify-between.items-center.mt-2
-         [:div (t :bug-report/inspector-page-desc-copy)]
-         (ui/button (t :bug-report/inspector-page-btn-copy) :on-click #(copy-result-to-clipboard! (js/JSON.stringify (clj->js result) nil 2)))]
+         [:div (t :bug-report.inspector/copy-desc)]
+         (ui/button (t :bug-report.inspector/copy) :on-click #(copy-result-to-clipboard! (js/JSON.stringify (clj->js result) nil 2)))]
         [:div.flex.justify-between.items-center.mt-2
-         [:div (t :bug-report/inspector-page-desc-create-issue)]
-         (ui/button (t :bug-report/inspector-page-btn-create-issue) :href (header/bug-report-url))]
+         [:div (t :bug-report.inspector/create-issue-desc)]
+         (ui/button (t :bug-report.inspector/create-issue) :href (header/bug-report-url))]
         [:div.flex.justify-between.items-center.mt-2
-         [:div (t :bug-report/inspector-page-tip)]
-         (ui/button (t :bug-report/inspector-page-btn-back) :on-click reset-step!)]
+         [:div (t :bug-report.inspector/tip)]
+         (ui/button (t :bug-report.inspector/back) :on-click reset-step!)]
 
         [:pre.whitespace-pre-wrap [:code (js/JSON.stringify (clj->js result) nil 2)]]))]))
 
@@ -87,7 +92,7 @@
     [:div.flex.flex-col ;; container
      (cond
        (= name "clipboard-data-inspector")
-       [:h1.text-2xl.mx-auto.mb-4 (ui/icon "clipboard") " " (-> (t :bug-report/clipboard-inspector-title) (string/capitalize))])
+       [:h1.text-2xl.mx-auto.mb-4 (ui/icon "clipboard") " " (-> (t :bug-report.inspector/title) (string/capitalize))])
      (cond
        (= name "clipboard-data-inspector")
        (clipboard-data-inspector))]))
@@ -106,17 +111,17 @@
    [:div.flex.flex-col.items-center
     [:div.flex.items-center.mb-2
      (ui/icon "bug")
-     [:h1.text-3xl.ml-2 (t :bug-report/main-title)]]
-    [:div.opacity-60 (t :bug-report/main-desc)]]
+     [:h1.text-3xl.ml-2 (t :bug-report/title)]]
+    [:div.opacity-60 (t :bug-report/desc)]]
    [:div.cp__bug-report-reporter.rounded-lg.p-8.mt-8
-    [:h1.text-2xl (t :bug-report/section-clipboard-title)]
-    [:div.opacity-60 (t :bug-report/section-clipboard-desc)]
-    (report-item-button (t :bug-report/section-clipboard-btn-title)
-                        (t :bug-report/section-clipboard-btn-desc)
+    [:h1.text-2xl (t :bug-report.clipboard/title)]
+    [:div.opacity-60 (t :bug-report.clipboard/desc)]
+    (report-item-button (t :bug-report.clipboard/action-title)
+                        (t :bug-report.clipboard/action-desc)
                         "clipboard"
                         {:on-click #(util/open-url (rfe/href :bug-report-tools {:tool "clipboard-data-inspector"}))})
     [:div.py-2] ;; divider
     [:div.flex.flex-col
-     [:h1.text-2xl (t :bug-report/section-issues-title)]
-     [:div.opacity-60 (t :bug-report/section-issues-desc)]
-     (report-item-button (t :bug-report/section-issues-btn-title) (t :bug-report/section-issues-btn-desc) "message-report" {:on-click #(util/open-url (header/bug-report-url))})]]])
+     [:h1.text-2xl (t :bug-report.issue/title)]
+     [:div.opacity-60 (t :bug-report.issue/desc)]
+     (report-item-button (t :bug-report.issue/action-title) (t :bug-report.issue/action-desc) "message-report" {:on-click #(util/open-url (header/bug-report-url))})]]])
