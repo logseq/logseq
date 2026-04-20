@@ -11,6 +11,8 @@ const log = (...args: any) => (Postmate.debug ? console.log(...args) : null)
 const resolveOrigin = (url: string) => {
   const a = document.createElement('a')
   a.href = url
+  // file:// URLs always have origin === 'null'; use '*' to allow postMessage
+  if (a.protocol === 'file:') return '*'
   const protocol = a.protocol.length > 4 ? a.protocol : window.location.protocol
   const host = a.host.length
     ? a.port === '80' || a.port === '443'
@@ -30,7 +32,7 @@ const messageTypes = {
 }
 
 export const sanitize = (message: any, allowedOrigin: any) => {
-  if (typeof allowedOrigin === 'string' && message.origin !== allowedOrigin)
+  if (typeof allowedOrigin === 'string' && allowedOrigin !== '*' && message.origin !== allowedOrigin)
     return false
   if (!message.data) return false
   if (typeof message.data === 'object' && !('postmate' in message.data))
@@ -240,7 +242,8 @@ export class ChildAPI {
     }
     // reply uses the event source/origin, others use stored parentOrigin.
     if (fallbackEvent?.source) {
-      ;(fallbackEvent.source as WindowProxy).postMessage(payload, fallbackEvent.origin)
+      const replyOrigin = fallbackEvent.origin === 'null' ? '*' : fallbackEvent.origin
+      ;(fallbackEvent.source as WindowProxy).postMessage(payload, replyOrigin)
     } else {
       this.parent.postMessage(payload, this.parentOrigin)
     }
@@ -583,7 +586,7 @@ export class Model {
               // Tell parent if child can accept MessageChannel
               acceptsMessageChannel: this.enableMessageChannel && runtimeSupportsMessageChannel ? 1 : 0,
             },
-            e.origin
+            e.origin === 'null' ? '*' : e.origin
           )
 
           // Extend model with the one provided by the parent
