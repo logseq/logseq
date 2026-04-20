@@ -8,7 +8,8 @@
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.db :as ldb]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.common.idb :as idb]))
 
 (def ^:private worker-bootstrap-loaded-key "__logseq_db_worker_bootstrap_loaded__")
 
@@ -31,6 +32,7 @@
   []
   (let [platform (platform-browser/browser-platform)
         proxy-object (db-core/init-core! platform)]
+    (idb/start)
     (glogi-console/install!)
     (log/set-levels {:glogi/root :info})
     (log/add-handler worker-state/log-append!)

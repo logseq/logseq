@@ -1,6 +1,5 @@
 (ns frontend.worker.sync.crypt-test
   (:require [cljs.test :refer [deftest is async]]
-            ["/frontend/idbkv" :as idb-keyval]
             [clojure.string :as string]
             [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
@@ -405,11 +404,7 @@
                                                  (p/resolved nil))
                                platform/kv-set! (fn [platform' k value]
                                                   (swap! kv-set-calls conj {:platform platform' :key k :value value})
-                                                  (p/resolved nil))
-                               idb-keyval/get (fn [_k _store]
-                                                (p/resolved nil))
-                               idb-keyval/set (fn [_k _v _store]
-                                                (p/resolved nil))]
+                                                  (p/resolved nil))]
                  (sync-crypt/<ensure-graph-aes-key "repo-1" graph-id))
                (p/then (fn [aes-key]
                          (is (= "aes:remote-encrypted" aes-key))
@@ -476,9 +471,7 @@
                                                   (swap! kv-set-calls conj {:platform platform'
                                                                             :key k
                                                                             :value value})
-                                                  (p/resolved nil))
-                               idb-keyval/del (fn [_k _store]
-                                                (throw (ex-info "should not use idb-keyval/del" {})))]
+                                                  (p/resolved nil))]
                  (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
                (p/then (fn [aes-key]
                          (is (= "aes:remote-encrypted" aes-key))
