@@ -80,24 +80,24 @@
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
        (ui/icon "filter" {:size 20})]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left.pb-2
-       [:h3#modal-headline.text-lg.leading-6.font-medium (t :linked-references/filter-heading)]
+       [:h3#modal-headline.text-lg.leading-6.font-medium (t :reference.filter/title)]
        [:span.text-xs
-        (t :linked-references/filter-directions)]]]
+        (t :reference.filter/directions)]]]
      (when (or (seq included) (seq excluded))
        [:div.cp__filters.mb-4.ml-2
         (when (seq included)
           [:div.flex.flex-row.flex-wrap.center-items
-           [:div.mr-1.font-medium.py-1 (t :linked-references/filter-includes)]
+           [:div.mr-1.font-medium.py-1 (t :reference.filter/includes)]
            (filtered-refs page-entity filters included false)])
         (when (seq excluded)
           [:div.flex.flex-row.flex-wrap
-           [:div.mr-1.font-medium.py-1 (t :linked-references/filter-excludes)]
+           [:div.mr-1.font-medium.py-1 (t :reference.filter/excludes)]
 
            (filtered-refs page-entity filters excluded false)])])
      [:div.cp__filters-input-panel.flex.focus-within:bg-gray-03
       (ui/icon "search")
       [:input.cp__filters-input.w-full.bg-transparent
-       {:placeholder (t :linked-references/filter-search)
+       {:placeholder (t :reference.filter/search-placeholder)
         :autofocus true
         :ref (fn [^js el] (when el
                             (-> (p/delay 32) (p/then #(.focus el)))))

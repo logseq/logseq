@@ -2,13 +2,14 @@ import { Button } from '@/components/ui/button'
 import { Input, InputProps } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
-import { FormHTMLAttributes, useEffect, useState } from 'react'
+import { FormHTMLAttributes, useEffect, useRef, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircleIcon, Loader2Icon, LucideEye, LucideEyeClosed, LucideX } from 'lucide-react'
 import { AuthFormRootContext, t, useAuthFormState } from './core'
 import * as Auth from 'aws-amplify/auth'
 import { Skeleton } from '@/components/ui/skeleton'
 import * as React from 'react'
+import { getAuthErrorMessageKey } from './errors'
 
 function ErrorTip({ error, removeError }: {
   error: string | { variant?: 'warning' | 'destructive', title?: string, message: string | any },
@@ -108,14 +109,26 @@ function validatePasswordPolicy(password: string) {
   }
 }
 
+function getAuthErrorMessage(error: unknown) {
+  return t(getAuthErrorMessageKey(error))
+}
+
 function useCountDown() {
   const [countDownNum, setCountDownNum] = useState<number>(0)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const startCountDown = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+    }
     setCountDownNum(60)
-    const interval = setInterval(() => {
+    intervalRef.current = setInterval(() => {
       setCountDownNum((num) => {
         if (num <= 1) {
-          clearInterval(interval)
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current)
+            intervalRef.current = null
+          }
           return 0
         }
         return num - 1
@@ -125,7 +138,10 @@ function useCountDown() {
 
   useEffect(() => {
     return () => {
-      setCountDownNum(0)
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
     }
   }, [])
 
@@ -224,10 +240,10 @@ export function LoginForm() {
             await loadSession()
             return
           default:
-            throw new Error('Unsupported sign-in step: ' + nextStep)
+            throw new Error(`${t('Unsupported sign-in step:')} ${nextStep}`)
         }
       } catch (e) {
-        setErrors({ password: { message: (e as Error).message, title: t('Bad Response.') } })
+        setErrors({ password: { message: getAuthErrorMessage(e), title: t('Bad Response.') } })
         console.error(e)
       } finally {
         setLoading(false)
@@ -338,7 +354,7 @@ export function SignupForm() {
           }
         } catch (e: any) {
           console.error(e)
-          const error = { title: t('Bad Response.'), message: (e as Error).message }
+          const error = { title: t('Bad Response.'), message: getAuthErrorMessage(e) }
           let k = 'confirm_password'
           if (e.name === 'UsernameExistsException') {
             k = 'username'
@@ -423,21 +439,25 @@ export function ResetPasswordForm() {
             setIsSentCode(true)
           } catch (error) {
             console.error('Error sending reset code:', error)
-            setErrors({ email: { message: (error as Error).message, title: t('Bad Response.') } })
+            setErrors({ email: { message: getAuthErrorMessage(error), title: t('Bad Response.') } })
           } finally {
             setLoading(false)
           }
         } else {
           // confirm reset password
-          if ((data.password as string)?.length < 8) {
+          try {
+            validatePasswordPolicy(data.password as string)
+          } catch (error) {
             setErrors({
               password: {
-                message: t('Password must be at least 8 characters.'),
+                message: (error as Error).message,
                 title: t('Invalid Password')
               }
             })
             return
-          } else if (data.password !== data.confirm_password) {
+          }
+
+          if (data.password !== data.confirm_password) {
             setErrors({
               confirm_password: {
                 message: t('Passwords do not match.'),
@@ -458,7 +478,7 @@ export function ResetPasswordForm() {
               setCurrentTab('login')
             } catch (error) {
               console.error('Error confirming reset password:', error)
-              setErrors({ 'confirm_password': { message: (error as Error).message, title: t('Bad Response.') } })
+              setErrors({ 'confirm_password': { message: getAuthErrorMessage(error), title: t('Bad Response.') } })
             } finally {
               setLoading(false)
             }
@@ -470,7 +490,7 @@ export function ResetPasswordForm() {
           <div className={'w-full opacity-60 flex justify-end relative h-0 z-[2]'}>
             {countDownNum > 0 ? (
               <span className={'text-sm opacity-50 select-none absolute top-3 right-0'}>
-                {countDownNum}s
+                {countDownNum}{t('COUNTDOWN_SUFFIX')}
               </span>
             ) : (<a onClick={async () => {
               startCountDown()
@@ -479,7 +499,7 @@ export function ResetPasswordForm() {
                 console.debug('[Auth] reset pw code re-sent: ', ret)
               } catch (error) {
                 console.error('Error resending reset code:', error)
-                setErrors({ email: { message: (error as Error).message, title: t('Bad Response.') } })
+                setErrors({ email: { message: getAuthErrorMessage(error), title: t('Bad Response.') } })
               } finally {}
             }} className={'text-sm opacity-70 hover:opacity-90 underline absolute top-3 right-0 select-none'}>
               {t('Resend code')}
@@ -589,7 +609,7 @@ export function ConfirmWithCodeForm(
             console.debug('confirmSignIn: ', ret)
           }
         } catch (e) {
-          setErrors({ code: { message: (e as Error).message, title: t('Bad Response.') } })
+          setErrors({ code: { message: getAuthErrorMessage(e), title: t('Bad Response.') } })
           console.error(e)
         } finally {
           setLoading(false)
@@ -613,7 +633,7 @@ export function ConfirmWithCodeForm(
       <span className={'w-full flex justify-end relative h-0 z-10'}>
         {countDownNum > 0 ? (
           <span className={'text-sm opacity-50 select-none absolute -bottom-8'}>
-            {countDownNum}s
+            {countDownNum}{t('COUNTDOWN_SUFFIX')}
           </span>
         ) : <a
           className={'text-sm opacity-50 hover:opacity-80 active:opacity-50 select-none underline absolute -bottom-8'}
@@ -632,7 +652,7 @@ export function ConfirmWithCodeForm(
                 // await Auth.resendSignInCode(props.user)
               }
             } catch (e) {
-              setErrors({ code: { message: (e as Error).message, title: t('Bad Response.') } })
+              setErrors({ code: { message: getAuthErrorMessage(e), title: t('Bad Response.') } })
               setCountDownNum(0)
               console.error(e)
             } finally {}

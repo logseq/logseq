@@ -27,7 +27,9 @@
   get-block-parent get-block-parents
   get-block-immediate-children get-file
   get-latest-journals get-page get-case-page
-  get-page-format journal-page? page? sub-block
+  get-journal-page get-journal-page-by-day
+  get-journal-page-title get-today-journal-page get-today-journal-title
+  get-page-format journal-page? today-journal-page? page? sub-block
   page-exists? get-alias-source-page has-children?])
 
 (defn start-db-conn!

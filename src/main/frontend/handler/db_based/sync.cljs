@@ -2,6 +2,7 @@
   "DB-sync handler based on Cloudflare Durable Objects."
   (:require [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
@@ -349,12 +350,12 @@
                _ (when (and repo e2ee?)
                    (state/<invoke-db-worker :thread-api/db-sync-grant-graph-access
                                             repo graph-uuid email))]
-         (notification/show! "Invitation sent!" :success))
+         (notification/show! (t :sync/invitation-sent) :success))
        (p/catch (fn [e]
                   (if (= "user not found" (get-in (ex-data e) [:body :error]))
-                    (notification/show! "User doesn't exist yet." :warning)
+                    (notification/show! (t :sync/user-doesnt-exist-yet) :warning)
                     (do
-                      (notification/show! "Something wrong, please try again." :error)
+                      (notification/show! (t :sync/something-wrong) :error)
                       (log/error :db-sync/invite-email-failed
                                  {:error e
                                   :graph-uuid graph-uuid

@@ -2,7 +2,7 @@
   (:require [clojure.string :as string]
             [logseq.shui.form.core :as form]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.popup.core :as popup]
+            [logseq.shui.popup.core :as shui-popup]
             [rum.core :as rum]))
 
 (defn- get-k [item]
@@ -35,8 +35,7 @@
     [:div.search-input
      {:ref *el}
      (form/input
-      (merge {:placeholder "search"
-              :on-key-up #(case (.-key %)
+      (merge {:on-key-up #(case (.-key %)
                             "ArrowDown" (set-down! (inc down))
                             "ArrowUp" nil
                             "Enter" (when (fn? on-enter) (on-enter))
@@ -57,10 +56,11 @@
   [items selected-items & {:keys [on-chosen item-render value-render
                                   head-render foot-render open? close!
                                   search-enabled? search-key on-search-key-change
+                                  search-input-placeholder
                                   search-fn search-key-render
                                   item-props content-props]}]
-  (let [x-content popup/dropdown-menu-content
-        x-item popup/dropdown-menu-item
+  (let [x-content shui-popup/dropdown-menu-content
+        x-item shui-popup/dropdown-menu-item
         *head-ref (rum/use-ref nil)
         [search-key1 set-search-key!] (rum/use-state search-key)
         search-key1' (some-> search-key1 (string/trim) (string/lower-case))
@@ -118,6 +118,7 @@
         (when search-enabled?
           (search-input
            {:value search-key1
+            :placeholder (or search-input-placeholder "")
             :on-key-down (fn [^js e]
                            (.stopPropagation e)
                            (case (.-key e)
