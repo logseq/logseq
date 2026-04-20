@@ -189,6 +189,12 @@
   ([k params query]
    (replace-state-impl k params query)))
 
+(defn get-current-route
+  []
+  (let [method (aget api-proxy "getCurrentRoute")
+        args []]
+    (core/call-method api-proxy method args)))
+
 (defn get-template
   [name]
   (let [method (aget api-proxy "getTemplate")
