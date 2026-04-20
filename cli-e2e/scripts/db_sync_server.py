@@ -143,6 +143,8 @@ def start_server(args: argparse.Namespace) -> None:
             "COGNITO_ISSUER": issuer,
             "COGNITO_CLIENT_ID": client_id,
             "COGNITO_JWKS_URL": jwks_url,
+            # CLI e2e sync suite should remain runnable without outbound internet.
+            "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS": "true",
         }
     )
 
