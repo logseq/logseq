@@ -249,7 +249,7 @@ export function LoginForm() {
         setLoading(false)
       }
     }}>
-      <InputRow id="email" type="email" required={true} name="email" autoFocus={true} label={t('Email')}/>
+      <InputRow id="email" type="text" required={true} name="email" autoFocus={true} label={t('Email')}/>
       <InputRow id="password" type="password" required={true} name="password" label={t('Password')}/>
 
       <div className={'w-full'}>
