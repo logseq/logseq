@@ -664,6 +664,65 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest finished-snapshot-upload-broadcasts-changed-test
+  (async done
+         (let [sql (test-sql/make-sql)
+               conn (d/create-conn db-schema/schema)
+               changed-messages (atom [])
+               self #js {:sql sql
+                         :conn conn
+                         :schema-ready true
+                         :env #js {"DB" nil}}
+               request (js/Request. "http://localhost/sync/graph-1/snapshot/upload?graph-id=graph-1&finished=true"
+                                    #js {:method "POST"
+                                         :body (js/Uint8Array. 0)})]
+           (-> (p/with-redefs [sync-handler/import-snapshot-stream! (fn [_self _stream _reset?]
+                                                                      (p/resolved 0))
+                               sync-handler/<set-graph-ready-for-use! (fn [_self _graph-id _graph-ready-for-use?]
+                                                                        (p/resolved true))
+                               ws/broadcast! (fn [_self _sender payload]
+                                               (swap! changed-messages conj payload))]
+                 (p/let [resp (sync-handler/handle {:self self
+                                                    :request request
+                                                    :url (js/URL. (.-url request))
+                                                    :route {:handler :sync/snapshot-upload}})]
+                   (is (= 200 (.-status resp)))
+                   (is (= [{:type "changed"
+                            :t (storage/get-t sql)}]
+                          @changed-messages))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest import-snapshot-stream-first-non-empty-chunk-applies-reset-test
+  (async done
+         (let [rows [[42 "payload" nil]]
+               frame (#'sync-handler/frame-bytes (snapshot/encode-rows rows))
+               stream (js/ReadableStream.
+                       #js {:start (fn [controller]
+                                     (.enqueue controller frame)
+                                     (.close controller))})
+               applied (atom [])
+               self #js {:sql (test-sql/make-sql)
+                         :conn (d/create-conn db-schema/schema)
+                         :schema-ready true}]
+           (-> (p/with-redefs [sync-handler/import-snapshot!
+                               (fn [_self rows* reset?]
+                                 (swap! applied conj {:rows rows*
+                                                      :reset? reset?}))]
+                 (p/let [count (#'sync-handler/import-snapshot-stream! self stream true)]
+                   (is (= 1 count))
+                   (is (= [{:rows rows
+                            :reset? true}]
+                          @applied))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest tx-batch-rejects-when-a-tx-entry-fails-test
   (testing "db transact failure rejects the batch"
     (let [sql (test-sql/make-sql)
