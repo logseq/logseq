@@ -349,14 +349,7 @@
 
 (defn execute-graph-list
   [_action config]
-  (let [graph-items (->> (cli-server/list-graph-items config)
-                         (mapv (fn [item]
-                                 (if (string? item)
-                                   {:kind :canonical
-                                    :graph-name item
-                                    :graph-dir item}
-                                   item)))
-                         vec)
+  (let [graph-items (vec (cli-server/list-graph-items config))
         graphs (->> graph-items
                     (keep graph-item->graph-name)
                     (mapv core/repo->graph))

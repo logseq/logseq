@@ -122,9 +122,7 @@
            (:db/id root))
     (-> (transport/invoke config :thread-api/get-block-parents false [repo (:db/id root)])
         (p/then (fn [parents]
-                  (or parents [])))
-        (p/catch (fn [_error]
-                   [])))
+                  (or parents []))))
     (p/resolved [])))
 
 (defn- render-breadcrumb-line
@@ -307,9 +305,15 @@
 
 (defn- epoch-ms->iso-string
   [ms]
-  (try
-    (.toISOString (js/Date. ms))
-    (catch :default _ (str ms))))
+  (when-not (number? ms)
+    (throw (ex-info "datetime value must be a number"
+                    {:code :invalid-datetime-value
+                     :value ms})))
+  (when-not (js/Number.isFinite ms)
+    (throw (ex-info "datetime value must be finite"
+                    {:code :invalid-datetime-value
+                     :value ms})))
+  (.toISOString (js/Date. ms)))
 
 (defn- property-value->string
   ([value] (property-value->string value nil))

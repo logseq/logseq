@@ -514,13 +514,14 @@
               (= cause :no-match)
               (command-core/unknown-command-result summary (str "unknown command: " (unknown-command-message data)))
 
-              (some? data)
+              (and (map? data)
+                   (contains? data :msg))
               (if-let [guided-message (legacy-upsert-option-guidance args (:msg data))]
                 (command-core/invalid-options-result summary guided-message)
                 (command-core/cli-error->result summary data))
 
               :else
-              (command-core/unknown-command-result summary (str "unknown command: " (string/join " " args))))))))))
+              (throw e))))))))
 
 ;; Repo/graph helpers live in logseq.cli.command.core.
 

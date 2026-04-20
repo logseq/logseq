@@ -462,9 +462,11 @@
          :data (cond-> {:result result}
                  (map? result) (merge (dissoc result :result)))})
       (p/catch (fn [e]
-                 {:status :error
-                  :error {:code (or (:code (ex-data e)) :exception)
-                          :message (or (ex-message e) (str e))}}))))
+                 (if-let [code (:code (ex-data e))]
+                   {:status :error
+                    :error {:code code
+                            :message (or (ex-message e) (str e))}}
+                   (p/rejected e))))))
 
 (defn execute-remove-page
   [action config]

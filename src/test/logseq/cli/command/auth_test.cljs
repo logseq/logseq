@@ -189,6 +189,21 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
+(deftest test-logout-fails-when-browser-cannot-open
+  (async done
+    (let [dir (node-helper/create-tmp-dir "cli-auth")
+          auth-path (node-path/join dir "auth.json")]
+      (-> (p/with-redefs [cli-auth/open-browser! (fn [_url]
+                                                   (p/resolved {:opened? false}))]
+            (-> (cli-auth/logout! {:auth-path auth-path})
+                (p/then (fn [_]
+                          (is false "expected logout browser-open failure")))
+                (p/catch (fn [e]
+                           (is (= :logout-browser-open-failed (-> e ex-data :code)))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
 (deftest test-command-execute-login-and-logout
   (async done
     (let [login-calls (atom [])
@@ -213,3 +228,15 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
+
+(deftest test-auth-execute-does-not-infer-code-from-error-message
+  (async done
+    (-> (p/with-redefs [cli-auth/login! (fn [_]
+                                          (p/rejected (ex-info "missing-auth" {})))]
+          (p/let [result (auth-command/execute {:type :login} {:auth-path "/tmp/auth.json"})]
+            (is (= :error (:status result)))
+            (is (= :exception (get-in result [:error :code])))
+            (is (= "missing-auth" (get-in result [:error :message])))))
+        (p/catch (fn [e]
+                   (is false (str "unexpected error: " e))))
+        (p/finally (fn [] (done))))))

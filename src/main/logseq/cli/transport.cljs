@@ -29,6 +29,13 @@
       port
       (if (= "https:" (.-protocol parsed)) 443 80))))
 
+(defn- normalize-base-url
+  [base-url]
+  (let [base-url (some-> base-url str string/trim)]
+    (when-not (seq base-url)
+      (throw (ex-info "base-url is required" {:code :missing-base-url})))
+    (string/replace base-url #"/$" "")))
+
 (defn- <raw-request
   [{:keys [method url headers body timeout-ms]}]
   (p/create
@@ -70,7 +77,10 @@
   (when (seq body)
     (try
       (js->clj (js/JSON.parse body) :keywordize-keys true)
-      (catch :default _ nil))))
+      (catch :default e
+        (if (instance? js/SyntaxError e)
+          nil
+          (throw e))))))
 
 (defn- normalize-error-code
   [error-code]
@@ -106,24 +116,27 @@
 (defn invoke
   [{:keys [base-url timeout-ms profile-session]}
    method direct-pass? args]
-  (let [url (str (string/replace base-url #"/$" "") "/v1/invoke")
+  (let [base-url (normalize-base-url base-url)
         method* (cond
                   (keyword? method) (subs (str method) 1)
                   (string? method) method
                   (nil? method) nil
-                  :else (str method))
-        stage-key (str "transport.invoke:" method*)
-        start-ms (js/Date.now)
-        args-preview (cli-log/truncate-preview args)
-        payload (if direct-pass?
-                  {:method method*
-                   :directPass true
-                   :args args}
-                  {:method method*
-                   :directPass false
-                   :argsTransit (ldb/write-transit-str args)})
-        body (js/JSON.stringify (clj->js payload))]
-    (profile/time! profile-session stage-key
+                  :else (str method))]
+    (when-not (seq method*)
+      (throw (ex-info "invoke method is required" {:code :missing-invoke-method})))
+    (let [url (str base-url "/v1/invoke")
+          stage-key (str "transport.invoke:" method*)
+          start-ms (js/Date.now)
+          args-preview (cli-log/truncate-preview args)
+          payload (if direct-pass?
+                    {:method method*
+                     :directPass true
+                     :args args}
+                    {:method method*
+                     :directPass false
+                     :argsTransit (ldb/write-transit-str args)})
+          body (js/JSON.stringify (clj->js payload))]
+      (profile/time! profile-session stage-key
                    (fn []
                      (log/debug :event :cli.transport/invoke
                                 :method method*
@@ -151,7 +164,7 @@
                                       :direct-pass? direct-pass?
                                       :elapsed-ms (- (js/Date.now) start-ms)
                                       :response response-preview)
-                           decoded)))))))
+                           decoded))))))))
 
 (defn- decode-event
   [{:keys [type payload]}]
@@ -173,10 +186,28 @@
             (subs line 6)))
         (string/split-lines event-text)))
 
+(defn- ensure-event-handler
+  [on-event]
+  (when-not (fn? on-event)
+    (throw (ex-info "connect-events! handler must be a function"
+                    {:code :invalid-events-handler
+                     :handler-type (type on-event)})))
+  on-event)
+
+(defn- destroy-resource!
+  [^js resource label]
+  (when resource
+    (try
+      (.destroy resource)
+      (catch :default e
+        (log/debug :event :cli.transport/resource-destroy-failed
+                   :resource label
+                   :error e)))))
+
 (defn connect-events!
   [{:keys [base-url]} on-event]
-  (let [handler (or on-event (fn [_event-type _payload] nil))
-        url (js/URL. (str (string/replace (or base-url "") #"/$" "") "/v1/events"))
+  (let [handler (ensure-event-handler on-event)
+        url (js/URL. (str (normalize-base-url base-url) "/v1/events"))
         buffer (atom "")
         *req (atom nil)
         *res (atom nil)
@@ -205,14 +236,8 @@
                                  (recur))))))
         close! (fn []
                  (reset! *closed? true)
-                 (when-let [^js res @*res]
-                   (try
-                     (.destroy res)
-                     (catch :default _ nil)))
-                 (when-let [^js req @*req]
-                   (try
-                     (.destroy req)
-                     (catch :default _ nil)))
+                 (destroy-resource! @*res :response)
+                 (destroy-resource! @*req :request)
                  nil)]
     (try
       (let [req (.request

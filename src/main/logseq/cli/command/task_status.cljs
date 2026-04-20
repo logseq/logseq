@@ -1,7 +1,6 @@
 (ns logseq.cli.command.task-status
   "Runtime task status helpers for graph-derived validation."
-  (:require [clojure.string :as string]
-            [logseq.cli.command.add :as add-command]))
+  (:require [clojure.string :as string]))
 
 (def status-closed-values-query
   '[:find [?status-ident ...]
@@ -54,12 +53,10 @@
   (let [available-statuses (normalize-available-statuses available-statuses)
         available-idents (set (map :ident available-statuses))
         by-value (into {} (map (juxt :value :ident) available-statuses))
-        legacy (add-command/normalize-status status-input)
         token (normalize-token status-input)
         ident-from-token (when (seq token)
                            (keyword "logseq.property" (str "status." token)))]
-    (or (when (contains? available-idents legacy) legacy)
-        (get by-value token)
+    (or (get by-value token)
         (when (contains? available-idents ident-from-token)
           ident-from-token))))
 
