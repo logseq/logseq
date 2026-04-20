@@ -314,6 +314,7 @@
   (let [on-change (fn [e]
                     (let [lang-code (util/evalue e)]
                       (state/set-preferred-language! lang-code)
+                      (state/pub-event! [:init/commands])
                       (ui-handler/re-render-root!)))
         action [:select.form-select.is-small {:value     preferred-language
                                               :on-change on-change}
