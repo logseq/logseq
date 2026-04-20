@@ -139,7 +139,8 @@
 
 (defn- asset-read-bytes!
   [repo file-name]
-  (.readFile (browser-pfs) (asset-path repo file-name)))
+  (when-let [^js bfs (browser-pfs)]
+    (.readFile bfs (asset-path repo file-name))))
 
 (defn- asset-write-bytes!
   [repo file-name payload]
