@@ -327,6 +327,15 @@
        journal-page
        (create-page-f journal {:redirect? false})))))
 
+(defn- focus-selected-day!
+  [id remaining]
+  (when (pos? remaining)
+    (if-let [selected-day (some-> id
+                                  (js/document.getElementById)
+                                  (.querySelector "[aria-selected=true]"))]
+      (.focus selected-day)
+      (js/setTimeout #(focus-selected-day! id (dec remaining)) 16))))
+
 (rum/defcs calendar-inner < rum/reactive db-mixins/query
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
   {:init (fn [state]
@@ -334,10 +343,7 @@
            state)
    :will-mount (fn [state]
                  (js/setTimeout
-                  #(some-> @(::identity state)
-                           (js/document.getElementById)
-                           (.querySelector "[aria-selected=true]")
-                           (.focus)) 16)
+                  #(focus-selected-day! @(::identity state) 10) 16)
                  state)
    :will-unmount (fn [state]
                    (shui/popup-hide!)
