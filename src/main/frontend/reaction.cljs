@@ -18,26 +18,24 @@
 (defn summarize
   "Summarize reactions for display."
   [reactions current-user-id]
-  (let [reaction-user-id (fn [reaction]
-                           (let [user (:logseq.property/created-by-ref reaction)]
-                             (cond
-                               (number? user) user
-                               (map? user) (:db/id user)
-                               :else nil)))
-        reaction-username (fn [reaction]
-                            (let [user (:logseq.property/created-by-ref reaction)]
-                              (:block/title (db/entity (:db/id user)))))
+  (let [reaction-user (fn [reaction]
+                        (let [user (:logseq.property/created-by-ref reaction)
+                              user-id (cond
+                                        (number? user) user
+                                        (map? user) (:db/id user)
+                                        :else nil)]
+                          {:id user-id
+                           :username (some-> user-id db/entity :block/title)}))
         summary (reduce (fn [acc reaction]
                           (let [emoji-id (:logseq.property.reaction/emoji-id reaction)
-                                user-id (reaction-user-id reaction)
-                                username (reaction-username reaction)]
+                                {:keys [id username]} (reaction-user reaction)]
                             (if (string? emoji-id)
                               (-> acc
                                   (update-in [emoji-id :count] (fnil inc 0))
                                   (cond-> (string? username)
                                     (update-in [emoji-id :usernames] (fnil conj #{}) username))
                                   (update-in [emoji-id :reacted-by-me?]
-                                             (fnil #(or % (= current-user-id user-id)) false)))
+                                             (fnil #(or % (= current-user-id id)) false)))
                               acc)))
                         {}
                         reactions)]
