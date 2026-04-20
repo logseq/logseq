@@ -1,6 +1,6 @@
 (ns frontend.worker.platform.browser
   "Browser platform adapter for db-worker."
-  (:require ["/frontend/idbkv" :as idb-keyval]
+  (:require [frontend.common.idb :as idb]
             ["@sqlite.org/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [clojure.string :as string]
@@ -51,16 +51,13 @@
     (fn [_e]                         ; not found
       false))))
 
-(defonce ^:private kv-store
-  (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
-
 (defn- kv-get
   [k]
-  (idb-keyval/get k @kv-store))
+  (idb/get-item k))
 
 (defn- kv-set!
   [k value]
-  (idb-keyval/set k value @kv-store))
+  (idb/set-item! k value))
 
 (def ^:private secret-prefix "worker-secret###")
 
