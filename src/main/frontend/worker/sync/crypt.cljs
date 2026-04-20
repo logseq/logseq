@@ -1,6 +1,6 @@
 (ns frontend.worker.sync.crypt
   "E2EE helpers for db-sync."
-  (:require ["/frontend/idbkv" :as idb-keyval]
+  (:require [frontend.common.idb :as idb]
             [clojure.string :as string]
             [frontend.common.crypt :as crypt]
             [frontend.common.file.opfs :as opfs]
@@ -15,7 +15,6 @@
 
 (defonce ^:private *graph->aes-key (atom {}))
 (defonce ^:private *user-rsa-key-pair-inflight (atom {}))
-(defonce ^:private e2ee-store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
 (defonce ^:private e2ee-password-file "e2ee-password")
 (defonce ^:private native-env?
   (let [href (try (.. js/self -location -href)
@@ -173,19 +172,19 @@
 
 (defn- <get-item
   [k]
-  (assert (and k @e2ee-store))
-  (p/let [r (idb-keyval/get k @e2ee-store)]
+  (assert (and k @idb/store))
+  (p/let [r (idb/get-item k)]
     (some-> r (js->clj :keywordize-keys true))))
 
 (defn- <set-item!
   [k value]
-  (assert (and k @e2ee-store))
-  (idb-keyval/set k value @e2ee-store))
+  (assert (and k @idb/store))
+  (idb/set-item! k value))
 
 (defn- <clear-item!
   [k]
-  (assert (and k @e2ee-store))
-  (idb-keyval/del k @e2ee-store))
+  (assert (and k @idb/store))
+  (idb/remove-item! k))
 
 (defn- graph-encrypted-aes-key-idb-key
   [graph-id]

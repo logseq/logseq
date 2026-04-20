@@ -8,7 +8,7 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.notification :as notification]
-            [frontend.idb :as idb]
+            [frontend.common.idb :as idb]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]

@@ -54,7 +54,8 @@
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [missionary.core :as m]
             [promesa.core :as p]
-            [goog.functions :as gfun]))
+            [goog.functions :as gfun]
+            [frontend.common.idb :as idb]))
 
 (def ^:private worker-bootstrap-loaded-key "__logseq_db_worker_bootstrap_loaded__")
 
@@ -1193,6 +1194,8 @@
 (defn init
   "web worker entry"
   []
+  (idb/start)
+
   (ldb/register-transact-invalid-callback-fn! notify-invalid-data)
 
   (let [proxy-object (->>
