@@ -44,29 +44,42 @@ logseq graph list
 
 ## Configuration
 
-Optional configuration file: `~/logseq/cli.edn`
-
-Default data dir: `~/logseq/graphs`.
-
-Graph directories on disk are stored as user-facing graph names (for example, `demo/`), not `logseq_db_` prefixed repo identifiers.
-
-Migration note: If you previously used `~/.logseq/cli-graphs` or `~/.logseq/cli.edn`, pass `--data-dir` or `--config` to continue using those locations.
+The CLI config file is located at `~/logseq/cli.edn`.
 
 Supported keys include:
-- `:graph`
-- `:data-dir`
-- `:timeout-ms`
-- `:output-format` (use `:json` or `:edn` for scripting)
-- `:list-title-max-display-width` (human `list *` TITLE max display width, default `40`)
-- sync config persisted via `sync config set|get|unset`: `:ws-url`, `:http-base`
+- `:graph` - The current active graph. Set this with `graph switch`.
+- `:data-dir` - Directory where graphs are stored. Default is `~/logseq/graphs`. The graphs in this directory are user-facing graph names e.g. `demo` and do not start with `logseq_db_`.
+- `:output-format` - Format for output. Default is `:human`. Use `:json` or `:edn` for scripting.
+- `:list-title-max-display-width` - For `:human` output, the max display width for TITLE column, defaulting to `40`.
+- `:http-base` - Http base domain for sync service. Interact with this via `sync config`.
+- `:ws-url` - Websocket url for sync service. Interact with this via `sync config`.
+- `:timeout-ms` - Request timeout in milliseconds.
+- `:login-timeout-ms` - Login callback timeout. Defaults to 5 minutes.
+- `:logout-timeout-ms` - Logout callback timeout. Defaults to 2 minutes.
+- `:custom-queries` - Map of custom queries which are run with `query --name`. See [below for more](#custom-queries).
 
-Legacy migration note:
-- `:e2ee-password` in `cli.edn` is ignored and removed silently during config read/update.
-- Use `sync start --e2ee-password` or `sync download --e2ee-password` instead.
+CLI global flags take precedence over environment variables, which take precedence over the config file. Here is a mapping of these three:
 
-`cli.edn` no longer persists cloud auth tokens. CLI login state is stored separately in `~/logseq/auth.json`.
+| Config key | Environment variable | Global flag |
+| --- | --- | --- |
+| :graph | $LOGSEQ_CLI_GRAPH | --graph |
+| :data-dir | $LOGSEQ_CLI_DATA_DIR | --data-dir |
+| :output-format | $LOGSEQ_CLI_OUTPUT | --output |
+| :timeout-ms | $LOGSEQ_CLI_TIMEOUT_MS | --timeout-ms |
+| :login-timeout-ms | $LOGSEQ_CLI_LOGIN_TIMEOUT_MS | n/a |
+| :logout-timeout-ms | $LOGSEQ_CLI_LOGOUT_TIMEOUT_MS | n/a  |
 
-CLI flags take precedence over environment variables, which take precedence over the config file.
+Legacy notes:
+* Migration note: If you previously used `~/.logseq/cli-graphs` or `~/.logseq/cli.edn`, pass `--data-dir` or `--config` to continue using those locations.
+* `:e2ee-password` in `cli.edn` is ignored and removed silently during config read/update. Use `sync start --e2ee-password` or `sync download --e2ee-password` instead.
+* `cli.edn` no longer persists cloud auth tokens. CLI login state is stored separately in `~/logseq/auth.json`.
+
+### Custom Queries
+
+Custom queries are defined in `:custom-queries` of a config file. This config is a map with the key as a query name and the value as a map with the following keys:
+* `:query` - Required datalog query as a vector. Queries can use built-in rules from `logseq.db.frontend.rules` by appending `%` to the `:in` part of a query. See `logseq.cli.command.query` for example queries.
+* `:doc` - Optional doc string describing the query.
+* `:inputs` - Optional vector of inputs where each input is a map. Valid keys for the map are `:name` and `:default`. This defines positional arguments to a query e.g. the arguments a user passes map to these inputs and the `:in` bindings in a `:query`.
 
 ## Authentication
 
