@@ -9,9 +9,6 @@
             [medley.core :as medley]
             [tongue.core :as tongue]))
 
-(def rtl-locales
-  #{:ar :fa})
-
 (def dicts (merge dicts/dicts {:tongue/fallback :en}))
 
 (def translate
@@ -24,14 +21,6 @@
 (defn locale-tag
   [language]
   (name (or (some-> language keyword) :en)))
-
-(defn rtl-locale?
-  [language]
-  (contains? rtl-locales (or (some-> language keyword) :en)))
-
-(defn locale-direction
-  [language]
-  (if (rtl-locale? language) "rtl" "ltr"))
 
 (def ^:private placeholder-pattern
   #"\{(\d+)\}")

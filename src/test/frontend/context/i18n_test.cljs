@@ -37,15 +37,6 @@
     (is (= "zh-CN"
            (i18n/locale-tag :zh-CN)))))
 
-(deftest locale-direction-test
-  (is (true? (i18n/rtl-locale? :ar)))
-  (is (true? (i18n/rtl-locale? :fa)))
-  (is (false? (i18n/rtl-locale? :en)))
-  (is (= "rtl"
-         (i18n/locale-direction :ar)))
-  (is (= "ltr"
-         (i18n/locale-direction :en))))
-
 (deftest start-test
   (testing "start initializes preferred language from the browser locale when missing"
     (with-redefs [i18n/fetch-local-language (constantly "pt-br")]
