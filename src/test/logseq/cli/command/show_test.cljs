@@ -456,6 +456,55 @@
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-execute-show-fails-when-breadcrumb-fetch-fails
+  (async done
+         (let [invoke-mock (fn [_ method _ args]
+                             (case method
+                               :thread-api/pull
+                               (let [[_repo _selector target] args]
+                                 (cond
+                                   (= target 1)
+                                   (p/resolved {:db/id 1
+                                                :block/title "Root A"
+                                                :block/page {:db/id 100}})
+
+                                   (= target 100)
+                                   (p/resolved {:db/id 100
+                                                :db/ident :block/name
+                                                :block/title "Home"})
+
+                                   :else
+                                   (p/resolved nil)))
+
+                               :thread-api/q
+                               (p/resolved [])
+
+                               :thread-api/get-block-refs
+                               (p/resolved [])
+
+                               :thread-api/get-block-parents
+                               (p/rejected (ex-info "parents query failed"
+                                                    {:code :breadcrumb-fetch-failed}))
+
+                               (p/resolved nil)))]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (-> (show-command/execute-show {:type :show
+                                                :repo "demo"
+                                                :id 1
+                                                :linked-references? false
+                                                :ref-id-footer? false}
+                                               {:output-format nil})
+                     (p/then (fn [_]
+                               (is false "expected execute-show to reject on breadcrumb fetch failure")))
+                     (p/catch (fn [error]
+                                (is (= :breadcrumb-fetch-failed (-> error ex-data :code)))
+                                (is (string/includes? (or (ex-message error) (str error))
+                                                      "parents query failed"))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest test-render-referenced-entities-footer
   (let [render-footer (fn [ordered-uuids uuid->entity]
                         (call-private 'render-referenced-entities-footer ordered-uuids uuid->entity))

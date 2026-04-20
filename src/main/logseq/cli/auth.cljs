@@ -90,12 +90,21 @@
     (try
       (let [parts (string/split jwt #"\.")
             payload (second parts)]
-        (when (seq payload)
-          (-> (js/Buffer.from payload "base64url")
-              (.toString "utf8")
-              parse-json)))
-      (catch :default _
-        nil))))
+        (when-not (and (= 3 (count parts))
+                       (seq payload))
+          (throw (ex-info "invalid auth token"
+                          {:code :invalid-auth-token
+                           :token jwt})))
+        (-> (js/Buffer.from payload "base64url")
+            (.toString "utf8")
+            parse-json))
+      (catch :default e
+        (if (= :invalid-auth-token (:code (ex-data e)))
+          (throw e)
+          (throw (ex-info "invalid auth token"
+                          {:code :invalid-auth-token
+                           :token jwt}
+                          e)))))))
 
 (defn write-auth-file!
   [opts auth-data]
@@ -135,27 +144,20 @@
         existed? (fs/existsSync path)
         logout-url (build-logout-url)]
     (delete-auth-file! opts)
-    (-> (p/let [callback-server (start-logout-complete-server! opts)]
-          (-> (p/let [open-result (open-browser! logout-url)
-                      logout-completed? (if (:opened? open-result)
-                                          (-> ((:wait! callback-server))
-                                              (p/then (constantly true))
-                                              (p/catch (fn [_]
-                                                         false)))
-                                          false)]
-                {:auth-path path
-                 :deleted? existed?
-                 :logout-url logout-url
-                 :opened? (:opened? open-result)
-                 :logout-completed? logout-completed?})
-              (p/finally (fn []
-                           ((:stop! callback-server))))))
-        (p/catch (fn [_]
-                   {:auth-path path
-                    :deleted? existed?
-                    :logout-url logout-url
-                    :opened? false
-                    :logout-completed? false})))))
+    (p/let [callback-server (start-logout-complete-server! opts)]
+      (-> (p/let [open-result (open-browser! logout-url)
+                  _ (when-not (:opened? open-result)
+                      (throw (ex-info "failed to open browser for logout"
+                                      {:code :logout-browser-open-failed
+                                       :logout-url logout-url})))
+                  _ ((:wait! callback-server))]
+            {:auth-path path
+             :deleted? existed?
+             :logout-url logout-url
+             :opened? true
+             :logout-completed? true})
+          (p/finally (fn []
+                       ((:stop! callback-server))))))))
 
 (defn expired-auth?
   [{:keys [expires-at]}]
@@ -326,9 +328,11 @@
                          "win32" ["cmd" ["/c" "start" "" url]]
                          [nil nil])]
     (if-not (seq command)
-      (p/resolved {:opened? false})
+      (p/rejected (ex-info "unsupported platform for browser open"
+                           {:code :browser-open-unsupported-platform
+                            :platform platform}))
       (p/create
-       (fn [resolve _reject]
+       (fn [resolve reject]
          (try
            (let [child (.spawn child-process command (clj->js args)
                                #js {:detached true
@@ -338,9 +342,10 @@
              (resolve {:opened? true
                        :command command}))
            (catch :default e
-             (resolve {:opened? false
-                       :command command
-                       :error (or (.-message e) (str e))}))))))))
+             (reject (ex-info "failed to open browser"
+                              {:code :browser-open-failed
+                               :command command}
+                              e)))))))))
 
 (defn- oauth-token-request!
   [params]
@@ -361,6 +366,9 @@
 (defn- token-body->auth-data
   [token-body current-auth]
   (let [id-token (:id_token token-body)
+        _ (when-not (seq id-token)
+            (throw (ex-info "auth token response missing id_token"
+                            {:code :missing-id-token})))
         claims (parse-jwt id-token)
         refresh-token (or (:refresh_token token-body)
                           (:refresh-token current-auth))]

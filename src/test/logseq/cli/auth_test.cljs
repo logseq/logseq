@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is]]
             [frontend.test.node-helper :as node-helper]
             [logseq.cli.auth :as auth]
+            [logseq.cli.test-helper :as test-helper]
             [promesa.core :as p]
             ["fs" :as fs]
             ["os" :as os]
@@ -27,6 +28,22 @@
       (.toString "utf8")
       js/JSON.parse
       (js->clj :keywordize-keys true)))
+
+(defn- call-private
+  [sym & args]
+  (when-let [v (get (ns-interns 'logseq.cli.auth) sym)]
+    (apply @v args)))
+
+(defn- jwt-with-claims
+  [claims]
+  (let [encode (fn [value]
+                 (.toString (js/Buffer.from (js/JSON.stringify (clj->js value)) "utf8")
+                            "base64url"))]
+    (str (encode {:alg "none"
+                  :typ "JWT"})
+         "."
+         (encode claims)
+         ".signature")))
 
 (deftest test-default-auth-path
   (is (= (node-path/join (.homedir os) "logseq" "auth.json")
@@ -100,3 +117,56 @@
                        (is false (str "unexpected error: " e))))
             (p/finally (fn []
                          (done))))))))
+
+(deftest test-open-browser-fails-when-spawn-throws
+  (async done
+    (let [child-process (js/require "child_process")]
+      (-> (test-helper/with-js-property-override
+            child-process
+            "spawn"
+            (fn [& _]
+              (throw (js/Error. "spawn failed")))
+            (fn []
+              (-> (auth/open-browser! "https://example.com")
+                  (p/then (fn [_]
+                            (is false "expected browser spawn failure")))
+                  (p/catch (fn [e]
+                             (is (= :browser-open-failed (-> e ex-data :code))))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (done)))))))
+
+(deftest test-parse-jwt-fails-fast-on-invalid-token
+  (let [parse-jwt (fn [jwt]
+                    (call-private 'parse-jwt jwt))]
+    (is (= {:sub "user-123"
+            :email "user@example.com"
+            :exp 1735689600}
+           (parse-jwt (jwt-with-claims {:sub "user-123"
+                                        :email "user@example.com"
+                                        :exp 1735689600}))))
+    (try
+      (parse-jwt "not-a-jwt")
+      (is false "expected invalid token to throw")
+      (catch :default e
+        (is (= :invalid-auth-token (-> e ex-data :code)))
+        (is (= "not-a-jwt" (-> e ex-data :token)))))))
+
+(deftest test-refresh-auth-fails-when-token-response-misses-id-token
+  (async done
+    (-> (p/with-redefs [auth/oauth-token-request! (fn [_params]
+                                                    (p/resolved {:access_token "access-token-only"
+                                                                 :refresh_token "refresh-token-1"}))]
+          (-> (auth/refresh-auth! {:auth-path "/tmp/auth.json"}
+                                  (sample-auth {:refresh-token "refresh-token-1"}))
+              (p/then (fn [_]
+                        (is false "expected refresh-auth! to reject when id_token is missing")))
+              (p/catch (fn [e]
+                         (is (= :auth-refresh-failed (-> e ex-data :code)))
+                         (is (= :missing-id-token
+                                (get-in (ex-data e) [:context :code])))))))
+        (p/catch (fn [e]
+                   (is false (str "unexpected error: " e))))
+        (p/finally (fn []
+                     (done))))))

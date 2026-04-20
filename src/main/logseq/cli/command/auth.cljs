@@ -19,18 +19,10 @@
   {:ok? true
    :action {:type command}})
 
-(defn- ex-message->code
-  [message]
-  (when (and (string? message)
-             (re-matches #"[a-zA-Z0-9._/\-]+" message))
-    (keyword message)))
-
 (defn- exception->error
   [error]
   (let [data (or (ex-data error) {})
-        code (or (:code data)
-                 (ex-message->code (ex-message error))
-                 :exception)]
+        code (or (:code data) :exception)]
     {:status :error
      :error (merge {:code code
                     :message (or (ex-message error) (str error))}

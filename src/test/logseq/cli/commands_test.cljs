@@ -1,5 +1,6 @@
 (ns logseq.cli.commands-test
   (:require [cljs.test :refer [async deftest is testing]]
+            [babashka.cli :as cli]
             [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.graph :as graph-command]
@@ -34,6 +35,14 @@
   (let [token (escape-regex token)
         pattern (re-pattern (str "\\u001b\\[[0-9;]*m" token "\\u001b\\[[0-9;]*m"))]
     (boolean (re-find pattern value))))
+
+(defn- capture-throw-message
+  [f]
+  (try
+    (f)
+    nil
+    (catch :default e
+      (or (ex-message e) (.-message e) (str e)))))
 
 (defn- command-lines
   [summary]
@@ -507,6 +516,12 @@
     (let [result (commands/parse-args ["wat"])]
       (is (false? (:ok? result)))
       (is (= :unknown-command (get-in result [:error :code]))))))
+
+(deftest test-parse-args-rethrows-unexpected-dispatch-errors
+  (with-redefs [cli/dispatch (fn [& _]
+                               (throw (js/Error. "dispatch exploded")))]
+    (let [message (capture-throw-message #(commands/parse-args ["graph" "list"]))]
+      (is (string/includes? (or message "") "dispatch exploded")))))
 
 (deftest test-parse-args-remove-help-and-rejects-add-tag
   (testing "bare remove shows remove subcommand help"
@@ -1474,6 +1489,10 @@
                                       {:repo "demo"
                                        :options {:status "invalid-status"}}
                                       {})
+                         list-alias-result (list-command/execute-list-task
+                                            {:repo "demo"
+                                             :options {:status "now"}}
+                                            {})
                          upsert-result (upsert-command/execute-upsert-task
                                         {:repo "upsert-demo"
                                          :mode :update
@@ -1481,13 +1500,19 @@
                                          :status "invalid-status"}
                                         {})
                          list-message (or (some-> (get-in list-result [:error :message]) strip-ansi) "")
+                         list-alias-message (or (some-> (get-in list-alias-result [:error :message]) strip-ansi) "")
                          upsert-message (or (some-> (get-in upsert-result [:error :message]) strip-ansi) "")]
                    (is (= :error (:status list-result)))
                    (is (= :invalid-options (get-in list-result [:error :code])))
                    (is (string/includes? list-message "Invalid value for option :status: invalid-status"))
                    (is (string/includes? list-message "Available values: doing, done, todo"))
                    (is (not (string/includes? list-message "from current graph")))
-                   (is (= [:thread-api/q] @list-calls*))
+
+                   (is (= :error (:status list-alias-result)))
+                   (is (= :invalid-options (get-in list-alias-result [:error :code])))
+                   (is (string/includes? list-alias-message "Invalid value for option :status: now"))
+                   (is (string/includes? list-alias-message "Available values: doing, done, todo"))
+                   (is (= [:thread-api/q :thread-api/q] @list-calls*))
 
                    (is (= :error (:status upsert-result)))
                    (is (= :invalid-options (get-in upsert-result [:error :code])))
@@ -4019,6 +4044,26 @@
                         (get-in result [:data :graphs])))))
              (p/catch (fn [e] (is false (str "unexpected error: " e))))
              (p/finally done))))
+
+(deftest test-execute-graph-list-keeps-classified-items-without-legacy-string-compat
+  (async done
+         (let [graph-items [{:kind :canonical
+                             :graph-name "alpha"
+                             :graph-dir "alpha"}
+                            {:kind :legacy
+                             :legacy-dir "legacy++name"
+                             :legacy-graph-name "legacy/name"
+                             :target-graph-dir "legacy~2Fname"
+                             :conflict? false}]]
+           (-> (p/with-redefs [cli-server/list-graph-items (fn [_]
+                                                             graph-items)]
+                 (p/let [result (commands/execute {:type :graph-list} {})]
+                   (is (= :ok (:status result)))
+                   (is (= graph-items
+                          (get-in result [:data :graph-items])))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-graph-list-includes-legacy-metadata
   (async done

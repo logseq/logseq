@@ -99,3 +99,28 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
+
+(deftest test-execute-remove-block-rethrows-unexpected-errors
+  (async done
+    (let [action {:type :remove-block
+                  :repo "demo-repo"
+                  :graph "demo-graph"
+                  :ids [190]
+                  :multi-id? false}
+          boom (js/Error. "transport exploded")]
+      (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                      (p/resolved (assoc config :base-url "http://example")))
+                          transport/invoke (fn [_ method _ _args]
+                                             (case method
+                                               :thread-api/pull
+                                               (p/rejected boom)
+                                               (p/resolved nil)))]
+            (-> (remove-command/execute-remove-block action {})
+                (p/then (fn [_]
+                          (is false "expected unexpected error to reject")))
+                (p/catch (fn [error]
+                           (is (= "transport exploded"
+                                  (or (ex-message error) (.-message error))))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
