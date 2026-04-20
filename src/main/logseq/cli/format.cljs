@@ -202,8 +202,8 @@
 
 (defn- format-error
   [error command]
-  (let [{:keys [code message candidates]} error
-        hint (error-hint error command)
+  (let [{:keys [code message candidates context]} error
+        hint (or (error-hint error command) (:hint context))
         message* (style/bold-keywords message ["option" "command" "argument"])
         candidates* (format-candidates candidates)]
     (if (= :graph-validation-failed code)

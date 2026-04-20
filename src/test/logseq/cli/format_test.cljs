@@ -74,7 +74,16 @@
   (testing "human error (default)"
     (let [result (format/format-result {:status :error :error {:code :boom :message "nope"}}
                                        {:output-format nil})]
-      (is (= "Error (boom): nope" result)))))
+      (is (= "Error (boom): nope" result))))
+
+  (testing "human error with hint from context"
+    (let [result (format/format-result {:status :error
+                                        :error {:code :missing-auth
+                                                :message "missing auth"
+                                                :context {:code :missing-auth
+                                                          :hint "Run `logseq login` first."}}}
+                                       {:output-format nil})]
+      (is (= "Error (missing-auth): missing auth\nHint: Run `logseq login` first." result)))))
 
 (deftest test-format-graph-validation
   (testing "graph validation success prints validated"
