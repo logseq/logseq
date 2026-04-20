@@ -242,8 +242,12 @@
 
 (defn get-graph-uuid
   [repo]
-  (some-> (sqlite-store-or-throw repo)
-          (sqlite-get-meta :graph-uuid)))
+  (when-let [store (sqlite-store-or-throw repo)]
+    (let [value (sqlite-get-meta store :graph-uuid)]
+      (prn :debug/client-op-get-graph-uuid {:repo repo
+                                            :has-store? (some? store)
+                                            :value value})
+      value)))
 
 (defn update-local-tx
   [repo t]
@@ -251,7 +255,6 @@
   (let [store (sqlite-store-or-throw repo)]
     (assert (some? store) repo)
     (sqlite-set-meta! store :local-tx t)))
-
 (defn update-local-checksum
   [repo checksum]
   {:pre [(some? checksum)]}
@@ -267,8 +270,13 @@
 (defn get-local-tx
   [repo]
   (when-let [store (sqlite-store-or-throw repo)]
-    (some-> (sqlite-get-meta store :local-tx)
-            (js/parseInt 10))))
+    (let [raw (sqlite-get-meta store :local-tx)
+          parsed (some-> raw
+                         (js/parseInt 10))]
+      (prn :debug/client-op-get-local-tx {:repo repo
+                                          :raw raw
+                                          :parsed parsed})
+      parsed)))
 
 (defn get-pending-local-tx-count
   [repo]
@@ -281,6 +289,9 @@
                                (aget "c"))
                        0)
                    0)]
+      (prn :debug/client-op-pending-local {:repo repo
+                                           :count count'
+                                           :cache-hit? false})
       (swap! *repo->pending-local-tx-count assoc repo count')
       count')))
 

@@ -39,4 +39,5 @@
   [(repo-path "static" "logseq-cli.js")
    (repo-path "static" "db-worker-node.js")
    (repo-path "dist" "db-worker-node.js")
-   (repo-path "dist" "db-worker-node-assets.json")])
+   (repo-path "dist" "db-worker-node-assets.json")
+   (repo-path "deps" "db-sync" "worker" "dist" "node-adapter.js")])

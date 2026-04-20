@@ -137,11 +137,15 @@
     (let [sql (gobj/get opts-or-sql "sql")
           bind (gobj/get opts-or-sql "bind")
           row-mode (gobj/get opts-or-sql "rowMode")
+          return-value (gobj/get opts-or-sql "returnValue")
           bind' (normalize-bind bind)
           ^js stmt (.prepare db sql)]
-      (if (= row-mode "array")
+      (if (or (= row-mode "array")
+              (= row-mode "object")
+              (= return-value "resultRows"))
         (do
-          (.setReturnArrays stmt true)
+          (when (= row-mode "array")
+            (.setReturnArrays stmt true))
           (stmt-all stmt bind'))
         (do
           (stmt-run stmt bind')

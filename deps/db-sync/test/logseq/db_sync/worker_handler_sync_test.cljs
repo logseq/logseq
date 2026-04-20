@@ -561,6 +561,59 @@
         (is (= "pull/ok" (:type pull-response)))
         (is (empty? (:txs pull-response)))))))
 
+(deftest tx-batch-drops-missing-created-by-ref-lookup-test
+  (testing "missing created-by lookup refs are sanitized so tx batch still applies"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          page-uuid (random-uuid)
+          missing-user-uuid (random-uuid)
+          tx-entry {:tx (protocol/tx->transit [[:db/add -1 :block/uuid page-uuid]
+                                               [:db/add -1 :block/name "created-by-sanitize-page"]
+                                               [:db/add -1 :block/title "created-by-sanitize-page"]
+                                               [:db/add -1 :logseq.property/created-by-ref
+                                                [:block/uuid missing-user-uuid]]])
+                    :outliner-op :save-block}
+          response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] 0))
+          page (d/entity @conn [:block/uuid page-uuid])]
+      (is (= "tx/batch/ok" (:type response)))
+      (is (= 1 (:t response)))
+      (is (some? page))
+      (is (= "created-by-sanitize-page" (:block/title page)))
+      (is (nil? (:logseq.property/created-by-ref page))))))
+
+(deftest tx-batch-drops-missing-optional-lookup-refs-test
+  (testing "missing optional lookup refs (tags/refs/created-by) are sanitized so page create still applies"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          page-uuid (random-uuid)
+          missing-ref-uuid (random-uuid)
+          missing-tag-uuid (random-uuid)
+          missing-user-uuid (random-uuid)
+          tx-entry {:tx (protocol/tx->transit [[:db/add -1 :block/uuid page-uuid]
+                                               [:db/add -1 :block/name "optional-ref-sanitize-page"]
+                                               [:db/add -1 :block/title "optional-ref-sanitize-page"]
+                                               [:db/add -1 :block/refs [:block/uuid missing-ref-uuid]]
+                                               [:db/add -1 :block/tags [:block/uuid missing-tag-uuid]]
+                                               [:db/add -1 :logseq.property/created-by-ref [:block/uuid missing-user-uuid]]])
+                    :outliner-op :create-page}
+          response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] 0))
+          page (d/entity @conn [:block/uuid page-uuid])]
+      (is (= "tx/batch/ok" (:type response)))
+      (is (= 1 (:t response)))
+      (is (some? page))
+      (is (= "optional-ref-sanitize-page" (:block/title page)))
+      (is (nil? (:block/refs page)))
+      (is (nil? (:block/tags page)))
+      (is (nil? (:logseq.property/created-by-ref page))))))
+
 (deftest tx-batch-rejects-while-snapshot-upload-is-in-progress-test
   (let [sql (test-sql/make-sql)
         conn (d/create-conn db-schema/schema)

@@ -4,7 +4,8 @@
 
 (deftest build-plan-matches-required-commands
   (is (= ["clojure -M:cljs compile logseq-cli db-worker-node"
-          "yarn db-worker-node:compile:bundle"]
+          "yarn db-worker-node:compile:bundle"
+          "yarn --cwd deps/db-sync build:node-adapter"]
          (mapv :cmd preflight/build-plan))))
 
 (deftest missing-artifacts-returns-unreadable-paths
@@ -30,13 +31,15 @@
         existing (atom #{"/repo/static/logseq-cli.js"
                          "/repo/static/db-worker-node.js"
                          "/repo/dist/db-worker-node.js"
-                         "/repo/dist/db-worker-node-assets.json"})]
+                         "/repo/dist/db-worker-node-assets.json"
+                         "/repo/deps/db-sync/worker/dist/node-adapter.js"})]
     (with-redefs [logseq.cli.e2e.paths/repo-root (constantly "/repo")
                   logseq.cli.e2e.paths/required-artifacts (fn []
                                                             ["/repo/static/logseq-cli.js"
                                                              "/repo/static/db-worker-node.js"
                                                              "/repo/dist/db-worker-node.js"
-                                                             "/repo/dist/db-worker-node-assets.json"])]
+                                                             "/repo/dist/db-worker-node-assets.json"
+                                                             "/repo/deps/db-sync/worker/dist/node-adapter.js"])]
       (let [result (preflight/run! {:run-command (fn [{:keys [cmd]}]
                                                    (swap! calls conj cmd)
                                                    {:cmd cmd
@@ -46,5 +49,6 @@
                                     :file-exists? @existing})]
         (is (= :ok (:status result)))
         (is (= ["clojure -M:cljs compile logseq-cli db-worker-node"
-                "yarn db-worker-node:compile:bundle"]
+                "yarn db-worker-node:compile:bundle"
+                "yarn --cwd deps/db-sync build:node-adapter"]
                @calls))))))

@@ -5,7 +5,8 @@
 
 (def build-plan
   [{:cmd "clojure -M:cljs compile logseq-cli db-worker-node"}
-   {:cmd "yarn db-worker-node:compile:bundle"}])
+   {:cmd "yarn db-worker-node:compile:bundle"}
+   {:cmd "yarn --cwd deps/db-sync build:node-adapter"}])
 
 (defn missing-artifacts
   ([]

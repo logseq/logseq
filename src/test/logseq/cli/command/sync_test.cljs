@@ -121,6 +121,46 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-execute-sync-start-uses-default-ws-url-when-config-missing
+  (async done
+         (let [invoke-calls (atom [])
+               worker-sync-config (atom {:ws-url nil})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (case method
+                                                    :thread-api/set-db-sync-config
+                                                    (let [cfg (first args)]
+                                                      (reset! worker-sync-config cfg)
+                                                      (p/resolved nil))
+
+                                                    :thread-api/db-sync-start
+                                                    (p/resolved nil)
+
+                                                    :thread-api/db-sync-status
+                                                    (p/resolved {:repo "logseq_db_demo"
+                                                                 :ws-state (if (seq (:ws-url @worker-sync-config)) :open :stopped)
+                                                                 :pending-local 0
+                                                                 :pending-asset 0
+                                                                 :pending-server 0})
+
+                                                    (p/resolved {:ok true})))]
+                 (p/let [result (execute-with-runtime-auth {:type :sync-start
+                                                            :repo "logseq_db_demo"
+                                                            :wait-timeout-ms 20
+                                                            :wait-poll-interval-ms 0}
+                                                           {:data-dir "/tmp"})
+                         set-config-calls (filter #(= :thread-api/set-db-sync-config (first %)) @invoke-calls)]
+                   (is (= :ok (:status result)))
+                   (is (seq set-config-calls))
+                   (is (every? #(= "wss://api.logseq.io/sync/%s"
+                                   (get-in % [2 0 :ws-url]))
+                               set-config-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest test-execute-sync-start-verifies-and-persists-e2ee-password-when-provided
   (async done
          (let [invoke-calls (atom [])]

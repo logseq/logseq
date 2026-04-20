@@ -88,3 +88,4 @@ deps/db-sync/data
 /dist/db-worker-node-assets.json
 /dist/*.wasm
 /dist/cljs-runtime/
+/.agent-shell/
