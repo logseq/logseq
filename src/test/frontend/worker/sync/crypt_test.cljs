@@ -99,10 +99,12 @@
 (deftest save-e2ee-password-uses-secret-storage-in-browser-runtime-test
   (async done
          (let [platform-map {:env {:runtime :browser}}
+               state-prev @worker-state/*state
                secret-calls (atom [])
                file-calls (atom [])
                auth-read-calls (atom [])
                encrypt-calls (atom [])]
+           (reset! worker-state/*state (assoc state-prev :auth/refresh-token "refresh-from-state"))
            (-> (p/with-redefs [crypt/<encrypt-text-by-text-password (fn [refresh-token password]
                                                                       (swap! encrypt-calls conj [refresh-token password])
                                                                       {:cipher "payload"})
@@ -123,9 +125,8 @@
                                                       (p/resolved nil))]
                  (#'sync-crypt/<save-e2ee-password "password"))
                (p/then (fn [_]
-                         (is (= 1 (count @auth-read-calls)))
-                         (is (= "~/logseq/auth.json" (:path (first @auth-read-calls))))
-                         (is (= [["refresh-from-auth-file" "password"]] @encrypt-calls))
+                         (is (empty? @auth-read-calls))
+                         (is (= [["refresh-from-state" "password"]] @encrypt-calls))
                          (is (= 1 (count @secret-calls)))
                          (is (= platform-map (:platform (first @secret-calls))))
                          (is (= "logseq-encrypted-password" (:key (first @secret-calls))))
@@ -133,7 +134,9 @@
                          (is (empty? @file-calls))))
                (p/catch (fn [e]
                           (is false (str e))))
-               (p/finally done)))))
+               (p/finally (fn []
+                            (reset! worker-state/*state state-prev)
+                            (done)))))))
 
 (deftest save-e2ee-password-uses-file-storage-in-node-runtime-test
   (async done
@@ -349,6 +352,46 @@
                                              (keyword (ex-message e)))))))
                (p/finally (fn []
                             (reset! worker-state/*db-sync-config old-sync-config)
+                            (reset! worker-state/*state old-state)
+                            (done)))))))
+
+(deftest decrypt-private-key-browser-fallback-does-not-log-missing-persisted-password-test
+  (async done
+         (let [old-state @worker-state/*state
+               fail-calls (atom [])
+               decrypt-calls (atom [])
+               save-calls (atom [])]
+           (reset! worker-state/*state (assoc old-state :auth/refresh-token "refresh-token"))
+           (-> (p/with-redefs [platform/current (fn [] {:env {:runtime :browser}})
+                               platform/read-secret-text (fn [_platform' _key]
+                                                           (p/resolved nil))
+                               platform/read-text! (fn [_platform' _path]
+                                                     (p/rejected (ex-info "should-not-read-browser-file" {})))
+                               ui-request/<request (fn [_action payload _opts]
+                                                     (is (= {:reason :decrypt-user-rsa-private-key} payload))
+                                                     (p/resolved {:password "ui-password"}))
+                               sync-crypt/fail-missing-e2ee-password! (fn [data]
+                                                                       (swap! fail-calls conj data)
+                                                                       (throw (ex-info "missing-e2ee-password" data)))
+                               ldb/read-transit-str (fn [_] :encrypted-private-key)
+                               crypt/<decrypt-private-key (fn [password encrypted-private-key]
+                                                            (swap! decrypt-calls conj [password encrypted-private-key])
+                                                            (p/resolved :private-key))
+                               crypt/<encrypt-text-by-text-password (fn [refresh-token password]
+                                                                      (swap! save-calls conj [:encrypt refresh-token password])
+                                                                      {:cipher "password-payload"})
+                               platform/save-secret-text! (fn [_platform' key text]
+                                                            (swap! save-calls conj [:save key text])
+                                                            (p/resolved nil))]
+                 (#'sync-crypt/<decrypt-private-key "encrypted-private-key-str"))
+               (p/then (fn [private-key]
+                         (is (= :private-key private-key))
+                         (is (= [["ui-password" :encrypted-private-key]] @decrypt-calls))
+                         (is (= 2 (count @save-calls)))
+                         (is (empty? @fail-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally (fn []
                             (reset! worker-state/*state old-state)
                             (done)))))))
 
