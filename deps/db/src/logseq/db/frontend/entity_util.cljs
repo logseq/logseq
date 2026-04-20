@@ -47,10 +47,7 @@
   (or (internal-page? entity)
       (journal? entity)
       (class? entity)
-      (property? entity)
-      ;; Sync sanitize can drop :block/tags when optional lookup refs are missing.
-      ;; Keep a :block/name fallback so page entities are still recognized.
-      (some? (:block/name entity))))
+      (property? entity)))
 
 (defn asset?
   "Given an entity or map, check if it is an asset block"
