@@ -73,6 +73,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.bidi :as bidi-util]
             [frontend.util.clock :as clock]
             [frontend.util.ref :as ref]
             [frontend.util.text :as text-util]
@@ -1219,7 +1220,7 @@
                            (:logseq.property/status block)
                            (:logseq.property/priority block))
                    [:div.inline-block
-                    {:style {:margin-right 1
+                    {:style {:margin-inline-end 1
                              :margin-top -2
                              :vertical-align "middle"}
                      :on-pointer-down (fn [e]
@@ -2351,7 +2352,7 @@
 (defn list-checkbox
   [config checked?]
   (ui/checkbox
-   {:style {:margin-right 6}
+   {:style {:margin-inline-end 6}
     :value checked?
     :checked checked?
     :on-change (fn [event]
@@ -3945,9 +3946,23 @@
     fallback-view
     view))
 
+(defn- get-cached-bidi-dir!
+  [*bidi-dir-state block-id text]
+  (let [{cached-block-id :block-id
+         cached-text :text
+         cached-dir :dir} @*bidi-dir-state]
+    (if (and (= cached-block-id block-id)
+             (= cached-text text))
+      cached-dir
+      (let [dir (bidi-util/infer-text-dir text)]
+        (reset! *bidi-dir-state {:block-id block-id
+                                 :text text
+                                 :dir dir})
+        dir))))
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner-aux < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [*ref (atom nil)
+                 *bidi-dir-state (atom {:block-id nil :text nil :dir "auto"})
                  [_container-state _repo config block] (:rum/args state)
                  current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
                  embed-self? (and (:embed? config)
@@ -3961,6 +3976,7 @@
                    (reset! *refs-count count))))
              (assoc state
                     ::ref *ref
+                    ::bidi-dir-state *bidi-dir-state
                     ::hide-block-refs? (atom default-hide?)
                     ::show-query? (atom false)
                     ::refs-count *refs-count
@@ -3984,6 +4000,7 @@
        (mixins/listen state @*ref "touchmove" block-handler/on-touch-move))))
   [state container-state repo config* block {:keys [navigating-block navigated? editing? selected?] :as opts}]
   (let [*ref (::ref state)
+        *bidi-dir-state (get state ::bidi-dir-state)
         *hide-block-refs? (get state ::hide-block-refs?)
         *show-query? (get state ::show-query?)
         show-query? (rum/react *show-query?)
@@ -4018,6 +4035,15 @@
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
         {:block/keys [uuid title]} block
+        edit-content (when editing? (state/sub-edit-content uuid))
+        bidi-text (bidi-util/row-dir-source-text
+                   {:editing? editing?
+                    :edit-content edit-content
+                    :title title
+                    :original-name (:block/original-name block)
+                    :name (:block/name block)
+                    :raw-title (:block/raw-title block)})
+        bidi-dir (get-cached-bidi-dir! *bidi-dir-state uuid bidi-text)
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
         *control-show? (get container-state ::control-show?)
@@ -4217,10 +4243,11 @@
      (when (and top? (not (or table? property?)))
        (dnd-separator-wrapper block block-id true))
 
-     (when-not (:hide-title? config)
-       [:div.block-main-container.flex.flex-row.gap-1
-        {:class (when (:page-title? config) "is-page-title-row")
-         :style (when (:page-title? config)
+    (when-not (:hide-title? config)
+      [:div.block-main-container.flex.gap-1
+       {:class (when (:page-title? config) "is-page-title-row")
+        :data-row-dir bidi-dir
+        :style (when (:page-title? config)
                   {:margin-left (cond
                                   (util/mobile?) 0
                                   page-icon -36
@@ -4234,18 +4261,19 @@
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
-        (when (and (not property?) (not (:table-block-title? config)))
-          (let [edit? (or editing?
-                        (= uuid (:block/uuid (state/get-edit-block))))]
-            (block-control (assoc config :hide-bullet? (:page-title? config))
-              block
-              (merge opts
-                {:uuid uuid
-                 :block-id block-id
-                 :collapsed? collapsed?
-                 :*control-show? *control-show?
-                 :edit? edit?}))))
+       (when (and (not property?) (not (:table-block-title? config)))
+         (let [edit? (or editing?
+                       (= uuid (:block/uuid (state/get-edit-block))))]
+           (block-control (assoc config :hide-bullet? (:page-title? config))
+             block
+             (merge opts
+               {:uuid uuid
+                :block-id block-id
+                :collapsed? collapsed?
+                :*control-show? *control-show?
+                :edit? edit?}))))
 
+       [:div.block-main-content-wrap.flex.flex-col.w-full
         (if (= :plugin renderer-display-mode)
           ;; --- Plugin renderer: full-block replacement ---
           [:div.block-renderer-container.flex.flex-col.w-full
@@ -4272,7 +4300,7 @@
               (str "block-renderer-" (:key matched-block-renderer) "-" uuid))]]
 
           ;; --- Original outline ---
-          outline-view-cp)
+          outline-view-cp)]
 
         (when (and has-comment-thread? (not table?) (not property?))
           (shui/button
