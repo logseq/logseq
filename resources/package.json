@@ -40,7 +40,7 @@
     "keytar": "^7.9.0"
   },
   "devDependencies": {
-    "electron": "41.2.1",
+    "electron": "39.8.8",
     "electron-builder": "26.8.2",
     "electron-devtools-installer": "4.0.0"
   },
