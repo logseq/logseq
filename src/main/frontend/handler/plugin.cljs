@@ -13,7 +13,7 @@
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin-config :as plugin-config-handler]
-            [frontend.idb :as idb]
+            [frontend.common.idb :as idb]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
             [frontend.storage :as storage]

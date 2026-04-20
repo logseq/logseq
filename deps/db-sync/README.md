@@ -50,7 +50,7 @@ Download a graph snapshot into a local sqlite debug file matching local graph DB
 
 ```bash
 cd deps/db-sync
-yarn download-graph-db --graph-id 6f2d7f6f-xxxx-xxxx-xxxx-xxxxxxxxxxxx --admin-token <admin-token>
+pnpm run download-graph-db -- --graph-id 6f2d7f6f-xxxx-xxxx-xxxx-xxxxxxxxxxxx --admin-token <admin-token>
 ```
 
 You can also pass `--admin-token <token>` or set `DB_SYNC_ADMIN_TOKEN`. The output defaults to
@@ -60,7 +60,7 @@ Show stored and recomputed checksum for a local sqlite graph db:
 
 ```bash
 cd deps/db-sync
-yarn show-sqlite-checksum --db ~/Downloads/test.sqlite
+pnpm run show-sqlite-checksum -- --db ~/Downloads/test.sqlite
 ```
 
 Delete the graphs owned by a production user after an explicit confirmation:
@@ -80,8 +80,8 @@ Delete a user completely (owned graphs, memberships, keys, and user row):
 
 ```bash
 cd deps/db-sync
-yarn delete-user-totally --username alice
-yarn delete-user-totally --user-id us-east-1:example-user-id
+pnpm run delete-user-totally -- --username alice
+pnpm run delete-user-totally -- --user-id us-east-1:example-user-id
 ```
 
 The script prints all linked graphs first, deletes owned graphs through the

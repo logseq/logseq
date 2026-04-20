@@ -62,7 +62,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.30.0
+          version: 10.33.0
 
       - name: Get pnpm store directory path
         id: pnpm-store-dir-path
@@ -113,7 +113,7 @@ jobs:
           echo "ENABLE_FILE_SYNC_PRODUCTION=${{ inputs.enable-file-sync-production || github.event.inputs.enable-file-sync-production || inputs.build-target == '' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS - app variant, use es6 instead of es-next
-        run: pnpm install && pnpm release-mobile
+        run: pnpm install --frozen-lockfile && pnpm release-mobile
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}

@@ -14,14 +14,14 @@
             {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
-            {:runner :cmd :name "yarn test (-e long)" :cmd "yarn test -e long"}]}
+            {:runner :cmd :name "pnpm exec nbb-logseq (-e long)" :cmd "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner -e long"}]}
    {:dep "deps/db"
     :steps [kondo-src-test-step
             {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
             {:runner :bb :name "lint:rules" :cmd "lint:rules"}
-            {:runner :cmd :name "yarn test (-e long)" :cmd "yarn test -e long"}]}
+            {:runner :cmd :name "pnpm exec nbb-logseq (-e long)" :cmd "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner -e long"}]}
    {:dep "deps/db-sync"
     :steps [kondo-src-test-step
             {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
@@ -37,21 +37,21 @@
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
             {:runner :bb :name "lint:minimize-public-vars" :cmd "lint:minimize-public-vars"}
-            {:runner :cmd :name "yarn test (-e long)" :cmd "yarn test -e long"}]}
+            {:runner :cmd :name "pnpm exec nbb-logseq (-e long)" :cmd "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner -e long"}]}
    {:dep "deps/graph-parser"
     :steps [kondo-src-test-step
             {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
             ;; {:runner :bb :name "lint:minimize-public-vars" :cmd "lint:minimize-public-vars"}
-            {:runner :cmd :name "yarn test (-e long)" :cmd "yarn test -e long"}]}
+            {:runner :cmd :name "pnpm exec nbb-logseq (-e long)" :cmd "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner -e long"}]}
    {:dep "deps/cli"
     :steps [kondo-src-test-step
             {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
             {:runner :bb :name "lint:minimize-public-vars" :cmd "lint:minimize-public-vars"}
-            {:runner :cmd :name "yarn test (-e long)" :cmd "yarn test -e long"}]}
+            {:runner :cmd :name "pnpm exec nbb-logseq (-e long)" :cmd "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner -e long"}]}
    {:dep "deps/publish"
     :steps [kondo-src-step
             {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
