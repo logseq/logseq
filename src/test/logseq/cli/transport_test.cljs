@@ -1,5 +1,6 @@
 (ns logseq.cli.transport-test
   (:require [cljs.test :refer [deftest is async testing]]
+            [clojure.string :as string]
             [logseq.cli.profile :as profile]
             [logseq.cli.test-helper :as test-helper]
             [logseq.cli.transport :as transport]
@@ -14,6 +15,14 @@
   [filename]
   (let [dir (.mkdtempSync fs (.join path (.tmpdir os) "logseq-cli-"))]
     (.join path dir filename)))
+
+(defn- capture-throw-message
+  [f]
+  (try
+    (f)
+    nil
+    (catch :default e
+      (or (ex-message e) (.-message e) (str e)))))
 
 (defn- start-server
   [handler]
@@ -156,6 +165,30 @@
                         (is false (str "unexpected error: " e))
                         (done))))))
 
+(deftest test-request-rethrows-non-syntax-json-parse-errors
+  (async done
+         (-> (test-helper/with-js-property-override
+               js/JSON
+               "parse"
+               (fn [_]
+                 (throw (js/Error. "json parser exploded")))
+               (fn []
+                 (p/let [{:keys [url stop!]} (start-server
+                                              (fn [_req ^js res]
+                                                (.writeHead res 500 #js {"Content-Type" "application/json"})
+                                                (.end res "{\"ok\":false}")))]
+                   (p/catch
+                    (transport/request {:method "POST"
+                                        :url (str url "/invoke")
+                                        :timeout-ms 1000})
+                    (fn [e]
+                      (is (string/includes? (or (ex-message e) (str e)) "json parser exploded"))))
+                   (p/let [_ (stop!)] true))))
+             (p/then (fn [_] (done)))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))
+                        (done))))))
+
 (deftest test-request-timeout
   (async done
          (-> (p/let [{:keys [url stop!]} (start-server
@@ -195,6 +228,27 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))
                           (done)))))))
+
+(deftest test-invoke-requires-explicit-base-url-and-method
+  (testing "invoke fails fast when base-url is missing"
+    (let [message (capture-throw-message #(transport/invoke {} :thread-api/q true []))]
+      (is (re-find #"base-url is required" (or message "")))))
+
+  (testing "invoke fails fast when method is missing"
+    (let [message (capture-throw-message #(transport/invoke {:base-url "http://127.0.0.1:8123"}
+                                                            nil
+                                                            true
+                                                            []))]
+      (is (re-find #"invoke method is required" (or message ""))))))
+
+(deftest test-connect-events-requires-valid-arguments
+  (testing "connect-events! requires base-url"
+    (let [message (capture-throw-message #(transport/connect-events! {} (fn [_ _] nil)))]
+      (is (re-find #"base-url is required" (or message "")))))
+
+  (testing "connect-events! requires function handler"
+    (let [message (capture-throw-message #(transport/connect-events! {:base-url "http://127.0.0.1:8123"} nil))]
+      (is (re-find #"handler must be a function" (or message ""))))))
 
 (deftest test-invoke-does-not-send-auth-header
   (async done
