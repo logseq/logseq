@@ -631,15 +631,16 @@
 (defn- run-sync-start
   [action config]
   (-> (p/let [config' (resolve-runtime-config! action config)
-              missing-keys (missing-required-sync-config-keys (:type action) config')]
+              missing-keys (missing-required-sync-config-keys (:type action) config')
+              start-config (assoc config' :ws-url (effective-sync-config-value config' :ws-url))]
         (if (seq missing-keys)
           (missing-sync-config-error (:type action) missing-keys)
-          (p/let [cfg (cli-server/ensure-server! config' (:repo action))
-                  _ (<sync-worker-runtime! cfg config')
+          (p/let [cfg (cli-server/ensure-server! start-config (:repo action))
+                  _ (<sync-worker-runtime! cfg start-config)
                   graph-e2ee? (transport/invoke cfg :thread-api/q false [(:repo action) [graph-e2ee-query]])
-                  _ (<ensure-e2ee-password-available! cfg config' action (true? graph-e2ee?))
+                  _ (<ensure-e2ee-password-available! cfg start-config action (true? graph-e2ee?))
                   _ (transport/invoke cfg :thread-api/db-sync-start false [(:repo action)])
-                  result (wait-sync-start-ready config' (:repo action) action)]
+                  result (wait-sync-start-ready start-config (:repo action) action)]
             result)))
       (p/catch (fn [error]
                  (if (= :e2ee-password-not-found (:code (ex-data error)))

@@ -24,15 +24,19 @@
 (logging/install!)
 
 (defn- make-env [cfg index-db assets-bucket]
-  (doto (js-obj)
-    (aset "DB" index-db)
-    (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
-    ;; Node adapter serves snapshot transit stream without gzip to avoid
-    ;; browser/adapter content-encoding mismatches during graph download.
-    (aset "DB_SYNC_SNAPSHOT_STREAM_GZIP" "false")
-    (aset "COGNITO_ISSUER" (:cognito-issuer cfg))
-    (aset "COGNITO_CLIENT_ID" (:cognito-client-id cfg))
-    (aset "COGNITO_JWKS_URL" (:cognito-jwks-url cfg))))
+  (let [allow-unverified-jwt-claims (some-> js/process .-env (aget "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS"))
+        env (doto (js-obj)
+              (aset "DB" index-db)
+              (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
+              ;; Node adapter serves snapshot transit stream without gzip to avoid
+              ;; browser/adapter content-encoding mismatches during graph download.
+              (aset "DB_SYNC_SNAPSHOT_STREAM_GZIP" "false")
+              (aset "COGNITO_ISSUER" (:cognito-issuer cfg))
+              (aset "COGNITO_CLIENT_ID" (:cognito-client-id cfg))
+              (aset "COGNITO_JWKS_URL" (:cognito-jwks-url cfg)))]
+    (when (some? allow-unverified-jwt-claims)
+      (aset env "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS" allow-unverified-jwt-claims))
+    env))
 
 (defn- access-allowed?
   [env graph-id request]
