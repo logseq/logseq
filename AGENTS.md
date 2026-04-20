@@ -7,6 +7,15 @@
 - CLI E2E tests live in `cli-e2e/`; run with `bb -f cli-e2e/bb.edn test --skip-build` (or `bb -f cli-e2e/bb.edn build` first when needed).
 - If a request says only “e2e”, clarify whether it targets `clj-e2e/` or `cli-e2e/` before planning changes.
 
+## Error handling and compatibility
+- When modifying code, first consider removing compatibility layers rather than extending them.
+- Prefer fail-fast over fallback.
+- Do not add backward compatibility unless explicitly requested.
+- Do not introduce default values to mask invalid state.
+- Do not silently recover from programmer errors.
+- Keep one clear code path whenever possible.
+- Internal code may assume well-formed inputs from controlled callers.
+
 ## Coding Style & Naming Conventions
 - ClojureScript keywords are defined via `logseq.common.defkeywords/defkeyword`; use existing keywords and add new ones in the shared definitions.
 - Follow existing namespace and file layout; keep related workers and RTC code in their dedicated directories.
@@ -26,7 +35,6 @@
 - PRs should describe the behavior change, link relevant issues, and note any test coverage added or skipped.
 
 ## Agent-Specific Notes
-- Review notes live in `prompts/review.md`; check them when preparing changes.
 - DB-sync feature guide for AI agents: `docs/agent-guide/db-sync/db-sync-guide.md`.
 - DB-sync protocol reference: `docs/agent-guide/db-sync/protocol.md`.
 - For db-sync D1 schema changes, add or update a Cloudflare worker SQL migration under `deps/db-sync/worker/migrations/`; do not rely on ad hoc runtime-only schema migration code.
