@@ -70,8 +70,6 @@
      #(let [doc js/document.documentElement
             preferred-language' (i18n/locale-tag preferred-language)]
         (.setAttribute doc "lang" preferred-language')
-        ;; TODO just set dir attribute on root container is not enough, can't support rlt layout currently
-        ;; (.setAttribute doc "dir" (i18n/locale-direction preferred-language))
         (js/LSI18N.setLocale preferred-language'))
      [preferred-language])
 
