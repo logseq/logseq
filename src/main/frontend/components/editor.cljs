@@ -40,11 +40,14 @@
 (defn filter-commands
   [page? commands]
   (if page?
-    (filter (fn [item]
-              (or
-               (= "Add new property" (first item))
-               (when (= (count item) 5)
-                 (contains? #{"TASK STATUS" "TASK DATE" "PRIORITY"} (last item))))) commands)
+    (let [task-groups #{(t :editor.slash/group-task-status)
+                        (t :editor.slash/group-task-date)
+                        (t :editor.slash/group-priority)}]
+      (filter (fn [item]
+                (or
+                 (= (t :command.editor/add-property) (first item))
+                 (when (= (count item) 5)
+                   (contains? task-groups (last item))))) commands))
     commands))
 
 (defn node-render
