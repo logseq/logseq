@@ -1,6 +1,12 @@
 (ns frontend.worker.platform
   "Platform adapter contract for db-worker runtimes.")
 
+(defn- normalize-missing-value
+  [value]
+  (if (identical? js/undefined value)
+    nil
+    value))
+
 (def ^:private required-sections
   [:env :storage :kv :broadcast :websocket :crypto :timers :sqlite])
 
@@ -54,7 +60,8 @@
 (defn kv-get
   [platform k]
   (if-let [f (get-in platform [:kv :get])]
-    (f k)
+    (-> (f k)
+        (.then normalize-missing-value))
     (throw (ex-info "platform kv/get missing" {:key k}))))
 
 (defn kv-set!
@@ -108,7 +115,8 @@
 (defn read-secret-text
   [platform key]
   (if-let [f (get-in platform [:crypto :read-secret-text])]
-    (f key)
+    (-> (f key)
+        (.then normalize-missing-value))
     (throw (ex-info "platform crypto/read-secret-text missing" {:key key}))))
 
 (defn delete-secret-text!

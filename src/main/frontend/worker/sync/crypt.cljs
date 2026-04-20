@@ -53,17 +53,38 @@
         (and (= :node runtime')
              (= :electron owner-source)))))
 
+(defn- missing-e2ee-password-ex
+  [data]
+  (ex-info "missing-e2ee-password"
+           (merge {:code :db-sync/missing-e2ee-password
+                   :field :e2ee-password}
+                  data)))
+
 (defn- fail-missing-e2ee-password!
   [data]
   (fail-fast :db-sync/missing-e2ee-password
-             (merge {:field :e2ee-password}
+             (merge {:code :db-sync/missing-e2ee-password
+                     :field :e2ee-password}
                     data)))
+
+(defn- throw-missing-e2ee-password!
+  [data]
+  (throw (missing-e2ee-password-ex data)))
 
 (defn- ensure-refresh-token!
   [refresh-token]
   (when-not (seq refresh-token)
     (fail-missing-e2ee-password! {:reason :missing-refresh-token
                                   :hint "Run logseq login first."})))
+
+(defn- missing-persisted-password-error?
+  [error]
+  (let [data (ex-data error)]
+    (and (contains? #{:db-sync/missing-e2ee-password
+                      :missing-e2ee-password}
+                    (or (:code data)
+                        (some-> error ex-message keyword)))
+         (= :missing-persisted-password (:reason data)))))
 
 (defn- parse-auth-file
   [text]
@@ -89,7 +110,10 @@
 (defn- <save-e2ee-password
   [password]
   (p/let [platform' (platform/current)
-          refresh-token (<read-refresh-token-from-auth-file platform')
+          refresh-token (if (browser-runtime? platform')
+                          (:auth/refresh-token @worker-state/*state)
+                          (<read-refresh-token-from-auth-file platform'))
+          _ (ensure-refresh-token! refresh-token)
           result (crypt/<encrypt-text-by-text-password refresh-token password)
           text (ldb/write-transit-str result)]
     (if (browser-runtime? platform')
@@ -113,8 +137,8 @@
                      (p/catch (fn [_]
                                 nil))))]
     (when-not (seq text)
-      (fail-missing-e2ee-password! {:reason :missing-persisted-password
-                                    :hint "Provide --e2ee-password to persist it."}))
+      (throw-missing-e2ee-password! {:reason :missing-persisted-password
+                                     :hint "Provide --e2ee-password to persist it."}))
     (let [data (try
                  (ldb/read-transit-str text)
                  (catch :default _
@@ -380,11 +404,13 @@
     (p/let [encrypted-private-key (ldb/read-transit-str encrypted-private-key-str)]
       (-> (<decrypt-in-headless encrypted-private-key)
           (p/catch (fn [headless-error]
-                     (if (interactive-runtime?)
+                     (if-not (interactive-runtime?)
+                       (p/rejected headless-error)
                        (-> (<decrypt-with-ui-request encrypted-private-key)
-                           (p/catch (fn [_ui-error]
-                                      (p/rejected headless-error))))
-                       (p/rejected headless-error))))))))
+                           (p/catch (fn [ui-error]
+                                      (if (missing-persisted-password-error? headless-error)
+                                        (p/rejected ui-error)
+                                        (p/rejected headless-error))))))))))))
 
 (defn- <import-public-key
   [public-key-str]
