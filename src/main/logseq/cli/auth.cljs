@@ -415,19 +415,19 @@
                          (p/rejected
                           (ex-info "refresh token is invalid"
                                    {:code :missing-auth
-                                    :hint "Run logseq login first."
+                                    :hint "Run `logseq login` first."
                                     :auth-path (auth-path opts)}
                                    error))
                          (p/rejected
                           (ex-info "auth refresh failed"
                                    {:code :auth-refresh-failed
-                                    :hint "Run logseq login first."
+                                    :hint "Run `logseq login` first."
                                     :auth-path (auth-path opts)
                                     :context data}
                                    error)))))))
       (p/rejected (ex-info "missing refresh token"
                            {:code :missing-auth
-                            :hint "Run logseq login first."
+                            :hint "Run `logseq login` first."
                             :auth-path (auth-path opts)})))))
 
 (defn login!
@@ -465,7 +465,7 @@
       (p/resolved current-auth))
     (p/rejected (ex-info "missing auth"
                          {:code :missing-auth
-                          :hint "Run logseq login first."
+                          :hint "Run `logseq login` first."
                           :auth-path (auth-path opts)}))))
 
 (defn resolve-auth-token!
