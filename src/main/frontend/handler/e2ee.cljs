@@ -49,6 +49,28 @@
     :else
     (p/resolved nil)))
 
+(defn native-storage-supported?
+  []
+  (or (util/electron?) (util/capacitor?)))
+
+(defn <native-save-secret!
+  [key encrypted-text]
+  (if (native-storage-supported?)
+    (<keychain-save! key encrypted-text)
+    (p/resolved nil)))
+
+(defn <native-get-secret
+  [key]
+  (if (native-storage-supported?)
+    (<keychain-get key)
+    (p/resolved nil)))
+
+(defn <native-delete-secret!
+  [key]
+  (if (native-storage-supported?)
+    (<keychain-delete! key)
+    (p/resolved nil)))
+
 (def-thread-api :thread-api/request-e2ee-password
   []
   (p/let [password-promise (state/pub-event! [:rtc/request-e2ee-password])
@@ -71,12 +93,12 @@
 
 (def-thread-api :thread-api/native-save-e2ee-password
   [encrypted-text]
-  (<keychain-save! "logseq-encrypted-password" encrypted-text))
+  (<native-save-secret! "logseq-encrypted-password" encrypted-text))
 
 (def-thread-api :thread-api/native-get-e2ee-password
   []
-  (<keychain-get "logseq-encrypted-password"))
+  (<native-get-secret "logseq-encrypted-password"))
 
 (def-thread-api :thread-api/native-delete-e2ee-password
   []
-  (<keychain-delete! "logseq-encrypted-password"))
+  (<native-delete-secret! "logseq-encrypted-password"))

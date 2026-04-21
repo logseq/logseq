@@ -1,6 +1,7 @@
 (ns frontend.persist-db-test
   (:require [cljs.test :refer [async deftest is use-fixtures]]
             [electron.ipc :as ipc]
+            [frontend.config :as config]
             [frontend.persist-db.browser :as browser]
             [frontend.persist-db :as persist-db]
             [frontend.persist-db.protocol :as protocol]
@@ -182,6 +183,48 @@
                        (set! storage/set original-storage-set)
                        (set! storage/remove original-storage-remove)
                        (done)))))))
+
+(deftest electron-ensure-remote-pushes-db-sync-config-on-start-test
+  (async done
+         (let [worker-calls (atom [])
+               ensure-remote! #'persist-db/<ensure-remote!
+               original-ipc ipc/ipc
+               original-start! remote/start!
+               original-stop! remote/stop!
+               original-ws config/db-sync-ws-url
+               original-http config/db-sync-http-base]
+           (reset-runtime-state!)
+           (set! ipc/ipc (fn [channel repo]
+                           (is (= "db-worker-runtime" channel))
+                           (p/resolved {:base-url "http://127.0.0.1:9101"
+                                        :auth-token nil
+                                        :repo repo})))
+           (set! config/db-sync-ws-url (fn [] "wss://sync.example.test/sync/%s"))
+           (set! config/db-sync-http-base (fn [] "https://sync.example.test"))
+           (set! remote/start! (fn [{:keys [repo]}]
+                                 (->FakeRemote repo
+                                               (fn [qkw direct-pass? & args]
+                                                 (swap! worker-calls conj [qkw direct-pass? args])
+                                                 (p/resolved nil)))))
+           (set! remote/stop! (fn [_] (p/resolved true)))
+           (-> (p/let [_ (ensure-remote! "logseq_db_graph_a")]
+                 (let [set-config-call (first (filter #(= :thread-api/set-db-sync-config (first %))
+                                                      @worker-calls))]
+                   (is (= [:thread-api/set-db-sync-config
+                           false
+                           [{:enabled? true
+                             :ws-url "wss://sync.example.test/sync/%s"
+                             :http-base "https://sync.example.test"}]]
+                          set-config-call))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! ipc/ipc original-ipc)
+                            (set! remote/start! original-start!)
+                            (set! remote/stop! original-stop!)
+                            (set! config/db-sync-ws-url original-ws)
+                            (set! config/db-sync-http-base original-http)
+                            (done)))))))
 
 (deftest electron-list-db-without-current-repo-does-not-bootstrap-runtime
   (async done

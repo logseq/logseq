@@ -12,7 +12,8 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            ["keytar" :as keytar]))
 
 (defn- resolve-database-sync-ctor
   []
@@ -339,10 +340,42 @@
   (transit/write kv-transit-writer state))
 
 (def ^:private secret-prefix "worker-secret###")
+(def ^:private keychain-service "Logseq E2EE")
 
 (defn- secret-key
   [key]
   (str secret-prefix key))
+
+(defn- keychain-account
+  [key]
+  (secret-key key))
+
+(defn- <save-secret-text!
+  [kv key text]
+  (-> (p/let [_ (.setPassword ^js keytar keychain-service (keychain-account key) text)]
+        nil)
+      (p/catch (fn [e]
+                 (log/warn :db-worker/keychain-save-failed {:error e
+                                                            :key key})
+                 ((:set! kv) (secret-key key) text)))))
+
+(defn- <read-secret-text
+  [kv key]
+  (-> (p/let [secret (.getPassword ^js keytar keychain-service (keychain-account key))]
+        secret)
+      (p/catch (fn [e]
+                 (log/warn :db-worker/keychain-read-failed {:error e
+                                                            :key key})
+                 ((:get kv) (secret-key key))))))
+
+(defn- <delete-secret-text!
+  [kv key]
+  (-> (p/let [_ (.deletePassword ^js keytar keychain-service (keychain-account key))]
+        nil)
+      (p/catch (fn [e]
+                 (log/warn :db-worker/keychain-delete-failed {:error e
+                                                              :key key})
+                 ((:set! kv) (secret-key key) nil)))))
 
 (defn- kv-store
   [data-dir]
@@ -413,9 +446,9 @@
                :backup-db (fn [^js db path]
                             (.backup db path))}
       :crypto {:save-secret-text! (fn [key text]
-                                    ((:set! kv) (secret-key key) text))
+                                    (<save-secret-text! kv key text))
                :read-secret-text (fn [key]
-                                   ((:get kv) (secret-key key)))
+                                   (<read-secret-text kv key))
                :delete-secret-text! (fn [key]
-                                      ((:set! kv) (secret-key key) nil))}
+                                      (<delete-secret-text! kv key))}
       :timers {:set-interval! (fn [f ms] (js/setInterval f ms))}})))
