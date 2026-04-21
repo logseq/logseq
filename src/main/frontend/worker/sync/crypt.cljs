@@ -204,7 +204,7 @@
 (defn graph-e2ee?
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (true? (ldb/get-graph-rtc-e2ee? @conn))))
+    (ldb/get-graph-rtc-e2ee? @conn)))
 
 (defn- get-user-uuid []
   (some-> (sync-util/auth-token) worker-util/parse-jwt :sub))
