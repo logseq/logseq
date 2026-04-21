@@ -1,7 +1,7 @@
 (ns frontend.components.quick-add
   "Quick add"
   (:require [frontend.components.page :as page]
-            [frontend.date :as date]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor-handler]
@@ -37,7 +37,7 @@
                   (editor-handler/quick-add-open-last-block!))
                 state)}
   []
-  (when (model/get-journal-page (date/today))
+  (when (model/get-today-journal-page)
     (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
       (let [mobile? (util/mobile?)
             add-button [:div
@@ -47,16 +47,13 @@
                           :on-click (fn [_e]
                                       (editor-handler/quick-add-blocks!))}
                          (when-not mobile? (shui/shortcut ["mod" "e"]))
-                         "Add to today")]]
+                         (t :editor.quick-add/add-to-today))]]
         [:div.ls-quick-add.flex.flex-1.flex-col.w-full.gap-4
-         (when-not (util/mobile?)
+         (when-not mobile?
            [:div.flex.flex-row.justify-between.gap-4.items-center
-            {:class (if mobile?
-                      "pt-4"
-                      "border-b pb-4")}
+            {:class "border-b pb-4"}
             [:div.font-medium
-             "Quick add"]
-            add-button])
+             (t :editor.quick-add/title)]])
          (if mobile?
            [:div.w-full.mt-4
             (page-blocks add-page)]

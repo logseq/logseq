@@ -10,6 +10,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.publish :as publish-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.db :as ldb]
@@ -33,11 +34,11 @@
      {:on-submit (fn [e]
                    (.preventDefault e)
                    (submit!))}
-     [:div.text-lg.font-medium "Publish page"]
+     [:div.text-lg.font-medium (t :publish/dialog-title)]
      [:div.text-sm.opacity-70
-      "Optionally protect this page with a password. Leave empty for public access."]
+      (t :publish/dialog-desc)]
      (shui/toggle-password
-      {:placeholder "Optional password"
+      {:placeholder (t :publish/password-optional-placeholder)
        :value password
        :on-change (fn [e]
                     (set-password! (util/evalue e)))})
@@ -46,20 +47,20 @@
        {:variant "ghost"
         :type "button"
         :on-click #(shui/dialog-close!)}
-       "Cancel")
+       (t :ui/cancel))
       (shui/button
        {:type "submit"
         :auto-focus true
         :disabled publishing?}
        (if publishing?
-         "Publishing..."
-         "Publish"))]]))
+         (t :publish/publishing)
+         (t :publish/action)))]]))
 
 (defn- delete-page!
   [page]
   (page-handler/<delete! (:block/uuid page)
                          (fn []
-                           (notification/show! (str "Page " (:block/title page) " was deleted successfully!")
+                           (notification/show! (t :page.delete/success (:block/title page))
                                                :success))
                          {:error-handler (fn [{:keys [msg]}]
                                            (notification/show! msg :warning))}))
@@ -72,10 +73,12 @@
                   [:span.top-1.relative
                    (shui/tabler-icon "alert-triangle")]
                   (if (or (ldb/class? page) (ldb/property? page))
-                    (t :page/permanently-delete-confirmation)
-                    (t :page/db-delete-confirmation))]
+                    (t :page.delete/permanent-confirm-title)
+                    (t :page.delete/confirm-title))]
           :content [:p.opacity-60 (str "- " (:block/title page))]
-          :outside-cancel? true})
+          :outside-cancel? true
+          :cancel-label (t :ui/cancel)
+          :ok-label (t :ui/confirm)})
         (p/then #(delete-page! page))
         (p/catch #()))))
 
@@ -104,7 +107,7 @@
 
           (when (or (util/electron?)
                     (mobile-util/native-platform?))
-            {:title   (t :page/copy-page-url)
+            {:title   (t :page/copy-url)
              :options {:on-click #(page-handler/copy-page-url (:block/uuid page))}})
 
           (when-not (or contents?
@@ -114,14 +117,14 @@
              :options {:on-click #(delete-page-confirm! page)}})
 
           (when page
-            {:title   (t :export-page)
+            {:title   (t :export/page)
              :options {:on-click #(shui/dialog-open!
                                    (fn []
                                      (export/export-blocks [(:block/uuid page)] {:export-type :page}))
                                    {:class "w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"})}})
 
           (when (and page (not config/publishing?))
-            {:title   "Publish page"
+            {:title   (t :publish/dialog-title)
              :options {:on-click #(shui/dialog-open! (fn [] (publish-page-dialog page))
                                                      {:class "w-auto max-w-md"})}})
 
@@ -145,12 +148,12 @@
                                    (db-page-handler/convert-page-to-tag! page))}})
 
           (when (and (ldb/class? page) (not (:logseq.property/built-in? page)))
-            {:title (t :page/convert-tag-to-page)
+            {:title (t :page.convert/tag-to-page-action)
              :options {:on-click (fn []
                                    (db-page-handler/convert-tag-to-page! page))}})
 
           (when developer-mode?
-            {:title   (t :dev/show-page-data)
+            {:title   (shortcut-dh/shortcut-desc-by-id :dev/show-page-data)
              :options {:on-click (fn []
                                    (dev-common-handler/show-entity-data (:db/id page)))}})]
          (flatten)

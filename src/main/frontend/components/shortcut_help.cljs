@@ -13,8 +13,8 @@
   [:table.classic-table.w-full
    [:thead
     [:tr
-     [:th.text-left [:b (t :help/shortcuts-triggers)]]
-     [:th.text-right [:b (t :help/shortcut)]]]]
+     [:th.text-left [:b (t :help.shortcuts/triggers)]]
+     [:th.text-right [:b (t :help.shortcuts/shortcut-column)]]]]
    [:tbody
     [:tr
      [:td.text-left (t :help/slash-autocomplete)]
@@ -31,42 +31,42 @@
      [:td.text-right [:code block-ref/left-and-right-parens]]]
     [:tr
      [:td.text-left (t :help/open-link-in-sidebar)]
-     [:td.text-right [:code "Shift click reference"]]]
+     [:td.text-right [:code (t :help/open-link-in-sidebar-action)]]]
     [:tr
      [:td.text-left (t :help/context-menu)]
-     [:td.text-right [:code "Right click bullet"]]]]])
+     [:td.text-right [:code (t :help/context-menu-action)]]]]])
 
 (defn markdown-syntax []
   (let [list [:bold :italics :del :mark :latex :code :link :pre :img]
         title (t :help/markdown-syntax)
         learn-more "https://www.markdownguide.org/basic-syntax"
-        raw {:bold (str "**" (t :bold) "**")
-             :italics (str "_" (t :italics) "_")
+        raw {:bold (str "**" (t :format/bold) "**")
+             :italics (str "_" (t :format/italics) "_")
              :link "[Link](https://www.example.com)"
-             :del (str "~~" (t :strikethrough) "~~")
-             :mark (str "^^" (t :highlight) "^^")
+             :del (str "~~" (t :format/strikethrough) "~~")
+             :mark (str "^^" (t :format/highlight) "^^")
              :latex "$$E = mc^2$$"
-             :code (str "`" (t :code) "`")
+             :code (str "`" (t :format/code) "`")
              :pre "```clojure\n  (println \"Hello world!\")\n```"
              :img "![image](https://asset.logseq.com/static/img/logo.png)"}
 
-        rendered {:italics [:i (t :italics)]
-                  :bold [:b (t :bold)]
-                  :link [:a {:href "https://www.example.com"} "Link"]
-                  :del [:del (t :strikethrough)]
-                  :mark [:mark (t :highlight)]
+        rendered {:italics [:i (t :format/italics)]
+                  :bold [:b (t :format/bold)]
+                  :link [:a {:href "https://www.example.com"} (t :ui/link)]
+                  :del [:del (t :format/strikethrough)]
+                  :mark [:mark (t :format/highlight)]
                   :latex (latex/latex "E = mc^2" true false)
-                  :code [:code (t :code)]
+                  :code [:code (t :format/code)]
                   :pre (highlight/highlight "help-highlight" {:data-lang "clojure"} "(println \"Hello world!\")")
                   :img [:img {:style {:float "right" :width 32 :height 32}
                               :src "https://asset.logseq.com/static/img/logo.png"
-                              :alt "image"}]}]
+                              :alt (t :ui/image)}]}]
 
     [:table.classic-table.w-full
      [:thead
       [:tr
        [:th.text-left [:b title]]
-       [:th.text-right [:a {:href learn-more} "Learn more →"]]]]
+       [:th.text-right [:a {:href learn-more} (str (t :help/learn-more) " →")]]]]
      [:tbody
       (map (fn [name]
              [:tr
@@ -79,7 +79,7 @@
     :or {show-title? true}}]
   [:div.cp__shortcut-page.px-2
    {:class "-mt-2"}
-   (when show-title? [:h1.title (t :help/shortcut-page-title)])
+   (when show-title? [:h1.title (t :help.shortcuts/title)])
    (trigger-table)
    (markdown-syntax)
    (shortcut/shortcut-keymap-x)])

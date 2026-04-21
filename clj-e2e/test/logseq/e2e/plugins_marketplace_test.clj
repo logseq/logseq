@@ -13,7 +13,7 @@
   "Opens the plugins dialog via the More menu"
   []
   (util/double-esc)
-  (w/click "button[title='More'] .ls-icon-dots")
+  (w/click ".toolbar-dots-btn")
   (w/click ".ui__dropdown-menu-item:has-text('Plugins')")
   (w/wait-for ".cp__plugins-page"))
 

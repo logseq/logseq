@@ -2,6 +2,7 @@
   (:require [frontend.common.missionary :as c.m]
             [frontend.components.reference-filters :as filters]
             [frontend.components.views :as views]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
@@ -18,7 +19,7 @@
   (let [filters (db-reference/get-filters page-entity)
         reference-filter (fn [{:keys [ref-pages-count]}]
                            (shui/button
-                            {:title "Page filter"
+                            {:title (t :reference/page-filter)
                              :variant "ghost"
                              :class "text-muted-foreground !px-1"
                              :size :sm

@@ -1,8 +1,8 @@
 (ns frontend.modules.outliner.op
   "Build outliner ops"
   (:require [datascript.impl.entity :as de]
-            [frontend.handler.user :as user-handler]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.utils :as db-utils]
+            [frontend.handler.user :as user-handler]))
 
 (defn- current-user-delete-opts
   [opts]

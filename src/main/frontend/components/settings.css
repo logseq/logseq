@@ -264,23 +264,22 @@
       cursor: inherit;
 
       > i {
-        border-color: var(--ls-link-text-color);
-        border-width: 2px;
+        box-shadow: inset 0 0 0 2px var(--ls-link-text-color);
       }
     }
 
     > i {
-      @apply block w-[70px] h-[47px] rounded overflow-hidden border-0 border-solid border-transparent bg-gray-04;
+      @apply block w-[70px] rounded overflow-hidden bg-gray-04;
+      aspect-ratio: 160 / 92;
 
-      background: url("../img/theme-modes.png") no-repeat;
-      background-size: 355%;
+      background: url('../img/light-theme.png') no-repeat center / cover;
 
       &.mode-dark {
-        background-position-x: -97px;
+        background: url('../img/dark-theme.png') no-repeat center / cover;
       }
 
       &.mode-system {
-        background-position-x: -194px;
+        background: url('../img/system-theme.png') no-repeat center / cover;
       }
 
       &.mode-dark.radix {

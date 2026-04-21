@@ -58,6 +58,16 @@
     (is (= "movie" (:block/title (ldb/get-case-page @conn "movie"))))
     (is (= "Movie" (:block/title (ldb/get-case-page @conn "Movie"))))))
 
+(deftest get-journal-page-by-day
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:build/journal 20260410}}
+                {:page {:build/journal 20260411}}]})]
+    (is (= "Apr 10th, 2026"
+           (:block/title (ldb/get-journal-page-by-day @conn 20260410))))
+    (is (= "Apr 11th, 2026"
+           (:block/title (ldb/get-journal-page-by-day @conn 20260411))))))
+
 (deftest page-exists
   (let [conn (db-test/create-conn-with-blocks
               {:properties

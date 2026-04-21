@@ -8,7 +8,9 @@
             [datascript.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [electron.locale :as electron-locale]
             [frontend.db.conn-state :as db-conn-state]
+            [frontend.dicts :as dicts]
             [frontend.flows :as flows]
             [frontend.mobile.util :as mobile-util]
             [frontend.spec.storage :as storage-spec]
@@ -34,6 +36,27 @@
 (defonce *db-worker-client-id (atom (storage/get :db-worker-client-id)))
 (defonce *editor-info (atom nil))
 (defonce app-ready-promise (p/deferred))
+
+(def ^:private supported-locale-tags
+  (into {}
+        (map (fn [locale]
+               [(string/lower-case (name locale)) locale])
+             (keys dicts/dicts))))
+
+(defn- canonical-preferred-language
+  "Convert browser/storage locale tags into one supported locale string."
+  [language]
+  (let [tag (cond
+              (keyword? language) (name language)
+              (string? language) language
+              :else nil)]
+    (when-not (string/blank? tag)
+      (let [normalized-tag (some-> tag string/trim string/lower-case)
+            base-tag (some-> normalized-tag (string/split #"-") first)]
+        (some-> (or (get supported-locale-tags normalized-tag)
+                    (get supported-locale-tags base-tag)
+                    :en)
+                name)))))
 
 (def db-worker-ready-flow
   "`<invoke-db-worker` throws err if `*db-worker` not ready yet.
@@ -199,7 +222,7 @@
       ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
       :sidebar/blocks                        '()
 
-      :preferred-language                    (storage/get :preferred-language)
+      :preferred-language                    (canonical-preferred-language (storage/get :preferred-language))
 
       ;; electron
       :electron/auto-updater-downloaded      false
@@ -341,7 +364,8 @@
          ;; The "TODO" query returns tasks with "Todo" status for upcoming future days
          {:default-queries
           {:journals
-           [{:title [:span (shui/tabler-icon "InProgress50" {:class "align-middle pr-1"}) [:span.align-middle "DOING"]]
+           [{:title-key :journal.default-query/doing
+             :title-icon "InProgress50"
              :query '[:find (pull ?b [*])
                       :in $ ?start ?today
                       :where
@@ -352,7 +376,8 @@
                       [(<= ?d ?today)]]
              :inputs [:14d :today]
              :collapsed? true}
-            {:title [:span (shui/tabler-icon "Todo" {:class "align-middle pr-1"}) [:span.align-middle "TODO"]]
+            {:title-key :journal.default-query/todo
+             :title-icon "Todo"
              :query '[:find (pull ?b [*])
                       :in $ ?start ?next
                       :where
@@ -808,8 +833,12 @@ Similar to re-frame subscriptions"
 
 (defn set-preferred-language!
   [language]
-  (set-state! :preferred-language (name language))
-  (storage/set :preferred-language (name language)))
+  (let [old-language (:preferred-language @state)
+        new-language (canonical-preferred-language language)]
+    (when (not= new-language old-language)
+      (set-state! :preferred-language new-language)
+      (storage/set :preferred-language new-language)
+      (electron-locale/push-locale! new-language))))
 
 (defn delete-repo!
   [repo]

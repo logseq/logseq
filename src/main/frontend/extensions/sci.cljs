@@ -4,7 +4,8 @@
 - For :result-transform evaluation
 - For cljs evaluation in Src blocks
 - For evaluating {{function }} under query tables"
-  (:require [sci.core :as sci]
+  (:require [frontend.context.i18n :refer [t]]
+            [sci.core :as sci]
             [frontend.util :as util]
             [goog.dom]
             [goog.object]
@@ -64,7 +65,7 @@
   "Evaluate code with sci in a block context"
   [code block]
   [:div
-   [:code "Results:"]
+   [:code (t :view/results)]
    [:div.results.mt-1
     (let [result (eval-string code {:bindings {'block block}})]
       (if (and (vector? result) (:hiccup (meta result)))

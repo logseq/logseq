@@ -2,6 +2,7 @@
   "Provides template related functionality"
   (:require [clojure.string :as string]
             [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
@@ -10,13 +11,13 @@
 
 (defn- variable-rules
   []
-  {"today" (ref/->page-ref (date/today))
-   "yesterday" (ref/->page-ref (date/yesterday))
-   "tomorrow" (ref/->page-ref (date/tomorrow))
+  {"today" (ref/->page-ref (db/get-journal-page-title (date/today)))
+   "yesterday" (ref/->page-ref (db/get-journal-page-title (date/yesterday)))
+   "tomorrow" (ref/->page-ref (db/get-journal-page-title (date/tomorrow)))
    "time" (date/get-current-time)
    "current page" (when-let [current-page (or
                                            (state/get-current-page)
-                                           (date/today))]
+                                           (db/get-journal-page-title (date/today)))]
                     (let [block-uuid (parse-uuid current-page)
                           page (if block-uuid
                                  (db-utils/entity [:block/uuid block-uuid])

@@ -8,7 +8,8 @@
     "watch:ui:examples": "parcel serve ./examples/index.html",
     "build:ui:only": "parcel build --target ui",
     "build:ui": "rm -rf .parcel-cache && pnpm build:ui:only",
-    "postinstall": "pnpm build:ui"
+    "postinstall": "pnpm build:ui",
+    "test": "node --experimental-strip-types --test src/i18n.test.mts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

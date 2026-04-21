@@ -274,15 +274,15 @@
                                      "ico" "image/x-icon"}
                           mime (get ext->mime ext)]
                       (if-not mime
-                        (notification/show! (str "Copy image is not supported for ." ext " files") :warning)
+                        (notification/show! (t :asset/copy-image-unsupported-extension (str "." ext)) :warning)
                         (-> (p/let [binary (fs/read-file-raw nil image-src {})
                                     blob (js/Blob. (array binary) (clj->js {:type mime}))]
                               (util/copy-image-blob-to-clipboard blob))
-                            (p/then #(notification/show! "Copied!" :success))
+                            (p/then #(notification/show! (t :notification/copied) :success))
                             (p/catch (fn [error]
                                        (js/console.error error))))))
                     (-> (util/copy-image-to-clipboard src')
-                        (p/then #(notification/show! "Copied!" :success))
+                        (p/then #(notification/show! (t :notification/copied) :success))
                         (p/catch (fn [error]
                                    (js/console.error error))))))
                 handle-delete!
@@ -297,8 +297,10 @@
                                 {:default-checked @*local-selected?
                                  :on-checked-change #(reset! *local-selected? %)})
                                (t :asset/physical-delete)])]
-                           {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                            :outside-cancel? true})
+                           {:title (t :asset/confirm-delete-image)
+                            :outside-cancel? true
+                            :cancel-label (t :ui/cancel)
+                            :ok-label (t :ui/confirm)})
                           (p/then (fn []
                                     (shui/dialog-close!)
                                     (editor-handler/delete-asset-of-block!
@@ -367,7 +369,7 @@
                                    (ipc/ipc "openFileInFolder" image-src)
                                    (js/window.apis.openExternal image-src)))}
                     [:span.flex.items-center.gap-1
-                     (ui/icon "folder-pin") (t (if local? :asset/show-in-folder :asset/open-in-browser))]))
+                     (ui/icon "folder-pin") (t (if local? :asset/show-file-in-folder :asset/open-in-browser))]))
 
                  (when-not config/publishing?
                    [:<>
@@ -594,40 +596,38 @@
          [:div.as-plain-image-link
           (resizable-image config title href metadata full_text false)])))))
 
-(def timestamp-to-string export-common-handler/timestamp-to-string)
-
 (defn timestamp [{:keys [active _date _time _repetition _wday] :as t} kind]
   (let [prefix (case kind
-                 "Scheduled"
+                 :scheduled
                  [:i {:class "fa fa-calendar"
                       :style {:margin-right 3.5}}]
-                 "Deadline"
+                 :deadline
                  [:i {:class "fa fa-calendar-times-o"
                       :style {:margin-right 3.5}}]
-                 "Date"
+                 :date
                  nil
-                 "Closed"
+                 :closed
                  nil
-                 "Started"
+                 :started
                  [:i {:class "fa fa-clock-o"
                       :style {:margin-right 3.5}}]
-                 "Start"
-                 "From: "
-                 "Stop"
-                 "To: "
+                 :start
+                 (t :ui/from)
+                 :stop
+                 (t :ui/to)
                  nil)
-        class (when (= kind "Closed")
+        class (when (= kind :closed)
                 "line-through")]
     [:span.timestamp (cond-> {:active (str active)}
                        class
                        (assoc :class class))
-     prefix (timestamp-to-string t)]))
+     prefix (export-common-handler/timestamp-to-string t)]))
 
 (defn range [{:keys [start stop]} stopped?]
   [:div {:class "timestamp-range"
          :stopped stopped?}
-   (timestamp start "Start")
-   (timestamp stop "Stop")])
+   (timestamp start :start)
+   (timestamp stop :stop)])
 
 (declare map-inline)
 (declare markup-element-cp)
@@ -702,7 +702,7 @@
                 recycled? (str " line-through opacity-70")
                 untitled? (str " opacity-50"))
        :data-ref page-name
-       :title (when recycled? "Deleted")
+       :title (when recycled? (t :ui/deleted))
        :draggable true
        :on-drag-start (fn [e]
                         (editor-handler/block->data-transfer! page-name e true))
@@ -765,7 +765,7 @@
 
           (ldb/page? page-entity)
           (if untitled?
-            (t :untitled)
+            (t :ui/untitled)
             (let [s (util/trim-safe (if show-unique-title?
                                       (block-handler/block-unique-title page-entity {:with-tags? with-tags?})
                                       (:block/title page-entity)))]
@@ -1053,9 +1053,9 @@
         percent (when in-progress?
                   (int (* 100 (/ loaded total))))
         label (case direction
-                :upload "Uploading"
-                :download "Downloading"
-                "Syncing")
+                :upload (t :asset/uploading)
+                :download (t :asset/downloading)
+                (t :asset/syncing))
         progress-view (when in-progress?
                         [:div.asset-transfer-progress
                          [:div.asset-transfer-progress-label (str label " " percent "%")]
@@ -1091,7 +1091,7 @@
     (if progress-view
       [:div.asset-transfer-shell
        (or content
-           [:div.asset-transfer-placeholder (str label " asset...")])
+           [:div.asset-transfer-placeholder (t :asset/transfer-placeholder label)])
        progress-view]
       content)))
 
@@ -1143,7 +1143,7 @@
               (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
               [:div.draw {:on-click (fn [e]
                                       (.stopPropagation e))}
-               [:div.warning "Excalidraw is no longer supported by default, we plan to support it through plugins."]]
+               [:div.warning (t :block/excalidraw-no-longer-supported)]]
 
               :else
               (let [blank-title? (string/blank? (:block/title block))]
@@ -1230,7 +1230,7 @@
            [(assoc attributes :class "inline")
             (inline-text {:add-margin? false} format macro-content)]))
        [attributes
-        [:span.warning {:title (str "Unsupported macro name: " name)}
+        [:span.warning {:title (t :block.macro/unsupported-name name)}
          (macro->text name arguments)]]))))
 
 (rum/defc nested-link < rum/reactive
@@ -1314,7 +1314,7 @@
   [config url s label title metadata full_text]
   (cond
     (string/blank? s)
-    [:span.warning {:title "Invalid link"} full_text]
+    [:span.warning {:title (t :block/invalid-link)} full_text]
 
     (= \# (first s))
     (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
@@ -1372,7 +1372,7 @@
             {:keys [link-depth]} config
             link-depth (or link-depth 0)]
         (if (> link-depth max-depth-of-links)
-          [:p.warning.text-sm "Block ref nesting is too deep"]
+          [:p.warning.text-sm (t :block/ref-nesting-too-deep)]
           (block-reference (assoc config
                                   :reference? true
                                   :link-depth (inc link-depth)
@@ -1540,9 +1540,9 @@
                 :src src
                 :width width
                 :height height}]))))
-      [:span.warning.mr-1 {:title "Invalid URL"}
+      [:span.warning.mr-1 {:title (t :block/invalid-url)}
        (macro->text "video" arguments)])
-    [:span.warning.mr-1 {:title "Empty URL"}
+    [:span.warning.mr-1 {:title (t :block/empty-url)}
      (macro->text "video" arguments)]))
 
 (defn- macro-else-cp
@@ -1564,13 +1564,13 @@
                     arguments)]
     (cond
       (= name "query")
-      [:div.warning "{{query}} is deprecated. Use '/Query' command instead."]
+      [:div.warning (t :block.macro/query-deprecated)]
 
       (= name "function")
       (macro-function-cp config arguments)
 
       (= name "namespace")
-      [:div.warning (str "{{namespace}} is deprecated. Use the " common-config/library-page-name " feature instead.")]
+      [:div.warning (t :block.macro/namespace-deprecated (t :library/title))]
 
       (= name "youtube")
       (when-let [url (first arguments)]
@@ -1617,7 +1617,7 @@
               (ui/tweet-embed id)))))
 
       (= name "embed")
-      [:div.warning "{{embed}} is deprecated. Use '/Node embed' command instead."]
+      [:div.warning (t :block.macro/embed-deprecated)]
 
       (= name "renderer")
       (when config/lsp-enabled?
@@ -1644,7 +1644,7 @@
   [s]
   (let [result (common-util/safe-read-string s)
         result' (if (seq result) result
-                    [:div.warning {:title "Invalid hiccup"}
+                    [:div.warning {:title (t :block/invalid-hiccup)}
                      s])]
     (-> result'
         (hiccups.core/html)
@@ -1718,7 +1718,7 @@
 
     ["Inline_Hiccup" s]                                ;; String to hiccup
     (ui/catch-error
-     [:div.warning {:title "Invalid hiccup"} s]
+    [:div.warning {:title (t :block/invalid-hiccup)} s]
      [:span {:dangerouslySetInnerHTML
              {:__html (hiccup->html s)}}])
 
@@ -1733,15 +1733,15 @@
     ["Timestamp" [(:or "Scheduled" "Deadline") _timestamp]]
     nil
     ["Timestamp" ["Date" t]]
-    (timestamp t "Date")
+    (timestamp t :date)
     ["Timestamp" ["Closed" t]]
-    (timestamp t "Closed")
+    (timestamp t :closed)
     ["Timestamp" ["Range" t]]
     (range t false)
     ["Timestamp" ["Clock" ["Stopped" t]]]
     (range t true)
     ["Timestamp" ["Clock" ["Started" t]]]
-    (timestamp t "Started")
+    (timestamp t :started)
 
     ["Cookie" ["Percent" n]]
     [:span {:class "cookie-percent"}
@@ -2111,8 +2111,8 @@
              (when-let [created-by (and (ldb/get-graph-rtc-uuid (db/get-db))
                                         (:logseq.property/created-by-ref block))]
                [:div (:block/title created-by)])
-             [:div "Created: " (date/int->local-time-2 (:block/created-at block))]
-             [:div "Last edited: " (date/int->local-time-2 (:block/updated-at block))]]))))]))
+             [:div (t :block/created-label (date/int->local-time-2 (:block/created-at block)))]
+             [:div (t :block/last-edited-label (date/int->local-time-2 (:block/updated-at block)))]]))))]))
 
 (rum/defc dnd-separator
   [move-to]
@@ -2224,8 +2224,8 @@
                                               (when *show-query? (swap! *show-query? not)))}
                           (ui/icon "settings"))
                          [:div.opacity-75 (if show-query?
-                                            "Hide query"
-                                            "Set query")]))]
+                                            (t :block/hide-query)
+                                            (t :block/set-query))]))]
     [:div
      (merge
       {:class (if query?
@@ -2238,7 +2238,7 @@
           {:on-click on-title-click})))
      (cond
        (and query? blank? (or advanced-query? show-query?))
-       [:span.opacity-75.hover:opacity-100 "Untitled query"]
+      [:span.opacity-75.hover:opacity-100 (t :block/untitled-query)]
        (and query? blank?)
        (query-builder-component/builder query {})
        :else
@@ -2255,8 +2255,8 @@
            :on-click (fn [e]
                        (util/stop e)
                        (state/pub-event! [:modal/show-cards (:db/id block)]))}
-          "Practice")
-         [:div "Practice cards"])])
+          (t :block/practice))
+         [:div (t :block/practice-cards)])])
      (when-let [property (:logseq.property/created-from-property block)]
        (when-let [message (when (= :url (:logseq.property/type property))
                             (first (outliner-property/validate-property-value (db/get-db) property (:db/id block))))]
@@ -2272,15 +2272,22 @@
   [config block {:keys [*show-query?]}]
   (let [block' (db/entity (:db/id block))
         node-display-type (:logseq.property.node/display-type block')
+        display-title (:display-title config)
         db (db/get-db)
         query? (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block')]
     (cond
       (and (:page-title? config) (ldb/page? block) (string/blank? (:block/title block)))
-      [:div.opacity-75 "Untitled"]
+      [:div.opacity-75 (t :ui/untitled)]
 
       (and (ldb/asset? block)
            (= :pdf (some-> (:logseq.property.asset/type block) string/lower-case keyword)))
       (asset-cp config block)
+
+      display-title
+      (text-block-title (dissoc config :display-title)
+                        (-> block
+                            (assoc :block/title display-title)
+                            (dissoc :block.temp/ast-title :block.temp/ast-body)))
 
       (:raw-title? config)
       (text-block-title (dissoc config :raw-title?) block)
@@ -2500,11 +2507,11 @@
                                   (shui/dropdown-menu-item
                                    {:key "Remove tag"
                                     :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
-                                   "Remove tag"))])
+                                   (t :block/remove-tag)))])
                              popup-opts))}
         (if (and @*hover? (not private-tag?) (not config/publishing?))
           [:a.inline-flex.text-muted-foreground
-           {:title "Remove this tag"
+             {:title (t :block/remove-this-tag)
             :style {:margin-top 1
                     :padding-left 2
                     :margin-right 2}
@@ -2554,7 +2561,7 @@
                                                      [:div.flex.flex-row.items-center.gap-1
                                                       (when-not (ldb/private-tags (:db/ident tag))
                                                         (shui/button
-                                                         {:title "Remove tag"
+                                                         {:title (t :block/remove-tag)
                                                           :variant :ghost
                                                           :class "!p-1 text-muted-foreground"
                                                           :size :sm
@@ -2665,7 +2672,7 @@
           {:variant :ghost
            :size :sm
            :class "px-1 py-0 h-6 text-muted-foreground hover:text-foreground"
-           :title "Add reaction"
+           :title (t :command.editor/add-reaction)
            :on-click open-picker!
            :on-pointer-down (fn [e]
                               (util/stop e))}
@@ -2676,9 +2683,9 @@
   (let [[sort-desc? set-sort-desc!] (rum/use-state true)]
     [:div.p-2.text-muted-foreground.text-sm.max-h-96
      [:div.font-medium.mb-2.flex.flex-row.gap-2.items-center
-      [:div "Status history"]
+      [:div (t :block/status-history)]
       (shui/button-ghost-icon (if sort-desc? :arrow-down :arrow-up)
-                              {:title "Sort order"
+                              {:title (t :block/sort-order)
                                :class "text-muted-foreground !h-4 !w-4"
                                :icon-props {:size 14}
                                :on-click #(set-sort-desc! (not sort-desc?))})]
@@ -2785,7 +2792,7 @@
       (when (and (> (count content) (state/block-content-max-length (state/get-current-repo)))
                  (not (contains? #{:code} (:logseq.property.node/display-type block))))
         [:div.warning.text-sm
-         "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
+         (t :block/large-block-warning)])
       [:div.flex.flex-row.justify-between.block-content-inner
        (when-not plugin-slotted?
          [:div.block-head-wrap
@@ -2800,7 +2807,7 @@
   (when (> block-refs-count' 0)
     [:div.h-6
      (shui/button {:variant :ghost
-                   :title "Open block references"
+                   :title (t :block/open-block-references)
                    :class (str "px-1 py-0 w-5 h-5 opacity-70 hover:opacity-100" (when (and (util/mobile?)
                                                                                            (seq (:block/_parent block)))
                                                                                   " !pr-4"))
@@ -2839,10 +2846,9 @@
           {:on-click (fn []
                        (set-editing! true)
                        (editor-handler/edit-block! query :max {:container-id (:container-id config)}))}
-          "Click to fix query: "
-          (:block/title query)])
+          (t :block/click-to-fix-query (:block/title query))])
        [:div.flex.flex-1.flex-col.w-full.gap-2
-        (ui/block-error "Block Render Error:"
+        (ui/block-error (t :block/render-error)
                         {:content (or (:block/title query)
                                       (:block/title block))
                          :section-attrs
@@ -2916,7 +2922,7 @@
                         {:id editor-id
                          :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
                         (ui/catch-error
-                         (ui/block-error "Something wrong in the editor" {})
+                         (ui/block-error (t :sync/something-wrong) {})
                          (editor-box {:block block
                                       :block-id uuid
                                       :block-parent-id block-id
@@ -3388,7 +3394,7 @@
                             (let [element (dom/create-element "div")]
                               (-> element
                                   (dom/set-attr! "id" "dragging-ghost-element")
-                                  (dom/set-text! (str "Moving " (count blocks) " blocks"))
+                                  (dom/set-text! (t :editor/moving-blocks-count (count blocks)))
                                   (dom/set-class! "p-2 rounded text-sm"))
                               element))]
               (doseq [block blocks]
@@ -3498,7 +3504,7 @@
           (if advanced-query?
             (src-cp (assoc config :code-block query) {:language "clojure"})
             [:div
-             [:div.opacity-75.ml-5.text-sm.mb-1 "Set query:"]
+             [:div.opacity-75.ml-5.text-sm.mb-1 (t :block/set-query-label)]
              (block-container config query)])]))
 
      (when (and (not (or (:table? config) (:property? config)))
@@ -3796,7 +3802,7 @@
   (when-let [langs (map (fn [m] (.-name m)) js/window.CodeMirror.modeInfo)]
     (let [options (map (fn [lang] {:label lang :value lang}) langs)]
       (select/select {:items options
-                      :input-default-placeholder "Choose language"
+                      :input-default-placeholder (t :editor/code-language-placeholder)
                       :on-chosen
                       (fn [chosen _ _ e]
                         (let [lang (:value chosen)]
@@ -3854,7 +3860,7 @@
                                                                        (db-property-handler/set-block-property!
                                                                         (:db/id block) :logseq.property.code/lang lang))))
                                                  {:align :end})))}
-                (or language "Choose language")
+                (or language (t :editor/code-language-placeholder))
                 (ui/icon "chevron-down"))
                (shui/button
                 {:variant :text
@@ -3863,9 +3869,9 @@
                              (util/stop-propagation e)
                              (when-let [^js cm (util/get-cm-instance (util/rec-get-node (.-target e) "ls-block"))]
                                (util/copy-to-clipboard! (.getValue cm))
-                               (notification/show! "Copied!" :success)))}
+                               (notification/show! (t :notification/copied) :success)))}
                 (ui/icon "copy")
-                "Copy")]
+                (t :ui/copy))]
               (lazy-editor/editor config (str (d/squuid)) attr code options)
               (let [options (:options options) block (:block config)]
                 (when (and (= language "clojure") (contains? (set options) ":results"))
@@ -3933,7 +3939,7 @@
       [:pre.pre-wrap-white-space
        (join-lines l)]
       ["Quote" _l]
-      [:div.warning "#+BEGIN_QUOTE is deprecated. Use '/Quote' command instead."]
+      [:div.warning (t :block/deprecated-quote)]
       ["Raw_Html" content]
       (when (not html-export?)
         [:div.raw_html.inline-block
@@ -3945,7 +3951,7 @@
                            {:__html (security/sanitize-html content)}}])
       ["Hiccup" content]
       (ui/catch-error
-       [:div.warning {:title "Invalid hiccup"}
+      [:div.warning {:title (t :block/invalid-hiccup)}
         content]
        [:div.hiccup_html.inline
         {:dangerouslySetInnerHTML
@@ -3954,10 +3960,10 @@
       ["Export" "latex" _options content]
       (if html-export?
         (latex/html-export content true false)
-        [:div.warning "'#+BEGIN_EXPORT latex' is deprecated. Use '/Math block' command instead."])
+        [:div.warning (t :block/deprecated-latex-export)])
 
       ["Custom" "query" _options _result _content]
-      [:div.warning "#+BEGIN_QUERY is deprecated. Use '/Advanced Query' command instead."]
+      [:div.warning (t :block/deprecated-query-syntax)]
 
       ["Custom" "note" _options result _content]
       (ui/admonition "note" (markup-elements-cp config result))
@@ -4281,7 +4287,7 @@
          (ui/foldable
           [:div.with-foldable-page
            (page-cp config page)
-           (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+           (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
           items
           {:debug-id page})
          [:div.only-page-blocks items]))]))
@@ -4305,7 +4311,7 @@
              (ui/foldable
               [:div
                (page-cp config page)
-               (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+               (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
               (fn []
                 (let [{top-level-blocks true others false} (group-by
                                                             (fn [b] (= (:db/id page) (:db/id (first b))))
@@ -4354,7 +4360,7 @@
                  (ui/foldable
                   [:div
                    (page-cp config page)
-                   (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+                   (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
                   (fn []
                     (blocks-container config blocks))
                   {})])))))]

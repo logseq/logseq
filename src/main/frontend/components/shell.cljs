@@ -1,5 +1,6 @@
 (ns frontend.components.shell
   (:require [rum.core :as rum]
+            [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.handler.shell :as shell-handler]
@@ -31,7 +32,7 @@
       [:div
        [:div
         [:h1.title
-         "Input command"]
+         (t :shell/input-command-title)]
         [:div.mt-4.mb-4.relative.rounded-md.shadow-sm
          [:input#run-command.form-input.font-mono.block.w-full.sm:text-sm.sm:leading-5
           {:autoFocus true
@@ -40,7 +41,7 @@
            :on-change (fn [e]
                         (reset! *command (util/evalue e)))}]]]]
       [:div.flex.flex-row.items-center
-       (ui/button "Run" :on-click run-command)
+       (ui/button (t :ui/run) :on-click run-command)
        [:div.ml-4
         (when loading?
           (ui/loading ""))]]]]))

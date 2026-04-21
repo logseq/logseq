@@ -10,6 +10,7 @@
             [frontend.commands :as commands]
             [frontend.components.rtc.indicator :as indicator]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
@@ -357,7 +358,7 @@
 
 (defmethod handle :rtc/remote-graph-gone [_]
   (p/do!
-   (notification/show! "This graph has been removed from Logseq Sync." :warning false)
+   (notification/show! (t :graph/removed-from-sync) :warning false)
    (rtc-handler/<get-remote-graphs)))
 
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version graph-e2ee?]]
@@ -372,7 +373,7 @@
        nil
        (fn []
          [:div.flex.flex-col.items-center.justify-center.mt-8.gap-4
-          [:div (str "Downloading " graph-name " ...")]
+          [:div (t :sync/downloading-graph graph-name)]
           (indicator/downloading-logs)])
        {:id :download-rtc-graph}))
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-e2ee?)
