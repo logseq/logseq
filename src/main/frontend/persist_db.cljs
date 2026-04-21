@@ -19,6 +19,26 @@
 (defonce remote-db (atom nil))
 (defonce remote-repo (atom nil))
 
+(defn- clear-remote-runtime!
+  []
+  (reset! remote-db nil)
+  (reset! remote-repo nil)
+  (reset! state/*db-worker nil))
+
+(defn- <stop-remote-if-current!
+  [repo]
+  (if (and repo (= repo @remote-repo))
+    (if-let [remote-client @remote-db]
+      (-> (remote/stop! remote-client)
+          (p/finally
+           (fn []
+             (when (= repo @remote-repo)
+               (clear-remote-runtime!)))))
+      (do
+        (clear-remote-runtime!)
+        (p/resolved true)))
+    (p/resolved false)))
+
 (defn- node-runtime?
   []
   (and (exists? js/process)
@@ -109,8 +129,14 @@
 (defn <close-db [repo]
   (when repo
     (if (electron-runtime?)
-      (p/let [remote-client (<ensure-remote! repo)]
-        (remote/invoke! (:client remote-client) "thread-api/close-db" false [repo]))
+      (if (= repo @remote-repo)
+        (if-let [remote-client @remote-db]
+          (p/let [_ (-> (remote/invoke! (:client remote-client) "thread-api/close-db" false [repo])
+                        (p/catch (fn [_] nil)))
+                  _ (<stop-remote-if-current! repo)]
+            nil)
+          (p/resolved nil))
+        (p/resolved nil))
       (state/<invoke-db-worker :thread-api/close-db repo))))
 
 (defn <export-db
