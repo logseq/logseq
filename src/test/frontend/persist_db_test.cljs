@@ -261,6 +261,71 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
+(deftest electron-close-db-disconnects-current-remote-runtime
+  (async done
+    (let [invoke-calls (atom [])
+          stop-calls (atom [])
+          fake-client {:repo "logseq_db_graph_a"
+                       :client {:base-url "http://127.0.0.1:9101"}}
+          original-electron? util/electron?
+          original-invoke! remote/invoke!
+          original-stop! remote/stop!]
+      (reset-runtime-state!)
+      (reset! persist-db/remote-db fake-client)
+      (reset! persist-db/remote-repo "logseq_db_graph_a")
+      (set! util/electron? (constantly true))
+      (set! remote/invoke! (fn [client method direct-pass? args]
+                             (swap! invoke-calls conj [client method direct-pass? args])
+                             (p/resolved nil)))
+      (set! remote/stop! (fn [client]
+                           (swap! stop-calls conj client)
+                           (p/resolved true)))
+      (-> (p/let [_ (persist-db/<close-db "logseq_db_graph_a")]
+            (is (= [[(:client fake-client) "thread-api/close-db" false ["logseq_db_graph_a"]]]
+                   @invoke-calls))
+            (is (= [fake-client] @stop-calls))
+            (is (nil? @persist-db/remote-db))
+            (is (nil? @persist-db/remote-repo)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! util/electron? original-electron?)
+                       (set! remote/invoke! original-invoke!)
+                       (set! remote/stop! original-stop!)
+                       (done)))))))
+
+(deftest electron-close-db-for-other-repo-does-not-bootstrap-runtime
+  (async done
+    (let [invoke-calls (atom [])
+          stop-calls (atom [])
+          fake-client {:repo "logseq_db_graph_a"
+                       :client {:base-url "http://127.0.0.1:9101"}}
+          original-electron? util/electron?
+          original-invoke! remote/invoke!
+          original-stop! remote/stop!]
+      (reset-runtime-state!)
+      (reset! persist-db/remote-db fake-client)
+      (reset! persist-db/remote-repo "logseq_db_graph_a")
+      (set! util/electron? (constantly true))
+      (set! remote/invoke! (fn [client method direct-pass? args]
+                             (swap! invoke-calls conj [client method direct-pass? args])
+                             (p/resolved nil)))
+      (set! remote/stop! (fn [client]
+                           (swap! stop-calls conj client)
+                           (p/resolved true)))
+      (-> (p/let [_ (persist-db/<close-db "logseq_db_graph_b")]
+            (is (empty? @invoke-calls))
+            (is (empty? @stop-calls))
+            (is (= fake-client @persist-db/remote-db))
+            (is (= "logseq_db_graph_a" @persist-db/remote-repo)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! util/electron? original-electron?)
+                       (set! remote/invoke! original-invoke!)
+                       (set! remote/stop! original-stop!)
+                       (done)))))))
+
 (deftest start-db-worker-skips-in-node-test-runtime
   (async done
     (let [invoke-calls (atom [])
