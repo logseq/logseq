@@ -156,7 +156,8 @@
        (p/let [repo (state/get-current-repo)
                properties (if (:class-schema? select-opts)
                             (property-handler/get-class-property-choices)
-                            (db-model/get-all-properties repo {:remove-ui-non-suitable-properties? true}))]
+                            (db-model/get-all-properties repo {:remove-ui-non-suitable-properties? true
+                                                               :block (:block select-opts)}))]
          (set-properties! properties)))
      [])
     (hooks/use-effect!
