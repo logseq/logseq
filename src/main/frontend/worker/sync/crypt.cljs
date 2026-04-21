@@ -16,7 +16,6 @@
 
 (defonce ^:private *graph->aes-key (atom {}))
 (defonce ^:private *user-rsa-key-pair-inflight (atom {}))
-(defonce ^:private node-default-e2ee-password-file "~/logseq/e2ee-password")
 (defonce ^:private node-default-auth-file "~/logseq/auth.json")
 (defonce ^:private e2ee-password-secret-key "logseq-encrypted-password")
 (def ^:private invalid-transit ::invalid-transit)
@@ -36,9 +35,14 @@
   [platform']
   (= :browser (runtime platform')))
 
-(defn- e2ee-password-file-path
-  []
-  node-default-e2ee-password-file)
+(defn- owner-source
+  [platform']
+  (get-in platform' [:env :owner-source]))
+
+(defn- capacitor-runtime?
+  [platform']
+  (and (= :browser (runtime platform'))
+       (= :capacitor (owner-source platform'))))
 
 (defn- auth-file-path
   []
@@ -48,10 +52,10 @@
   []
   (let [env (:env (platform/current))
         runtime' (:runtime env)
-        owner-source (:owner-source env)]
+        owner-source' (:owner-source env)]
     (or (= :browser runtime')
         (and (= :node runtime')
-             (= :electron owner-source)))))
+             (= :electron owner-source')))))
 
 (defn- missing-e2ee-password-ex
   [data]
@@ -115,12 +119,22 @@
                           (<read-refresh-token-from-auth-file platform'))
           _ (ensure-refresh-token! refresh-token)
           result (crypt/<encrypt-text-by-text-password refresh-token password)
-          text (ldb/write-transit-str result)]
-    (if (browser-runtime? platform')
-      (platform/save-secret-text! platform' e2ee-password-secret-key text)
-      (platform/write-text! platform' (e2ee-password-file-path) text))))
+          text (ldb/write-transit-str result)
+          native-saved? (if (capacitor-runtime? platform')
+                          (-> (ui-request/<request :native-save-e2ee-password
+                                                   {:key e2ee-password-secret-key
+                                                    :encrypted-text text})
+                              (p/then (fn [resp]
+                                        (true? (:supported? resp))))
+                              (p/catch (fn [e]
+                                         (log/warn :db-sync/save-e2ee-password-native-failed {:error e})
+                                         false)))
+                          false)]
+    (if native-saved?
+      nil
+      (platform/save-secret-text! platform' e2ee-password-secret-key text))))
 
-(defn- <read-browser-e2ee-password-text
+(defn- <read-platform-e2ee-password-text
   [platform']
   (-> (platform/read-secret-text platform' e2ee-password-secret-key)
       (p/catch (fn [e]
@@ -131,11 +145,16 @@
   [refresh-token]
   (ensure-refresh-token! refresh-token)
   (p/let [platform' (platform/current)
-          text (if (browser-runtime? platform')
-                 (<read-browser-e2ee-password-text platform')
-                 (-> (platform/read-text! platform' (e2ee-password-file-path))
-                     (p/catch (fn [_]
-                                nil))))]
+          native-result (if (capacitor-runtime? platform')
+                          (-> (ui-request/<request :native-get-e2ee-password
+                                                   {:key e2ee-password-secret-key})
+                              (p/catch (fn [e]
+                                         (log/warn :db-sync/read-e2ee-password-native-failed {:error e})
+                                         {:supported? false})))
+                          {:supported? false})
+          text (if (:supported? native-result)
+                 (:encrypted-text native-result)
+                 (<read-platform-e2ee-password-text platform'))]
     (when-not (seq text)
       (throw-missing-e2ee-password! {:reason :missing-persisted-password
                                      :hint "Provide --e2ee-password to persist it."}))
@@ -152,14 +171,19 @@
 (defn- <clear-e2ee-password!
   []
   (p/let [platform' (platform/current)
-          _ (if (browser-runtime? platform')
+          native-deleted? (if (capacitor-runtime? platform')
+                            (-> (ui-request/<request :native-delete-e2ee-password
+                                                     {:key e2ee-password-secret-key})
+                                (p/then (fn [resp]
+                                          (true? (:supported? resp))))
+                                (p/catch (fn [e]
+                                           (log/warn :db-sync/delete-e2ee-password-native-failed {:error e})
+                                           false)))
+                            false)
+          _ (when-not native-deleted?
               (-> (platform/delete-secret-text! platform' e2ee-password-secret-key)
                   (p/catch (fn [e]
                              (log/warn :db-sync/delete-e2ee-password-secret-failed {:error e})
-                             nil)))
-              (-> (platform/write-text! platform' (e2ee-password-file-path) "")
-                  (p/catch (fn [e]
-                             (log/warn :db-sync/clear-e2ee-password-file-failed {:error e})
                              nil))))]
     nil))
 

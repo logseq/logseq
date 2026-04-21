@@ -180,10 +180,24 @@
     (let [^js DB (.-DB ^js (.-oo1 ^js sqlite))]
       (new DB path (or mode "c")))))
 
+(defn- search-param-true?
+  [k]
+  (let [value (.get (js/URLSearchParams. (.-search js/location)) k)]
+    (or (= value "true")
+        (= value "1"))))
+
+(defn- owner-source
+  []
+  (cond
+    (search-param-true? "capacitor") :capacitor
+    (search-param-true? "electron") :electron
+    :else :browser))
+
 (defn browser-platform
   []
   {:env {:publishing? (string/includes? (.. js/location -href) "publishing=true")
-         :runtime :browser}
+         :runtime :browser
+         :owner-source (owner-source)}
    :storage {:install-opfs-pool install-opfs-pool
              :list-graphs list-graphs
              :db-exists? db-exists?

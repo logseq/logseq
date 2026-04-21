@@ -1,6 +1,7 @@
 (ns frontend.persist-db
   "Backend of DB based graph"
   (:require [electron.ipc :as ipc]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.transact :as db-transact]
             [frontend.persist-db.browser :as browser]
@@ -29,6 +30,12 @@
   (and (not (node-runtime?))
        (util/electron?)))
 
+(defn- current-db-sync-config
+  []
+  {:enabled? true
+   :ws-url (config/db-sync-ws-url)
+   :http-base (config/db-sync-http-base)})
+
 (defn- <ensure-remote!
   [repo]
   (if (or (nil? repo) (= repo @remote-repo))
@@ -42,6 +49,9 @@
       (reset! remote-db client)
       (reset! remote-repo repo)
       (reset! state/*db-worker (:wrapped-worker client))
+      (p/let [_ (state/<invoke-db-worker :thread-api/set-db-sync-config
+                                         (current-db-sync-config))]
+        nil)
       (ldb/register-transact-fn!
        (fn remote-transact!
          [repo tx-data tx-meta]

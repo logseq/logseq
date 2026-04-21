@@ -138,7 +138,51 @@
                             (reset! worker-state/*state state-prev)
                             (done)))))))
 
-(deftest save-e2ee-password-uses-file-storage-in-node-runtime-test
+(deftest save-e2ee-password-uses-native-storage-in-capacitor-runtime-test
+  (async done
+         (let [platform-map {:env {:runtime :browser
+                                   :owner-source :capacitor}}
+               state-prev @worker-state/*state
+               native-calls (atom [])
+               secret-calls (atom [])
+               file-calls (atom [])
+               encrypt-calls (atom [])]
+           (reset! worker-state/*state (assoc state-prev :auth/refresh-token "refresh-from-state"))
+           (-> (p/with-redefs [crypt/<encrypt-text-by-text-password (fn [refresh-token password]
+                                                                      (swap! encrypt-calls conj [refresh-token password])
+                                                                      {:cipher "payload"})
+                               platform/current (fn [] platform-map)
+                               ui-request/<request (fn [action payload _opts]
+                                                     (swap! native-calls conj {:action action
+                                                                               :payload payload})
+                                                     (p/resolved {:supported? true}))
+                               platform/save-secret-text! (fn [platform' key text]
+                                                            (swap! secret-calls conj {:platform platform'
+                                                                                      :key key
+                                                                                      :text text})
+                                                            (p/resolved nil))
+                               platform/write-text! (fn [platform' path text]
+                                                      (swap! file-calls conj {:platform platform'
+                                                                              :path path
+                                                                              :text text})
+                                                      (p/resolved nil))]
+                 (#'sync-crypt/<save-e2ee-password "password"))
+               (p/then (fn [_]
+                         (is (= [["refresh-from-state" "password"]] @encrypt-calls))
+                         (is (= 1 (count @native-calls)))
+                         (is (= :native-save-e2ee-password (:action (first @native-calls))))
+                         (is (= "logseq-encrypted-password"
+                                (get-in (first @native-calls) [:payload :key])))
+                         (is (string? (get-in (first @native-calls) [:payload :encrypted-text])))
+                         (is (empty? @secret-calls))
+                         (is (empty? @file-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally (fn []
+                            (reset! worker-state/*state state-prev)
+                            (done)))))))
+
+(deftest save-e2ee-password-uses-secret-storage-in-node-runtime-test
   (async done
          (let [platform-map {:env {:runtime :node
                                    :owner-source :cli}}
@@ -169,11 +213,51 @@
                          (is (= 1 (count @auth-read-calls)))
                          (is (= "~/logseq/auth.json" (:path (first @auth-read-calls))))
                          (is (= [["refresh-from-auth-file" "password"]] @encrypt-calls))
-                         (is (= 1 (count @file-calls)))
-                         (is (= platform-map (:platform (first @file-calls))))
-                         (is (= "~/logseq/e2ee-password" (:path (first @file-calls))))
-                         (is (string? (:text (first @file-calls))))
-                         (is (empty? @secret-calls))))
+                         (is (= 1 (count @secret-calls)))
+                         (is (= platform-map (:platform (first @secret-calls))))
+                         (is (= "logseq-encrypted-password" (:key (first @secret-calls))))
+                         (is (string? (:text (first @secret-calls))))
+                         (is (empty? @file-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
+(deftest save-e2ee-password-uses-secret-storage-in-electron-runtime-test
+  (async done
+         (let [platform-map {:env {:runtime :node
+                                   :owner-source :electron}}
+               secret-calls (atom [])
+               file-calls (atom [])
+               auth-read-calls (atom [])
+               encrypt-calls (atom [])]
+           (-> (p/with-redefs [crypt/<encrypt-text-by-text-password (fn [refresh-token password]
+                                                                      (swap! encrypt-calls conj [refresh-token password])
+                                                                      {:cipher "payload"})
+                               platform/current (fn [] platform-map)
+                               platform/read-text! (fn [platform' path]
+                                                     (swap! auth-read-calls conj {:platform platform'
+                                                                                  :path path})
+                                                     (p/resolved "{\"refresh-token\":\"refresh-from-auth-file\"}"))
+                               platform/save-secret-text! (fn [platform' key text]
+                                                            (swap! secret-calls conj {:platform platform'
+                                                                                      :key key
+                                                                                      :text text})
+                                                            (p/resolved nil))
+                               platform/write-text! (fn [platform' path text]
+                                                      (swap! file-calls conj {:platform platform'
+                                                                              :path path
+                                                                              :text text})
+                                                      (p/resolved nil))]
+                 (#'sync-crypt/<save-e2ee-password "password"))
+               (p/then (fn [_]
+                         (is (= 1 (count @auth-read-calls)))
+                         (is (= "~/logseq/auth.json" (:path (first @auth-read-calls))))
+                         (is (= [["refresh-from-auth-file" "password"]] @encrypt-calls))
+                         (is (= 1 (count @secret-calls)))
+                         (is (= platform-map (:platform (first @secret-calls))))
+                         (is (= "logseq-encrypted-password" (:key (first @secret-calls))))
+                         (is (string? (:text (first @secret-calls))))
+                         (is (empty? @file-calls))))
                (p/catch (fn [e]
                           (is false (str e))))
                (p/finally done)))))
@@ -226,6 +310,95 @@
                           (is false (str e))))
                (p/finally done)))))
 
+(deftest read-e2ee-password-uses-native-storage-in-capacitor-runtime-test
+  (async done
+         (let [platform-map {:env {:runtime :browser
+                                   :owner-source :capacitor}}
+               native-calls (atom [])
+               secret-calls (atom [])
+               file-calls (atom [])]
+           (-> (p/with-redefs [platform/current (fn [] platform-map)
+                               ui-request/<request (fn [action payload _opts]
+                                                     (swap! native-calls conj {:action action
+                                                                               :payload payload})
+                                                     (p/resolved {:supported? true
+                                                                  :encrypted-text (ldb/write-transit-str {:cipher "payload"})}))
+                               platform/read-secret-text (fn [platform' key]
+                                                           (swap! secret-calls conj {:platform platform'
+                                                                                     :key key})
+                                                           (p/resolved (ldb/write-transit-str {:cipher "legacy"})))
+                               platform/read-text! (fn [platform' path]
+                                                     (swap! file-calls conj {:platform platform'
+                                                                             :path path})
+                                                     (p/resolved (ldb/write-transit-str {:cipher "legacy"})))
+                               crypt/<decrypt-text-by-text-password (fn [_refresh-token _data]
+                                                                      (p/resolved "decrypted-password"))]
+                 (#'sync-crypt/<read-e2ee-password "refresh-token"))
+               (p/then (fn [password]
+                         (is (= "decrypted-password" password))
+                         (is (= [{:action :native-get-e2ee-password
+                                  :payload {:key "logseq-encrypted-password"}}]
+                                @native-calls))
+                         (is (empty? @secret-calls))
+                         (is (empty? @file-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
+(deftest read-e2ee-password-uses-secret-storage-in-node-runtime-test
+  (async done
+         (let [platform-map {:env {:runtime :node
+                                   :owner-source :cli}}
+               secret-calls (atom [])
+               file-calls (atom [])]
+           (-> (p/with-redefs [platform/current (fn [] platform-map)
+                               platform/read-secret-text (fn [platform' key]
+                                                           (swap! secret-calls conj {:platform platform'
+                                                                                     :key key})
+                                                           (p/resolved (ldb/write-transit-str {:cipher "payload"})))
+                               platform/read-text! (fn [platform' path]
+                                                     (swap! file-calls conj {:platform platform'
+                                                                             :path path})
+                                                     (p/resolved (ldb/write-transit-str {:cipher "legacy"})))
+                               crypt/<decrypt-text-by-text-password (fn [_refresh-token _data]
+                                                                      (p/resolved "decrypted-password"))]
+                 (#'sync-crypt/<read-e2ee-password "refresh-token"))
+               (p/then (fn [password]
+                         (is (= "decrypted-password" password))
+                         (is (= 1 (count @secret-calls)))
+                         (is (= "logseq-encrypted-password" (:key (first @secret-calls))))
+                         (is (empty? @file-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
+(deftest read-e2ee-password-uses-secret-storage-in-electron-runtime-test
+  (async done
+         (let [platform-map {:env {:runtime :node
+                                   :owner-source :electron}}
+               secret-calls (atom [])
+               file-calls (atom [])]
+           (-> (p/with-redefs [platform/current (fn [] platform-map)
+                               platform/read-secret-text (fn [platform' key]
+                                                           (swap! secret-calls conj {:platform platform'
+                                                                                     :key key})
+                                                           (p/resolved (ldb/write-transit-str {:cipher "payload"})))
+                               platform/read-text! (fn [platform' path]
+                                                     (swap! file-calls conj {:platform platform'
+                                                                             :path path})
+                                                     (p/resolved (ldb/write-transit-str {:cipher "legacy"})))
+                               crypt/<decrypt-text-by-text-password (fn [_refresh-token _data]
+                                                                      (p/resolved "decrypted-password"))]
+                 (#'sync-crypt/<read-e2ee-password "refresh-token"))
+               (p/then (fn [password]
+                         (is (= "decrypted-password" password))
+                         (is (= 1 (count @secret-calls)))
+                         (is (= "logseq-encrypted-password" (:key (first @secret-calls))))
+                         (is (empty? @file-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
 (deftest read-e2ee-password-browser-missing-secret-does-not-fallback-to-file-test
   (async done
          (let [platform-map {:env {:runtime :browser}}
@@ -252,9 +425,44 @@
                                              (keyword (ex-message e)))))))
                (p/finally done)))))
 
+(deftest read-e2ee-password-capacitor-missing-native-secret-does-not-fallback-to-worker-storage-test
+  (async done
+         (let [platform-map {:env {:runtime :browser
+                                   :owner-source :capacitor}}
+               native-read-calls (atom 0)
+               secret-read-calls (atom 0)
+               file-read-calls (atom 0)]
+           (-> (p/with-redefs [platform/current (fn [] platform-map)
+                               ui-request/<request (fn [action payload _opts]
+                                                     (swap! native-read-calls inc)
+                                                     (is (= :native-get-e2ee-password action))
+                                                     (is (= {:key "logseq-encrypted-password"} payload))
+                                                     (p/resolved {:supported? true
+                                                                  :encrypted-text nil}))
+                               platform/read-secret-text (fn [_platform' _key]
+                                                           (swap! secret-read-calls inc)
+                                                           (p/resolved (ldb/write-transit-str {:cipher "legacy"})))
+                               platform/read-text! (fn [_platform' _path]
+                                                     (swap! file-read-calls inc)
+                                                     (p/resolved (ldb/write-transit-str {:cipher "legacy-file"})))
+                               crypt/<decrypt-text-by-text-password (fn [_refresh-token _data]
+                                                                      (p/rejected (ex-info "should-not-decrypt" {})))]
+                 (#'sync-crypt/<read-e2ee-password "refresh-token"))
+               (p/then (fn [_]
+                         (is false "expected missing e2ee password failure")))
+               (p/catch (fn [e]
+                          (is (= 1 @native-read-calls))
+                          (is (zero? @secret-read-calls))
+                          (is (zero? @file-read-calls))
+                          (is (contains? #{:db-sync/missing-e2ee-password
+                                           :missing-e2ee-password}
+                                         (or (:code (ex-data e))
+                                             (keyword (ex-message e)))))))
+               (p/finally done)))))
+
 (deftest verify-and-save-e2ee-password-verifies-before-write-test
   (async done
-         (let [write-calls (atom [])
+         (let [save-calls (atom [])
                decrypt-calls (atom [])]
            (-> (p/with-redefs [platform/current (fn [] {:env {:runtime :node
                                                               :owner-source :cli}})
@@ -269,40 +477,41 @@
                                                      (p/resolved "{\"refresh-token\":\"refresh-token\"}"))
                                crypt/<encrypt-text-by-text-password (fn [_refresh-token _password]
                                                                       {:cipher "password-payload"})
-                               platform/write-text! (fn [_platform' path text]
-                                                      (swap! write-calls conj {:path path
-                                                                               :text text})
-                                                      (p/resolved nil))
-                               platform/save-secret-text! (fn [& _]
-                                                            (p/rejected (ex-info "should not use browser secret store" {})))]
+                               platform/save-secret-text! (fn [_platform' key text]
+                                                            (swap! save-calls conj {:key key
+                                                                                    :text text})
+                                                            (p/resolved nil))
+                               platform/write-text! (fn [& _]
+                                                      (p/rejected (ex-info "should not use node file storage" {})))]
                  (#'sync-crypt/<verify-and-save-e2ee-password! "new-password"
                                                                "encrypted-private-key"))
                (p/then (fn [_]
                          (is (= [["new-password" :encrypted-private-key-payload]] @decrypt-calls))
-                         (is (= 1 (count @write-calls)))
-                         (is (= "~/logseq/e2ee-password" (:path (first @write-calls))))))
+                         (is (= 1 (count @save-calls)))
+                         (is (= "logseq-encrypted-password" (:key (first @save-calls))))
+                         (is (string? (:text (first @save-calls))))))
                (p/catch (fn [e]
                           (is false (str e))))
                (p/finally done)))))
 
 (deftest verify-and-save-e2ee-password-invalid-password-does-not-overwrite-test
   (async done
-         (let [write-calls (atom 0)]
+         (let [save-calls (atom 0)]
            (-> (p/with-redefs [platform/current (fn [] {:env {:runtime :node
                                                               :owner-source :cli}})
                                ldb/read-transit-str (fn [_] :encrypted-private-key-payload)
                                crypt/<decrypt-private-key (fn [_password _encrypted-private-key]
                                                             (p/rejected (ex-info "decrypt-private-key" {:code :invalid-password})))
-                               platform/write-text! (fn [_platform' _path _text]
-                                                      (swap! write-calls inc)
-                                                      (p/resolved nil))]
+                               platform/save-secret-text! (fn [_platform' _key _text]
+                                                            (swap! save-calls inc)
+                                                            (p/resolved nil))]
                  (#'sync-crypt/<verify-and-save-e2ee-password! "wrong-password"
                                                                "encrypted-private-key"))
                (p/then (fn [_]
                          (is false "expected verify failure")))
                (p/catch (fn [e]
                           (is (= "decrypt-private-key" (ex-message e)))
-                          (is (zero? @write-calls))))
+                          (is (zero? @save-calls))))
                (p/finally done)))))
 
 (deftest verify-and-save-e2ee-password-invalid-server-user-keys-shape-test
