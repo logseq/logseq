@@ -280,6 +280,11 @@
     (when (pos? (:exit result))
       (System/exit (:exit result)))))
 
+(defn- check-missing-translations
+  "Use logseq-i18n-lint to fail fast on missing translations before other checks."
+  []
+  (run-i18n-lint-command! "check-missing" []))
+
 (defn- check-translation-keys
   "Use logseq-i18n-lint to detect unused translation keys."
   [args]
@@ -315,6 +320,7 @@
 (defn validate-translations
   "Runs multiple translation validations that fail fast if one of them is invalid"
   [& args]
+  (check-missing-translations)
   (validate-non-default-languages (contains? (set args) "--fix"))
   (check-translation-keys args)
   (validate-rich-translations)
