@@ -6,6 +6,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
@@ -43,6 +44,7 @@
 (declare fetch-json)
 
 (declare coerce-http-response)
+(declare <sync-auth-state-to-db-worker!)
 
 (defn fetch-json
   [url opts {:keys [response-schema error-schema] :or {error-schema :error}}]
@@ -114,6 +116,14 @@
   (if (nil? graph-e2ee?)
     true
     (true? graph-e2ee?)))
+
+(defn- <ensure-download-runtime-bound!
+  [repo]
+  (if (util/electron?)
+    (p/let [_ (persist-db/<fetch-init-data repo {:sync-download-graph? true})
+            _ (<sync-auth-state-to-db-worker!)]
+      nil)
+    (p/resolved nil)))
 
 (defn- <ensure-user-rsa-keys-on-server!
   [{:keys [server-rsa-keys-exists?]}]
@@ -294,6 +304,7 @@
      (-> (if (and graph-uuid base)
            (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
                    graph (str config/db-version-prefix graph-name)
+                   _ (<ensure-download-runtime-bound! graph)
                    _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
                                               graph graph-uuid graph-e2ee?)]
              true)
