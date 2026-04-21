@@ -36,5 +36,10 @@
   },
   "devDependencies": {
     "@sentry/cli": "^3.3.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }
