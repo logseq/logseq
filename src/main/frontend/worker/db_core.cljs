@@ -75,6 +75,7 @@
 (defonce ^:private *search-index-build-ids (atom {}))
 (defonce ^:private *client-ops-cleanup-timers (atom {}))
 (def ^:private client-ops-cleanup-interval-ms (* 3 60 60 1000))
+(def ^:private wal-checkpoint-sql "PRAGMA wal_checkpoint(TRUNCATE)")
 
 
 (defn- node-runtime?
@@ -135,6 +136,18 @@
     (if-let [f (:resolve-db-path storage)]
       (f repo pool path)
       path)))
+
+(defn- checkpoint-db!
+  ([^Object db]
+   (checkpoint-db! nil db))
+  ([repo ^Object db]
+   (when (and db (fn? (.-exec db)))
+     (try
+       (.exec db wal-checkpoint-sql)
+       (catch :default e
+         (log/warn :db-worker/wal-checkpoint-failed
+                   (cond-> {:error e}
+                     repo (assoc :repo repo))))))))
 
 (defn- <export-db-file
   ([repo]
@@ -237,6 +250,9 @@
 
 (defn- close-db-aux!
   [repo ^Object db ^Object search ^Object client-ops]
+  (checkpoint-db! repo db)
+  (checkpoint-db! repo search)
+  (checkpoint-db! repo client-ops)
   (when-let [timer (get @*client-ops-cleanup-timers repo)]
     (js/clearInterval timer))
   (swap! *client-ops-cleanup-timers dissoc repo)
@@ -824,14 +840,14 @@
 (def-thread-api :thread-api/export-db
   [repo]
   (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
-    (.exec db "PRAGMA wal_checkpoint(2)"))
+    (checkpoint-db! repo db))
   (p/let [data (<export-db-file repo)]
     (platform/transfer (platform/current) data #js [(.-buffer data)])))
 
 (def-thread-api :thread-api/export-client-ops-db
   [repo]
   (when-let [^js db (worker-state/get-sqlite-conn repo :client-ops)]
-    (.exec db "PRAGMA wal_checkpoint(2)"))
+    (checkpoint-db! repo db))
   (let [^js client-ops-db (worker-state/get-sqlite-conn repo :client-ops)
         ^js pool (get-storage-pool repo)
         db-filename (some-> client-ops-db .-filename)
@@ -851,7 +867,7 @@
 (def-thread-api :thread-api/export-db-base64
   [repo]
   (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
-    (.exec db "PRAGMA wal_checkpoint(2)"))
+    (checkpoint-db! repo db))
   (p/let [data (<export-db-file repo)]
     (when data
       (let [buffer (if (instance? js/Buffer data)
@@ -871,7 +887,7 @@
         (throw (ex-info "platform sqlite backup not supported"
                         {:code :backup-not-supported
                          :repo repo})))
-      (.exec db "PRAGMA wal_checkpoint(2)")
+      (checkpoint-db! repo db)
       (p/let [_ (backup-db-fn db dst-path)]
         {:path dst-path}))))
 

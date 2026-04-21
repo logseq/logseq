@@ -129,6 +129,29 @@
        (is (nil? (get @client-op/*repo->pending-local-tx-count test-repo)))
        (is (nil? (get @worker-state/*sqlite-conns test-repo)))))))
 
+(deftest close-db-checkpoints-wal-before-closing-test
+  (restoring-worker-state
+   (fn []
+     (let [sql-calls (atom [])
+           closed (atom [])
+           mk-db (fn [label]
+                   #js {:exec (fn [sql]
+                                (swap! sql-calls conj [label sql]))
+                        :close (fn []
+                                 (swap! closed conj label))})]
+       (reset! worker-state/*sqlite-conns
+               {test-repo {:db (mk-db :db)
+                           :search (mk-db :search)
+                           :client-ops (mk-db :client-ops)}})
+
+       (db-worker/close-db! test-repo)
+
+       (is (= [[:db "PRAGMA wal_checkpoint(TRUNCATE)"]
+               [:search "PRAGMA wal_checkpoint(TRUNCATE)"]
+               [:client-ops "PRAGMA wal_checkpoint(TRUNCATE)"]]
+              @sql-calls))
+       (is (= [:db :search :client-ops] @closed))))))
+
 (deftest client-ops-cleanup-timer-starts-once-and-clears-on-close-test
   (restoring-worker-state
    (fn []
@@ -474,7 +497,7 @@
                                                                      (swap! sql-calls conj sql))}))]
            (-> (export-client-ops-db test-repo)
                (p/then (fn [result]
-                         (is (= ["PRAGMA wal_checkpoint(2)"] @sql-calls))
+                         (is (= ["PRAGMA wal_checkpoint(TRUNCATE)"] @sql-calls))
                          (is (= 1 (count @export-calls)))
                          (is (contains? #{"client-ops/db.sqlite"
                                           "client-ops-/db.sqlite"}
