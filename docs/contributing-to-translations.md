@@ -98,6 +98,7 @@ bb lang:validate-translations
 
 It checks for:
 
+- translation keys referenced from code that do not exist in `en.edn`
 - locale keys that do not exist in `en.edn`
 - dictionary keys that are no longer used
 - placeholder mismatches such as `{1}` vs `{2}`

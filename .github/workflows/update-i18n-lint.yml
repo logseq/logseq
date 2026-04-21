@@ -208,10 +208,13 @@ jobs:
           COMMIT_SHA: ${{ steps.source.outputs.commit_sha }}
           SHORT_SHA: ${{ steps.source.outputs.short_sha }}
           BRANCH: ${{ steps.commit.outputs.branch }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          REPO_OWNER: ${{ github.repository_owner }}
         run: |
+          HEAD_REF="${REPO_OWNER}:${BRANCH}"
           gh pr create \
-            --base develop \
-            --head "${BRANCH}" \
+            --base "${BASE_BRANCH}" \
+            --head "${HEAD_REF}" \
             --title "chore: update logseq-i18n-lint binaries to ${SHORT_SHA}" \
             --body "$(cat <<EOF
           ## Update logseq-i18n-lint binaries
