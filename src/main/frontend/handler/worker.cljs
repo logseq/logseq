@@ -3,6 +3,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.common.crypt :as crypt]
+            [frontend.handler.e2ee :as e2ee-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
@@ -87,6 +88,43 @@
       (p/let [private-key-promise (state/pub-event! [:rtc/decrypt-user-e2ee-private-key encrypted-private-key])
               private-key private-key-promise]
         (crypt/<export-private-key private-key)))
+
+    :native-save-e2ee-password
+    (let [{:keys [key encrypted-text]} payload]
+      (if-not (and (string? key) (string? encrypted-text))
+        (p/rejected (ex-info "invalid native-save-e2ee-password payload"
+                             {:code :invalid-ui-action-payload
+                              :action action
+                              :payload payload}))
+        (if-not (e2ee-handler/native-storage-supported?)
+          (p/resolved {:supported? false})
+          (p/let [_ (e2ee-handler/<native-save-secret! key encrypted-text)]
+            {:supported? true}))))
+
+    :native-get-e2ee-password
+    (let [{:keys [key]} payload]
+      (if-not (string? key)
+        (p/rejected (ex-info "invalid native-get-e2ee-password payload"
+                             {:code :invalid-ui-action-payload
+                              :action action
+                              :payload payload}))
+        (if-not (e2ee-handler/native-storage-supported?)
+          (p/resolved {:supported? false})
+          (p/let [encrypted-text (e2ee-handler/<native-get-secret key)]
+            {:supported? true
+             :encrypted-text encrypted-text}))))
+
+    :native-delete-e2ee-password
+    (let [{:keys [key]} payload]
+      (if-not (string? key)
+        (p/rejected (ex-info "invalid native-delete-e2ee-password payload"
+                             {:code :invalid-ui-action-payload
+                              :action action
+                              :payload payload}))
+        (if-not (e2ee-handler/native-storage-supported?)
+          (p/resolved {:supported? false})
+          (p/let [_ (e2ee-handler/<native-delete-secret! key)]
+            {:supported? true}))))
 
     (p/rejected (ex-info "unsupported db-worker ui action"
                          {:code :unsupported-ui-action
