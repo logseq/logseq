@@ -4,6 +4,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.notification :as notification]
@@ -72,7 +73,7 @@
          {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
                   [:span.top-1.relative
                    (shui/tabler-icon "alert-triangle")]
-                  (if (or (ldb/class? page) (ldb/property? page))
+                  (if (or (ldb/class? page) (ldb/property? page) (db-model/today-journal-page? page))
                     (t :page.delete/permanent-confirm-title)
                     (t :page.delete/confirm-title))]
           :content [:p.opacity-60 (str "- " (:block/title page))]
