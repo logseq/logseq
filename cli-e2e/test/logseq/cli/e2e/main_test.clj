@@ -1,5 +1,6 @@
 (ns logseq.cli.e2e.main-test
-  (:require [clojure.string :as string]
+  (:require [babashka.cli :as cli]
+            [clojure.string :as string]
             [clojure.test :refer [deftest is testing]]
             [logseq.cli.e2e.cleanup :as cleanup]
             [logseq.cli.e2e.main :as main]
@@ -27,6 +28,216 @@
    :scopes {:global {:options ["--help"]}
             :graph {:commands ["graph create" "graph list"]
                     :options ["--type" "--file"]}}})
+
+(def cli-parse-config
+  {:alias {:i :include
+           :h :help}
+   :spec {:jobs {:default 4}}
+   :coerce {:include []
+            :help :boolean
+            :dry-run :boolean
+            :skip-build :boolean
+            :verbose :boolean
+            :timings :boolean
+            :jobs :long}})
+
+(deftest cli-opts-parses-jobs-as-integer
+  (is (= 3
+         (:jobs (cli/parse-opts ["--jobs" "3"] cli-parse-config)))))
+
+(deftest cli-opts-defaults-jobs-to-four
+  (is (= 4
+         (:jobs (cli/parse-opts [] cli-parse-config)))))
+
+(deftest cli-opts-rejects-non-integer-jobs
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo
+       #"Coerce failure"
+       (cli/parse-opts ["--jobs" "nope"] cli-parse-config))))
+
+(deftest run-rejects-jobs-less-than-one
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo
+       #"--jobs must be a positive integer"
+       (main/run! {:inventory complete-inventory
+                   :cases sample-cases
+                   :skip-build true
+                   :jobs 0
+                   :run-command (fn [_]
+                                  {:exit 0
+                                   :out ""
+                                   :err ""})
+                   :run-case (fn [case _opts]
+                               {:id (:id case)
+                                :status :ok})}))))
+
+(deftest run-non-sync-uses-parallel-runner-when-jobs-greater-than-one
+  (let [parallel-call (atom nil)
+        serial-called? (atom false)]
+    (with-redefs [main/run-selected-cases-in-parallel! (fn [selected-cases run-case run-command opts]
+                                                         (reset! parallel-call {:case-ids (mapv :id selected-cases)
+                                                                                :run-case run-case
+                                                                                :run-command run-command
+                                                                                :jobs (:jobs opts)})
+                                                         [{:id "global-help" :status :ok}
+                                                          {:id "graph-list" :status :ok}])
+                  main/run-selected-cases! (fn [& _]
+                                             (reset! serial-called? true)
+                                             (throw (ex-info "serial runner should not be used" {})))]
+      (let [result (main/run! {:inventory complete-inventory
+                               :cases sample-cases
+                               :include ["smoke"]
+                               :skip-build true
+                               :jobs 2
+                               :run-command (fn [_]
+                                              {:exit 0
+                                               :out ""
+                                               :err ""})
+                               :run-case (fn [case _opts]
+                                           {:id (:id case)
+                                            :status :ok})})]
+        (is (= :ok (:status result)))
+        (is (= ["global-help" "graph-list"] (:case-ids @parallel-call)))
+        (is (= 2 (:jobs @parallel-call)))
+        (is (false? @serial-called?))))))
+
+(deftest run-sync-suite-stays-serial-when-jobs-greater-than-one
+  (let [serial-call (atom nil)
+        parallel-called? (atom false)
+        sync-inventory {:excluded-command-prefixes ["login" "logout"]
+                        :scopes {:sync {:commands ["sync upload" "sync status"]
+                                        :options []}}}
+        sync-cases [{:id "sync-upload"
+                     :cmds ["node static/logseq-cli.js sync upload"]
+                     :covers {:commands ["sync upload"]}}
+                    {:id "sync-status"
+                     :cmds ["node static/logseq-cli.js sync status"]
+                     :covers {:commands ["sync status"]}}]]
+    (with-redefs [main/run-selected-cases! (fn [selected-cases run-case run-command opts]
+                                             (reset! serial-call {:case-ids (mapv :id selected-cases)
+                                                                  :run-case run-case
+                                                                  :run-command run-command
+                                                                  :jobs (:jobs opts)})
+                                             (mapv (fn [case]
+                                                     {:id (:id case)
+                                                      :status :ok})
+                                                   selected-cases))
+                  main/run-selected-cases-in-parallel! (fn [& _]
+                                                         (reset! parallel-called? true)
+                                                         (throw (ex-info "parallel runner should not be used" {})))]
+      (let [result (main/run! {:suite :sync
+                               :inventory sync-inventory
+                               :cases sync-cases
+                               :skip-build true
+                               :jobs 4
+                               :run-command (fn [_]
+                                              {:exit 0
+                                               :out ""
+                                               :err ""})
+                               :run-case (fn [case _opts]
+                                           {:id (:id case)
+                                            :status :ok})})]
+        (is (= :ok (:status result)))
+        (is (= ["sync-upload" "sync-status"] (:case-ids @serial-call)))
+        (is (= 4 (:jobs @serial-call)))
+        (is (false? @parallel-called?))))))
+
+(deftest run-jobs-one-keeps-serial-runner
+  (let [serial-call (atom nil)
+        parallel-called? (atom false)]
+    (with-redefs [main/run-selected-cases! (fn [selected-cases run-case run-command opts]
+                                             (reset! serial-call {:case-ids (mapv :id selected-cases)
+                                                                  :run-case run-case
+                                                                  :run-command run-command
+                                                                  :jobs (:jobs opts)})
+                                             (mapv (fn [case]
+                                                     {:id (:id case)
+                                                      :status :ok})
+                                                   selected-cases))
+                  main/run-selected-cases-in-parallel! (fn [& _]
+                                                         (reset! parallel-called? true)
+                                                         (throw (ex-info "parallel runner should not be used" {})))]
+      (let [result (main/run! {:inventory complete-inventory
+                               :cases sample-cases
+                               :include ["smoke"]
+                               :skip-build true
+                               :jobs 1
+                               :run-command (fn [_]
+                                              {:exit 0
+                                               :out ""
+                                               :err ""})
+                               :run-case (fn [case _opts]
+                                           {:id (:id case)
+                                            :status :ok})})]
+        (is (= :ok (:status result)))
+        (is (= ["global-help" "graph-list"] (:case-ids @serial-call)))
+        (is (= 1 (:jobs @serial-call)))
+        (is (false? @parallel-called?))))))
+
+(deftest parallel-runner-collects-completions-before-rethrowing-failure
+  (let [started (atom [])
+        finished (atom [])
+        started-latch (java.util.concurrent.CountDownLatch. 2)
+        release-success (promise)
+        cases [{:id "global-help"}
+               {:id "graph-list"}]
+        error (try
+                (main/run-selected-cases-in-parallel!
+                 cases
+                 (fn [case _opts]
+                   (swap! started conj (:id case))
+                   (.countDown started-latch)
+                   (.await started-latch)
+                   (if (= "graph-list" (:id case))
+                     (do
+                       (swap! finished conj [:failed (:id case)])
+                       (deliver release-success true)
+                       (throw (ex-info "boom" {:id (:id case)})))
+                     (do
+                       @release-success
+                       (swap! finished conj [:ok (:id case)])
+                       {:id (:id case)
+                        :status :ok})))
+                 (fn [_]
+                   {:exit 0
+                    :out ""
+                    :err ""})
+                 {:jobs 2})
+                nil
+                (catch Exception ex
+                  ex))]
+    (is (instance? Exception error))
+    (is (= #{"global-help" "graph-list"}
+           (set @started)))
+    (is (= #{[:ok "global-help"]
+             [:failed "graph-list"]}
+           (set @finished)))))
+
+(deftest parallel-runner-elapsed-ms-starts-when-case-begins-running
+  (let [events (atom [])]
+    (main/run-selected-cases-in-parallel!
+     [{:id "slow-1"}
+      {:id "slow-2"}
+      {:id "fast-after-queue"}]
+     (fn [test-case _opts]
+       (clojure.core/case (:id test-case)
+         "slow-1" (Thread/sleep 180)
+         "slow-2" (Thread/sleep 180)
+         "fast-after-queue" (Thread/sleep 10))
+       {:id (:id test-case)
+        :status :ok})
+     (fn [_]
+       {:exit 0
+        :out ""
+        :err ""})
+     {:jobs 2
+      :on-case-success (fn [payload]
+                         (swap! events conj [(:id (:result payload)) (:elapsed-ms payload)]))})
+    (let [elapsed-map (into {} @events)]
+      (is (< (get elapsed-map "fast-after-queue" 1000) 120)
+          "queued case should measure only its own execution time, not time spent waiting in the pool")
+      (is (>= (get elapsed-map "slow-1" 0) 150))
+      (is (>= (get elapsed-map "slow-2" 0) 150)))))
 
 (deftest select-cases-supports-case-id
   (is (= ["graph-create"]
@@ -283,6 +494,27 @@
     (is (string/includes? output "[2/2] ✓ graph-list"))
     (is (string/includes? output "Summary: 2 passed, 0 failed"))))
 
+(deftest test-parallel-output-omits-meaningless-index-prefixes
+  (let [output (with-out-str
+                 (main/test! {:inventory complete-inventory
+                              :cases sample-cases
+                              :include ["smoke"]
+                              :skip-build true
+                              :jobs 2
+                              :run-command (fn [_]
+                                             {:exit 0
+                                              :out ""
+                                              :err ""})
+                              :run-case (fn [case _opts]
+                                          (Thread/sleep (if (= "global-help" (:id case)) 25 5))
+                                          {:id (:id case)
+                                           :status :ok})}))]
+    (is (string/includes? output "▶ global-help"))
+    (is (string/includes? output "✓ global-help"))
+    (is (string/includes? output "✓ graph-list"))
+    (is (not (string/includes? output "[1/2]")))
+    (is (not (string/includes? output "[2/2]")))))
+
 (deftest test-timings-prints-step-details-and-slow-summary
   (let [output (with-out-str
                  (main/test! {:inventory complete-inventory
@@ -410,6 +642,8 @@
     (is (string/includes? output "--skip-build"))
     (is (string/includes? output "--include TAG"))
     (is (string/includes? output "--case ID"))
+    (is (string/includes? output "--jobs N"))
+    (is (string/includes? output "Default: 4"))
     (is (string/includes? output "--timings"))
     (is (not (string/includes? output "--e2ee-password")))))
 
@@ -434,6 +668,8 @@
     (is (string/includes? output "--skip-build"))
     (is (string/includes? output "--include TAG"))
     (is (string/includes? output "--case ID"))
+    (is (string/includes? output "--jobs N"))
+    (is (string/includes? output "Default: 4"))
     (is (string/includes? output "--timings"))
     (is (string/includes? output "--e2ee-password VALUE"))
     (is (string/includes? output "Default: 11111"))))

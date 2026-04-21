@@ -9,12 +9,14 @@
            *command-line-args*
            {:alias {:i :include
                     :h :help}
+            :spec {:jobs {:default 4}}
             :coerce {:include []
                      :help :boolean
                      :dry-run :boolean
                      :skip-build :boolean
                      :verbose :boolean
-                     :timings :boolean}}))
+                     :timings :boolean
+                     :jobs :long}}))
 
   unit-test
   {:doc "Run internal cli-e2e harness unit tests"
