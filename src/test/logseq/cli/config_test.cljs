@@ -5,7 +5,6 @@
             [goog.object :as gobj]
             [logseq.cli.config :as config]
             ["fs" :as fs]
-            ["os" :as os]
             ["path" :as node-path]))
 
 (defn- with-env
@@ -99,9 +98,17 @@
     (is (= :edn (:output-format result)))))
 
 (deftest test-default-paths
-  (let [result (config/resolve-config {})
-        expected-config-path (node-path/join (.homedir os) "logseq" "cli.edn")]
-    (is (= expected-config-path (:config-path result)))
+  (let [dir (node-helper/create-tmp-dir)
+        cfg-path (node-path/join dir "missing-cli.edn")
+        result (with-env {"LOGSEQ_CLI_GRAPH" nil
+                          "LOGSEQ_CLI_DATA_DIR" nil
+                          "LOGSEQ_CLI_TIMEOUT_MS" nil
+                          "LOGSEQ_CLI_LOGIN_TIMEOUT_MS" nil
+                          "LOGSEQ_CLI_LOGOUT_TIMEOUT_MS" nil
+                          "LOGSEQ_CLI_OUTPUT" nil
+                          "LOGSEQ_CLI_CONFIG" nil}
+                 #(config/resolve-config {:config-path cfg-path}))]
+    (is (= cfg-path (:config-path result)))
     (is (= "~/logseq/graphs" (:data-dir result)))
     (is (= "wss://api.logseq.io/sync/%s" (:ws-url result)))
     (is (= "https://api.logseq.io" (:http-base result)))

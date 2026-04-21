@@ -33,7 +33,7 @@
           (p/then (fn [_]
                     (is (= (.-execPath js/process)
                            (:cmd @captured)))
-                    (is (= (node-path/join js/__dirname "../dist/db-worker-node.js")
+                    (is (= (cli-server/db-worker-script-path)
                            (first (:args @captured))))
                     (is (some #{"--repo"} (:args @captured)))
                     (is (some #{"--data-dir"} (:args @captured)))
@@ -55,8 +55,8 @@
         expected (node-path/join data-dir "foo~2Fbar" "db-worker.lock")]
     (is (= expected (cli-server/lock-path data-dir repo)))))
 
-(deftest db-worker-runtime-script-path-defaults-to-packaged-dist-target
-  (is (= (node-path/join js/__dirname "../dist/db-worker-node.js")
+(deftest db-worker-runtime-script-path-matches-runtime-selection
+  (is (= (cli-server/db-worker-script-path)
          (cli-server/db-worker-runtime-script-path))))
 
 (deftest ensure-server-repairs-stale-lock

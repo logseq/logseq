@@ -345,7 +345,7 @@
              (set! state/<invoke-db-worker original-invoke)
              (done)))))))
 
-(deftest browser-export-db-on-electron-triggers-local-backup-without-worker-export
+(deftest browser-export-db-on-electron-triggers-worker-export-then-local-backup
   (async done
     (let [ipc-calls (atom [])
           worker-export-calls (atom [])
@@ -359,12 +359,15 @@
       (set! state/<invoke-db-worker-direct-pass
             (fn [qkw & _]
               (swap! worker-export-calls conj qkw)
-              (p/rejected (ex-info "worker export should not be called" {:qkw qkw}))))
+              (case qkw
+                :thread-api/export-db (p/resolved (.from js/Buffer "sqlite-bytes"))
+                (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
       (-> (protocol/<export-db (browser/->InBrowser) "logseq_db_graph_a" {})
           (p/then (fn [_]
-                    (is (= [[:db-export "logseq_db_graph_a"]]
+                    (is (= [[:db-export "logseq_db_graph_a" false]]
                            @ipc-calls))
-                    (is (empty? @worker-export-calls))))
+                    (is (= [:thread-api/export-db]
+                           @worker-export-calls))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally
