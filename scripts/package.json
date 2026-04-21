@@ -13,5 +13,10 @@
     "better-sqlite3": "12.8.0",
     "fs-extra": "^11.3.4",
     "mldoc": "^1.5.9"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }

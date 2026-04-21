@@ -13,5 +13,10 @@
   "scripts": {
     "test": "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner",
     "test-v": "pnpm exec nbb-logseq -cp test -m logseq.db.test-runner"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }
