@@ -52,6 +52,25 @@
                      (update :repos dissoc repo))]
         [state' (when (empty? remaining) (:runtime entry))]))))
 
+(defn- detach-repo
+  [state repo]
+  (let [state (ensure-state state)
+        entry (get-in state [:repos repo])]
+    (if-not entry
+      [state nil]
+      (let [windows (or (:windows entry) #{})
+            state' (-> state
+                       (update :repos dissoc repo)
+                       (update :window->repo
+                               (fn [window->repo]
+                                 (reduce (fn [m window-id]
+                                           (if (= repo (get m window-id))
+                                             (dissoc m window-id)
+                                             m))
+                                         window->repo
+                                         windows))))]
+        [state' (:runtime entry)]))))
+
 (defn create-manager
   [{:keys [start-daemon! stop-daemon! runtime-ready?] :as deps}]
   {:deps deps
@@ -164,6 +183,21 @@
                   (reset! state (initial-state))
                   true)))))
 
+(defn ensure-repo-stopped!
+  [{:keys [state stop-daemon!]} repo]
+  (let [runtime* (atom nil)]
+    (swap! state
+           (fn [current]
+             (let [[next-state runtime] (detach-repo current repo)]
+               (reset! runtime* runtime)
+               next-state)))
+    (if-let [runtime @runtime*]
+      (if (owned-runtime? runtime)
+        (p/let [_ (stop-daemon! runtime)]
+          true)
+        (p/resolved true))
+      (p/resolved false))))
+
 (defn- start-managed-daemon!
   [repo]
   (p/let [config (cli-server/ensure-server! {:owner-source :electron} repo)]
@@ -190,6 +224,10 @@
 (defn release-window!
   [window-id]
   (ensure-window-stopped! manager window-id))
+
+(defn release-repo!
+  [repo]
+  (ensure-repo-stopped! manager repo))
 
 (defn stop-all-managed!
   []

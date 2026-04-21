@@ -139,6 +139,19 @@
         method-str (normalize-method-str method-kw)]
     (<invoke! proxy method-str method-kw true #js [])))
 
+(defn- <close-bound-repo!
+  [proxy repo]
+  (if (string/blank? repo)
+    (p/resolved nil)
+    (let [method-kw :thread-api/close-db
+          method-str (normalize-method-str method-kw)]
+      (-> (<invoke! proxy method-str method-kw false [repo])
+          (p/catch (fn [error]
+                     (log/warn :db-worker-node-close-db-before-stop-failed
+                               {:repo repo
+                                :error error})
+                     nil))))))
+
 (def ^:private non-repo-methods
   #{:thread-api/init
     :thread-api/set-db-sync-config
@@ -395,7 +408,7 @@
     file-path))
 
 (defn start-daemon!
-  [{:keys [data-dir repo log-level owner-source] :as opts}]
+  [{:keys [data-dir repo log-level owner-source on-stopped!] :as opts}]
   (let [host "127.0.0.1"
         port 0
         owner-source (normalize-owner-source owner-source)]
@@ -428,6 +441,7 @@
                               method-str (normalize-method-str method-kw)]
                           (<invoke! proxy method-str method-kw false [repo (startup-db-opts opts)]))]
                 (let [stop!* (atom nil)
+                      stopped? (atom false)
                       server (make-server proxy {:bound-repo repo
                                                  :stop-fn (fn []
                                                             (when-let [stop! @stop!*]
@@ -441,17 +455,30 @@
                                                     address
                                                     (.-port address))
                                       stop! (fn []
-                                              (p/create
-                                               (fn [resolve _]
-                                                 (reset! *ready? false)
-                                                 (doseq [^js res @*sse-clients]
-                                                   (try
-                                                     (.end res)
-                                                     (catch :default _)))
-                                                 (reset! *sse-clients #{})
-                                                 (when-let [lock-path (:path @*lock-info)]
-                                                   (db-lock/remove-lock! lock-path))
-                                                 (.close server (fn [] (resolve true))))))]
+                                              (if @stopped?
+                                                (p/resolved true)
+                                                (do
+                                                  (reset! stopped? true)
+                                                  (-> (p/let [_ (<close-bound-repo! proxy repo)]
+                                                        (reset! *ready? false)
+                                                        (doseq [^js res @*sse-clients]
+                                                          (try
+                                                            (.end res)
+                                                            (catch :default _)))
+                                                        (reset! *sse-clients #{})
+                                                        (when-let [lock-path (:path @*lock-info)]
+                                                          (db-lock/remove-lock! lock-path))
+                                                        (p/create
+                                                         (fn [resolve _]
+                                                           (try
+                                                             (.close server (fn [] (resolve true)))
+                                                             (catch :default _
+                                                               (resolve true)))))
+                                                        true)
+                                                      (p/finally
+                                                       (fn []
+                                                         (when (fn? on-stopped!)
+                                                           (on-stopped!))))))))]
                                   (reset! *ready? true)
                                   (reset! stop!* stop!)
                                   (p/let [lock-with-port (assoc (:lock @*lock-info) :port actual-port)
@@ -490,13 +517,12 @@
                                 :repo repo
                                 :create-empty-db? (:create-empty-db? opts)
                                 :owner-source owner-source
+                                :on-stopped! (fn []
+                                               (log/info :db-worker-node-stopped nil)
+                                               (.exit js/process 0))
                                 :log-level (:log-level opts)})]
           (log/info :db-worker-node-ready {:host (:host daemon) :port (:port daemon)})
-          (let [shutdown (fn []
-                           (-> (stop!)
-                               (p/finally (fn []
-                                            (log/info :db-worker-node-stopped nil)
-                                            (.exit js/process 0)))))]
+          (let [shutdown (fn [] (stop!))]
             (.on js/process "SIGINT" shutdown)
             (.on js/process "SIGTERM" shutdown)))
         (p/catch (fn [error]

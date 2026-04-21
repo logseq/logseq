@@ -199,7 +199,8 @@
 
 (defmethod handle :deleteGraph [_window [_ graph]]
   (when-let [repo (canonical-repo graph)]
-    (cli-common/unlink-graph! repo)))
+    (p/let [_ (db-worker/release-repo! repo)]
+      (cli-common/unlink-graph! repo))))
 
 ;; DB related IPCs start
 
