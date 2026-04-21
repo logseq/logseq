@@ -1,5 +1,6 @@
 (ns frontend.worker.db-worker-test
   (:require [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.a-test-env]
@@ -337,6 +338,99 @@
                       (p/catch (fn [error]
                                  (is false (str error))
                                  (done)))))))))))
+
+(deftest db-sync-import-finalize-cleans-temp-pool-on-success-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [import-id "import-success-1"
+                  graph-id "graph-success-1"
+                  remote-tx 42
+                  rows-db-closed* (atom 0)
+                  removed-pools* (atom [])
+                  rows-pool #js {:name "temp-download-pool"}
+                  rows-db #js {:close (fn []
+                                        (swap! rows-db-closed* inc))}]
+              (reset! @#'sync-download/*import-state
+                      {:import-id import-id
+                       :repo test-repo
+                       :graph-id graph-id
+                       :rows-db rows-db
+                       :rows-pool rows-pool
+                       :rows-path "/download-import.sqlite"
+                       :rows-imported? false})
+              (-> (p/with-redefs [sync-download/complete-datoms-import! (fn [_repo _graph-id _remote-tx]
+                                                                          (p/resolved :ok))
+                                  platform/remove-storage-pool! (fn [_platform pool]
+                                                                  (swap! removed-pools* conj pool)
+                                                                  (p/resolved true))]
+                    (sync-download/finalize-import! test-repo graph-id remote-tx import-id))
+                  (p/then (fn [result]
+                            (is (= :ok result))
+                            (is (= 1 @rows-db-closed*))
+                            (is (= [rows-pool] @removed-pools*))
+                            (is (nil? @@#'sync-download/*import-state))
+                            (done)))
+                  (p/catch (fn [error]
+                             (is false (str error))
+                             (done)))))))))
+
+(deftest db-sync-download-graph-by-id-cleans-temp-pool-on-failure-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [original-fetch js/fetch
+                  import-id "import-failure-1"
+                  graph-id "graph-failure-1"
+                  rows-db-closed* (atom 0)
+                  removed-pools* (atom [])
+                  finalize-calls* (atom 0)
+                  rows-pool #js {:name "temp-download-pool"}
+                  rows-db #js {:close (fn []
+                                        (swap! rows-db-closed* inc))}]
+              (reset! worker-state/*db-sync-config {:http-base "https://sync.example.test"})
+              (set! js/fetch (fn [_url _opts]
+                               (p/resolved #js {:ok true})))
+              (-> (p/with-redefs [rtc-log-and-state/rtc-log (fn [& _] nil)
+                                  sync-download/fetch-json (fn [_url _opts schema]
+                                                             (case schema
+                                                               :sync/pull (p/resolved {:t 77})
+                                                               :sync/snapshot-download (p/resolved {:url "https://snapshot.example.test"})
+                                                               (p/rejected (ex-info "unexpected schema" {:schema schema}))))
+                                  sync-download/prepare-import! (fn [repo _reset? gid _graph-e2ee? & _]
+                                                                  (reset! @#'sync-download/*import-state
+                                                                          {:import-id import-id
+                                                                           :repo repo
+                                                                           :graph-id gid
+                                                                           :rows-db rows-db
+                                                                           :rows-pool rows-pool
+                                                                           :rows-path "/download-import.sqlite"
+                                                                           :rows-imported? false})
+                                                                  (p/resolved {:import-id import-id}))
+                                  sync-download/import-rows-chunk! (fn [_rows _graph-id _import-id]
+                                                                     (p/resolved true))
+                                  sync-download/finalize-import! (fn [& _]
+                                                                   (swap! finalize-calls* inc)
+                                                                   (p/resolved nil))
+                                  sync-download/<stream-snapshot-row-batches! (fn [_resp _batch-size on-batch]
+                                                                                (p/let [_ (on-batch [[1 "content" nil]])]
+                                                                                  (p/rejected (ex-info "stream failed" {:code :stream-failed}))))
+                                  platform/remove-storage-pool! (fn [_platform pool]
+                                                                  (swap! removed-pools* conj pool)
+                                                                  (p/resolved true))]
+                    (sync-download/download-graph-by-id! test-repo graph-id false))
+                  (p/then (fn [_]
+                            (is false "expected download failure")
+                            (done)))
+                  (p/catch (fn [error]
+                             (is (string/includes? (or (ex-message error) "") "db-sync download failed"))
+                             (is (= 1 @rows-db-closed*))
+                             (is (= [rows-pool] @removed-pools*))
+                             (is (= 0 @finalize-calls*))
+                             (is (nil? @@#'sync-download/*import-state))
+                             (done)))
+                  (p/finally (fn []
+                               (set! js/fetch original-fetch)))))))))
 
 (deftest db-sync-import-rows-chunk-calls-import-rows-batch-test
   (async done

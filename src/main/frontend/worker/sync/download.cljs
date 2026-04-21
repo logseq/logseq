@@ -437,7 +437,7 @@
               _ (when (:rows-imported? state)
                   (<replay-imported-rows! state))
               result (complete-datoms-import! repo graph-id remote-tx)
-              _ (reset! *import-state nil)]
+              _ (clear-import-state! import-id)]
         result)
       (p/catch (fn [error]
                  (when-not (= :db-sync/stale-import (:type (ex-data error)))
@@ -448,7 +448,8 @@
   [repo graph-id graph-e2ee?]
   (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
     (if (and (seq repo) (seq graph-id) (seq base))
-      (let [stage* (atom :init)]
+      (let [stage* (atom :init)
+            import-id* (atom nil)]
         (-> (p/let [log-f (fn [payload]
                             (rtc-log-and-state/rtc-log :rtc.log/download payload))
                     _ (log-f {:sub-type :download-progress
@@ -477,8 +478,7 @@
                 (throw (ex-info "snapshot download failed"
                                 {:repo repo
                                  :status (.-status resp)})))
-              (let [import-id* (atom nil)
-                    ensure-import! (fn []
+              (let [ensure-import! (fn []
                                      (if-let [import-id @import-id*]
                                        (p/resolved import-id)
                                        (p/let [_ (reset! stage* :prepare-import)
@@ -504,6 +504,8 @@
                    :remote-tx remote-tx
                    :graph-e2ee? graph-e2ee?})))
             (p/catch (fn [error]
+                       (when-let [import-id @import-id*]
+                         (clear-import-state! import-id))
                        (log/error :db-sync/download-graph-by-id-failed
                                   {:repo repo
                                    :graph-id graph-id
@@ -513,11 +515,11 @@
                                    :error-stack (when (instance? js/Error error)
                                                   (.-stack error))})
                        (throw (ex-info "db-sync download failed"
-                                       {:repo repo
-                                        :graph-id graph-id
-                                        :graph-e2ee? graph-e2ee?
-                                        :stage @stage*
-                                        :error-message (or (ex-message error)
+                                      {:repo repo
+                                       :graph-id graph-id
+                                       :graph-e2ee? graph-e2ee?
+                                       :stage @stage*
+                                       :error-message (or (ex-message error)
                                                            (when (instance? js/Error error)
                                                              (.-message error)))}
                                        error))))))
