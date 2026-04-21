@@ -46,17 +46,19 @@
   [data-dir repo]
   (node-path/join (repo-dir data-dir repo) "db-worker.lock"))
 
+(defn db-worker-dev-script-path
+  []
+  (node-path/join js/__dirname "../static/db-worker-node.js"))
+
 (defn db-worker-script-path
   []
-  (node-path/join js/__dirname "../dist/db-worker-node.js"))
+  (if goog.DEBUG
+    (db-worker-dev-script-path)
+    (node-path/join js/__dirname "../dist/db-worker-node.js")))
 
 (defn db-worker-runtime-script-path
   []
   (db-worker-script-path))
-
-(defn db-worker-dev-script-path
-  []
-  (node-path/join js/__dirname "../static/db-worker-node.js"))
 
 (defn- base-url
   [{:keys [host port]}]
