@@ -820,8 +820,8 @@
 
 (deftest ^:long random-mixed-ops
   (testing "Random mixed operations"
+    (transact-random-tree!)
     (let [*random-blocks (atom (get-blocks-ids))]
-      (transact-random-tree!)
       (run-random-mixed-ops! *random-blocks)
       (let [total (get-blocks-count)
             page-id 1]
