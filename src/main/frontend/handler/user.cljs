@@ -117,15 +117,14 @@
 (defn- persist-auth-file!
   []
   (when (util/electron?)
-    (if-let [auth-path (auth-file-path)]
+    (when-let [auth-path (auth-file-path)]
       (-> (ipc/ipc "writeFile"
                    nil
                    auth-path
                    (js/JSON.stringify (clj->js (auth-file-payload)) nil 2))
           (p/catch (fn [error]
                      (js/console.warn :persist-auth-file-failed error)
-                     nil)))
-      (js/console.warn :persist-auth-file-failed :missing-home-dir))))
+                     nil))))))
 
 (defn- clear-cognito-tokens!
   "Clear tokens for cognito's localstorage, prefix is 'CognitoIdentityServiceProvider'"
