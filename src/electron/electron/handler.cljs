@@ -4,7 +4,6 @@
   (:require ["/electron/utils" :as js-utils]
             ["abort-controller" :as AbortController]
             ["buffer" :as buffer]
-            ["diff-match-patch" :as google-diff]
             ["electron" :refer [app dialog ipcMain shell]]
             ["electron-updater" :refer [autoUpdater]]
             ["electron-window-state" :as windowStateKeeper]
@@ -14,7 +13,6 @@
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [electron.backup-file :as backup-file]
             [electron.configs :as cfgs]
             [electron.db :as db]
             [electron.db-worker :as db-worker]
@@ -67,19 +65,6 @@
         (logger/error ::unlink path e)
         nil))))
 
-(defonce Diff (google-diff.))
-(defn string-some-deleted?
-  [old new]
-  (let [result (.diff_main Diff old new)]
-    (some (fn [a] (= -1 (first a))) result)))
-
-(defmethod handle :backupDbFile [_window [_ repo path db-content new-content]]
-  (when (and (string? db-content)
-             (string? new-content)
-             (string-some-deleted? db-content new-content))
-    (logger/info ::backup "backup db file" path)
-    (backup-file/backup-file repo :backup-dir path (node-path/extname path) db-content)))
-
 (defmethod handle :openFileInFolder [_window [_ full-path]]
   (when-let [full-path (utils/to-native-win-path! full-path)]
     (logger/info ::open-file-in-folder full-path)
@@ -109,7 +94,7 @@
   (logger/info ::copy-file from-path to-path)
   (fs-extra/copy from-path to-path))
 
-(defmethod handle :writeFile [window [_ repo path content]]
+(defmethod handle :writeFile [_window [_ _repo path content]]
   (let [^js Buf (.-Buffer buffer)
         ^js content (if (instance? js/ArrayBuffer content)
                       (.from Buf content)
@@ -120,19 +105,7 @@
       (fs/writeFileSync path content)
       (utils/fs-stat->clj path)
       (catch :default e
-        (logger/warn ::write-file path e)
-        (let [backup-path (try
-                            (backup-file/backup-file repo :backup-dir path (node-path/extname path) content)
-                            (catch :default e
-                              (logger/error ::write-file "backup file failed:" e)))]
-          (utils/send-to-renderer window "notification" {:type "error"
-                                                         :payload (str "Write to the file " path
-                                                                       " failed, "
-                                                                       e
-                                                                       (when backup-path
-                                                                         (str ". A backup file was saved to "
-                                                                              backup-path
-                                                                              ".")))}))))))
+        (logger/warn ::write-file path e)))))
 
 (defmethod handle :rename [_window [_ old-path new-path]]
   (logger/info ::rename "from" old-path "to" new-path)
@@ -239,13 +212,10 @@
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
     (db-worker/ensure-runtime! (canonical-repo repo) (.-id window))))
 
-(defmethod handle :db-export [_window [_ repo data]]
+(defmethod handle :db-export [_window [_ repo force-backup?]]
   (when-let [repo (canonical-repo repo)]
-    (logger/warn ::db-export-compat
-                 {:repo repo
-                  :message "legacy db-export IPC path invoked; desktop should use db-worker runtime"})
     (db/ensure-graph-dir! repo)
-    (db/save-db! repo data)))
+    (db/backup-db! repo {:force-backup? force-backup?})))
 
 (defmethod handle :db-get [_window [_ repo]]
   (when-let [repo (canonical-repo repo)]
@@ -344,6 +314,7 @@
                            :next-graph-path next-graph-path})]
     (p/let [_ (when release-runtime?
                 (db-worker/release-window! (.-id window)))]
+      (db/sync-auto-backup-repo! (.-id window) graph-name)
       (if next-graph-path
         (set-current-graph! window next-graph-path)
         (state/close-window! window))

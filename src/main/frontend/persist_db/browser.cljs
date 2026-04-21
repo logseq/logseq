@@ -182,9 +182,9 @@
                       (log/error :init-sqlite-wasm-error ["Can't init SQLite wasm" error]))))))))
 
 (defn <export-db!
-  [repo data]
+  [repo]
   (when (util/electron?)
-    (ipc/ipc :db-export repo data)))
+    (ipc/ipc :db-export repo false)))
 
 (defn- sqlite-error-handler
   [error]
@@ -226,7 +226,7 @@
           (when data
             (if (:return-data? opts)
               data
-              (<export-db! repo data))))
+              (<export-db! repo))))
         (p/catch (fn [error]
                    (log/error :export-db-error repo error "SQLiteDB save error")
                    (notification/show! (str "SQLiteDB save error: " error) :error) {}))))

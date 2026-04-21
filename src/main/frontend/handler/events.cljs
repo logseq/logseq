@@ -245,9 +245,7 @@
     (state/pub-event! [:graph/ready graph])))
 
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
-  (if (util/electron?)
-    (notification/show! "The graph database is automatically saved to disk. Manual save is no longer required." :info)
-    (persist-db/export-current-graph! {:succ-notification? true :force-save? true})))
+  (persist-db/export-current-graph! :succ-notification? true))
 
 (defmethod handle :graph/db-save-shortcut [[_]]
   (handle [:graph/save-db-to-disk {:source :shortcut}]))
