@@ -7,7 +7,8 @@
             [logseq.cli.e2e.report :as report]
             [logseq.cli.e2e.runner :as runner]
             [logseq.cli.e2e.shell :as shell]
-            [logseq.cli.e2e.sync-fixture :as sync-fixture]))
+            [logseq.cli.e2e.sync-fixture :as sync-fixture])
+  (:import (java.util.concurrent Executors LinkedBlockingQueue TimeUnit)))
 
 (defn select-cases
   [cases {:keys [case include]}]
@@ -25,6 +26,8 @@
     (vec cases)))
 
 (def default-suite :non-sync)
+(def default-jobs 1)
+(def default-cli-jobs 4)
 
 (defn- suite-from-opts
   [opts]
@@ -38,9 +41,18 @@
   [started-at]
   (format "%.2fs" (/ (double (- (System/nanoTime) started-at)) 1000000000.0)))
 
-(defn- run-selected-cases!
-  [selected-cases run-case run-command {:keys [on-case-start on-case-success on-case-failure detailed-log? timings?]}]
-  (let [total (count selected-cases)]
+(defn- positive-jobs
+  [jobs]
+  (let [jobs (or jobs default-jobs)]
+    (when-not (and (integer? jobs) (pos? jobs))
+      (throw (ex-info "--jobs must be a positive integer"
+                      {:jobs jobs})))
+    jobs))
+
+(defn run-selected-cases!
+  [selected-cases run-case run-command {:keys [on-case-start on-case-success on-case-failure detailed-log? timings? jobs]}]
+  (let [total (count selected-cases)
+        _ (positive-jobs jobs)]
     (reduce (fn [acc [idx case]]
               (let [index (inc idx)
                     started-at (System/nanoTime)]
@@ -71,13 +83,71 @@
             []
             (map-indexed vector selected-cases))))
 
+(defn run-selected-cases-in-parallel!
+  [selected-cases run-case run-command {:keys [on-case-start on-case-success on-case-failure detailed-log? timings? jobs]}]
+  (let [total (count selected-cases)
+        jobs (positive-jobs jobs)
+        executor (Executors/newFixedThreadPool jobs)
+        completions (LinkedBlockingQueue.)]
+    (try
+      (doseq [[idx case] (map-indexed vector selected-cases)]
+        (let [index (inc idx)]
+          (when on-case-start
+            (on-case-start {:index index
+                            :total total
+                            :case case}))
+          (.submit executor
+                   ^Runnable
+                   (fn []
+                     (let [started-at (System/nanoTime)]
+                       (.put completions
+                             (try
+                               (let [result (run-case case {:run-command run-command
+                                                            :detailed-log? detailed-log?
+                                                            :timings? timings?})]
+                                 {:index index
+                                  :total total
+                                  :case case
+                                  :result result
+                                  :elapsed-ms (elapsed-ms started-at)})
+                               (catch Exception error
+                                 {:index index
+                                  :total total
+                                  :case case
+                                  :error error
+                                  :elapsed-ms (elapsed-ms started-at)}))))))))
+      (loop [remaining total
+             results []
+             failure nil]
+        (if (zero? remaining)
+          (do
+            (when failure
+              (throw failure))
+            (->> results
+                 (sort-by :index)
+                 (mapv :result)))
+          (let [payload (.take completions)]
+            (if-let [error (:error payload)]
+              (do
+                (when on-case-failure
+                  (on-case-failure payload))
+                (recur (dec remaining) results (or failure error)))
+              (do
+                (when on-case-success
+                  (on-case-success payload))
+                (recur (dec remaining) (conj results payload) failure))))))
+      (finally
+        (.shutdown executor)
+        (.awaitTermination executor 1 TimeUnit/MINUTES)))))
+
 (defn run!
-  [{:keys [inventory cases skip-build run-command]
+  [{:keys [inventory cases skip-build run-command jobs]
     :as opts}]
   (let [run-command (or run-command shell/run!)
         run-case (or (:run-case opts) runner/run-case!)
         suite (suite-from-opts opts)
         sync-suite? (= suite :sync)
+        jobs (positive-jobs jobs)
         targeted-run? (or (:case opts) (seq (:include opts)))
         on-preflight-start (:on-preflight-start opts)
         on-preflight-complete (:on-preflight-complete opts)
@@ -115,7 +185,13 @@
             {:status :ok
              :cases selected-cases
              :coverage coverage-result
-             :results (run-selected-cases! selected-cases run-case* run-command opts)}
+             :results ((if (and (not sync-suite?) (> jobs 1))
+                         run-selected-cases-in-parallel!
+                         run-selected-cases!)
+                       selected-cases
+                       run-case*
+                       run-command
+                       (assoc opts :jobs jobs))}
             (finally
               (when suite-context
                 (sync-fixture/after-suite! suite-context {:run-command run-command})))))))))
@@ -234,6 +310,12 @@
                        cmd)))
     (flush)))
 
+(defn- progress-prefix
+  [{:keys [parallel? index total]} symbol]
+  (if parallel?
+    (str symbol " ")
+    (format "[%d/%d] %s " index total symbol)))
+
 (defn- print-test-help!
   [command-name suite]
   (let [sync-suite? (= suite :sync)]
@@ -244,6 +326,7 @@
     (println "      --skip-build     Skip build preflight steps")
     (println "  -i, --include TAG    Run only cases with matching tag (repeatable)")
     (println "      --case ID        Run a single case by id")
+    (println (format "      --jobs N         Run up to N non-sync cases in parallel (Default: %d)" default-cli-jobs))
     (when sync-suite?
       (println "      --e2ee-password VALUE  E2EE password for sync commands (Default: 11111)"))
     (println "      --verbose        Enable verbose output")
@@ -251,6 +334,7 @@
     (println)
     (println "Examples:")
     (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build"))
+    (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build --jobs 4"))
     (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build -i smoke"))
     (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build --case global-help"))
     (when sync-suite?
@@ -274,6 +358,7 @@
             timings? (boolean (:timings opts))
             all-step-timings (atom [])
             detailed-case-log? (some? (:case opts))
+            parallel? (and (= suite :non-sync) (> (positive-jobs (:jobs opts)) 1))
             base-run-command (or (:run-command opts) shell/run!)
             run-command (if detailed-case-log?
                           (fn [{:keys [cmd phase step-index step-total] :as command-opts}]
@@ -310,13 +395,19 @@
                                          (println (format "==> Prepared %d case(s), starting execution" total))
                                          (flush))
                        :on-case-start (fn [{:keys [index total case]}]
-                                        (println (format "[%d/%d] ▶ %s" index total (:id case)))
+                                        (println (str (progress-prefix {:parallel? parallel?
+                                                                        :index index
+                                                                        :total total}
+                                                                       "▶")
+                                                      (:id case)))
                                         (flush))
                        :on-case-success (fn [{:keys [index total result elapsed-ms]}]
                                           (swap! passed inc)
-                                          (println (format "[%d/%d] ✓ %s (%dms)"
-                                                           index
-                                                           total
+                                          (println (format "%s%s (%dms)"
+                                                           (progress-prefix {:parallel? parallel?
+                                                                             :index index
+                                                                             :total total}
+                                                                            "✓")
                                                            (:id result)
                                                            elapsed-ms))
                                           (when timings?
@@ -327,9 +418,11 @@
                                           (flush))
                        :on-case-failure (fn [{:keys [index total case error elapsed-ms]}]
                                           (swap! failed inc)
-                                          (println (format "[%d/%d] ✗ %s (%dms)"
-                                                           index
-                                                           total
+                                          (println (format "%s%s (%dms)"
+                                                           (progress-prefix {:parallel? parallel?
+                                                                             :index index
+                                                                             :total total}
+                                                                            "✗")
                                                            (:id case)
                                                            elapsed-ms))
                                           (print-failure-details! error)

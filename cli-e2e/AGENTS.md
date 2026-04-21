@@ -13,11 +13,14 @@ Shell-first end-to-end tests for logseq CLI.
 - List declared non-sync case ids: `bb list-cases`
 - Run non-sync cases with build preflight unless `--skip-build` is provided: `bb test`
   - `bb test --help` for options
+  - Increase case-level parallelism with `--jobs N` (default: `4`), for example: `bb test --skip-build --jobs 4`
+  - Parallelism is case-scoped only; each case still runs setup/main/cleanup sequentially in the existing ephemeral shell model
 
 ## Run sync suite
 - List declared sync case ids: `bb list-sync-cases`
 - Run sync cases with build preflight unless `--skip-build` is provided: `bb test-sync`
   - `bb test-sync --help` for options
+  - `--jobs` is accepted for CLI consistency but sync cases still run serially
   - Configure sync E2EE password: `--e2ee-password <value>` (default: `11111`)
   - Run only sync MVP case: `bb test-sync --skip-build --case sync-upload-download-mvp`
 
