@@ -4,9 +4,11 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.db-based.sync :as db-sync]
+            [frontend.persist-db :as persist-db]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
+            [frontend.util :as util]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -468,3 +470,102 @@
                           (done)))
                (p/finally (fn []
                             (reset! state/*db-worker worker-prev)))))))
+
+(deftest rtc-download-graph-rebinds-desktop-runtime-before-download-test
+  (async done
+         (let [runtime-bound-repo (atom "logseq_db_d")
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))
+                               util/electron? (fn [] true)
+                               persist-db/<fetch-init-data (fn [repo _opts]
+                                                             (reset! runtime-bound-repo repo)
+                                                             (p/resolved {:schema {}
+                                                                          :initial-data []}))
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! invoke-calls conj args)
+                                                         (let [[op repo] args]
+                                                           (case op
+                                                             :thread-api/sync-app-state
+                                                             (p/resolved :ok)
+
+                                                             :thread-api/db-sync-download-graph-by-id
+                                                             (if (= repo @runtime-bound-repo)
+                                                               (p/resolved :ok)
+                                                               (p/rejected
+                                                                (ex-info "repo does not match bound repo"
+                                                                         {:status 409
+                                                                          :code :repo-mismatch
+                                                                          :error {:code "repo-mismatch"
+                                                                                  :message "repo does not match bound repo"
+                                                                                  :repo repo
+                                                                                  :bound-repo @runtime-bound-repo}})))
+
+                                                             (p/resolved :ok))))
+                               state/pub-event! (fn [& _] nil)
+                               state/set-state! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "db1" "graph-1" false))
+               (p/then (fn [_]
+                         (is (= "logseq_db_db1" @runtime-bound-repo))
+                         (is (= :thread-api/sync-app-state
+                                (ffirst @invoke-calls)))
+                         (is (= :thread-api/db-sync-download-graph-by-id
+                                (first (second @invoke-calls))))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest rtc-download-graph-skips-runtime-rebind-outside-electron-test
+  (async done
+         (let [runtime-rebind-calls (atom [])
+               worker-calls (atom [])]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))
+                               util/electron? (fn [] false)
+                               persist-db/<fetch-init-data (fn [& args]
+                                                             (swap! runtime-rebind-calls conj args)
+                                                             (p/resolved {:schema {}
+                                                                          :initial-data []}))
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! worker-calls conj args)
+                                                         (p/resolved :ok))
+                               state/pub-event! (fn [& _] nil)
+                               state/set-state! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "db1" "graph-1" true))
+               (p/then (fn [_]
+                         (is (empty? @runtime-rebind-calls))
+                         (is (= :thread-api/db-sync-download-graph-by-id
+                                (ffirst @worker-calls)))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest rtc-download-graph-syncs-auth-state-after-runtime-rebind-test
+  (async done
+         (let [worker-calls (atom [])]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))
+                               util/electron? (fn [] true)
+                               persist-db/<fetch-init-data (fn [_repo _opts]
+                                                             (p/resolved {:schema {}
+                                                                          :initial-data []}))
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! worker-calls conj args)
+                                                         (p/resolved :ok))
+                               state/pub-event! (fn [& _] nil)
+                               state/set-state! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "db1" "graph-1" true))
+               (p/then (fn [_]
+                         (is (= :thread-api/sync-app-state
+                                (ffirst @worker-calls)))
+                         (is (= :thread-api/db-sync-download-graph-by-id
+                                (first (second @worker-calls))))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
