@@ -12,6 +12,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
+            [logseq.db.sqlite.backup :as sqlite-backup]
             [promesa.core :as p]
             ["keytar" :as keytar]))
 
@@ -28,17 +29,6 @@
 
 (def ^:private DatabaseSync
   (resolve-database-sync-ctor))
-
-(defn- resolve-sqlite-backup-fn
-  []
-  (or (gobj/get node-sqlite "backup")
-      (some-> (gobj/get node-sqlite "default")
-              (gobj/get "backup"))
-      (throw (ex-info "node:sqlite backup function missing"
-                      {:module-keys (js->clj (js/Object.keys node-sqlite))}))))
-
-(def ^:private sqlite-backup-fn
-  (resolve-sqlite-backup-fn))
 
 (defn- expand-home
   [path]
@@ -188,7 +178,7 @@
   (p/let [_ (when write-guard-fn
               (write-guard-fn))
           _ (ensure-dir! (node-path/dirname path))]
-    (sqlite-backup-fn db path)))
+    (sqlite-backup/backup-connection! db path)))
 
 (defn- wrap-node-sqlite-db
   [db write-guard-fn]

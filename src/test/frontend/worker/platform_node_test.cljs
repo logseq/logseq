@@ -59,6 +59,11 @@
     (is (string/includes? source "\"node:sqlite\""))
     (is (not (string/includes? source "\"better-sqlite3\"")))))
 
+(deftest node-platform-backup-uses-shared-sqlite-backup-implementation
+  (let [source (node-platform-source)]
+    (is (string/includes? source "logseq.db.sqlite.backup"))
+    (is (string/includes? source "sqlite-backup/backup-connection!"))))
+
 (deftest node-platform-env-owner-source-is-propagated
   (async done
     (let [data-dir (node-helper/create-tmp-dir "platform-node-owner-source")]

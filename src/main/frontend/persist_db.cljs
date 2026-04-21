@@ -2,7 +2,6 @@
   "Backend of DB based graph"
   (:require [electron.ipc :as ipc]
             [frontend.config :as config]
-            [frontend.db :as db]
             [frontend.db.transact :as db-transact]
             [frontend.persist-db.browser :as browser]
             [frontend.persist-db.node :as node]
@@ -117,10 +116,7 @@
 (defn <export-db
   [repo opts]
   (when repo
-    (if (electron-runtime?)
-      (p/let [client (<ensure-remote! repo)]
-        (protocol/<export-db client repo opts))
-      (protocol/<export-db (get-impl) repo opts))))
+    (protocol/<export-db (get-impl) repo opts)))
 
 (defn <import-db
   [repo data]
@@ -150,36 +146,21 @@
           _ (protocol/<new impl repo opts)]
     (<export-db repo {})))
 
-;; repo->max-tx
-(defonce *last-synced-graph->tx (atom {}))
-
-(defn- graph-has-changed?
-  [repo]
-  (let [tx (@*last-synced-graph->tx repo)
-        db (db/get-db repo)]
-    (or (nil? tx)
-        (> (:max-tx db) tx))))
-
 (defn export-current-graph!
-  [& {:keys [succ-notification? force-save?]}]
+  [& {:keys [succ-notification?]}]
   (when (util/electron?)
     (when-let [repo (state/get-current-repo)]
-      (when (or force-save?
-                (and (graph-has-changed? repo)
-                     (state/input-idle? repo :diff 5000)))
-        (log/debug :event :save-db-to-disk :repo repo)
-        (println :debug :save-db-to-disk repo)
-        (->
-         (p/do!
-          (<export-db repo {})
-          (swap! *last-synced-graph->tx assoc repo (:max-tx (db/get-db repo)))
-          (when succ-notification?
-            (state/pub-event!
-             [:notification/show {:content "The current db has been saved successfully to the disk."
-                                  :status :success}])))
-         (p/catch (fn [^js error]
-                    (log/error :event :save-db-to-disk-failed :repo repo :error error)
-                    (state/pub-event!
-                     [:notification/show {:content (str (.getMessage error))
-                                          :status :error
-                                          :clear? false}]))))))))
+      (log/debug :event :backup-db :graph repo)
+      (->
+       (p/do!
+         (ipc/ipc :db-export repo true)
+         (when succ-notification?
+           (state/pub-event!
+            [:notification/show {:content "DB backup successfully."
+                                 :status :success}])))
+       (p/catch (fn [^js error]
+                  (log/error :event :db-backup-failed :graph repo :error error)
+                  (state/pub-event!
+                   [:notification/show {:content (str (.getMessage error))
+                                        :status :error
+                                        :clear? false}])))))))
