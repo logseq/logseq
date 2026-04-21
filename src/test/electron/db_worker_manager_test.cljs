@@ -199,3 +199,42 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
+
+(deftest ensure-repo-stopped-detaches-all-windows-and-stops-runtime-once
+  (async done
+    (let [stop-calls (atom [])
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo] (p/resolved (runtime repo)))
+                    :stop-daemon! (fn [rt]
+                                    (swap! stop-calls conj (:repo rt))
+                                    (p/resolved true))})]
+      (-> (p/let [_ (db-worker/ensure-started! manager "graph-a" :window-1)
+                  _ (db-worker/ensure-started! manager "graph-a" :window-2)
+                  _ (db-worker/ensure-repo-stopped! manager "graph-a")
+                  state @(:state manager)]
+            (is (= ["graph-a"] @stop-calls))
+            (is (nil? (get-in state [:repos "graph-a"])))
+            (is (nil? (get-in state [:window->repo :window-1])))
+            (is (nil? (get-in state [:window->repo :window-2]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest ensure-repo-stopped-skips-stop-for-external-runtime
+  (async done
+    (let [stop-calls (atom [])
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo]
+                                     (p/resolved (assoc (runtime repo) :owned? false)))
+                    :stop-daemon! (fn [rt]
+                                    (swap! stop-calls conj (:repo rt))
+                                    (p/resolved true))})]
+      (-> (p/let [_ (db-worker/ensure-started! manager "graph-a" :window-1)
+                  _ (db-worker/ensure-repo-stopped! manager "graph-a")
+                  state @(:state manager)]
+            (is (empty? @stop-calls))
+            (is (nil? (get-in state [:repos "graph-a"])))
+            (is (nil? (get-in state [:window->repo :window-1]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))

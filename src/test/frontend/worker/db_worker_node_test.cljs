@@ -488,6 +488,44 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest db-worker-node-stop-closes-bound-repo
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-stop-close-db")
+               repo (str "logseq_db_stop_close_" (subs (str (random-uuid)) 0 8))
+               lock-file-path (lock-path data-dir repo)
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
+                               db-core/init-core! (fn [_platform]
+                                                    #js {:remoteInvoke (fn [method direct-pass? args]
+                                                                         (swap! invoke-calls conj
+                                                                                [method
+                                                                                 direct-pass?
+                                                                                 (if direct-pass?
+                                                                                   (vec (js->clj args))
+                                                                                   (ldb/read-transit-str args))])
+                                                                         (p/resolved nil))})
+                               db-lock/ensure-lock! (fn [_]
+                                                      (p/resolved {:path lock-file-path
+                                                                   :lock {:repo repo
+                                                                          :pid (.-pid js/process)
+                                                                          :host "127.0.0.1"
+                                                                          :port 0
+                                                                          :lock-id "stop-close-lock"}}))
+                               db-lock/update-lock! (fn [_path lock] lock)]
+                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:data-dir data-dir
+                                                                        :repo repo
+                                                                        :log-level "error"})
+                         _ (stop!)]
+                   (is (= ["thread-api/init" true []]
+                          (first @invoke-calls)))
+                   (is (= ["thread-api/create-or-open-db" false [repo {}]]
+                          (second @invoke-calls)))
+                   (is (= ["thread-api/close-db" false [repo]]
+                          (nth @invoke-calls 2)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest db-worker-node-repo-error-handles-keyword-methods
   (let [repo-error #'db-worker-node/repo-error
         bound-repo "logseq_db_bound"]
