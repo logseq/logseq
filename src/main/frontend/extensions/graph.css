@@ -2,17 +2,126 @@
 #page-graph {
     min-height: 100% !important;
     height: 100%;
+    max-height: 100%;
     width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
     overflow: hidden;
     position: relative;
     z-index: 4;
 }
 
-
-.graph {
-    height: 500px;
+.graph-v2-root {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    position: relative;
+    background: transparent;
 }
 
-#main-content-container .graph {
-    height: calc(100vh - 100px) !important;
+.graph-v2-settings {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.graph-v2-settings-dot {
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: 0;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: transparent;
+}
+
+.graph-v2-settings-dot-core {
+    width: 10px;
+    height: 10px;
+    border-radius: 9999px;
+    background: var(--ls-link-text-color);
+    opacity: 0.9;
+    transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.graph-v2-settings-dot:hover .graph-v2-settings-dot-core {
+    transform: scale(1.15);
+    opacity: 1;
+}
+
+.graph-v2-settings-panel {
+    min-width: 190px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--ls-border-color);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--ls-primary-background-color) 90%, var(--ls-secondary-background-color) 10%);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.graph-v2-settings-title {
+    font-size: 12px;
+    opacity: 0.72;
+}
+
+.graph-v2-settings-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 4px;
+    font-size: 12px;
+    opacity: 0.78;
+}
+
+.graph-v2-mode-button {
+    width: 100%;
+    justify-content: flex-start;
+    border-radius: 8px !important;
+}
+
+.graph-v2-mode-button:hover {
+    border-color: var(--ls-link-text-color);
+}
+
+.graph-v2-mode-button.is-active {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--ls-link-text-color) 45%, transparent);
+}
+
+.graph-v2-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    opacity: 0.75;
+    z-index: 1;
+}
+
+.graph-v2-canvas {
+    height: 100%;
+    min-height: 0;
+    border-radius: 0;
+    border: none;
+    overflow: hidden;
+    background: transparent;
+}
+
+@media (max-width: 900px) {
+    .graph-v2-settings-panel {
+        min-width: 168px;
+    }
 }

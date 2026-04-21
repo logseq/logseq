@@ -15,6 +15,82 @@
              :target (str to)}))
         links))
 
+(defn- normalize-view-mode
+  [view-mode]
+  (if (= view-mode :all-pages)
+    :all-pages
+    :tags-and-objects))
+
+(defn- visible-entity?
+  [entity]
+  (and entity
+       (not (ldb/hidden? entity))
+       (not (ldb/recycled? entity))))
+
+(defn- entity-label
+  [entity]
+  (or (:block/title entity)
+      (:block/name entity)
+      (some-> (:block/uuid entity) str)
+      (str (:db/id entity))))
+
+(defn- entity->node
+  [entity kind]
+  {:id (str (:db/id entity))
+   :db-id (:db/id entity)
+   :uuid (some-> (:block/uuid entity) str)
+   :page? (ldb/page? entity)
+   :label (entity-label entity)
+   :kind kind
+   :block/created-at (:block/created-at entity)})
+
+(defn- build-tags-and-objects-graph
+  [db]
+  (let [tags (->> (d/q
+                   '[:find [?e ...]
+                     :where
+                     [?e :block/tags :logseq.class/Tag]]
+                   db)
+                  (map #(d/entity db %))
+                  (filter visible-entity?)
+                  (remove ldb/built-in?)
+                  (remove ldb/property?)
+                  vec)
+        tag-id-set (set (map :db/id tags))
+        objects (->> (d/q
+                      '[:find [?e ...]
+                        :where
+                        [?e :block/tags ?tag]]
+                      db)
+                     (map #(d/entity db %))
+                     (filter visible-entity?)
+                     (remove ldb/class?)
+                     (remove ldb/property?)
+                     (filter
+                      (fn [entity]
+                        (some (fn [tag]
+                                (contains? tag-id-set (:db/id tag)))
+                              (:block/tags entity))))
+                     (common-util/distinct-by :db/id)
+                     vec)
+        nodes (concat
+               (map #(entity->node % "tag") tags)
+               (map #(entity->node % "object") objects))
+        links (->> objects
+                   (mapcat
+                    (fn [entity]
+                      (let [from-id (:db/id entity)]
+                        (keep (fn [tag]
+                                (let [to-id (:db/id tag)]
+                                  (when (contains? tag-id-set to-id)
+                                    [from-id to-id])))
+                              (:block/tags entity)))))
+                   (distinct)
+                   (build-links)
+                   vec)]
+    {:nodes (vec nodes)
+     :links links}))
+
 (defn- build-nodes
   [dark? current-page page-links tags nodes namespaces]
   (let [page-parents (set (map last namespaces))
@@ -38,8 +114,16 @@
                      n (get page-links page-title 1)
                      size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
                  (cond->
-                  {:id (str (:db/id p))
+                 {:id (str (:db/id p))
+                  :db-id (:db/id p)
+                  :uuid (some-> (:block/uuid p) str)
+                  :page? true
                    :label page-title
+                   :kind (cond
+                           (ldb/class? p) "tag"
+                           (ldb/property? p) "property"
+                           (ldb/journal? p) "journal"
+                           :else "page")
                    :size size
                    :color color
                    :block/created-at (:block/created-at p)}
@@ -73,7 +157,7 @@
     {:nodes nodes'
      :links links}))
 
-(defn- build-global-graph
+(defn- build-all-pages-graph
   [db {:keys [theme journal? orphan-pages? builtin-pages? excluded-pages? created-at-filter]}]
   (let [dark? (= "dark" theme)
         relation (ldb/get-pages-relation db journal?)
@@ -115,6 +199,16 @@
         (assoc :all-pages
                {:created-at-min (apply min created-ats)
                 :created-at-max (apply max created-ats)}))))
+
+(defn- build-global-graph
+  [db {:keys [view-mode] :as opts}]
+  (let [view-mode (normalize-view-mode view-mode)
+        result (case view-mode
+                 :tags-and-objects
+                 (build-tags-and-objects-graph db)
+                 :all-pages
+                 (build-all-pages-graph db opts))]
+    (assoc result :meta {:view-mode view-mode})))
 
 (defn get-pages-that-mentioned-page
   [db page-id include-journals?]
