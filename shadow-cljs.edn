@@ -1,6 +1,7 @@
 ;; shadow-cljs configuration
 {:deps true
- :nrepl {:port 8701}
+ :nrepl {:port 8701
+         :middleware [cider.piggieback/wrap-cljs-repl]}
  :source-paths ["src/main" "src/electron" "src/resources"]
 
  ;; :ssl   {:password "logseq"}
