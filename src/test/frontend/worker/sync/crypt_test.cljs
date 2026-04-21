@@ -96,6 +96,20 @@
                           (is false (str e))))
                (p/finally done)))))
 
+(deftest graph-e2ee-preserves-nil-kv-value-test
+  (with-redefs [worker-state/get-datascript-conn (fn [_repo]
+                                                    (atom {}))
+                ldb/get-graph-rtc-e2ee? (fn [_db]
+                                          nil)]
+    (is (nil? (sync-crypt/graph-e2ee? "logseq_db_demo")))))
+
+(deftest graph-e2ee-preserves-false-kv-value-test
+  (with-redefs [worker-state/get-datascript-conn (fn [_repo]
+                                                    (atom {}))
+                ldb/get-graph-rtc-e2ee? (fn [_db]
+                                          false)]
+    (is (= false (sync-crypt/graph-e2ee? "logseq_db_demo")))))
+
 (deftest save-e2ee-password-uses-secret-storage-in-browser-runtime-test
   (async done
          (let [platform-map {:env {:runtime :browser}}
