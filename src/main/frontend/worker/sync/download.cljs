@@ -175,7 +175,7 @@
                                    :graph-uuid graph-id
                                    :message "Graph is ready!"})
        (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
-         (.exec db "PRAGMA wal_checkpoint(2)"))
+         (.exec db "PRAGMA wal_checkpoint(TRUNCATE)"))
        (client-op/update-local-tx repo remote-tx)
        (shared-service/broadcast-to-clients! :add-repo {:repo repo}))
       (p/catch (fn [error]
