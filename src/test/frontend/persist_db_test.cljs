@@ -279,3 +279,32 @@
              (set! util/node-test? original-node-test?)
              (set! state/<invoke-db-worker original-invoke)
              (done)))))))
+
+(deftest browser-export-db-on-electron-triggers-local-backup-without-worker-export
+  (async done
+    (let [ipc-calls (atom [])
+          worker-export-calls (atom [])
+          original-electron? util/electron?
+          original-ipc ipc/ipc
+          original-invoke state/<invoke-db-worker-direct-pass]
+      (set! util/electron? (constantly true))
+      (set! ipc/ipc (fn [& args]
+                      (swap! ipc-calls conj args)
+                      (p/resolved :ok)))
+      (set! state/<invoke-db-worker-direct-pass
+            (fn [qkw & _]
+              (swap! worker-export-calls conj qkw)
+              (p/rejected (ex-info "worker export should not be called" {:qkw qkw}))))
+      (-> (protocol/<export-db (browser/->InBrowser) "logseq_db_graph_a" {})
+          (p/then (fn [_]
+                    (is (= [[:db-export "logseq_db_graph_a"]]
+                           @ipc-calls))
+                    (is (empty? @worker-export-calls))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally
+           (fn []
+             (set! util/electron? original-electron?)
+             (set! ipc/ipc original-ipc)
+             (set! state/<invoke-db-worker-direct-pass original-invoke)
+             (done)))))))

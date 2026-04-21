@@ -613,9 +613,7 @@
 (def-thread-api :thread-api/q
   [repo inputs]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-util/profile
-     (str "Datalog query: " inputs)
-     (apply d/q (first inputs) @conn (rest inputs)))))
+    (apply d/q (first inputs) @conn (rest inputs))))
 
 (def-thread-api :thread-api/datoms
   [repo & args]
