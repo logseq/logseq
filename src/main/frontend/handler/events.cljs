@@ -121,16 +121,12 @@
             (search-plugin/call-service! service "search:rebuildBlocksIndice" {}))))))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (let [switch-promise
-        (p/do!
-         (export/cancel-db-backup!)
-         (persist-db/export-current-graph!)
-         (state/set-state! :db/async-queries {})
-         (st/refresh!)
-         (graph-switch-on-persisted graph opts))]
-    (p/then switch-promise
-            (fn [_]
-              (export/backup-db-graph (state/get-current-repo))))))
+  (p/do!
+   (export/cancel-db-backup!)
+   (state/set-state! :db/async-queries {})
+   (st/refresh!)
+   (graph-switch-on-persisted graph opts)
+   (export/backup-db-graph (state/get-current-repo))))
 
 (defmethod handle :graph/open-new-window [[_ev target-repo]]
   (ui-handler/open-new-window-or-tab! target-repo))
