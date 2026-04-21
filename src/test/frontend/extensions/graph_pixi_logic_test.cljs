@@ -77,3 +77,19 @@
     (is (= "This is a very long..." short-text))
     (is (= label hover-text))
     (is (= "Short" (logic/label-display-text "Short" false)))))
+
+(deftest connected-drag-weights-attenuates-by-depth
+  (let [neighbor-map {"a" ["b" "c"]
+                      "b" ["a" "d"]
+                      "c" ["a"]
+                      "d" ["b" "e"]
+                      "e" ["d"]}
+        weights (logic/connected-drag-weights neighbor-map "a"
+                                              {:max-depth 2
+                                               :decay 0.5
+                                               :min-weight 0.2})]
+    (is (= 1.0 (get weights "a")))
+    (is (= 0.5 (get weights "b")))
+    (is (= 0.5 (get weights "c")))
+    (is (= 0.25 (get weights "d")))
+    (is (nil? (get weights "e")))))

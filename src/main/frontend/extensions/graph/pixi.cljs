@@ -417,6 +417,14 @@
     (assoc layouted-nodes idx (assoc (nth layouted-nodes idx) :x x :y y))
     layouted-nodes))
 
+(defn- update-node-positions
+  [layouted-nodes node-index-by-id positions-by-id]
+  (reduce-kv
+   (fn [nodes node-id {:keys [x y]}]
+     (update-node-position nodes node-index-by-id node-id x y))
+   layouted-nodes
+   positions-by-id))
+
 (defn- setup-pan-and-zoom!
   [canvas world {:keys [get-node-index
                         on-node-activate
@@ -592,6 +600,7 @@
                                              label-candidate-ids
                                              (fn [id] (get @layout-by-id* id)))
         hovered-node-id* (atom nil)
+        drag-session* (atom nil)
         detail-target-alpha (atom 1.0)
         label-target-alpha (atom 0.0)
         visibility-state* (atom {:detail-expanded? true
@@ -607,34 +616,79 @@
                     :hide-label-scale hide-label-scale}
         mark-transform! (fn []
                           (reset! transform-dirty? true))
+        ensure-drag-session! (fn [root-node]
+                               (let [root-id (:id root-node)]
+                                 (if (and @drag-session*
+                                          (= root-id (:root-id @drag-session*)))
+                                   @drag-session*
+                                   (let [weights (logic/connected-drag-weights
+                                                  neighbor-map
+                                                  root-id
+                                                  {:max-depth 6
+                                                   :max-nodes 1200
+                                                   :decay 0.72
+                                                   :min-weight 0.2})
+                                         root-start (get @layout-by-id* root-id)
+                                         base-by-id (reduce-kv
+                                                     (fn [m node-id _weight]
+                                                       (if-let [node (get @layout-by-id* node-id)]
+                                                         (assoc m node-id {:x (:x node)
+                                                                            :y (:y node)})
+                                                         m))
+                                                     {}
+                                                     weights)
+                                         session {:root-id root-id
+                                                  :root-start root-start
+                                                  :weights weights
+                                                  :base-by-id base-by-id
+                                                  :positions {}}]
+                                     (reset! drag-session* session)
+                                     session))))
         apply-node-drag! (fn [node next-x next-y]
-                           (let [node-id (:id node)]
-                             (when-let [sprite (get (:sprites node-render-info) node-id)]
-                               (set! (.-x sprite) next-x)
-                               (set! (.-y sprite) next-y))
+                           (let [session (ensure-drag-session! node)
+                                 root-id (:id node)
+                                 root-start (:root-start session)
+                                 dx (- next-x (:x root-start))
+                                 dy (- next-y (:y root-start))
+                                 positions (reduce-kv
+                                            (fn [m node-id weight]
+                                              (if-let [base (get (:base-by-id session) node-id)]
+                                                (assoc m node-id
+                                                       {:x (+ (:x base) (* dx weight))
+                                                        :y (+ (:y base) (* dy weight))})
+                                                m))
+                                            {}
+                                            (:weights session))]
+                             (reset! drag-session* (assoc session :positions positions))
+                             (doseq [[node-id {:keys [x y]}] positions]
+                               (when-let [sprite (get (:sprites node-render-info) node-id)]
+                                 (set! (.-x sprite) x)
+                                 (set! (.-y sprite) y)))
                              (draw-drag-neighbor-edges! drag-edge-layer
                                                         @layout-by-id*
-                                                        (get neighbor-map node-id)
+                                                        (get neighbor-map root-id)
                                                         next-x
                                                         next-y
                                                         dark?)
                              (mark-transform!)))
         commit-node-drag! (fn [node next-x next-y]
                             (let [node-id (:id node)
+                                  positions (or (:positions @drag-session*)
+                                                {node-id {:x next-x :y next-y}})
                                   next-layouted-nodes (swap! layouted-nodes*
-                                                             update-node-position
+                                                             update-node-positions
                                                              node-index-by-id
-                                                             node-id
-                                                             next-x
-                                                             next-y)
-                                  moved-node (get next-layouted-nodes
-                                                  (get node-index-by-id node-id))]
-                              (swap! layout-by-id* assoc node-id moved-node)
+                                                             positions)]
+                              (doseq [[moved-node-id _] positions]
+                                (when-let [idx (get node-index-by-id moved-node-id)]
+                                  (when-let [moved-node (get next-layouted-nodes idx)]
+                                    (swap! layout-by-id* assoc moved-node-id moved-node))))
                               (draw-edges! (:graphics edge-render-info)
                                            @layout-by-id*
                                            links
                                            dark?)
                               (.clear drag-edge-layer)
+                              (reset! drag-session* nil)
                               (reset! all-node-index* (index-layouted-nodes @layouted-nodes*))
                               (reset! tag-node-index* (index-layouted-nodes
                                                        (filter #(= "tag" (:kind %))

@@ -66,3 +66,33 @@
     (if (> (count label) max-prefix-length)
       (str (subs label 0 max-prefix-length) "...")
       label)))
+
+(defn connected-drag-weights
+  [neighbor-map start-id {:keys [max-depth max-nodes decay min-weight]
+                          :or {max-depth 6
+                               max-nodes 1200
+                               decay 0.72
+                               min-weight 0.18}}]
+  (loop [queue (conj cljs.core/PersistentQueue.EMPTY [start-id 0])
+         depths {start-id 0}]
+    (if (or (empty? queue)
+            (>= (count depths) max-nodes))
+      (reduce-kv
+       (fn [m node-id depth]
+         (assoc m node-id (max min-weight (js/Math.pow decay depth))))
+       {}
+       depths)
+      (let [[node-id depth] (peek queue)
+            queue (pop queue)]
+        (if (>= depth max-depth)
+          (recur queue depths)
+          (let [[queue depths]
+                (reduce
+                 (fn [[queue* depths*] neighbor-id]
+                   (if (contains? depths* neighbor-id)
+                     [queue* depths*]
+                     [(conj queue* [neighbor-id (inc depth)])
+                      (assoc depths* neighbor-id (inc depth))]))
+                 [queue depths]
+                 (get neighbor-map node-id []))]
+            (recur queue depths)))))))
