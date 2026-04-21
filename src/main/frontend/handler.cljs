@@ -125,10 +125,10 @@
   (let [t1 (util/time-ms)]
     (p/do!
      (idb/start)
+     (get-system-info)
      (plugin-handler/setup!)
      (render))
 
-    (get-system-info)
     (set-global-error-notification!)
 
     (register-components-fns!)
