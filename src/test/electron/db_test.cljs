@@ -107,8 +107,9 @@
                 (is (= ".sqlite" ext))
                 (is (= "copied" content))
                 (is (= backups-path (:backups-dir opts)))
-                (is (= true (:truncate-daily? opts)))
-                (is (= 12 (:keep-versions opts))))))
+                (is (= 12 (:keep-versions opts)))
+                (is (contains? opts :force-backup?))
+                (is (nil? (:force-backup? opts))))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))

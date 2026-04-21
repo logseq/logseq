@@ -25,4 +25,4 @@
         source (.toString (fs/readFileSync events-source-path) "utf8")]
     (is (not (.includes source "Manual save is no longer required.")))
     (is (.includes source "(persist-db/export-current-graph!"))
-    (is (.includes source ":force-save? true"))))
+    (is (.includes source ":succ-notification? true"))))
