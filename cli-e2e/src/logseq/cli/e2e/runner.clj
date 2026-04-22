@@ -14,7 +14,8 @@
       text)))
 
 (def template-pattern #"\{\{([^}]+)\}\}")
-(def ^:private e2e-env {"CLI_E2E_TEST" "1"})
+(def ^:private e2e-env {"CLI_E2E_TEST" "1"
+                        "NO_COLOR" "1"})
 
 (defn- render-string
   [template context]
