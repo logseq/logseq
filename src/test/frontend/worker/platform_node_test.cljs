@@ -255,3 +255,26 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
+
+(deftest remove-vfs-removes-lock-file
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "platform-node-remove-vfs")
+          lock-json "{\"repo\":\"logseq_db_demo\",\"pid\":1,\"host\":\"127.0.0.1\",\"port\":9001}"]
+      (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir})
+                  storage (:storage platform)
+                  pool ((:install-opfs-pool storage) nil "logseq_db_demo")
+                  repo-dir (gobj/get pool "repoDir")
+                  lock-path (node-path/join repo-dir "db-worker.lock")
+                  db-path (node-path/join repo-dir "db.sqlite")
+                  nested-path (node-path/join repo-dir "assets" "file.bin")
+                  _ (fs/mkdirSync (node-path/dirname nested-path) #js {:recursive true})
+                  _ (fs/writeFileSync lock-path lock-json "utf8")
+                  _ (fs/writeFileSync db-path "db-bytes" "utf8")
+                  _ (fs/writeFileSync nested-path "asset-bytes" "utf8")
+                  _ ((:remove-vfs! storage) pool)]
+            (is (not (fs/existsSync lock-path)))
+            (is (not (fs/existsSync db-path)))
+            (is (not (fs/existsSync nested-path))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))

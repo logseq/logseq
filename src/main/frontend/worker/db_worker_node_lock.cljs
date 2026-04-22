@@ -135,6 +135,7 @@
                      (-> lock
                          (update :owner-source normalize-owner-source)
                          (update :revision #(or % (worker-version/revision)))))]
+         (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
          (fs/writeFileSync path (js/JSON.stringify (clj->js lock')))
          (resolve lock'))
        (catch :default e

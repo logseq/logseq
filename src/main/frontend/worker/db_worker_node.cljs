@@ -407,6 +407,28 @@
     (log/set-levels {:glogi/root log-level})
     file-path))
 
+(defn- assert-lock-owner!
+  []
+  (let [{:keys [path lock]} @*lock-info]
+    (db-lock/assert-lock-owner! path lock)))
+
+(defn- recreate-lock!
+  [target-repo]
+  (p/let [{:keys [path lock]} @*lock-info
+          _ (when-not (and (seq path) lock)
+              (throw (ex-info "lock owner missing"
+                              {:code :repo-locked
+                               :repo target-repo})))
+          _ (when (and (seq target-repo)
+                       (not= target-repo (:repo lock)))
+              (throw (ex-info "graph lock repo mismatch"
+                              {:code :repo-locked
+                               :repo target-repo
+                               :bound-repo (:repo lock)})))
+          updated-lock (db-lock/update-lock! path lock)]
+    (swap! *lock-info assoc :lock updated-lock)
+    nil))
+
 (defn start-daemon!
   [{:keys [data-dir repo log-level owner-source on-stopped!] :as opts}]
   (let [host "127.0.0.1"
@@ -422,13 +444,11 @@
           (reset! *ready? false)
           (reset! *lock-info nil)
           (set-main-thread-stub!)
-          (-> (p/let [write-guard-fn (fn []
-                                       (let [{:keys [path lock]} @*lock-info]
-                                         (db-lock/assert-lock-owner! path lock)))
-                      platform (platform-node/node-platform {:data-dir data-dir
+          (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir
                                                              :event-fn handle-event!
-                                                             :write-guard-fn write-guard-fn
-                                                             :owner-source owner-source})
+                                                             :write-guard-fn assert-lock-owner!
+                                                             :owner-source owner-source
+                                                             :recreate-lock-fn recreate-lock!})
                       proxy (db-core/init-core! platform)
                       _ (<init-worker! proxy)
                       {:keys [path lock]} (db-lock/ensure-lock! {:data-dir data-dir

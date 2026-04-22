@@ -379,6 +379,7 @@
   (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
     (-> (p/let [close-db-f (require-thread-api-f! :thread-api/db-sync-close-db)
                 unlink-db-f (require-thread-api-f! :thread-api/unsafe-unlink-db)
+                recreate-lock-f (require-thread-api-f! :thread-api/db-sync-recreate-lock)
                 invalidate-search-db-f (require-thread-api-f! :thread-api/db-sync-invalidate-search-db)
                 create-or-open-db-f (require-thread-api-f! :thread-api/create-or-open-db)
                 _ (when-let [state @*import-state]
@@ -387,6 +388,7 @@
                 _ (reset! *import-state nil)
                 _ (when reset? (close-db-f repo))
                 _ (when reset? (unlink-db-f repo))
+                _ (when reset? (recreate-lock-f repo))
                 _ (when reset? (invalidate-search-db-f repo))
                 import-id (str (random-uuid))
                 aes-key (when graph-e2ee?
