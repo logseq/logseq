@@ -1089,8 +1089,8 @@
         (js/console.error "Stack:\n" (.-stack e))
         (platform/post-message! (platform/current)
                                 :notification
-                                ["An unexpected error occurred during export. See the javascript console for details."
-                                 :error])
+                                [nil :error nil nil nil
+                                 {:i18n-key :export/error-unexpected}])
         {:export-edn-error (.-message e)}))))
 
 (def-thread-api :thread-api/import-edn
@@ -1283,7 +1283,8 @@
   (when-not (and (or (:undo? tx-meta) (:redo? tx-meta))
                  (not worker-util/dev?))
     (shared-service/broadcast-to-clients! :notification
-                                          [["Invalid data writing to db!"] :error])
+                                          [nil :error nil nil nil
+                                           {:i18n-key :storage/invalid-data-writing}])
     (platform/post-message! (platform/current)
                             :capture-error
                             {:error (ex-info "Invalid data writing to db" tx-meta)

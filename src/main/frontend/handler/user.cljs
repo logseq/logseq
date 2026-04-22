@@ -11,6 +11,7 @@
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.debug :as debug]
             [frontend.flows :as flows]
             [frontend.handler.notification :as notification]
@@ -222,7 +223,7 @@
             nil)                           ; do nothing
 
           (not (http/unexceptional-status? (:status resp)))
-          (notification/show! "exceptional status when refresh-token" :warning true)
+          (notification/show! (t :account/refresh-token-warning) :warning true)
 
           :else                         ; ok
           (when (and (:id_token (:body resp)) (:access_token (:body resp)))

@@ -3,6 +3,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.common.crypt :as crypt]
+            [frontend.context.i18n :as i18n]
             [frontend.handler.e2ee :as e2ee-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -12,8 +13,26 @@
 
 (defmulti handle identity)
 
+(defn- normalize-notification-payload
+  [[content status clear? uid timeout extra]]
+  (let [i18n-data (when (and (map? extra) (contains? extra :i18n-key))
+                    extra)
+        close-cb (when (fn? extra) extra)]
+    {:content content
+     :status status
+     :clear? clear?
+     :uid uid
+     :timeout timeout
+     :close-cb close-cb
+     :i18n-data i18n-data}))
+
 (defmethod handle :notification [_ _worker data]
-  (apply notification/show! data))
+  (let [{:keys [content status clear? uid timeout close-cb i18n-data]}
+        (normalize-notification-payload data)
+        translated-content (if-let [i18n-key (:i18n-key i18n-data)]
+                             (apply i18n/t i18n-key (or (:i18n-args i18n-data) []))
+                             content)]
+    (notification/show! translated-content status clear? uid timeout close-cb)))
 
 (defmethod handle :log [_ _worker [name level data]]
   (log/log name level data))

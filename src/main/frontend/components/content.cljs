@@ -18,6 +18,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.reaction :as reaction-handler]
+            [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -95,7 +96,7 @@
      (shui/dropdown-menu-item
       {:key "copy"
        :on-click #(editor-handler/copy-selection-blocks true)}
-      (t :editor/copy)
+      (t :ui/copy)
       (ui/dropdown-shortcut :editor/copy))
 
      (shui/dropdown-menu-item
@@ -106,12 +107,12 @@
                             (shui/popup-hide!)
                             (shui/dialog-open!
                              #(export/export-blocks block-uuids {:export-type :selected-nodes}))))}
-      (t :content/copy-export-as))
+      (t :export/copy-or-export-as))
 
      (shui/dropdown-menu-item
       {:key "copy block refs"
        :on-click editor-handler/copy-block-refs}
-      (t :content/copy-block-ref))
+      (t :block/copy-ref))
 
      (shui/dropdown-menu-separator)
 
@@ -174,12 +175,12 @@
           {:key "Open in sidebar"
            :on-click (fn [_e]
                        (editor-handler/open-block-in-sidebar! block-id))}
-          (t :content/open-in-sidebar)
+          (t :sidebar.right/open)
           (ui/dropdown-shortcut "shift+click"))
 
          (shui/dropdown-menu-sub
           (shui/dropdown-menu-sub-trigger
-           "Add reaction")
+           (t :command.editor/add-reaction))
           (shui/dropdown-menu-sub-content
            [:div.p-1
             (icon-component/icon-search
@@ -191,8 +192,8 @@
                                  (reaction-handler/toggle-reaction! block-id emoji-id)
                                  (state/hide-custom-context-menu!)
                                  (shui/popup-hide!))
-                               (notification/show! "Please pick an emoji reaction." :warning))))
-              :tabs [[:emoji "Emojis"]]
+                               (notification/show! (t :block.reaction/emoji-required-warning) :warning))))
+              :tabs [[:emoji (t :icon/tab-emojis)]]
               :default-tab :emoji
               :show-used? true
               :icon-value nil})]))
@@ -230,7 +231,7 @@
           {:key "Copy block ref"
            :on-click (fn [_e]
                        (editor-handler/copy-block-ref! block-id ref/->block-ref))}
-          (t :content/copy-block-ref))
+          (t :block/copy-ref))
 
          ;; TODO Logseq protocol mobile support
          (when (util/electron?)
@@ -241,7 +242,7 @@
                                tap-f (fn [block-id]
                                        (url-util/get-logseq-graph-uuid-url nil current-repo block-id))]
                            (editor-handler/copy-block-ref! block-id tap-f)))}
-            (t :content/copy-block-url)))
+            (t :block/copy-url)))
 
          (when (and (util/electron?) (ldb/asset? block))
            (shui/dropdown-menu-item
@@ -258,7 +259,7 @@
            :on-click (fn [_]
                        (shui/dialog-open!
                         #(export/export-blocks [block-id] {:export-type :block})))}
-          (t :content/copy-export-as))
+          (t :export/copy-or-export-as))
 
          (when-not property-default-value?
            (shui/dropdown-menu-item
@@ -321,29 +322,29 @@
             (shui/dropdown-menu-separator)
             (shui/dropdown-menu-sub
              (shui/dropdown-menu-sub-trigger
-              "Developer tools")
+              (t :context-menu/developer-tools))
 
-             (shui/dropdown-menu-sub-content
-              (shui/dropdown-menu-item
-               {:key "(Dev) Show block data"
+              (shui/dropdown-menu-sub-content
+               (shui/dropdown-menu-item
+               {:key :dev/show-block-data
                 :on-click (fn []
                             (dev-common-handler/show-entity-data [:block/uuid block-id]))}
-               (t :dev/show-block-data))
+               (shortcut-dh/shortcut-desc-by-id :dev/show-block-data))
               (shui/dropdown-menu-item
-               {:key "(Dev) Show block AST"
+               {:key :dev/show-block-ast
                 :on-click (fn []
                             (let [block (db/entity [:block/uuid block-id])]
                               (dev-common-handler/show-content-ast (:block/title block)
                                                                    (get block :block/format :markdown))))}
-               (t :dev/show-block-ast))
+               (shortcut-dh/shortcut-desc-by-id :dev/show-block-ast))
               (shui/dropdown-menu-item
-               {:key "(Dev) Show block content history"
+               {:key :dev/show-block-content-history
                 :on-click
                 (fn []
                   (let [token (state/get-auth-id-token)
                         graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
                     (p/let [blocks-versions (state/<invoke-db-worker :thread-api/rtc-get-block-content-versions token graph-uuid block-id)]
-                      (prn :Dev-show-block-content-history)
+                      (prn :dev/show-block-content-history)
                       (doseq [[block-uuid versions] blocks-versions]
                         (prn :block-uuid block-uuid)
                         (pp/print-table [:content :created-at]
@@ -351,7 +352,6 @@
                                                {:created-at (tc/from-long (* (:created-at version) 1000))
                                                 :content (:value version)})
                                              versions))))))}
-
                "(Dev) Show block content history")))])]))))
 
 (rum/defc block-ref-custom-context-menu-content
@@ -365,32 +365,38 @@
                     (state/get-current-repo)
                     block-ref-id
                     :block-ref))}
-      (t :content/open-in-sidebar)
+      (t :sidebar.right/open)
       (ui/dropdown-shortcut "shift+click"))
      (shui/dropdown-menu-item
       {:key "copy"
        :on-click (fn [] (editor-handler/copy-current-ref block-ref-id))}
-      (t :content/copy-ref))
+      (t :reference/copy))
      (shui/dropdown-menu-item
       {:key "delete"
        :on-click (fn [] (editor-handler/delete-current-ref! block block-ref-id))}
-      (t :content/delete-ref))
+      (t :reference/delete))
      (shui/dropdown-menu-item
       {:key "replace-with-text"
        :on-click (fn [] (editor-handler/replace-ref-with-text! block block-ref-id))}
-      (t :content/replace-with-text))
+      (t :reference/replace-with-text))
      (shui/dropdown-menu-item
       {:key "replace-with-embed"
        :on-click (fn [] (editor-handler/replace-ref-with-embed! block block-ref-id))}
-      (t :content/replace-with-embed))]))
+      (t :reference/replace-with-embed))]))
 
 (rum/defc page-title-custom-context-menu-content
-  [page]
+  [page popup-id]
   (when page
     (let [page-menu-options (page-menu/page-menu page)]
       [:<>
        (for [{:keys [title options]} page-menu-options]
-         (shui/dropdown-menu-item options title))])))
+         (let [on-click (:on-click options)]
+           (shui/dropdown-menu-item
+            (assoc options
+                   :on-click (fn [e]
+                               (when-not (false? (when on-click (on-click e)))
+                                 (shui/popup-hide! popup-id))))
+            title)))])))
 
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
@@ -400,7 +406,7 @@
   [:div {:id id}
    (if hiccup
      hiccup
-     [:div.cursor (t :content/click-to-edit)])])
+     [:div.cursor (t :editor/click-to-edit)])])
 
 (rum/defc non-hiccup-content
   [id content on-click on-hide config format]
@@ -421,7 +427,7 @@
          {:id id
           :on-click on-click}
          (if (string/blank? content)
-           [:div.cursor (t :content/click-to-edit)]
+           [:div.cursor (t :editor/click-to-edit)]
            content)]))))
 
 (rum/defcs content < rum/reactive

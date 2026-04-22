@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.components.block :as component-block]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.react :as react]
@@ -58,7 +59,7 @@
   (if (ldb/page? root)
     (:block/title root)
     (or (:block/title (resolve-entity db (:logseq.property.recycle/original-page root)))
-        "Unknown page")))
+        (t :page/unknown))))
 
 (defn- deleted-by
   [db root]
@@ -86,23 +87,24 @@
       (deleted-by-avatar user)
       [:div.min-w-0
        [:div.truncate
-        (str (if (ldb/page? root) "Page" "Block")
-             " deleted "
-             (.toLocaleString (js/Date. deleted-at)))]]]
+        (t (if (ldb/page? root)
+             :storage.recycle/page-deleted-at
+             :storage.recycle/block-deleted-at)
+           (i18n/locale-format-date (js/Date. deleted-at)))]]]
      [:div.flex.items-center.gap-1
       (shui/button
        {:variant :ghost
         :size :xs
         :class "!py-0 !px-1 h-4"
         :on-click #(page-handler/restore-recycled! root-uuid)}
-       "Restore")
+       (t :storage.recycle/restore))
       (shui/button
        {:variant :ghost
         :size :xs
         :class "!py-0 !px-1 h-4 hover:text-red-rx-09 dark:hover:text-red-rx-10 hover:bg-red-rx-04-alpha dark:hover:bg-red-rx-06-alpha"
         :on-click #(when (js/confirm delete-message)
                      (page-handler/delete-recycled-permanently! root-uuid))}
-        "Delete")]]))
+       (t :ui/delete))]]))
 
 (defn- deleted-root-outliner
   [root]
@@ -134,7 +136,7 @@
                              #(compare %2 %1)))]
     [:div {:class (util/classnames ["flex" "flex-col" "gap-8" "ls-recycle-page-content" class])}
      [:div.text-sm.text-muted-foreground.ls-recycle-page-description.ml-1
-      "Deleted pages and blocks stay here until restored or automatically garbage collected after 30 days."]
+      (t :storage.recycle/retention-desc)]
      (if (seq groups)
        (for [[title roots] groups]
          [:section {:key title}
@@ -145,4 +147,4 @@
              [:div {:key (str (:block/uuid root))}
               (deleted-root-header db* root)
               (deleted-root-outliner root)])]])
-       [:div.text-sm.text-muted-foreground "Recycle is empty."])]))
+       [:div.text-sm.text-muted-foreground (t :storage.recycle/empty)])]))

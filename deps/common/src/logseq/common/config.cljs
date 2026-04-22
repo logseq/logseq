@@ -98,6 +98,9 @@
 
 (defonce block-pattern "-")
 
+(def unused-in-db-graphs-deprecation
+  "is not used in DB graphs")
+
 (def file-only-config
   "File only config keys that are deprecated in DB graphs along with
   descriptions for their deprecation."
@@ -120,7 +123,7 @@
      :srs/initial-interval
      :whiteboards-directory
      :feature/enable-whiteboards?]
-    (repeat "is not used in DB graphs"))
+    (repeat unused-in-db-graphs-deprecation))
    {:preferred-format
     "is not used in DB graphs as there is only markdown mode."
     :property-pages/enabled?

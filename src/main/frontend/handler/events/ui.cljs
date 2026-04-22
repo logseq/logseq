@@ -17,6 +17,7 @@
             [frontend.components.shell :as shell]
             [frontend.components.user.login :as login]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
@@ -53,7 +54,7 @@
 (defmethod events/handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
 
-(defmethod events/handle :command/run [_]
+(defmethod events/handle :shell/run [_]
   (when (util/electron?)
     (shui/dialog-open! shell/shell)))
 
@@ -99,7 +100,7 @@
   (shui/dialog-open!
    (fn [] (fsrs/cards-view cards-id))
    {:id :srs
-    :label "flashcards__cp"}))
+    :label :flashcards__cp}))
 
 (defmethod events/handle :modal/show-themes-modal [[_ classic?]]
   (if classic?
@@ -138,7 +139,7 @@
           (if-not error-code
             (plugin/set-updates-sub-content! (str title "...") 0)
             (notification/show!
-             (str "[Checked]<" title "> " error-code) :error)))))
+             (str "[" (t :plugin/checked) "]<" title "> " error-code) :error)))))
 
     (if (and updated? downloading?)
       ;; try to start consume downloading item
@@ -251,14 +252,14 @@
                       (do
                         (reaction-handler/toggle-reaction! target-block-id emoji-id)
                         (shui/popup-hide! popup-id))
-                      (notification/show! "Please pick an emoji reaction." :warning))))]
+                      (notification/show! (t :block.reaction/emoji-required-warning) :warning))))]
     (when (and target-block-id target')
       (shui/popup-show!
        target'
        (fn [{:keys [id]}]
          (icon-component/icon-search
           {:on-chosen (fn [_e icon _keep-popup?] (on-pick id icon))
-           :tabs [[:emoji "Emojis"]]
+           :tabs [[:emoji (t :icon/tab-emojis)]]
            :default-tab :emoji
            :show-used? true
            :icon-value nil}))
@@ -275,7 +276,7 @@
   (shui/dialog-open!
    repo/new-db-graph
    {:id :new-db-graph
-    :title [:h2 "Create a new graph"]
+    :title [:h2 (t :graph/create-new)]
     :align (if (util/mobile?) :top :center)
     :style {:max-width "500px"}}))
 
@@ -325,7 +326,7 @@
   (shui/dialog-open!
    (assets/edit-external-url-content asset-block pdf-current)
    {:id :edit-external-asset-source-dialog
-    :title (str (if asset-block "Edit" "Create") " asset")
+    :title (if asset-block (t :asset/edit-title) (t :asset/create-title))
     :center? true}))
 
 (defn ensure-user-rsa-keys-if-possible!

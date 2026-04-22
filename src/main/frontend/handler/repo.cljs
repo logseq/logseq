@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.persist :as db-persist]
@@ -39,13 +40,12 @@
          (do
            (state/set-current-repo! nil)
            (when-let [graph (:url (first (state/get-repos)))]
-             (notification/show! (str "Removed graph "
-                                      (pr-str (text-util/get-graph-name-from-path url))
-                                      ". Redirecting to graph "
-                                      (pr-str (text-util/get-graph-name-from-path graph)))
+             (notification/show! (t :graph/removed-and-redirecting
+                                    (text-util/get-graph-name-from-path url)
+                                    (text-util/get-graph-name-from-path graph))
                                  :success)
              (state/pub-event! [:graph/switch graph {:persist? false}])))
-         (notification/show! (str "Removed graph " (pr-str (text-util/get-graph-name-from-path url))) :success))))))
+           (notification/show! (t :graph/removed (text-util/get-graph-name-from-path url)) :success))))))
 
 (defn start-repo-db-if-not-exists!
   [repo & {:as opts}]
@@ -154,7 +154,7 @@
      (prn "New db created: " full-graph-name)
      full-graph-name)
    (p/catch (fn [error]
-              (notification/show! "Create graph failed." :error)
+              (notification/show! (t :graph/create-error) :error)
               (js/console.error error)))))
 
 (defn new-db!
@@ -164,7 +164,7 @@
    (let [full-graph-name (str config/db-version-prefix graph)]
      (if (graph-already-exists? graph)
        (state/pub-event! [:notification/show
-                          {:content (str "The graph '" graph "' already exists. Please try again with another name.")
+                          {:content (t :graph/already-exists-error graph)
                            :status :error}])
        (create-db full-graph-name opts)))))
 
@@ -173,5 +173,5 @@
   (p/do!
    (state/<invoke-db-worker :thread-api/gc-graph graph)
    (state/pub-event! [:notification/show
-                      {:content "Graph gc successfully!"
+                      {:content (t :graph/gc-success)
                        :status :success}])))

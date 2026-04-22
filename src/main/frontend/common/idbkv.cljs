@@ -138,7 +138,6 @@
          batcher (or (get @set-batchers* sid)
                      (let [b (make-batcher
                               (fn [items]
-                                (prn :debug :fn (:with-idb-store store))
                                 ((:with-idb-store store)
                                  "readwrite"
                                  (fn [os]
@@ -146,7 +145,6 @@
                                      (.put os value key))))))]
                        (swap! set-batchers* assoc sid b)
                        b))]
-     (prn :debug :batcher batcher)
      ((:queue! batcher) {:key key :value value}))))
 
 (comment

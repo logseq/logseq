@@ -4,6 +4,7 @@
   logseq/config.edn. In the future it may manage more files. This component
   depends on a repo."
   (:require [clojure.edn :as edn]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]))
@@ -18,7 +19,7 @@
   (try
     (edn/read-string content)
     (catch :default e
-      (notification/show! "The file 'logseq/config.edn' is invalid. Please reload the app to in order to see the error and fix it." :error)
+      (notification/show! (t :file/config-invalid) :error)
       ;; Rethrow so we know how long this is an issue and to prevent downstream errors
       (throw e))))
 

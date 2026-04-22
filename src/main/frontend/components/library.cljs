@@ -2,6 +2,7 @@
   "Library page"
   (:require [clojure.string :as string]
             [frontend.components.select :as components-select]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.search :as search]
@@ -47,7 +48,7 @@
                                      {:outliner-op :save-block})
                        (set-selected-choices! (disj selected-choices chosen)))))
       :multiple-choices? true
-      :input-default-placeholder "Add pages"
+      :input-default-placeholder (t :library/add-pages)
       :show-new-when-not-exact-match? false
       :on-input set-input!
       :input-opts {:class "!p-1 !text-sm"}
@@ -68,4 +69,4 @@
                      (select-pages library-page)])
                   {:align :start}))}
     (ui/icon "plus" {:size 16})
-    "Add existing pages to Library")])
+    (t :library/add-existing-pages))])
