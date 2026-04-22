@@ -298,7 +298,12 @@
       (batch-tx-fn conn)
       (batch-transact-cleanup! conn)
       (when-some [_storage (storage/storage @conn)]
-        (d/store @conn))
+        (d/store @conn)
+        ;; batch-transact! bypasses conn/store-after-transact!, so keep tail bookkeeping in sync
+        ;; with the just-persisted root snapshot.
+        (swap! (:atom conn) assoc
+               :tx-tail []
+               :db-last-stored @conn))
       (let [batch-tx-data @*tx-data
             _ (reset! *tx-data nil)
             tx-report {:db-before db-before
