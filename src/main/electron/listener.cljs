@@ -5,6 +5,8 @@
             [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [electron.locale :as electron-locale]
+            [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.handler.notification :as notification]
@@ -26,9 +28,13 @@
   []
   (safe-api-call "notification"
                  (fn [data]
-                   (let [{:keys [type payload]} (bean/->clj data)
+                   (let [{:keys [type payload i18n-key i18n-args]} (bean/->clj data)
                          type (keyword type)
-                         comp [:div (str payload)]]
+                         i18n-key (when i18n-key (keyword i18n-key))
+                         content (if i18n-key
+                                   (apply i18n/t i18n-key i18n-args)
+                                   (str payload))
+                         comp [:div content]]
                      (notification/show! comp type false))))
 
   (safe-api-call "rebuildSearchIndice"
@@ -67,7 +73,7 @@
                        (p/let [block (db-async/<get-block (state/get-current-repo) block-id {:children? false})]
                          (if block
                            (route-handler/redirect-to-page! block-id)
-                           (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false)))))))
+                           (notification/show! (i18n/t :electron/block-not-exist block-id) :error false)))))))
 
   (safe-api-call "foundInPage"
                  (fn [data]
@@ -133,4 +139,5 @@
 
 (defn listen!
   []
-  (listen-to-electron!))
+  (listen-to-electron!)
+  (electron-locale/push-locale! (state/sub :preferred-language)))

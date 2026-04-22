@@ -2,6 +2,7 @@
   "Handles DB graph exports and imports across graphs"
   (:require [cljs.pprint :as pprint]
             [clojure.string :as string]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -31,8 +32,8 @@
       (when-not (:export-edn-error result)
         (.writeText js/navigator.clipboard pull-data)
         (println pull-data)
-        (notification/show! "Copied block's data!" :success)))
-    (notification/show! "No block found" :warning)))
+        (notification/show! (t :export/block-data-copied) :success)))
+    (notification/show! (t :block/not-found-warning) :warning)))
 
 (defn export-view-nodes-data [rows {:keys [group-by?]}]
   (p/let [result (<export-edn-helper {:export-type :view-nodes
@@ -43,7 +44,7 @@
       (notification/show! (:export-edn-error result) :error)
       (do (.writeText js/navigator.clipboard pull-data)
           (println pull-data)
-          (notification/show! "Copied view nodes' data!" :success)))))
+          (notification/show! (t :export/view-nodes-data-copied) :success)))))
 
 (defn ^:export export-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
@@ -53,8 +54,8 @@
         (notification/show! (:export-edn-error result) :error)
         (do (.writeText js/navigator.clipboard pull-data)
             (println pull-data)
-            (notification/show! "Copied page's data!" :success))))
-    (notification/show! "No page found" :warning)))
+            (notification/show! (t :export/page-data-copied) :success))))
+    (notification/show! (t :page/not-found-warning) :warning)))
 
 (defn ^:export export-graph-ontology-data []
   (p/let [result (state/<invoke-db-worker :thread-api/export-edn
@@ -66,7 +67,7 @@
       (println pull-data)
       (js/console.log (str "Exported " (count (:classes result)) " classes and "
                            (count (:properties result)) " properties"))
-      (notification/show! "Copied graphs's ontology data!" :success))))
+      (notification/show! (t :export/graph-ontology-data-copied) :success))))
 
 ;; Copied from handler.export
 (defn- file-name [repo extension]

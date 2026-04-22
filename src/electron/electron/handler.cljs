@@ -13,11 +13,13 @@
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [electron.backup-file :as backup-file]
             [electron.configs :as cfgs]
             [electron.db :as db]
             [electron.db-worker :as db-worker]
             [electron.find-in-page :as find]
             [electron.handler-interface :refer [handle]]
+            [electron.i18n :as i18n]
             [electron.keychain :as keychain]
             [electron.logger :as logger]
             [electron.plugin :as plugin]
@@ -94,7 +96,7 @@
   (logger/info ::copy-file from-path to-path)
   (fs-extra/copy from-path to-path))
 
-(defmethod handle :writeFile [_window [_ _repo path content]]
+(defmethod handle :writeFile [window [_ repo path content]]
   (let [^js Buf (.-Buffer buffer)
         ^js content (if (instance? js/ArrayBuffer content)
                       (.from Buf content)
@@ -105,7 +107,22 @@
       (fs/writeFileSync path content)
       (utils/fs-stat->clj path)
       (catch :default e
-        (logger/warn ::write-file path e)))))
+        (logger/warn ::write-file path e)
+        (let [error-message (str e)
+              backup-path (try
+                            (backup-file/backup-file repo :backup-dir path (node-path/extname path) content)
+                            (catch :default backup-error
+                              (logger/error ::write-file "backup file failed:" backup-error)))]
+          (utils/send-to-renderer window "notification"
+                                  (if backup-path
+                                    {:type "error"
+                                     :payload (str "Write to the file " path " failed, " error-message ". A backup file was saved to " backup-path ".")
+                                     :i18n-key :electron/write-file-error-with-backup
+                                     :i18n-args [path error-message backup-path]}
+                                    {:type "error"
+                                     :payload (str "Write to the file " path " failed, " error-message)
+                                     :i18n-key :electron/write-file-error
+                                     :i18n-args [path error-message]})))))))
 
 (defmethod handle :rename [_window [_ old-path new-path]]
   (logger/info ::rename "from" old-path "to" new-path)
@@ -158,9 +175,12 @@
                                 :files (get-files path)}))
         (catch js/Error e
           (do
-            (utils/send-to-renderer window "notification" {:type "error"
-                                                           :payload (str "Opening the specified directory failed.\n"
-                                                                         (or (pretty-print-js-error e) (str "Unexpected error: " e)))})
+            (let [error-message (or (pretty-print-js-error e) (str "Unexpected error: " e))]
+              (utils/send-to-renderer window "notification"
+                                      {:type "error"
+                                       :payload (str "Opening the specified directory failed.\n" error-message)
+                                       :i18n-key :electron/open-dir-error
+                                       :i18n-args [error-message]}))
             (p/rejected e))))
 
       (p/rejected (js/Error "path empty")))))
@@ -320,6 +340,9 @@
         (set-current-graph! window next-graph-path)
         (state/close-window! window))
       nil)))
+
+(defmethod handle :updateElectronLocale [_window [_ locale]]
+  (i18n/update-locale! locale))
 
 (defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
   (try

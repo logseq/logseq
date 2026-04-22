@@ -1,9 +1,8 @@
 (ns frontend.components.theme
-  (:require [clojure.string :as string]
-            [electron.ipc :as ipc]
+  (:require [electron.ipc :as ipc]
             [frontend.components.settings :as settings]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.extensions.pdf.core :as pdf]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
@@ -68,9 +67,10 @@
      [editor-font])
 
     (hooks/use-effect!
-     #(let [doc js/document.documentElement]
-        (.setAttribute doc "lang" preferred-language)
-        (some-> preferred-language (string/lower-case) (js/LSI18N.setLocale)))
+     #(let [doc js/document.documentElement
+            preferred-language' (i18n/locale-tag preferred-language)]
+        (.setAttribute doc "lang" preferred-language')
+        (js/LSI18N.setLocale preferred-language'))
      [preferred-language])
 
     (hooks/use-effect!
@@ -102,7 +102,7 @@
     (hooks/use-effect!
      #(let [db-restored? (false? db-restoring?)]
         (if db-restoring?
-          (util/set-title! (t :loading))
+          (util/set-title! (t :ui/loading))
           (when db-restored?
             (route-handler/update-page-title! route))))
      [db-restoring? route])
@@ -132,7 +132,7 @@
        (if settings-open?
          (shui/dialog-open!
           (fn [] [:div.settings-modal (settings/settings settings-open?)])
-          {:label "app-settings"
+          {:label :app-settings
            :align :top
            :content-props {:onOpenAutoFocus #(.preventDefault %)}
            :id :app-settings})

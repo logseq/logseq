@@ -79,6 +79,12 @@
         args []]
     (core/call-method api-proxy method args)))
 
+(defn get-today-page
+  []
+  (let [method (aget api-proxy "getTodayPage")
+        args []]
+    (core/call-method api-proxy method args)))
+
 (defn get-current-block
   []
   (let [method (aget api-proxy "getCurrentBlock")
@@ -200,9 +206,9 @@
    (get-block-impl src-block opts)))
 
 (defn set-block-collapsed
-  [uuid opts]
+  [src-block opts]
   (let [method (aget api-proxy "setBlockCollapsed")
-        args [uuid opts]]
+        args [src-block opts]]
     (core/call-method api-proxy method args)))
 
 (defn- get-page-impl
@@ -274,9 +280,93 @@
     (core/call-method api-proxy method args)))
 
 (defn get-tag-objects
-  [page-identity]
+  [name-or-ident]
   (let [method (aget api-proxy "getTagObjects")
-        args [page-identity]]
+        args [name-or-ident]]
+    (core/call-method api-proxy method args)))
+
+(defn- create-tag-impl
+  [tag-name opts]
+  (let [method (aget api-proxy "createTag")
+        args [tag-name opts]]
+    (core/call-method api-proxy method args)))
+
+(defn create-tag
+  ([tag-name]
+   (create-tag-impl tag-name nil))
+  ([tag-name opts]
+   (create-tag-impl tag-name opts)))
+
+(defn get-tag
+  [name-or-ident]
+  (let [method (aget api-proxy "getTag")
+        args [name-or-ident]]
+    (core/call-method api-proxy method args)))
+
+(defn get-tags-by-name
+  [tag-name]
+  (let [method (aget api-proxy "getTagsByName")
+        args [tag-name]]
+    (core/call-method api-proxy method args)))
+
+(defn add-tag-property
+  [tag-id property-id-or-name]
+  (let [method (aget api-proxy "addTagProperty")
+        args [tag-id property-id-or-name]]
+    (core/call-method api-proxy method args)))
+
+(defn remove-tag-property
+  [tag-id property-id-or-name]
+  (let [method (aget api-proxy "removeTagProperty")
+        args [tag-id property-id-or-name]]
+    (core/call-method api-proxy method args)))
+
+(defn add-tag-extends
+  [tag-id parent-tag-id-or-name]
+  (let [method (aget api-proxy "addTagExtends")
+        args [tag-id parent-tag-id-or-name]]
+    (core/call-method api-proxy method args)))
+
+(defn remove-tag-extends
+  [tag-id parent-tag-id-or-name]
+  (let [method (aget api-proxy "removeTagExtends")
+        args [tag-id parent-tag-id-or-name]]
+    (core/call-method api-proxy method args)))
+
+(defn add-block-tag
+  [block-id tag-id]
+  (let [method (aget api-proxy "addBlockTag")
+        args [block-id tag-id]]
+    (core/call-method api-proxy method args)))
+
+(defn remove-block-tag
+  [block-id tag-id]
+  (let [method (aget api-proxy "removeBlockTag")
+        args [block-id tag-id]]
+    (core/call-method api-proxy method args)))
+
+(defn set-block-icon
+  [block-id icon-type icon-name]
+  (let [method (aget api-proxy "setBlockIcon")
+        args [block-id icon-type icon-name]]
+    (core/call-method api-proxy method args)))
+
+(defn remove-block-icon
+  [block-id]
+  (let [method (aget api-proxy "removeBlockIcon")
+        args [block-id]]
+    (core/call-method api-proxy method args)))
+
+(defn add-property-value-choices
+  [property-id choices]
+  (let [method (aget api-proxy "addPropertyValueChoices")
+        args [property-id choices]]
+    (core/call-method api-proxy method args)))
+
+(defn set-property-node-tags
+  [property-id tag-ids]
+  (let [method (aget api-proxy "setPropertyNodeTags")
+        args [property-id tag-ids]]
     (core/call-method api-proxy method args)))
 
 (defn- prepend-block-in-page-impl
@@ -377,11 +467,17 @@
         args [key]]
     (core/call-method api-proxy method args)))
 
-(defn upsert-block-property
-  [block key value]
+(defn- upsert-block-property-impl
+  [block key value options]
   (let [method (aget api-proxy "upsertBlockProperty")
-        args [block key value]]
+        args [block key value options]]
     (core/call-method api-proxy method args)))
+
+(defn upsert-block-property
+  ([block key value]
+   (upsert-block-property-impl block key value nil))
+  ([block key value options]
+   (upsert-block-property-impl block key value options)))
 
 (defn remove-block-property
   [block key]
@@ -423,6 +519,12 @@
   [id]
   (let [method (aget api-proxy "openInRightSidebar")
         args [id]]
+    (core/call-method api-proxy method args)))
+
+(defn open-pdf-viewer
+  [asset-block-id-or-file-url]
+  (let [method (aget api-proxy "openPDFViewer")
+        args [asset-block-id-or-file-url]]
     (core/call-method api-proxy method args)))
 
 (defn on-input-selection-end

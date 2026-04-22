@@ -6,6 +6,7 @@
             [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
@@ -542,7 +543,7 @@
                   (db/entity [:block/uuid block-uuid]))]
       (when block
         (if (ldb/recycled? block)
-          (notification/show! "Recycle is read-only." :warning)
+          (notification/show! (t :storage.recycle/readonly) :warning)
           (let [last-block (when (not sibling?)
                              (let [children (:block/_parent block)
                                    blocks (db/sort-by-order children)
@@ -802,7 +803,7 @@
   (when (seq blocks)
     (if (or (some ldb/recycled? blocks)
             (ldb/recycled? target))
-      (notification/show! "Recycle is read-only." :warning)
+      (notification/show! (t :storage.recycle/readonly) :warning)
       (ui-outliner-tx/transact!
        {:outliner-op :move-blocks}
        (outliner-op/move-blocks! blocks target opts)))))
@@ -823,7 +824,7 @@
                                                  (state/pub-event! [:editor/hide-action-bar])
                                                  (state/clear-selection!)
                                                  (move-blocks! blocks (:source-block chosen) {:bottom? true}))}))
-      (notification/show! "There's no block selected, please select blocks first." :warning))))
+      (notification/show! (t :editor/no-block-selected-warning) :warning))))
 
 (defn delete-block!
   [repo]
@@ -1331,8 +1332,7 @@
           existing-asset (some->> checksum (db-async/<get-asset-with-checksum repo))]
     (if existing-asset
       (do
-        (notification/show! (str "Asset exists already, title: " (:block/title existing-asset)
-                                 ", node reference: [[" (:block/uuid existing-asset) "]]")
+        (notification/show! (t :asset/already-exists (:block/title existing-asset) (:block/uuid existing-asset))
                             :warning
                             false)
         nil)
@@ -1343,7 +1343,7 @@
                 (throw (ex-info "File doesn't have a valid ext."
                                 {:file-name file-name})))
             _ (when (some-> file (assets-handler/exceed-limit-size?))
-                (notification/show! [:div "Asset size shouldn't be larger than 100M"]
+                (notification/show! [:div (t :asset/size-too-large)]
                                     :warning
                                     false)
                 (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))]
@@ -1367,7 +1367,7 @@
    Returns: asset entities"
   [repo files & {:keys [pdf-area? last-edit-block save-to-page]}]
   (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
-          today-page-name (date/today)
+          today-page-name (db-model/get-today-journal-title)
           today-page-e (db-model/get-journal-page today-page-name)
           today-page (if (nil? today-page-e)
                        (state/pub-event! [:page/create today-page-name])
@@ -1489,7 +1489,7 @@
 
           (= prefix block-ref/left-parens)
           (notification/show!
-           "To reference a node, please use `[[]]`."
+           (t :editor/reference-node-use-page-ref)
            :warning)
 
           (= prefix block-ref/left-parens)
@@ -1545,11 +1545,11 @@
                                                                   :enable-snippet? false
                                                                   :page-only? page-only?})
           matched (remove (fn [b] (= (:block/uuid b) (:block/uuid block))) result)
+          extract-fn #(str (:block/title %) " " (:nlp-original-title %))
           result' (-> (concat matched
                               (when nlp-pages?
-                                (map (fn [title] {:block/title title :nlp-date? true :page? true})
-                                     date/nlp-pages)))
-                      (search/fuzzy-search q {:extract-fn :block/title :limit 50}))
+                                (date/nlp-pages-i18n :nlp-date? true :page? true)))
+                      (search/fuzzy-search q {:extract-fn extract-fn :limit 50}))
           result'' (let [ids (set (map :block/uuid result'))]
                      (concat result' (remove (fn [item] (ids (:block/uuid item))) matched)))]
     (sort-by (complement :page?) result'')))
@@ -2002,7 +2002,7 @@
 
              (catch :default ^js/Error e
                (notification/show!
-                (util/format "Template insert error: %s" (.-message e))
+                (t :editor/template-insert-error (.-message e))
                 :error)))))))))
 
 (defn template-on-chosen-handler
@@ -2537,6 +2537,11 @@
         (state/set-state! :editor/start-pos pos))
 
       (cond
+        (and (= :page-search (state/get-editor-action))
+             (= key commands/hashtag))
+        (do
+          (util/stop e)
+          (notification/show! (t :page.validation/name-no-hash) :warning))
         ;; stop accepting edits if the new block is not created yet
         (some? @(:editor/async-unsaved-chars @state/state))
         (do
@@ -3076,7 +3081,7 @@
     :or {collapse? false expanded? false incremental? true root-block nil}}]
   (when-let [page (or page
                       (state/get-current-page)
-                      (date/today))]
+                      (db-model/get-today-journal-title))]
     (p/let [block-id (or root-block (parse-uuid page))
             page-id (let [page-entity (db/get-page page)]
                       (when (ldb/page? page-entity)
@@ -3530,7 +3535,7 @@
 
 (defn quick-add-blocks!
   []
-  (let [today (db/get-page (date/today))
+  (let [today (db-model/get-today-journal-page)
         add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
     (p/do!
      (save-current-block!)
@@ -3544,7 +3549,7 @@
           (state/close-modal!)
           (shui/popup-hide!)
           (when (seq children)
-            (notification/show! "Blocks added to today!" :success))))))))
+            (notification/show! (t :journal/add-blocks-to-today-success) :success))))))))
 
 (defn quick-add
   []

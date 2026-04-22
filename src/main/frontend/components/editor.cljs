@@ -40,11 +40,14 @@
 (defn filter-commands
   [page? commands]
   (if page?
-    (filter (fn [item]
-              (or
-               (= "Add new property" (first item))
-               (when (= (count item) 5)
-                 (contains? #{"TASK STATUS" "TASK DATE" "PRIORITY"} (last item))))) commands)
+    (let [task-groups #{(t :editor.slash/group-task-status)
+                        (t :editor.slash/group-task-date)
+                        (t :editor.slash/group-priority)}]
+      (filter (fn [item]
+                (or
+                 (= (t :command.editor/add-property) (first item))
+                 (when (= (count item) 5)
+                   (contains? task-groups (last item))))) commands))
     commands))
 
 (defn node-render
@@ -70,8 +73,8 @@
              (:nlp-date? block')
              (ui/icon "calendar" {:size 14})
 
-             (or (string/starts-with? (str (:block/title block')) (t :new-tag))
-                 (string/starts-with? (str (:block/title block')) (t :new-page)))
+             (or (string/starts-with? (str (:block/title block')) (t :editor/new-tag))
+                 (string/starts-with? (str (:block/title block')) (t :editor/new-page)))
              (ui/icon "plus" {:size 14})
 
              :else
@@ -79,8 +82,8 @@
 
         (let [title (let [alias (get-in block' [:alias :block/title])]
                       (block-handler/block-unique-title block' {:alias alias}))]
-          (if (or (string/starts-with? title (t :new-tag))
-                  (string/starts-with? title (t :new-page)))
+          (if (or (string/starts-with? title (t :editor/new-tag))
+                  (string/starts-with? title (t :editor/new-page)))
             title
             (block-handler/block-title-with-icon block'
                                                  (search-handler/highlight-exact-query title q)
@@ -184,9 +187,9 @@
        ;; Don't show 'New tag' for an internal page because it already shows 'Convert ...'
          (when-not (let [entity (db/get-page q)]
                      (and (ldb/internal-page? entity) (= (:block/title entity) q)))
-           [{:block/title (str (t :new-tag) " " q)}])
+           [{:block/title (str (t :editor/new-tag) " " q)}])
          partial-matched-pages)
-        (cons {:block/title (str (t :new-page) " " q)}
+        (cons {:block/title (str (t :editor/new-page) " " q)}
               partial-matched-pages)))))
 
 (defn- search-pages
@@ -202,7 +205,7 @@
                                 :db/id (:db/id block)
                                 :block/uuid (:block/uuid block)
                                 :convert-page-to-tag? true
-                                :friendly-title (util/format "Convert \"%s\" to tag" q)} classes)
+                                :friendly-title (t :page.convert/page-to-tag-action q)} classes)
                          classes))
                      (editor-handler/<get-matched-blocks q {:nlp-pages? true
                                                             :page-only? false}))]
@@ -218,9 +221,7 @@
     (let [matched-pages' (if (string/blank? q)
                            (if db-tag?
                              (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
-                             (->> (map (fn [title] {:block/title title
-                                                    :nlp-date? true})
-                                       date/nlp-pages)
+                             (->> (date/nlp-pages-i18n :nlp-date? true)
                                   (take 10)))
                            ;; reorder, shortest and starts-with first.
                            (if (and (seq matched-pages)
@@ -237,8 +238,8 @@
          :item-render (fn [block _chosen?]
                         (node-render block q {:db-tag? db-tag?}))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                    "Search for a tag"
-                                                                    "Search for a node")]
+                                                                    (t :editor/search-for-tag)
+                                                                    (t :editor/search-for-node))]
          :class "black"})
 
        (when (and db-tag?
@@ -246,7 +247,7 @@
                   (not= "page" (string/lower-case q)))
          [:p.px-1.opacity-50.text-sm.flex.flex-row.items-center.gap-2
           (shui/shortcut "mod+enter")
-          [:span " to display this tag inline instead of at the end of this node."]])])))
+          [:span (t :editor/display-tag-inline-hint)]])])))
 
 (rum/defcs page-search < rum/reactive
   {:init (fn [state]
@@ -368,7 +369,7 @@
      matched-templates
      {:on-chosen   (editor-handler/template-on-chosen-handler id)
       :on-enter    (fn [_state] (state/clear-editor-action!))
-      :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
+      :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm (t :editor/search-template-placeholder)]
       :item-render (fn [template]
                      (:block/title template))
       :class       "black"})))
@@ -471,7 +472,7 @@
                 placeholder
                 (assoc :placeholder placeholder))))
            (ui/button
-            "Submit"
+            (t :ui/submit)
             :on-click
             (fn [e]
               (util/stop e)
@@ -698,6 +699,10 @@
          (some-> config :on-escape-editing
                  (apply [(str uuid) (= type :esc)])))))))
 
+(defn editor-readonly?
+  [block]
+  (boolean (:block/journal-day block)))
+
 (rum/defcs box < rum/reactive
   {:init (fn [state]
            (assoc state
@@ -728,6 +733,7 @@
   (let [*ref (::ref state)
         content (state/sub-edit-content (:block/uuid block))
         heading-class (get-editor-style-class block content format)
+        read-only? (editor-readonly? block)
         opts (cond->
               {:id                id
                :ref               #(reset! *ref %)
@@ -746,6 +752,10 @@
                :auto-capitalize (if (util/mobile?) "sentences" "off")
                :auto-correct (if (util/mobile?) "true" "false")
                :class heading-class}
+               read-only?
+               (merge
+                {:on-before-input #(.preventDefault ^js/Event %)
+                 :on-paste #(.preventDefault ^js/Event %)})
                (some? parent-block)
                (assoc :parentblockid (str (:block/uuid parent-block)))
 

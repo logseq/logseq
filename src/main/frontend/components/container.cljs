@@ -13,7 +13,7 @@
             [frontend.components.theme :as theme]
             [frontend.components.window-controls :as window-controls]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :refer [interpolate-rich-text-node t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
@@ -192,31 +192,35 @@
       {:on-click state/toggle-document-mode!}
       "D"]
      [:div.p-2
-      [:p.mb-2 [:b "Document mode"]]
+      [:p.mb-2 [:b (t :editor.document-mode/title)]]
       [:ul
        [:li
-        [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line)
-                                                             :shortcut-id :editor/new-line)]
-        [:p.inline-block "to create new block"]]
-       [:li
-        [:p.inline-block.mr-1 "Click `D` or type"]
-        [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode)
-                                                             :shortcut-id :ui/toggle-document-mode)]
-        [:p.inline-block "to toggle document mode"]]]])))
+        [:p.inline-block.mr-1
+         (interpolate-rich-text-node
+          (t :editor.document-mode/new-block-hint)
+          [[:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line)
+                                                                :shortcut-id :editor/new-line)]])]
+        [:li
+         [:p.inline-block.mr-1
+          (interpolate-rich-text-node
+           (t :editor.document-mode/toggle-desc)
+           [[:div.inline-block.mr-1
+             (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode)
+                                          :shortcut-id :ui/toggle-document-mode)]])]]]]])))
 
 (def help-menu-items
-  [{:title "Handbook" :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
-   {:title "Keyboard shortcuts" :icon "command" :on-click #(state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings)}
-   {:title "Documentation" :icon "help" :href "https://docs.logseq.com/"}
+  [{:title (t :help/handbook) :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
+   {:title (t :help.shortcuts/label) :icon "command" :on-click #(state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings)}
+   {:title (t :help/docs) :icon "help" :href "https://docs.logseq.com/"}
    :hr
-   {:title "Report bug" :icon "bug" :on-click #(rfe/push-state :bug-report)}
-   {:title "Request feature" :icon "git-pull-request" :href "https://discuss.logseq.com/c/feedback/feature-requests/"}
-   {:title "Submit feedback" :icon "messages" :href "https://discuss.logseq.com/c/feedback/13"}
+   {:title (t :help/bug) :icon "bug" :on-click #(rfe/push-state :bug-report)}
+   {:title (t :help/feature) :icon "git-pull-request" :href "https://discuss.logseq.com/c/feedback/feature-requests/"}
+   {:title (t :help/submit-feedback) :icon "messages" :href "https://discuss.logseq.com/c/feedback/13"}
    :hr
-   {:title "Ask the community" :icon "brand-discord" :href "https://discord.com/invite/KpN4eHY"}
-   {:title "Support forum" :icon "message" :href "https://discuss.logseq.com/"}
+   {:title (t :help/ask-community) :icon "brand-discord" :href "https://discord.com/invite/KpN4eHY"}
+   {:title (t :help/support-forum) :icon "message" :href "https://discuss.logseq.com/"}
    :hr
-   {:title "Release notes" :icon "asterisk" :href "https://docs.logseq.com/#/page/changelog"}])
+   {:title (t :help/release-notes) :icon "asterisk" :href "https://docs.logseq.com/#/page/changelog"}])
 
 (rum/defc help-menu-popup
   []
@@ -258,13 +262,15 @@
         handbooks-open? (state/sub :ui/handbooks-open?)]
     [:<>
      [:div.cp__sidebar-help-btn
-      [:div.inner
-       {:title (t :help-shortcut-title)
-        :on-click #(state/toggle! :ui/help-open?)}
-       [:svg.scale-125 {:stroke "currentColor", :fill "none", :stroke-linejoin "round", :width "24", :view-box "0 0 24 24", :xmlns "http://www.w3.org/2000/svg", :stroke-linecap "round", :stroke-width "2", :class "icon icon-tabler icon-tabler-help-small", :height "24"}
-        [:path {:stroke "none", :d "M0 0h24v24H0z", :fill "none"}]
-        [:path {:d "M12 16v.01"}]
-        [:path {:d "M12 13a2 2 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483"}]]]]
+      (ui/tooltip
+       [:div.inner
+        {:on-click #(state/toggle! :ui/help-open?)}
+        [:svg.scale-125 {:stroke "currentColor", :fill "none", :stroke-linejoin "round", :width "24", :view-box "0 0 24 24", :xmlns "http://www.w3.org/2000/svg", :stroke-linecap "round", :stroke-width "2", :class "icon icon-tabler icon-tabler-help-small", :height "24"}
+         [:path {:stroke "none", :d "M0 0h24v24H0z", :fill "none"}]
+         [:path {:d "M12 16v.01"}]
+         [:path {:d "M12 13a2 2 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483"}]]]
+       (t :help.shortcuts/desc)
+       {:root-props {:delay-duration 100}})]
 
      (when help-open?
        (help-menu-popup))
@@ -304,7 +310,9 @@
                                                                        (when (context-menu-click-should-hide? target)
                                                                          (shui/popup-hide! id))))
                                                          :data-keep-selection true}
-                                                   content])
+                                                   (if (fn? content)
+                                                     (content {:id id})
+                                                     content)])
                                                 (merge
                                                  {:on-before-hide state/dom-clear-selection!
                                                   :on-after-hide state/state-clear-selection!
@@ -316,7 +324,8 @@
                             (cond
                               (and page (not block-id))
                               (do
-                                (show! (cp-content/page-title-custom-context-menu-content page-entity))
+                                (show! (fn [{:keys [id]}]
+                                         (cp-content/page-title-custom-context-menu-content page-entity id)))
                                 (state/set-state! :page-title/context nil))
 
                               block-ref
@@ -442,7 +451,7 @@
         :on-key-up (fn [e]
                      (when (= "Enter" (.-key e))
                        (ui/focus-element (ui/main-node))))}
-       (t :accessibility/skip-to-main-content)]
+       (t :nav/skip-to-main-content)]
       [:div.#app-container
        {:on-mouse-up on-mouse-up}
        [:div#left-container
@@ -459,7 +468,7 @@
 
         (if (state/sub :rtc/uploading?)
           [:div.flex.items-center.justify-center.full-height-without-header
-           (ui/loading "Creating remote graph...")]
+           (ui/loading (t :sync/creating-remote-graph))]
           (main {:route-match route-match
                  :margin-less-pages? margin-less-pages?
                  :logged? logged?

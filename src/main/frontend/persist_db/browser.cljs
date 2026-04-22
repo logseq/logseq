@@ -6,6 +6,7 @@
             [electron.ipc :as ipc]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db.transact :as db-transact]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
@@ -195,7 +196,7 @@
     (js/window.location.reload)
     (do
       (log/error :sqlite-error error)
-      (notification/show! (str "SQLiteDB error: " error) :error))))
+      (notification/show! (t :storage/sqlitedb-error error) :error))))
 
 (defrecord InBrowser []
   protocol/PersistentDB
@@ -229,10 +230,10 @@
               (<export-db! repo))))
         (p/catch (fn [error]
                    (log/error :export-db-error repo error "SQLiteDB save error")
-                   (notification/show! (str "SQLiteDB save error: " error) :error) {}))))
+                   (notification/show! (t :storage/sqlitedb-save-error error) :error) {}))))
 
   (<import-db [_this repo data]
     (-> (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)
         (p/catch (fn [error]
                    (log/error :import-db-error repo error "SQLiteDB import error")
-                   (notification/show! (str "SQLiteDB import error: " error) :error) {})))))
+                   (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))

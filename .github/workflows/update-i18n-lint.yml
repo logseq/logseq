@@ -1,0 +1,234 @@
+name: Update logseq-i18n-lint binaries
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  CARGO_TERM_COLOR: always
+  LINT_REPO: ${{ github.repository_owner }}/logseq-i18n-lint
+  LINT_REF: master
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout logseq-i18n-lint source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.LINT_REPO }}
+          ref: ${{ env.LINT_REF }}
+          path: lint-src
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            lint-src/target/
+          key: test-cargo-${{ hashFiles('lint-src/Cargo.lock') }}
+          restore-keys: |
+            test-cargo-
+
+      - name: Run tests
+        working-directory: lint-src
+        run: cargo test --locked
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: logseq-i18n-lint-x86_64-windows.exe
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            artifact: logseq-i18n-lint-aarch64-windows.exe
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: logseq-i18n-lint-x86_64-macos
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: logseq-i18n-lint-aarch64-macos
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            artifact: logseq-i18n-lint-x86_64-linux
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            artifact: logseq-i18n-lint-aarch64-linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout logseq-i18n-lint source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.LINT_REPO }}
+          ref: ${{ env.LINT_REF }}
+          path: lint-src
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry and build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            lint-src/target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('lint-src/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
+            ${{ runner.os }}-cargo-
+
+      - name: Install cross (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Install musl tools (Linux x64)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build with cross
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        working-directory: lint-src
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Build with cargo
+        if: matrix.target != 'aarch64-unknown-linux-musl'
+        working-directory: lint-src
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Stage artifact (Unix)
+        if: runner.os != 'Windows'
+        run: cp lint-src/target/${{ matrix.target }}/release/logseq-i18n-lint ${{ matrix.artifact }}
+
+      - name: Stage artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: cp lint-src/target/${{ matrix.target }}/release/logseq-i18n-lint.exe ${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  open-pr:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+
+      - name: Checkout logseq-i18n-lint source
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.LINT_REPO }}
+          ref: ${{ env.LINT_REF }}
+          fetch-depth: 0
+          path: lint-src
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Resolve source commit and stage launcher
+        id: source
+        run: |
+          cd lint-src
+          COMMIT_SHA="$(git rev-parse HEAD)"
+          SHORT_SHA="$(git rev-parse --short=12 HEAD)"
+          echo "commit_sha=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          cd ..
+          cp lint-src/scripts/logseq-i18n-lint artifacts/logseq-i18n-lint
+
+      - name: Replace bin artifacts
+        run: |
+          cp artifacts/logseq-i18n-lint bin/logseq-i18n-lint
+          cp artifacts/logseq-i18n-lint-aarch64-linux bin/logseq-i18n-lint-aarch64-linux
+          cp artifacts/logseq-i18n-lint-aarch64-macos bin/logseq-i18n-lint-aarch64-macos
+          cp artifacts/logseq-i18n-lint-aarch64-windows.exe bin/logseq-i18n-lint-aarch64-windows.exe
+          cp artifacts/logseq-i18n-lint-x86_64-linux bin/logseq-i18n-lint-x86_64-linux
+          cp artifacts/logseq-i18n-lint-x86_64-macos bin/logseq-i18n-lint-x86_64-macos
+          cp artifacts/logseq-i18n-lint-x86_64-windows.exe bin/logseq-i18n-lint-x86_64-windows.exe
+          chmod +x bin/logseq-i18n-lint bin/logseq-i18n-lint-*-linux bin/logseq-i18n-lint-*-macos 2>/dev/null || true
+
+      - name: Commit updated binaries
+        id: commit
+        env:
+          SHORT_SHA: ${{ steps.source.outputs.short_sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="chore/update-i18n-lint-${SHORT_SHA}"
+          git switch -C "${BRANCH}"
+          git add -A -- \
+            bin/logseq-i18n-lint \
+            bin/logseq-i18n-lint-aarch64-linux \
+            bin/logseq-i18n-lint-aarch64-macos \
+            bin/logseq-i18n-lint-aarch64-windows.exe \
+            bin/logseq-i18n-lint-x86_64-linux \
+            bin/logseq-i18n-lint-x86_64-macos \
+            bin/logseq-i18n-lint-x86_64-windows.exe
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "chore: update logseq-i18n-lint binaries to ${SHORT_SHA}"
+          git push origin "${BRANCH}"
+          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Open pull request
+        if: steps.commit.outputs.branch != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ steps.source.outputs.commit_sha }}
+          SHORT_SHA: ${{ steps.source.outputs.short_sha }}
+          BRANCH: ${{ steps.commit.outputs.branch }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          HEAD_REF="${REPO_OWNER}:${BRANCH}"
+          gh pr create \
+            --base "${BASE_BRANCH}" \
+            --head "${HEAD_REF}" \
+            --title "chore: update logseq-i18n-lint binaries to ${SHORT_SHA}" \
+            --body "$(cat <<EOF
+          ## Update logseq-i18n-lint binaries
+
+          This PR was created automatically by the [update-i18n-lint](.github/workflows/update-i18n-lint.yml) workflow.
+
+          | Field | Value |
+          |-------|-------|
+          | Source repo | [${LINT_REPO}](https://github.com/${LINT_REPO}) |
+          | Source ref | \`${LINT_REF}\` |
+          | Source commit | \`${COMMIT_SHA}\` |
+          | Trigger | Manual (\`workflow_dispatch\`) |
+
+          ### Changed files
+          This PR rebuilds and replaces exactly 7 files in \`bin/\` from the latest \`${LINT_REF}\` source of \`${LINT_REPO}\`.
+          EOF
+          )"
