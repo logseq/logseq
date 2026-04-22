@@ -165,3 +165,20 @@
       (is (some? error))
       (is (= [{:type :unused-template :template :unused}]
              (vec unused-issues))))))
+
+(deftest sync-multi-batch-operations-uses-state-driven-waits-instead-of-fixed-sleeps
+  (let [cases (manifests/load-cases :sync)
+        multi-batch (some #(when (= "sync-multi-batch-operations" (:id %)) %) cases)
+        commands (:cmds multi-batch)]
+    (is (some? multi-batch))
+    (is (not-any? #(= "sleep 1" %) commands))
+    (is (>= (count (filter #(re-find #"wait_sync_status\.py" %) commands))
+            4))))
+
+(deftest sync-status-steady-state-does-not-repeat-identical-b-side-steady-state-waits
+  (let [cases (manifests/load-cases :sync)
+        steady-state (some #(when (= "sync-status-steady-state" (:id %)) %) cases)
+        steady-waits (filter #(re-find #"wait_sync_status\.py.+--data-dir '\{\{tmp-dir\}\}/graphs-b'.+--timeout-s 30 --interval-s 1" %) (:cmds steady-state))]
+    (is (some? steady-state))
+    (is (= 1 (count steady-waits)))
+    (is (= 1 (count (filter #(re-find #"sync status --graph" %) (:cmds steady-state)))))))

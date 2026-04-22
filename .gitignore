@@ -89,3 +89,5 @@ deps/db-sync/data
 /dist/*.wasm
 /dist/cljs-runtime/
 /.agent-shell/
+
+clj-e2e/.clj-kondo/imports

@@ -2,6 +2,19 @@
   (:require [clojure.test :refer [deftest is testing]]
             [logseq.cli.e2e.preflight :as preflight]))
 
+(def required-artifacts
+  ["/repo/static/logseq-cli.js"
+   "/repo/static/db-worker-node.js"
+   "/repo/dist/db-worker-node.js"
+   "/repo/dist/db-worker-node-assets.json"
+   "/repo/deps/db-sync/worker/dist/node-adapter.js"])
+
+(defn- with-required-artifacts
+  [f]
+  (with-redefs [logseq.cli.e2e.paths/repo-root (constantly "/repo")
+                logseq.cli.e2e.paths/required-artifacts (fn [] required-artifacts)]
+    (f)))
+
 (deftest build-plan-matches-required-commands
   (is (= ["clojure -M:cljs compile logseq-cli db-worker-node"
           "yarn db-worker-node:compile:bundle"
@@ -26,29 +39,57 @@
     (is (= :skipped (:status result)))
     (is (false? @called?))))
 
-(deftest build-runs-commands-before-verifying-artifacts
+(deftest build-runs-commands-even-when-artifacts-are-ready
+  (let [calls (atom [])]
+    (with-required-artifacts
+      #(let [result (preflight/run! {:run-command (fn [{:keys [cmd]}]
+                                                    (swap! calls conj cmd)
+                                                    {:cmd cmd
+                                                     :exit 0
+                                                     :out ""
+                                                     :err ""})
+                                     :file-exists? (set required-artifacts)})]
+         (is (= :ok (:status result)))
+         (is (= ["clojure -M:cljs compile logseq-cli db-worker-node"
+                 "yarn db-worker-node:compile:bundle"
+                 "yarn --cwd deps/db-sync build:node-adapter"]
+                @calls))))))
+
+(deftest build-runs-commands-when-artifacts-are-partially-present
   (let [calls (atom [])
-        existing (atom #{"/repo/static/logseq-cli.js"
-                         "/repo/static/db-worker-node.js"
-                         "/repo/dist/db-worker-node.js"
-                         "/repo/dist/db-worker-node-assets.json"
-                         "/repo/deps/db-sync/worker/dist/node-adapter.js"})]
-    (with-redefs [logseq.cli.e2e.paths/repo-root (constantly "/repo")
-                  logseq.cli.e2e.paths/required-artifacts (fn []
-                                                            ["/repo/static/logseq-cli.js"
-                                                             "/repo/static/db-worker-node.js"
-                                                             "/repo/dist/db-worker-node.js"
-                                                             "/repo/dist/db-worker-node-assets.json"
-                                                             "/repo/deps/db-sync/worker/dist/node-adapter.js"])]
-      (let [result (preflight/run! {:run-command (fn [{:keys [cmd]}]
-                                                   (swap! calls conj cmd)
-                                                   {:cmd cmd
-                                                    :exit 0
-                                                    :out ""
-                                                    :err ""})
-                                    :file-exists? @existing})]
-        (is (= :ok (:status result)))
-        (is (= ["clojure -M:cljs compile logseq-cli db-worker-node"
-                "yarn db-worker-node:compile:bundle"
-                "yarn --cwd deps/db-sync build:node-adapter"]
-               @calls))))))
+        existing (atom (disj (set required-artifacts)
+                             "/repo/dist/db-worker-node-assets.json"))]
+    (with-required-artifacts
+      #(let [result (preflight/run! {:run-command (fn [{:keys [cmd]}]
+                                                    (swap! calls conj cmd)
+                                                    (reset! existing (set required-artifacts))
+                                                    {:cmd cmd
+                                                     :exit 0
+                                                     :out ""
+                                                     :err ""})
+                                     :file-exists? (fn [path]
+                                                     (contains? @existing path))})]
+         (is (= :ok (:status result)))
+         (is (= ["clojure -M:cljs compile logseq-cli db-worker-node"
+                 "yarn db-worker-node:compile:bundle"
+                 "yarn --cwd deps/db-sync build:node-adapter"]
+                @calls))))))
+
+(deftest build-runs-commands-when-artifacts-are-absent
+  (let [calls (atom [])
+        existing (atom #{})]
+    (with-required-artifacts
+      #(let [result (preflight/run! {:run-command (fn [{:keys [cmd]}]
+                                                    (swap! calls conj cmd)
+                                                    (reset! existing (set required-artifacts))
+                                                    {:cmd cmd
+                                                     :exit 0
+                                                     :out ""
+                                                     :err ""})
+                                     :file-exists? (fn [path]
+                                                     (contains? @existing path))})]
+         (is (= :ok (:status result)))
+         (is (= ["clojure -M:cljs compile logseq-cli db-worker-node"
+                 "yarn db-worker-node:compile:bundle"
+                 "yarn --cwd deps/db-sync build:node-adapter"]
+                @calls))))))

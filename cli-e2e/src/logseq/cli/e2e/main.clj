@@ -173,7 +173,7 @@
                            :targeted-run? targeted-run?}))
         (let [suite-context (when sync-suite?
                               (sync-fixture/before-suite! {:run-command run-command}))
-              sync-context (if sync-suite?
+              sync-context (if suite-context
                              (assoc suite-context :e2ee-password (:e2ee-password opts))
                              suite-context)
               run-case* (if sync-suite?
@@ -326,19 +326,28 @@
     (println "      --skip-build     Skip build preflight steps")
     (println "  -i, --include TAG    Run only cases with matching tag (repeatable)")
     (println "      --case ID        Run a single case by id")
-    (println (format "      --jobs N         Run up to N non-sync cases in parallel (Default: %d)" default-cli-jobs))
+    (println (format "      --jobs N         %s (Default: %d)"
+                     (if sync-suite?
+                       "Accepted for CLI consistency; sync cases still run serially"
+                       "Run up to N non-sync cases in parallel")
+                     default-cli-jobs))
     (when sync-suite?
       (println "      --e2ee-password VALUE  E2EE password for sync commands (Default: 11111)"))
     (println "      --verbose        Enable verbose output")
     (println "      --timings        Print per-step timings and slow-step summary")
     (println)
     (println "Examples:")
-    (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build"))
-    (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build --jobs 4"))
-    (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build -i smoke"))
-    (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build --case global-help"))
+    (if sync-suite?
+      (println (str "  bb -f cli-e2e/bb.edn " command-name))
+      (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build")))
+    (when-not sync-suite?
+      (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build --jobs 4")))
+    (println (str "  bb -f cli-e2e/bb.edn " command-name " -i smoke"))
+    (if sync-suite?
+      (println (str "  bb -f cli-e2e/bb.edn " command-name " --case sync-upload-download-mvp"))
+      (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build --case global-help")))
     (when sync-suite?
-      (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build --e2ee-password 'my-secret'")))
+      (println (str "  bb -f cli-e2e/bb.edn " command-name " --e2ee-password 'my-secret'")))
     (flush)))
 
 (defn- test-suite!
