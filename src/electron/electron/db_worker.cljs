@@ -102,7 +102,7 @@
   [{:keys [state start-daemon! stop-daemon! runtime-ready?] :as manager} repo window-id]
   (p/let [current-repo (get-in (ensure-state @state) [:window->repo window-id])
           _ (when (and current-repo (not= current-repo repo))
-              (ensure-window-stopped! manager window-id))]
+              (js/setTimeout #(ensure-window-stopped! manager window-id) 0))]
     (if-let [entry (get-in (ensure-state @state) [:repos repo])]
       (p/let [runtime (:runtime entry)
               ready? (runtime-ready? runtime)]
