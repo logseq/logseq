@@ -225,7 +225,7 @@
 (defn wait-for
   [pred-fn {:keys [timeout-ms interval-ms]
             :or {timeout-ms 8000
-                 interval-ms 200}}]
+                 interval-ms 50}}]
   (p/create
    (fn [resolve reject]
      (let [start (js/Date.now)
@@ -245,17 +245,18 @@
                                (let [lock (read-lock path)]
                                  (pos-int? (:port lock))))))
             {:timeout-ms 8000
-             :interval-ms 200}))
+             :interval-ms 50}))
 
 (defn wait-for-ready
   [lock]
   (wait-for (fn [] (ready? lock))
             {:timeout-ms 8000
-             :interval-ms 250}))
+             :interval-ms 50}))
 
 (defn spawn-server!
   [{:keys [script repo data-dir owner-source create-empty-db?]}]
   (let [owner-source (normalize-owner-source owner-source)
+        detached? (not= owner-source :electron)
         args (clj->js (cond-> [script "--repo" repo "--data-dir" data-dir "--owner-source" (name owner-source)]
                         create-empty-db? (conj "--create-empty-db")))
         env (js/Object.assign #js {} (.-env js/process) #js {:ELECTRON_RUN_AS_NODE "1"})]
@@ -263,10 +264,11 @@
       (do
         (log/warn :db-worker-daemon/missing-script {:repo repo :data-dir data-dir})
         nil)
-      (let [child (.spawn child-process (.-execPath js/process) args #js {:detached true
-                                                                          :stdio (if (= owner-source :cli)
+      (let [child (.spawn child-process (.-execPath js/process) args #js {:detached detached?
+                                                                          :stdio (if detached?
                                                                                    "ignore"
                                                                                    "inherit")
                                                                           :env env})]
-        (.unref child)
+        (when detached?
+          (.unref child))
         child))))
