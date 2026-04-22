@@ -9,13 +9,14 @@
 
 (deftest spawn-server-uses-detached-process-and-no-host-port-args
   (let [captured (atom nil)
+        unref-called? (atom false)
         original-spawn (.-spawn child-process)]
     (set! (.-spawn child-process)
           (fn [cmd args opts]
             (reset! captured {:cmd cmd
                               :args (vec (js->clj args))
                               :opts (js->clj opts :keywordize-keys true)})
-            (js-obj "unref" (fn [] nil))))
+            (js-obj "unref" (fn [] (reset! unref-called? true)))))
     (try
       (daemon/spawn-server! {:script "/tmp/db-worker-node.js"
                              :repo "logseq_db_spawn_helper_test"
@@ -27,6 +28,28 @@
       (is (not-any? #{"--host" "--port"} (:args @captured)))
       (is (= true (get-in @captured [:opts :detached])))
       (is (= "1" (get-in @captured [:opts :env :ELECTRON_RUN_AS_NODE])))
+      (is (= true @unref-called?))
+      (finally
+        (set! (.-spawn child-process) original-spawn)))))
+
+(deftest spawn-server-keeps-electron-owned-process-attached
+  (let [captured (atom nil)
+        unref-called? (atom false)
+        original-spawn (.-spawn child-process)]
+    (set! (.-spawn child-process)
+          (fn [cmd args opts]
+            (reset! captured {:cmd cmd
+                              :args (vec (js->clj args))
+                              :opts (js->clj opts :keywordize-keys true)})
+            (js-obj "unref" (fn [] (reset! unref-called? true)))))
+    (try
+      (daemon/spawn-server! {:script "/tmp/db-worker-node.js"
+                             :repo "logseq_db_spawn_helper_test"
+                             :data-dir "/tmp/logseq-db-worker"
+                             :owner-source :electron})
+      (is (= false (get-in @captured [:opts :detached])))
+      (is (= "inherit" (get-in @captured [:opts :stdio])))
+      (is (= false @unref-called?))
       (finally
         (set! (.-spawn child-process) original-spawn)))))
 
