@@ -1,5 +1,6 @@
 (ns logseq.cli.e2e.shell-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [babashka.process :as process]
+            [clojure.test :refer [deftest is testing]]
             [logseq.cli.e2e.shell :as shell]))
 
 (deftest preserves-the-exact-command-string
@@ -43,3 +44,11 @@
     (is (= 1 (:exit result)))
     (is (= "failed" (:out result)))
     (is (= "missing" (:err result)))))
+
+(deftest default-executor-uses-resolvable-shell-command
+  (let [captured (atom nil)]
+    (with-redefs [process/process (fn [_opts & args]
+                                    (reset! captured args)
+                                    (future {:exit 0}))]
+      (shell/run! {:cmd "echo ok"}))
+    (is (= ["bash" "-c" "echo ok"] @captured))))
