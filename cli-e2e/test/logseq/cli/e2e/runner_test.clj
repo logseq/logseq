@@ -139,3 +139,14 @@
          :exit 0
          :out "Home\n- Alpha block"
          :err ""}))))
+
+(deftest assert-result-normalizes-json-escaped-windows-paths-for-contains
+  (is (nil? (runner/assert-result!
+             {:id "doctor-dev-script-json"
+              :expect {:exit 0
+                       :stdout-contains ["static/db-worker-node.js"
+                                         "C:\\Users\\demo\\tmp\\graph-export.edn"]}}
+             {:cmd "node cli.js doctor --dev-script"
+              :exit 0
+              :out "{\"status\":\"ok\",\"data\":{\"path\":\"C:\\\\Users\\\\demo\\\\tmp\\\\graph-export.edn\",\"message\":\"Found readable file: C:\\\\Users\\\\demo\\\\project\\\\static\\\\db-worker-node.js\"}}"
+              :err ""}))))

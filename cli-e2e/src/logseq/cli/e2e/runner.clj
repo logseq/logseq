@@ -14,7 +14,8 @@
       text)))
 
 (def template-pattern #"\{\{([^}]+)\}\}")
-(def ^:private e2e-env {"CLI_E2E_TEST" "1"})
+(def ^:private e2e-env {"CLI_E2E_TEST" "1"
+                        "NO_COLOR" "1"})
 
 (defn- render-string
   [template context]
@@ -48,13 +49,21 @@
 (defn- ensure-contains!
   [id cmd output snippets stream]
   (doseq [snippet (or snippets [])]
-    (when-not (string/includes? output snippet)
+    (let [normalize-pathish-text (fn [text]
+                                   (-> (str text)
+                                       (string/replace "\\\\" "\\")
+                                       (string/replace "\\" "/")
+                                       (string/replace "\r" "")))
+          matches? (or (string/includes? output snippet)
+                       (string/includes? (normalize-pathish-text output)
+                                         (normalize-pathish-text snippet)))]
+      (when-not matches?
       (throw (ex-info (str stream " did not contain expected text")
                       {:id id
                        :cmd cmd
                        :snippet snippet
                        :output output
-                       :stream stream})))))
+                       :stream stream}))))))
 
 (defn- ensure-not-contains!
   [id cmd output snippets stream]
