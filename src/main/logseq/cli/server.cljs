@@ -153,8 +153,6 @@
                      (p/let [existing (read-lock path)
                              _ (cleanup-stale-lock! path existing)
                              _ (when (not (fs/existsSync path))
-                                 (daemon/cleanup-orphan-processes! {:repo repo
-                                                                    :data-dir data-dir})
                                  (profile/time! profile-session
                                                 "server.spawn-daemon"
                                                 (fn []
@@ -168,13 +166,9 @@
                                                       (wait-for-lock path)))
                                      (p/catch (fn [e]
                                                 (if (= :timeout (:code (ex-data e)))
-                                                  (let [orphans (daemon/find-orphan-processes {:repo repo
-                                                                                               :data-dir data-dir})
-                                                        pids (mapv :pid orphans)]
-                                                    (throw (ex-info "db-worker-node failed to create lock"
-                                                                    {:code :server-start-timeout-orphan
-                                                                     :repo repo
-                                                                     :pids pids})))
+                                                  (throw (ex-info "db-worker-node failed to create lock"
+                                                                  {:code :server-start-timeout-orphan
+                                                                   :repo repo}))
                                                   (throw e))))))
                              lock (read-lock path)
                              lock (if (and lock
