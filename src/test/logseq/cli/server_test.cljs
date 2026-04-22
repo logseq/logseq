@@ -210,29 +210,20 @@
   (async done
          (let [data-dir (node-helper/create-tmp-dir "cli-server-orphan-timeout")
                repo (str "logseq_db_orphan_timeout_" (subs (str (random-uuid)) 0 8))
-               cleanup-calls (atom 0)
                spawn-calls (atom 0)]
            (-> (p/with-redefs [daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
-                               daemon/cleanup-orphan-processes! (fn [_]
-                                                                  (swap! cleanup-calls inc)
-                                                                  {:killed-pids [111]})
                                daemon/spawn-server! (fn [_]
                                                       (swap! spawn-calls inc)
                                                       nil)
                                daemon/wait-for-lock (fn [_]
                                                       (p/rejected (ex-info "timeout"
-                                                                           {:code :timeout})))
-                               daemon/find-orphan-processes (fn [_]
-                                                              [{:pid 111}
-                                                               {:pid 222}])]
+                                                                           {:code :timeout})))]
                  (cli-server/start-server! {:data-dir data-dir
                                             :owner-source :cli}
                                            repo))
                (p/then (fn [result]
                          (is (= false (:ok? result)))
                          (is (= :server-start-timeout-orphan (get-in result [:error :code])))
-                         (is (= [111 222] (get-in result [:error :pids])))
-                         (is (= 1 @cleanup-calls))
                          (is (= 1 @spawn-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -253,7 +244,6 @@
                                                     nil
                                                     lock))
                                daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
-                               daemon/cleanup-orphan-processes! (fn [_] {:orphans [] :killed-pids []})
                                daemon/spawn-server! (fn [opts]
                                                       (reset! captured opts)
                                                       nil)
@@ -287,7 +277,6 @@
                                                     nil
                                                     lock))
                                daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
-                               daemon/cleanup-orphan-processes! (fn [_] {:orphans [] :killed-pids []})
                                daemon/spawn-server! (fn [_] nil)
                                daemon/wait-for-lock (fn [_] (p/resolved true))
                                daemon/wait-for-ready (fn [_] (p/resolved true))]
