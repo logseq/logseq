@@ -8,6 +8,7 @@
             [electron.configs :as cfgs]
             [electron.context-menu :as context-menu]
             [electron.db-worker :as db-worker]
+            [electron.i18n :refer [t]]
             [electron.logger :as logger]
             [electron.state :as state]
             [electron.utils :refer [mac? win32? linux? dev? open] :as utils]))
@@ -128,10 +129,10 @@
         (when-let [^js res (and (fn? default-open)
                                 (.showMessageBoxSync dialog
                                                      #js {:type "warning"
-                                                          :message (str "Are you sure you want to open this link? \n\n" url)
+                                                          :message (t :electron/link-open-confirm url)
                                                           :defaultId 1
                                                           :cancelId 0
-                                                          :buttons #js ["Cancel" "OK"]}))]
+                                                          :buttons #js [(t :electron/cancel) (t :electron/ok)]}))]
           (when (= res 1)
             (default-open url)))))))
 

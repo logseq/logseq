@@ -9,6 +9,7 @@ when a plugin is installed, updated or removed"
             [clojure.pprint :as pprint]
             [clojure.set :as set]
             [frontend.fs :as fs]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
@@ -84,7 +85,7 @@ returns map of plugins to install and uninstall"
            edn-plugins (edn/read-string edn-plugins*)]
      (if-let [errors (->> edn-plugins (m/explain plugin-config-schema/Plugins-edn) me/humanize)]
        (do
-         (notification/show! "Invalid plugins.edn provided. See javascript console for specific errors"
+         (notification/show! (t :plugin/invalid-plugins-edn)
                              :error)
          (log/error :plugin-edn-errors errors))
        (let [plugins-to-change (determine-plugins-to-change
@@ -93,7 +94,7 @@ returns map of plugins to install and uninstall"
          (state/pub-event! [:go/plugins-from-file plugins-to-change]))))
    (fn [e]
      (if (= :reader-exception (:type (ex-data e)))
-       (notification/show! "Malformed plugins.edn provided. Please check the file has correct edn syntax."
+       (notification/show! (t :plugin/malformed-plugins-edn)
                            :error)
        (log/error :unexpected-error e)))))
 

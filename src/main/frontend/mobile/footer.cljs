@@ -1,6 +1,6 @@
 (ns frontend.mobile.footer
   (:require [clojure.string :as string]
-            [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -30,7 +30,7 @@
      (mobile-bar-command state/toggle-document-mode! "notes")
      (mobile-bar-command
       #(let [page (or (state/get-current-page)
-                      (string/lower-case (date/journal-name)))]
+                      (string/lower-case (db/get-today-journal-title)))]
          (editor-handler/api-insert-new-block!
           ""
           {:page page

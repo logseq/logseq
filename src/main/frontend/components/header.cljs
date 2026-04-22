@@ -16,7 +16,7 @@
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler :as handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
@@ -44,7 +44,7 @@
   < {:key-fn #(identity "home-button")}
   []
   (shui/button-ghost-icon :home
-                          {:title (t :home)
+                          {:title (t :nav/home)
                            :on-click #(do
                                         (when (mobile-util/native-iphone?)
                                           (state/set-left-sidebar-open! false))
@@ -74,7 +74,7 @@
                                {:on-click #(shui/dialog-open!
                                             (fn []
                                               [:div.p-2.-mb-8
-                                               [:h1.text-3xl.-mt-2.-ml-2 "Collaborators:"]
+                                               [:h1.text-3xl.-mt-2.-ml-2 (t :collaboration/members)]
                                                (settings/settings-collaboration)])
                                             {:id :rtc-collaborators})})
 
@@ -98,9 +98,9 @@
   [{:keys [on-click]}]
   (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
     [:button.#left-menu.cp__header-left-menu.button.icon
-     {:title (t :header/toggle-left-sidebar)
-      :on-click on-click}
-     (ui/icon "menu-2" {:size ui/icon-size})]))
+     {:on-click on-click}
+     (ui/icon "menu-2" {:size ui/icon-size})]
+    (t :header/toggle-left-sidebar)))
 
 (defn bug-report-url []
   (let [ua (.-userAgent js/navigator)
@@ -137,7 +137,7 @@
                                       (if favorited?
                                         (page-handler/<unfavorite-page! block-id-str)
                                         (page-handler/<favorite-page! block-id-str)))}}
-                         {:title   "Publish page"
+                         {:title   (t :publish/dialog-title)
                           :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
                                                                   {:class "w-auto max-w-md"})}}])))
         page-menu-and-hr (concat page-menu [{:hr true}])
@@ -145,41 +145,41 @@
         items (fn []
                 (->>
                  [(when (state/enable-editing?)
-                    {:title (t :settings)
+                    {:title (t :nav/settings)
                      :options {:on-click state/open-settings!}
                      :icon (ui/icon "settings")})
 
                   (when config/lsp-enabled?
-                    {:title (t :plugins)
+                    {:title (t :nav/plugins)
                      :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
                      :icon (ui/icon "apps")})
 
-                  {:title (t :appearance)
+                  {:title (t :nav/appearance)
                    :options {:on-click #(state/pub-event! [:ui/toggle-appearance])}
                    :icon (ui/icon "color-swatch")}
 
                   (when (db/get-page common-config/recycle-page-name)
-                    {:title "Recycle"
+                    {:title (t :storage.recycle/title)
                      :options {:on-click page-handler/open-recycle!}
                      :icon (ui/icon "trash")})
 
                   (when current-repo
-                    {:title (t :export-graph)
+                    {:title (t :export/graph)
                      :options {:on-click #(shui/dialog-open! export/export)}
                      :icon (ui/icon "database-export")})
 
                   (when (and current-repo (state/enable-editing?))
-                    {:title (t :import)
+                    {:title (t :import/title)
                      :options {:href (rfe/href :import)}
                      :icon (ui/icon "file-upload")})
 
                   (when config/publishing?
-                    {:title (t :toggle-theme)
+                    {:title (t :ui/toggle-theme)
                      :options {:on-click #(state/toggle-theme!)}
                      :icon (ui/icon "bulb")})
 
                   (when-not (or config/publishing? login?)
-                    {:title (t :login)
+                    {:title (t :ui/login)
                      :options {:on-click #(state/pub-event! [:user/login])}
                      :icon (ui/icon "user")})
 
@@ -189,57 +189,61 @@
                             [:b.leading-none (user-handler/username)]
                             [:small.opacity-70 (user-handler/email)]
                             [:i.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09
-                             {:class "right-1 top-3" :title (t :logout)}
+                             {:class "right-1 top-3" :title (t :ui/logout)}
                              (ui/icon "logout")]]
                      :options {:on-click #(user-handler/logout)
                                :class "w-full"}})]
                  (concat page-menu-and-hr)
                  (remove nil?)))]
 
-    (shui/button-ghost-icon :dots
-                            {:title (t :header/more)
-                             :class "toolbar-dots-btn"
-                             :on-pointer-down (fn [^js e]
-                                                (shui/popup-show! (.-target e)
-                                                                  (fn [{:keys [id]}]
-                                                                    (for [{:keys [hr item title options icon]} (items)]
-                                                                      (let [on-click' (:on-click options)
-                                                                            href (:href options)]
-                                                                        (if hr
-                                                                          (shui/dropdown-menu-separator)
-                                                                          (shui/dropdown-menu-item
-                                                                           (assoc options
-                                                                                  :on-click (fn [^js e]
-                                                                                              (when on-click'
-                                                                                                (when-not (false? (on-click' e))
-                                                                                                  (shui/popup-hide! id)))))
-                                                                           (or item
-                                                                               (if href
-                                                                                 [:a.flex.items-center.w-full
-                                                                                  {:href href :on-click #(shui/popup-hide! id)
-                                                                                   :style {:color "inherit"}}
-                                                                                  [:span.flex.items-center.gap-1.w-full
-                                                                                   icon [:div title]]]
-                                                                                 [:span.flex.items-center.gap-1.w-full
-                                                                                  icon [:div title]])))))))
-                                                                  {:align "end"
-                                                                   :as-dropdown? true
-                                                                   :content-props {:class "w-64"
-                                                                                   :align-offset -32}}))})))
+    (ui/tooltip
+     (shui/button-ghost-icon
+      :dots {:class "toolbar-dots-btn"
+             :on-pointer-down (fn [^js e]
+                                (shui/popup-show! (.-target e)
+                                                  (fn [{:keys [id]}]
+                                                    (for [{:keys [hr item title options icon]} (items)]
+                                                      (let [on-click' (:on-click options)
+                                                            href (:href options)]
+                                                        (if hr
+                                                          (shui/dropdown-menu-separator)
+                                                          (shui/dropdown-menu-item
+                                                           (assoc options
+                                                                  :on-click (fn [^js e]
+                                                                              (when on-click'
+                                                                                (when-not (false? (on-click' e))
+                                                                                  (shui/popup-hide! id)))))
+                                                           (or item
+                                                               (if href
+                                                                 [:a.flex.items-center.w-full
+                                                                  {:href href :on-click #(shui/popup-hide! id)
+                                                                   :style {:color "inherit"}}
+                                                                  [:span.flex.items-center.gap-1.w-full
+                                                                   icon [:div title]]]
+                                                                 [:span.flex.items-center.gap-1.w-full
+                                                                  icon [:div title]])))))))
+                                                  {:align "end"
+                                                   :as-dropdown? true
+                                                   :content-props {:class "w-64"
+                                                                   :align-offset -32}}))})
+     (t :header/more)
+     {:trigger-props {:as-child true}})))
 
 (rum/defc back-and-forward
   < {:key-fn #(identity "nav-history-buttons")}
   []
   [:div.flex.flex-row
    (ui/with-shortcut :go/backward "bottom"
-     (shui/button-ghost-icon :arrow-left
-                             {:title (t :header/go-back) :on-click #(js/window.history.back)
-                              :class "it navigation nav-left"}))
+     (shui/button-ghost-icon
+      :arrow-left {:on-click #(js/window.history.back)
+                   :class "it navigation nav-left"})
+     (t :header/go-back))
 
    (ui/with-shortcut :go/forward "bottom"
-     (shui/button-ghost-icon :arrow-right
-                             {:title (t :header/go-forward) :on-click #(js/window.history.forward)
-                              :class "it navigation nav-right"}))])
+     (shui/button-ghost-icon
+      :arrow-right {:on-click #(js/window.history.forward)
+                    :class "it navigation nav-right"})
+     (t :header/go-forward))])
 
 (rum/defc updater-tips-new-version
   [t]
@@ -268,7 +272,7 @@
 
     (when downloaded
       [:div.cp__header-tips
-       [:p (t :updater/new-version-install)
+       [:p (t :updater/update-ready-to-install)
         [:a.restart.ml-2
          {:on-click #(handler/quit-and-install-new-version!)}
          (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
@@ -329,13 +333,13 @@
            :class "block h-4 w-4 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none"}))
         (shui/tooltip-content
          {:onPointerDownOutside (fn [e] (.preventDefault e))}
-         (str "Highlight recent blocks"
-              (when (not= recent-days 0)
-                (str ": " recent-days " days ago")))))))
+         (if (zero? recent-days)
+           (t :header/highlight-recent-blocks)
+           (t :header/highlight-recent-blocks-days-ago recent-days))))))
      (shui/button
       {:variant :ghost
        :size :sm
-       :title "Quit highlight recent blocks"
+       :title (t :header/quit-highlight-recent-blocks)
        :class "opacity-50 hover:opacity-100"
        :on-click (fn [] (state/toggle-highlight-recent-blocks!))}
       (ui/icon "x" {:size 16}))]))
@@ -373,7 +377,7 @@
     (when (and running? (= repo current-repo))
       [:div.search-index-progress
        [ui/loading ""]
-       [:span.search-index-progress__text (str "Indexing " progress' "%")]
+       [:span.search-index-progress__text (t :search/index-progress progress')]
        [:div.search-index-progress__bar
         [:div.search-index-progress__bar-fill {:style {:width (str progress' "%")}}]]])))
 
@@ -406,19 +410,20 @@
          (when-not (or (state/home?) custom-home-page?)
            (ui/with-shortcut :go/backward "bottom"
              [:button.it.navigation.nav-left.button.icon.opacity-70
-              {:title (t :header/go-back) :on-click #(js/window.history.back)}
-              (ui/icon "chevron-left" {:size 26})]))
+              {:on-click #(js/window.history.back)}
+              (ui/icon "chevron-left" {:size 26})]
+             (t :header/go-back)))
                  ;; search button for non-mobile
          (when current-repo
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
               {:data-keep-selection true
-               :title (t :header/search)
                :on-click #(do (when (or (mobile-util/native-android?)
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
-              (ui/icon "search" {:size ui/icon-size})])))]]
+              (ui/icon "search" {:size ui/icon-size})]
+             (t :nav/search))))]]
 
      [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
       [:div.flex.flex-1
@@ -461,7 +466,7 @@
 
        (when config/publishing?
          [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
-          (t :graph)])
+          (t :nav/graph)])
 
        (toolbar-dots-menu {:t            t
                            :current-repo current-repo

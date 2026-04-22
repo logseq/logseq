@@ -179,13 +179,13 @@
             target (first (:block/_alias chosen-result))
             chosen-result (if (and target (not (ldb/class? chosen-result)) (ldb/class? target)) target chosen-result)
             chosen (:block/title chosen-result)
-            class? (or (string/includes? chosen (str (t :new-tag) " "))
+            class? (or (string/includes? chosen (str (t :editor/new-tag) " "))
                        (ldb/class? chosen-result))
             inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete")
                              (not= chosen "Page"))
             chosen (-> chosen
-                       (string/replace-first (str (t :new-tag) " ") "")
-                       (string/replace-first (str (t :new-page) " ") ""))
+                       (string/replace-first (str (t :editor/new-tag) " ") "")
+                       (string/replace-first (str (t :editor/new-page) " ") ""))
             wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
             chosen-last-part (if (text/namespace-page? chosen)
                                (text/get-namespace-last-part chosen)
@@ -227,9 +227,10 @@
                 (throw (ex-info "No chosen item"
                                 {:chosen chosen-result})))
             chosen (:block/title chosen-result)
-            chosen' (string/replace-first chosen (str (t :new-page) " ") "")
+            chosen' (string/replace-first chosen (str (t :editor/new-page) " ") "")
+            nlp-title (or (:nlp-original-title chosen-result) chosen')
             [chosen' chosen-result] (or (when (and (:nlp-date? chosen-result) (not (de/entity? chosen-result)))
-                                          (when-let [result (date/nld-parse chosen')]
+                                          (when-let [result (date/nld-parse nlp-title)]
                                             (let [d (doto (goog.date.DateTime.) (.setTime (.getTime result)))
                                                   gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
                                                   page (date/js-date->journal-title gd)]
@@ -288,18 +289,18 @@
                (not config/publishing?))
       (when-let [title (date/today)]
         (state/set-today! title)
-        (p/let [today-page (util/page-name-sanity-lc title)
-                page (ldb/get-journal-page (db/get-db) (date/today-name))]
+        (p/let [today-page-lc-title (util/page-name-sanity-lc title)
+                page (db/get-today-journal-page)]
           (when-not page
             (p/let [result (<create! title {:redirect? false
                                             :split-namespace? false
                                             :today-journal? true})]
-              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
+              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page-lc-title})
               result)))))))
 
 (defn open-today-in-sidebar
   []
-  (when-let [page (db/get-page (date/today))]
+  (when-let [page (db/get-today-journal-page)]
     (state/sidebar-add-block!
      (state/get-current-repo)
      (:db/id page)
@@ -313,4 +314,4 @@
    (if page-uuid
      (util/copy-to-clipboard!
       (url-util/get-logseq-graph-page-url nil (state/get-current-repo) (str page-uuid)))
-     (notification/show! "No page found to copy" :warning))))
+     (notification/show! (t :page/no-page-found-to-copy) :warning))))

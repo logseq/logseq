@@ -4,6 +4,7 @@
             [frontend.common.missionary :as c.m]
             [frontend.components.e2ee :as e2ee]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.events :as events]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -54,10 +55,10 @@
     password-promise))
 
 (defmethod events/handle :rtc/storage-exceed-limit [[_]]
-  (notification/show! "Sync storage exceed limit" :warning false))
+  (notification/show! (t :sync/storage-exceed-limit) :warning false))
 
 (defmethod events/handle :rtc/graph-count-exceed-limit [[_]]
-  (notification/show! "Sync graph count exceed limit" :warning false))
+  (notification/show! (t :sync/graph-count-exceed-limit) :warning false))
 
 (defn- sync-app-state!
   []
