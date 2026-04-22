@@ -139,6 +139,27 @@
       (finally
         (fs/rmSync tmp-root #js {:recursive true :force true})))))
 
+(deftest test-execute-skill-install-global-prefers-home-env
+  (let [tmp-root (.mkdtempSync fs (node-path/join (.tmpdir os) "logseq-skill-home-"))
+        source-path (node-path/join tmp-root "source-skill.md")
+        installed-file (node-path/join tmp-root ".agents" "skills" "logseq-cli" "SKILL.md")
+        previous-home (.. js/process -env -HOME)]
+    (try
+      (fs/writeFileSync source-path "# installed\ncontent" "utf8")
+      (set! (.. js/process -env -HOME) tmp-root)
+      (let [result (skill-command/execute-skill-install {:type :skill-install
+                                                         :source-path source-path
+                                                         :global? true}
+                                                        {})]
+        (is (= :ok (:status result)))
+        (is (= installed-file (get-in result [:data :installed-path])))
+        (is (= "# installed\ncontent" (fs/readFileSync installed-file "utf8"))))
+      (finally
+        (if (some? previous-home)
+          (set! (.. js/process -env -HOME) previous-home)
+          (js-delete (.-env js/process) "HOME"))
+        (fs/rmSync tmp-root #js {:recursive true :force true})))))
+
 (deftest test-execute-skill-install-write-error
   (let [mkdir-sync (.-mkdirSync fs)
         write-file-sync (.-writeFileSync fs)

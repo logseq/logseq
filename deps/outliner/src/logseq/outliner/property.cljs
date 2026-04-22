@@ -185,15 +185,17 @@
       (and new-type old-ref-type? (not ref-type?))
       (conj [:db/retract (:db/id property) :db/valueType]))))
 
-(defn- update-property
-  [conn db-ident property schema {:keys [property-name properties]}]
+(defn- validate-property-name-update
+  [conn property property-name]
   (when (and (some? property-name) (not= property-name (:block/title property)))
     (outliner-validate/validate-page-title property-name {:node property})
     (outliner-validate/validate-page-title-characters property-name {:node property})
     (outliner-validate/validate-block-title @conn property-name property)
-    (outliner-validate/validate-property-title property-name))
+    (outliner-validate/validate-property-title property-name)))
 
-  ;; TODO: Add this check to more editing fns like batch-set-property! and set-block-property!
+(defn- update-property
+  [conn db-ident property schema {:keys [property-name properties]}]
+  (validate-property-name-update conn property property-name)
   (outliner-validate/validate-editing-built-in-property property schema)
   (let [changed-property-attrs
         ;; Only update property if something has changed as we are updating a timestamp
