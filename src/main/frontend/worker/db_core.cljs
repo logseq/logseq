@@ -804,6 +804,12 @@
   [repo]
   (<invalidate-search-db! repo))
 
+(def-thread-api :thread-api/db-sync-recreate-lock
+  [repo]
+  (if-let [recreate-lock-fn (get-in (platform/current) [:env :recreate-lock-fn])]
+    (recreate-lock-fn repo)
+    nil))
+
 (def-thread-api :thread-api/db-sync-rehydrate-large-titles
   [repo graph-id]
   (db-sync/rehydrate-large-titles-from-db! repo graph-id))

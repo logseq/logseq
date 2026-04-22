@@ -390,7 +390,7 @@
                (fs/writeFile kv-path payload "utf8")))}))
 
 (defn node-platform
-  [{:keys [data-dir event-fn write-guard-fn owner-source]}]
+  [{:keys [data-dir event-fn write-guard-fn owner-source recreate-lock-fn]}]
   (let [data-dir (expand-home (or data-dir (common-graph/get-default-graphs-dir)))
         owner-source (db-lock/normalize-owner-source owner-source)
         kv (kv-store data-dir)]
@@ -400,7 +400,8 @@
      {:env {:publishing? false
             :runtime :node
             :data-dir data-dir
-            :owner-source owner-source}
+            :owner-source owner-source
+            :recreate-lock-fn recreate-lock-fn}
       :storage {:install-opfs-pool (fn [sqlite-module pool-name]
                                      (install-opfs-pool data-dir sqlite-module pool-name))
                 :list-graphs (fn [] (list-graphs data-dir))
