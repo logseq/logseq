@@ -832,11 +832,9 @@
   (d/q '[:find ?e ?a
          :in $ ?v
          :where
-         [?c :logseq.property.class/enable-bidirectional? ?c-enable?]
-         [(true? ?c-enable?)]
-         [?ea :logseq.property/classes ?c]
+         [?e ?a ?v]
          [?ea :db/ident ?a]
-         [?e ?a ?v]]
+         [?ea :logseq.property/classes ?c]]
        db
        v))
 
