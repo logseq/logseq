@@ -14,6 +14,7 @@
       text)))
 
 (def template-pattern #"\{\{([^}]+)\}\}")
+(def ^:private e2e-env {"CLI_E2E_TEST" "1"})
 
 (defn- render-string
   [template context]
@@ -165,6 +166,7 @@
   [command context {:keys [run-command stdin allow-failure phase step-index step-total case-id]}]
   (run-command {:cmd (render-string command context)
                 :dir (paths/repo-root)
+                :env e2e-env
                 :stdin (some-> stdin (render-string context))
                 :phase phase
                 :step-index step-index

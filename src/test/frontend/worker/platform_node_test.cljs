@@ -1,5 +1,6 @@
 (ns frontend.worker.platform-node-test
   (:require ["fs" :as fs]
+            ["keytar" :as keytar]
             ["path" :as node-path]
             [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
@@ -75,6 +76,95 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
+
+(deftest node-platform-cli-owner-bypasses-keychain-in-cli-e2e-test
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "platform-node-cli-secrets")
+          process-env (.-env js/process)
+          original-cli-e2e-test (gobj/get process-env "CLI_E2E_TEST")
+          calls (atom {:save 0 :read 0 :delete 0})
+          original-save (gobj/get keytar "setPassword")
+          original-read (gobj/get keytar "getPassword")
+          original-delete (gobj/get keytar "deletePassword")]
+      (gobj/set process-env "CLI_E2E_TEST" "1")
+      (gobj/set keytar "setPassword" (fn [& _]
+                                        (swap! calls update :save inc)
+                                        (js/Promise.resolve true)))
+      (gobj/set keytar "getPassword" (fn [& _]
+                                        (swap! calls update :read inc)
+                                        (js/Promise.resolve nil)))
+      (gobj/set keytar "deletePassword" (fn [& _]
+                                           (swap! calls update :delete inc)
+                                           (js/Promise.resolve true)))
+      (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir
+                                                         :owner-source :cli})
+                  crypto (:crypto platform)
+                  kv (:kv platform)
+                  _ ((:save-secret-text! crypto) "secret-key" "secret-value")
+                  kv-value ((:get kv) "secret-key")
+                  secret-value ((:read-secret-text crypto) "secret-key")
+                  _ ((:delete-secret-text! crypto) "secret-key")
+                  kv-cleared ((:get kv) "secret-key")]
+            (is (= "secret-value" kv-value))
+            (is (= "secret-value" secret-value))
+            (is (nil? kv-cleared))
+            (is (= {:save 0 :read 0 :delete 0} @calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (gobj/set keytar "setPassword" original-save)
+                       (gobj/set keytar "getPassword" original-read)
+                       (gobj/set keytar "deletePassword" original-delete)
+                       (if (some? original-cli-e2e-test)
+                         (gobj/set process-env "CLI_E2E_TEST" original-cli-e2e-test)
+                         (gobj/remove process-env "CLI_E2E_TEST"))
+                       (done)))))))
+
+(deftest node-platform-cli-owner-uses-keychain-when-keychain-present
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "platform-node-cli-secrets-keychain")
+          process-env (.-env js/process)
+          original-cli-e2e-test (gobj/get process-env "CLI_E2E_TEST")
+          calls (atom {:save 0 :read 0 :delete 0})
+          secrets (atom {})
+          original-save (gobj/get keytar "setPassword")
+          original-read (gobj/get keytar "getPassword")
+          original-delete (gobj/get keytar "deletePassword")]
+      (gobj/remove process-env "CLI_E2E_TEST")
+      (gobj/set keytar "setPassword" (fn [_service key value]
+                                        (swap! calls update :save inc)
+                                        (swap! secrets assoc key value)
+                                        (js/Promise.resolve true)))
+      (gobj/set keytar "getPassword" (fn [_service key]
+                                        (swap! calls update :read inc)
+                                        (js/Promise.resolve (get @secrets key))))
+      (gobj/set keytar "deletePassword" (fn [_service key]
+                                           (swap! calls update :delete inc)
+                                           (swap! secrets dissoc key)
+                                           (js/Promise.resolve true)))
+      (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir
+                                                         :owner-source :cli})
+                  crypto (:crypto platform)
+                  kv (:kv platform)
+                  _ ((:save-secret-text! crypto) "secret-key" "secret-value")
+                  kv-value ((:get kv) "secret-key")
+                  secret-value ((:read-secret-text crypto) "secret-key")
+                  _ ((:delete-secret-text! crypto) "secret-key")
+                  deleted-value ((:read-secret-text crypto) "secret-key")]
+            (is (nil? kv-value))
+            (is (= "secret-value" secret-value))
+            (is (nil? deleted-value))
+            (is (= {:save 1 :read 2 :delete 1} @calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (gobj/set keytar "setPassword" original-save)
+                       (gobj/set keytar "getPassword" original-read)
+                       (gobj/set keytar "deletePassword" original-delete)
+                       (if (some? original-cli-e2e-test)
+                         (gobj/set process-env "CLI_E2E_TEST" original-cli-e2e-test)
+                         (gobj/remove process-env "CLI_E2E_TEST"))
+                       (done)))))))
 
 (deftest kv-store-preserves-uint8array-values-across-reloads-test
   (async done
