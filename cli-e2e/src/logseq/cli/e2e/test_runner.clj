@@ -4,6 +4,7 @@
 (def test-namespaces
   '[logseq.cli.e2e.coverage-test
     logseq.cli.e2e.preflight-test
+    logseq.cli.e2e.paths-test
     logseq.cli.e2e.shell-test
     logseq.cli.e2e.runner-test
     logseq.cli.e2e.cleanup-test

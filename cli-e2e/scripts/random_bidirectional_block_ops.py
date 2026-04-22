@@ -364,6 +364,13 @@ def ensure_non_empty_page(
     )
 
 
+PROFILE_DEFAULT_ROUNDS = {
+    "default": 40,
+    "high-stress": 100,
+}
+
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run randomized bidirectional block operations on two synced graph clients"
@@ -375,9 +382,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config-b", required=True)
     parser.add_argument("--data-dir-b", required=True)
     parser.add_argument("--page", required=True)
-    parser.add_argument("--rounds-per-client", type=int, default=100)
+    parser.add_argument(
+        "--profile",
+        choices=sorted(PROFILE_DEFAULT_ROUNDS.keys()),
+        default="default",
+        help="Execution profile controlling default stress level",
+    )
+    parser.add_argument("--rounds-per-client", type=int, default=None)
     parser.add_argument("--seed", type=int, default=424242)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.rounds_per_client is None:
+        args.rounds_per_client = PROFILE_DEFAULT_ROUNDS[args.profile]
+    return args
 
 
 def main() -> None:

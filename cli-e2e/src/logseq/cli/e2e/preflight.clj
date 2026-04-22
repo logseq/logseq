@@ -24,14 +24,14 @@
     {:status :skipped
      :commands []
      :missing-artifacts []}
-    (do
+    (let [artifacts (paths/required-artifacts)]
       (doseq [{:keys [cmd]} build-plan]
         (run-command {:cmd cmd
                       :dir (paths/repo-root)}))
-      (let [missing (missing-artifacts (paths/required-artifacts) file-exists?)]
-        (when (seq missing)
+      (let [missing-after-build (missing-artifacts artifacts file-exists?)]
+        (when (seq missing-after-build)
           (throw (ex-info "Build preflight completed but required artifacts are missing"
-                          {:missing-artifacts missing})))
+                          {:missing-artifacts missing-after-build})))
         {:status :ok
          :commands build-plan
          :missing-artifacts []}))))

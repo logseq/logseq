@@ -33,7 +33,11 @@ def parse_int(value: Any) -> int:
         return 0
 
 
-def run_status(args: argparse.Namespace) -> Dict[str, Any]:
+def status_command(args: argparse.Namespace) -> list[str]:
+    existing = getattr(args, "status_command", None)
+    if existing is not None:
+        return existing
+
     command = [
         "node",
         str(Path(args.cli).expanduser().resolve()),
@@ -48,6 +52,13 @@ def run_status(args: argparse.Namespace) -> Dict[str, Any]:
         "--graph",
         args.graph,
     ]
+    args.status_command = command
+    return command
+
+
+
+def run_status(args: argparse.Namespace) -> Dict[str, Any]:
+    command = status_command(args)
 
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:

@@ -94,60 +94,84 @@ def run_query(cli_path: Path, config_path: Path, data_dir: Path, graph: str, que
     }
 
 
-def main() -> None:
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Compare normalized query payloads between two cli contexts")
     parser.add_argument("--cli", required=True, help="Path to static/logseq-cli.js")
     parser.add_argument("--graph", required=True)
-    parser.add_argument("--query", required=True)
+    parser.add_argument("--query", required=True, action="append")
     parser.add_argument("--config-a", required=True)
     parser.add_argument("--data-dir-a", required=True)
     parser.add_argument("--config-b", required=True)
     parser.add_argument("--data-dir-b", required=True)
     parser.add_argument("--require-result", action="store_true")
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+
+def main() -> None:
+    args = parse_args()
 
     cli_path = Path(args.cli).expanduser().resolve()
     if not cli_path.exists():
         fail("cli entry file does not exist", cli=str(cli_path))
 
-    left = run_query(
-        cli_path,
-        Path(args.config_a).expanduser().resolve(),
-        Path(args.data_dir_a).expanduser().resolve(),
-        args.graph,
-        args.query,
-    )
-    right = run_query(
-        cli_path,
-        Path(args.config_b).expanduser().resolve(),
-        Path(args.data_dir_b).expanduser().resolve(),
-        args.graph,
-        args.query,
-    )
+    queries = args.query
+    left_config = Path(args.config_a).expanduser().resolve()
+    left_data_dir = Path(args.data_dir_a).expanduser().resolve()
+    right_config = Path(args.config_b).expanduser().resolve()
+    right_data_dir = Path(args.data_dir_b).expanduser().resolve()
 
-    left_result = left["result"]
-    right_result = right["result"]
+    normalized_results = {}
 
-    if args.require_result and (left_result is None or right_result is None):
-        fail("query result is empty", left_result=left_result, right_result=right_result)
-
-    left_normalized = normalize(left_result)
-    right_normalized = normalize(right_result)
-
-    if left_normalized != right_normalized:
-        fail(
-            "normalized query results differ",
-            left_result=left_normalized,
-            right_result=right_normalized,
-            left_payload=left["payload"],
-            right_payload=right["payload"],
+    for query in queries:
+        left = run_query(
+            cli_path,
+            left_config,
+            left_data_dir,
+            args.graph,
+            query,
+        )
+        right = run_query(
+            cli_path,
+            right_config,
+            right_data_dir,
+            args.graph,
+            query,
         )
 
+        left_result = left["result"]
+        right_result = right["result"]
+
+        if args.require_result and (left_result is None or right_result is None):
+            fail(
+                "query result is empty",
+                query=query,
+                left_result=left_result,
+                right_result=right_result,
+            )
+
+        left_normalized = normalize(left_result)
+        right_normalized = normalize(right_result)
+
+        if left_normalized != right_normalized:
+            fail(
+                "normalized query results differ",
+                query=query,
+                left_result=left_normalized,
+                right_result=right_normalized,
+                left_payload=left["payload"],
+                right_payload=right["payload"],
+            )
+
+        normalized_results[query] = left_normalized
+
+    payload_key = "result" if len(normalized_results) == 1 else "results"
+    payload_value = next(iter(normalized_results.values())) if len(normalized_results) == 1 else normalized_results
     print(
         json.dumps(
             {
                 "status": "ok",
-                "result": left_normalized,
+                payload_key: payload_value,
             }
         )
     )

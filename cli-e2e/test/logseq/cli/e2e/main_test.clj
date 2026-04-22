@@ -640,9 +640,12 @@
     (is (false? @ran?))
     (is (string/includes? output "Usage: bb -f cli-e2e/bb.edn test [options]"))
     (is (string/includes? output "--skip-build"))
+    (is (not (string/includes? output "--force-build")))
     (is (string/includes? output "--include TAG"))
     (is (string/includes? output "--case ID"))
     (is (string/includes? output "--jobs N"))
+    (is (string/includes? output "Run up to N non-sync cases in parallel"))
+    (is (string/includes? output "--skip-build --jobs 4"))
     (is (string/includes? output "Default: 4"))
     (is (string/includes? output "--timings"))
     (is (not (string/includes? output "--e2ee-password")))))
@@ -666,13 +669,41 @@
     (is (false? @ran?))
     (is (string/includes? output "Usage: bb -f cli-e2e/bb.edn test-sync [options]"))
     (is (string/includes? output "--skip-build"))
+    (is (not (string/includes? output "--force-build")))
     (is (string/includes? output "--include TAG"))
     (is (string/includes? output "--case ID"))
     (is (string/includes? output "--jobs N"))
+    (is (string/includes? output "Accepted for CLI consistency; sync cases still run serially"))
+    (is (not (string/includes? output "--skip-build --jobs 4")))
+    (is (string/includes? output "bb -f cli-e2e/bb.edn test-sync"))
+    (is (string/includes? output "--case sync-upload-download-mvp"))
+    (is (not (string/includes? output "--skip-build --case sync-upload-download-mvp")))
     (is (string/includes? output "Default: 4"))
     (is (string/includes? output "--timings"))
     (is (string/includes? output "--e2ee-password VALUE"))
     (is (string/includes? output "Default: 11111"))))
+
+(deftest run-does-not-pass-force-build-to-preflight
+  (let [preflight-call (atom nil)]
+    (with-redefs [logseq.cli.e2e.preflight/run! (fn [opts]
+                                                  (reset! preflight-call opts)
+                                                  {:status :ok
+                                                   :commands []
+                                                   :missing-artifacts []})]
+      (let [result (main/run! {:inventory complete-inventory
+                               :cases sample-cases
+                               :include ["smoke"]
+                               :skip-build false
+                               :force-build true
+                               :run-command (fn [_]
+                                              {:exit 0
+                                               :out ""
+                                               :err ""})
+                               :run-case (fn [case _opts]
+                                           {:id (:id case)
+                                            :status :ok})})]
+        (is (= :ok (:status result)))
+        (is (not (contains? @preflight-call :force-build)))))))
 
 (deftest test-single-case-enables-detailed-command-logging
   (let [command-opts (atom nil)

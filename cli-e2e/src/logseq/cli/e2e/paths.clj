@@ -12,15 +12,20 @@
             candidate))
         (ancestors (fs/canonicalize path))))
 
-(defn cli-e2e-root
-  []
-  (or (find-parent-named *file* "cli-e2e")
+(def ^:private cli-e2e-root-path
+  (or (some-> *file*
+              (find-parent-named "cli-e2e")
+              str)
       (throw (ex-info "Unable to locate cli-e2e root"
                       {:file *file*}))))
 
+(defn cli-e2e-root
+  []
+  cli-e2e-root-path)
+
 (defn repo-root
   []
-  (str (fs/parent (cli-e2e-root))))
+  (str (fs/parent cli-e2e-root-path)))
 
 (defn repo-path
   [& segments]
