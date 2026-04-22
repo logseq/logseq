@@ -699,6 +699,10 @@
          (some-> config :on-escape-editing
                  (apply [(str uuid) (= type :esc)])))))))
 
+(defn editor-readonly?
+  [block]
+  (boolean (:block/journal-day block)))
+
 (rum/defcs box < rum/reactive
   {:init (fn [state]
            (assoc state
@@ -729,6 +733,7 @@
   (let [*ref (::ref state)
         content (state/sub-edit-content (:block/uuid block))
         heading-class (get-editor-style-class block content format)
+        read-only? (editor-readonly? block)
         opts (cond->
               {:id                id
                :ref               #(reset! *ref %)
@@ -747,6 +752,10 @@
                :auto-capitalize (if (util/mobile?) "sentences" "off")
                :auto-correct (if (util/mobile?) "true" "false")
                :class heading-class}
+               read-only?
+               (merge
+                {:on-before-input #(.preventDefault ^js/Event %)
+                 :on-paste #(.preventDefault ^js/Event %)})
                (some? parent-block)
                (assoc :parentblockid (str (:block/uuid parent-block)))
 
