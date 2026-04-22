@@ -59,23 +59,17 @@
   [k value]
   (idb/set-item! k value))
 
-(def ^:private secret-prefix "worker-secret###")
-
-(defn- secret-key
-  [key]
-  (str secret-prefix key))
-
 (defn- save-secret-text!
   [key text]
-  (kv-set! (secret-key key) text))
+  (kv-set! key text))
 
 (defn- read-secret-text
   [key]
-  (kv-get (secret-key key)))
+  (kv-get key))
 
 (defn- delete-secret-text!
   [key]
-  (kv-set! (secret-key key) nil))
+  (kv-set! key nil))
 
 (defn- install-opfs-pool
   [sqlite pool-name]
