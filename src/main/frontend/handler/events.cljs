@@ -48,7 +48,8 @@
             [logseq.api.plugin :as plugin-api]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [cljs-time.core :as t]))
 
 ;; TODO: should we move all events here?
 
@@ -121,12 +122,15 @@
             (search-plugin/call-service! service "search:rebuildBlocksIndice" {}))))))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (p/do!
-   (export/cancel-db-backup!)
-   (state/set-state! :db/async-queries {})
-   (st/refresh!)
-   (graph-switch-on-persisted graph opts)
-   (export/backup-db-graph (state/get-current-repo))))
+  (let [t1 (t/now)]
+    (p/do!
+    (export/cancel-db-backup!)
+    (state/set-state! :db/async-queries {})
+    (st/refresh!)
+    (graph-switch-on-persisted graph opts)
+    (export/backup-db-graph (state/get-current-repo))
+    (let [t2 (t/now)]
+      (log/info ::graph-switch-spent (- t2 t1))))))
 
 (defmethod handle :graph/open-new-window [[_ev target-repo]]
   (ui-handler/open-new-window-or-tab! target-repo))
