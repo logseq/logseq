@@ -49,13 +49,21 @@
 (defn- ensure-contains!
   [id cmd output snippets stream]
   (doseq [snippet (or snippets [])]
-    (when-not (string/includes? output snippet)
+    (let [normalize-pathish-text (fn [text]
+                                   (-> (str text)
+                                       (string/replace "\\\\" "\\")
+                                       (string/replace "\\" "/")
+                                       (string/replace "\r" "")))
+          matches? (or (string/includes? output snippet)
+                       (string/includes? (normalize-pathish-text output)
+                                         (normalize-pathish-text snippet)))]
+      (when-not matches?
       (throw (ex-info (str stream " did not contain expected text")
                       {:id id
                        :cmd cmd
                        :snippet snippet
                        :output output
-                       :stream stream})))))
+                       :stream stream}))))))
 
 (defn- ensure-not-contains!
   [id cmd output snippets stream]
