@@ -230,7 +230,7 @@
   ([repo conn f]
    (with-fake-create-or-open-db repo conn {} f))
   ([repo conn
-    {:keys [create-or-open-db-f close-db-f invalidate-search-db-f unlink-db-f]}
+    {:keys [create-or-open-db-f close-db-f invalidate-search-db-f unlink-db-f recreate-lock-f]}
     f]
    (let [thread-apis-prev @thread-api/*thread-apis
          create-or-open-db-f (or create-or-open-db-f
@@ -239,13 +239,15 @@
                                    (p/resolved nil)))
          close-db-f (or close-db-f (fn [_repo] nil))
          invalidate-search-db-f (or invalidate-search-db-f (fn [_repo] (p/resolved nil)))
-         unlink-db-f (or unlink-db-f (fn [_repo] nil))]
+         unlink-db-f (or unlink-db-f (fn [_repo] nil))
+         recreate-lock-f (or recreate-lock-f (fn [_repo] (p/resolved nil)))]
      (vreset! thread-api/*thread-apis
               (assoc thread-apis-prev
                      :thread-api/create-or-open-db create-or-open-db-f
                      :thread-api/db-sync-close-db close-db-f
                      :thread-api/db-sync-invalidate-search-db invalidate-search-db-f
-                     :thread-api/unsafe-unlink-db unlink-db-f))
+                     :thread-api/unsafe-unlink-db unlink-db-f
+                     :thread-api/db-sync-recreate-lock recreate-lock-f))
      (-> (f)
          (p/finally (fn []
                       (vreset! thread-api/*thread-apis thread-apis-prev)))))))
@@ -287,6 +289,9 @@
             :unlink-db-f (fn [repo]
                            (swap! calls conj [:unlink repo])
                            nil)
+            :recreate-lock-f (fn [repo]
+                               (swap! calls conj [:recreate-lock repo])
+                               (p/resolved nil))
             :invalidate-search-db-f (fn [repo]
                                       (swap! calls conj [:invalidate-search repo])
                                       (p/resolved nil))
@@ -304,10 +309,12 @@
                                                             ops)))]
                              (is (some? (idx :close)))
                              (is (some? (idx :unlink)))
+                             (is (some? (idx :recreate-lock)))
                              (is (some? (idx :invalidate-search)))
                              (is (some? (idx :create-or-open)))
                              (is (< (idx :close) (idx :unlink)))
-                             (is (< (idx :unlink) (idx :invalidate-search)))
+                             (is (< (idx :unlink) (idx :recreate-lock)))
+                             (is (< (idx :recreate-lock) (idx :invalidate-search)))
                              (is (< (idx :invalidate-search) (idx :create-or-open))))
                            (done)))
                  (p/catch (fn [error]
