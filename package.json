@@ -99,7 +99,7 @@
         "cljs:run-test-no-worker": "node static/tests-no-worker.js",
         "db-worker-node:compile": "clojure -M:cljs compile db-worker-node",
         "db-worker-node:release": "clojure -M:cljs release db-worker-node",
-        "db-worker-node:ncc": "ncc build static/db-worker-node.js --out dist/.db-worker-node-ncc --asset-builds",
+        "db-worker-node:ncc": "ncc build static/db-worker-node.js --out dist/.db-worker-node-ncc --asset-builds --quiet",
         "db-worker-node:bundle:normalize": "node ./scripts/build-db-worker-node-bundle.mjs",
         "db-worker-node:release:bundle": "run-s db-worker-node:release db-worker-node:ncc db-worker-node:bundle:normalize",
         "db-worker-node:compile:bundle": "run-s db-worker-node:compile db-worker-node:ncc db-worker-node:bundle:normalize",
