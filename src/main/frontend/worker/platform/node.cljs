@@ -237,11 +237,9 @@
       (fs/writeFile full-path (->buffer data)))))
 
 (defn- remove-vfs!
-  [write-guard-fn ^js pool]
+  [^js pool]
   (when pool
-    (p/let [_ (when write-guard-fn
-                (write-guard-fn))]
-      (fs/rm (.-repoDir pool) #js {:recursive true :force true}))))
+    (fs/rm (.-repoDir pool) #js {:recursive true :force true})))
 
 (defn- read-text!
   [data-dir path]
@@ -411,7 +409,7 @@
                                    (pool-path pool path))
                 :export-file export-file
                 :import-db (fn [pool path data] (import-db write-guard-fn pool path data))
-                :remove-vfs! (fn [pool] (remove-vfs! write-guard-fn pool))
+                :remove-vfs! (fn [pool] (remove-vfs! pool))
                 :read-text! (fn [path] (read-text! data-dir path))
                 :write-text! (fn [path text] (write-text! write-guard-fn data-dir path text))
                 :asset-read-bytes! (fn [repo file-name]

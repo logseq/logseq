@@ -580,10 +580,6 @@
   [repo]
   (db-sync/upload-stopped? repo))
 
-(def-thread-api :thread-api/db-sync-download-graph
-  [repo]
-  (sync-download/download-graph! repo))
-
 (def-thread-api :thread-api/db-sync-download-graph-by-id
   [repo graph-id graph-e2ee?]
   (sync-download/download-graph-by-id! repo graph-id graph-e2ee?))

@@ -527,12 +527,3 @@
                            {:repo repo
                             :graph-id graph-id
                             :base base})))))
-
-(defn download-graph!
-  [repo]
-  (if-let [graph-id (client-op/get-graph-uuid repo)]
-    (download-graph-by-id! repo graph-id (sync-crypt/graph-e2ee? repo))
-    (p/rejected (ex-info "db-sync missing graph id"
-                         {:repo repo
-                          :type :db-sync/missing-field
-                          :field :graph-id}))))
