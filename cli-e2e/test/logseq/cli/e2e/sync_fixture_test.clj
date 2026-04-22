@@ -66,3 +66,4 @@
     (is (string/includes? (:cmd (last @calls)) "db_sync_server.py"))
     (is (string/includes? (:cmd (last @calls)) " stop "))
     (is (false? (:throw? (last @calls))))))
+
