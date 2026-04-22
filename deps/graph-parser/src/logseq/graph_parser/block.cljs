@@ -266,6 +266,29 @@
    (map last)
    (into {})))
 
+(defn- repetition->props
+  "Destructures an mldoc repetition tuple like [[\"DoublePlus\"] [\"Week\"] 1]
+  into bare keywords and a frequency integer for downstream consumers (e.g.,
+  the exporter that writes DB-graph properties). Unknown kinds default to
+  `:double-plus` to match the scheduler's fallback."
+  [repetition]
+  (let [[[kind] [unit] n] repetition]
+    {:repeated? true
+     :repeat-type (case kind
+                    "Dotted"     :dotted-plus
+                    "Plus"       :plus
+                    "DoublePlus" :double-plus
+                    :double-plus)
+     :recur-unit (case unit
+                   "Minute" :minute
+                   "Hour"   :hour
+                   "Day"    :day
+                   "Week"   :week
+                   "Month"  :month
+                   "Year"   :year
+                   nil)
+     :recur-frequency n}))
+
 ;; {"Deadline" {:date {:year 2020, :month 10, :day 20}, :wday "Tue", :time {:hour 8, :min 0}, :repetition [["DoublePlus"] ["Day"] 1], :active true}}
 (defn timestamps->scheduled-and-deadline
   [timestamps]
@@ -282,7 +305,7 @@
                                :deadline
                                {:deadline day})
                               repetition
-                              (assoc :repeated? true))))))]
+                              (merge (repetition->props repetition)))))))]
     (apply merge m)))
 
 (defn- convert-page-if-journal-impl

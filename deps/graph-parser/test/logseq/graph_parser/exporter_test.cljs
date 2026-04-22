@@ -458,6 +458,47 @@
                  (update-vals date-time-util/ms->journal-day)))
           "scheduled block converted to correct deadline")
 
+      (is (= {:logseq.property.repeat/repeated? true
+              :logseq.property.repeat/repeat-type :logseq.property.repeat/repeat-type.dotted-plus
+              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.day}
+             (-> (db-test/readable-properties (db-test/find-block-by-content @conn #"deadline and scheduled"))
+                 (select-keys [:logseq.property.repeat/repeated?
+                               :logseq.property.repeat/repeat-type
+                               :logseq.property.repeat/recur-unit])))
+          "`.+1d` cookie carries through to DB-graph repeat properties after migration")
+
+      (is (= {:logseq.property.repeat/repeated? true
+              :logseq.property.repeat/repeat-type :logseq.property.repeat/repeat-type.plus
+              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.hour}
+             (-> (db-test/readable-properties (db-test/find-block-by-content @conn "plus hourly repeat"))
+                 (select-keys [:logseq.property.repeat/repeated?
+                               :logseq.property.repeat/repeat-type
+                               :logseq.property.repeat/recur-unit])))
+          "`+1h` cookie migrates to plus / hour")
+
+      (is (= {:logseq.property.repeat/repeated? true
+              :logseq.property.repeat/repeat-type :logseq.property.repeat/repeat-type.double-plus
+              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.day}
+             (-> (db-test/readable-properties (db-test/find-block-by-content @conn "double-plus every-other-day repeat"))
+                 (select-keys [:logseq.property.repeat/repeated?
+                               :logseq.property.repeat/repeat-type
+                               :logseq.property.repeat/recur-unit])))
+          "`++2d` cookie migrates to double-plus / day (frequency itself is not yet translated)")
+
+      (is (= {:logseq.property.repeat/repeated? true
+              :logseq.property.repeat/repeat-type :logseq.property.repeat/repeat-type.dotted-plus
+              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}
+             (-> (db-test/readable-properties (db-test/find-block-by-content @conn "dotted-plus weekly repeat"))
+                 (select-keys [:logseq.property.repeat/repeated?
+                               :logseq.property.repeat/repeat-type
+                               :logseq.property.repeat/recur-unit])))
+          "`.+1w` cookie migrates to dotted-plus / week")
+
+      (is (nil? (:logseq.property.repeat/recur-frequency
+                 (db-test/readable-properties
+                  (db-test/find-block-by-content @conn "double-plus every-other-day repeat"))))
+          ":recur-frequency is intentionally unset post-migration — the scheduler's `resolve-recur-frequency` falls back to the default-value of 1")
+
       (is (= 1 (count (d/q '[:find [(pull ?b [*]) ...]
                              :in $ ?content
                              :where [?b :block/title ?content]]

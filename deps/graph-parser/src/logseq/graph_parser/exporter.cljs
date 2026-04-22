@@ -464,21 +464,50 @@
     {:property-value time-long
      :journal-tx (when-not existing-journal-page [journal-page])}))
 
+(defn- closed-value-db-ident
+  "Maps a parser-emitted bare keyword (`:dotted-plus`, `:day`, etc.) to the
+  corresponding closed-value db-ident in the DB-graph property schema. Returns
+  nil on unknown input so callers can skip assoc'ing the property."
+  [ns-prefix bare-kw]
+  (when bare-kw
+    (keyword "logseq.property.repeat" (str ns-prefix "." (name bare-kw)))))
+
 (defn- update-block-deadline-and-scheduled
-  "Converts :block/deadline and :block/scheduled to their new logseq properties."
+  "Converts :block/deadline and :block/scheduled to their new logseq properties.
+  Also carries repeater metadata (:block/repeated?, :block/repeat-type,
+  :block/recur-unit) from the parser onto the corresponding
+  :logseq.property.repeat/* properties so imported recurring tasks stay
+  recurring after migration.
+
+  :block/recur-frequency is not translated here because
+  :logseq.property.repeat/recur-frequency is a :number property stored via a
+  property-value block, which needs separate tx construction. Until that's
+  wired up, migrated recurring tasks pick up the `:recur-frequency` default of
+  1 via the DB-graph schema default-value."
   [block page-names-to-uuids {:keys [user-config]}]
   (let [{deadline-value :property-value deadline-tx :journal-tx}
         (when (:block/deadline block)
           (find-or-create-deadline-scheduled-value (:block/deadline block) page-names-to-uuids user-config))
         {scheduled-value :property-value scheduled-tx :journal-tx}
         (when (:block/scheduled block)
-          (find-or-create-deadline-scheduled-value (:block/scheduled block) page-names-to-uuids user-config))]
+          (find-or-create-deadline-scheduled-value (:block/scheduled block) page-names-to-uuids user-config))
+        repeated? (boolean (:block/repeated? block))
+        repeat-type-ident (closed-value-db-ident "repeat-type" (:block/repeat-type block))
+        recur-unit-ident (closed-value-db-ident "recur-unit" (:block/recur-unit block))]
     {:block
-     (cond-> (dissoc block :block/deadline :block/scheduled :block/repeated?)
+     (cond-> (dissoc block :block/deadline :block/scheduled
+                     :block/repeated? :block/repeat-type
+                     :block/recur-unit :block/recur-frequency)
        (some? deadline-value)
        (assoc :logseq.property/deadline deadline-value)
        (some? scheduled-value)
-       (assoc :logseq.property/scheduled scheduled-value))
+       (assoc :logseq.property/scheduled scheduled-value)
+       repeated?
+       (assoc :logseq.property.repeat/repeated? true)
+       repeat-type-ident
+       (assoc :logseq.property.repeat/repeat-type repeat-type-ident)
+       recur-unit-ident
+       (assoc :logseq.property.repeat/recur-unit recur-unit-ident))
      :properties-tx (distinct (concat deadline-tx scheduled-tx))}))
 
 (defn- text-with-refs?

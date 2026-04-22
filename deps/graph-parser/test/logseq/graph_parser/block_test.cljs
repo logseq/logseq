@@ -115,3 +115,54 @@
             content)
        (map first)
        first))
+
+(deftest timestamps-preserve-repeater-metadata
+  (testing "non-recurring scheduled or deadline omits all repeat keys"
+    (let [ts {"Scheduled" {:date {:year 2024 :month 4 :day 1}
+                           :active true}}
+          result (gp-block/timestamps->scheduled-and-deadline ts)]
+      (is (= 20240401 (:scheduled result)))
+      (is (nil? (:repeated? result)))
+      (is (nil? (:repeat-type result)))
+      (is (nil? (:recur-unit result)))
+      (is (nil? (:recur-frequency result)))))
+
+  (testing "mldoc repetition kind maps to the matching repeat-type keyword"
+    (are [kind expected]
+         (let [ts {"Scheduled" {:date {:year 2024 :month 4 :day 1}
+                                :repetition [[kind] ["Day"] 1]
+                                :active true}}
+               result (gp-block/timestamps->scheduled-and-deadline ts)]
+           (and (true? (:repeated? result))
+                (= expected (:repeat-type result))))
+      "Dotted"     :dotted-plus
+      "Plus"       :plus
+      "DoublePlus" :double-plus))
+
+  (testing "unknown repetition kinds fall back to :double-plus"
+    (let [ts {"Scheduled" {:date {:year 2024 :month 4 :day 1}
+                           :repetition [["UnknownKind"] ["Day"] 1]
+                           :active true}}
+          result (gp-block/timestamps->scheduled-and-deadline ts)]
+      (is (= :double-plus (:repeat-type result)))))
+
+  (testing "mldoc repetition unit maps to the matching recur-unit keyword"
+    (are [unit expected]
+         (let [ts {"Scheduled" {:date {:year 2024 :month 4 :day 1}
+                                :repetition [["Dotted"] [unit] 2]
+                                :active true}}
+               result (gp-block/timestamps->scheduled-and-deadline ts)]
+           (= expected (:recur-unit result)))
+      "Minute" :minute
+      "Hour"   :hour
+      "Day"    :day
+      "Week"   :week
+      "Month"  :month
+      "Year"   :year))
+
+  (testing "recur-frequency is carried through verbatim"
+    (let [ts {"Scheduled" {:date {:year 2024 :month 4 :day 1}
+                           :repetition [["DoublePlus"] ["Week"] 3]
+                           :active true}}
+          result (gp-block/timestamps->scheduled-and-deadline ts)]
+      (is (= 3 (:recur-frequency result))))))
