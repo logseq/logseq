@@ -113,9 +113,12 @@
     {:ok? true
      :dir (:destination-dir action)
      :file (:destination-file action)}
+    (let [env-home (or (some-> js/process .-env .-HOME)
+                       (some-> js/process .-env .-USERPROFILE))]
     (resolve-install-target {:global? (:global? action)
                              :cwd (.cwd js/process)
-                             :home-dir (.homedir os)})))
+                             :home-dir (or env-home
+                                           (.homedir os))}))))
 
 (defn execute-skill-install
   [action _config]
