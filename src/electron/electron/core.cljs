@@ -11,6 +11,7 @@
             [electron.handler :as handler]
             [electron.i18n :as i18n :refer [t]]
             [electron.logger :as logger]
+            [electron.release-warning :as release-warning]
             [electron.server :as server]
             [electron.updater :refer [init-updater] :as updater]
             [electron.url :refer [logseq-url-handler]]
@@ -248,6 +249,23 @@
     (when-let [url (find-deeplink-url (rest (js->clj (.-argv js/process))))]
       (open-url-handler win url))))
 
+(defn- maybe-warn-wrong-release!
+  []
+  (when (release-warning/x64-on-apple-silicon?
+         {:platform (.-platform js/process)
+          :arch (.-arch js/process)
+          :running-under-arm64-translation? (boolean (.-runningUnderARM64Translation app))})
+    (-> (.showMessageBox
+         dialog
+         (clj->js (assoc (release-warning/warning-dialog-options t) :title "Logseq")))
+        (.then
+         (fn [result]
+           (when-let [url (release-warning/selected-release-url (.-response result))]
+             (.openExternal shell url))))
+        (.catch
+         (fn [error]
+           (logger/warn :electron/wrong-release-warning-failed error))))))
+
 (defn- on-app-ready!
   [^js app']
   (.on app' "ready"
@@ -271,6 +289,7 @@
 
            ;; Windows/Linux: handle deeplink URL passed on first launch via argv
            (handle-initial-deeplink! win)
+           (maybe-warn-wrong-release!)
 
            (vreset! *setup-fn
                     (fn []
