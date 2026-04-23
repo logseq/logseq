@@ -970,7 +970,7 @@
  :mobile.share/unsupported-content-warning "現在の共有コンテンツの解析はサポートされていません。以下のコードを{1}に報告してください。早急に対応いたします。"
  :mobile.share/unsupported-import-type "{1}ファイルのインポートはサポートされていません。{2}に報告してください。早急に対応いたします。"
 
- :mobile.tab/capture "キャプチャ"
+ :mobile.tab/capture "メモ"
  :mobile.tab/go-to "移動"
  :mobile.tab/graphs "グラフ"
 

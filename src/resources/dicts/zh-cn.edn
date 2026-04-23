@@ -539,6 +539,10 @@
  :electron/version "版本 {1}"
  :electron/write-file-error "写入文件 {1} 失败，{2}。"
  :electron/write-file-error-with-backup "写入文件 {1} 失败，{2}。备份文件已保存到 {3}。"
+ :electron/wrong-release-open-nightly "打开 Nightly 版本"
+ :electron/wrong-release-open-stable "下载正式版"
+ :electron/wrong-release-warning-detail "当前版本通过 Rosetta 运行，速度可能非常慢。请优先下载 Apple Silicon (arm64) 版本；若该版本暂不支持您当前的系统版本，可使用 Nightly 版本。"
+ :electron/wrong-release-warning-title "您正在 Apple Silicon 上使用 Intel (x64) 版本。"
 
  :encryption/cloud-password-rich (fn [] ["如果你丢失了密码，云端中的所有数据都将无法解密。" [:span "你仍然可以访问图谱的本地版本。"]])
  :encryption/current-password "当前密码"
@@ -970,7 +974,7 @@
  :mobile.share/unsupported-content-warning "暂不支持解析当前分享的内容。请将以下代码反馈到 {1}，我们会尽快处理。"
  :mobile.share/unsupported-import-type "不支持导入 {1} 文件。您可以在 {2} 上反馈，我们会尽快处理。"
 
- :mobile.tab/capture "捕获"
+ :mobile.tab/capture "速记"
  :mobile.tab/go-to "跳转"
  :mobile.tab/graphs "图谱"
 

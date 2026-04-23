@@ -970,7 +970,7 @@
  :mobile.share/unsupported-content-warning "Разбор текущего общего контента не поддерживается. Сообщите следующие коды на {1}. Мы скоро разберёмся."
  :mobile.share/unsupported-import-type "Импорт файлов {1} не поддерживается. Вы можете сообщить об этом на {2}. Мы скоро разберёмся."
 
- :mobile.tab/capture "Захват"
+ :mobile.tab/capture "Сбор"
  :mobile.tab/go-to "Перейти"
  :mobile.tab/graphs "Графы"
 

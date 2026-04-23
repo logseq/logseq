@@ -138,6 +138,7 @@
     (f tx-report errors))
   (let [debug-data (invalid-tx-debug-data tx-meta tx-data errors tx-report)]
     (prn :debug :invalid-data debug-data)
+    (prn :debug :errors errors)
     (throw (ex-info "DB write failed with invalid data" debug-data))))
 
 (defn- transact-sync
@@ -298,7 +299,12 @@
       (batch-tx-fn conn)
       (batch-transact-cleanup! conn)
       (when-some [_storage (storage/storage @conn)]
-        (d/store @conn))
+        (d/store @conn)
+        ;; batch-transact! bypasses conn/store-after-transact!, so keep tail bookkeeping in sync
+        ;; with the just-persisted root snapshot.
+        (swap! (:atom conn) assoc
+               :tx-tail []
+               :db-last-stored @conn))
       (let [batch-tx-data @*tx-data
             _ (reset! *tx-data nil)
             tx-report {:db-before db-before
@@ -832,11 +838,9 @@
   (d/q '[:find ?e ?a
          :in $ ?v
          :where
-         [?c :logseq.property.class/enable-bidirectional? ?c-enable?]
-         [(true? ?c-enable?)]
-         [?ea :logseq.property/classes ?c]
+         [?e ?a ?v]
          [?ea :db/ident ?a]
-         [?e ?a ?v]]
+         [?ea :logseq.property/classes ?c]]
        db
        v))
 

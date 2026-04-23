@@ -341,7 +341,7 @@
                       :skip-validate-db? true}))))
 
 (defn- <create-or-open-db!
-  [repo {:keys [config datoms sync-download-graph?] :as opts}]
+  [repo {:keys [config datoms sync-download-graph? remote-graph?] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)]
@@ -397,6 +397,9 @@
             (db-migrate/migrate conn)
             (gc-sqlite-dbs! db client-ops-db conn {})
             (maybe-run-recycle-gc! conn))
+
+          (when remote-graph?
+            (client-op/update-local-tx repo 0))
 
           (when initial-tx-report
             (db-sync/handle-local-tx! repo initial-tx-report))

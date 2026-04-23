@@ -539,6 +539,10 @@
  :electron/version "Version {1}"
  :electron/write-file-error "Write to the file {1} failed, {2}."
  :electron/write-file-error-with-backup "Write to the file {1} failed, {2}. A backup file was saved to {3}."
+ :electron/wrong-release-open-nightly "Open nightly release"
+ :electron/wrong-release-open-stable "Download regular release"
+ :electron/wrong-release-warning-detail "This release runs through Rosetta and can be very slow. Download the Apple Silicon (arm64) release first. If it is unavailable for your version, use the nightly release."
+ :electron/wrong-release-warning-title "You are using the Intel (x64) release on Apple Silicon."
 
  :encryption/cloud-password-rich (fn [] ["If you lose your password, all of your data in the cloud can't be decrypted. " [:span "You will still be able to access the local version of your graph."]])
  :encryption/current-password "Current password"

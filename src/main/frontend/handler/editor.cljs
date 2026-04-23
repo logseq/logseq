@@ -3029,7 +3029,7 @@
          true)))
 
 (defn- db-collapsable?
-  [block]
+  [block & {:keys [page-title?]}]
   (let [class-properties (:classes-properties (outliner-property/get-block-classes-properties (db/get-db) (:db/id block)))
         db (db/get-db)
         attributes (set (remove #{:block/alias} db-property/db-attribute-properties))
@@ -3037,7 +3037,9 @@
                         (map (partial entity-plus/entity-memoized db))
                         (concat class-properties)
                         (remove (fn [e] (attributes (:db/ident e))))
-                        (remove outliner-property/property-with-other-position?)
+                        (remove (fn [k]
+                                  (when-not page-title?
+                                    (outliner-property/property-with-other-position? k))))
                         (remove (fn [e] (:logseq.property/hide? e)))
                         (remove nil?))]
     (or (seq properties)
@@ -3046,13 +3048,13 @@
 (defn collapsable?
   ([block-id]
    (collapsable? block-id {}))
-  ([block-id {:keys [semantic? ignore-children?]
+  ([block-id {:keys [semantic? ignore-children? page-title?]
               :or {semantic? false
                    ignore-children? false}}]
    (when block-id
      (if-let [block (db/entity [:block/uuid block-id])]
        (or (if ignore-children? false (db-model/has-children? block-id))
-           (db-collapsable? block)
+           (db-collapsable? block {:page-title? page-title?})
            (and
             (:outliner/block-title-collapse-enabled? (state/get-config))
             (block-with-title? (get block :block/format :markdown)
