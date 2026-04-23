@@ -1062,6 +1062,40 @@ html.is-mac {
   .property-k {
     color: var(--ls-primary-text-color);
   }
+
+  .bottom-property-pair {
+    @apply min-w-0;
+  }
+
+  .bottom-property-content {
+    @apply flex items-center gap-1 min-w-0;
+  }
+
+  .bottom-property-separator {
+    @apply text-muted-foreground;
+  }
+
+  .bottom-property-edit-icon {
+    @apply text-muted-foreground inline-flex items-center justify-center p-0 bg-transparent border-0 cursor-pointer;
+  }
+
+  .ls-block.property-value-container {
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .property-value-inner,
+  .select-item,
+  [role="checkbox"] {
+    @apply items-center;
+    vertical-align: middle;
+  }
+
+  svg,
+  [role="checkbox"] {
+    @apply self-center;
+    vertical-align: middle;
+  }
 }
 
 .block-tags {

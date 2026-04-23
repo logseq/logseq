@@ -346,6 +346,70 @@
     (is (= [:user.property/p1 :user.property/p2 :user.property/p3]
            (map :db/ident (:classes-properties (outliner-property/get-block-classes-properties @conn (:db/id block))))))))
 
+(deftest property-with-other-position-default-bottom-rules
+  (testing "explicit non-properties ui-position remains other-position"
+    (is (true?
+         (outliner-property/property-with-other-position?
+          {:db/ident :user.property/p1
+           :logseq.property/type :number
+           :logseq.property/ui-position :block-left}))))
+
+  (testing "number property without explicit ui-position defaults to bottom position"
+    (is (true?
+         (outliner-property/property-with-other-position?
+          {:db/ident :user.property/p1
+           :logseq.property/type :number}))))
+
+  (testing "default property without closed values stays in normal property rows"
+    (is (false?
+         (outliner-property/property-with-other-position?
+          {:db/ident :user.property/p1
+           :logseq.property/type :default
+           :property/closed-values []}))))
+
+  (testing "default property with closed values is positioned in bottom row"
+    (is (true?
+         (outliner-property/property-with-other-position?
+          {:db/ident :user.property/p1
+           :logseq.property/type :default
+           :property/closed-values [{:db/id 1}]}))))
+
+  (testing "url property without explicit ui-position stays in normal property rows"
+    (is (false?
+         (outliner-property/property-with-other-position?
+          {:db/ident :user.property/p1
+           :logseq.property/type :url}))))
+
+  (testing "explicit left/right ui-position remains in positioned rows"
+    (is (true?
+         (outliner-property/property-with-other-position?
+          {:db/ident :user.property/p1
+           :logseq.property/type :url
+           :logseq.property/ui-position :block-left}))))
+
+  (testing "bidirectional config property stays in normal property rows"
+    (is (false?
+         (outliner-property/property-with-other-position?
+          {:db/ident :logseq.property.class/enable-bidirectional?
+           :logseq.property/type :checkbox}))))
+
+  (testing "tag properties and schema-related properties stay in normal property rows"
+    (is (false?
+         (outliner-property/property-with-other-position?
+          {:db/ident :block/tags
+           :logseq.property/type :class})))
+    (is (false?
+         (outliner-property/property-with-other-position?
+          {:db/ident :logseq.property.class/properties
+           :logseq.property/type :property})))
+    (is (false?
+         (outliner-property/property-with-other-position?
+          {:db/ident :logseq.property/public?
+           :logseq.property/type :checkbox}))))
+
+  (testing "a schema property is part of the shared schema set"
+    (is (contains? db-property/schema-properties :logseq.property/public?))))
+
 (deftest extends-cycle
   (testing "Fail when creating a cycle of extends"
     (let [conn (db-test/create-conn-with-blocks

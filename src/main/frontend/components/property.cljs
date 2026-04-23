@@ -680,15 +680,40 @@
           properties' (keep (fn [ent] (find prop-kv-map (:db/ident ent))) sorted-prop-entities)]
       (ordered-properties block properties' sorted-prop-entities opts))))
 
+(defonce ^:private *show-hidden-properties-block-ids
+  (atom #{}))
+
+(defn toggle-hidden-properties-visibility!
+  [block-uuid]
+  (when block-uuid
+    (swap! *show-hidden-properties-block-ids
+           (fn [ids]
+             (if (contains? ids block-uuid)
+               (disj ids block-uuid)
+               (conj ids block-uuid))))))
+
+(defn hidden-properties-visible?
+  [block-uuid]
+  (contains? @*show-hidden-properties-block-ids block-uuid))
+
+(rum/defc hidden-properties-toggle-button
+  [block]
+  (let [block-uuid (:block/uuid block)]
+    (when block-uuid
+      (shui/button
+       {:variant :ghost
+        :size :sm
+        :class "px-1 text-muted-foreground h-6 text-xs"
+        :on-click (fn [e]
+                    (util/stop e)
+                    (toggle-hidden-properties-visibility! block-uuid))}
+       (t :property/hidden-properties)))))
+
 (rum/defc hidden-properties-cp
-  [block hidden-properties {:keys [root-block? sidebar-properties?] :as opts}]
-  (when (and (seq hidden-properties) (or root-block? sidebar-properties?))
-    [:details.my-1
-     [:summary.text-sm.opacity-50.hover:opacity-90.cursor-pointer
-      {:style {:margin-left 11}}
-      [:span.ml-1 (t :property/hidden-properties)]]
-     [:div.mt-1
-      (properties-section block hidden-properties opts)]]))
+  [block hidden-properties {:keys [show-hidden-properties?] :as opts}]
+  (when (and show-hidden-properties? (seq hidden-properties))
+    [:div.mt-1
+     (properties-section block hidden-properties opts)]))
 
 (rum/defc load-bidirectional-properties < rum/static
   [block root-block? set-bidirectional-properties!]
@@ -708,13 +733,15 @@
              (assoc state
                     ::id (str (random-uuid))
                     ::block block)))}
-  [state _target-block {:keys [page-title? journal-page? sidebar-properties? tag-dialog?] :as opts}]
+  [state _target-block {:keys [sidebar-properties? tag-dialog?] :as opts}]
   (let [*bidirectional-properties (::bidirectional-properties state)
         bidirectional-properties @*bidirectional-properties
         id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
         show-properties? (or sidebar-properties? tag-dialog?)
+        show-hidden-properties? (let [shown-block-ids (rum/react *show-hidden-properties-block-ids)]
+                                  (contains? shown-block-ids (:block/uuid block)))
         show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/sub :ui/show-empty-and-hidden-properties?)]
                                             (and show?
                                                  (or (= mode :global)
@@ -739,8 +766,6 @@
                                (ldb/built-in? ent))
                           ;; other position
                           (when-not (or
-                                     sidebar-properties?
-                                     (and page-title? (not journal-page?))
                                      show-empty-and-hidden-properties?
                                      show-in-hidden-properties?)
                             (outliner-property/property-with-other-position? ent))
@@ -817,6 +842,7 @@
      (let [has-bidirectional-properties? (seq bidirectional-properties)]
        (cond
          (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
+              (not show-hidden-properties?)
               (not has-bidirectional-properties?))
          nil
 
@@ -841,7 +867,7 @@
 
              (when-not class?
                (hidden-properties-cp block hidden-properties
-                                     (assoc opts :root-block? root-block?)))
+                                     (assoc opts :show-hidden-properties? show-hidden-properties?)))
 
              (when (and page? (not class?))
                (rum/with-key (new-property block opts) (str id "-add-property")))
@@ -860,5 +886,5 @@
                   [:div.ml-4
                    (properties-section block properties opts')
                    (hidden-properties-cp block hidden-properties
-                                         (assoc opts :root-block? root-block?))
+                                         (assoc opts :show-hidden-properties? show-hidden-properties?))
                    (rum/with-key (new-property block opts') (str id "-class-add-property"))]]))]])))]))

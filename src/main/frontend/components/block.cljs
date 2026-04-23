@@ -2595,16 +2595,33 @@
     (when (seq properties)
       (case position
         :block-below
-        [:div.positioned-properties.block-below.flex.flex-row.gap-2.item-center.flex-wrap.text-sm.overflow-x-hidden
-         (for [property properties]
-           [:div.flex.flex-row.items-center.gap-1
+        [:div.positioned-properties.block-below.flex.flex-row.gap-2.items-center.flex-wrap.text-sm.overflow-x-hidden
+         (for [[idx property] (map-indexed vector properties)]
+           [:div.bottom-property-pair.flex.flex-row.items-center.gap-1
             {:key (str (:db/id block) "-" (:db/id property))}
             [:div.flex.flex-row.items-center
              (property-component/property-key-cp block property opts)
              [:div.select-none ":"]]
-            [:div.ls-block.property-value-container
+            [:div.bottom-property-content.ls-block.property-value-container
              {:style {:min-height 20}}
-             (pv/property-value block property opts)]])]
+             (pv/property-value block property opts)
+             (when (and (contains? #{:date :number} (:logseq.property/type property))
+                        (not config/publishing?))
+               [:button.bottom-property-edit-icon.select-none
+                {:type "button"
+                 :on-click (fn [e]
+                             (util/stop e)
+                             (when-let [trigger
+                                        (some-> (.-currentTarget e)
+                                                (.closest ".bottom-property-content")
+                                                (.querySelector ".jtrigger"))]
+                               (.click trigger)
+                               (some-> trigger .focus)))}
+                (ui/icon "edit" {:size 14})])]
+            (when (< idx (dec (count properties)))
+              [:div.bottom-property-separator.select-none ","])])
+         (when (and (ldb/page? block) (not config/publishing?))
+           (property-component/hidden-properties-toggle-button block))]
         [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
          {:class (name position)}
          (for [property properties]

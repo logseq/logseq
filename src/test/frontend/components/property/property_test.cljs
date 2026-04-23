@@ -33,3 +33,11 @@
     (is (nil? (:user.property/nodes properties)))
     (is (= #{:user.property/nodes}
            recycled-only-property-ids))))
+
+(deftest toggle-hidden-properties-visibility-test
+  (let [block-uuid (random-uuid)]
+    (is (false? (property-component/hidden-properties-visible? block-uuid)))
+    (property-component/toggle-hidden-properties-visibility! block-uuid)
+    (is (true? (property-component/hidden-properties-visible? block-uuid)))
+    (property-component/toggle-hidden-properties-visibility! block-uuid)
+    (is (false? (property-component/hidden-properties-visible? block-uuid)))))
