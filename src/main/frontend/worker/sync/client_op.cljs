@@ -230,10 +230,6 @@
                     " on conflict(key) do update set value = excluded.value")
                [(name k) (str v)]))
 
-(defn- sqlite-delete-meta!
-  [db k]
-  (sqlite-run! db "delete from sync_meta where key = ?" [(name k)]))
-
 (defn update-graph-uuid
   [repo graph-uuid]
   {:pre [(some? graph-uuid)]}
@@ -245,12 +241,29 @@
   (some-> (sqlite-store-or-throw repo)
           (sqlite-get-meta :graph-uuid)))
 
+(defn get-local-tx
+  [repo]
+  (when-let [store (sqlite-store-or-throw repo)]
+    (when-let [result (sqlite-get-meta store :local-tx)]
+      (js/parseInt result 10))))
+
 (defn update-local-tx
   [repo t]
-  {:pre [(some? t)]}
-  (let [store (sqlite-store-or-throw repo)]
+  {:pre [(and (integer? t) (>= t 0))]}
+  (let [store (sqlite-store-or-throw repo)
+        prev-t (get-local-tx repo)]
     (assert (some? store) repo)
+    (when (and prev-t (< t prev-t))
+      (throw (ex-info "local-tx should be monotonically increasing"
+                      {:repo repo
+                       :prev-t prev-t
+                       :new-t t})))
     (sqlite-set-meta! store :local-tx t)))
+
+(defn reset-local-tx
+  "Should be used only when uploading a graph"
+  [repo]
+  (update-local-tx repo 0))
 
 (defn update-local-checksum
   [repo checksum]
@@ -258,17 +271,6 @@
   (let [store (sqlite-store-or-throw repo)]
     (assert (some? store) repo)
     (sqlite-set-meta! store :db-sync/checksum checksum)))
-
-(defn remove-local-tx
-  [repo]
-  (when-let [store (sqlite-store-or-throw repo)]
-    (sqlite-delete-meta! store :local-tx)))
-
-(defn get-local-tx
-  [repo]
-  (when-let [store (sqlite-store-or-throw repo)]
-    (some-> (sqlite-get-meta store :local-tx)
-            (js/parseInt 10))))
 
 (defn get-pending-local-tx-count
   [repo]

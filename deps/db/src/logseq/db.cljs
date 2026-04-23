@@ -138,6 +138,7 @@
     (f tx-report errors))
   (let [debug-data (invalid-tx-debug-data tx-meta tx-data errors tx-report)]
     (prn :debug :invalid-data debug-data)
+    (prn :debug :errors errors)
     (throw (ex-info "DB write failed with invalid data" debug-data))))
 
 (defn- transact-sync

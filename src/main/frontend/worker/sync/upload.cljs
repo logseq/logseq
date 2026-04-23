@@ -177,8 +177,7 @@
                         (if (empty? rows)
                           (do
                             (sync-apply/clear-pending-txs! repo)
-                            (client-op/remove-local-tx repo)
-                            (client-op/update-local-tx repo 0)
+                            (client-op/reset-local-tx repo)
                             (client-op/add-all-exists-asset-as-ops repo)
                             (update-progress {:sub-type :upload-completed
                                               :message "Graph upload finished!"})
