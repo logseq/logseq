@@ -970,7 +970,7 @@
  :mobile.share/unsupported-content-warning "현재 공유된 콘텐츠의 구문 분석은 지원되지 않습니다. {1}에 다음 코드를 보고해 주세요. 곧 확인하겠습니다."
  :mobile.share/unsupported-import-type "{1} 파일 가져오기는 지원되지 않습니다. {2}에 보고해 주시면 곧 확인하겠습니다."
 
- :mobile.tab/capture "캡처"
+ :mobile.tab/capture "메모"
  :mobile.tab/go-to "이동"
  :mobile.tab/graphs "그래프"
 
