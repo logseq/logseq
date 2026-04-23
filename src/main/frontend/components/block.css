@@ -1063,14 +1063,34 @@ html.is-mac {
     @apply gap-1.5 py-1;
   }
 
+  .bottom-properties-row:focus {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--ls-link-text-color);
+    border-radius: 9999px;
+  }
+
   .bottom-property-pill {
     @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 h-6 max-w-full;
     background-color: var(--ls-secondary-background-color);
     box-shadow: inset 0 0 0 1px var(--ls-border-color);
+    position: relative;
+  }
+
+  .bottom-property-pill-focusable:focus {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--ls-link-text-color);
+  }
+
+  .bottom-property-control-btn:focus,
+  .bottom-property-control-btn:focus-visible,
+  .bottom-property-add-btn:focus,
+  .bottom-property-add-btn:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--ls-link-text-color);
   }
 
   .bottom-property-content {
-    @apply flex items-center gap-1 min-w-0;
+    @apply flex items-center gap-1 min-w-0 relative;
   }
 
   .bottom-property-pill .property-key-inner {
@@ -1098,8 +1118,29 @@ html.is-mac {
     box-shadow: inset 0 0 0 1px var(--ls-border-color);
   }
 
+  .bottom-property-add-btn {
+    @apply justify-center w-6 h-6 p-0 rounded-full;
+  }
+
+  .ls-new-property .jtrigger.bottom-property-add-btn:focus,
+  .ls-new-property .jtrigger.bottom-property-add-btn:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--ls-link-text-color);
+  }
+
   .bottom-property-edit-icon {
-    @apply inline-flex items-center justify-center p-0 bg-transparent border-0 text-muted-foreground cursor-pointer;
+    @apply inline-flex items-center justify-end pr-0 py-2 px-2 border-0 cursor-pointer opacity-0 pointer-events-none;
+    position: absolute;
+    right: -10px;
+    top: 0;
+    height: 100%;
+    color: var(--ls-primary-text-color);
+    background: linear-gradient(to left, var(--ls-primary-background-color) 65%, transparent);
+  }
+
+  .bottom-property-pill:hover .bottom-property-edit-icon,
+  .bottom-property-edit-icon:focus-visible {
+    @apply opacity-100 pointer-events-auto;
   }
 
   .ls-block.property-value-container {
