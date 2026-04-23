@@ -319,14 +319,35 @@
                                      (js/clearTimeout timeout-id)
                                      (stop-server! server))})))))))
 
+(defn- browser-open-command
+  [platform url]
+  (letfn [(unwrap-double-quoted [s]
+            (if (and (string/starts-with? s "\"")
+                     (string/ends-with? s "\"")
+                     (> (count s) 1))
+              (subs s 1 (dec (count s)))
+              s))
+          (windows-start-url-command [s]
+            (str "start \"\" \"" (unwrap-double-quoted s) "\""))]
+    (case platform
+      "darwin" ["open" [url]]
+      "linux" ["xdg-open" [url]]
+      "win32" ["cmd.exe" ["/d" "/c" (windows-start-url-command url)]]
+      [nil nil])))
+
+(defn- browser-open-spawn-options
+  [platform]
+  (cond-> {:detached true
+           :stdio "ignore"
+           :shell false}
+    (= platform "win32")
+    (assoc :windowsVerbatimArguments true)))
+
 (defn open-browser!
   [url]
   (let [platform (.-platform js/process)
-        [command args] (case platform
-                         "darwin" ["open" [url]]
-                         "linux" ["xdg-open" [url]]
-                         "win32" ["cmd" ["/c" "start" "" url]]
-                         [nil nil])]
+        [command args] (browser-open-command platform url)
+        spawn-opts (browser-open-spawn-options platform)]
     (if-not (seq command)
       (p/rejected (ex-info "unsupported platform for browser open"
                            {:code :browser-open-unsupported-platform
@@ -334,10 +355,7 @@
       (p/create
        (fn [resolve reject]
          (try
-           (let [child (.spawn child-process command (clj->js args)
-                               #js {:detached true
-                                    :stdio "ignore"
-                                    :shell false})]
+           (let [child (.spawn child-process command (clj->js args) (clj->js spawn-opts))]
              (.unref child)
              (resolve {:opened? true
                        :command command}))
