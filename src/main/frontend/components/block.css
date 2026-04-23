@@ -250,7 +250,7 @@
   }
 }
 
-.ls-page-title .block-main-container > .block-control-wrap {
+.block-main-container.is-page-title-row > .block-control-wrap {
   /* Center the page-title control against the page title's line box.
      Mobile overrides --ls-page-title-size, so this stays aligned cross-platform. */
   --ls-page-title-line-height: 1.38;
