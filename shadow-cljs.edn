@@ -50,7 +50,8 @@
 
         :devtools {:before-load frontend.core/stop          ;; before live-reloading any code call this function
                    :after-load frontend.core/start          ;; after live-reloading finishes call this function
-                   :watch-path "/static"
+                   :watch-path ""
+                   :watch-dir "static"
                    :preloads [devtools.preload
                               shadow.remote.runtime.cljs.browser]
                    :loader-mode :eval
@@ -128,7 +129,8 @@
 
            :devtools {:before-load mobile.core/stop!          ;; before live-reloading any code call this function
                       :after-load mobile.core/render!          ;; after live-reloading finishes call this function
-                      :watch-path "/static/mobile"
+                      :watch-path ""
+                      :watch-dir "static/mobile"
                       :preloads [devtools.preload
                                  shadow.remote.runtime.cljs.browser]
                       :loader-mode :eval}}
