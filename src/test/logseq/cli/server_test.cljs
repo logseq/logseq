@@ -166,6 +166,75 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest stop-server-waits-for-process-exit-after-lock-removal
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "cli-server-stop-waits-pid")
+               repo (str "logseq_db_stop_waits_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path data-dir repo)
+               lock {:repo repo
+                     :pid 424242
+                     :host "127.0.0.1"
+                     :port 9101
+                     :owner-source :cli}
+               pid-state (atom :alive)]
+           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+           (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
+           (-> (p/with-redefs [daemon/http-request (fn [_] (p/resolved {:status 200 :body ""}))
+                               daemon/pid-status (fn [_] @pid-state)
+                               daemon/wait-for (fn [pred _opts]
+                                                 (fs/unlinkSync lock-file)
+                                                 (p/let [first-result (pred)
+                                                         _ (is (= false first-result))
+                                                         _ (reset! pid-state :not-found)
+                                                         second-result (pred)]
+                                                   (is (= true second-result))
+                                                   true))]
+                 (cli-server/stop-server! {:data-dir data-dir
+                                           :owner-source :cli}
+                                          repo))
+               (p/then (fn [result]
+                         (is (= true (:ok? result)))
+                         (is (= repo (get-in result [:data :repo])))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest stop-server-times-out-when-lock-is-gone-but-process-is-still-alive
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "cli-server-stop-timeout-pid")
+               repo (str "logseq_db_stop_timeout_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path data-dir repo)
+               lock {:repo repo
+                     :pid 424242
+                     :host "127.0.0.1"
+                     :port 9101
+                     :owner-source :cli}
+               kill-calls (atom [])]
+           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+           (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
+           (-> (test-helper/with-js-property-override
+                 js/process
+                 "kill"
+                 (fn [pid signal]
+                   (swap! kill-calls conj [pid signal])
+                   true)
+                 (fn []
+                   (p/with-redefs [daemon/http-request (fn [_] (p/resolved {:status 200 :body ""}))
+                                   daemon/pid-status (fn [_] :alive)
+                                   daemon/wait-for (fn [_ _]
+                                                     (fs/unlinkSync lock-file)
+                                                     (p/rejected (ex-info "timeout" {:code :timeout})))]
+                     (cli-server/stop-server! {:data-dir data-dir
+                                               :owner-source :cli}
+                                              repo))))
+               (p/then (fn [result]
+                         (is (= false (:ok? result)))
+                         (is (= :server-stop-timeout (get-in result [:error :code])))
+                         (is (= [[424242 "SIGTERM"]] @kill-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest restart-server-does-not-sigterm-external-owner-daemon
   (async done
          (let [data-dir (node-helper/create-tmp-dir "cli-server-owner-restart")
