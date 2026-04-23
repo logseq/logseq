@@ -333,6 +333,8 @@
           ;; (cljs.pprint/pprint tx-meta)
         (if (seq ops')
           (try
+            (when (seq ops)
+              (op-construct/assert-no-numeric-entity-ids! @conn ops :history-action-ops))
             (ldb/batch-transact-with-temp-conn!
              conn
              tx-meta'
@@ -357,7 +359,7 @@
 (defn flush-pending!
   [repo client]
   (let [inflight @(:inflight client)
-        local-tx (or (client-op/get-local-tx repo) 0)
+        local-tx (client-op/get-local-tx repo)
         remote-tx (get @*repo->latest-remote-tx repo)
         conn (worker-state/get-datascript-conn repo)]
     (when (and conn (= local-tx remote-tx)) ; rebase
@@ -491,9 +493,11 @@
 
 (defn- history-action-error-reason
   [error]
-  (if (= "invalid rebase op" (ex-message error))
-    :invalid-history-action-ops
-    :error))
+  (let [message (ex-message error)]
+    (if (or (= "invalid rebase op" message)
+            (= "Non-transact outliner ops contain numeric entity ids" message))
+      :invalid-history-action-ops
+      :error)))
 
 (defn- replay-entity-id-value
   [db v]
