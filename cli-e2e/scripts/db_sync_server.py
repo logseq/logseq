@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ctypes
 import json
 import os
 import signal
@@ -42,6 +43,16 @@ def load_pid(pid_file: Path) -> Optional[int]:
 
 
 def process_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        kernel32 = ctypes.windll.kernel32
+        access = 0x00100000 | 0x1000  # SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION
+        handle = kernel32.OpenProcess(access, False, pid)
+        if handle:
+            kernel32.CloseHandle(handle)
+            return True
+        return ctypes.get_last_error() == 5
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -50,6 +61,24 @@ def process_running(pid: int) -> bool:
         return True
     else:
         return True
+
+
+def terminate_process(pid: int, force: bool) -> bool:
+    if pid <= 0:
+        return True
+    if os.name == "nt":
+        cmd = ["taskkill", "/PID", str(pid), "/T"]
+        if force:
+            cmd.append("/F")
+        result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        return result.returncode == 0 or not process_running(pid)
+    try:
+        os.kill(pid, signal.SIGKILL if force else signal.SIGTERM)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    return True
 
 
 def parse_json_file(path: Path) -> Dict[str, Any]:
@@ -162,10 +191,7 @@ def start_server(args: argparse.Namespace) -> None:
 
     base_url = f"http://{args.host}:{args.port}"
     if not wait_health(base_url, args.startup_timeout_s, args.poll_interval_s):
-        try:
-            os.kill(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
+        terminate_process(process.pid, force=False)
         fail(
             "db-sync server failed health check before timeout",
             base_url=base_url,
@@ -207,7 +233,8 @@ def stop_server(args: argparse.Namespace) -> None:
         print(json.dumps({"status": "ok", "stopped": False, "reason": "process-not-running", "pid": pid, "pid_file": str(pid_file)}))
         return
 
-    os.kill(pid, signal.SIGTERM)
+    if not terminate_process(pid, force=False):
+        fail("db-sync server stop failed", pid=pid, signal="SIGTERM", pid_file=str(pid_file))
     deadline = time.time() + args.shutdown_timeout_s
     while time.time() < deadline:
         if not process_running(pid):
@@ -216,7 +243,8 @@ def stop_server(args: argparse.Namespace) -> None:
             return
         time.sleep(args.poll_interval_s)
 
-    os.kill(pid, signal.SIGKILL)
+    if not terminate_process(pid, force=True):
+        fail("db-sync server force stop failed", pid=pid, signal="SIGKILL", pid_file=str(pid_file))
     pid_file.unlink(missing_ok=True)
     print(json.dumps({"status": "ok", "stopped": True, "signal": "SIGKILL", "pid": pid, "pid_file": str(pid_file)}))
 

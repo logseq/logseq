@@ -1,11 +1,17 @@
 (ns logseq.db-worker.daemon-test
   (:require [cljs.test :refer [async deftest is]]
             [frontend.test.node-helper :as node-helper]
+            [logseq.cli.test-helper :as test-helper]
             [logseq.db-worker.daemon :as daemon]
             [promesa.core :as p]
             ["fs" :as fs]
             ["path" :as node-path]
             ["child_process" :as child-process]))
+
+(defn- call-private
+  [sym & args]
+  (when-let [v (get (ns-interns 'logseq.db-worker.daemon) sym)]
+    (apply @v args)))
 
 (deftest spawn-server-uses-detached-process-and-no-host-port-args
   (let [captured (atom nil)
@@ -109,3 +115,130 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))
                      (done)))))))
+
+(deftest cleanup-stale-lock-stops-unhealthy-alive-process-before-removing-lock
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker-daemon-unhealthy")
+          repo (str "logseq_db_helper_unhealthy_" (subs (str (random-uuid)) 0 8))
+          path (node-path/join data-dir "db-worker.lock")
+          lock {:repo repo
+                :pid 424242
+                :host "127.0.0.1"
+                :port 9100
+                :owner-source :cli
+                :startedAt "2000-01-01T00:00:00.000Z"}
+          pid-state (atom :alive)
+          kill-calls (atom [])]
+      (fs/mkdirSync data-dir #js {:recursive true})
+      (fs/writeFileSync path (js/JSON.stringify (clj->js lock)))
+      (-> ((if (= "win32" (.-platform js/process))
+             (fn [f]
+               (test-helper/with-js-property-override
+                child-process
+                "spawnSync"
+                (fn [command args _opts]
+                  (swap! kill-calls conj [command (vec (js->clj args))])
+                  (reset! pid-state :not-found)
+                  #js {:status 0})
+                f))
+             (fn [f]
+               (test-helper/with-js-property-override
+                js/process
+                "kill"
+                (fn [pid signal]
+                  (swap! kill-calls conj [pid signal])
+                  (reset! pid-state :not-found)
+                  true)
+                f)))
+           (fn []
+             (p/with-redefs [daemon/pid-status (fn [_] @pid-state)
+                             daemon/healthy? (fn [_] (p/resolved false))
+                             daemon/wait-for (fn [pred _opts]
+                                               (p/let [result (pred)]
+                                                 (is (= true result))
+                                                 true))]
+               (daemon/cleanup-stale-lock! path lock))))
+          (p/then (fn [_]
+                    (if (= "win32" (.-platform js/process))
+                      (is (= [["taskkill" ["/PID" "424242" "/T"]]] @kill-calls))
+                      (is (= [[424242 "SIGTERM"]] @kill-calls)))
+                    (is (not (fs/existsSync path)))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest cleanup-stale-lock-keeps-recent-unhealthy-alive-process
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker-daemon-recent")
+          repo (str "logseq_db_helper_recent_" (subs (str (random-uuid)) 0 8))
+          path (node-path/join data-dir "db-worker.lock")
+          lock {:repo repo
+                :pid 424242
+                :host "127.0.0.1"
+                :port 9100
+                :owner-source :cli
+                :startedAt (.toISOString (js/Date.))}
+          kill-calls (atom [])]
+      (fs/mkdirSync data-dir #js {:recursive true})
+      (fs/writeFileSync path (js/JSON.stringify (clj->js lock)))
+      (-> (test-helper/with-js-property-override
+           js/process
+           "kill"
+           (fn [pid signal]
+             (swap! kill-calls conj [pid signal])
+             true)
+           (fn []
+             (p/with-redefs [daemon/pid-status (fn [_] :alive)
+                             daemon/healthy? (fn [_] (p/resolved false))]
+               (daemon/cleanup-stale-lock! path lock))))
+          (p/then (fn [_]
+                    (is (= [] @kill-calls))
+                    (is (fs/existsSync path))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest terminate-process-uses-platform-appropriate-stop-command
+  (async done
+    (let [terminate-process! (fn [pid force?]
+                               (call-private 'terminate-process! pid force?))
+          spawn-calls (atom [])
+          kill-calls (atom [])]
+      (-> ((if (= "win32" (.-platform js/process))
+             (fn [f]
+               (test-helper/with-js-property-override
+                child-process
+                "spawnSync"
+                (fn [command args opts]
+                  (swap! spawn-calls conj {:command command
+                                           :args (vec (js->clj args))
+                                           :opts (js->clj opts :keywordize-keys true)})
+                  #js {:status 0})
+                f))
+             (fn [f]
+               (test-helper/with-js-property-override
+                js/process
+                "kill"
+                (fn [pid signal]
+                  (swap! kill-calls conj [pid signal])
+                  true)
+                f)))
+           (fn []
+             (p/let [_ (terminate-process! 424242 false)
+                     _ (terminate-process! 424242 true)]
+               (if (= "win32" (.-platform js/process))
+                 (is (= [{:command "taskkill"
+                          :args ["/PID" "424242" "/T"]
+                          :opts {:windowsHide true
+                                 :stdio "ignore"}}
+                         {:command "taskkill"
+                          :args ["/PID" "424242" "/T" "/F"]
+                          :opts {:windowsHide true
+                                 :stdio "ignore"}}]
+                        @spawn-calls))
+                 (is (= [[424242 "SIGTERM"]
+                         [424242 "SIGKILL"]]
+                        @kill-calls))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
