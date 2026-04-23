@@ -767,23 +767,37 @@
         (= "logseq.property.class" property-ns)
         (contains? db-property/schema-properties property-id))))
 
+(defn- tag-class-page?
+  [db block]
+  (or (= :logseq.class/Tag (:db/ident block))
+      (and db
+           (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Tag) block))))
+
 (defn- bottom-position-property?
-  [property]
+  [db block property]
   (let [property-id (:db/ident property)
         property-type (:logseq.property/type property)]
-    (and (not= :url property-type)
-         (or (not= :default property-type)
-             (seq (:property/closed-values property)))
-         (not (schema-or-tag-related-property? property-id)))))
+    (if (tag-class-page? db block)
+      (or (contains? #{:logseq.property.class/extends
+                       :logseq.property.class/enable-bidirectional?}
+                     property-id)
+          (and (not= :url property-type)
+               (or (not= :default property-type)
+                   (seq (:property/closed-values property)))
+               (not (schema-or-tag-related-property? property-id))))
+      (and (not= :url property-type)
+           (or (not= :default property-type)
+               (seq (:property/closed-values property)))
+           (not (schema-or-tag-related-property? property-id))))))
 
 (defn- resolved-property-position
-  [property]
+  [db block property]
   (let [ui-position (:logseq.property/ui-position property)]
     (cond
       (contains? #{:block-left :block-right :block-below} ui-position)
       ui-position
 
-      (bottom-position-property? property)
+      (bottom-position-property? db block property)
       :block-below
 
       :else
@@ -792,7 +806,7 @@
 (defn- property-with-position?
   [db property-id block position]
   (when-let [property (entity-plus/entity-memoized db property-id)]
-    (let [property-position' (resolved-property-position property)]
+    (let [property-position' (resolved-property-position db block property)]
       (and
        (= property-position' position)
        (not (and (:logseq.property/hide-empty-value property)
@@ -800,20 +814,28 @@
        (not (:logseq.property/hide? property))
        (not (and
              (= property-position' :block-below)
-             (nil? (get block property-id))))))))
+             (nil? (get block property-id))
+             (not (tag-class-page? db block))))))))
 
 (defn property-with-other-position?
-  [property]
-  (not= :properties (resolved-property-position property)))
+  [db block property]
+  (not= :properties (resolved-property-position db block property)))
 
 (defn get-block-positioned-properties
   [db eid position]
   (let [block (d/entity db eid)
-        own-properties (:block.temp/property-keys block)]
-    (->> (:classes-properties (get-block-classes-properties db eid))
-         (map :db/ident)
-         (concat own-properties)
-         (distinct)
+        own-properties (:block.temp/property-keys block)
+        tag-page-pill-properties (when (tag-class-page? db block)
+                                   [:logseq.property.class/extends
+                                    :logseq.property.class/enable-bidirectional?])
+        positioned-property-ids (if (tag-class-page? db block)
+                                  (->> (concat own-properties tag-page-pill-properties)
+                                       distinct)
+                                  (->> (:classes-properties (get-block-classes-properties db eid))
+                                       (map :db/ident)
+                                       (concat own-properties)
+                                       distinct))]
+    (->> positioned-property-ids
          (filter (fn [id] (property-with-position? db id block position)))
          (map #(d/entity db %))
          (ldb/sort-by-order))))

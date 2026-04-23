@@ -3039,7 +3039,7 @@
                         (remove (fn [e] (attributes (:db/ident e))))
                         (remove (fn [k]
                                   (when-not page-title?
-                                    (outliner-property/property-with-other-position? k))))
+                                    (outliner-property/property-with-other-position? db block k))))
                         (remove (fn [e] (:logseq.property/hide? e)))
                         (remove nil?))]
     (or (seq properties)

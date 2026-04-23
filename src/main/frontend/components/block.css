@@ -1059,29 +1059,58 @@ html.is-mac {
     @apply flex;
   }
 
-  .property-k {
-    color: var(--ls-primary-text-color);
+  .bottom-properties-row {
+    @apply gap-1.5 py-1;
   }
 
-  .bottom-property-pair {
-    @apply min-w-0;
+  .bottom-property-pill {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 h-6 max-w-full;
+    background-color: var(--ls-secondary-background-color);
+    box-shadow: inset 0 0 0 1px var(--ls-border-color);
   }
 
   .bottom-property-content {
     @apply flex items-center gap-1 min-w-0;
   }
 
-  .bottom-property-separator {
-    @apply text-muted-foreground;
+  .bottom-property-pill .property-key-inner {
+    @apply flex items-center min-w-0;
+  }
+
+  .bottom-property-pill .property-k {
+    @apply w-auto flex-none whitespace-nowrap leading-[20px];
+    max-width: none;
+    color: var(--ls-primary-text-color);
+  }
+
+  .bottom-property-pill a.property-k,
+  .bottom-property-pill .property-key-inner a {
+    color: var(--ls-primary-text-color);
+  }
+
+  .ls-new-property {
+    @apply m-0;
+  }
+
+  .ls-new-property .jtrigger,
+  .bottom-property-control-btn {
+    @apply inline-flex items-center rounded-full px-1.5 py-0.5 h-6 text-xs text-muted-foreground;
+    box-shadow: inset 0 0 0 1px var(--ls-border-color);
   }
 
   .bottom-property-edit-icon {
-    @apply text-muted-foreground inline-flex items-center justify-center p-0 bg-transparent border-0 cursor-pointer;
+    @apply inline-flex items-center justify-center p-0 bg-transparent border-0 text-muted-foreground cursor-pointer;
   }
 
   .ls-block.property-value-container {
     min-width: 0;
-    flex-shrink: 1;
+    flex: 0 1 auto;
+    width: auto;
+    min-height: 20px;
+  }
+
+  .property-value {
+    @apply pl-0 min-h-[20px];
   }
 
   .property-value-inner,
@@ -1095,6 +1124,11 @@ html.is-mac {
   [role="checkbox"] {
     @apply self-center;
     vertical-align: middle;
+  }
+
+  .bullet-container,
+  .property-icon {
+    display: none;
   }
 }
 

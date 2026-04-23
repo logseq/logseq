@@ -431,7 +431,7 @@
       :else nil)))
 
 (rum/defc datetime-value
-  [value property-id repeated-task?]
+  [value property-id repeated-task? {:keys [datetime? other-position? suppress-inline-edit-icon?]}]
   (when-let [date (t/to-default-time-zone (tc/from-long value))]
     (let [content [:div.ls-datetime.flex.flex-row.gap-1.items-center
                    (when-let [page-cp (state/get-component :block/page-cp)]
@@ -442,15 +442,17 @@
                                    :label (human-date-label value)}
                                   {:block/name page-title})
                          page-title)))
-                   (let [date (js/Date. value)
-                         hours (.getHours date)
-                         minutes (.getMinutes date)]
-                     [:span.select-none
-                      (if (= 0 hours minutes)
-                        (ui/icon "edit" {:size 14 :class "text-muted-foreground hover:text-foreground align-middle"})
-                        (str (util/zero-pad hours)
-                             ":"
-                             (util/zero-pad minutes)))])]]
+                   (when datetime?
+                     (let [date (js/Date. value)
+                           hours (.getHours date)
+                           minutes (.getMinutes date)]
+                        [:span.select-none
+                        (if (= 0 hours minutes)
+                          (when-not (or other-position? suppress-inline-edit-icon?)
+                            (ui/icon "edit" {:size 14 :class "text-muted-foreground hover:text-foreground align-middle"}))
+                          (str (util/zero-pad hours)
+                               ":"
+                               (util/zero-pad minutes)))]))]]
       (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} property-id))
         (overdue date content)
         content))))
@@ -462,7 +464,7 @@
                                            (:db/ident property)))
 
 (rum/defc date-picker
-  [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
+  [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position? suppress-inline-edit-icon?]}]
   (let [*el (hooks/use-ref nil)
         content-fn (fn [{:keys [id]}] (calendar-inner id
                                                       {:block block
@@ -526,7 +528,12 @@
                 content))
 
             (number? value)
-            (datetime-value value (:db/ident property) repeated-task?)
+            (datetime-value value
+                            (:db/ident property)
+                            repeated-task?
+                            {:datetime? datetime?
+                             :other-position? other-position?
+                             :suppress-inline-edit-icon? suppress-inline-edit-icon?})
 
             :else
             (property-empty-btn-value nil))])))))
