@@ -256,7 +256,7 @@
 (defn- handle-tx-batch-ok!
   [repo client remote-tx remote-checksum]
   (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
-  (let [current-local-tx (or (client-op/get-local-tx repo) 0)
+  (let [current-local-tx (client-op/get-local-tx repo)
         next-local-tx (max current-local-tx remote-tx)]
     (client-op/update-local-tx repo next-local-tx)
     (broadcast-rtc-state! client)
@@ -288,6 +288,16 @@
 
 (declare handle-pull-ok! handle-changed!)
 
+(defn- validate-local-tx!
+  [repo message local-tx]
+  (let [message-type (:type message)]
+    (when (contains? #{"hello" "tx/batch/ok" "pull/ok" "changed" "tx/reject"} message-type)
+      (let [validate? (and (integer? local-tx) (>= local-tx 0))]
+       (when-not validate?
+         (throw (ex-info "Invalid local tx"
+                         {:repo repo
+                          :message-type message-type
+                          :local-tx local-tx})))))))
 (defn handle-message!
   [repo client raw]
   (let [message (-> raw
@@ -295,9 +305,10 @@
                     sync-transport/coerce-ws-server-message)]
     (when-not (map? message)
       (fail-fast :db-sync/response-parse-failed {:repo repo :raw raw}))
-    (let [local-tx (or (client-op/get-local-tx repo) 0)
+    (let [local-tx (client-op/get-local-tx repo)
           remote-tx (:t message)
           remote-checksum (:checksum message)]
+      (validate-local-tx! repo message local-tx)
       (update-latest-remote-state! repo message)
       (case (:type message)
         "hello" (handle-hello! repo client local-tx remote-tx remote-checksum)
