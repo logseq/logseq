@@ -45,13 +45,13 @@
     (testing "picks first existing candidate path"
       (set! (.-existsSync fs)
             (fn [path]
-              (= path "/opt/logseq/skills/logseq-cli/SKILL.md")))
+              (= path "/opt/logseq/.agents/skills/logseq-cli/SKILL.md")))
       (try
         (let [result (skill-command/resolve-skill-source-path
-                      ["/opt/logseq/skills/logseq-cli/SKILL.md"
-                       "/fallback/skills/logseq-cli/SKILL.md"])]
+                      ["/opt/logseq/.agents/skills/logseq-cli/SKILL.md"
+                       "/fallback/.agents/skills/logseq-cli/SKILL.md"])]
           (is (true? (:ok? result)))
-          (is (= "/opt/logseq/skills/logseq-cli/SKILL.md" (:path result))))
+          (is (= "/opt/logseq/.agents/skills/logseq-cli/SKILL.md" (:path result))))
         (finally
           (set! (.-existsSync fs) exists-sync))))
 
@@ -101,16 +101,16 @@
             (swap! captured conj [:write path payload encoding])))
     (try
       (let [result (skill-command/execute-skill-install {:type :skill-install
-                                                         :source-path "/opt/logseq/skills/logseq-cli/SKILL.md"
+                                                         :source-path "/opt/logseq/.agents/skills/logseq-cli/SKILL.md"
                                                          :destination-dir "/tmp/work/.agents/skills/logseq-cli"
                                                          :destination-file "/tmp/work/.agents/skills/logseq-cli/SKILL.md"
                                                          :global? false}
                                                         {})]
         (is (= :ok (:status result)))
         (is (= "/tmp/work/.agents/skills/logseq-cli/SKILL.md" (get-in result [:data :installed-path])))
-        (is (= "/opt/logseq/skills/logseq-cli/SKILL.md" (get-in result [:data :source-path])))
+        (is (= "/opt/logseq/.agents/skills/logseq-cli/SKILL.md" (get-in result [:data :source-path])))
         (is (= [[:mkdir "/tmp/work/.agents/skills/logseq-cli" {:recursive true}]
-                [:read "/opt/logseq/skills/logseq-cli/SKILL.md" "utf8"]
+                [:read "/opt/logseq/.agents/skills/logseq-cli/SKILL.md" "utf8"]
                 [:write "/tmp/work/.agents/skills/logseq-cli/SKILL.md" "# skill\nfrom source" "utf8"]]
                @captured)))
       (finally
@@ -172,7 +172,7 @@
             (throw (ex-info "write failed" {:code "EACCES"}))))
     (try
       (let [result (skill-command/execute-skill-install {:type :skill-install
-                                                         :source-path "/opt/logseq/skills/logseq-cli/SKILL.md"
+                                                         :source-path "/opt/logseq/.agents/skills/logseq-cli/SKILL.md"
                                                          :destination-dir "/tmp/work/.agents/skills/logseq-cli"
                                                          :destination-file "/tmp/work/.agents/skills/logseq-cli/SKILL.md"
                                                          :global? false}

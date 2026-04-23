@@ -37,7 +37,8 @@
 - PRs should describe the behavior change, link relevant issues, and note any test coverage added or skipped.
 
 ## Agent-Specific Notes
-- Project-specific skills live under `.agents/skills/`; load `.agents/skills/logseq-i18n/SKILL.md` for i18n/localization/hardcoded UI text tasks.
+- **Project skills registry**: Read `.agents/skills/registry.edn` before each request. Match tasks to skills by reading each skill's `:summary` and judging semantic intent — `:triggers` are supplemental hints only. Load the matching skill's `SKILL.md` before editing files or proposing changes.
+- **i18n (mandatory)**: Always load `.agents/skills/logseq-i18n/SKILL.md` before any change that adds, edits, or removes user-facing UI text, regardless of whether other skills also apply.
 - Review notes live in `prompts/review.md`; check them when preparing changes.
 - DB-sync feature guide for AI agents: `docs/agent-guide/db-sync/db-sync-guide.md`.
 - DB-sync protocol reference: `docs/agent-guide/db-sync/protocol.md`.

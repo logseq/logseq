@@ -9,7 +9,7 @@
 
 (def ^:private skill-dir-name "logseq-cli")
 (def ^:private skill-file-name "SKILL.md")
-(def ^:private relative-skill-path ["skills" skill-dir-name skill-file-name])
+(def ^:private relative-skill-path [".agents" "skills" skill-dir-name skill-file-name])
 
 (def ^:private install-spec
   {:global {:desc "Install to ~/.agents/skills/logseq-cli"
