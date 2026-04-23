@@ -341,6 +341,8 @@
           ;; (cljs.pprint/pprint tx-meta)
         (if (seq ops')
           (try
+            (when (seq ops)
+              (op-construct/assert-no-numeric-entity-ids! @conn ops :history-action-ops))
             (ldb/batch-transact-with-temp-conn!
              conn
              tx-meta'
@@ -499,9 +501,11 @@
 
 (defn- history-action-error-reason
   [error]
-  (if (= "invalid rebase op" (ex-message error))
-    :invalid-history-action-ops
-    :error))
+  (let [message (ex-message error)]
+    (if (or (= "invalid rebase op" message)
+            (= "Non-transact outliner ops contain numeric entity ids" message))
+      :invalid-history-action-ops
+      :error)))
 
 (defn- replay-entity-id-value
   [db v]
