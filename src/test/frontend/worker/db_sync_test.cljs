@@ -204,6 +204,10 @@
     (swap! client-op/*repo->pending-local-tx-count dissoc test-repo)
     (reset! worker-state/*datascript-conns {test-repo db-conn})
     (reset! worker-state/*client-ops-conns {test-repo ops-conn})
+    (undo-redo/clear-history! test-repo)
+    ;; Keep sync-message tests deterministic under strict local-tx validation.
+    (when (and ops-conn (nil? (client-op/get-local-tx test-repo)))
+      (client-op/update-local-tx test-repo 0))
     (when ops-conn
       (d/listen! db-conn ::listen-db
                  (fn [tx-report]
@@ -212,6 +216,7 @@
           cleanup (fn []
                     (when ops-conn
                       (d/unlisten! db-conn ::listen-db))
+                    (undo-redo/clear-history! test-repo)
                     (swap! client-op/*repo->pending-local-tx-count dissoc test-repo)
                     (reset! worker-state/*datascript-conns db-prev)
                     (reset! worker-state/*client-ops-conns ops-prev))]
@@ -4727,6 +4732,22 @@
               all-threes)
         (first all-threes))))
 
+(defn- select-offline-inserted-one
+  [conn template-root-uuid]
+  (let [all-one-ids (d/q '[:find [?b ...]
+                           :in $ ?title
+                           :where
+                           [?b :block/title ?title]]
+                         @conn
+                         "1")
+        all-ones (mapv #(d/entity @conn %) all-one-ids)]
+    (or (some (fn [b]
+                (when (not= template-root-uuid
+                            (some-> b :block/parent :block/uuid))
+                  b))
+              all-ones)
+        (first all-ones))))
+
 (defn- setup-rebase-apply-template-repro-state
   []
   (let [template-root-uuid (random-uuid)
@@ -4766,6 +4787,9 @@
                         :keep-uuid? true}]]]
      local-tx-meta)
     {:template-root-uuid template-root-uuid
+     :template-1-uuid template-1-uuid
+     :template-2-uuid template-2-uuid
+     :template-3-uuid template-3-uuid
      :empty-target-uuid empty-target-uuid
      :local-empty-uuid local-empty-uuid
      :seed-conn seed-conn
@@ -4915,5 +4939,57 @@
               (let [followup (d/entity @conn [:block/uuid followup-uuid])]
                 (is (some? followup))
                 (is (= "followup" (:block/title followup)))))
+            (finally
+              (reset! undo-redo/*apply-history-action! prev-apply-action))))))))
+
+(deftest undo-redo-apply-template-without-template-blocks-rewrites-property-value-refs-test
+  (testing "redo apply-template should not keep property value refs to template source blocks"
+    (let [{:keys [template-root-uuid template-1-uuid template-3-uuid empty-target-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn (d/conn-from-db @seed-conn)
+          prev-apply-action @undo-redo/*apply-history-action!]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! undo-redo/*apply-history-action! sync-apply/apply-history-action!)
+          (try
+            (d/transact! conn [[:db/add [:block/uuid template-1-uuid] :user.property/p1 [:block/uuid template-3-uuid]]
+                               [:db/add [:block/uuid empty-target-uuid] :block/title "target"]])
+            (apply-ops! conn
+                        [[:apply-template [(:db/id (d/entity @conn [:block/uuid template-root-uuid]))
+                                           (:db/id (d/entity @conn [:block/uuid empty-target-uuid]))
+                                           {:sibling? true}]]]
+                        local-tx-meta)
+            (let [inserted-one (select-offline-inserted-one conn template-root-uuid)
+                  inserted-three (select-offline-inserted-three conn template-root-uuid)
+                  property-value (:user.property/p1 inserted-one)
+                  initial-ref-uuid (cond
+                                     (map? property-value)
+                                     (:block/uuid property-value)
+
+                                     (and (vector? property-value)
+                                          (= :block/uuid (first property-value)))
+                                     (second property-value)
+
+                                     :else
+                                     property-value)]
+              (is (= (:block/uuid inserted-three) initial-ref-uuid))
+              (is (not= template-3-uuid initial-ref-uuid)))
+            (undo-all! test-repo)
+            (redo-all! test-repo)
+            (let [inserted-one (select-offline-inserted-one conn template-root-uuid)
+                  inserted-three (select-offline-inserted-three conn template-root-uuid)
+                  property-value (:user.property/p1 inserted-one)
+                  redone-ref-uuid (cond
+                                    (map? property-value)
+                                    (:block/uuid property-value)
+
+                                    (and (vector? property-value)
+                                         (= :block/uuid (first property-value)))
+                                    (second property-value)
+
+                                    :else
+                                    property-value)]
+              (is (= (:block/uuid inserted-three) redone-ref-uuid))
+              (is (not= template-3-uuid redone-ref-uuid)))
             (finally
               (reset! undo-redo/*apply-history-action! prev-apply-action))))))))
