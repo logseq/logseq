@@ -365,7 +365,7 @@
 (defn flush-pending!
   [repo client]
   (let [inflight @(:inflight client)
-        local-tx (or (client-op/get-local-tx repo) 0)
+        local-tx (client-op/get-local-tx repo)
         remote-tx (get @*repo->latest-remote-tx repo)
         conn (worker-state/get-datascript-conn repo)]
     (when (and conn (= local-tx remote-tx)) ; rebase
