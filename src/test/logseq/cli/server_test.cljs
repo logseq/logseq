@@ -185,75 +185,6 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest stop-server-waits-for-process-exit-after-lock-removal
-  (async done
-         (let [data-dir (node-helper/create-tmp-dir "cli-server-stop-waits-pid")
-               repo (str "logseq_db_stop_waits_" (subs (str (random-uuid)) 0 8))
-               lock-file (cli-server/lock-path data-dir repo)
-               lock {:repo repo
-                     :pid 424242
-                     :host "127.0.0.1"
-                     :port 9101
-                     :owner-source :cli}
-               pid-state (atom :alive)]
-           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
-           (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
-           (-> (p/with-redefs [daemon/http-request (fn [_] (p/resolved {:status 200 :body ""}))
-                               daemon/pid-status (fn [_] @pid-state)
-                               daemon/wait-for (fn [pred _opts]
-                                                 (fs/unlinkSync lock-file)
-                                                 (p/let [first-result (pred)
-                                                         _ (is (= false first-result))
-                                                         _ (reset! pid-state :not-found)
-                                                         second-result (pred)]
-                                                   (is (= true second-result))
-                                                   true))]
-                 (cli-server/stop-server! {:data-dir data-dir
-                                           :owner-source :cli}
-                                          repo))
-               (p/then (fn [result]
-                         (is (= true (:ok? result)))
-                         (is (= repo (get-in result [:data :repo])))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally done)))))
-
-(deftest stop-server-times-out-when-lock-is-gone-but-process-is-still-alive
-  (async done
-         (let [data-dir (node-helper/create-tmp-dir "cli-server-stop-timeout-pid")
-               repo (str "logseq_db_stop_timeout_" (subs (str (random-uuid)) 0 8))
-               lock-file (cli-server/lock-path data-dir repo)
-               lock {:repo repo
-                     :pid 424242
-                     :host "127.0.0.1"
-                     :port 9101
-                     :owner-source :cli}
-               kill-calls (atom [])]
-           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
-           (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
-           (-> (test-helper/with-js-property-override
-                 js/process
-                 "kill"
-                 (fn [pid signal]
-                   (swap! kill-calls conj [pid signal])
-                   true)
-                 (fn []
-                   (p/with-redefs [daemon/http-request (fn [_] (p/resolved {:status 200 :body ""}))
-                                   daemon/pid-status (fn [_] :alive)
-                                   daemon/wait-for (fn [_ _]
-                                                     (fs/unlinkSync lock-file)
-                                                     (p/rejected (ex-info "timeout" {:code :timeout})))]
-                     (cli-server/stop-server! {:data-dir data-dir
-                                               :owner-source :cli}
-                                              repo))))
-               (p/then (fn [result]
-                         (is (= false (:ok? result)))
-                         (is (= :server-stop-timeout (get-in result [:error :code])))
-                         (is (= [[424242 "SIGTERM"]] @kill-calls))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally done)))))
-
 (deftest restart-server-does-not-sigterm-external-owner-daemon
   (async done
          (let [data-dir (node-helper/create-tmp-dir "cli-server-owner-restart")
@@ -445,6 +376,61 @@
                          (is (= "http://127.0.0.1:9311" (:base-url config)))
                          (is (true? (:owned? config)))
                          (is (<= 3 @discover-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-preserves-live-server-list-entry-after-transient-healthz-failure
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "cli-server-transient-healthz")
+               config-path (node-path/join data-dir "cli.edn")
+               server-list-file (cli-config/server-list-path config-path)
+               repo (str "logseq_db_transient_healthz_" (subs (str (random-uuid)) 0 8))
+               pid 424242
+               port 9312
+               read-lock-calls (atom 0)
+               healthz-calls (atom 0)
+               lock {:repo repo
+                     :pid pid
+                     :lock-id "transient-healthz-lock"
+                     :owner-source :cli}]
+           (-> (p/with-redefs [daemon/read-lock (fn [_]
+                                                  (if (= 1 (swap! read-lock-calls inc))
+                                                    nil
+                                                    lock))
+                               daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/spawn-server! (fn [_]
+                                                      (fs/writeFileSync server-list-file
+                                                                        (str pid " " port "\n"))
+                                                      nil)
+                               daemon/wait-for-lock (fn [_] (p/resolved true))
+                               daemon/pid-status (fn [_] :alive)
+                               daemon/http-request (fn [{:keys [path]}]
+                                                     (if (= "/healthz" path)
+                                                       (let [call (swap! healthz-calls inc)]
+                                                         (if (= 1 call)
+                                                           (p/rejected (ex-info "connection refused" {:code :econnrefused}))
+                                                           (p/resolved {:status 200
+                                                                        :body (js/JSON.stringify
+                                                                               (clj->js {:repo repo
+                                                                                         :status "ready"
+                                                                                         :host "127.0.0.1"
+                                                                                         :port port
+                                                                                         :pid pid
+                                                                                         :owner-source "cli"
+                                                                                         :data-dir data-dir
+                                                                                         :revision "server-revision"}))})))
+                                                       (p/resolved {:status 200 :body ""})))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:data-dir data-dir
+                                             :config-path config-path}
+                                            repo))
+               (p/then (fn [config]
+                         (is (= "http://127.0.0.1:9312" (:base-url config)))
+                         (is (true? (:owned? config)))
+                         (is (>= @healthz-calls 2))
+                         (is (= (str pid " " port "\n")
+                                (.toString (fs/readFileSync server-list-file) "utf8")))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

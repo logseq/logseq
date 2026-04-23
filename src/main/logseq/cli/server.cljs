@@ -101,10 +101,6 @@
   [pid]
   (daemon/pid-status pid))
 
-(defn- process-stopped?
-  [pid]
-  (not (contains? #{:alive :no-permission} (pid-status pid))))
-
 (defn- read-lock
   [path]
   (daemon/read-lock path))
@@ -197,20 +193,20 @@
                      (for [{:keys [pid port] :as entry} entries]
                        (p/let [pid-state (pid-status pid)]
                          (if-not (contains? #{:alive :no-permission} pid-state)
-                           {:entry entry :alive? false}
+                           {:entry entry :retain? false}
                            (-> (fetch-healthz {:host "127.0.0.1" :port port})
                                (p/then (fn [payload]
                                          {:entry entry
-                                          :alive? true
+                                          :retain? true
                                           :server (-> payload
                                                       (update :status keyword)
                                                       (update :owner-source normalize-owner-source))}))
                                (p/catch (fn [_]
-                                          {:entry entry :alive? false})))))))
-            alive-results (filter :alive? results)
-            cleaned-entries (mapv :entry alive-results)
+                                          {:entry entry :retain? true})))))))
+            retained-results (filter :retain? results)
+            cleaned-entries (mapv :entry retained-results)
             _ (server-list/rewrite-entries! path cleaned-entries)]
-      (->> alive-results
+      (->> retained-results
            (keep :server)
            vec))))
 

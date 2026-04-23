@@ -10,8 +10,6 @@
 (def ^:private valid-owner-sources
   #{:cli :electron :unknown})
 
-(def ^:private stale-unhealthy-lock-grace-ms 30000)
-
 (defn normalize-owner-source
   [owner-source]
   (let [owner-source (cond
@@ -107,14 +105,6 @@
   (and (seq (:repo lock))
        (number? (:pid lock))
        (seq (:lock-id lock))))
-
-(defn- recent-lock?
-  [{:keys [startedAt]}]
-  (when (string? startedAt)
-    (let [started-ms (js/Date.parse startedAt)]
-      (and (number? started-ms)
-           (not (js/isNaN started-ms))
-           (< (- (js/Date.now) started-ms) stale-unhealthy-lock-grace-ms)))))
 
 (declare wait-for)
 
