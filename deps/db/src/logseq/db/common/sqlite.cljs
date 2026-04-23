@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.graph-dir :as graph-dir]
+            [logseq.common.path :as path]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn create-kvs-table!
@@ -29,9 +30,9 @@
   [graphs-dir db-name]
   (let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name db-name)
         graph-dir (node-path/join graphs-dir graph-dir-name)]
-    [graph-dir-name (node-path/join graph-dir "db.sqlite")]))
+    [graph-dir-name (path/path-join graph-dir "db.sqlite")]))
 
 (defn get-db-backups-path
   [graphs-dir db-name]
   (let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name db-name)]
-    (node-path/join graphs-dir graph-dir-name "backups")))
+    (path/path-join graphs-dir graph-dir-name "backups")))

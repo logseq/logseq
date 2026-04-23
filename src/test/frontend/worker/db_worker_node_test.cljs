@@ -160,18 +160,20 @@
 
 (deftest db-worker-node-data-dir-permission-error
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "db-worker-readonly")
-               repo (str "logseq_db_perm_" (subs (str (random-uuid)) 0 8))]
-           (fs/chmodSync data-dir 365)
-           (-> (start-daemon! {:data-dir data-dir
-                               :repo repo})
-               (p/then (fn [_]
-                         (is false "expected data-dir permission error")))
-               (p/catch (fn [e]
-                          (let [data (ex-data e)]
-                            (is (= :data-dir-permission (:code data)))
-                            (is (= (node-path/resolve data-dir) (:path data))))))
-               (p/finally (fn [] (done)))))))
+         (if (= "win32" (.-platform js/process))
+           (done)
+           (let [data-dir (node-helper/create-tmp-dir "db-worker-readonly")
+                 repo (str "logseq_db_perm_" (subs (str (random-uuid)) 0 8))]
+             (fs/chmodSync data-dir 365)
+             (-> (start-daemon! {:data-dir data-dir
+                                 :repo repo})
+                 (p/then (fn [_]
+                           (is false "expected data-dir permission error")))
+                 (p/catch (fn [e]
+                            (let [data (ex-data e)]
+                              (is (= :data-dir-permission (:code data)))
+                              (is (= (node-path/resolve data-dir) (:path data))))))
+                 (p/finally (fn [] (done))))))))
 
 (deftest db-worker-node-creates-log-file
   (async done
