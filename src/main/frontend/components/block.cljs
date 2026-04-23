@@ -2007,7 +2007,8 @@
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
         collapsable? (editor-handler/collapsable? uuid {:semantic? true
-                                                        :ignore-children? page-title?})
+                                                        :ignore-children? page-title?
+                                                        :page-title? page-title?})
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
