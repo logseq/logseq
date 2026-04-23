@@ -87,7 +87,7 @@
   (-> (p/let [{:keys [status]} (http-request {:method "GET"
                                               :host host
                                               :port port
-                                              :path "/readyz"
+                                              :path "/healthz"
                                               :timeout-ms 1000})]
         (= 200 status))
       (p/catch (fn [_] false))))
@@ -99,13 +99,14 @@
                                               :port port
                                               :path "/healthz"
                                               :timeout-ms 1000})]
-        (= 200 status))
+        (contains? #{200 503} status))
       (p/catch (fn [_] false))))
 
 (defn valid-lock?
   [lock]
-  (and (seq (:host lock))
-       (pos-int? (:port lock))))
+  (and (seq (:repo lock))
+       (number? (:pid lock))
+       (seq (:lock-id lock))))
 
 (defn- recent-lock?
   [{:keys [startedAt]}]
@@ -198,13 +199,7 @@
                   nil)))
 
     :else
-    (p/let [healthy (healthy? lock)]
-      (when-not (or healthy
-                    (and (contains? #{:alive :no-permission} (pid-status (:pid lock)))
-                         (recent-lock? lock)))
-        (p/let [_ (stop-stale-process! lock)]
-          (remove-lock! path)
-          nil)))))
+    (p/resolved nil)))
 
 (defn wait-for
   [pred-fn {:keys [timeout-ms interval-ms]
@@ -225,9 +220,7 @@
 (defn wait-for-lock
   [path]
   (wait-for (fn []
-              (p/resolved (and (fs/existsSync path)
-                               (let [lock (read-lock path)]
-                                 (pos-int? (:port lock))))))
+              (p/resolved (fs/existsSync path)))
             {:timeout-ms 8000
              :interval-ms 50}))
 
@@ -238,10 +231,11 @@
              :interval-ms 50}))
 
 (defn spawn-server!
-  [{:keys [script repo data-dir owner-source create-empty-db?]}]
+  [{:keys [script repo data-dir owner-source create-empty-db? server-list-file]}]
   (let [owner-source (normalize-owner-source owner-source)
         detached? (not= owner-source :electron)
         args (clj->js (cond-> [script "--repo" repo "--data-dir" data-dir "--owner-source" (name owner-source)]
+                        server-list-file (conj "--server-list-file" server-list-file)
                         create-empty-db? (conj "--create-empty-db")))
         env (js/Object.assign #js {} (.-env js/process) #js {:ELECTRON_RUN_AS_NODE "1"})]
     (if-not script

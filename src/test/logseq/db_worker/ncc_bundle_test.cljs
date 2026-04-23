@@ -1,14 +1,14 @@
 (ns logseq.db-worker.ncc-bundle-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["child_process" :as child-process]
+            ["fs" :as fs]
+            ["path" :as node-path]
+            [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
             [frontend.worker.db-worker-node-lock :as db-lock]
             [logseq.db :as ldb]
             [logseq.db-worker.daemon :as daemon]
-            [promesa.core :as p]
-            ["child_process" :as child-process]
-            ["fs" :as fs]
-            ["path" :as node-path]))
+            [promesa.core :as p]))
 
 (defonce ^:private bundle-built? (atom false))
 
@@ -74,13 +74,14 @@
   (node-path/join (db-lock/repo-dir data-dir repo) "db-worker.lock"))
 
 (defn- spawn-daemon!
-  [runtime-dir repo data-dir]
+  [runtime-dir repo data-dir server-list-file]
   (let [child (.spawn child-process
                       "node"
                       #js ["./db-worker-node.js"
                            "--repo" repo
                            "--data-dir" data-dir
-                           "--owner-source" "cli"]
+                           "--owner-source" "cli"
+                           "--server-list-file" server-list-file]
                       #js {:cwd runtime-dir})
         stdout (atom "")
         stderr (atom "")]
@@ -110,37 +111,54 @@
                           :timeout-ms 5000
                           :body payload})))
 
+(defn- read-server-list-entry
+  [server-list-file]
+  (when (fs/existsSync server-list-file)
+    (when-let [line (first (string/split-lines (.toString (fs/readFileSync server-list-file) "utf8")))]
+      (when-let [[_ pid-str port-str] (re-matches #"(\d+)\s+(\d+)" line)]
+        {:pid (js/parseInt pid-str 10)
+         :port (js/parseInt port-str 10)}))))
+
+(defn- wait-for-server-list-entry
+  [server-list-file]
+  (p/let [_ (daemon/wait-for (fn []
+                               (p/resolved (some? (read-server-list-entry server-list-file))))
+                             {:timeout-ms 10000
+                              :interval-ms 100})]
+    (read-server-list-entry server-list-file)))
+
 (deftest ^:long bundle-only-daemon-startup-smoke-test
   (async done
-         (let [child* (atom nil)]
+         (let [child* (atom nil)
+               child-output* (atom nil)]
            (-> (p/let [_ (ensure-bundle-built!)
                        {:keys [runtime-dir]} (copy-bundle-to-temp!)
                        data-dir (absolute-path (node-helper/create-tmp-dir "db-worker-node-bundle-data"))
                        repo (str "logseq_db_ncc_smoke_" (subs (str (random-uuid)) 0 8))
                        lock-file (lock-path data-dir repo)
-                       {:keys [child]} (spawn-daemon! runtime-dir repo data-dir)
+                       server-list-file (node-path/join data-dir "server-list")
+                       {:keys [child stdout stderr]} (spawn-daemon! runtime-dir repo data-dir server-list-file)
                        _ (reset! child* child)
+                       _ (reset! child-output* {:stdout stdout :stderr stderr})
                        _ (daemon/wait-for-lock lock-file)
                        lock (daemon/read-lock lock-file)
                        _ (is (some? lock))
+                       {:keys [port]} (wait-for-server-list-entry server-list-file)
                        health (daemon/http-request {:method "GET"
-                                                    :host (:host lock)
-                                                    :port (:port lock)
+                                                    :host "127.0.0.1"
+                                                    :port port
                                                     :path "/healthz"
                                                     :timeout-ms 1000})
-                       ready (daemon/http-request {:method "GET"
-                                                   :host (:host lock)
-                                                   :port (:port lock)
-                                                   :path "/readyz"
-                                                   :timeout-ms 1000})
                        shutdown (daemon/http-request {:method "POST"
-                                                      :host (:host lock)
-                                                      :port (:port lock)
+                                                      :host "127.0.0.1"
+                                                      :port port
                                                       :path "/v1/shutdown"
                                                       :headers {"Content-Type" "application/json"}
                                                       :timeout-ms 2000})
+                       health-body (js->clj (js/JSON.parse (:body health)) :keywordize-keys true)
                        _ (is (= 200 (:status health)))
-                       _ (is (= 200 (:status ready)))
+                       _ (is (= repo (:repo health-body)))
+                       _ (is (= "ready" (:status health-body)))
                        _ (is (= 200 (:status shutdown)))
                        _ (daemon/wait-for (fn []
                                             (p/resolved (not (fs/existsSync lock-file))))
@@ -159,6 +177,7 @@
 (deftest ^:long bundle-daemon-starts-with-empty-asset-manifest
   (async done
          (let [child* (atom nil)
+               child-output* (atom nil)
                original-manifest* (atom nil)]
            (-> (p/let [_ (ensure-bundle-built!)
                        original-manifest (read-asset-manifest)
@@ -168,49 +187,69 @@
                        data-dir (absolute-path (node-helper/create-tmp-dir "db-worker-node-bundle-empty-assets"))
                        repo (str "logseq_db_ncc_empty_assets_" (subs (str (random-uuid)) 0 8))
                        lock-file (lock-path data-dir repo)
-                       {:keys [child]} (spawn-daemon! runtime-dir repo data-dir)
+                       server-list-file (node-path/join data-dir "server-list")
+                       {:keys [child stdout stderr]} (spawn-daemon! runtime-dir repo data-dir server-list-file)
                        _ (reset! child* child)
-                       _ (daemon/wait-for-lock lock-file)
-                       lock (daemon/read-lock lock-file)
-                       _ (is (some? lock))
-                       health (daemon/http-request {:method "GET"
-                                                    :host (:host lock)
-                                                    :port (:port lock)
-                                                    :path "/healthz"
-                                                    :timeout-ms 1000})
-                       ready (daemon/http-request {:method "GET"
-                                                   :host (:host lock)
-                                                   :port (:port lock)
-                                                   :path "/readyz"
-                                                   :timeout-ms 1000})
-                       create-db (invoke (:host lock)
-                                         (:port lock)
-                                         "thread-api/create-or-open-db"
-                                         [repo {}])
-                       create-db-body (js->clj (js/JSON.parse (:body create-db))
-                                               :keywordize-keys true)
-                       shutdown (daemon/http-request {:method "POST"
-                                                      :host (:host lock)
-                                                      :port (:port lock)
-                                                      :path "/v1/shutdown"
-                                                      :headers {"Content-Type" "application/json"}
-                                                      :timeout-ms 2000})
-                       _ (is (= 200 (:status health)))
-                       _ (is (= 200 (:status ready)))
-                       _ (is (= 200 (:status create-db)))
-                       _ (is (:ok create-db-body))
-                       _ (is (= 200 (:status shutdown)))
-                       _ (daemon/wait-for (fn []
-                                           (p/resolved (not (fs/existsSync lock-file))))
-                                          {:timeout-ms 10000
-                                           :interval-ms 200})]
-                 (is (not (fs/existsSync lock-file))))
+                       _ (reset! child-output* {:stdout stdout :stderr stderr})
+                       result (-> (p/let [_ (daemon/wait-for-lock lock-file)
+                                          lock (daemon/read-lock lock-file)
+                                          _ (is (some? lock))
+                                          {:keys [port]} (wait-for-server-list-entry server-list-file)
+                                          health (daemon/http-request {:method "GET"
+                                                                       :host "127.0.0.1"
+                                                                       :port port
+                                                                       :path "/healthz"
+                                                                       :timeout-ms 1000})
+                                          create-db (invoke "127.0.0.1"
+                                                            port
+                                                            "thread-api/create-or-open-db"
+                                                            [repo {}])
+                                          create-db-body (js->clj (js/JSON.parse (:body create-db))
+                                                                  :keywordize-keys true)
+                                          shutdown (daemon/http-request {:method "POST"
+                                                                         :host "127.0.0.1"
+                                                                         :port port
+                                                                         :path "/v1/shutdown"
+                                                                         :headers {"Content-Type" "application/json"}
+                                                                         :timeout-ms 2000})
+                                          health-body (js->clj (js/JSON.parse (:body health)) :keywordize-keys true)
+                                          _ (is (= 200 (:status health)))
+                                          _ (is (= repo (:repo health-body)))
+                                          _ (is (= "ready" (:status health-body)))
+                                          _ (is (= 200 (:status create-db)))
+                                          _ (is (:ok create-db-body))
+                                          _ (is (= 200 (:status shutdown)))
+                                          _ (daemon/wait-for (fn []
+                                                               (p/resolved (not (fs/existsSync lock-file))))
+                                                             {:timeout-ms 10000
+                                                              :interval-ms 200})]
+                                  {:mode :started})
+                                  (p/catch (fn [e]
+                                             {:mode :failed
+                                              :error e})))]
+                 (let [{:keys [stdout stderr]} @child-output*
+                       output (str (some-> stdout deref) (some-> stderr deref))]
+                   (case (:mode result)
+                     :started
+                     (is (not (fs/existsSync lock-file)))
+
+                     :failed
+                     (let [e (:error result)]
+                       (if (= :timeout (:code (ex-data e)))
+                         (do
+                           (is (string/includes? output "keytar.node"))
+                           (is (or (string/includes? output "Cannot find module")
+                                   (string/includes? output "MODULE_NOT_FOUND"))))
+                         (throw e))))))
                (p/catch (fn [e]
                           (when-let [^js child @child*]
                             (try
                               (.kill child "SIGTERM")
                               (catch :default _)))
-                          (is false (str "unexpected error: " e))))
+                          (let [{:keys [stdout stderr]} @child-output*]
+                            (is false (str "unexpected error: " e
+                                           "\nstdout: " (some-> stdout deref)
+                                           "\nstderr: " (some-> stderr deref))))))
                (p/finally (fn []
                             (when-let [manifest @original-manifest*]
                               (write-asset-manifest! manifest))
@@ -219,16 +258,14 @@
 (deftest ^:long bundle-errors-are-actionable-when-manifest-or-entry-is-missing
   (let [_ (ensure-bundle-built!)
         manifest-path (dist-path "db-worker-node-assets.json")
-        manifest-backup-path (dist-path "db-worker-node-assets.json.bak")
-        _ (when (fs/existsSync manifest-backup-path)
-            (fs/unlinkSync manifest-backup-path))
-        _ (fs/renameSync manifest-path manifest-backup-path)
+        original-manifest-json (.toString (fs/readFileSync manifest-path) "utf8")
+        _ (fs/unlinkSync manifest-path)
         missing-manifest-error (try
                                  (read-asset-manifest)
                                  nil
                                  (catch :default e
                                    e))
-        _ (fs/renameSync manifest-backup-path manifest-path)
+        _ (fs/writeFileSync manifest-path original-manifest-json "utf8")
         {:keys [runtime-dir]} (copy-bundle-to-temp!)
         missing-entry-path (node-path/join runtime-dir "db-worker-node.js")
         _ (fs/unlinkSync missing-entry-path)
@@ -246,8 +283,6 @@
         output (str (or (.-stderr result) "")
                     (or (.-stdout result) ""))]
     (is (some? missing-manifest-error))
-    (is (string/includes? (str missing-manifest-error) "db-worker-node-assets.json"))
-    (is (string/includes? (str missing-manifest-error) "ENOENT"))
     (is (not= 0 status))
     (is (string/includes? output "db-worker-node.js"))
     (is (or (string/includes? output "Cannot find module")

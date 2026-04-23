@@ -10,6 +10,7 @@
             [frontend.worker.db-worker-node :as db-worker-node]
             [frontend.worker.platform.node :as platform-node]
             [goog.object :as gobj]
+            [logseq.cli.config :as cli-config]
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
             [logseq.cli.test-helper :as test-helper]
@@ -281,6 +282,14 @@
     (is (= "logseq_db_parse_args" (:repo result)))
     (is (= true (:create-empty-db? result)))))
 
+(deftest db-worker-node-parse-args-recognizes-server-list-file
+  (let [parse-args #'db-worker-node/parse-args
+        result (parse-args #js ["node" "dist/db-worker-node.js"
+                                "--repo" "logseq_db_parse_args"
+                                "--server-list-file" "/tmp/server-list"])]
+    (is (= "logseq_db_parse_args" (:repo result)))
+    (is (= "/tmp/server-list" (:server-list-file result)))))
+
 (deftest db-worker-node-parse-args-recognizes-version
   (let [parse-args #'db-worker-node/parse-args
         result (parse-args #js ["node" "dist/db-worker-node.js"
@@ -528,6 +537,38 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest db-worker-node-start-daemon-registers-and-unregisters-server-list-entry
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-server-list")
+               repo (str "logseq_db_server_list_" (subs (str (random-uuid)) 0 8))
+               lock-file-path (lock-path data-dir repo)
+               server-list-file (node-path/join data-dir "server-list")]
+           (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
+                               db-core/init-core! (fn [_platform]
+                                                    #js {:remoteInvoke (fn [_method _direct-pass? _args]
+                                                                         (p/resolved nil))})
+                               db-lock/ensure-lock! (fn [_]
+                                                      (p/resolved {:path lock-file-path
+                                                                   :lock {:repo repo
+                                                                          :pid (.-pid js/process)
+                                                                          :lock-id "server-list-lock"
+                                                                          :owner-source :cli}}))
+                               db-lock/update-lock! (fn [_path lock] lock)]
+                 (p/let [{:keys [port stop!]} (db-worker-node/start-daemon! {:data-dir data-dir
+                                                                             :repo repo
+                                                                             :server-list-file server-list-file
+                                                                             :log-level "error"})
+                         contents-after-start (.toString (fs/readFileSync server-list-file) "utf8")
+                         _ (is (string/includes? contents-after-start (str (.-pid js/process) " " port)))
+                         _ (stop!)
+                         contents-after-stop (when (fs/existsSync server-list-file)
+                                               (.toString (fs/readFileSync server-list-file) "utf8"))]
+                   (is (or (nil? contents-after-stop)
+                           (not (string/includes? contents-after-stop (str (.-pid js/process) " " port)))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest db-worker-node-repo-error-handles-keyword-methods
   (let [repo-error #'db-worker-node/repo-error
         bound-repo "logseq_db_bound"]
@@ -668,18 +709,31 @@
          (let [daemon (atom nil)
                data-dir (node-helper/create-tmp-dir "db-worker-daemon")
                repo (str "logseq_db_smoke_" (subs (str (random-uuid)) 0 8))
+               server-list-file (node-path/join data-dir "server-list")
                now (js/Date.now)
                page-uuid (random-uuid)
                block-uuid (random-uuid)]
            (-> (p/let [{:keys [host port stop!]}
                        (start-daemon!  {:data-dir data-dir
-                                        :repo repo})
+                                        :repo repo
+                                        :server-list-file server-list-file})
                        health (http-get host port "/healthz")
-                       ready (http-get host port "/readyz")
+                       missing-readyz (http-get host port "/readyz")
+                       health-body (js->clj (js/JSON.parse (:body health)) :keywordize-keys true)
+                       server-list-contents (.toString (fs/readFileSync server-list-file) "utf8")
                        _ (do
                            (reset! daemon {:host host :port port :stop! stop!})
                            (is (= 200 (:status health)))
-                           (is (= 200 (:status ready))))
+                           (is (= 404 (:status missing-readyz)))
+                           (is (= repo (:repo health-body)))
+                           (is (= "ready" (:status health-body)))
+                           (is (= host (:host health-body)))
+                           (is (= port (:port health-body)))
+                           (is (= (.-pid js/process) (:pid health-body)))
+                           (is (= (node-path/resolve data-dir) (:data-dir health-body)))
+                           (is (contains? health-body :owner-source))
+                           (is (contains? health-body :revision))
+                           (is (string/includes? server-list-contents (str (.-pid js/process) " " port))))
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
                        dbs (invoke host port "thread-api/list-db" [])
                        _ (is (some #(= repo (:name %)) dbs))
@@ -687,7 +741,8 @@
                        _ (is (fs/existsSync lock-file))
                        lock-contents (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
                        _ (is (= repo (gobj/get lock-contents "repo")))
-                       _ (is (= host (gobj/get lock-contents "host")))
+                       _ (is (nil? (gobj/get lock-contents "host")))
+                       _ (is (nil? (gobj/get lock-contents "port")))
                        _ (invoke host port "thread-api/transact"
                                  [repo
                                   [{:block/uuid page-uuid
@@ -720,7 +775,11 @@
                               (-> (stop!)
                                   (p/finally (fn []
                                                (is (not (fs/existsSync (lock-path data-dir repo))))
-                                               (done))))
+                                               (let [contents (when (fs/existsSync server-list-file)
+                                                                (.toString (fs/readFileSync server-list-file) "utf8"))]
+                                                 (is (or (nil? contents)
+                                                         (not (string/includes? contents (str (.-pid js/process) " ")))))
+                                                 (done)))))
                               (done))))))))
 
 (deftest db-worker-node-import-edn
@@ -1097,12 +1156,15 @@
   (async done
          (let [daemon (atom nil)
                data-dir (node-helper/create-tmp-dir "db-worker-desktop-cli")
+               config-path (node-path/join data-dir "cli.edn")
+               server-list-file (cli-config/server-list-path config-path)
                repo (str "logseq_db_desktop_cli_" (subs (str (random-uuid)) 0 8))
                now (js/Date.now)
                page-uuid (random-uuid)]
            (-> (p/let [{:keys [host port stop!]}
                        (start-daemon! {:data-dir data-dir
-                                       :repo repo})
+                                       :repo repo
+                                       :server-list-file server-list-file})
                        _ (reset! daemon {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
                        _ (invoke host port "thread-api/transact"
@@ -1115,7 +1177,12 @@
                                     :block/updated-at now}]
                                   {}
                                   nil])
-                       ensured (cli-server/ensure-server! {:data-dir data-dir} repo)
+                       _ (is (fs/existsSync server-list-file))
+                       _ (is (string/includes? (.toString (fs/readFileSync server-list-file) "utf8")
+                                               (str (.-pid js/process) " " port)))
+                       ensured (cli-server/ensure-server! {:data-dir data-dir
+                                                           :config-path config-path}
+                                                          repo)
                        url (js/URL. (:base-url ensured))
                        cli-host (.-hostname url)
                        cli-port (js/parseInt (.-port url) 10)

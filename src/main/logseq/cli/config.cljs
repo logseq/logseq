@@ -36,6 +36,10 @@
   []
   (node-path/join (.homedir os) "logseq" "cli.edn"))
 
+(defn server-list-path
+  [config-path]
+  (node-path/join (node-path/dirname (or config-path (default-config-path))) "server-list"))
+
 (def ^:private removed-config-keys
   #{:auth-token :retries :e2ee-password})
 
