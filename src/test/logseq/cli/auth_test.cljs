@@ -137,6 +137,39 @@
           (p/finally (fn []
                        (done)))))))
 
+(deftest test-open-browser-uses-cmd-start-on-windows
+  (let [open-command (fn [platform url]
+                       (call-private 'browser-open-command platform url))
+        [command args] (open-command "win32"
+                                     "https://example.com/oauth2/authorize?response_type=code&client_id=abc&redirect_uri=http%3A%2F%2Flocalhost%3A8765%2Fauth%2Fcallback")]
+    (is (= "cmd.exe" command))
+    (is (= ["/d" "/c"
+            "start \"\" \"https://example.com/oauth2/authorize?response_type=code&client_id=abc&redirect_uri=http%3A%2F%2Flocalhost%3A8765%2Fauth%2Fcallback\""]
+           args))))
+
+(deftest test-open-browser-normalizes-prequoted-windows-url
+  (let [open-command (fn [platform url]
+                       (call-private 'browser-open-command platform url))
+        [command args] (open-command "win32"
+                                     "\"https://example.com/oauth2/authorize?response_type=code&client_id=abc&redirect_uri=http%3A%2F%2Flocalhost%3A8765%2Fauth%2Fcallback\"")]
+    (is (= "cmd.exe" command))
+    (is (= ["/d" "/c"
+            "start \"\" \"https://example.com/oauth2/authorize?response_type=code&client_id=abc&redirect_uri=http%3A%2F%2Flocalhost%3A8765%2Fauth%2Fcallback\""]
+           args))))
+
+(deftest test-open-browser-uses-verbatim-windows-cmd-arguments
+  (let [spawn-options (fn [platform]
+                        (call-private 'browser-open-spawn-options platform))]
+    (is (= {:detached true
+            :stdio "ignore"
+            :shell false
+            :windowsVerbatimArguments true}
+           (spawn-options "win32")))
+    (is (= {:detached true
+            :stdio "ignore"
+            :shell false}
+           (spawn-options "linux")))))
+
 (deftest test-parse-jwt-fails-fast-on-invalid-token
   (let [parse-jwt (fn [jwt]
                     (call-private 'parse-jwt jwt))]
