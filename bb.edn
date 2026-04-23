@@ -203,6 +203,10 @@
   {:doc "Run shell-first CLI end-to-end tests"
    :task (apply shell {:shutdown nil} "bb" "-f" "cli-e2e/bb.edn" "test" *command-line-args*)}
 
+  dev:cli-e2e-cleanup
+  {:doc "Run shell-first CLI end-to-end cleanup"
+   :task (apply shell {:shutdown nil} "bb" "-f" "cli-e2e/bb.edn" "cleanup" *command-line-args*)}
+
   dev:cli-e2e-sync
   {:doc "Run shell-first CLI sync end-to-end tests"
    :task (apply shell {:shutdown nil} "bb" "-f" "cli-e2e/bb.edn" "test-sync" *command-line-args*)}
