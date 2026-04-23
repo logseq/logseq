@@ -9,7 +9,7 @@
     "files": [
         "dist/",
         "static/logseq-cli.js",
-        "skills/logseq-cli/SKILL.md"
+        ".agents/skills/logseq-cli/SKILL.md"
     ],
     "engines": {
         "node": ">=22.20.0"
