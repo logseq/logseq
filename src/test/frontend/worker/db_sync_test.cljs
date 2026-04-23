@@ -1600,6 +1600,29 @@
           (is (= before-title
                  (:block/title (d/entity @conn [:block/uuid child-uuid])))))))))
 
+(deftest apply-history-action-inline-semantic-op-rejects-numeric-ref-ids-test
+  (testing "inline semantic history action should reject stale numeric ref ids before replay"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          child-uuid (:block/uuid child1)
+          stale-ref-id 99999999]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [result (#'sync-apply/apply-history-action!
+                        test-repo
+                        tx-id
+                        false
+                        {:outliner-op :save-block
+                         :db-sync/forward-outliner-ops [[:save-block [{:block/uuid child-uuid
+                                                                       :block/tags #{stale-ref-id}}
+                                                                      {}]]]
+                         :db-sync/inverse-outliner-ops [[:save-block [{:block/uuid child-uuid
+                                                                       :block/title "child 1"}
+                                                                      {}]]]})]
+            (is (= false (:applied? result)))
+            (is (= :invalid-history-action-ops
+                   (:reason result)))))))))
+
 (deftest apply-history-action-redo-invalid-insert-conflict-skips-fail-fast-test
   (testing "redo conflict on stale insert target should return error result without fail-fast logger"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)
@@ -4651,6 +4674,43 @@
                          :template-blocks blocks-to-insert}]]]
      local-tx-meta)))
 
+(defn- apply-template-with-opts!
+  [conn template-root-uuid target-uuid opts]
+  (let [template-root (d/entity @conn [:block/uuid template-root-uuid])
+        target (d/entity @conn [:block/uuid target-uuid])
+        template-blocks (->> (ldb/get-block-and-children @conn template-root-uuid
+                                                         {:include-property-block? true})
+                             rest)
+        blocks-to-insert (cons (assoc (first template-blocks)
+                                      :logseq.property/used-template (:db/id template-root))
+                               (rest template-blocks))]
+    (apply-ops!
+     conn
+     [[:apply-template [(:db/id template-root)
+                        (:db/id target)
+                        (merge {:sibling? true
+                                :template-blocks blocks-to-insert}
+                               opts)]]]
+     local-tx-meta)))
+
+(defn- undo-all!
+  [repo]
+  (loop [n 0]
+    (let [result (undo-redo/undo repo)]
+      (when-not (= :frontend.worker.undo-redo/empty-undo-stack result)
+        (when (> n 128)
+          (throw (ex-info "undo loop exceeded" {:count n})))
+        (recur (inc n))))))
+
+(defn- redo-all!
+  [repo]
+  (loop [n 0]
+    (let [result (undo-redo/redo repo)]
+      (when-not (= :frontend.worker.undo-redo/empty-redo-stack result)
+        (when (> n 128)
+          (throw (ex-info "redo loop exceeded" {:count n})))
+        (recur (inc n))))))
+
 (defn- select-offline-inserted-three
   [conn template-root-uuid]
   (let [all-three-ids (d/q '[:find [?b ...]
@@ -4760,3 +4820,64 @@
                       (str (:errors validation))))))))
         (finally
           (d/unlisten! conn-b ::capture-rebase-apply-template))))))
+
+(deftest apply-history-action-redo-after-apply-template-undo-all-preserves-followup-insert-test
+  (testing "apply-template then insert-blocks should replay on redo after both are undone"
+    (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn (d/conn-from-db @seed-conn)
+          followup-uuid (random-uuid)
+          prev-apply-action @undo-redo/*apply-history-action!]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! undo-redo/*apply-history-action! sync-apply/apply-history-action!)
+          (try
+            (apply-template-to-empty-target! conn template-root-uuid empty-target-uuid)
+            (let [inserted-three (select-offline-inserted-three conn template-root-uuid)]
+              (is (some? inserted-three))
+              (apply-ops! conn
+                          [[:insert-blocks [[{:block/uuid followup-uuid
+                                              :block/title "followup"}]
+                                            (:db/id inserted-three)
+                                            {:sibling? true
+                                             :keep-uuid? true}]]]
+                          local-tx-meta)
+              (undo-all! test-repo)
+              (is (nil? (d/entity @conn [:block/uuid followup-uuid])))
+              (redo-all! test-repo)
+              (let [followup (d/entity @conn [:block/uuid followup-uuid])]
+                (is (some? followup))
+                (is (= "followup" (:block/title followup)))))
+            (finally
+              (reset! undo-redo/*apply-history-action! prev-apply-action))))))))
+
+(deftest apply-history-action-redo-after-non-empty-template-insert-preserves-followup-insert-test
+  (testing "non-empty apply-template + insert-blocks should replay on redo after undo-all"
+    (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn (d/conn-from-db @seed-conn)
+          followup-uuid (random-uuid)
+          prev-apply-action @undo-redo/*apply-history-action!]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! undo-redo/*apply-history-action! sync-apply/apply-history-action!)
+          (try
+            (d/transact! conn [[:db/add [:block/uuid empty-target-uuid] :block/title "target"]])
+            (apply-template-with-opts! conn template-root-uuid empty-target-uuid {})
+            (let [inserted-three (select-offline-inserted-three conn template-root-uuid)]
+              (is (some? inserted-three))
+              (apply-ops! conn
+                          [[:insert-blocks [[{:block/uuid followup-uuid
+                                              :block/title "followup"}]
+                                            (:db/id inserted-three)
+                                            {:sibling? true
+                                             :keep-uuid? true}]]]
+                          local-tx-meta)
+              (undo-all! test-repo)
+              (is (nil? (d/entity @conn [:block/uuid followup-uuid])))
+              (redo-all! test-repo)
+              (let [followup (d/entity @conn [:block/uuid followup-uuid])]
+                (is (some? followup))
+                (is (= "followup" (:block/title followup)))))
+            (finally
+              (reset! undo-redo/*apply-history-action! prev-apply-action))))))))
