@@ -1133,9 +1133,11 @@
       (unresolved-numeric-entity-id? root-id))
 
     :apply-template
-    (let [[template-id target-id _opts] args]
+    (let [[template-id target-id opts] args
+          template-blocks (:template-blocks opts)]
       (or (unresolved-numeric-entity-id? template-id)
-          (unresolved-numeric-entity-id? target-id)))
+          (unresolved-numeric-entity-id? target-id)
+          (some #(numeric-id-in-block-ref-attrs? db %) template-blocks)))
 
     :recycle-delete-permanently
     (let [[root-id] args]
@@ -1201,10 +1203,7 @@
                                (and (= :apply-template (:outliner-op tx-meta))
                                     (:undo? tx-meta)
                                     (seq (:db-sync/inverse-outliner-ops tx-meta)))
-                               (some-> (:db-sync/inverse-outliner-ops tx-meta)
-                                       seq
-                                       vec
-                                       (->> (mapv #(normalize-op-entry-ids db-before %))))
+                               explicit-inverse-outliner-ops
 
                                (has-replace-empty-target-insert-op? forward-outliner-ops)
                                built-inverse-outliner-ops

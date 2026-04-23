@@ -249,6 +249,41 @@
       (is (= #{[:block/uuid tag-uuid]}
              (get-in forward-outliner-ops [0 1 0 0 :block/tags]))))))
 
+(deftest derive-history-outliner-ops-apply-template-undo-canonicalizes-template-block-refs-test
+  (testing "apply-template undo explicit inverse should canonicalize nested template-block ref attrs"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page"}
+                   :blocks [{:block/title "template"}
+                            {:block/title "target"}]}]})
+          template (db-test/find-block-by-content @conn "template")
+          target (db-test/find-block-by-content @conn "target")
+          template-uuid (:block/uuid template)
+          target-uuid (:block/uuid target)
+          inserted-uuid (random-uuid)
+          tag-uuid (random-uuid)
+          _ (d/transact! conn [{:db/id -1
+                                :block/uuid tag-uuid
+                                :block/title "Tag"
+                                :block/name "tag"
+                                :block/tags :logseq.class/Tag}])
+          tag-id (:db/id (d/entity @conn [:block/uuid tag-uuid]))
+          tx-report (d/with @conn [[:db/retractEntity tag-id]] {})
+          tx-meta {:outliner-op :apply-template
+                   :undo? true
+                   :db-sync/inverse-outliner-ops
+                   [[:apply-template [template-uuid
+                                      target-uuid
+                                      {:template-blocks [{:block/uuid inserted-uuid
+                                                          :block/title "inserted"
+                                                          :block/tags #{tag-id}}]
+                                       :sibling? true}]]]}
+          {:keys [inverse-outliner-ops]}
+          (op-construct/derive-history-outliner-ops
+           @conn (:db-after tx-report) (:tx-data tx-report) tx-meta)]
+      (is (= #{[:block/uuid tag-uuid]}
+             (get-in inverse-outliner-ops [0 1 2 :template-blocks 0 :block/tags]))))))
+
 (deftest derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page-test
   (testing "delete-page inverse restores hard-retracted class/property/today pages with stable db/ident"
     (let [today (date-time-util/ms->journal-day (js/Date.))
