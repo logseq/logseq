@@ -222,6 +222,48 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-execute-sync-start-retries-transient-stopped-state
+  (async done
+         (let [status-calls (atom 0)
+               start-calls (atom 0)]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method _direct-pass? _args]
+                                                  (case method
+                                                    :thread-api/db-sync-start
+                                                    (do
+                                                      (swap! start-calls inc)
+                                                      (p/resolved nil))
+
+                                                    :thread-api/db-sync-status
+                                                    (let [idx (swap! status-calls inc)]
+                                                      (p/resolved (if (= idx 1)
+                                                                    {:repo "logseq_db_demo"
+                                                                     :graph-id "graph-uuid"
+                                                                     :ws-state :stopped
+                                                                     :pending-local 0
+                                                                     :pending-asset 0
+                                                                     :pending-server 0}
+                                                                    {:repo "logseq_db_demo"
+                                                                     :graph-id "graph-uuid"
+                                                                     :ws-state :open
+                                                                     :pending-local 0
+                                                                     :pending-asset 0
+                                                                     :pending-server 0})))
+                                                    (p/resolved {:ok true})))]
+                 (p/let [result (execute-with-runtime-auth {:type :sync-start
+                                                            :repo "logseq_db_demo"
+                                                            :wait-timeout-ms 200
+                                                            :wait-poll-interval-ms 0}
+                                                           {:data-dir "/tmp"})]
+                   (is (= :ok (:status result)))
+                   (is (= :open (get-in result [:data :ws-state])))
+                   (is (= 2 @status-calls))
+                   (is (= 2 @start-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest test-execute-sync-start-missing-ws-url-is-error
   (async done
          (let [ensure-calls (atom [])
