@@ -2585,49 +2585,64 @@
 (rum/defc block-positioned-properties
   [config block position]
   (let [properties (outliner-property/get-block-positioned-properties (db/get-db) (:db/id block) position)
+        has-viewable-properties? (seq properties)
         opts (merge config
                     {:icon? true
                      :page-cp page-cp
                      :block-cp blocks-container
                      :inline-text inline-text
                      :other-position? true
-                     :property-position position})]
-    (when (seq properties)
-      (case position
+                     :property-position position})
+        show-page-hidden-properties-toggle? (and (ldb/page? block)
+                                                 (not config/publishing?))
+        show-hidden-properties-toggle? (and has-viewable-properties?
+                                            show-page-hidden-properties-toggle?
+                                            (property-component/has-hidden-properties? block config))
+        show-page-add-property? (and (ldb/page? block)
+                                     (not (ldb/class? block))
+                                     (not config/publishing?))
+        show-add-property-button? (and has-viewable-properties?
+                                       show-page-add-property?)]
+    (case position
         :block-below
-        [:div.positioned-properties.block-below.flex.flex-row.gap-2.items-center.flex-wrap.text-sm.overflow-x-hidden
-         (for [[idx property] (map-indexed vector properties)]
-           [:div.bottom-property-pair.flex.flex-row.items-center.gap-1
-            {:key (str (:db/id block) "-" (:db/id property))}
-            [:div.flex.flex-row.items-center
-             (property-component/property-key-cp block property opts)
-             [:div.select-none ":"]]
-            [:div.bottom-property-content.ls-block.property-value-container
-             {:style {:min-height 20}}
-             (pv/property-value block property opts)
-             (when (and (contains? #{:date :number} (:logseq.property/type property))
-                        (not config/publishing?))
-               [:button.bottom-property-edit-icon.select-none
-                {:type "button"
-                 :on-click (fn [e]
-                             (util/stop e)
-                             (when-let [trigger
-                                        (some-> (.-currentTarget e)
-                                                (.closest ".bottom-property-content")
-                                                (.querySelector ".jtrigger"))]
-                               (.click trigger)
-                               (some-> trigger .focus)))}
-                (ui/icon "edit" {:size 14})])]
-            (when (< idx (dec (count properties)))
-              [:div.bottom-property-separator.select-none ","])])
-         (when (and (ldb/page? block) (not config/publishing?))
-           (property-component/hidden-properties-toggle-button block))]
-        [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
-         {:class (name position)}
-         (for [property properties]
-           (rum/with-key
-             (pv/property-value block property (assoc opts :show-tooltip? true))
-             (str (:db/id block) "-" (:db/id property))))]))))
+        (when has-viewable-properties?
+          [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden
+           [:div.bottom-properties-row.flex.flex-row.gap-2.items-center.flex-wrap.overflow-x-hidden
+            (for [property properties]
+              [:div.bottom-property-pill
+               {:key (str (:db/id block) "-" (:db/id property))}
+               [:div.flex.flex-row.items-center
+                (property-component/property-key-cp block property opts)
+                [:div.select-none ":"]]
+               [:div.bottom-property-content.ls-block.property-value-container
+                {:style {:min-height 20}}
+                (pv/property-value block property opts)
+                (when (contains? #{:number :date :datetime} (:logseq.property/type property))
+                  [:button.bottom-property-edit-icon.select-none
+                   {:type "button"
+                    :on-click (fn [e]
+                                (util/stop e)
+                                (when-let [trigger
+                                           (some-> (.-currentTarget e)
+                                                   (.closest ".bottom-property-content")
+                                                   (.querySelector ".jtrigger"))]
+                                  (.click trigger)
+                                  (some-> trigger .focus)))}
+                   (ui/icon "edit" {:size 14})])]])
+            (when show-hidden-properties-toggle?
+              (property-component/hidden-properties-toggle-button block {:icon-only? true}))
+            (when show-add-property-button?
+              (property-component/new-property block (assoc opts
+                                                            :property-position :block-below
+                                                            :icon-only? true)))]])
+
+        (when (seq properties)
+          [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
+           {:class (name position)}
+           (for [property properties]
+             (rum/with-key
+               (pv/property-value block property (assoc opts :show-tooltip? true))
+               (str (:db/id block) "-" (:db/id property))))]))))
 
 (rum/defc block-reactions < rum/reactive db-mixins/query
   [block]
