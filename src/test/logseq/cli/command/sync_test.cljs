@@ -952,7 +952,8 @@
                                                        :repo "logseq_db_demo"
                                                        :graph "demo"
                                                        :e2ee-password "pw"}
-                                                      {:data-dir "/tmp"
+                                                      {:base-url "http://example"
+                                                       :data-dir "/tmp"
                                                        :refresh-token "refresh-token"})]
                    (is (= :error (:status result)))
                    (is (= :graph-db-not-empty (get-in result [:error :code])))
