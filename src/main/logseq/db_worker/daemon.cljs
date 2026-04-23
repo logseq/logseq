@@ -10,6 +10,8 @@
 (def ^:private valid-owner-sources
   #{:cli :electron :unknown})
 
+(def ^:private stale-unhealthy-lock-grace-ms 30000)
+
 (defn normalize-owner-source
   [owner-source]
   (let [owner-source (cond
@@ -105,6 +107,79 @@
   (and (seq (:host lock))
        (pos-int? (:port lock))))
 
+(defn- recent-lock?
+  [{:keys [startedAt]}]
+  (when (string? startedAt)
+    (let [started-ms (js/Date.parse startedAt)]
+      (and (number? started-ms)
+           (not (js/isNaN started-ms))
+           (< (- (js/Date.now) started-ms) stale-unhealthy-lock-grace-ms)))))
+
+(declare wait-for)
+
+(defn- process-stopped?
+  [pid]
+  (not (contains? #{:alive :no-permission} (pid-status pid))))
+
+(defn- terminate-process!
+  [pid force?]
+  (if (= "win32" (.-platform js/process))
+    (let [args (cond-> ["/PID" (str pid) "/T"]
+                 force? (conj "/F"))]
+      (try
+        (let [result (.spawnSync child-process "taskkill" (clj->js args)
+                                 #js {:windowsHide true
+                                      :stdio "ignore"})]
+          (if (or (= 0 (.-status result))
+                  (process-stopped? pid))
+            (p/resolved nil)
+            (p/rejected (ex-info "taskkill failed"
+                                 {:code :taskkill-failed
+                                  :pid pid
+                                  :force? force?}))))
+        (catch :default e
+          (p/rejected e))))
+    (try
+      (.kill js/process pid (if force? "SIGKILL" "SIGTERM"))
+      (p/resolved nil)
+      (catch :default e
+        (p/rejected e)))))
+
+(defn- wait-for-process-stop!
+  [pid timeout-ms]
+  (wait-for (fn [] (p/resolved (process-stopped? pid)))
+            {:timeout-ms timeout-ms
+             :interval-ms 100}))
+
+(defn- stop-stale-process!
+  [{:keys [pid]}]
+  (cond
+    (not (number? pid))
+    (p/resolved nil)
+
+    (= pid (.-pid js/process))
+    (p/resolved nil)
+
+    (process-stopped? pid)
+    (p/resolved nil)
+
+    :else
+    (-> (p/do!
+         (-> (terminate-process! pid false)
+             (p/catch (fn [e]
+                        (log/warn :db-worker-daemon/stale-process-stop-failed
+                                  {:pid pid :force? false :error e})
+                        (p/resolved nil))))
+         (wait-for-process-stop! pid 5000))
+        (p/catch (fn [_]
+                   (-> (terminate-process! pid true)
+                       (p/catch (fn [e]
+                                  (log/warn :db-worker-daemon/stale-process-stop-failed
+                                            {:pid pid :force? true :error e})
+                                  (p/resolved nil))))
+                   (-> (wait-for-process-stop! pid 1000)
+                       (p/catch (fn [_] nil))))))))
+
 (defn cleanup-stale-lock!
   [path lock]
   (cond
@@ -117,14 +192,19 @@
       (p/resolved nil))
 
     (not (valid-lock? lock))
-    (do
-      (remove-lock! path)
-      (p/resolved nil))
+    (-> (stop-stale-process! lock)
+        (p/then (fn [_]
+                  (remove-lock! path)
+                  nil)))
 
     :else
     (p/let [healthy (healthy? lock)]
-      (when-not healthy
-        (remove-lock! path)))))
+      (when-not (or healthy
+                    (and (contains? #{:alive :no-permission} (pid-status (:pid lock)))
+                         (recent-lock? lock)))
+        (p/let [_ (stop-stale-process! lock)]
+          (remove-lock! path)
+          nil)))))
 
 (defn wait-for
   [pred-fn {:keys [timeout-ms interval-ms]

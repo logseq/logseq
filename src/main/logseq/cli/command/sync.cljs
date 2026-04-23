@@ -498,7 +498,7 @@
         graph-id-skipped-hint "Graph-id is missing locally. Run sync download first, then retry sync start."
         runtime-error-hint "Run sync status to inspect last-error and fix sync runtime error before retrying."
         timeout-hint "Run sync status to inspect ws-state and ensure sync endpoint/token are valid."]
-    (letfn [(poll! []
+    (letfn [(poll! [initial?]
               (p/let [status (invoke-with-repo config repo :thread-api/db-sync-status [repo])
                       ws-state (:ws-state status)
                       graph-id (:graph-id status)
@@ -521,6 +521,11 @@
                   {:status :ok
                    :data status}
 
+                  (and initial? (contains? sync-start-skipped-states ws-state))
+                  (p/let [_ (invoke-with-repo config repo :thread-api/db-sync-start [repo])
+                          _ (p/delay poll-interval-ms)]
+                    (poll! false))
+
                   (contains? sync-start-skipped-states ws-state)
                   {:status :error
                    :error {:code :sync-start-skipped
@@ -541,8 +546,8 @@
 
                   :else
                   (p/let [_ (p/delay poll-interval-ms)]
-                    (poll!)))))]
-      (poll!))))
+                    (poll! false)))))]
+      (poll! true))))
 
 (defn- execute-sync-upload
   [action config]
