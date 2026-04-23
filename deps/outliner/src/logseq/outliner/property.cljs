@@ -760,22 +760,51 @@
       (:classes-properties (get-block-classes-properties db eid)))
      (common-util/distinct-by :db/id))))
 
+(defn- schema-or-tag-related-property?
+  [property-id]
+  (let [property-ns (some-> property-id namespace)]
+    (or (= :block/tags property-id)
+        (= "logseq.property.class" property-ns)
+        (contains? db-property/schema-properties property-id))))
+
+(defn- bottom-position-property?
+  [property]
+  (let [property-id (:db/ident property)
+        property-type (:logseq.property/type property)]
+    (and (not= :url property-type)
+         (or (not= :default property-type)
+             (seq (:property/closed-values property)))
+         (not (schema-or-tag-related-property? property-id)))))
+
+(defn- resolved-property-position
+  [property]
+  (let [ui-position (:logseq.property/ui-position property)]
+    (cond
+      (contains? #{:block-left :block-right :block-below} ui-position)
+      ui-position
+
+      (bottom-position-property? property)
+      :block-below
+
+      :else
+      :properties)))
+
 (defn- property-with-position?
   [db property-id block position]
   (when-let [property (entity-plus/entity-memoized db property-id)]
-    (let [property-position (:logseq.property/ui-position property)]
+    (let [property-position' (resolved-property-position property)]
       (and
-       (= property-position position)
+       (= property-position' position)
        (not (and (:logseq.property/hide-empty-value property)
                  (nil? (get block property-id))))
        (not (:logseq.property/hide? property))
        (not (and
-             (= property-position :block-below)
+             (= property-position' :block-below)
              (nil? (get block property-id))))))))
 
 (defn property-with-other-position?
   [property]
-  (not (contains? #{:properties nil} (:logseq.property/ui-position property))))
+  (not= :properties (resolved-property-position property)))
 
 (defn get-block-positioned-properties
   [db eid position]

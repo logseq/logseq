@@ -674,7 +674,7 @@
         special-built-in-prop? (contains? #{:block/title :block/tags :block/created-at :block/updated-at} (:db/ident property))]
     (->>
      [(when with-title?
-        [:h3.font-medium.px-2.py-2.opacity-80.flex.items-center.gap-1
+        [:h3.px-2.py-2.opacity-80.flex.items-center.gap-1
          (t :property/configure)])
       (when-not special-built-in-prop?
         (dropdown-editor-menuitem {:icon :pencil :title (t :property/name) :desc [:span.flex.items-center.gap-1 icon title]
