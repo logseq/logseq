@@ -31,15 +31,16 @@
 
 (deftest ensure-data-dir-rejects-read-only-dir
   (testing "rejects directories without write permission"
-    (let [target (node-helper/create-tmp-dir "data-dir-readonly")]
-      (fs/chmodSync target 365)
-      (try
-        (data-dir/ensure-data-dir! target)
-        (is false "expected data-dir permission error")
-        (catch :default e
-          (let [data (ex-data e)]
-            (is (= :data-dir-permission (:code data)))
-            (is (= (node-path/resolve target) (:path data)))))))))
+    (when-not (= "win32" (.-platform js/process))
+      (let [target (node-helper/create-tmp-dir "data-dir-readonly")]
+        (fs/chmodSync target 365)
+        (try
+          (data-dir/ensure-data-dir! target)
+          (is false "expected data-dir permission error")
+          (catch :default e
+            (let [data (ex-data e)]
+              (is (= :data-dir-permission (:code data)))
+              (is (= (node-path/resolve target) (:path data))))))))))
 
 (deftest normalize-data-dir-default
   (testing "defaults to ~/logseq/graphs"

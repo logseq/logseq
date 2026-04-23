@@ -4,7 +4,8 @@
             ["path" :as node-path]
             [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
-            [logseq.cli.command.skill :as skill-command]))
+            [logseq.cli.command.skill :as skill-command]
+            [logseq.common.path :as path]))
 
 (deftest test-skill-command-entries
   (let [entries skill-command/entries
@@ -142,7 +143,7 @@
 (deftest test-execute-skill-install-global-prefers-home-env
   (let [tmp-root (.mkdtempSync fs (node-path/join (.tmpdir os) "logseq-skill-home-"))
         source-path (node-path/join tmp-root "source-skill.md")
-        installed-file (node-path/join tmp-root ".agents" "skills" "logseq-cli" "SKILL.md")
+        installed-file (path/path-join tmp-root ".agents" "skills" "logseq-cli" "SKILL.md")
         previous-home (.. js/process -env -HOME)]
     (try
       (fs/writeFileSync source-path "# installed\ncontent" "utf8")
