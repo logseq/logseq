@@ -95,6 +95,10 @@
   [pid]
   (daemon/pid-status pid))
 
+(defn- process-stopped?
+  [pid]
+  (not (contains? #{:alive :no-permission} (pid-status pid))))
+
 (defn- read-lock
   [path]
   (daemon/read-lock path))
@@ -220,7 +224,8 @@
           (p/resolved (owner-mismatch-error repo requester-owner lock-owner))
           (-> (p/let [_ (shutdown! lock)]
             (wait-for (fn []
-                        (p/resolved (not (fs/existsSync path))))
+                        (p/resolved (and (not (fs/existsSync path))
+                                         (process-stopped? (:pid lock)))))
                       {:timeout-ms 5000
                        :interval-ms 200})
             {:ok? true
@@ -232,14 +237,16 @@
                              (.kill js/process (:pid lock) "SIGTERM")
                              (catch :default e
                                (log/warn :cli-server-stop-sigterm-failed e))))
-                         (when (= :not-found (pid-status (:pid lock)))
-                           (remove-lock! path))
-                         (if (fs/existsSync path)
-                           {:ok? false
-                            :error {:code :server-stop-timeout
-                                    :message "timed out stopping server"}}
-                           {:ok? true
-                            :data {:repo repo}})))))))))
+                         (let [pid-state (pid-status (:pid lock))]
+                           (when (= :not-found pid-state)
+                             (remove-lock! path))
+                           (if (or (fs/existsSync path)
+                                   (= :alive pid-state))
+                             {:ok? false
+                              :error {:code :server-stop-timeout
+                                      :message "timed out stopping server"}}
+                             {:ok? true
+                              :data {:repo repo}}))))))))))
 
 (defn start-server!
   [config repo]
