@@ -195,6 +195,60 @@
       (is (= target-uuid
              (get-in forward-outliner-ops [0 1 1]))))))
 
+(deftest derive-history-outliner-ops-save-block-resolves-retracted-ref-id-from-db-before-test
+  (testing "save-block should canonicalize ref attrs using db-before when target ref is retracted in current tx"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page"}
+                   :blocks [{:block/title "child"}]}]})
+          child (db-test/find-block-by-content @conn "child")
+          child-uuid (:block/uuid child)
+          tag-uuid (random-uuid)
+          _ (d/transact! conn [{:db/id -1
+                                :block/uuid tag-uuid
+                                :block/title "Tag"
+                                :block/name "tag"
+                                :block/tags :logseq.class/Tag}])
+          tag-id (:db/id (d/entity @conn [:block/uuid tag-uuid]))
+          tx-report (d/with @conn [[:db/retractEntity tag-id]] {})
+          tx-meta {:outliner-op :save-block
+                   :outliner-ops [[:save-block [{:block/uuid child-uuid
+                                                 :block/tags #{tag-id}}
+                                                {}]]]}
+          {:keys [forward-outliner-ops]}
+          (op-construct/derive-history-outliner-ops
+           @conn (:db-after tx-report) (:tx-data tx-report) tx-meta)]
+      (is (= #{[:block/uuid tag-uuid]}
+             (get-in forward-outliner-ops [0 1 0 :block/tags]))))))
+
+(deftest derive-history-outliner-ops-insert-blocks-resolves-retracted-ref-id-from-tx-data-test
+  (testing "insert-blocks should canonicalize block ref attrs when ref entity is retracted in current tx"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page"}
+                   :blocks [{:block/title "target"}]}]})
+          target (db-test/find-block-by-content @conn "target")
+          target-id (:db/id target)
+          tag-uuid (random-uuid)
+          _ (d/transact! conn [{:db/id -1
+                                :block/uuid tag-uuid
+                                :block/title "Tag"
+                                :block/name "tag"
+                                :block/tags :logseq.class/Tag}])
+          tag-id (:db/id (d/entity @conn [:block/uuid tag-uuid]))
+          tx-report (d/with @conn [[:db/retractEntity tag-id]] {})
+          tx-meta {:outliner-op :insert-blocks
+                   :outliner-ops [[:insert-blocks [[{:block/uuid (random-uuid)
+                                                     :block/title "new child"
+                                                     :block/tags #{tag-id}}]
+                                                   target-id
+                                                   {:sibling? true}]]]}
+          {:keys [forward-outliner-ops]}
+          (op-construct/derive-history-outliner-ops
+           @conn (:db-after tx-report) (:tx-data tx-report) tx-meta)]
+      (is (= #{[:block/uuid tag-uuid]}
+             (get-in forward-outliner-ops [0 1 0 0 :block/tags]))))))
+
 (deftest derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page-test
   (testing "delete-page inverse restores hard-retracted class/property/today pages with stable db/ident"
     (let [today (date-time-util/ms->journal-day (js/Date.))

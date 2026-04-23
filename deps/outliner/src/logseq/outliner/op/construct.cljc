@@ -61,25 +61,35 @@
       x)
     :else x))
 
-(defn- stable-block-ref-with-tx-data
+(defn- tx-data-block-uuid-ref
+  [tx-data entity-ref]
+  (some (fn [item]
+          (when (and (= entity-ref (:e item))
+                     (= :block/uuid (:a item))
+                     (uuid? (:v item)))
+            [:block/uuid (:v item)]))
+        tx-data))
+
+(defn- stable-entity-ref-with-tx-data
   [db tx-data x]
   (let [entity-ref (stable-entity-ref db x)]
     (if (and (integer? entity-ref) (not (neg? entity-ref)))
-      (or (some (fn [item]
-                  (when (and (= entity-ref (:e item))
-                             (= :block/uuid (:a item))
-                             (uuid? (:v item)))
-                    [:block/uuid (:v item)]))
-                tx-data)
+      (or (tx-data-block-uuid-ref tx-data entity-ref)
           entity-ref)
       entity-ref)))
 
+(defn- stable-block-ref-with-tx-data
+  [db tx-data x]
+  (stable-entity-ref-with-tx-data db tx-data x))
+
 (defn- sanitize-ref-value
-  [db v]
-  (cond
-    (vector? v) (stable-entity-ref db v)
-    (or (set? v) (sequential? v)) (set (map #(stable-entity-ref db %) v))
-    :else (stable-entity-ref db v)))
+  ([db v]
+   (sanitize-ref-value db nil v))
+  ([db tx-data v]
+   (cond
+     (vector? v) (stable-entity-ref-with-tx-data db tx-data v)
+     (or (set? v) (sequential? v)) (set (map #(stable-entity-ref-with-tx-data db tx-data %) v))
+     :else (stable-entity-ref-with-tx-data db tx-data v))))
 
 (defn- sanitize-upsert-property-schema
   [db schema]
@@ -108,7 +118,7 @@
 (defn- sanitize-block-payload
   ([db block]
    (sanitize-block-payload db block nil))
-  ([db block {:keys [created-uuids]}]
+  ([db block {:keys [created-uuids tx-data]}]
    (if (map? block)
      (let [refs (sanitize-block-refs (:block/refs block))
            created-ref-uuids (when (and (seq created-uuids) (seq refs))
@@ -123,7 +133,7 @@
                  (contains? transient-block-keys k) m
                  (= "block.temp" (namespace k)) m
                  (ref-attr? db k)
-                 (assoc m k (sanitize-ref-value db v))
+                 (assoc m k (sanitize-ref-value db tx-data v))
                  :else
                  (assoc m k v)))
              {}
@@ -190,8 +200,8 @@
     (dissoc block' rebase-refs-key rebase-created-refs-key)))
 
 (defn- sanitize-insert-block-payload
-  [db block]
-  (let [block' (sanitize-block-payload db block)]
+  [db tx-data block]
+  (let [block' (sanitize-block-payload db block {:tx-data tx-data})]
     (if (map? block')
       (dissoc block' :block/page :block/order rebase-refs-key)
       block')))
@@ -384,7 +394,7 @@
   [db tx-data args]
   (let [[blocks target-id opts] args
         created-uuids (created-block-uuids-from-tx-data tx-data)
-        blocks* (mapv #(sanitize-insert-block-payload db %) blocks)
+        blocks* (mapv #(sanitize-insert-block-payload db tx-data %) blocks)
         target-ref (stable-entity-ref db target-id)
         target (d/entity db target-id)
         block-with-new-id (fn [block block-uuid]
@@ -402,7 +412,7 @@
                               (map block-with-new-id rst-blocks created-rst-uuids)
                               rst-blocks)))
                     (mapv block-with-new-id blocks* created-uuids))
-                  blocks)]
+                  blocks*)]
     [blocks*
      target-ref
      (assoc (dissoc (or opts {}) :outliner-op)
@@ -438,7 +448,9 @@
     :save-block
     (let [[block opts] args
           created-uuids (created-block-uuids-from-tx-data tx-data)]
-      [:save-block [(sanitize-block-payload db block {:created-uuids created-uuids}) opts]])
+      [:save-block [(sanitize-block-payload db block {:created-uuids created-uuids
+                                                      :tx-data tx-data})
+                    opts]])
 
     :insert-blocks
     [:insert-blocks
