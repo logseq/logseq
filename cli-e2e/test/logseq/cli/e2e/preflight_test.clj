@@ -16,7 +16,7 @@
     (f)))
 
 (deftest build-plan-matches-required-commands
-  (is (= ["clojure -M:cljs compile logseq-cli db-worker-node"
+  (is (= ["clojure -M:cljs compile logseq-cli"
           "yarn db-worker-node:compile:bundle"
           "yarn --cwd deps/db-sync build:node-adapter"]
          (mapv :cmd preflight/build-plan))))
@@ -50,7 +50,7 @@
                                                      :err ""})
                                      :file-exists? (set required-artifacts)})]
          (is (= :ok (:status result)))
-         (is (= ["clojure -M:cljs compile logseq-cli db-worker-node"
+         (is (= ["clojure -M:cljs compile logseq-cli"
                  "yarn db-worker-node:compile:bundle"
                  "yarn --cwd deps/db-sync build:node-adapter"]
                 @calls))))))
@@ -70,7 +70,7 @@
                                      :file-exists? (fn [path]
                                                      (contains? @existing path))})]
          (is (= :ok (:status result)))
-         (is (= ["clojure -M:cljs compile logseq-cli db-worker-node"
+         (is (= ["clojure -M:cljs compile logseq-cli"
                  "yarn db-worker-node:compile:bundle"
                  "yarn --cwd deps/db-sync build:node-adapter"]
                 @calls))))))
@@ -89,7 +89,7 @@
                                      :file-exists? (fn [path]
                                                      (contains? @existing path))})]
          (is (= :ok (:status result)))
-         (is (= ["clojure -M:cljs compile logseq-cli db-worker-node"
+         (is (= ["clojure -M:cljs compile logseq-cli"
                  "yarn db-worker-node:compile:bundle"
                  "yarn --cwd deps/db-sync build:node-adapter"]
                 @calls))))))

@@ -105,43 +105,44 @@
     (is (= [] (:failed-pids result)))
     (is (= [] @killed))))
 
-(deftest cleanup-temp-graph-dirs-removes-only-cli-e2e-graphs
+(deftest cleanup-temp-roots-removes-only-cli-e2e-temp-roots
   (let [tmp-root (fs/create-temp-dir {:prefix "cleanup-e2e-test-"})
-        matching-graphs (fs/path tmp-root "logseq-cli-e2e-case-a-123" "graphs")
-        another-matching-graphs (fs/path tmp-root "logseq-cli-e2e-case-b-456" "graphs")
-        non-matching-graphs (fs/path tmp-root "other-case" "graphs")]
+        matching-root (fs/path tmp-root "logseq-cli-e2e-case-a-123")
+        another-matching-root (fs/path tmp-root "logseq-cli-e2e-case-b-456")
+        non-matching-root (fs/path tmp-root "other-case")]
     (try
-      (fs/create-dirs matching-graphs)
-      (fs/create-dirs another-matching-graphs)
-      (fs/create-dirs non-matching-graphs)
+      (fs/create-dirs (fs/path matching-root "graphs"))
+      (fs/create-dirs (fs/path matching-root "home" "logseq"))
+      (fs/create-dirs (fs/path another-matching-root "graphs"))
+      (fs/create-dirs (fs/path non-matching-root "graphs"))
 
-      (let [result (cleanup/cleanup-temp-graph-dirs! {:tmp-root (str tmp-root)})
-            expected-dirs (sort [(str matching-graphs)
-                                 (str another-matching-graphs)])]
+      (let [result (cleanup/cleanup-temp-roots! {:tmp-root (str tmp-root)})
+            expected-dirs (sort [(str matching-root)
+                                 (str another-matching-root)])]
         (is (= expected-dirs
                (sort (:found-dirs result))))
         (is (= expected-dirs
                (sort (:removed-dirs result))))
         (is (empty? (:failed-dirs result)))
-        (is (false? (fs/exists? matching-graphs)))
-        (is (false? (fs/exists? another-matching-graphs)))
-        (is (true? (fs/exists? non-matching-graphs))))
+        (is (false? (fs/exists? matching-root)))
+        (is (false? (fs/exists? another-matching-root)))
+        (is (true? (fs/exists? non-matching-root))))
       (finally
         (fs/delete-tree tmp-root)))))
 
-(deftest cleanup-temp-graph-dirs-dry-run-does-not-delete
+(deftest cleanup-temp-roots-dry-run-does-not-delete
   (let [deleted (atom [])
-        result (cleanup/cleanup-temp-graph-dirs! {:dry-run true
-                                                  :list-dirs-fn (fn [] ["/tmp/logseq-cli-e2e-a/graphs"
-                                                                         "/tmp/logseq-cli-e2e-b/graphs"])
-                                                  :delete-dir-fn (fn [dir]
-                                                                   (swap! deleted conj dir))})]
-    (is (= ["/tmp/logseq-cli-e2e-a/graphs"
-            "/tmp/logseq-cli-e2e-b/graphs"]
+        result (cleanup/cleanup-temp-roots! {:dry-run true
+                                             :list-dirs-fn (fn [] ["/tmp/logseq-cli-e2e-a"
+                                                                    "/tmp/logseq-cli-e2e-b"])
+                                             :delete-dir-fn (fn [dir]
+                                                              (swap! deleted conj dir))})]
+    (is (= ["/tmp/logseq-cli-e2e-a"
+            "/tmp/logseq-cli-e2e-b"]
            (:found-dirs result)))
     (is (true? (:dry-run? result)))
-    (is (= ["/tmp/logseq-cli-e2e-a/graphs"
-            "/tmp/logseq-cli-e2e-b/graphs"]
+    (is (= ["/tmp/logseq-cli-e2e-a"
+            "/tmp/logseq-cli-e2e-b"]
            (:would-remove-dirs result)))
     (is (= [] (:removed-dirs result)))
     (is (= [] (:failed-dirs result)))

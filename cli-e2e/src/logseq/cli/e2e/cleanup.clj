@@ -145,20 +145,21 @@
           :killed-pids killed-pids
           :failed-pids failed-pids})))))
 
-(defn- list-cli-e2e-temp-graph-dirs
+(defn- list-cli-e2e-temp-roots
   [tmp-root]
-  (->> (fs/glob tmp-root (str cli-e2e-temp-prefix "*/graphs"))
+  (->> (fs/list-dir tmp-root)
        (filter fs/directory?)
+       (filter #(string/starts-with? (fs/file-name %) cli-e2e-temp-prefix))
        (mapv str)))
 
-(defn cleanup-temp-graph-dirs!
+(defn cleanup-temp-roots!
   ([]
-   (cleanup-temp-graph-dirs! {}))
+   (cleanup-temp-roots! {}))
   ([{:keys [dry-run tmp-root list-dirs-fn delete-dir-fn]
      :or {tmp-root (System/getProperty "java.io.tmpdir")
           delete-dir-fn fs/delete-tree}}]
    (let [list-dirs-fn (or list-dirs-fn
-                          #(list-cli-e2e-temp-graph-dirs tmp-root))
+                          #(list-cli-e2e-temp-roots tmp-root))
          found-dirs (vec (list-dirs-fn))]
      (if dry-run
        {:dry-run? true

@@ -39,9 +39,9 @@
    :task (main/test! cli-opts)}
 
   test-sync
-  {:doc "Run sync cli-e2e cases with build preflight unless --skip-build is provided"
+  {:doc "Run sync cli-e2e cases with build preflight unless --skip-build is provided; use --jobs for case-level parallelism"
    :task (main/test-sync! cli-opts)}
 
   cleanup
-  {:doc "Terminate cli-e2e db-worker-node processes and remove temp graph dirs"
+  {:doc "Terminate cli-e2e db-worker-node processes, terminate stale db-sync listeners, and remove cli-e2e temp roots"
    :task (main/cleanup! cli-opts)}}}
