@@ -390,6 +390,32 @@
        distinct
        vec))
 
+(defn- remap-lookup-ref-by-uuid-map
+  [uuid-map v]
+  (cond
+    (and (vector? v)
+         (= :block/uuid (first v))
+         (uuid? (second v)))
+    [:block/uuid (get uuid-map (second v) (second v))]
+
+    (set? v)
+    (into #{} (map #(remap-lookup-ref-by-uuid-map uuid-map %) v))
+
+    (sequential? v)
+    (into (empty v) (map #(remap-lookup-ref-by-uuid-map uuid-map %) v))
+
+    :else
+    v))
+
+(defn- remap-block-lookup-values-by-uuid-map
+  [block uuid-map]
+  (if (map? block)
+    (reduce-kv (fn [m k v]
+                 (assoc m k (remap-lookup-ref-by-uuid-map uuid-map v)))
+               {}
+               block)
+    block))
+
 (defn- template-children-blocks-for-history
   [db template-ref]
   (when-let [template (d/entity db template-ref)]
@@ -412,7 +438,8 @@
   [db tx-data args]
   (let [[blocks target-id opts] args
         created-uuids (created-block-uuids-from-tx-data tx-data)
-        blocks* (mapv #(sanitize-insert-block-payload db tx-data %) blocks)
+        source-blocks (mapv #(sanitize-insert-block-payload db tx-data %) blocks)
+        source-uuids (mapv :block/uuid source-blocks)
         target-ref (stable-entity-ref db target-id)
         target (d/entity db target-id)
         block-with-new-id (fn [block block-uuid]
@@ -422,14 +449,24 @@
                                                    [:block/uuid (:block/uuid parent)])))
         blocks* (if (seq created-uuids)
                   (if (and (:replace-empty-target? opts)
-                           (= (inc (count created-uuids)) (count blocks)))
-                    (let [[fst-block & rst-blocks] blocks*
+                           (= (inc (count created-uuids)) (count source-blocks)))
+                    (let [[fst-block & rst-blocks] source-blocks
                           created-rst-uuids created-uuids]
                       (into [(assoc fst-block :block/uuid (:block/uuid target))]
                             (if (seq created-rst-uuids)
                               (map block-with-new-id rst-blocks created-rst-uuids)
                               rst-blocks)))
-                    (mapv block-with-new-id blocks* created-uuids))
+                    (mapv block-with-new-id source-blocks created-uuids))
+                  source-blocks)
+        uuid-remap (->> (map vector source-uuids (map :block/uuid blocks*))
+                        (keep (fn [[old-uuid new-uuid]]
+                                (when (and (uuid? old-uuid)
+                                           (uuid? new-uuid)
+                                           (not= old-uuid new-uuid))
+                                  [old-uuid new-uuid])))
+                        (into {}))
+        blocks* (if (seq uuid-remap)
+                  (mapv #(remap-block-lookup-values-by-uuid-map % uuid-remap) blocks*)
                   blocks*)]
     [blocks*
      target-ref

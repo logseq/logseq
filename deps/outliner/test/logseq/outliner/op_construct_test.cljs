@@ -294,11 +294,14 @@
                                               {:block/title "template child 2"}]}
                             {:block/title "target"}]}]})
           template (db-test/find-block-by-content @conn "template")
+          template-child-1 (db-test/find-block-by-content @conn "template child 1")
+          template-child-2 (db-test/find-block-by-content @conn "template child 2")
           target (db-test/find-block-by-content @conn "target")
           inserted-child-1-uuid (random-uuid)
           inserted-child-2-uuid (random-uuid)
           tx-data [{:e 900001 :a :block/uuid :v inserted-child-1-uuid :added true}
                    {:e 900002 :a :block/uuid :v inserted-child-2-uuid :added true}]
+          _ (d/transact! conn [[:db/add (:db/id template-child-1) :block/refs (:db/id template-child-2)]])
           tx-meta {:outliner-op :apply-template
                    :outliner-ops [[:apply-template [(:db/id template)
                                                     (:db/id target)
@@ -308,7 +311,9 @@
       (is (= :apply-template (ffirst forward-outliner-ops)))
       (is (= true (get-in forward-outliner-ops [0 1 2 :keep-uuid?])))
       (is (= [inserted-child-1-uuid inserted-child-2-uuid]
-             (mapv :block/uuid (get-in forward-outliner-ops [0 1 2 :template-blocks])))))))
+             (mapv :block/uuid (get-in forward-outliner-ops [0 1 2 :template-blocks]))))
+      (is (= #{[:block/uuid inserted-child-2-uuid]}
+             (get-in forward-outliner-ops [0 1 2 :template-blocks 0 :block/refs]))))))
 
 (deftest derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page-test
   (testing "delete-page inverse restores hard-retracted class/property/today pages with stable db/ident"
