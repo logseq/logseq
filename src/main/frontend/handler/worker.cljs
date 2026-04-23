@@ -87,6 +87,12 @@
                :worker-error-data error-data
                :worker-cause-data cause-data}}])))
 
+(defn- suppress-worker-error-log?
+  [error-value]
+  (= "Non-transact outliner ops contain numeric entity ids"
+     (or (:message error-value)
+         (get error-value "message"))))
+
 (defn handle-message!
   [^js worker wrapped-worker]
   (assert worker "worker doesn't exists")
@@ -101,8 +107,10 @@
                 (if (and (= "HANDLER" (.-type data)) (= "throw" (.-name data)))
                   (if (.-isError (.-value ^js data))
                     (let [error-value (-> data bean/->clj (get-in [:value :value]))]
-                      (js/console.error "Unexpected webworker error:" error-value)
-                      (js/console.log (:stack error-value))
+                      (when-not (suppress-worker-error-log? error-value)
+                        (js/console.error "Unexpected webworker error:" error-value)
+                        (when-let [stack (:stack error-value)]
+                          (js/console.log stack)))
                       (report-worker-error! error-value))
                     (js/console.error "Unexpected webworker error :" data))
                   (if (string? data)

@@ -1,6 +1,6 @@
 (ns frontend.worker.db-sync-test
   (:require
-   [cljs.test :refer [async deftest is testing]]
+   [cljs.test :refer [async deftest is testing use-fixtures]]
    [clojure.set :as set]
    [clojure.string :as string]
    [datascript.core :as d]
@@ -22,6 +22,7 @@
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
    [frontend.worker.sync.transport :as sync-transport]
    [frontend.worker.sync.upload :as sync-upload]
+   [frontend.test.noise :as test-noise]
    [frontend.worker.undo-redo :as undo-redo]
    [logseq.common.config :as common-config]
    [logseq.common.util :as common-util]
@@ -51,6 +52,18 @@
   #{:logseq.property.recycle/original-parent
     :logseq.property.recycle/original-page
     :logseq.property.recycle/original-order})
+
+(defn- with-silenced-console-error
+  "Silences expected error logging without swallowing thrown exceptions."
+  [f]
+  (let [original-console-error (.-error js/console)]
+    (aset js/console "error" (fn [& _] nil))
+    (try
+      (f)
+      (finally
+        (aset js/console "error" original-console-error)))))
+
+(use-fixtures :once (test-noise/mute-console-fixture ::db-sync-test))
 
 (defn- js-row
   [m]
@@ -724,7 +737,8 @@
                                                (reset! *captured {:type type
                                                                   :payload payload}))]
           (try
-            (sync-handle-message/handle-message! test-repo client raw-message)
+            (with-silenced-console-error
+              #(sync-handle-message/handle-message! test-repo client raw-message))
             (is false "expected tx/reject to fail-fast with rejected tx details")
             (catch :default error
               (let [data (ex-data error)
@@ -763,12 +777,17 @@
              :db-sync/pending? true}])
           (with-redefs [client-op/get-local-tx (constantly 0)]
             (let [error (try
-                          (sync-handle-message/handle-message! test-repo client raw-message)
+                          (with-silenced-console-error
+                            #(sync-handle-message/handle-message! test-repo client raw-message))
                           nil
                           (catch :default e
                             e))
                   ent (client-op-tx-row client-ops-conn tx-id)]
               (is (some? error))
+              (is (= :db-sync/tx-rejected
+                     (:type (ex-data error))))
+              (is (= "db transact failed"
+                     (:reason (ex-data error))))
               (is (= [] @(:inflight client)))
               (is (= 0 (aget ent "pending")))
               (is (= 1 (aget ent "failed"))))))))))
@@ -805,7 +824,8 @@
              :db-sync/pending? true}])
           (with-redefs [client-op/get-local-tx (constantly 0)]
             (let [error (try
-                          (sync-handle-message/handle-message! test-repo client raw-message)
+                          (with-silenced-console-error
+                            #(sync-handle-message/handle-message! test-repo client raw-message))
                           nil
                           (catch :default e
                             e))
@@ -813,6 +833,10 @@
                   failed-ent (client-op-tx-row client-ops-conn failed-tx-id)
                   untouched-ent (client-op-tx-row client-ops-conn untouched-tx-id)]
               (is (some? error))
+              (is (= :db-sync/tx-rejected
+                     (:type (ex-data error))))
+              (is (= "db transact failed"
+                     (:reason (ex-data error))))
               (is (= [] @(:inflight client)))
               (is (= 0 (aget success-ent "pending")))
               (is (not= 1 (aget success-ent "failed")))
@@ -2373,14 +2397,15 @@
           page-uuid (:block/uuid (:block/page seed))
           block-uuid (random-uuid)]
       (is (thrown? js/Error
-                   (#'sync-apply/replay-canonical-outliner-op!
-                    conn
-                    [:save-block [{:block/uuid block-uuid
-                                   :block/title ""
-                                   :block/parent [:block/uuid page-uuid]
-                                   :block/page [:block/uuid page-uuid]
-                                   :block/order "a0"}
-                                  nil]])))
+                   (with-silenced-console-error
+                     #(#'sync-apply/replay-canonical-outliner-op!
+                       conn
+                       [:save-block [{:block/uuid block-uuid
+                                      :block/title ""
+                                      :block/parent [:block/uuid page-uuid]
+                                      :block/page [:block/uuid page-uuid]
+                                      :block/order "a0"}
+                                     nil]]))))
       (is (nil? (d/entity @conn [:block/uuid block-uuid]))))))
 
 (deftest apply-history-action-redo-replays-status-property-test
