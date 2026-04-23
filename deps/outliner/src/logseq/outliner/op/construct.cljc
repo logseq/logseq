@@ -390,6 +390,24 @@
        distinct
        vec))
 
+(defn- template-children-blocks-for-history
+  [db template-ref]
+  (when-let [template (d/entity db template-ref)]
+    (let [template-id (:db/id template)
+          template-blocks (some->> (ldb/get-block-and-children db (:block/uuid template)
+                                                               {:include-property-block? true})
+                                   rest
+                                   seq
+                                   vec)]
+      (when (seq template-blocks)
+        (vec
+         (cons (assoc (into {} (first template-blocks))
+                      :db/id (:db/id (first template-blocks))
+                      :logseq.property/used-template template-id)
+               (map (fn [block]
+                      (assoc (into {} block) :db/id (:db/id block)))
+                    (rest template-blocks))))))))
+
 (defn- canonicalize-insert-blocks-op
   [db tx-data args]
   (let [[blocks target-id opts] args
@@ -460,7 +478,8 @@
     (let [[template-id target-id opts] args
           template-ref (stable-entity-ref db template-id)
           target-ref (stable-entity-ref db target-id)
-          template-blocks (:template-blocks opts)
+          template-blocks (or (some-> (:template-blocks opts) seq vec)
+                              (template-children-blocks-for-history db template-ref))
           opts-base (dissoc opts :template-id :outliner-op)
           opts' (if (seq template-blocks)
                   (let [[blocks* _target-ref insert-opts]
