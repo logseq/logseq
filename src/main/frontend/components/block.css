@@ -250,8 +250,13 @@
   }
 }
 
-.ls-page-title .block-control-wrap {
-  height: initial;
+.ls-page-title .block-main-container > .block-control-wrap {
+  /* Center the page-title control against the page title's line box.
+     Mobile overrides --ls-page-title-size, so this stays aligned cross-platform. */
+  --ls-page-title-line-height: 1.38;
+  --ls-block-control-size: 24px;
+  @apply relative;
+  top: calc((var(--ls-page-title-size, 32px) * var(--ls-page-title-line-height) - var(--ls-block-control-size)) / 2);
 }
 
 .block-title-wrap {
