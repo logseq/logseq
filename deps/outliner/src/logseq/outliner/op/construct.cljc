@@ -61,25 +61,35 @@
       x)
     :else x))
 
-(defn- stable-block-ref-with-tx-data
+(defn- tx-data-block-uuid-ref
+  [tx-data entity-ref]
+  (some (fn [item]
+          (when (and (= entity-ref (:e item))
+                     (= :block/uuid (:a item))
+                     (uuid? (:v item)))
+            [:block/uuid (:v item)]))
+        tx-data))
+
+(defn- stable-entity-ref-with-tx-data
   [db tx-data x]
   (let [entity-ref (stable-entity-ref db x)]
     (if (and (integer? entity-ref) (not (neg? entity-ref)))
-      (or (some (fn [item]
-                  (when (and (= entity-ref (:e item))
-                             (= :block/uuid (:a item))
-                             (uuid? (:v item)))
-                    [:block/uuid (:v item)]))
-                tx-data)
+      (or (tx-data-block-uuid-ref tx-data entity-ref)
           entity-ref)
       entity-ref)))
 
+(defn- stable-block-ref-with-tx-data
+  [db tx-data x]
+  (stable-entity-ref-with-tx-data db tx-data x))
+
 (defn- sanitize-ref-value
-  [db v]
-  (cond
-    (vector? v) (stable-entity-ref db v)
-    (or (set? v) (sequential? v)) (set (map #(stable-entity-ref db %) v))
-    :else (stable-entity-ref db v)))
+  ([db v]
+   (sanitize-ref-value db nil v))
+  ([db tx-data v]
+   (cond
+     (vector? v) (stable-entity-ref-with-tx-data db tx-data v)
+     (or (set? v) (sequential? v)) (set (map #(stable-entity-ref-with-tx-data db tx-data %) v))
+     :else (stable-entity-ref-with-tx-data db tx-data v))))
 
 (defn- sanitize-upsert-property-schema
   [db schema]
@@ -108,7 +118,7 @@
 (defn- sanitize-block-payload
   ([db block]
    (sanitize-block-payload db block nil))
-  ([db block {:keys [created-uuids]}]
+  ([db block {:keys [created-uuids tx-data]}]
    (if (map? block)
      (let [refs (sanitize-block-refs (:block/refs block))
            created-ref-uuids (when (and (seq created-uuids) (seq refs))
@@ -123,7 +133,7 @@
                  (contains? transient-block-keys k) m
                  (= "block.temp" (namespace k)) m
                  (ref-attr? db k)
-                 (assoc m k (sanitize-ref-value db v))
+                 (assoc m k (sanitize-ref-value db tx-data v))
                  :else
                  (assoc m k v)))
              {}
@@ -190,8 +200,8 @@
     (dissoc block' rebase-refs-key rebase-created-refs-key)))
 
 (defn- sanitize-insert-block-payload
-  [db block]
-  (let [block' (sanitize-block-payload db block)]
+  [db tx-data block]
+  (let [block' (sanitize-block-payload db block {:tx-data tx-data})]
     (if (map? block')
       (dissoc block' :block/page :block/order rebase-refs-key)
       block')))
@@ -380,11 +390,56 @@
        distinct
        vec))
 
+(defn- remap-lookup-ref-by-uuid-map
+  [uuid-map v]
+  (cond
+    (and (vector? v)
+         (= :block/uuid (first v))
+         (uuid? (second v)))
+    [:block/uuid (get uuid-map (second v) (second v))]
+
+    (set? v)
+    (into #{} (map #(remap-lookup-ref-by-uuid-map uuid-map %) v))
+
+    (sequential? v)
+    (into (empty v) (map #(remap-lookup-ref-by-uuid-map uuid-map %) v))
+
+    :else
+    v))
+
+(defn- remap-block-lookup-values-by-uuid-map
+  [block uuid-map]
+  (if (map? block)
+    (reduce-kv (fn [m k v]
+                 (assoc m k (remap-lookup-ref-by-uuid-map uuid-map v)))
+               {}
+               block)
+    block))
+
+(defn- template-children-blocks-for-history
+  [db template-ref]
+  (when-let [template (d/entity db template-ref)]
+    (let [template-id (:db/id template)
+          template-blocks (some->> (ldb/get-block-and-children db (:block/uuid template)
+                                                               {:include-property-block? true})
+                                   rest
+                                   seq
+                                   vec)]
+      (when (seq template-blocks)
+        (vec
+         (cons (assoc (into {} (first template-blocks))
+                      :db/id (:db/id (first template-blocks))
+                      :logseq.property/used-template template-id)
+               (map (fn [block]
+                      (assoc (into {} block) :db/id (:db/id block)))
+                    (rest template-blocks))))))))
+
 (defn- canonicalize-insert-blocks-op
   [db tx-data args]
   (let [[blocks target-id opts] args
         created-uuids (created-block-uuids-from-tx-data tx-data)
-        blocks* (mapv #(sanitize-insert-block-payload db %) blocks)
+        source-blocks (mapv #(sanitize-insert-block-payload db tx-data %) blocks)
+        source-uuids (mapv :block/uuid source-blocks)
         target-ref (stable-entity-ref db target-id)
         target (d/entity db target-id)
         block-with-new-id (fn [block block-uuid]
@@ -394,15 +449,25 @@
                                                    [:block/uuid (:block/uuid parent)])))
         blocks* (if (seq created-uuids)
                   (if (and (:replace-empty-target? opts)
-                           (= (inc (count created-uuids)) (count blocks)))
-                    (let [[fst-block & rst-blocks] blocks*
+                           (= (inc (count created-uuids)) (count source-blocks)))
+                    (let [[fst-block & rst-blocks] source-blocks
                           created-rst-uuids created-uuids]
                       (into [(assoc fst-block :block/uuid (:block/uuid target))]
                             (if (seq created-rst-uuids)
                               (map block-with-new-id rst-blocks created-rst-uuids)
                               rst-blocks)))
-                    (mapv block-with-new-id blocks* created-uuids))
-                  blocks)]
+                    (mapv block-with-new-id source-blocks created-uuids))
+                  source-blocks)
+        uuid-remap (->> (map vector source-uuids (map :block/uuid blocks*))
+                        (keep (fn [[old-uuid new-uuid]]
+                                (when (and (uuid? old-uuid)
+                                           (uuid? new-uuid)
+                                           (not= old-uuid new-uuid))
+                                  [old-uuid new-uuid])))
+                        (into {}))
+        blocks* (if (seq uuid-remap)
+                  (mapv #(remap-block-lookup-values-by-uuid-map % uuid-remap) blocks*)
+                  blocks*)]
     [blocks*
      target-ref
      (assoc (dissoc (or opts {}) :outliner-op)
@@ -438,7 +503,9 @@
     :save-block
     (let [[block opts] args
           created-uuids (created-block-uuids-from-tx-data tx-data)]
-      [:save-block [(sanitize-block-payload db block {:created-uuids created-uuids}) opts]])
+      [:save-block [(sanitize-block-payload db block {:created-uuids created-uuids
+                                                      :tx-data tx-data})
+                    opts]])
 
     :insert-blocks
     [:insert-blocks
@@ -448,7 +515,8 @@
     (let [[template-id target-id opts] args
           template-ref (stable-entity-ref db template-id)
           target-ref (stable-entity-ref db target-id)
-          template-blocks (:template-blocks opts)
+          template-blocks (or (some-> (:template-blocks opts) seq vec)
+                              (template-children-blocks-for-history db template-ref))
           opts-base (dissoc opts :template-id :outliner-op)
           opts' (if (seq template-blocks)
                   (let [[blocks* _target-ref insert-opts]
@@ -1121,9 +1189,11 @@
       (unresolved-numeric-entity-id? root-id))
 
     :apply-template
-    (let [[template-id target-id _opts] args]
+    (let [[template-id target-id opts] args
+          template-blocks (:template-blocks opts)]
       (or (unresolved-numeric-entity-id? template-id)
-          (unresolved-numeric-entity-id? target-id)))
+          (unresolved-numeric-entity-id? target-id)
+          (some #(numeric-id-in-block-ref-attrs? db %) template-blocks)))
 
     :recycle-delete-permanently
     (let [[root-id] args]
@@ -1189,10 +1259,7 @@
                                (and (= :apply-template (:outliner-op tx-meta))
                                     (:undo? tx-meta)
                                     (seq (:db-sync/inverse-outliner-ops tx-meta)))
-                               (some-> (:db-sync/inverse-outliner-ops tx-meta)
-                                       seq
-                                       vec
-                                       (->> (mapv #(normalize-op-entry-ids db-before %))))
+                               explicit-inverse-outliner-ops
 
                                (has-replace-empty-target-insert-op? forward-outliner-ops)
                                built-inverse-outliner-ops

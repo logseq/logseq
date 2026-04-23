@@ -970,7 +970,7 @@
  :mobile.share/unsupported-content-warning "目前不支援解析此分享內容。請在 {1} 上回報以下代碼，我們會盡快處理。"
  :mobile.share/unsupported-import-type "不支援匯入 {1} 檔案。您可以在 {2} 上回報，我們會盡快處理。"
 
- :mobile.tab/capture "捕獲"
+ :mobile.tab/capture "速記"
  :mobile.tab/go-to "前往"
  :mobile.tab/graphs "圖譜"
 

@@ -179,6 +179,23 @@
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))
 
+(defn- report-worker-error!
+  [error-value]
+  (let [message (or (:message error-value)
+                    (get error-value "message")
+                    "Unexpected webworker error")
+        error-data (or (:data error-value)
+                       (get error-value "data"))
+        cause-data (or (get-in error-value [:cause :data])
+                       (get-in error-value ["cause" "data"]))]
+    (state/pub-event!
+     [:capture-error
+      {:error (ex-info message (or (when (map? error-data) error-data) {}))
+       :payload {:worker-error? true}
+       :extra {:worker-error error-value
+               :worker-error-data error-data
+               :worker-cause-data cause-data}}])))
+
 (defn handle-message!
   [^js worker wrapped-worker]
   (assert worker "worker doesn't exists")
@@ -192,8 +209,10 @@
                 ;; https://github.com/GoogleChromeLabs/comlink/blob/dffe9050f63b1b39f30213adeb1dd4b9ed7d2594/src/comlink.ts#L223-L236
                 (if (and (= "HANDLER" (.-type data)) (= "throw" (.-name data)))
                   (if (.-isError (.-value ^js data))
-                    (do (js/console.error "Unexpected webworker error:" (-> data bean/->clj (get-in [:value :value])))
-                        (js/console.log (get-in (bean/->clj data) [:value :value :stack])))
+                    (let [error-value (-> data bean/->clj (get-in [:value :value]))]
+                      (js/console.error "Unexpected webworker error:" error-value)
+                      (js/console.log (:stack error-value))
+                      (report-worker-error! error-value))
                     (js/console.error "Unexpected webworker error :" data))
                   (if (string? data)
                     (let [[e payload] (ldb/read-transit-str data)]

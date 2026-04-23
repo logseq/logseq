@@ -2007,7 +2007,8 @@
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
         collapsable? (editor-handler/collapsable? uuid {:semantic? true
-                                                        :ignore-children? page-title?})
+                                                        :ignore-children? page-title?
+                                                        :page-title? page-title?})
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
@@ -3436,7 +3437,8 @@
 
      (when-not (:hide-title? config)
        [:div.block-main-container.flex.flex-row.gap-1
-        {:style (when (:page-title? config)
+        {:class (when (:page-title? config) "is-page-title-row")
+         :style (when (:page-title? config)
                   {:margin-left (cond
                                   (util/mobile?) 0
                                   page-icon -36
