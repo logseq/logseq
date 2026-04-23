@@ -2146,22 +2146,25 @@
       (util/scroll-to-block sibling-block)
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
-(defn- active-jtrigger?
-  []
-  (some-> js/document.activeElement (dom/has-class? "jtrigger")))
-
 (defn- property-value-node?
   [node]
   (some-> node (dom/has-class? "property-value-container")))
 
+(defn- bottom-properties-row-node
+  [node]
+  (some-> node (.closest ".bottom-properties-row")))
+
 (defn- focus-trigger
   [_current-block sibling-block]
-  (when-let [trigger (first (dom/by-class sibling-block "jtrigger"))]
-    (state/clear-edit!)
-    (if (or (dom/has-class? trigger "ls-number")
-            (dom/has-class? trigger "ls-empty-text-property"))
-      (.click trigger)
-      (.focus trigger))))
+  (if-let [trigger (first (dom/by-class sibling-block "jtrigger"))]
+    (do
+      (state/clear-edit!)
+      (if (or (dom/has-class? trigger "ls-number")
+              (dom/has-class? trigger "ls-empty-text-property"))
+        (.click trigger)
+        (.focus trigger)))
+    (when-let [row (bottom-properties-row-node sibling-block)]
+      (.focus row))))
 
 (defn move-cross-boundary-up-down
   [direction move-opts]
@@ -2174,11 +2177,14 @@
                 :up util/get-prev-block-non-collapsed
                 :down util/get-next-block-non-collapsed)
             current-block (util/rec-get-node input-or-active-element "ls-block")
-            sibling-block (f current-block {:up-down? true})
+            sibling-block (f current-block (cond-> {:up-down? true}
+                                             (:exclude-property? move-opts)
+                                             (assoc :exclude-property? true)))
             {:block/keys [uuid title]} (state/get-edit-block)
             sibling-block (or (when (property-value-node? sibling-block)
                                 (first (dom/by-class sibling-block "ls-block")))
                               sibling-block)
+            bottom-properties-row (bottom-properties-row-node sibling-block)
             property-value-container? (property-value-node? sibling-block)]
         (if sibling-block
           (let [sibling-block-id (dom/attr sibling-block "blockid")
@@ -2196,6 +2202,11 @@
                     (util/rec-get-node current-block "ls-page-title"))
                (.click sibling-block)
 
+               bottom-properties-row
+               (do
+                 (state/clear-edit!)
+                 (.focus bottom-properties-row))
+
                property-value-container?
                (focus-trigger current-block sibling-block)
 
@@ -2209,8 +2220,13 @@
                               {:container-id container-id
                                :direction direction})))))
           (case direction
-            :up (cursor/move-cursor-to input 0)
-            :down (cursor/move-cursor-to-end input)))))))
+            :up (if input
+                  (cursor/move-cursor-to input 0)
+                  (when current-block
+                    (util/scroll-to-block current-block)
+                    (state/exit-editing-and-set-selected-blocks! [current-block])))
+            :down (when input
+                    (cursor/move-cursor-to-end input))))))))
 
 (defn keydown-up-down-handler
   [direction {:keys [_pos] :as move-opts}]
@@ -2220,9 +2236,6 @@
         up? (= direction :up)
         down? (= direction :down)]
     (cond
-      (active-jtrigger?)
-      (move-cross-boundary-up-down direction move-opts)
-
       (not= selected-start selected-end)
       (if up?
         (cursor/move-cursor-to input selected-start)
@@ -2296,14 +2309,6 @@
 
         (and property? left? (not (cursor/start? input)))
         (cursor/move-cursor-to-start input)
-
-        (and property? right? (cursor/end? input)
-             (or (not= (:logseq.property/type block) :default)
-                 (seq (:property/closed-values block))))
-        (let [pair (util/rec-get-node input "property-pair")
-              jtrigger (when pair (dom/sel1 pair ".property-value-container .jtrigger"))]
-          (when jtrigger
-            (.focus jtrigger)))
 
         (not= selected-start selected-end)
         (cond
@@ -2908,7 +2913,7 @@
                (not (state/get-timestamp-block)))
       (util/stop e)
       (cond
-        (or (state/editing?) (active-jtrigger?))
+        (state/editing?)
         (keydown-up-down-handler direction {})
 
         (state/selection?)
