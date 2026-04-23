@@ -185,7 +185,7 @@
             {:status :ok
              :cases selected-cases
              :coverage coverage-result
-             :results ((if (and (not sync-suite?) (> jobs 1))
+             :results ((if (> jobs 1)
                          run-selected-cases-in-parallel!
                          run-selected-cases!)
                        selected-cases
@@ -219,7 +219,7 @@
   (println "Cleanups performed:")
   (println "  - Terminate cli-e2e db-worker-node processes")
   (println "  - Terminate db-sync server listeners on port 18080")
-  (println "  - Remove cli-e2e temp graph directories")
+  (println "  - Remove cli-e2e temp roots")
   (flush))
 
 (defn cleanup!
@@ -233,7 +233,7 @@
                          dry-run? (assoc :dry-run true))
           processes (cleanup/cleanup-db-worker-processes! cleanup-opts)
           db-sync-port-processes (cleanup/cleanup-db-sync-port-processes! cleanup-opts)
-          temp-graphs (cleanup/cleanup-temp-graph-dirs! cleanup-opts)]
+          temp-roots (cleanup/cleanup-temp-roots! cleanup-opts)]
       (println "==> Running cli-e2e cleanup")
       (if dry-run?
         (do
@@ -243,9 +243,9 @@
           (println (format "[dry-run] db-sync server processes (port 18080): found %d, would kill %d"
                            (count (:found-pids db-sync-port-processes))
                            (count (:would-kill-pids db-sync-port-processes))))
-          (println (format "[dry-run] temp graph directories: found %d, would remove %d"
-                           (count (:found-dirs temp-graphs))
-                           (count (:would-remove-dirs temp-graphs)))))
+          (println (format "[dry-run] temp roots: found %d, would remove %d"
+                           (count (:found-dirs temp-roots))
+                           (count (:would-remove-dirs temp-roots)))))
         (do
           (println (format "db-worker-node processes: found %d, killed %d, failed %d"
                            (count (:found-pids processes))
@@ -255,16 +255,16 @@
                            (count (:found-pids db-sync-port-processes))
                            (count (:killed-pids db-sync-port-processes))
                            (count (:failed-pids db-sync-port-processes))))
-          (println (format "temp graph directories: found %d, removed %d, failed %d"
-                           (count (:found-dirs temp-graphs))
-                           (count (:removed-dirs temp-graphs))
-                           (count (:failed-dirs temp-graphs))))))
+          (println (format "temp roots: found %d, removed %d, failed %d"
+                           (count (:found-dirs temp-roots))
+                           (count (:removed-dirs temp-roots))
+                           (count (:failed-dirs temp-roots))))))
       (flush)
       {:status :ok
        :dry-run? dry-run?
        :processes processes
        :db-sync-port-processes db-sync-port-processes
-       :temp-graphs temp-graphs})))
+       :temp-roots temp-roots})))
 
 (defn- print-failure-details!
   [error]
@@ -328,7 +328,7 @@
     (println "      --case ID        Run a single case by id")
     (println (format "      --jobs N         %s (Default: %d)"
                      (if sync-suite?
-                       "Accepted for CLI consistency; sync cases still run serially"
+                       "Run up to N sync cases in parallel"
                        "Run up to N non-sync cases in parallel")
                      default-cli-jobs))
     (when sync-suite?
@@ -340,8 +340,10 @@
     (if sync-suite?
       (println (str "  bb -f cli-e2e/bb.edn " command-name))
       (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build")))
-    (when-not sync-suite?
-      (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build --jobs 4")))
+    (println (str "  bb -f cli-e2e/bb.edn " command-name
+                  (if sync-suite?
+                    " --jobs 4"
+                    " --skip-build --jobs 4")))
     (println (str "  bb -f cli-e2e/bb.edn " command-name " -i smoke"))
     (if sync-suite?
       (println (str "  bb -f cli-e2e/bb.edn " command-name " --case sync-upload-download-mvp"))
@@ -367,7 +369,7 @@
             timings? (boolean (:timings opts))
             all-step-timings (atom [])
             detailed-case-log? (some? (:case opts))
-            parallel? (and (= suite :non-sync) (> (positive-jobs (:jobs opts)) 1))
+            parallel? (> (positive-jobs (:jobs opts)) 1)
             base-run-command (or (:run-command opts) shell/run!)
             run-command (if detailed-case-log?
                           (fn [{:keys [cmd phase step-index step-total] :as command-opts}]

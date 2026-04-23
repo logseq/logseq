@@ -13,8 +13,7 @@
     :options {:global ["--config" "--graph" "--data-dir" "--output"]}},
    :cleanup
    ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
-    "{{cli}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json server stop --graph {{graph-arg}}"
-    "python3 '{{repo-root}}/cli-e2e/scripts/db_sync_server.py' stop --pid-file '{{tmp-dir}}/db-sync-server.pid'"],
+    "{{cli}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json server stop --graph {{graph-arg}}"],
    :tags [:sync]},
   :sync/common
   {:extends :sync/default,
@@ -27,13 +26,8 @@
     :cli-home "HOME='{{tmp-dir}}/home' {{cli}}"},
    :setup
    ["mkdir -p '{{tmp-dir}}/graphs-b'"
-    "mkdir -p '{{tmp-dir}}/home/logseq'"
-    "cp ~/logseq/auth.json '{{tmp-dir}}/home/logseq/auth.json'"
-    "python3 '{{repo-root}}/cli-e2e/scripts/prepare_sync_config.py' --output '{{config-path}}' --auth-path '{{auth-path}}' --http-base '{{sync-http-base}}' --ws-url '{{sync-ws-url}}'"
-    "python3 '{{repo-root}}/cli-e2e/scripts/prepare_sync_config.py' --output '{{tmp-dir}}/cli-b.edn' --auth-path '{{auth-path}}' --http-base '{{sync-http-base}}' --ws-url '{{sync-ws-url}}'"
-    "python3 '{{repo-root}}/cli-e2e/scripts/db_sync_server.py' start --repo-root '{{repo-root}}' --pid-file '{{tmp-dir}}/db-sync-server.pid' --log-file '{{tmp-dir}}/db-sync-server.log' --data-dir '{{tmp-dir}}/db-sync-server-data' --port {{sync-port}} --auth-path '{{auth-path}}'"
     "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
-    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}} --upload-keys"],
+    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"],
    :cmds
    ["{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync upload --graph {{graph-arg}}"
     "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync start --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"

@@ -101,9 +101,9 @@
         (is (= 2 (:jobs @parallel-call)))
         (is (false? @serial-called?))))))
 
-(deftest run-sync-suite-stays-serial-when-jobs-greater-than-one
-  (let [serial-call (atom nil)
-        parallel-called? (atom false)
+(deftest run-sync-suite-uses-parallel-runner-when-jobs-greater-than-one
+  (let [parallel-call (atom nil)
+        serial-called? (atom false)
         sync-inventory {:excluded-command-prefixes ["login" "logout"]
                         :scopes {:sync {:commands ["sync upload" "sync status"]
                                         :options []}}}
@@ -113,18 +113,18 @@
                     {:id "sync-status"
                      :cmds ["node static/logseq-cli.js sync status"]
                      :covers {:commands ["sync status"]}}]]
-    (with-redefs [main/run-selected-cases! (fn [selected-cases run-case run-command opts]
-                                             (reset! serial-call {:case-ids (mapv :id selected-cases)
-                                                                  :run-case run-case
-                                                                  :run-command run-command
-                                                                  :jobs (:jobs opts)})
-                                             (mapv (fn [case]
-                                                     {:id (:id case)
-                                                      :status :ok})
-                                                   selected-cases))
-                  main/run-selected-cases-in-parallel! (fn [& _]
-                                                         (reset! parallel-called? true)
-                                                         (throw (ex-info "parallel runner should not be used" {})))]
+    (with-redefs [main/run-selected-cases-in-parallel! (fn [selected-cases run-case run-command opts]
+                                                         (reset! parallel-call {:case-ids (mapv :id selected-cases)
+                                                                                :run-case run-case
+                                                                                :run-command run-command
+                                                                                :jobs (:jobs opts)})
+                                                         (mapv (fn [case]
+                                                                 {:id (:id case)
+                                                                  :status :ok})
+                                                               selected-cases))
+                  main/run-selected-cases! (fn [& _]
+                                             (reset! serial-called? true)
+                                             (throw (ex-info "serial runner should not be used" {})))]
       (let [result (main/run! {:suite :sync
                                :inventory sync-inventory
                                :cases sync-cases
@@ -138,9 +138,9 @@
                                            {:id (:id case)
                                             :status :ok})})]
         (is (= :ok (:status result)))
-        (is (= ["sync-upload" "sync-status"] (:case-ids @serial-call)))
-        (is (= 4 (:jobs @serial-call)))
-        (is (false? @parallel-called?))))))
+        (is (= ["sync-upload" "sync-status"] (:case-ids @parallel-call)))
+        (is (= 4 (:jobs @parallel-call)))
+        (is (false? @serial-called?))))))
 
 (deftest run-jobs-one-keeps-serial-runner
   (let [serial-call (atom nil)
@@ -380,11 +380,12 @@
               [:cases :sync]]
              @suite-calls)))))
 
-(deftest run-sync-suite-uses-suite-fixture-once
+(deftest run-sync-suite-uses-suite-fixture-once-with-parallel-runner
   (let [before-called (atom 0)
         after-called (atom 0)
         prepared-case-ids (atom [])
         run-case-seen (atom [])
+        parallel-call (atom nil)
         sync-inventory {:excluded-command-prefixes ["login" "logout"]
                         :scopes {:sync {:commands ["sync upload" "sync status"]
                                         :options []}}}
@@ -401,11 +402,18 @@
                                               (swap! prepared-case-ids conj (:id case))
                                               (assoc case :prepared? true))
                   sync-fixture/after-suite! (fn [_ _]
-                                              (swap! after-called inc))]
+                                              (swap! after-called inc))
+                  main/run-selected-cases-in-parallel! (fn [selected-cases run-case run-command opts]
+                                                         (reset! parallel-call {:case-ids (mapv :id selected-cases)
+                                                                                :jobs (:jobs opts)})
+                                                         (mapv (fn [case]
+                                                                 (run-case case {:run-command run-command}))
+                                                               selected-cases))]
       (let [result (main/run! {:suite :sync
                                :inventory sync-inventory
                                :cases sync-cases
                                :skip-build true
+                               :jobs 2
                                :run-command (fn [_]
                                               {:exit 0
                                                :out ""
@@ -417,6 +425,8 @@
         (is (= :ok (:status result)))))
     (is (= 1 @before-called))
     (is (= 1 @after-called))
+    (is (= ["sync-upload" "sync-status"] (:case-ids @parallel-call)))
+    (is (= 2 (:jobs @parallel-call)))
     (is (= ["sync-upload" "sync-status"] @prepared-case-ids))
     (is (= [["sync-upload" true]
             ["sync-status" true]]
@@ -673,8 +683,8 @@
     (is (string/includes? output "--include TAG"))
     (is (string/includes? output "--case ID"))
     (is (string/includes? output "--jobs N"))
-    (is (string/includes? output "Accepted for CLI consistency; sync cases still run serially"))
-    (is (not (string/includes? output "--skip-build --jobs 4")))
+    (is (string/includes? output "Run up to N sync cases in parallel"))
+    (is (string/includes? output "--jobs 4"))
     (is (string/includes? output "bb -f cli-e2e/bb.edn test-sync"))
     (is (string/includes? output "--case sync-upload-download-mvp"))
     (is (not (string/includes? output "--skip-build --case sync-upload-download-mvp")))
@@ -737,6 +747,7 @@
     (is (string/includes? output "Usage: bb -f cli-e2e/bb.edn cleanup"))
     (is (string/includes? output "Terminate cli-e2e db-worker-node processes"))
     (is (string/includes? output "Terminate db-sync server listeners on port 18080"))
+    (is (string/includes? output "Remove cli-e2e temp roots"))
     (is (string/includes? output "--dry-run"))))
 
 (deftest cleanup-prints-summary-and-returns-status
@@ -746,20 +757,20 @@
                 cleanup/cleanup-db-sync-port-processes! (fn [_] {:found-pids [303]
                                                                   :killed-pids [303]
                                                                   :failed-pids []})
-                cleanup/cleanup-temp-graph-dirs! (fn [_] {:found-dirs ["/tmp/logseq-cli-e2e-a/graphs"
-                                                                        "/tmp/logseq-cli-e2e-b/graphs"]
-                                                           :removed-dirs ["/tmp/logseq-cli-e2e-a/graphs"]
-                                                           :failed-dirs ["/tmp/logseq-cli-e2e-b/graphs"]})]
+                cleanup/cleanup-temp-roots! (fn [_] {:found-dirs ["/tmp/logseq-cli-e2e-a"
+                                                                   "/tmp/logseq-cli-e2e-b"]
+                                                      :removed-dirs ["/tmp/logseq-cli-e2e-a"]
+                                                      :failed-dirs ["/tmp/logseq-cli-e2e-b"]})]
     (let [result (atom nil)
           output (with-out-str
                    (reset! result (main/cleanup! {})))]
       (is (= :ok (:status @result)))
       (is (= [101] (get-in @result [:processes :killed-pids])))
       (is (= [303] (get-in @result [:db-sync-port-processes :killed-pids])))
-      (is (= ["/tmp/logseq-cli-e2e-a/graphs"] (get-in @result [:temp-graphs :removed-dirs])))
+      (is (= ["/tmp/logseq-cli-e2e-a"] (get-in @result [:temp-roots :removed-dirs])))
       (is (string/includes? output "db-worker-node processes: found 2, killed 1, failed 1"))
       (is (string/includes? output "db-sync server processes (port 18080): found 1, killed 1, failed 0"))
-      (is (string/includes? output "temp graph directories: found 2, removed 1, failed 1")))))
+      (is (string/includes? output "temp roots: found 2, removed 1, failed 1")))))
 
 (deftest cleanup-dry-run-prints-summary-and-passes-option
   (let [process-opts (atom nil)
@@ -779,13 +790,13 @@
                                                              :would-kill-pids [303]
                                                              :killed-pids []
                                                              :failed-pids []})
-                  cleanup/cleanup-temp-graph-dirs! (fn [opts]
-                                                     (reset! dir-opts opts)
-                                                     {:dry-run? true
-                                                      :found-dirs ["/tmp/logseq-cli-e2e-a/graphs"]
-                                                      :would-remove-dirs ["/tmp/logseq-cli-e2e-a/graphs"]
-                                                      :removed-dirs []
-                                                      :failed-dirs []})]
+                  cleanup/cleanup-temp-roots! (fn [opts]
+                                                (reset! dir-opts opts)
+                                                {:dry-run? true
+                                                 :found-dirs ["/tmp/logseq-cli-e2e-a"]
+                                                 :would-remove-dirs ["/tmp/logseq-cli-e2e-a"]
+                                                 :removed-dirs []
+                                                 :failed-dirs []})]
       (let [result (atom nil)
             output (with-out-str
                      (reset! result (main/cleanup! {:dry-run true})))]
@@ -795,7 +806,7 @@
         (is (= :ok (:status @result)))
         (is (true? (get-in @result [:processes :dry-run?])))
         (is (true? (get-in @result [:db-sync-port-processes :dry-run?])))
-        (is (true? (get-in @result [:temp-graphs :dry-run?])))
+        (is (true? (get-in @result [:temp-roots :dry-run?])))
         (is (string/includes? output "[dry-run] db-worker-node processes: found 2, would kill 2"))
         (is (string/includes? output "[dry-run] db-sync server processes (port 18080): found 1, would kill 1"))
-        (is (string/includes? output "[dry-run] temp graph directories: found 1, would remove 1"))))))
+        (is (string/includes? output "[dry-run] temp roots: found 1, would remove 1"))))))
