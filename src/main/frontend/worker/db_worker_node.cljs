@@ -10,16 +10,18 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.version :as worker-version]
             [lambdaisland.glogi :as log]
+            [logseq.cli.data-dir :as data-dir]
             [logseq.cli.style :as style]
             [logseq.common.config :as common-config]
-            [logseq.cli.data-dir :as data-dir]
             [logseq.db :as ldb]
+            [logseq.db-worker.server-list :as server-list]
             [promesa.core :as p]))
 
 (defonce ^:private *ready? (atom false))
 (defonce ^:private *sse-clients (atom #{}))
 (defonce ^:private *lock-info (atom nil))
 (defonce ^:private *file-handler (atom nil))
+(defonce ^:private *server-list-file (atom nil))
 
 (defn- send-json!
   [^js res status payload]
@@ -53,6 +55,7 @@
           "--data-dir" (recur (subvec args 2) (assoc opts :data-dir (second args)))
           "--repo" (recur (subvec args 2) (assoc opts :repo (second args)))
           "--owner-source" (recur (subvec args 2) (assoc opts :owner-source (second args)))
+          "--server-list-file" (recur (subvec args 2) (assoc opts :server-list-file (second args)))
           "--log-level" (recur (subvec args 2) (assoc opts :log-level (second args)))
           "--create-empty-db" (recur (subvec args 1) (assoc opts :create-empty-db? true))
           "--version" (recur (subvec args 1) (assoc opts :version? true))
@@ -241,20 +244,31 @@
   [data]
   (= :parser/query (:error data)))
 
+(defn- health-payload
+  [{:keys [bound-repo host port owner-source data-dir]}]
+  {:repo bound-repo
+   :status (if @*ready? "ready" "starting")
+   :host host
+   :port (if (satisfies? IDeref port) @port port)
+   :pid (.-pid js/process)
+   :owner-source (name (normalize-owner-source owner-source))
+   :data-dir data-dir
+   :revision (worker-version/revision)})
+
 (defn- make-server
-  [proxy {:keys [bound-repo stop-fn]}]
+  [proxy {:keys [bound-repo stop-fn host port owner-source data-dir]}]
   (http/createServer
    (fn [^js req ^js res]
      (let [url (.-url req)
            method (.-method req)]
        (cond
          (= url "/healthz")
-         (send-text! res 200 "ok")
-
-         (= url "/readyz")
-         (if @*ready?
-           (send-text! res 200 "ok")
-           (send-text! res 503 "not-ready"))
+         (send-json! res (if @*ready? 200 503)
+                     (health-payload {:bound-repo bound-repo
+                                      :host host
+                                      :port port
+                                      :owner-source owner-source
+                                      :data-dir data-dir}))
 
          (= url "/v1/events")
          (sse-handler req res)
@@ -430,7 +444,7 @@
     nil))
 
 (defn start-daemon!
-  [{:keys [data-dir repo log-level owner-source on-stopped!] :as opts}]
+  [{:keys [data-dir repo log-level owner-source on-stopped! server-list-file] :as opts}]
   (let [host "127.0.0.1"
         port 0
         owner-source (normalize-owner-source owner-source)]
@@ -443,6 +457,7 @@
                                  :log-level (keyword (or log-level "info"))})
           (reset! *ready? false)
           (reset! *lock-info nil)
+          (reset! *server-list-file server-list-file)
           (set-main-thread-stub!)
           (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir
                                                              :event-fn handle-event!
@@ -453,8 +468,6 @@
                       _ (<init-worker! proxy)
                       {:keys [path lock]} (db-lock/ensure-lock! {:data-dir data-dir
                                                                  :repo repo
-                                                                 :host host
-                                                                 :port port
                                                                  :owner-source owner-source})
                       _ (reset! *lock-info {:path path :lock lock})
                       _ (let [method-kw :thread-api/create-or-open-db
@@ -462,7 +475,12 @@
                           (<invoke! proxy method-str method-kw false [repo (startup-db-opts opts)]))]
                 (let [stop!* (atom nil)
                       stopped? (atom false)
+                      port* (atom nil)
                       server (make-server proxy {:bound-repo repo
+                                                 :host host
+                                                 :port port*
+                                                 :owner-source owner-source
+                                                 :data-dir data-dir
                                                  :stop-fn (fn []
                                                             (when-let [stop! @stop!*]
                                                               (stop!)))})]
@@ -474,6 +492,7 @@
                                       actual-port (if (number? address)
                                                     address
                                                     (.-port address))
+                                      _ (reset! port* actual-port)
                                       stop! (fn []
                                               (if @stopped?
                                                 (p/resolved true)
@@ -481,6 +500,9 @@
                                                   (reset! stopped? true)
                                                   (-> (p/let [_ (<close-bound-repo! proxy repo)]
                                                         (reset! *ready? false)
+                                                        (when-let [path @*server-list-file]
+                                                          (server-list/remove-entry! path {:pid (.-pid js/process)
+                                                                                           :port actual-port}))
                                                         (doseq [^js res @*sse-clients]
                                                           (try
                                                             (.end res)
@@ -496,18 +518,18 @@
                                                                (resolve true)))))
                                                         true)
                                                       (p/finally
-                                                       (fn []
-                                                         (when (fn? on-stopped!)
-                                                           (on-stopped!))))))))]
+                                                        (fn []
+                                                          (when (fn? on-stopped!)
+                                                            (on-stopped!))))))))]
                                   (reset! *ready? true)
+                                  (when-let [path @*server-list-file]
+                                    (server-list/append-entry! path {:pid (.-pid js/process)
+                                                                     :port actual-port}))
                                   (reset! stop!* stop!)
-                                  (p/let [lock-with-port (assoc (:lock @*lock-info) :port actual-port)
-                                          updated-lock (db-lock/update-lock! (:path @*lock-info) lock-with-port)
-                                          _ (swap! *lock-info assoc :lock updated-lock)]
-                                    (resolve {:host host
-                                              :port actual-port
-                                              :server server
-                                              :stop! stop!})))))
+                                  (resolve {:host host
+                                            :port actual-port
+                                            :server server
+                                            :stop! stop!}))))
                      (.on server "error" (fn [error]
                                            (when-let [lock-path (:path @*lock-info)]
                                              (db-lock/remove-lock! lock-path))
@@ -521,7 +543,7 @@
 
 (defn main
   []
-  (let [{:keys [data-dir repo help? version? owner-source] :as opts}
+  (let [{:keys [data-dir repo help? version? owner-source server-list-file] :as opts}
         (parse-args (.-argv js/process))]
     (when help?
       (show-help!)
@@ -537,6 +559,7 @@
                                 :repo repo
                                 :create-empty-db? (:create-empty-db? opts)
                                 :owner-source owner-source
+                                :server-list-file server-list-file
                                 :on-stopped! (fn []
                                                (log/info :db-worker-node-stopped nil)
                                                (.exit js/process 0))

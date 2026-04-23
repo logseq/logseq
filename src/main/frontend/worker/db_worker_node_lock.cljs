@@ -5,7 +5,6 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [frontend.worker-common.util :as worker-util]
-            [frontend.worker.version :as worker-version]
             [lambdaisland.glogi :as log]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.common.config :as common-config]
@@ -88,7 +87,7 @@
     (fs/unlinkSync path)))
 
 (defn create-lock!
-  [{:keys [data-dir repo host port owner-source]}]
+  [{:keys [data-dir repo owner-source]}]
   (p/create
    (fn [resolve reject]
      (try
@@ -104,11 +103,7 @@
                lock {:repo repo
                      :pid (.-pid js/process)
                      :lock-id (str (random-uuid))
-                     :host host
-                     :port port
-                     :owner-source (normalize-owner-source owner-source)
-                     :revision (worker-version/revision)
-                     :startedAt (.toISOString (js/Date.))}]
+                     :owner-source (normalize-owner-source owner-source)}]
            (try
              (fs/writeFileSync fd (js/JSON.stringify (clj->js lock)))
              (finally
@@ -125,16 +120,14 @@
      (try
        (let [existing (read-lock path)
              lock' (if existing
-                     (-> lock
-                         (assoc :repo (:repo existing))
-                         (assoc :pid (:pid existing))
-                         (assoc :lock-id (or (:lock-id existing) (:lock-id lock)))
-                         (assoc :owner-source (normalize-owner-source (:owner-source existing)))
-                         (assoc :revision (:revision existing))
-                         (assoc :startedAt (:startedAt existing)))
-                     (-> lock
-                         (update :owner-source normalize-owner-source)
-                         (update :revision #(or % (worker-version/revision)))))]
+                     {:repo (:repo existing)
+                      :pid (:pid existing)
+                      :lock-id (or (:lock-id existing) (:lock-id lock))
+                      :owner-source (normalize-owner-source (:owner-source existing))}
+                     {:repo (:repo lock)
+                      :pid (:pid lock)
+                      :lock-id (:lock-id lock)
+                      :owner-source (normalize-owner-source (:owner-source lock))})]
          (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
          (fs/writeFileSync path (js/JSON.stringify (clj->js lock')))
          (resolve lock'))
@@ -187,13 +180,11 @@
       lock)))
 
 (defn ensure-lock!
-  [{:keys [data-dir repo host port owner-source]}]
+  [{:keys [data-dir repo owner-source]}]
   (let [data-dir (resolve-data-dir data-dir)
         path (lock-path data-dir repo)]
     (p/let [lock (create-lock! {:data-dir data-dir
                                 :repo repo
-                                :host host
-                                :port port
                                 :owner-source owner-source})]
       {:path path
        :lock lock})))
