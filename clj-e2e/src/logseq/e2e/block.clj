@@ -127,7 +127,7 @@
   (util/wait-timeout 100)
   (util/input property-value)
   (w/wait-for (format "#ac-0.menu-link:has-text('%s')" property-value))
-  (k/enter))
+  (w/click (first (w/query (format ".menu-link:has-text('%s')" property-value)))))
 
 (defn select-blocks
   [n]
