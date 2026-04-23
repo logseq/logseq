@@ -5,10 +5,12 @@
             [clojure.string :as string]
             [frontend.worker.db-worker-node-lock :as db-lock]
             [lambdaisland.glogi :as log]
+            [logseq.cli.config :as cli-config]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.db-worker.daemon :as daemon]
+            [logseq.db-worker.server-list :as server-list]
             [logseq.cli.profile :as profile]
             [promesa.core :as p]))
 
@@ -45,6 +47,10 @@
 (defn lock-path
   [data-dir repo]
   (node-path/join (repo-dir data-dir repo) "db-worker.lock"))
+
+(defn- server-list-path
+  [config]
+  (cli-config/server-list-path (:config-path config)))
 
 (defn db-worker-dev-script-path
   []
@@ -127,16 +133,23 @@
   [lock]
   (daemon/wait-for-ready lock))
 
-(defn- ready?
-  [lock]
-  (daemon/ready? lock))
+(defn- fetch-healthz
+  [{:keys [host port]}]
+  (p/let [{:keys [status body]} (http-request {:method "GET"
+                                               :host host
+                                               :port port
+                                               :path "/healthz"
+                                               :timeout-ms 1000})
+          payload (js->clj (js/JSON.parse body) :keywordize-keys true)]
+    (assoc payload :http-status status)))
 
 (defn- spawn-server!
-  [{:keys [repo data-dir owner-source create-empty-db?]}]
+  [{:keys [repo data-dir owner-source create-empty-db? server-list-file]}]
   (daemon/spawn-server! {:script (db-worker-script-path)
                          :repo repo
                          :data-dir data-dir
                          :owner-source owner-source
+                         :server-list-file server-list-file
                          :create-empty-db? create-empty-db?}))
 
 (defn- rewrite-lock-owner-source!
@@ -145,24 +158,96 @@
     (fs/writeFileSync path (js/JSON.stringify (clj->js lock')))
     lock'))
 
+(defn- canonical-path
+  [path]
+  (when (seq path)
+    (let [path (common-graph/expand-home path)]
+      (try
+        (fs/realpathSync path)
+        (catch :default _
+          (node-path/resolve path))))))
+
+(defn- current-data-dir
+  [config]
+  (canonical-path (resolve-data-dir config)))
+
+(defn- same-data-dir?
+  [config server]
+  (let [server-data-dir (:data-dir server)]
+    (or (not (seq server-data-dir))
+        (= (current-data-dir config)
+           (canonical-path server-data-dir)))))
+
+(defn- servers-for-config
+  [config servers]
+  (->> (or servers [])
+       (filter #(same-data-dir? config %))
+       vec))
+
+(defn- repo-server
+  [config servers repo]
+  (first (filter #(= repo (:repo %))
+                 (servers-for-config config servers))))
+
+(defn- discover-servers
+  [config]
+  (let [path (server-list-path config)
+        entries (server-list/read-entries path)]
+    (p/let [results (p/all
+                     (for [{:keys [pid port] :as entry} entries]
+                       (p/let [pid-state (pid-status pid)]
+                         (if-not (contains? #{:alive :no-permission} pid-state)
+                           {:entry entry :alive? false}
+                           (-> (fetch-healthz {:host "127.0.0.1" :port port})
+                               (p/then (fn [payload]
+                                         {:entry entry
+                                          :alive? true
+                                          :server (-> payload
+                                                      (update :status keyword)
+                                                      (update :owner-source normalize-owner-source))}))
+                               (p/catch (fn [_]
+                                          {:entry entry :alive? false})))))))
+            alive-results (filter :alive? results)
+            cleaned-entries (mapv :entry alive-results)
+            _ (server-list/rewrite-entries! path cleaned-entries)]
+      (->> alive-results
+           (keep :server)
+           vec))))
+
+(defn- wait-for-discovered-server
+  [config repo]
+  (let [server* (atom nil)]
+    (-> (wait-for (fn []
+                    (p/let [servers (discover-servers config)
+                            server (repo-server config servers repo)]
+                      (reset! server* server)
+                      (some? server)))
+                  {:timeout-ms 8000
+                   :interval-ms 50})
+        (p/then (fn [_] @server*)))))
+
 (defn- ensure-server-started!
   [config repo]
   (let [data-dir (resolve-data-dir config)
         path (lock-path data-dir repo)
         requester-owner (requester-owner-source config)
-        profile-session (:profile-session config)]
+        profile-session (:profile-session config)
+        server-list-file (server-list-path config)]
     (profile/time! profile-session "server.ensure-started"
                    (fn []
                      (ensure-repo-dir! data-dir repo)
                      (p/let [existing (read-lock path)
                              _ (cleanup-stale-lock! path existing)
-                             _ (when (not (fs/existsSync path))
+                             discovered (discover-servers config)
+                             discovered-repo-server (repo-server config discovered repo)
+                             _ (when (and (not discovered-repo-server) (not (fs/existsSync path)))
                                  (profile/time! profile-session
                                                 "server.spawn-daemon"
                                                 (fn []
                                                   (spawn-server! {:repo repo
                                                                   :data-dir data-dir
                                                                   :owner-source requester-owner
+                                                                  :server-list-file server-list-file
                                                                   :create-empty-db? (:create-empty-db? config)})))
                                  (-> (profile/time! profile-session
                                                     "server.wait-lock"
@@ -179,15 +264,27 @@
                                            (= :cli requester-owner)
                                            (= :unknown (lock-owner-source lock)))
                                     (rewrite-lock-owner-source! path lock :cli)
-                                    lock)]
+                                    lock)
+                             repo-server' (if discovered-repo-server
+                                            discovered-repo-server
+                                            (-> (profile/time! profile-session
+                                                               "server.wait-publish"
+                                                               (fn []
+                                                                 (wait-for-discovered-server config repo)))
+                                                (p/catch (fn [e]
+                                                           (if (= :timeout (:code (ex-data e)))
+                                                             (throw (ex-info "db-worker-node failed to publish health"
+                                                                             {:code :server-start-failed
+                                                                              :repo repo}))
+                                                             (throw e))))))]
                        (when-not lock
                          (throw (ex-info "db-worker-node failed to start" {:code :server-start-failed})))
                        (p/let [_ (profile/time! profile-session
                                                 "server.wait-ready"
                                                 (fn []
-                                                  (wait-for-ready lock)))]
+                                                  (wait-for-ready repo-server')))]
                          (let [lock-owner (lock-owner-source lock)]
-                           (assoc lock
+                           (assoc repo-server'
                                   :owner-source lock-owner
                                   :owned? (owner-manageable? requester-owner lock-owner)))))))))
 
@@ -222,31 +319,35 @@
       (let [lock-owner (lock-owner-source lock)]
         (if-not (owner-manageable? requester-owner lock-owner)
           (p/resolved (owner-mismatch-error repo requester-owner lock-owner))
-          (-> (p/let [_ (shutdown! lock)]
-            (wait-for (fn []
-                        (p/resolved (and (not (fs/existsSync path))
-                                         (process-stopped? (:pid lock)))))
-                      {:timeout-ms 5000
-                       :interval-ms 200})
-            {:ok? true
-             :data {:repo repo}})
-              (p/catch (fn [_]
-                         (when (and (= :alive (pid-status (:pid lock)))
-                                    (not= (:pid lock) (.-pid js/process)))
-                           (try
-                             (.kill js/process (:pid lock) "SIGTERM")
-                             (catch :default e
-                               (log/warn :cli-server-stop-sigterm-failed e))))
-                         (let [pid-state (pid-status (:pid lock))]
-                           (when (= :not-found pid-state)
-                             (remove-lock! path))
-                           (if (or (fs/existsSync path)
-                                   (= :alive pid-state))
-                             {:ok? false
-                              :error {:code :server-stop-timeout
-                                      :message "timed out stopping server"}}
-                             {:ok? true
-                              :data {:repo repo}}))))))))))
+          (p/let [servers (discover-servers config)
+                  server (repo-server config servers repo)]
+            (if-not server
+              {:ok? false
+               :error {:code :server-not-found
+                       :message "server is not running"}}
+              (-> (p/let [_ (shutdown! server)]
+                    (wait-for (fn []
+                                (p/resolved (not (fs/existsSync path))))
+                              {:timeout-ms 5000
+                               :interval-ms 200})
+                    {:ok? true
+                     :data {:repo repo}})
+                  (p/catch
+                   (fn [_]
+                     (when (and (= :alive (pid-status (:pid server)))
+                                (not= (:pid server) (.-pid js/process)))
+                       (try
+                         (.kill js/process (:pid server) "SIGTERM")
+                         (catch :default e
+                           (log/warn :cli-server-stop-sigterm-failed e))))
+                     (when (= :not-found (pid-status (:pid server)))
+                       (remove-lock! path))
+                     (if (fs/existsSync path)
+                       {:ok? false
+                        :error {:code :server-stop-timeout
+                                :message "timed out stopping server"}}
+                       {:ok? true
+                        :data {:repo repo}})))))))))))
 
 (defn start-server!
   [config repo]
@@ -276,25 +377,8 @@
 
 (defn list-servers
   [config]
-  (let [data-dir (resolve-data-dir config)
-        entries (when (fs/existsSync data-dir)
-                  (fs/readdirSync data-dir #js {:withFileTypes true}))]
-    (p/all
-     (for [^js entry entries
-           :when (.isDirectory entry)
-           :let [name (.-name entry)
-                 graph-key (db-lock/decode-canonical-graph-dir-key name)
-                 lock (when graph-key
-                        (read-lock (node-path/join data-dir name "db-worker.lock")))]
-           :when lock]
-       (p/let [ready (ready? lock)]
-         {:repo (:repo lock)
-          :host (:host lock)
-          :port (:port lock)
-          :pid (:pid lock)
-          :owner-source (lock-owner-source lock)
-          :revision (:revision lock)
-          :status (if ready :ready :starting)})))))
+  (p/let [servers (discover-servers config)]
+    (servers-for-config config servers)))
 
 (defn compute-revision-mismatches
   [cli-revision servers]

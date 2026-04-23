@@ -6,6 +6,7 @@
             ["path" :as node-path]
             [cljs.test :refer [async deftest is]]
             [frontend.test.node-helper :as node-helper]
+            [logseq.cli.config :as cli-config]
             [logseq.cli.profile :as profile]
             [logseq.cli.server :as cli-server]
             [logseq.cli.test-helper :as test-helper]
@@ -84,31 +85,42 @@
          (let [data-dir (node-helper/create-tmp-dir "cli-server-reuse")
                repo (str "logseq_db_reuse_" (subs (str (random-uuid)) 0 8))
                lock-file (cli-server/lock-path data-dir repo)
+               config-path (node-path/join data-dir "cli.edn")
+               server-list-file (cli-config/server-list-path config-path)
                host "127.0.0.1"
+               port* (atom nil)
                spawn-calls (atom 0)
                server (http/createServer
                        (fn [^js req ^js res]
                          (case (.-url req)
-                           "/healthz" (do (.writeHead res 200 #js {"Content-Type" "text/plain"})
-                                          (.end res "ok"))
-                           "/readyz" (do (.writeHead res 200 #js {"Content-Type" "text/plain"})
-                                         (.end res "ok"))
+                           "/healthz" (do (.writeHead res 200 #js {"Content-Type" "application/json"})
+                                          (.end res (js/JSON.stringify #js {:repo repo
+                                                                            :status "ready"
+                                                                            :host host
+                                                                            :port @port*
+                                                                            :pid (.-pid js/process)
+                                                                            :owner-source "cli"
+                                                                            :revision "server-revision"})))
                            (do (.writeHead res 404 #js {"Content-Type" "text/plain"})
                                (.end res "not-found")))))]
            (.listen server 0 host
                     (fn []
                       (let [address (.address server)
                             port (if (number? address) address (.-port address))
+                            _ (reset! port* port)
                             lock {:repo repo
                                   :pid (.-pid js/process)
-                                  :host host
-                                  :port port}]
+                                  :lock-id "reuse-lock"
+                                  :owner-source :cli}]
                         (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
                         (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
+                        (fs/writeFileSync server-list-file (str (.-pid js/process) " " port "\n"))
                         (-> (p/with-redefs [daemon/spawn-server! (fn [_opts]
                                                                    (swap! spawn-calls inc)
-                                                                   (throw (ex-info "should not spawn when lock is ready" {})))]
-                              (cli-server/ensure-server! {:data-dir data-dir} repo))
+                                                                   (throw (ex-info "should not spawn when server-list entry is ready" {})))]
+                              (cli-server/ensure-server! {:data-dir data-dir
+                                                          :config-path config-path}
+                                                         repo))
                             (p/then (fn [config]
                                       (is (= (str "http://" host ":" port) (:base-url config)))
                                       (is (= 0 @spawn-calls))))
@@ -129,6 +141,13 @@
            (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
            (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
            (-> (p/with-redefs [daemon/cleanup-stale-lock! (fn [_path _lock] (p/resolved nil))
+                               cli-server/discover-servers (fn [_] (p/resolved [{:repo repo
+                                                                                  :host "127.0.0.1"
+                                                                                  :port 55555
+                                                                                  :pid 999999
+                                                                                  :owner-source :cli
+                                                                                  :revision nil
+                                                                                  :status :starting}]))
                                daemon/wait-for-ready (fn [_lock]
                                                        (p/rejected (ex-info "graph already locked"
                                                                             {:code :repo-locked
@@ -301,13 +320,16 @@
 (deftest ensure-server-forwards-create-empty-db-flag-when-spawning-daemon
   (async done
          (let [data-dir (node-helper/create-tmp-dir "cli-server-create-empty")
+               config-path (node-path/join data-dir "custom" "cli.edn")
                repo (str "logseq_db_create_empty_" (subs (str (random-uuid)) 0 8))
                captured (atom nil)
                lock {:repo repo
                      :pid (.-pid js/process)
                      :host "127.0.0.1"
-                     :port 9301}
-               read-lock-calls (atom 0)]
+                     :port 9301
+                     :owner-source :cli}
+               read-lock-calls (atom 0)
+               discover-calls (atom 0)]
            (-> (p/with-redefs [daemon/read-lock (fn [_]
                                                   (if (= 1 (swap! read-lock-calls inc))
                                                     nil
@@ -317,15 +339,28 @@
                                                       (reset! captured opts)
                                                       nil)
                                daemon/wait-for-lock (fn [_] (p/resolved true))
+                               cli-server/discover-servers (fn [_]
+                                                            (p/resolved (if (= 1 (swap! discover-calls inc))
+                                                                          []
+                                                                          [{:repo repo
+                                                                            :host "127.0.0.1"
+                                                                            :port 9301
+                                                                            :pid (.-pid js/process)
+                                                                            :owner-source :cli
+                                                                            :revision nil
+                                                                            :status :ready}])))
                                daemon/wait-for-ready (fn [_] (p/resolved true))]
                  (cli-server/ensure-server! {:data-dir data-dir
+                                             :config-path config-path
                                              :create-empty-db? true}
                                             repo))
                (p/then (fn [_]
                          (is (= repo (:repo @captured)))
                          (is (= (cli-server/resolve-data-dir {:data-dir data-dir})
                                 (:data-dir @captured)))
-                         (is (= true (:create-empty-db? @captured)))))
+                         (is (= true (:create-empty-db? @captured)))
+                         (is (= (cli-config/server-list-path config-path)
+                                (:server-list-file @captured)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -336,6 +371,7 @@
                repo (str "logseq_db_profile_" (subs (str (random-uuid)) 0 8))
                session (profile/create-session true)
                read-lock-calls (atom 0)
+               discover-calls (atom 0)
                lock {:repo repo
                      :pid (.-pid js/process)
                      :host "127.0.0.1"
@@ -348,6 +384,16 @@
                                daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
                                daemon/spawn-server! (fn [_] nil)
                                daemon/wait-for-lock (fn [_] (p/resolved true))
+                               cli-server/discover-servers (fn [_]
+                                                            (p/resolved (if (= 1 (swap! discover-calls inc))
+                                                                          []
+                                                                          [{:repo repo
+                                                                            :host "127.0.0.1"
+                                                                            :port 9310
+                                                                            :pid (.-pid js/process)
+                                                                            :owner-source :cli
+                                                                            :revision nil
+                                                                            :status :ready}])))
                                daemon/wait-for-ready (fn [_] (p/resolved true))]
                  (cli-server/ensure-server! {:data-dir data-dir
                                              :profile-session session}
@@ -364,25 +410,244 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest list-servers-includes-revision-from-lock
+(deftest ensure-server-waits-for-server-list-publication-after-lock
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "cli-server-list-revision")
-               repo (str "logseq_db_list_revision_" (subs (str (random-uuid)) 0 8))
-               lock-file (cli-server/lock-path data-dir repo)
+         (let [data-dir (node-helper/create-tmp-dir "cli-server-wait-publish")
+               repo (str "logseq_db_wait_publish_" (subs (str (random-uuid)) 0 8))
+               read-lock-calls (atom 0)
+               discover-calls (atom 0)
                lock {:repo repo
                      :pid (.-pid js/process)
-                     :host "127.0.0.1"
-                     :port 9311
-                     :owner-source :cli
-                     :revision "server-revision"}]
+                     :lock-id "wait-publish-lock"
+                     :owner-source :cli}
+               server {:repo repo
+                       :host "127.0.0.1"
+                       :port 9311
+                       :pid (.-pid js/process)
+                       :owner-source :cli
+                       :revision nil
+                       :status :ready}]
+           (-> (p/with-redefs [daemon/read-lock (fn [_]
+                                                  (if (= 1 (swap! read-lock-calls inc))
+                                                    nil
+                                                    lock))
+                               daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/spawn-server! (fn [_] nil)
+                               daemon/wait-for-lock (fn [_] (p/resolved true))
+                               cli-server/discover-servers (fn [_]
+                                                            (let [call (swap! discover-calls inc)]
+                                                              (p/resolved (if (< call 3)
+                                                                            []
+                                                                            [server]))))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:data-dir data-dir} repo))
+               (p/then (fn [config]
+                         (is (= "http://127.0.0.1:9311" (:base-url config)))
+                         (is (true? (:owned? config)))
+                         (is (<= 3 @discover-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-ignores-discovered-server-from-other-data-dir
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-other-data-dir")
+               data-dir-a (node-path/join root-dir "graphs-a")
+               data-dir-b (node-path/join root-dir "graphs-b")
+               config-path (node-path/join root-dir "cli.edn")
+               repo (str "logseq_db_shared_repo_" (subs (str (random-uuid)) 0 8))
+               spawned? (atom false)
+               captured (atom nil)
+               lock {:repo repo
+                     :pid (.-pid js/process)
+                     :lock-id "local-lock"
+                     :owner-source :cli}
+               remote-server {:repo repo
+                              :host "127.0.0.1"
+                              :port 9320
+                              :pid 1001
+                              :owner-source :cli
+                              :revision nil
+                              :status :ready
+                              :data-dir data-dir-a}
+               local-server {:repo repo
+                             :host "127.0.0.1"
+                             :port 9321
+                             :pid (.-pid js/process)
+                             :owner-source :cli
+                             :revision nil
+                             :status :ready
+                             :data-dir data-dir-b}]
+           (-> (p/with-redefs [daemon/read-lock (fn [_]
+                                                  (when @spawned?
+                                                    lock))
+                               daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/spawn-server! (fn [opts]
+                                                      (reset! captured opts)
+                                                      (reset! spawned? true)
+                                                      nil)
+                               daemon/wait-for-lock (fn [_] (p/resolved true))
+                               cli-server/discover-servers (fn [_]
+                                                            (p/resolved (if @spawned?
+                                                                          [remote-server local-server]
+                                                                          [remote-server])))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:data-dir data-dir-b
+                                             :config-path config-path}
+                                            repo))
+               (p/then (fn [config]
+                         (is (= data-dir-b (:data-dir @captured)))
+                         (is (= "http://127.0.0.1:9321" (:base-url config)))
+                         (is (true? (:owned? config)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-reuses-discovered-server-across-symlinked-data-dir-spellings
+  (async done
+         (let [repo (str "logseq_db_symlink_dir_" (subs (str (random-uuid)) 0 8))
+               lock {:repo repo
+                     :pid (.-pid js/process)
+                     :lock-id "symlink-lock"
+                     :owner-source :cli}
+               spawned? (atom false)]
+           (-> (test-helper/with-js-property-override
+                 fs
+                 "realpathSync"
+                 (fn [path]
+                   (case path
+                     "/var/tmp/shared-graphs" "/private/var/tmp/shared-graphs"
+                     "/private/var/tmp/shared-graphs" "/private/var/tmp/shared-graphs"
+                     path))
+                 (fn []
+                   (p/with-redefs [daemon/read-lock (fn [_] lock)
+                                   daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                                   daemon/spawn-server! (fn [_]
+                                                          (reset! spawned? true)
+                                                          nil)
+                                   cli-server/discover-servers (fn [_]
+                                                                (p/resolved [{:repo repo
+                                                                              :host "127.0.0.1"
+                                                                              :port 9322
+                                                                              :pid (.-pid js/process)
+                                                                              :owner-source :cli
+                                                                              :revision nil
+                                                                              :status :ready
+                                                                              :data-dir "/var/tmp/shared-graphs"}]))
+                                   daemon/wait-for-ready (fn [_] (p/resolved true))]
+                     (cli-server/ensure-server! {:data-dir "/private/var/tmp/shared-graphs"}
+                                                repo))))
+               (p/then (fn [config]
+                         (is (false? @spawned?))
+                         (is (= "http://127.0.0.1:9322" (:base-url config)))
+                         (is (true? (:owned? config)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest stop-server-targets-discovered-server-for-current-data-dir
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-stop-target")
+               data-dir-a (node-path/join root-dir "graphs-a")
+               data-dir-b (node-path/join root-dir "graphs-b")
+               config-path (node-path/join root-dir "cli.edn")
+               repo (str "logseq_db_stop_target_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path data-dir-b repo)
+               request* (atom nil)
+               lock {:repo repo
+                     :pid (.-pid js/process)
+                     :lock-id "stop-lock"
+                     :owner-source :cli}]
            (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
            (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
-           (-> (p/with-redefs [daemon/ready? (fn [_] (p/resolved true))]
-                 (cli-server/list-servers {:data-dir data-dir}))
+           (-> (p/with-redefs [cli-server/discover-servers (fn [_]
+                                                            (p/resolved [{:repo repo
+                                                                          :host "127.0.0.1"
+                                                                          :port 9401
+                                                                          :pid 4001
+                                                                          :owner-source :cli
+                                                                          :revision nil
+                                                                          :status :ready
+                                                                          :data-dir data-dir-a}
+                                                                         {:repo repo
+                                                                          :host "127.0.0.1"
+                                                                          :port 9402
+                                                                          :pid 4002
+                                                                          :owner-source :cli
+                                                                          :revision nil
+                                                                          :status :ready
+                                                                          :data-dir data-dir-b}]))
+                               daemon/http-request (fn [opts]
+                                                     (reset! request* opts)
+                                                     (p/resolved {:status 200 :body ""}))
+                               daemon/wait-for (fn [_ _] (p/resolved true))]
+                 (cli-server/stop-server! {:data-dir data-dir-b
+                                           :config-path config-path
+                                           :owner-source :cli}
+                                          repo))
+               (p/then (fn [result]
+                         (is (= true (:ok? result)))
+                         (is (= 9402 (:port @request*)))
+                         (is (= "127.0.0.1" (:host @request*)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest list-servers-reads-server-list-and-healthz-details
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "cli-server-list-revision")
+               config-path (node-path/join data-dir "cli.edn")
+               server-list-file (cli-config/server-list-path config-path)
+               repo (str "logseq_db_list_revision_" (subs (str (random-uuid)) 0 8))
+               host "127.0.0.1"
+               port* (atom nil)
+               server (http/createServer
+                       (fn [^js req ^js res]
+                         (case (.-url req)
+                           "/healthz" (do (.writeHead res 200 #js {"Content-Type" "application/json"})
+                                          (.end res (js/JSON.stringify #js {:repo repo
+                                                                            :status "ready"
+                                                                            :host host
+                                                                            :port @port*
+                                                                            :pid (.-pid js/process)
+                                                                            :owner-source "cli"
+                                                                            :data-dir data-dir
+                                                                            :revision "server-revision"})))
+                           (do (.writeHead res 404 #js {"Content-Type" "text/plain"})
+                               (.end res "not-found")))))]
+           (.listen server 0 host
+                    (fn []
+                      (let [address (.address server)
+                            port (if (number? address) address (.-port address))
+                            _ (reset! port* port)]
+                        (fs/writeFileSync server-list-file (str (.-pid js/process) " " port "\n"))
+                        (-> (cli-server/list-servers {:data-dir data-dir
+                                                      :config-path config-path})
+                            (p/then (fn [servers]
+                                      (is (= 1 (count servers)))
+                                      (is (= repo (:repo (first servers))))
+                                      (is (= :ready (:status (first servers))))
+                                      (is (= data-dir (:data-dir (first servers))))
+                                      (is (= "server-revision" (:revision (first servers))))))
+                            (p/catch (fn [e]
+                                       (is false (str "unexpected error: " e))))
+                            (p/finally (fn []
+                                         (.close server (fn [] (done))))))))))))
+
+(deftest list-servers-lazily-cleans-stale-server-list-entries
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "cli-server-list-cleanup")
+               config-path (node-path/join data-dir "cli.edn")
+               server-list-file (cli-config/server-list-path config-path)]
+           (fs/writeFileSync server-list-file "999999 65535\n")
+           (-> (cli-server/list-servers {:data-dir data-dir
+                                         :config-path config-path})
                (p/then (fn [servers]
-                         (is (= 1 (count servers)))
-                         (is (= repo (:repo (first servers))))
-                         (is (= "server-revision" (:revision (first servers))))))
+                         (is (empty? servers))
+                         (let [contents (when (fs/existsSync server-list-file)
+                                          (.toString (fs/readFileSync server-list-file) "utf8"))]
+                           (is (or (nil? contents)
+                                   (= "" contents))))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

@@ -5,6 +5,7 @@
             [goog.object :as gobj]
             [logseq.cli.config :as config]
             ["fs" :as fs]
+            ["os" :as os]
             ["path" :as node-path]))
 
 (defn- with-env
@@ -116,6 +117,16 @@
     (is (= 300000 (:login-timeout-ms result)))
     (is (= 120000 (:logout-timeout-ms result)))
     (is (= 40 (:list-title-max-display-width result)))))
+
+(deftest test-server-list-path-follows-config-path
+  (let [config-dir (node-helper/create-tmp-dir "cli-config-dir")
+        config-path (node-path/join config-dir "nested" "custom-cli.edn")
+        expected (node-path/join config-dir "nested" "server-list")]
+    (is (= expected (config/server-list-path config-path)))))
+
+(deftest test-server-list-path-defaults-next-to-default-config
+  (let [expected (node-path/join (.homedir os) "logseq" "server-list")]
+    (is (= expected (config/server-list-path nil)))))
 
 (deftest test-list-title-max-display-width-config
   (testing "reads valid list-title-max-display-width from cli.edn"
