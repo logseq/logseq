@@ -4881,3 +4881,39 @@
                 (is (= "followup" (:block/title followup)))))
             (finally
               (reset! undo-redo/*apply-history-action! prev-apply-action))))))))
+
+(deftest undo-redo-apply-template-without-template-blocks-keeps-followup-insert-target-test
+  (testing "redo after apply-template (without template-blocks in original op) should preserve inserted target uuid"
+    (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn (d/conn-from-db @seed-conn)
+          followup-uuid (random-uuid)
+          prev-apply-action @undo-redo/*apply-history-action!]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! undo-redo/*apply-history-action! sync-apply/apply-history-action!)
+          (try
+            ;; Match editor path: apply-template op only carries target/template ids + opts.
+            (d/transact! conn [[:db/add [:block/uuid empty-target-uuid] :block/title "target"]])
+            (apply-ops! conn
+                        [[:apply-template [(:db/id (d/entity @conn [:block/uuid template-root-uuid]))
+                                           (:db/id (d/entity @conn [:block/uuid empty-target-uuid]))
+                                           {:sibling? true}]]]
+                        local-tx-meta)
+            (let [inserted-three (select-offline-inserted-three conn template-root-uuid)]
+              (is (some? inserted-three))
+              (apply-ops! conn
+                          [[:insert-blocks [[{:block/uuid followup-uuid
+                                              :block/title "followup"}]
+                                            (:db/id inserted-three)
+                                            {:sibling? true
+                                             :keep-uuid? true}]]]
+                          local-tx-meta)
+              (undo-all! test-repo)
+              (is (nil? (d/entity @conn [:block/uuid followup-uuid])))
+              (redo-all! test-repo)
+              (let [followup (d/entity @conn [:block/uuid followup-uuid])]
+                (is (some? followup))
+                (is (= "followup" (:block/title followup)))))
+            (finally
+              (reset! undo-redo/*apply-history-action! prev-apply-action))))))))
