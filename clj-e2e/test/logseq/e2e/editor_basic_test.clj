@@ -50,20 +50,20 @@
   (testing "Convert block to page and back"
     (b/new-block "b1")
     (util/set-tag "Page" {:hidden? true})
-    (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
+    (assert/assert-have-count ".ls-page-blocks .ls-block .block-tags :text('Template')" 1)
     (b/toggle-property "Tags" "Page")
-    (assert/assert-is-hidden ".ls-page-blocks .ls-block .ls-icon-file")))
+    (assert/assert-have-count ".ls-page-blocks .ls-block .block-tags :text('Template')" 0)))
 
 (deftest toggle-between-page-and-block-for-selected-blocks
   (testing "Convert selected blocks to pages and back"
     (b/new-blocks ["b1" "b2" "b3"])
     (b/select-blocks 3)
     (b/toggle-property "Tags" "Page")
-    (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
+    (assert/assert-have-count ".ls-page-blocks .ls-block .block-tags :text('Template')" 3)
     (w/wait-for (format ".menu-link:has-text('%s')" "Page"))
     (k/esc)
     (b/toggle-property "Tags" "Page")
-    (w/wait-for-not-visible ".ls-page-blocks .ls-block .ls-icon-file")))
+    (assert/assert-have-count ".ls-page-blocks .ls-block .block-tags :text('Template')" 0)))
 
 (deftest disallow-adding-page-tag-to-normal-pages
   (testing "Disallow adding #Page to normal pages"
@@ -107,7 +107,7 @@
     (b/new-blocks ["block1" "block2" "block3"])
     (b/select-blocks 3)
     (b/toggle-property "Tags" "Page")
-    (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
+    (assert/assert-have-count ".ls-page-blocks .ls-block .block-tags :text('Template')" 3)
     (k/press "ControlOrMeta+Shift+m")
     (w/fill "input[placeholder=\"Move blocks to\"]" "Library")
     (w/wait-for (w/get-by-test-id "Library"))
@@ -120,7 +120,7 @@
     (b/new-blocks ["block4" "block5"])
     (b/select-blocks 2)
     (b/toggle-property "Tags" "Page")
-    (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
+    (assert/assert-have-count ".ls-page-blocks .ls-block .block-tags :text('Template')" 2)
     (k/press "ControlOrMeta+Shift+m")
     (w/fill "input[placeholder=\"Move blocks to\"]" "Library")
     (w/wait-for (w/get-by-test-id "Library"))
