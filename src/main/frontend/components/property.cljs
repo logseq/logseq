@@ -447,6 +447,9 @@
   [state block opts]
   (when-not config/publishing?
     (let [icon-only? (:icon-only? opts)
+          bottom-property-add-button? (= :block-below (:property-position opts))
+          tab-index (:tab-index opts)
+          bottom-row-nav? (:bottom-row-nav? opts)
           add-new-property! (fn [e]
                               (state/pub-event! [:editor/new-property (merge opts {:block block
                                                                                    :target (.-target e)})]))]
@@ -454,8 +457,11 @@
        (shui/button
          {:variant :outline
           :size :small
-          :class "jtrigger flex !px-2 !py-1"
-          :tab-index 0
+          :class (util/classnames
+                  ["jtrigger flex !px-2 !py-1"
+                   {:bottom-property-add-btn bottom-property-add-button?}])
+          :tab-index (or tab-index 0)
+          :data-bottom-row-nav (when bottom-row-nav? true)
           :title (t :property/add-new)
           :on-click add-new-property!
           :on-key-press (fn [e]
@@ -526,7 +532,7 @@
              (if (:class-schema? opts)
                (pv/property-value property (db/entity :logseq.property/description) opts)
                (pv/property-value block' property (assoc opts :suppress-inline-edit-icon? true)))]
-            (when (contains? #{:number :date :datetime} type)
+            (when (contains? #{:date :datetime} type)
               [:button.property-panel-edit-btn.select-none
                {:type "button"
                 :on-click (fn [e]
@@ -537,7 +543,7 @@
                                                (.querySelector ".jtrigger"))]
                               (.click trigger)
                               (some-> trigger .focus)))}
-               (ui/icon "edit" {:size 14})])])]))))
+               (ui/icon "edit" {:size 15})])])]))))
 
 (defn- entity-ref-value?
   [value]
@@ -765,13 +771,17 @@
     (boolean (seq hidden-properties))))
 
 (rum/defc hidden-properties-toggle-button
-  [block {:keys [icon-only?] :as _opts}]
+  [block {:keys [icon-only? tab-index bottom-row-nav?] :as _opts}]
   (let [block-uuid (:block/uuid block)]
     (when block-uuid
       (shui/button
-       {:variant :ghost
-        :size :sm
-        :class "bottom-property-control-btn px-1 text-muted-foreground h-6 text-xs"
+       {:variant :outline
+        :size :small
+        :class (util/classnames
+                ["bottom-property-control-btn"
+                 {:bottom-property-add-btn icon-only?}])
+        :tab-index (or tab-index 0)
+        :data-bottom-row-nav (when bottom-row-nav? true)
         :title (t :property/hidden-properties)
         :on-click (fn [e]
                     (util/stop e)
@@ -803,14 +813,13 @@
              (assoc state
                     ::id (str (random-uuid))
                     ::block block)))}
-  [state _target-block {:keys [sidebar-properties? tag-dialog?] :as opts}]
+  [state _target-block {:keys [sidebar-properties?] :as opts}]
   (let [*bidirectional-properties (::bidirectional-properties state)
         bidirectional-properties @*bidirectional-properties
         id (::id state)
         current-db (db/get-db)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
-        show-properties? (or sidebar-properties? tag-dialog?)
         show-hidden-properties? (let [shown-block-ids (rum/react *show-hidden-properties-block-ids)]
                                   (contains? shown-block-ids (:block/uuid block)))
         show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/sub :ui/show-empty-and-hidden-properties?)]
