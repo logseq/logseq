@@ -23,19 +23,19 @@
         } 
     ```
 - Working directory: Logseq root directory
-- Run `yarn && yarn mobile-watch` from the logseq project root directory in terminal.
-- Run `npx cap sync ios` in another terminal to copy web assets from public to *ios/App/App/public*, and create *capacitor.config.json* in *ios/App/App*, and update iOS plugins.
+- Run `pnpm install && pnpm mobile-watch` from the logseq project root directory in terminal.
+- Run `pnpm exec cap sync ios` in another terminal to copy web assets from public to *ios/App/App/public*, and create *capacitor.config.json* in *ios/App/App*, and update iOS plugins.
 - Connect your iOS device to MacBook.
-- Run `npx cap open ios` to open Logseq project in Xcode, and build the app there.
+- Run `pnpm exec cap open ios` to open Logseq project in Xcode, and build the app there.
 
 or, you can run `bb dev:ios-app` to do those steps with one command if you are on MacOS. To download bb, see https://github.com/babashka/babashka#installation. Also, in order to use mobile bb tasks on macOS, `gsed` needs to be installed in your system (run `brew install gnu-sed` to install).
 
-Note: if the dev build isn't reflecting the change of code, restart `yarn mobile-watch` and run `npx cap sync ios` again.
+Note: if the dev build isn't reflecting the change of code, restart `pnpm mobile-watch` and run `pnpm exec cap sync ios` again.
 
 ### Build the release app
 - Comment out `server` section above in **capacitor.config.ts**.
 - Connect your iOS device to MacBook.
-- Run `yarn run-ios-release` to install the release app to your iOS device.
+- Run `pnpm run-ios-release` to install the release app to your iOS device.
 
 or, you can run `bb release:ios-app` to do those steps with one command.
 
@@ -69,9 +69,9 @@ or, you can run `bb release:ios-app` to do those steps with one command.
         cleartext: true
         } 
     ```
-- Run `yarn && yarn mobile-watch` from the logseq project root directory in terminal.
-- Run `npx cap sync android` in another terminal.
-- Run `npx cap run android` to install app into your device.
+- Run `pnpm install && pnpm mobile-watch` from the logseq project root directory in terminal.
+- Run `pnpm exec cap sync android` in another terminal.
+- Run `pnpm exec cap run android` to install app into your device.
 
 or, you can run `bb dev:android-app` to do those steps with one command if you are on macOS.
 
@@ -85,13 +85,13 @@ Then,
 ### Build a release and install it to your android device 
 - Comment out `server` section above in **capacitor.config.ts**.
 - Connect your device to PC.
-- Run `yarn run-android-release`.
+- Run `pnpm run-android-release`.
 
 or, you can run `bb release:android-app` to do those steps with one command.
 
 ### Build an apk
 - Comment out `server` section above in **capacitor.config.ts**.
-- Run `yarn run-android-release`
+- Run `pnpm run-android-release`
 
 or, you can run `bb release:android-app` to do those steps with one command.
 

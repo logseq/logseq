@@ -1,5 +1,6 @@
 {
   "name": "@logseq/libs",
+  "packageManager": "pnpm@10.33.0",
   "version": "0.3.2",
   "description": "Logseq SDK libraries",
   "main": "dist/lsplugin.user.js",
@@ -7,11 +8,11 @@
   "private": false,
   "scripts": {
     "build:user": "webpack --mode production",
-    "dev:user": "npm run build:user -- --mode development --watch",
+    "dev:user": "pnpm build:user -- --mode development --watch",
     "build:core": "webpack --config webpack.config.core.js --mode production",
-    "dev:core": "npm run build:core -- --mode development --watch",
+    "dev:core": "pnpm build:core -- --mode development --watch",
     "generate:schema": "node scripts/extract-sdk-schema.js",
-    "build": "tsc && rm dist/*.js && npm run build:user",
+    "build": "tsc && rm dist/*.js && pnpm build:user",
     "lint": "prettier --check \"src/**/*.{ts, js}\"",
     "fix": "prettier --write \"src/**/*.{ts, js}\"",
     "build:docs": "typedoc src/LSPlugin.user.ts",

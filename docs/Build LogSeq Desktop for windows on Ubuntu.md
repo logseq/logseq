@@ -28,8 +28,8 @@ sudo apt-get install mono-complete
 1. Compile using
 ```shell
 cd logseq
-yarn
-yarn release
-yarn release-electron
+pnpm install
+pnpm release
+pnpm release-electron
 ```
 the executable should be in the `static/out/make/squirrel.windows/x64/` folder
