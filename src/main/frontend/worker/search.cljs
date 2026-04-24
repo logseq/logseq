@@ -133,7 +133,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   [^Object db blocks]
   (.transaction db (fn [tx]
                      (doseq [batch (partition-all upsert-blocks-batch-size blocks)]
-                       (doseq [item blocks]
+                       (doseq [item batch]
                          (when-not (valid-upsert-block? item)
                            (throw-upsert-blocks-error! item)))
                        (.exec tx #js {:sql (upsert-blocks-sql (count batch))
