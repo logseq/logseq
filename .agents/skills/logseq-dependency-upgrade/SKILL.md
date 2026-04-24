@@ -62,7 +62,7 @@ Target versions preserve the original specifier prefix. If current is `^1.0.0` a
 
 ## Lockfile resolution
 
-For npm packages with a range specifier (e.g. `^`), the script checks `yarn.lock` to see if the resolved version already matches latest. These packages are flagged as **already resolved** — they need only a lockfile refresh, not a manifest change, and carry zero upgrade risk.
+For npm packages with a range specifier (e.g. `^`), the script checks `pnpm-lock.yaml` to see if the resolved version already matches latest. These packages are flagged as **already resolved** — they need only a manifest/range update, not a lockfile refresh/install, and carry zero upgrade risk.
 
 ## Output contract
 
