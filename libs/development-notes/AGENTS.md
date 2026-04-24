@@ -1,4 +1,4 @@
-﻿# AGENTS.md - Logseq Plugin Development Guide
+# AGENTS.md - Logseq Plugin Development Guide
 
 ## Overview
 

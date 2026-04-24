@@ -1,4 +1,4 @@
-﻿## Description
+## Description
 
 This library provides an API to the
 frontend([datascript](https://github.com/tonsky/datascript)) and

@@ -1,4 +1,4 @@
-﻿## Description
+## Description
 
 This page describes development practices for this codebase.
 

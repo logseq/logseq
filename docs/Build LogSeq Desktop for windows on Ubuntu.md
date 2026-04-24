@@ -1,4 +1,4 @@
-﻿# Building Logseq Desktop app for Windows on Ubuntu
+# Building Logseq Desktop app for Windows on Ubuntu
 ## Intro
 My Logseq dev machine is on Ubuntu 18.x and my production machine is running Windows 10, I needed a way to compile the Logseq desktop APP for Windows.
 I tried & failed to make the "build" run on my windows machine but I did, however, succeed in letting my Ubuntu machine make Windows x64 files

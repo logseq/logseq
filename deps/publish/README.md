@@ -1,4 +1,4 @@
-﻿## Description
+## Description
 
 Shared library for page publish features (snapshot payloads, SSR helpers, shared schemas, and storage contracts).
 

@@ -1,4 +1,4 @@
-﻿## Description
+## Description
 
 This library provides common util namespaces and resources to share between the
 frontend and other non-frontend contexts. This library is not supposed to depend

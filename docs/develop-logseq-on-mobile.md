@@ -1,4 +1,4 @@
-﻿# iOS development
+# iOS development
 
 ## Installation
 - Install Xcode 13 from App Store.

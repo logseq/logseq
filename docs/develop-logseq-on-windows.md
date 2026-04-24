@@ -1,4 +1,4 @@
-﻿# Setup Logseq development dependencies on Windows
+# Setup Logseq development dependencies on Windows
 
 This is a guide on setting up Logseq development dependencies on Windows.  Once these dependencies are installed, you can follow the  [develop-logseq](develop-logseq.md) docs for build instructions.
 

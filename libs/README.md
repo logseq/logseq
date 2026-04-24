@@ -1,4 +1,4 @@
-﻿## @logseq/libs
+## @logseq/libs
 
 🚀 Logseq SDK libraries.
 

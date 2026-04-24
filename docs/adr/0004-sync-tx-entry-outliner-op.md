@@ -1,4 +1,4 @@
-﻿# ADR 0004: Sync batches are ordered tx entries with persisted `:outliner-op`
+# ADR 0004: Sync batches are ordered tx entries with persisted `:outliner-op`
 
 Date: 2026-03-16
 Status: Accepted

@@ -1,4 +1,4 @@
-﻿# Logseq DB Sync (deps/db-sync)
+# Logseq DB Sync (deps/db-sync)
 
 This package contains the DB sync server code and tests used by Logseq.
 It includes the Cloudflare Worker implementation and a Node.js adapter for self-hosting.

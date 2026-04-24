@@ -1,4 +1,4 @@
-﻿## Description
+## Description
 
 This library provides outliner operation related functionality. This library is
 compatible with ClojureScript and with

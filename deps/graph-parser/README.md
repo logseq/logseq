@@ -1,4 +1,4 @@
-﻿## Description
+## Description
 
 This library parses a file graph directory and returns it as a datascript
 database connection. This library mainly exists to convert file graphs to DB graphs.

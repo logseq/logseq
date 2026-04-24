@@ -1,4 +1,4 @@
-﻿## Description
+## Description
 
 This library handles exporting the `frontend.publishing` single page
 application. This library is compatible with ClojureScript and with

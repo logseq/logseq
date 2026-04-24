@@ -1,4 +1,4 @@
-﻿# DB-Sync Feature Agent Guide
+# DB-Sync Feature Agent Guide
 
 ## Purpose
 This guide helps AI agents implement and review db-sync features consistently across the client and the Cloudflare Worker. Keep changes scoped, follow the existing flow, and document any protocol or storage changes. Keep this document accurate (file names, paths, commands, and parameters).
