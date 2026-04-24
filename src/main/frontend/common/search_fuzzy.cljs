@@ -88,3 +88,18 @@
                                   {:data item
                                    :score (score query s)})))))
        (map :data)))
+
+(defn fuzzy-search-multi
+  "Like fuzzy-search but scores each item by the best match across multiple
+  extract-fns. Enables bilingual search without degrading result quality."
+  [data query & {:keys [limit extract-fns]
+                 :or {limit 20}}]
+  (->> (take limit
+             (sort-by :score (comp - compare)
+                      (filter #(< 0 (:score %))
+                              (for [item data]
+                                (let [strings (map (fn [f] (str (f item))) extract-fns)
+                                      best-score (apply max (map #(score query %) strings))]
+                                  {:data item
+                                   :score best-score})))))
+       (map :data)))

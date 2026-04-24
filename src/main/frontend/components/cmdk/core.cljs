@@ -7,7 +7,7 @@
             [frontend.components.cmdk.state :as cmdk-state]
             [frontend.components.icon :as icon-component]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t t-en]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
@@ -42,9 +42,10 @@
   []
   (:action (:search/args @state/state)))
 
-(defn translate [t {:keys [id desc]}]
+(defn translate
+  [t-fn {:keys [id desc]}]
   (when id
-    (let [desc-i18n (t (shortcut-utils/decorate-namespace id))]
+    (let [desc-i18n (t-fn (shortcut-utils/decorate-namespace id))]
       (if (string/starts-with? desc-i18n "{Missing key")
         desc
         desc-i18n))))
@@ -240,15 +241,34 @@
       (reset! !results (assoc-in default-results [:recently-updated-pages :items] recent-pages)))))
 
 ;; The commands search uses the command-palette handler
+(defonce ^:private !commands-cache (atom {:lang nil :commands nil}))
+
+(defn- get-commands-for-search
+  "Return commands pre-translated for both current locale and English.
+  Cached by language — rebuilt only when preferred-language changes."
+  []
+  (let [lang (or (:preferred-language @state/state) :en)
+        cache @!commands-cache]
+    (if (= (:lang cache) lang)
+      (:commands cache)
+      (let [cmds (->> (cp-handler/top-commands 1000)
+                      (map #(assoc %
+                                   :t (translate t %)
+                                   :en-t (translate t-en %))))]
+        (reset! !commands-cache {:lang lang :commands cmds})
+        cmds))))
+
 (defmethod load-results :commands [group state]
   (let [!input (::input state)
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
-    (let [commands (->> (cp-handler/top-commands 1000)
-                        (map #(assoc % :t (translate t %))))
+    (let [commands (get-commands-for-search)
+          en? (= :en (or (:preferred-language @state/state) :en))
+          extract-fns (if en? [:t] [:t :en-t])
           search-results (if (string/blank? @!input)
                            commands
-                           (search/fuzzy-search commands @!input {:extract-fn :t}))]
+                           (search/fuzzy-search-multi commands @!input
+                                                      {:extract-fns extract-fns}))]
       (->> search-results
            (map #(hash-map :icon "command"
                            :icon-theme :gray

@@ -12,6 +12,7 @@
             [promesa.core :as p]))
 
 (def fuzzy-search fuzzy/fuzzy-search)
+(def fuzzy-search-multi fuzzy/fuzzy-search-multi)
 
 (defn get-engine
   [repo]
