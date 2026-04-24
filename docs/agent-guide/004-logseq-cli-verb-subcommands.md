@@ -67,7 +67,7 @@ Common list options:
 | --limit N | page, tag, property | Limit results | Implemented in CLI after fetch unless server supports it. |
 | --offset N | page, tag, property | Offset results | Implemented in CLI after fetch unless server supports it. |
 | --sort FIELD | page, tag, property | Sort results | Field whitelist per type. |
-| --order asc|desc | page, tag, property | Sort direction | Defaults to asc. |
+| --order asc|desc | page, tag, property | Sort direction | Defaults to desc. |
 | --output FORMAT | all | Output format | Existing output handling. |
 
 List page options:

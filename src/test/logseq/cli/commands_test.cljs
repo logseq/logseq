@@ -1204,7 +1204,14 @@
       (is (= 5 (get-in result [:options :limit])))
       (is (= 1 (get-in result [:options :offset])))
       (is (= "updated-at" (get-in result [:options :sort])))
-      (is (= "desc" (get-in result [:options :order]))))))
+      (is (= "desc" (get-in result [:options :order])))))
+
+  (testing "list command help shows default sort and order"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["list" "page" "--help"]))
+          summary (strip-ansi (:summary result))]
+      (is (string/includes? summary "Sort field. Default: updated-at"))
+      (is (string/includes? summary "Sort order. Default: desc")))))
 
 (deftest test-search-subcommand-parse
   (testing "search block parses --content option"
@@ -1359,13 +1366,35 @@
                                                   :thread-api/cli-list-properties [{:db/id 8 :block/title "Property C" :block/updated-at 9}
                                                                                    {:db/id 6 :block/title "Property B" :block/updated-at 3}
                                                                                    {:db/id 1 :block/title "Property A" :block/updated-at 3}]
+                                                  :thread-api/cli-list-tasks [{:db/id 14 :block/title "Task C" :block/updated-at 12}
+                                                                              {:db/id 12 :block/title "Task B" :block/updated-at 4}
+                                                                              {:db/id 10 :block/title "Task A" :block/updated-at 4}]
                                                   (throw (ex-info "unexpected invoke" {:method method}))))]
                (p/let [page-result (list-command/execute-list-page {:repo "demo" :options {}} {})
                        tag-result (list-command/execute-list-tag {:repo "demo" :options {}} {})
-                       property-result (list-command/execute-list-property {:repo "demo" :options {}} {})]
-                 (is (= [5 7 11] (item-ids page-result)))
-                 (is (= [2 9 4] (item-ids tag-result)))
-                 (is (= [1 6 8] (item-ids property-result)))))
+                       property-result (list-command/execute-list-property {:repo "demo" :options {}} {})
+                       task-result (list-command/execute-list-task {:repo "demo" :options {}} {})]
+                 (is (= [11 7 5] (item-ids page-result)))
+                 (is (= [4 9 2] (item-ids tag-result)))
+                 (is (= [8 6 1] (item-ids property-result)))
+                 (is (= [14 12 10] (item-ids task-result)))))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
+(deftest test-list-execute-default-limit-returns-newest-records
+  (async done
+         (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                             transport/invoke (fn [_ method _ _]
+                                                (case method
+                                                  :thread-api/cli-list-pages (mapv (fn [id]
+                                                                                     {:db/id id
+                                                                                      :block/title (str "Page " id)
+                                                                                      :block/updated-at id})
+                                                                                   [4 12 1 8 3 11 2 10 5 9 6 7])
+                                                  (throw (ex-info "unexpected invoke" {:method method}))))]
+               (p/let [result (list-command/execute-list-page {:repo "demo" :options {:limit 10}} {})]
+                 (is (= [12 11 10 9 8 7 6 5 4 3] (item-ids result)))))
              (p/catch (fn [e]
                         (is false (str "unexpected error: " e))))
              (p/finally done))))
@@ -1375,14 +1404,16 @@
          (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
                              transport/invoke (fn [_ method _ _]
                                                 (case method
-                                                  :thread-api/cli-list-pages [{:db/id 3 :block/title "Gamma" :block/updated-at 20}
-                                                                              {:db/id 2 :block/title "Alpha" :block/updated-at 5}
-                                                                              {:db/id 1 :block/title "Beta" :block/updated-at 10}]
+                                                  :thread-api/cli-list-pages [{:db/id 3 :block/title "Beta" :block/updated-at 20}
+                                                                              {:db/id 2 :block/title "Gamma" :block/updated-at 5}
+                                                                              {:db/id 1 :block/title "Alpha" :block/updated-at 10}]
                                                   (throw (ex-info "unexpected invoke" {:method method}))))]
-               (p/let [desc-default-result (list-command/execute-list-page {:repo "demo" :options {:order "desc"}} {})
+               (p/let [default-result (list-command/execute-list-page {:repo "demo" :options {}} {})
+                       explicit-order-result (list-command/execute-list-page {:repo "demo" :options {:order "asc"}} {})
                        explicit-sort-result (list-command/execute-list-page {:repo "demo" :options {:sort "title"}} {})]
-                 (is (= [3 1 2] (item-ids desc-default-result)))
-                 (is (= [2 1 3] (item-ids explicit-sort-result)))))
+                 (is (= [3 1 2] (item-ids default-result)))
+                 (is (= [2 1 3] (item-ids explicit-order-result)))
+                 (is (= [2 3 1] (item-ids explicit-sort-result)))))
              (p/catch (fn [e]
                         (is false (str "unexpected error: " e))))
              (p/finally done))))
@@ -1408,7 +1439,7 @@
                                           :fields "id,title,cardinality"}}
                                {})
                        items (get-in result [:data :items])]
-                 (is (= [10 20 30] (mapv :db/id items)))
+                 (is (= [30 20 10] (mapv :db/id items)))
                  (is (= [#{:db/id :block/title :db/cardinality}
                          #{:db/id :block/title :db/cardinality}
                          #{:db/id :block/title :db/cardinality}]
@@ -1440,7 +1471,7 @@
                                                     (throw (ex-info "unexpected invoke" {:method method :args args}))))]
                  (p/let [result (list-command/execute-list-asset
                                  {:repo "demo"
-                                  :options {:sort "updated-at" :order "desc" :limit 1}}
+                                  :options {:limit 1}}
                                  {})
                          items (get-in result [:data :items])
                          list-call (some #(when (= :thread-api/cli-list-nodes (:method %)) %) @calls*)]
