@@ -1256,7 +1256,7 @@
 (defn- graph-assets-dir-path
   [config repo]
   (if-let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)]
-    (node-path/join (cli-server/resolve-data-dir config)
+    (node-path/join (cli-server/graphs-dir config)
                     graph-dir-name
                     "assets")
     (throw (ex-info "invalid repo"

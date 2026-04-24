@@ -11,7 +11,6 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
-            [logseq.common.graph :as common-graph]
             [logseq.db.sqlite.backup :as sqlite-backup]
             [promesa.core :as p]
             ["keytar" :as keytar]))
@@ -409,16 +408,18 @@
                (fs/writeFile kv-path payload "utf8")))}))
 
 (defn node-platform
-  [{:keys [data-dir event-fn write-guard-fn owner-source recreate-lock-fn]}]
-  (let [data-dir (expand-home (or data-dir (common-graph/get-default-graphs-dir)))
+  [{:keys [root-dir event-fn write-guard-fn owner-source recreate-lock-fn]}]
+  (let [root-dir (db-lock/resolve-root-dir root-dir)
+        data-dir (db-lock/graphs-dir root-dir)
         owner-source (db-lock/normalize-owner-source owner-source)
-        kv (kv-store data-dir)]
+        kv (kv-store root-dir)]
     (p/do!
+     (ensure-dir! root-dir)
      (ensure-dir! data-dir)
-     (log/info :db-worker-node-platform {:data-dir data-dir})
+     (log/info :db-worker-node-platform {:root-dir root-dir})
      {:env {:publishing? false
             :runtime :node
-            :data-dir data-dir
+            :root-dir root-dir
             :owner-source owner-source
             :recreate-lock-fn recreate-lock-fn}
       :storage {:install-opfs-pool (fn [sqlite-module pool-name]

@@ -288,7 +288,7 @@
 (defn- backup-root-path
   [config repo]
   (when-let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)]
-    (node-path/join (cli-server/resolve-data-dir config)
+    (node-path/join (cli-server/graphs-dir config)
                     graph-dir-name
                     backup-root-dir-name)))
 

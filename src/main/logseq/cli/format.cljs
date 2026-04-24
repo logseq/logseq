@@ -186,7 +186,7 @@
     :unknown-query "Use `logseq query list` to see available queries"
     :ambiguous-tag-name "Retry with --id <tag-id>"
     :ambiguous-property-name "Retry with --id <property-id>"
-    :data-dir-permission "Check filesystem permissions or set LOGSEQ_CLI_DATA_DIR"
+    :root-dir-permission "Check filesystem permissions or set LOGSEQ_CLI_ROOT_DIR"
     :server-owned-by-other "Retry from the process owner that started the server"
     :server-start-timeout-orphan "Check and stop lingering db-worker-node processes, then retry"
     nil))
@@ -430,7 +430,7 @@
   (contains? #{:legacy :legacy-undecodable} kind))
 
 (defn- format-legacy-warning-lines
-  [legacy-item data-dir]
+  [legacy-item graphs-dir]
   (let [{:keys [kind legacy-dir legacy-graph-name target-graph-dir conflict?]} legacy-item
         legacy-dir (or legacy-dir "-")]
     (case kind
@@ -444,11 +444,11 @@
 
         (and (seq legacy-graph-name)
              (seq target-graph-dir))
-        (let [source-path (if (seq data-dir)
-                            (posix-join data-dir legacy-dir)
+        (let [source-path (if (seq graphs-dir)
+                            (posix-join graphs-dir legacy-dir)
                             legacy-dir)
-              target-path (if (seq data-dir)
-                            (posix-join data-dir target-graph-dir)
+              target-path (if (seq graphs-dir)
+                            (posix-join graphs-dir target-graph-dir)
                             target-graph-dir)]
           ["Rename suggestion:"
            (str "  mv "
@@ -469,7 +469,7 @@
       [])))
 
 (defn- format-graph-list
-  [{:keys [graphs graph-items]} {:keys [current-graph data-dir]}]
+  [{:keys [graphs graph-items]} {:keys [current-graph graphs-dir]}]
   (let [graph-items (->> (or graph-items graphs [])
                          (mapv graph-list-item->entry))
         graph-names (mapv (fn [{:keys [kind graph-name legacy-graph-name legacy-dir]}]
@@ -501,7 +501,7 @@
                                              " legacy graph "
                                              (cli-humanize/pluralize-noun legacy-count "directory")
                                              " detected.")]
-                                       (mapcat #(format-legacy-warning-lines % data-dir) legacy-items)))]
+                                       (mapcat #(format-legacy-warning-lines % graphs-dir) legacy-items)))]
         (str base-output "\n\n" (string/join "\n" warning-lines)))
       base-output)))
 
@@ -928,14 +928,14 @@
 
 (defn- ->human
   [{:keys [status data error command context human]}
-   {:keys [now-ms graph data-dir list-title-max-display-width]}]
+   {:keys [now-ms graph graphs-dir list-title-max-display-width]}]
   (let [now-ms (or now-ms (js/Date.now))
         list-title-max-display-width (resolve-list-title-max-display-width list-title-max-display-width)]
     (case status
       :ok
       (case command
         :graph-list (format-graph-list data {:current-graph graph
-                                             :data-dir data-dir})
+                                             :graphs-dir graphs-dir})
         :graph-backup-list (format-graph-backup-list (:backups data) now-ms)
         :graph-backup-create (format-graph-backup-create context data)
         :graph-backup-restore (format-graph-backup-restore context)

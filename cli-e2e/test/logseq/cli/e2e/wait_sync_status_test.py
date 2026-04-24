@@ -15,7 +15,7 @@ spec.loader.exec_module(wait_sync_status)
 def test_resolved_status_command_is_built_once_and_reused() -> None:
     args = SimpleNamespace(
         cli="~/repo/static/logseq-cli.js",
-        data_dir="~/tmp/graph",
+        root_dir="~/tmp/root",
         config="~/tmp/cli.edn",
         graph="demo",
     )
@@ -23,6 +23,7 @@ def test_resolved_status_command_is_built_once_and_reused() -> None:
     command = wait_sync_status.status_command(args)
 
     assert command[0] == "node"
+    assert command[2] == "--root-dir"
     assert command[-2:] == ["--graph", "demo"]
     assert Path(command[1]).is_absolute()
     assert Path(command[3]).is_absolute()

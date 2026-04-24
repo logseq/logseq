@@ -47,8 +47,8 @@
       (is (= :graphs (get-in spec [:graph :complete]))))
     (testing ":config has :complete :file"
       (is (= :file (get-in spec [:config :complete]))))
-    (testing ":data-dir has :complete :dir"
-      (is (= :dir (get-in spec [:data-dir :complete]))))
+    (testing ":root-dir has :complete :dir"
+      (is (= :dir (get-in spec [:root-dir :complete]))))
     (testing ":profile is a global boolean flag"
       (is (= :boolean (get-in spec [:profile :coerce]))))))
 
@@ -235,7 +235,7 @@
     (let [token (gen/spec->token [:config {:complete :file :desc "Config"}])]
       (is (= :file (:type token)))))
   (testing "spec with :complete :dir → :dir type"
-    (let [token (gen/spec->token [:data-dir {:complete :dir :desc "Data dir"}])]
+    (let [token (gen/spec->token [:root-dir {:complete :dir :desc "Root dir"}])]
       (is (= :dir (:type token)))))
   (testing "spec with :alias → includes alias"
     (let [token (gen/spec->token [:help {:alias :h :coerce :boolean :desc "Help"}])]
@@ -298,8 +298,8 @@
       (is (string/includes? output "--graph=[Graph name]:value:{_logseq_graphs}'"))
       (is (string/includes? output "-g[Graph name]:value:{_logseq_graphs}'")))
     (testing ":complete :file emits long spec for --config without short alias"
-      (is (string/includes? output "--config=[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'"))
-      (is (not (string/includes? output "-c[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'"))))
+      (is (string/includes? output "--config=[Path to cli.edn (default <root-dir>/cli.edn)]:file:_files'"))
+      (is (not (string/includes? output "-c[Path to cli.edn (default <root-dir>/cli.edn)]:file:_files'"))))
     (testing "-c is available as content alias in command-specific completion"
       (is (re-find #"(?s)_logseq_search_block\(\).*?-c\[Search content text\]" output))
       (is (re-find #"(?s)_logseq_upsert_block\(\).*?-c\[Block content" output))
@@ -550,7 +550,7 @@
 
 (deftest test-bash-find-varied-option-keys
   (let [global-spec (-> full-table first :spec
-                        (select-keys [:help :version :config :graph :data-dir
+                        (select-keys [:help :version :config :graph :root-dir
                                       :timeout-ms :output :verbose :profile]))
         global-keys (set (keys global-spec))
         varied (gen/find-varied-option-keys full-table global-keys)]

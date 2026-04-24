@@ -41,8 +41,8 @@ def status_command(args: argparse.Namespace) -> list[str]:
     command = [
         "node",
         str(Path(args.cli).expanduser().resolve()),
-        "--data-dir",
-        str(Path(args.data_dir).expanduser().resolve()),
+        "--root-dir",
+        str(Path(args.root_dir).expanduser().resolve()),
         "--config",
         str(Path(args.config).expanduser().resolve()),
         "--output",
@@ -184,7 +184,7 @@ def main() -> None:
         required=True,
         help="Path to static/logseq-cli.js",
     )
-    parser.add_argument("--data-dir", required=True)
+    parser.add_argument("--root-dir", required=True)
     parser.add_argument("--config", required=True)
     parser.add_argument("--graph", required=True)
     parser.add_argument("--timeout-s", type=float, default=120.0)

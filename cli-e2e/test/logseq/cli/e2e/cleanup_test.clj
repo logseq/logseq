@@ -6,11 +6,11 @@
 (deftest list-cli-e2e-db-worker-pids-filters-processes
   (let [shell-fn (fn [& _]
                    {:exit 0
-                    :out (str " 101 node /repo/dist/db-worker-node.js --repo graph-a --data-dir /tmp/logseq-cli-e2e-graph-a-123/graphs --owner-source cli\n"
-                              " 202 node /repo/dist/db-worker-node.js --repo production --data-dir /tmp/production-graphs --owner-source cli\n"
+                    :out (str " 101 node /repo/dist/db-worker-node.js --repo graph-a --root-dir /tmp/logseq-cli-e2e-graph-a-123/graphs --owner-source cli\n"
+                              " 202 node /repo/dist/db-worker-node.js --repo production --root-dir /tmp/production-graphs --owner-source cli\n"
                               " 303 node /repo/static/logseq-cli.js graph list\n"
                               " 404 /usr/bin/python3 background.py\n"
-                              " 505 node /repo/static/db-worker-node.js --repo graph-b --data-dir /private/tmp/logseq-cli-e2e-graph-b-999/graphs --owner-source cli\n")
+                              " 505 node /repo/static/db-worker-node.js --repo graph-b --root-dir /private/tmp/logseq-cli-e2e-graph-b-999/graphs --owner-source cli\n")
                     :err ""})]
     (is (= [101 505]
            (cleanup/list-cli-e2e-db-worker-pids {:shell-fn shell-fn}))))

@@ -140,21 +140,21 @@
   [case context]
   (let [tmp-dir (or (:tmp-dir context)
                     (str (fs/create-temp-dir {:prefix (str "logseq-cli-e2e-" (:id case) "-")})))
-        data-dir (or (:data-dir context)
-                     (str (fs/path tmp-dir "graphs")))
+        root-dir (or (:root-dir context)
+                     tmp-dir)
         config-path (or (:config-path context)
-                        (str (fs/path tmp-dir "cli.edn")))
+                        (str (fs/path root-dir "cli.edn")))
         export-path (or (:export-path context)
                         (str (fs/path tmp-dir "graph-export.edn")))
         graph (or (:graph context)
                   (:graph case)
                   (str "cli-e2e-" (:id case)))]
-    (fs/create-dirs data-dir)
+    (fs/create-dirs (fs/path root-dir "graphs"))
     (spit config-path "{:output-format :json}\n")
     {:tmp-dir tmp-dir
      :tmp-dir-arg (shell-escape tmp-dir)
-     :data-dir data-dir
-     :data-dir-arg (shell-escape data-dir)
+     :root-dir root-dir
+     :root-dir-arg (shell-escape root-dir)
      :config-path config-path
      :config-path-arg (shell-escape config-path)
      :export-path export-path
