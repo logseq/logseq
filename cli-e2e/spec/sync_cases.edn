@@ -1,22 +1,9 @@
 {:templates
- {:sync/default
-  {:expect
-   {:exit 0,
-    :stdout-json-paths
-    {[:status] "ok",
-     [:data :pending-local] 0,
-     [:data :pending-asset] 0,
-     [:data :pending-server] 0,
-     [:data :last-error] nil}},
-   :covers
-   {:commands ["sync upload" "sync download" "sync status"],
-    :options {:global ["--config" "--graph" "--data-dir" "--output"]}},
-   :cleanup
+ {:sync/base
+  {:cleanup
    ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
     "{{cli}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json server stop --graph {{graph-arg}}"],
-   :tags [:sync]},
-  :sync/common
-  {:extends :sync/default,
+   :tags [:sync],
    :vars
    {:sync-port "18080",
     :sync-http-base "http://127.0.0.1:18080",
@@ -27,14 +14,27 @@
    :setup
    ["mkdir -p '{{tmp-dir}}/graphs-b'"
     "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
-    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"],
+    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"]},
+  :sync/common
+  {:extends :sync/base,
    :cmds
    ["{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync upload --graph {{graph-arg}}"
     "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync start --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"
     "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{data-dir}}' --config '{{config-path}}' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
     "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync download --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"
     "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync start --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"
-    "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 120 --interval-s 1"]}},
+    "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 120 --interval-s 1"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :pending-local] 0,
+     [:data :pending-asset] 0,
+     [:data :pending-server] 0,
+     [:data :last-error] nil}},
+   :covers
+   {:commands ["sync upload" "sync download" "sync status"],
+    :options {:global ["--config" "--graph" "--data-dir" "--output"]}}}}
  :cases
  [{:tags [:happy-path :bootstrap :a-to-b],
    :extends :sync/common,
@@ -54,7 +54,6 @@
     "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page SyncIncrementalHome --content '{{seed-marker}}' >/dev/null"],
    :cmds
    ["{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page SyncIncrementalHome --content '{{incremental-marker}}' >/dev/null"
-    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync upload --graph {{graph-arg}}"
     "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
     "python3 '{{repo-root}}/cli-e2e/scripts/compare_graph_queries.py' --cli '{{repo-root}}/static/logseq-cli.js' --graph '{{graph}}' --config-a '{{config-path}}' --data-dir-a '{{data-dir}}' --config-b '{{tmp-dir}}/cli-b.edn' --data-dir-b '{{tmp-dir}}/graphs-b' --query '[:find ?title :where [?b :block/title ?title] [(= ?title \"{{incremental-marker}}\")] ]' --require-result"
     "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync status --graph {{graph-arg}}"],
@@ -71,7 +70,6 @@
    :cmds
    ["{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json upsert page --graph {{graph-arg}} --page SyncRoundtripBHome >/dev/null"
     "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json upsert block --graph {{graph-arg}} --target-page SyncRoundtripBHome --content '{{marker-b}}' >/dev/null"
-    "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync upload --graph {{graph-arg}}"
     "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{data-dir}}' --config '{{config-path}}' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
     "python3 '{{repo-root}}/cli-e2e/scripts/compare_graph_queries.py' --cli '{{repo-root}}/static/logseq-cli.js' --graph '{{graph}}' --config-a '{{config-path}}' --data-dir-a '{{data-dir}}' --config-b '{{tmp-dir}}/cli-b.edn' --data-dir-b '{{tmp-dir}}/graphs-b' --query '[:find ?title :where [?b :block/title ?title] [(= ?title \"{{marker-b}}\")] ]' --require-result"
     "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync status --graph {{graph-arg}}"],
@@ -89,26 +87,12 @@
    ["{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page SyncMultiBatchOne >/dev/null"
     "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page SyncMultiBatchOne --content '{{batch-marker-1}}' >/dev/null"
     "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 30 --interval-s 1"
-    "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
-    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync upload --graph {{graph-arg}}"
-    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync start --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"
-    "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
     "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page SyncMultiBatchTwo >/dev/null"
     "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page SyncMultiBatchTwo --content '{{batch-marker-2}}' >/dev/null"
     "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 30 --interval-s 1"
-    "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
-    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync upload --graph {{graph-arg}}"
-    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync start --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"
-    "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
     "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page SyncMultiBatchThree >/dev/null"
     "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page SyncMultiBatchThree --content '{{batch-marker-3}}' >/dev/null"
     "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 30 --interval-s 1"
-    "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
-    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync upload --graph {{graph-arg}}"
-    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync start --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"
-    "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
-    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync upload --graph {{graph-arg}}"
-    "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
     "python3 '{{repo-root}}/cli-e2e/scripts/compare_graph_queries.py' --cli '{{repo-root}}/static/logseq-cli.js' --graph '{{graph}}' --config-a '{{config-path}}' --data-dir-a '{{data-dir}}' --config-b '{{tmp-dir}}/cli-b.edn' --data-dir-b '{{tmp-dir}}/graphs-b' --query '[:find ?title :where [?b :block/title ?title] [(= ?title \"{{batch-marker-1}}\")] ]' --query '[:find ?title :where [?b :block/title ?title] [(= ?title \"{{batch-marker-2}}\")] ]' --query '[:find ?title :where [?b :block/title ?title] [(= ?title \"{{batch-marker-3}}\")] ]' --require-result"
     "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync status --graph {{graph-arg}}"],
    :id "sync-multi-batch-operations",
@@ -118,6 +102,22 @@
     :batch-marker-3 "sync-happy-multi-batch-marker-3",
     :batch-marker-1 "sync-happy-multi-batch-marker-1",
     :batch-marker-2 "sync-happy-multi-batch-marker-2"}}
+  {:tags [:negative :upload :duplicate],
+   :extends :sync/base,
+   :setup
+   ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
+    "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync upload --graph {{graph-arg}} >/dev/null"],
+   :cmds
+   ["{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync upload --graph {{graph-arg}}"],
+   :expect
+   {:exit 1,
+    :stdout-json-paths
+    {[:status] "error",
+     [:error :code] "graph-already-exists",
+     [:error :context :graph-name] "{{graph}}"},
+    :stdout-contains ["delete it before uploading again"]},
+   :id "sync-upload-rejects-duplicate-remote-graph",
+   :graph "sync-e2e-upload-rejects-duplicate-remote-graph"}
   {:tags [:happy-path :steady-state :status],
    :extends :sync/common,
    :setup
