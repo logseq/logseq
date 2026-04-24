@@ -436,7 +436,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- sanitize
   [content]
   (some-> content
-          (fuzzy/search-normalize true)))
+          (fuzzy/search-normalize true {:lower-case? false})))
 
 (defn- block-search-title
   "Build display title from block entity with original casing."
