@@ -1254,6 +1254,10 @@
 (defn- cmdk-init-state
   "Initialize cmdk component state atoms."
   [state]
+  ;; Invalidate the commands cache so that each new CMDK session gets a fresh
+  ;; commands list from cp-handler/top-commands (plugins, graph state, etc. may
+  ;; have changed since the last session).
+  (reset! !commands-cache {:lang nil :commands nil})
   (let [raw-search-mode (:search/mode @state/state)
         search-mode (or raw-search-mode :global)
         search-args (:search/args @state/state)
