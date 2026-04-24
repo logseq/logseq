@@ -191,8 +191,6 @@
 
 (defn recur-replace-uuid-in-block-title
   "Convert id ref (recursively) backs to page name refs, returns replaced title"
-  ;; This hot path is used during search. Avoid scanning all refs on every pass by
-  ;; precomputing reachable uuid->title once and replacing only matched id refs.
   ([ent]
    (recur-replace-uuid-in-block-title ent 10))
   ([ent max-depth]
@@ -212,9 +210,10 @@
                                  seen-ids' (into seen-ids
                                                  (keep :block/uuid)
                                                  new-refs)
-                                 id->title' (reduce (fn [m {:block/keys [uuid title]}]
-                                                      (if (and uuid (string? title))
-                                                        (assoc m (str uuid) title)
+                                 id->title' (reduce (fn [m {:block/keys [title]
+                                                            block-uuid :block/uuid}]
+                                                      (if (and block-uuid (string? title))
+                                                        (assoc m (str block-uuid) title)
                                                         m))
                                                     id->title
                                                     new-refs)
@@ -223,8 +222,7 @@
                                                     (filter map?)
                                                     set)]
                              (recur next-frontier seen-ids' id->title' (inc depth)))))]
-         (loop [result title
-                depth 0]
+         (loop [result title depth 0]
            (if (or (>= depth max-depth)
                    (not (re-find id-ref-pattern result)))
              result
