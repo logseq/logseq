@@ -1030,13 +1030,18 @@
     :stdout-not-contains ["\"status\"" "\"data\""]},
    :covers {:commands ["skill show"], :options {:global ["--output"]}},
    :tags [:skill]}
+  ;; Repo root already contains tracked `.agents/skills/logseq-cli/SKILL.md`,
+  ;; so this local-install case must run from an isolated cwd.
   {:id "skill-install-local",
+   :setup
+   ["rm -rf ./tmp/cli-e2e-skill-install-local"
+    "mkdir -p ./tmp/cli-e2e-skill-install-local"],
    :cmds
-   ["{{cli}} skill install >/dev/null"
-    "python3 -c 'import pathlib; p=pathlib.Path(\".agents/skills/logseq-cli/SKILL.md\"); print(\"installed\" if p.exists() else \"missing\")'"],
+   ["cd ./tmp/cli-e2e-skill-install-local && {{cli}} skill install >/dev/null"
+    "python3 -c 'import pathlib; p=pathlib.Path(\"./tmp/cli-e2e-skill-install-local/.agents/skills/logseq-cli/SKILL.md\"); print(\"installed\" if p.exists() else \"missing\")'"],
    :expect {:exit 0, :stdout-contains ["installed"]},
    :covers {:commands ["skill install"], :options {:skill []}},
-   :cleanup ["rm -rf ./.agents/skills/logseq-cli"],
+   :cleanup ["rm -rf ./tmp/cli-e2e-skill-install-local"],
    :tags [:skill]}
   {:id "skill-install-global-preserves-other-skills",
    :setup
