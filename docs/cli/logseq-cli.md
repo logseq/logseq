@@ -242,15 +242,15 @@ E2EE password persistence locations:
 - Node runtime stores refresh-token-encrypted password payload at `~/logseq/e2ee-password`.
 
 Inspect and edit commands:
-- `list page [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list pages (defaults to `--sort updated-at`)
-- `list tag [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list tags (defaults to `--sort updated-at`)
-- `list property [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list properties (defaults to `--sort updated-at`; `TYPE` and `CARDINALITY` are included by default even without `--expand`; missing schema cardinality is treated as `one`)
-- `list task [--status <status>] [--priority <low|medium|high|urgent>] [-c|--content <text>] [--fields <csv>] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list task nodes tagged with `#Task` (supports both pages and blocks; defaults to `--sort updated-at`)
+- `list page [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list pages (defaults to `--sort updated-at --order desc`)
+- `list tag [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list tags (defaults to `--sort updated-at --order desc`)
+- `list property [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list properties (defaults to `--sort updated-at --order desc`; `TYPE` and `CARDINALITY` are included by default even without `--expand`; missing schema cardinality is treated as `one`)
+- `list task [--status <status>] [--priority <low|medium|high|urgent>] [-c|--content <text>] [--fields <csv>] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list task nodes tagged with `#Task` (supports both pages and blocks; defaults to `--sort updated-at --order desc`)
   - `--status` is validated at runtime using values from the current graph; invalid values return an error that includes available values from that graph.
-- `list node [--tags <csv>] [--properties <csv>] [--fields <csv>] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list ordinary nodes (pages and blocks) filtered by tags/properties (supports selector forms id/uuid/ident/name; at least one of `--tags` or `--properties` is required; defaults to `--sort updated-at`)
+- `list node [--tags <csv>] [--properties <csv>] [--fields <csv>] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list ordinary nodes (pages and blocks) filtered by tags/properties (supports selector forms id/uuid/ident/name; at least one of `--tags` or `--properties` is required; defaults to `--sort updated-at --order desc`)
   - `--tags` and `--properties` use **all-of** semantics, and when both are present they are combined with **AND**.
   - CSV tokens are trimmed and empty tokens are ignored; if a provided filter becomes empty after normalization, CLI returns `invalid-options`.
-- `list asset [--fields <csv>] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list nodes tagged with `#Asset` (`:logseq.class/Asset`; defaults to `--sort updated-at`)
+- `list asset [--fields <csv>] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list nodes tagged with `#Asset` (`:logseq.class/Asset`; defaults to `--sort updated-at --order desc`)
 - `upsert block --content <text> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - create blocks; defaults to today’s journal page if no target is given
 - `upsert block --blocks <edn> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks via EDN vector
 - `upsert block --blocks-file <path> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks from an EDN file
