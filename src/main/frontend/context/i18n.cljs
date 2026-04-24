@@ -41,6 +41,31 @@
    :zh-CN "，"
    :zh-Hant "，"})
 
+(def ^:private translate-strict
+  "tongue translator built against the raw locale dicts without any fallback.
+  Returns a '{Missing key ...}' string for keys absent in the requested locale."
+  (tongue/build-translate dicts/dicts))
+
+(defn t-locale
+  "Translate using the user's current locale without English fallback for
+  missing keys — returns nil when the key has no translation in the current
+  locale. If translation throws (e.g. malformed value format), falls back to
+  English and logs the error; that is distinct from a missing-key nil return.
+  Callers that need a guaranteed string should use t."
+  [& args]
+  (let [lang   (preferred-locale)
+        result (try
+                 (apply translate-strict lang args)
+                 (catch :default e
+                   (log/error :failed-translation {:arguments args :lang lang})
+                   (state/pub-event! [:capture-error {:error e
+                                                      :payload {:type :failed-translation
+                                                                :arguments args
+                                                                :lang lang}}])
+                   (apply translate :en args)))]
+    (when-not (string/starts-with? (str result) "{Missing key")
+      result)))
+
 (defn t-en
   "Translate using English locale, ignoring user preference.
    Useful for user-facing text that also requires output to the console."
