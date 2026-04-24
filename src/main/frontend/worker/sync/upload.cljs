@@ -206,33 +206,44 @@
                                            {:response-schema :graphs/list})]
           (vec (or (:graphs resp) [])))))))
 
+(defn- fail-upload-graph-already-exists!
+  [repo {:keys [graph-id graph-name]}]
+  (throw (ex-info "remote graph already exists; delete it before uploading again"
+                  {:code :db-sync/graph-already-exists
+                   :repo repo
+                   :graph-id graph-id
+                   :graph-name graph-name})))
+
 (defn- <ensure-upload-graph-identity!
   [repo]
-  (if-let [graph-id (get-graph-id repo)]
-    (p/resolved (persist-upload-graph-identity! repo graph-id
-                                                (normalize-graph-e2ee? (sync-crypt/graph-e2ee? repo))))
-    (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)
-          local-graph-e2ee? (normalize-graph-e2ee? (sync-crypt/graph-e2ee? repo))]
-      (if-not (seq target-graph-name)
-        (fail-fast :db-sync/missing-field {:repo repo :field :graph-name})
-        (p/let [remote-graphs (list-remote-graphs!)
-                matching-graphs (filterv (fn [{:keys [graph-name]}]
-                                           (= target-graph-name graph-name))
-                                         remote-graphs)]
-          (cond
-            (> (count matching-graphs) 1)
-            (fail-fast :db-sync/ambiguous-graph-match {:repo repo
-                                                       :graph-name target-graph-name
-                                                       :match-count (count matching-graphs)})
+  (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)
+        local-graph-e2ee? (normalize-graph-e2ee? (sync-crypt/graph-e2ee? repo))
+        existing-graph-id (get-graph-id repo)]
+    (cond
+      (not (seq target-graph-name))
+      (fail-fast :db-sync/missing-field {:repo repo :field :graph-name})
 
-            (= 1 (count matching-graphs))
-            (let [{:keys [graph-id graph-e2ee?]} (first matching-graphs)]
-              (persist-upload-graph-identity! repo graph-id (if (contains? (first matching-graphs) :graph-e2ee?)
-                                                              graph-e2ee?
-                                                              local-graph-e2ee?)))
+      existing-graph-id
+      (fail-upload-graph-already-exists! repo {:graph-id existing-graph-id
+                                               :graph-name target-graph-name})
 
-            :else
-            (<create-remote-graph! repo local-graph-e2ee?)))))))
+      :else
+      (p/let [remote-graphs (list-remote-graphs!)
+              matching-graphs (filterv (fn [{:keys [graph-name]}]
+                                         (= target-graph-name graph-name))
+                                       remote-graphs)]
+        (cond
+          (> (count matching-graphs) 1)
+          (fail-fast :db-sync/ambiguous-graph-match {:repo repo
+                                                     :graph-name target-graph-name
+                                                     :match-count (count matching-graphs)})
+
+          (= 1 (count matching-graphs))
+          (fail-upload-graph-already-exists! repo (select-keys (first matching-graphs)
+                                                               [:graph-id :graph-name]))
+
+          :else
+          (<create-remote-graph! repo local-graph-e2ee?))))))
 
 (defn upload-graph!
   [repo]

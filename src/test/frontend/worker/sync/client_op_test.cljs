@@ -120,3 +120,23 @@
         (is (= 0 (client-op/cleanup-finished-history-ops! repo #{}))))
       (finally
         (reset! worker-state/*client-ops-conns prev-client-ops-conns)))))
+
+(deftest reset-local-tx-preserves-monotonicity-test
+  (let [repo "repo-monotonic"]
+    (with-client-ops-db
+      repo
+      (fn [_db]
+        (client-op/update-local-tx repo 9)
+        (let [error (try
+                      (client-op/reset-local-tx repo)
+                      nil
+                      (catch :default error
+                        error))]
+          (is (some? error))
+          (is (= "local-tx should be monotonically increasing"
+                 (ex-message error)))
+          (is (= {:repo repo
+                  :prev-t 9
+                  :new-t 0}
+                 (select-keys (ex-data error) [:repo :prev-t :new-t])))
+          (is (= 9 (client-op/get-local-tx repo))))))))
