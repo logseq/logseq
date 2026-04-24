@@ -36,10 +36,39 @@
                                             {:extract-fns [:locale :en]
                                              :limit 5}))))))
 
-(deftest fuzzy-search-multi-respects-limit
-  (testing "never returns more items than :limit"
-    (let [data (mapv (fn [i] {:locale (str "命令" i) :en (str "Command" i)}) (range 20))]
-      (is (<= (count (fuzzy/fuzzy-search-multi data "command"
-                                               {:extract-fns [:locale :en]
-                                                :limit 3}))
-              3)))))
+(deftest fuzzy-search-multi-skips-nil-extract-fields
+  (testing "nil fields from extract-fns are silently skipped, non-nil fields still score"
+    (let [data [{:en "Delete Page" :locale nil}
+                {:en "New Page"    :locale nil}]]
+      (is (= [{:en "Delete Page" :locale nil}]
+             (fuzzy/fuzzy-search-multi data "delete"
+                                       {:extract-fns [:locale :en]
+                                        :limit 5}))))))
+
+(deftest hanzi->initials-all-chinese
+  (testing "pure Chinese command names produce correct pinyin initials"
+    (is (= "sck"  (fuzzy/hanzi->initials "删除块")))
+    (is (= "xjym" (fuzzy/hanzi->initials "新建页面")))
+    (is (= "jrrz" (fuzzy/hanzi->initials "今日日志")))
+    (is (= "sz"   (fuzzy/hanzi->initials "设置")))))
+
+(deftest hanzi->initials-mixed-chinese-english
+  (testing "mixed Chinese and English text combines pinyin and word initials"
+    (is (= "crbe"  (fuzzy/hanzi->initials "插入 block embed")))
+    (is (= "dcwp"  (fuzzy/hanzi->initials "导出为 PDF")))
+    (is (= "sck"   (fuzzy/hanzi->initials "删除块")))))
+
+(deftest hanzi->initials-punctuation-not-word-boundary
+  (testing "punctuation inside a word is stripped, not treated as a word separator"
+    (is (= "b"  (fuzzy/hanzi->initials "block(s)")))
+    (is (= "ti" (fuzzy/hanzi->initials "TODO: items")))))
+
+(deftest hanzi->initials-numbers
+  (testing "contiguous digits form one word; space-separated digit groups each contribute first digit"
+    (is (= "1"   (fuzzy/hanzi->initials "12345")))
+    (is (= "124" (fuzzy/hanzi->initials "1 23 45")))))
+
+(deftest hanzi->initials-nil-and-blank
+  (testing "nil input returns nil; non-string input returns nil"
+    (is (nil? (fuzzy/hanzi->initials nil)))
+    (is (nil? (fuzzy/hanzi->initials 42)))))

@@ -1,7 +1,7 @@
 (ns frontend.commands
   "Provides functionality for commands and advanced commands"
   (:require [clojure.string :as string]
-            [frontend.context.i18n :refer [interpolate-sentence t t-en]]
+            [frontend.context.i18n :as i18n :refer [interpolate-sentence t t-en]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.extensions.video.youtube :as youtube]
@@ -20,8 +20,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.property :as gp-property]
-            [promesa.core :as p]
-            [frontend.context.i18n :as i18n]))
+            [promesa.core :as p]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
@@ -368,9 +367,14 @@
   [get-page-ref-text]
   (let [commands    (commands-map get-page-ref-text)
         en-commands (commands-map get-page-ref-text t-en)
-        commands-with-meta (mapv (fn [cmd en-cmd]
-                                   (with-meta cmd {:en-text (first en-cmd)}))
-                                 commands en-commands)]
+        lang        (or (some-> (:preferred-language @state/state) keyword) :en)
+        zh-cn?      (= lang :zh-CN)
+        commands-with-meta
+        (mapv (fn [cmd en-cmd]
+                (let [m (cond-> {:en-text (first en-cmd)}
+                          zh-cn? (assoc :pinyin-text (search/hanzi->initials (first cmd))))]
+                  (with-meta cmd m)))
+              commands en-commands)]
     (reset! *latest-matched-command "")
     (reset! *initial-commands commands-with-meta)
     (reset! *matched-commands commands-with-meta)))
@@ -541,8 +545,16 @@
   ([text]
    (get-matched-commands text @*initial-commands))
   ([text commands]
-   (let [en? (= :en (or (:preferred-language @state/state) :en))
-         extract-fns (if en? [first] [first #(or (-> % meta :en-text) (first %))])]
+   (let [lang        (or (some-> (:preferred-language @state/state) keyword) :en)
+         en?         (= lang :en)
+         zh-cn?      (= lang :zh-CN)
+         extract-fns (cond
+                       en?    [first]
+                       zh-cn? [first
+                               #(-> % meta :en-text)
+                               #(-> % meta :pinyin-text)]
+                       :else  [first
+                               #(-> % meta :en-text)])]
      (search/fuzzy-search-multi
       commands
       text

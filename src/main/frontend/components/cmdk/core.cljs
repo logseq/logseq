@@ -7,7 +7,7 @@
             [frontend.components.cmdk.state :as cmdk-state]
             [frontend.components.icon :as icon-component]
             [frontend.config :as config]
-            [frontend.context.i18n :as i18n :refer [t t-en]]
+            [frontend.context.i18n :refer [interpolate-rich-text t t-en t-locale]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
@@ -241,30 +241,51 @@
       (reset! !results (assoc-in default-results [:recently-updated-pages :items] recent-pages)))))
 
 ;; The commands search uses the command-palette handler
+(defn- translate-locale
+  "Return the locale-only translation for a command.
+  Returns nil when the locale is :en or the key has no translation in the
+  current locale — no English fallback is applied."
+  [{:keys [id]}]
+  (when id
+    (t-locale (shortcut-utils/decorate-namespace id))))
+
 (defonce ^:private !commands-cache (atom {:lang nil :commands nil}))
 
 (defn- get-commands-for-search
-  "Return commands pre-translated for both current locale and English.
+  "Return commands with locale, English, and (for :zh-CN) pinyin-initial fields.
+  :locale-t — locale-only translation; nil when locale is :en or key has no
+              locale entry (no English fallback).
+  :en-t     — English translation; always present.
+  :pinyin-t — Simplified Chinese pinyin initials; present only for :zh-CN.
   Cached by language — rebuilt only when preferred-language changes."
   []
-  (let [lang (or (:preferred-language @state/state) :en)
+  (let [lang (or (some-> (:preferred-language @state/state) keyword) :en)
         cache @!commands-cache]
     (if (= (:lang cache) lang)
       (:commands cache)
-      (let [cmds (->> (cp-handler/top-commands 1000)
-                      (map #(assoc %
-                                   :t (translate t %)
-                                   :en-t (translate t-en %))))]
+      (let [zh-cn? (= lang :zh-CN)
+            cmds   (->> (cp-handler/top-commands 1000)
+                        (map (fn [cmd]
+                               (let [locale-t (when-not (= lang :en) (translate-locale cmd))
+                                     en-t     (translate t-en cmd)]
+                                 (cond-> (assoc cmd :en-t en-t)
+                                   locale-t              (assoc :locale-t locale-t)
+                                   (and zh-cn? locale-t) (assoc :pinyin-t (search/hanzi->initials locale-t)))))))]
         (reset! !commands-cache {:lang lang :commands cmds})
         cmds))))
 
 (defmethod load-results :commands [group state]
-  (let [!input (::input state)
+  (let [!input   (::input state)
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
-    (let [commands (get-commands-for-search)
-          en? (= :en (or (:preferred-language @state/state) :en))
-          extract-fns (if en? [:t] [:t :en-t])
+    (let [lang        (or (some-> (:preferred-language @state/state) keyword) :en)
+          en?         (= lang :en)
+          zh-cn?      (= lang :zh-CN)
+          commands    (get-commands-for-search)
+          extract-fns (cond
+                        en?    [:en-t]
+                        zh-cn? [:locale-t :en-t :pinyin-t]
+                        :else  [:locale-t :en-t])
           search-results (if (string/blank? @!input)
                            commands
                            (search/fuzzy-search-multi commands @!input
@@ -1131,7 +1152,7 @@
 (defn- tip-with-shortcut
   [template shortcut & [shortcut-opts]]
   (into [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100]
-        (i18n/interpolate-rich-text
+        (interpolate-rich-text
          template
          [(shui/shortcut shortcut shortcut-opts)])))
 
