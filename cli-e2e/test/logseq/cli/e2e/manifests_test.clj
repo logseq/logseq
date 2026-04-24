@@ -38,7 +38,13 @@
                             :vars {:nested {:right 2}}
                             :covers {:options {:graph ["--addon"]}}
                             :expect {:stdout-json-paths {[:data :addon] 2}}
-                            :graph "addon-graph"}}
+                            :graph "addon-graph"}
+                    :shared {:setup ["setup-shared"]
+                             :cmds ["cmd-shared"]
+                             :cleanup ["cleanup-shared"]
+                             :tags [:shared]
+                             :vars {:nested {:shared 9}}
+                             :graph "shared-graph"}}
                    :cases
                    [{:id "single-parent"
                      :extends :base
@@ -56,8 +62,13 @@
                      :covers {:commands ["case-command"]
                               :options {:graph ["--case"]}}
                      :expect {:stdout-json-paths {[:data :case] 3}}
-                     :graph "case-graph"}]})]
-    (let [[single-parent multi-parent] (manifests/load-cases :sync)]
+                     :graph "case-graph"}
+                    {:id "negative-case"
+                     :extends :shared
+                     :expect {:exit 1
+                              :stdout-json-paths {[:error :code] "boom"}}
+                     :graph "negative-graph"}]})]
+    (let [[single-parent multi-parent negative-case] (manifests/load-cases :sync)]
       (testing "supports :extends keyword"
         (is (= "single-parent" (:id single-parent)))
         (is (= ["cmd-a" "cmd-case"] (:cmds single-parent)))
@@ -81,6 +92,14 @@
                 [:data :addon] 2
                 [:data :case] 3}
                (get-in multi-parent [:expect :stdout-json-paths]))))
+      (testing "child expect overrides inherited maps when parent omits them"
+        (is (= {:exit 1
+                :stdout-json-paths {[:error :code] "boom"}}
+               (:expect negative-case))))
+      (testing "base templates can omit happy-path defaults"
+        (is (= ["setup-shared"] (:setup negative-case)))
+        (is (= ["cmd-shared"] (:cmds negative-case)))
+        (is (= ["cleanup-shared"] (:cleanup negative-case))))
       (testing "scalar keys are overridden by child"
         (is (= "case-graph" (:graph multi-parent)))))))
 
@@ -169,11 +188,33 @@
 (deftest sync-multi-batch-operations-uses-state-driven-waits-instead-of-fixed-sleeps
   (let [cases (manifests/load-cases :sync)
         multi-batch (some #(when (= "sync-multi-batch-operations" (:id %)) %) cases)
-        commands (:cmds multi-batch)]
+        commands (:cmds multi-batch)
+        upload-commands (filter #(re-find #"sync upload --graph" %) commands)
+        wait-commands (filter #(re-find #"wait_sync_status\.py" %) commands)]
     (is (some? multi-batch))
     (is (not-any? #(= "sleep 1" %) commands))
-    (is (>= (count (filter #(re-find #"wait_sync_status\.py" %) commands))
-            4))))
+    (is (= 1 (count upload-commands)))
+    (is (= 5 (count wait-commands)))
+    (is (= 3 (count (filter #(re-find #"--data-dir '\{\{tmp-dir\}\}/graphs-b'.+--timeout-s 30 --interval-s 1" %) wait-commands))))))
+
+(deftest sync-manifest-includes-duplicate-upload-negative-case
+  (let [cases (manifests/load-cases :sync)
+        duplicate-upload (some #(when (= "sync-upload-rejects-duplicate-remote-graph" (:id %)) %) cases)
+        json-paths (get-in duplicate-upload [:expect :stdout-json-paths])
+        setup-commands (:setup duplicate-upload)
+        main-commands (:cmds duplicate-upload)]
+    (is (some? duplicate-upload))
+    (is (= 1 (get-in duplicate-upload [:expect :exit])))
+    (is (= "graph-already-exists"
+           (get-in duplicate-upload [:expect :stdout-json-paths [:error :code]])))
+    (is (= ["delete it before uploading again"]
+           (get-in duplicate-upload [:expect :stdout-contains])))
+    (is (= 1 (count (filter #(re-find #"sync upload --graph" %) setup-commands))))
+    (is (= 1 (count (filter #(re-find #"sync upload --graph" %) main-commands))))
+    (is (false? (contains? json-paths [:data :pending-local])))
+    (is (false? (contains? json-paths [:data :pending-asset])))
+    (is (false? (contains? json-paths [:data :pending-server])))
+    (is (false? (contains? json-paths [:data :last-error])))))
 
 (deftest sync-status-steady-state-does-not-repeat-identical-b-side-steady-state-waits
   (let [cases (manifests/load-cases :sync)

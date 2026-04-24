@@ -611,6 +611,35 @@
                         (is false (str "unexpected error: " e))))
              (p/finally done))))
 
+(deftest test-execute-sync-upload-surfaces-graph-already-exists-error
+  (async done
+         (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                         (p/resolved (assoc config :base-url "http://example")))
+                             transport/invoke (fn [_ method _direct-pass? _args]
+                                                (case method
+                                                  :thread-api/set-db-sync-config
+                                                  (p/resolved nil)
+
+                                                  :thread-api/db-sync-upload-graph
+                                                  (p/rejected (ex-info "remote graph already exists; delete it before uploading again"
+                                                                       {:code :db-sync/graph-already-exists
+                                                                        :graph-id "graph-1"
+                                                                        :graph-name "demo"}))
+
+                                                  (p/resolved nil)))]
+               (p/let [result (execute-with-runtime-auth {:type :sync-upload
+                                                         :repo "logseq_db_demo"}
+                                                        {:data-dir "/tmp"})]
+                 (is (= :error (:status result)))
+                 (is (= :db-sync/graph-already-exists (get-in result [:error :code])))
+                 (is (= "remote graph already exists; delete it before uploading again"
+                        (get-in result [:error :message])))
+                 (is (= "graph-1" (get-in result [:error :context :graph-id])))
+                 (is (= "demo" (get-in result [:error :context :graph-name])))))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
 (deftest test-execute-sync-download
   (async done
          (let [ensure-calls (atom [])
