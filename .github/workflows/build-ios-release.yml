@@ -32,10 +32,15 @@ jobs:
       - name: Install iOS platform
         run: |
           xcodebuild -downloadPlatform iOS
-      - name: Install Node.js, NPM and Yarn
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -64,7 +69,7 @@ jobs:
           echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
 
       - name: Compile CLJS
-        run: yarn install && yarn release-mobile
+        run: pnpm install --frozen-lockfile && pnpm release-mobile
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
@@ -83,7 +88,7 @@ jobs:
           SENTRY_PROJECT: logseq
 
       - name: Prepare iOS build
-        run: npx cap sync ios
+        run: pnpm exec cap sync ios
 
       - name: Build and upload iOS app
         run: fastlane beta

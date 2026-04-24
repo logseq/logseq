@@ -1,0 +1,32 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      '@logseq/nbb-logseq':
+        specifier: git+https://github.com/logseq/nbb-logseq.git#feat-db-v34
+        version: https://codeload.github.com/logseq/nbb-logseq/tar.gz/4d9f1382ce2cec6f39bf12df49ba425f1bd5f3fb
+
+packages:
+
+  '@logseq/nbb-logseq@https://codeload.github.com/logseq/nbb-logseq/tar.gz/4d9f1382ce2cec6f39bf12df49ba425f1bd5f3fb':
+    resolution: {tarball: https://codeload.github.com/logseq/nbb-logseq/tar.gz/4d9f1382ce2cec6f39bf12df49ba425f1bd5f3fb}
+    version: 1.2.173-feat-db-v34
+    engines: {node: '>=20.10.0'}
+    hasBin: true
+
+  import-meta-resolve@4.1.0:
+    resolution: {integrity: sha512-I6fiaX09Xivtk+THaMfAwnA3MVA5Big1WHF1Dfx9hFuvNIWpXnorlkzhcQf6ehrqQiiZECRt1poOAkPmer3ruw==}
+
+snapshots:
+
+  '@logseq/nbb-logseq@https://codeload.github.com/logseq/nbb-logseq/tar.gz/4d9f1382ce2cec6f39bf12df49ba425f1bd5f3fb':
+    dependencies:
+      import-meta-resolve: 4.1.0
+
+  import-meta-resolve@4.1.0: {}
