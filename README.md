@@ -14,7 +14,7 @@
     <a href="https://logseq.com">Home Page</a> |
     <a href="https://blog.logseq.com/">Blog</a> |
     <a href="https://docs.logseq.com/">Documentation</a> |
-    <a href="https://discuss.logseq.com/t/logseq-product-roadmap/34267">Roadmap</a>
+    <a href="https://logseq.io/p/NX4mc_ggEV">Roadmap</a>
 </div>
 <br></br>
 
