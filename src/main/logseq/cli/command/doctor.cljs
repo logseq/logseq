@@ -3,8 +3,8 @@
   (:require ["fs" :as fs]
             [clojure.string :as string]
             [logseq.cli.command.core :as core]
-            [logseq.cli.data-dir :as data-dir]
             [logseq.cli.humanize :as cli-humanize]
+            [logseq.cli.root-dir :as root-dir]
             [logseq.cli.server :as cli-server]
             [logseq.cli.version :as version]
             [promesa.core :as p]))
@@ -74,23 +74,23 @@
                  :cause (.-code e)
                  :message (str "db-worker script is not readable: " path)}}))))
 
-(defn- check-data-dir
+(defn- check-root-dir
   [config]
   (try
-    (let [path (data-dir/ensure-data-dir! (:data-dir config))]
+    (let [path (root-dir/ensure-root-dir! (:root-dir config))]
       {:ok? true
-       :check {:id :data-dir
+       :check {:id :root-dir
                :status :ok
                :path path
                :message (str "Read/write access confirmed: " path)}})
     (catch :default e
       (let [data (ex-data e)
-            code (or (:code data) :data-dir-permission)
-            path (or (:path data) (:data-dir config))
+            code (or (:code data) :root-dir-permission)
+            path (or (:path data) (:root-dir config))
             message (or (.-message e)
-                        "data-dir check failed")]
+                        "root-dir check failed")]
         {:ok? false
-         :check {:id :data-dir
+         :check {:id :root-dir
                  :status :error
                  :code code
                  :path path
@@ -165,20 +165,20 @@
       (let [check (:check script-check)]
         (doctor-error [check] (:code check) (:message check)))
       (let [checks [(:check script-check)]
-            data-dir-check (check-data-dir config)]
-        (if-not (:ok? data-dir-check)
-          (let [check (:check data-dir-check)
+            root-dir-check (check-root-dir config)]
+        (if-not (:ok? root-dir-check)
+          (let [check (:check root-dir-check)
                 checks (conj checks check)]
             (doctor-error checks (:code check) (:message check)))
           (p/let [server-check (check-running-servers config)]
             (if-not (:ok? server-check)
-              (let [checks (conj checks (:check data-dir-check) (:check server-check))
+              (let [checks (conj checks (:check root-dir-check) (:check server-check))
                     check (:check server-check)]
                 (doctor-error checks (:code check) (:message check)))
               (let [revision-check (check-server-revision-mismatch (version/revision)
                                                                    (:servers server-check))
                     checks (conj checks
-                                 (:check data-dir-check)
+                                 (:check root-dir-check)
                                  (:check server-check)
                                  (:check revision-check))]
                 {:status :ok

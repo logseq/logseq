@@ -6,32 +6,37 @@
             [frontend.worker.db-worker-node-lock :as db-lock]
             [lambdaisland.glogi :as log]
             [logseq.cli.config :as cli-config]
+            [logseq.cli.profile :as profile]
+            [logseq.cli.root-dir :as root-dir]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.db-worker.daemon :as daemon]
             [logseq.db-worker.server-list :as server-list]
-            [logseq.cli.profile :as profile]
             [promesa.core :as p]))
 
-(defn resolve-data-dir
+(defn resolve-root-dir
   [config]
-  (common-graph/expand-home (or (:data-dir config) (common-graph/get-default-graphs-dir))))
+  (common-graph/expand-home (or (:root-dir config) "~/logseq")))
+
+(defn graphs-dir
+  [config]
+  (root-dir/graphs-dir (resolve-root-dir config)))
 
 (defn- repo-dir
-  [data-dir repo]
-  (db-lock/repo-dir data-dir repo))
+  [root-dir repo]
+  (db-lock/repo-dir (root-dir/graphs-dir root-dir) repo))
 
 (defn- ensure-repo-dir!
-  [data-dir repo]
-  (let [path (repo-dir data-dir repo)]
+  [root-dir repo]
+  (let [path (repo-dir root-dir repo)]
     (try
       (when-not (fs/existsSync path)
         (fs/mkdirSync path #js {:recursive true}))
       (let [stat (fs/statSync path)]
         (when-not (.isDirectory stat)
           (throw (ex-info (str "graph-dir is not a directory: " path)
-                          {:code :data-dir-permission
+                          {:code :root-dir-permission
                            :path path
                            :cause "ENOTDIR"}))))
       (let [constants (.-constants fs)
@@ -40,17 +45,17 @@
       path
       (catch :default e
         (throw (ex-info (str "graph-dir is not readable/writable: " path)
-                        {:code :data-dir-permission
+                        {:code :root-dir-permission
                          :path path
                          :cause (.-code e)}))))))
 
 (defn lock-path
-  [data-dir repo]
-  (node-path/join (repo-dir data-dir repo) "db-worker.lock"))
+  [root-dir repo]
+  (db-lock/lock-path root-dir repo))
 
 (defn- server-list-path
   [config]
-  (cli-config/server-list-path (:config-path config)))
+  (cli-config/server-list-path (resolve-root-dir config)))
 
 (defn db-worker-dev-script-path
   []
@@ -140,10 +145,10 @@
     (assoc payload :http-status status)))
 
 (defn- spawn-server!
-  [{:keys [repo data-dir owner-source create-empty-db? server-list-file]}]
+  [{:keys [repo root-dir owner-source create-empty-db? server-list-file]}]
   (daemon/spawn-server! {:script (db-worker-script-path)
                          :repo repo
-                         :data-dir data-dir
+                         :root-dir root-dir
                          :owner-source owner-source
                          :server-list-file server-list-file
                          :create-empty-db? create-empty-db?}))
@@ -163,21 +168,21 @@
         (catch :default _
           (node-path/resolve path))))))
 
-(defn- current-data-dir
+(defn- current-root-dir
   [config]
-  (canonical-path (resolve-data-dir config)))
+  (canonical-path (resolve-root-dir config)))
 
-(defn- same-data-dir?
+(defn- same-root-dir?
   [config server]
-  (let [server-data-dir (:data-dir server)]
-    (or (not (seq server-data-dir))
-        (= (current-data-dir config)
-           (canonical-path server-data-dir)))))
+  (let [server-root-dir (:root-dir server)]
+    (or (not (seq server-root-dir))
+        (= (current-root-dir config)
+           (canonical-path server-root-dir)))))
 
 (defn- servers-for-config
   [config servers]
   (->> (or servers [])
-       (filter #(same-data-dir? config %))
+       (filter #(same-root-dir? config %))
        vec))
 
 (defn- repo-server
@@ -185,7 +190,7 @@
   (first (filter #(= repo (:repo %))
                  (servers-for-config config servers))))
 
-(defn- discover-servers
+(defn discover-servers
   [config]
   (let [path (server-list-path config)
         entries (server-list/read-entries path)]
@@ -224,14 +229,14 @@
 
 (defn- ensure-server-started!
   [config repo]
-  (let [data-dir (resolve-data-dir config)
-        path (lock-path data-dir repo)
+  (let [root-dir (resolve-root-dir config)
+        path (lock-path root-dir repo)
         requester-owner (requester-owner-source config)
         profile-session (:profile-session config)
         server-list-file (server-list-path config)]
     (profile/time! profile-session "server.ensure-started"
                    (fn []
-                     (ensure-repo-dir! data-dir repo)
+                     (ensure-repo-dir! root-dir repo)
                      (p/let [existing (read-lock path)
                              _ (cleanup-stale-lock! path existing)
                              discovered (discover-servers config)
@@ -241,7 +246,7 @@
                                                 "server.spawn-daemon"
                                                 (fn []
                                                   (spawn-server! {:repo repo
-                                                                  :data-dir data-dir
+                                                                  :root-dir root-dir
                                                                   :owner-source requester-owner
                                                                   :server-list-file server-list-file
                                                                   :create-empty-db? (:create-empty-db? config)})))
@@ -305,8 +310,8 @@
 (defn stop-server!
   [config repo]
   (let [requester-owner (requester-owner-source config)
-        data-dir (resolve-data-dir config)
-        path (lock-path data-dir repo)
+        root-dir (resolve-root-dir config)
+        path (lock-path root-dir repo)
         lock (read-lock path)]
     (if-not lock
       (p/resolved {:ok? false
@@ -469,7 +474,7 @@
   (= dir-name (graph-dir/graph-dir-key->encoded-dir-name graph-name)))
 
 (defn- classify-graph-dir
-  [data-dir dir-name]
+  [graphs-root dir-name]
   (when-not (ignored-graph-dir? dir-name)
     (let [decoded-canonical (db-lock/decode-canonical-graph-dir-key dir-name)
           canonical? (and (seq decoded-canonical)
@@ -489,7 +494,7 @@
         (let [target-graph-dir (graph-dir/graph-dir-key->encoded-dir-name legacy-graph-name)
               conflict? (and (seq target-graph-dir)
                              (not= target-graph-dir dir-name)
-                             (fs/existsSync (node-path/join data-dir target-graph-dir)))]
+                             (fs/existsSync (node-path/join graphs-root target-graph-dir)))]
           {:kind :legacy
            :legacy-dir dir-name
            :legacy-graph-name legacy-graph-name
@@ -506,13 +511,13 @@
 
 (defn list-graph-items
   [config]
-  (let [data-dir (resolve-data-dir config)
-        entries (when (fs/existsSync data-dir)
-                  (fs/readdirSync data-dir #js {:withFileTypes true}))]
+  (let [graphs-root (graphs-dir config)
+        entries (when (fs/existsSync graphs-root)
+                  (fs/readdirSync graphs-root #js {:withFileTypes true}))]
     (->> entries
          (filter #(.isDirectory ^js %))
          (map (fn [^js dirent]
-                (classify-graph-dir data-dir (.-name dirent))))
+                (classify-graph-dir graphs-root (.-name dirent))))
          (filter some?)
          (vec))))
 

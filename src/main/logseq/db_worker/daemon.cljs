@@ -221,16 +221,16 @@
              :interval-ms 50}))
 
 (defn spawn-server!
-  [{:keys [script repo data-dir owner-source create-empty-db? server-list-file]}]
+  [{:keys [script repo root-dir owner-source create-empty-db? server-list-file]}]
   (let [owner-source (normalize-owner-source owner-source)
         detached? (not= owner-source :electron)
-        args (clj->js (cond-> [script "--repo" repo "--data-dir" data-dir "--owner-source" (name owner-source)]
+        args (clj->js (cond-> [script "--repo" repo "--root-dir" root-dir "--owner-source" (name owner-source)]
                         server-list-file (conj "--server-list-file" server-list-file)
                         create-empty-db? (conj "--create-empty-db")))
         env (js/Object.assign #js {} (.-env js/process) #js {:ELECTRON_RUN_AS_NODE "1"})]
     (if-not script
       (do
-        (log/warn :db-worker-daemon/missing-script {:repo repo :data-dir data-dir})
+        (log/warn :db-worker-daemon/missing-script {:repo repo :root-dir root-dir})
         nil)
       (let [child (.spawn child-process (.-execPath js/process) args #js {:detached detached?
                                                                           :stdio (if detached?

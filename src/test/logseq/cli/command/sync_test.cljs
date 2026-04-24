@@ -109,7 +109,7 @@
                                                     (p/resolved {:ok true})))]
                  (p/let [result (execute-with-runtime-auth {:type :sync-start
                                                        :repo "logseq_db_demo"}
-                                                      {:data-dir "/tmp"})
+                                                      {:root-dir "/tmp"})
                          invoked-methods (map first @invoke-calls)]
                    (is (= :ok (:status result)))
                    (is (= :open (get-in result [:data :ws-state])))
@@ -150,7 +150,7 @@
                                                             :repo "logseq_db_demo"
                                                             :wait-timeout-ms 20
                                                             :wait-poll-interval-ms 0}
-                                                           {:data-dir "/tmp"})
+                                                           {:root-dir "/tmp"})
                          set-config-calls (filter #(= :thread-api/set-db-sync-config (first %)) @invoke-calls)]
                    (is (= :ok (:status result)))
                    (is (seq set-config-calls))
@@ -183,7 +183,7 @@
                                                        :e2ee-password "pw"
                                                        :wait-timeout-ms 50
                                                        :wait-poll-interval-ms 0}
-                                                      {:data-dir "/tmp"
+                                                      {:root-dir "/tmp"
                                                        :refresh-token "refresh-token"
                                                        :id-token "runtime-token"})]
                    (is (= :ok (:status result)))
@@ -213,7 +213,7 @@
                                                        :repo "logseq_db_demo"
                                                        :wait-timeout-ms 20
                                                        :wait-poll-interval-ms 0}
-                                                      {:data-dir "/tmp"})]
+                                                      {:root-dir "/tmp"})]
                    (is (= :error (:status result)))
                    (is (= :sync-start-timeout (get-in result [:error :code])))
                    (is (= "logseq_db_demo" (get-in result [:error :repo])))
@@ -255,7 +255,7 @@
                                                             :repo "logseq_db_demo"
                                                             :wait-timeout-ms 200
                                                             :wait-poll-interval-ms 0}
-                                                           {:data-dir "/tmp"})]
+                                                           {:root-dir "/tmp"})]
                    (is (= :ok (:status result)))
                    (is (= :open (get-in result [:data :ws-state])))
                    (is (= 2 @status-calls))
@@ -276,7 +276,7 @@
                                                   (p/resolved {:ok true}))]
                  (p/let [result (sync-command/execute {:type :sync-start
                                                        :repo "logseq_db_demo"}
-                                                      {:data-dir "/tmp"
+                                                      {:root-dir "/tmp"
                                                        :ws-url ""
                                                        :id-token "runtime-token"})]
                    (is (= :error (:status result)))
@@ -301,7 +301,7 @@
                                                   (p/resolved {:ok true}))]
                  (p/let [result (sync-command/execute {:type :sync-upload
                                                        :repo "logseq_db_demo"}
-                                                      {:data-dir "/tmp"
+                                                      {:root-dir "/tmp"
                                                        :http-base ""
                                                        :id-token "runtime-token"})]
                    (is (= :error (:status result)))
@@ -328,7 +328,7 @@
                                                        :repo "logseq_db_demo"
                                                        :graph "demo"}
                                                       {:base-url "http://example"
-                                                       :data-dir "/tmp"
+                                                       :root-dir "/tmp"
                                                        :http-base ""
                                                        :id-token "runtime-token"})]
                    (is (= :error (:status result)))
@@ -372,7 +372,7 @@
                                                        :repo "logseq_db_demo"
                                                        :graph "demo"}
                                                       {:base-url "http://example"
-                                                       :data-dir "/tmp"
+                                                       :root-dir "/tmp"
                                                        :http-base "https://api.logseq.io"
                                                        :id-token "runtime-token"
                                                        :refresh-token "refresh-token"})]
@@ -413,7 +413,7 @@
                                                        :repo "logseq_db_demo"
                                                        :wait-timeout-ms 200
                                                        :wait-poll-interval-ms 0}
-                                                      {:data-dir "/tmp"})]
+                                                      {:root-dir "/tmp"})]
                    (is (= :error (:status result)))
                    (is (= :sync-start-runtime-error (get-in result [:error :code])))
                    (is (= :decrypt-aes-key (get-in result [:error :last-error :code])))))
@@ -435,8 +435,8 @@
                                                     (p/resolved nil)))]
                  (p/let [_ (sync-command/execute {:type :sync-stop
                                                   :repo "logseq_db_demo"}
-                                                 {:data-dir "/tmp"})]
-                   (is (= [[{:data-dir "/tmp"}
+                                                 {:root-dir "/tmp"})]
+                   (is (= [[{:root-dir "/tmp"}
                             "logseq_db_demo"]]
                           @ensure-calls))
                    (is (= [[:thread-api/set-db-sync-config false [{:ws-url nil
@@ -465,10 +465,10 @@
                                                     (p/resolved nil)))]
                  (p/let [result (sync-command/execute {:type :sync-status
                                                        :repo "logseq_db_demo"}
-                                                      {:data-dir "/tmp"})]
+                                                      {:root-dir "/tmp"})]
                    (is (= :ok (:status result)))
                    (is (= :open (get-in result [:data :ws-state])))
-                   (is (= [[{:data-dir "/tmp"}
+                   (is (= [[{:root-dir "/tmp"}
                             "logseq_db_demo"]]
                           @ensure-calls))
                    (is (= [:thread-api/set-db-sync-config
@@ -507,7 +507,7 @@
                                                     (p/resolved nil)))]
                  (p/let [result (sync-command/execute {:type :sync-status
                                                        :repo "logseq_db_demo"}
-                                                      {:data-dir "/tmp"
+                                                      {:root-dir "/tmp"
                                                        :refresh-token "refresh-token"})]
                    (is (= :error (:status result)))
                    (is (= :e2ee-password-not-found (get-in result [:error :code])))
@@ -543,7 +543,7 @@
                                                     (p/resolved nil)))]
                  (p/let [result (sync-command/execute {:type :sync-status
                                                        :repo "logseq_db_demo"}
-                                                      {:data-dir "/tmp"
+                                                      {:root-dir "/tmp"
                                                        :refresh-token "refresh-token"})]
                    (is (= :error (:status result)))
                    (is (= :e2ee-password-not-found (get-in result [:error :code])))
@@ -567,8 +567,8 @@
                                                   (p/resolved {:ok true}))]
                  (p/let [_ (execute-with-runtime-auth {:type :sync-upload
                                                   :repo "logseq_db_demo"}
-                                                 {:data-dir "/tmp"})]
-                   (is (= [[{:data-dir "/tmp"
+                                                 {:root-dir "/tmp"})]
+                   (is (= [[{:root-dir "/tmp"
                              :id-token "runtime-token"}
                             "logseq_db_demo"]]
                           @ensure-calls))
@@ -602,7 +602,7 @@
                                                   (p/resolved nil)))]
                (p/let [result (execute-with-runtime-auth {:type :sync-upload
                                                      :repo "logseq_db_demo"}
-                                                    {:data-dir "/tmp"})]
+                                                    {:root-dir "/tmp"})]
                  (is (= :error (:status result)))
                  (is (= :snapshot-upload-failed (get-in result [:error :code])))
                  (is (= 500 (get-in result [:error :context :status])))
@@ -629,7 +629,7 @@
                                                   (p/resolved nil)))]
                (p/let [result (execute-with-runtime-auth {:type :sync-upload
                                                          :repo "logseq_db_demo"}
-                                                        {:data-dir "/tmp"})]
+                                                        {:root-dir "/tmp"})]
                  (is (= :error (:status result)))
                  (is (= :db-sync/graph-already-exists (get-in result [:error :code])))
                  (is (= "remote graph already exists; delete it before uploading again"
@@ -664,11 +664,11 @@
                                                   :graph "demo"
                                                   :e2ee-password "pw"}
                                                  {:base-url "http://example"
-                                                  :data-dir "/tmp"
+                                                  :root-dir "/tmp"
                                                   :refresh-token "refresh-token"})]
                    (is (= [[{:base-url "http://example"
                              :create-empty-db? true
-                             :data-dir "/tmp"
+                             :root-dir "/tmp"
                              :refresh-token "refresh-token"
                              :id-token "runtime-token"}
                             "logseq_db_demo"]]
@@ -721,7 +721,7 @@
                                                             :repo "logseq_db_demo"
                                                             :graph "demo"}
                                                            {:base-url "http://example"
-                                                            :data-dir "/tmp"
+                                                            :root-dir "/tmp"
                                                             :timeout-ms 10000})
                          [sync-app-state-before set-config-before list-remote-graphs sync-app-state-after set-config-after check-empty-db download]
                          @invoke-calls]
@@ -781,7 +781,7 @@
                                                        :graph "demo"
                                                        :progress-explicit? false}
                                                       {:base-url "http://example"
-                                                       :data-dir "/tmp"
+                                                       :root-dir "/tmp"
                                                        :output-format nil})
                          _ (is (= 1 (count @subscribe-calls)))
                          _ (is (= ["Preparing graph snapshot download"] @printed-lines))
@@ -794,7 +794,7 @@
                                                        :graph "demo"
                                                        :progress-explicit? false}
                                                       {:base-url "http://example"
-                                                       :data-dir "/tmp"
+                                                       :root-dir "/tmp"
                                                        :output-format :json})
                          _ (is (= [] @subscribe-calls))
                          _ (is (= [] @printed-lines))
@@ -804,7 +804,7 @@
                                                        :graph "demo"
                                                        :progress-explicit? false}
                                                       {:base-url "http://example"
-                                                       :data-dir "/tmp"
+                                                       :root-dir "/tmp"
                                                        :output-format :edn})
                          _ (is (= [] @subscribe-calls))
                          _ (is (= [] @printed-lines))
@@ -815,7 +815,7 @@
                                                        :progress true
                                                        :progress-explicit? true}
                                                       {:base-url "http://example"
-                                                       :data-dir "/tmp"
+                                                       :root-dir "/tmp"
                                                        :output-format :json})
                          _ (is (= 1 (count @subscribe-calls)))
                          _ (is (= ["Preparing graph snapshot download"] @printed-lines))
@@ -829,7 +829,7 @@
                                                        :progress false
                                                        :progress-explicit? true}
                                                       {:base-url "http://example"
-                                                       :data-dir "/tmp"
+                                                       :root-dir "/tmp"
                                                        :output-format nil})]
                    (is (= [] @subscribe-calls))
                    (is (= [] @printed-lines))
@@ -861,15 +861,15 @@
                                                   :repo "logseq_db_demo"
                                                   :graph "demo"}
                                                  {:graph "demo"
-                                                  :data-dir "/tmp"})]
+                                                  :root-dir "/tmp"})]
                    (is (= [[{:graph "demo"
                              :create-empty-db? true
-                             :data-dir "/tmp"
+                             :root-dir "/tmp"
                              :id-token "runtime-token"}
                             "logseq_db_demo"]
                            [{:graph "demo"
                              :create-empty-db? true
-                             :data-dir "/tmp"
+                             :root-dir "/tmp"
                              :id-token "runtime-token"}
                             "logseq_db_demo"]]
                           @ensure-calls))
@@ -913,7 +913,7 @@
                                                        :repo "logseq_db_demo"
                                                        :graph "demo"}
                                                       {:base-url "http://example"
-                                                       :data-dir "/tmp"})]
+                                                       :root-dir "/tmp"})]
                    (is (= :error (:status result)))
                    (is (= :remote-graph-not-found (get-in result [:error :code])))
                    (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
@@ -950,7 +950,7 @@
                                                      :graph "demo"
                                                      :e2ee-password "pw"}
                                                     {:base-url "http://example"
-                                                     :data-dir "/tmp"
+                                                     :root-dir "/tmp"
                                                      :refresh-token "refresh-token"})]
                  (is (= :error (:status result)))
                  (is (= :db-sync/snapshot-download-failed (get-in result [:error :code])))))
@@ -982,7 +982,7 @@
                                                        :graph "demo"
                                                        :e2ee-password "pw"}
                                                       {:base-url "http://example"
-                                                       :data-dir "/tmp"
+                                                       :root-dir "/tmp"
                                                        :refresh-token "refresh-token"})]
                    (is (= :error (:status result)))
                    (is (= :graph-db-not-empty (get-in result [:error :code])))
@@ -1015,13 +1015,13 @@
                                                   :http-base "https://sync.example.com"
                                                   :ws-url "wss://sync.example.com/sync/%s"
                                                   :e2ee-password "pw"
-                                                  :data-dir "/tmp"})]
+                                                  :root-dir "/tmp"})]
                    (is (= [] @ensure-calls))
                    (is (= [{:base-url "http://example"
                             :http-base "https://sync.example.com"
                             :ws-url "wss://sync.example.com/sync/%s"
                             :e2ee-password "pw"
-                            :data-dir "/tmp"}]
+                            :root-dir "/tmp"}]
                           @auth-calls))
                    (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
                    (is (= "resolved-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
@@ -1046,7 +1046,7 @@
                                                   (p/resolved []))]
                  (p/let [result (sync-command/execute {:type :sync-remote-graphs}
                                                       {:base-url "http://example"
-                                                       :data-dir "/tmp"})]
+                                                       :root-dir "/tmp"})]
                    (is (= :error (:status result)))
                    (is (= :missing-auth (get-in result [:error :code])))
                    (is (= "Run logseq login first." (get-in result [:error :context :hint])))
@@ -1067,7 +1067,7 @@
                                                   (p/resolved {:ok true}))]
                  (p/let [_ (execute-with-runtime-auth {:type :sync-ensure-keys}
                                                       {:base-url "http://example"
-                                                       :data-dir "/tmp"})]
+                                                       :root-dir "/tmp"})]
                    (is (= [] @ensure-calls))
                    (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
                    (is (= "runtime-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
@@ -1089,7 +1089,7 @@
                  (p/let [_ (sync-command/execute {:type :sync-ensure-keys
                                                   :e2ee-password "pw"}
                                                  {:base-url "http://example"
-                                                  :data-dir "/tmp"
+                                                  :root-dir "/tmp"
                                                   :refresh-token "refresh-token"
                                                   :id-token "runtime-token"})]
                    (is (= [:thread-api/sync-app-state
@@ -1116,7 +1116,7 @@
                                                   :upload-keys true
                                                   :e2ee-password "pw"}
                                                  {:base-url "http://example"
-                                                  :data-dir "/tmp"
+                                                  :root-dir "/tmp"
                                                   :refresh-token "refresh-token"
                                                   :id-token "runtime-token"})]
                    (is (= [:thread-api/sync-app-state
@@ -1151,7 +1151,7 @@
                                                        :repo "logseq_db_demo"
                                                        :graph-id "graph-uuid"
                                                        :email "user@example.com"}
-                                                      {:data-dir "/tmp"
+                                                      {:root-dir "/tmp"
                                                        :http-base ""
                                                        :id-token "runtime-token"})]
                    (is (= :error (:status result)))
@@ -1178,8 +1178,8 @@
                                                   :repo "logseq_db_demo"
                                                   :graph-id "graph-uuid"
                                                   :email "user@example.com"}
-                                                 {:data-dir "/tmp"})]
-                   (is (= [[{:data-dir "/tmp"
+                                                 {:root-dir "/tmp"})]
+                   (is (= [[{:root-dir "/tmp"
                              :id-token "runtime-token"}
                             "logseq_db_demo"]]
                           @ensure-calls))
@@ -1208,7 +1208,7 @@
                                                   :config-key :ws-url}
                                                  {:base-url "http://example"
                                                   :ws-url "wss://sync.example.com/sync/%s"
-                                                  :data-dir "/tmp"})]
+                                                  :root-dir "/tmp"})]
                    (is (= [] @ensure-calls))
                    (is (= [] @invoke-calls))))
                (p/catch (fn [e]
@@ -1230,10 +1230,10 @@
                                                   :config-value "wss://sync.example.com/sync/%s"}
                                                  {:base-url "http://example"
                                                   :config-path "/tmp/cli.edn"
-                                                  :data-dir "/tmp"})]
+                                                  :root-dir "/tmp"})]
                    (is (= [[{:base-url "http://example"
                              :config-path "/tmp/cli.edn"
-                             :data-dir "/tmp"}
+                             :root-dir "/tmp"}
                             {:ws-url "wss://sync.example.com/sync/%s"}]]
                           @update-calls))
                    (is (= [] @invoke-calls))))
@@ -1256,10 +1256,10 @@
                                                   :config-key :ws-url}
                                                  {:base-url "http://example"
                                                   :config-path "/tmp/cli.edn"
-                                                  :data-dir "/tmp"})]
+                                                  :root-dir "/tmp"})]
                    (is (= [[{:base-url "http://example"
                              :config-path "/tmp/cli.edn"
-                             :data-dir "/tmp"}
+                             :root-dir "/tmp"}
                             {:ws-url nil}]]
                           @update-calls))
                    (is (= [] @invoke-calls))))

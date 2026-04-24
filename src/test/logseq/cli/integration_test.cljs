@@ -14,7 +14,7 @@
 ;; See `cli-e2e/spec/non_sync_cases.edn` and run `bb dev:cli-e2e` for non-sync e2e coverage.
 
 (defn- run-cli
-  [args data-dir cfg-path]
+  [args root-dir cfg-path]
   (let [args (vec args)
         output-idx (.indexOf args "--output")
         [args output-args] (if (and (>= output-idx 0)
@@ -26,7 +26,7 @@
         output-args (if (seq output-args)
                       output-args
                       ["--output" "json"])
-        global-opts ["--data-dir" data-dir "--config" cfg-path]
+        global-opts ["--root-dir" root-dir "--config" cfg-path]
         final-args (vec (concat global-opts output-args args))]
     (-> (cli-main/run! final-args {:exit? false})
         (p/then (fn [result]
@@ -55,8 +55,8 @@
                       e)))))
 
 (defn- stop-repo!
-  [data-dir cfg-path repo]
-  (p/let [result (run-cli ["server" "stop" "--graph" repo] data-dir cfg-path)]
+  [root-dir cfg-path repo]
+  (p/let [result (run-cli ["server" "stop" "--graph" repo] root-dir cfg-path)]
     (parse-json-output result)))
 
 (defn- sample-auth
@@ -75,7 +75,7 @@
 
 (deftest ^:long test-cli-login-integration
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "cli-login-data")
+         (let [root-dir (node-helper/create-tmp-dir "cli-login-data")
                cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                auth-path (node-path/join (node-helper/create-tmp-dir "cli-auth") "auth.json")
                open-calls (atom [])
@@ -94,7 +94,7 @@
                                  cli-auth/exchange-code-for-auth! (fn [_opts payload]
                                                                     (is (= "integration-code" (:code payload)))
                                                                     (p/resolved auth-data))]
-                   (p/let [result (run-cli ["login"] data-dir cfg-path)
+                   (p/let [result (run-cli ["login"] root-dir cfg-path)
                            payload (parse-json-output-safe result "login")
                            stored (cli-auth/read-auth-file {:auth-path auth-path})]
                      (is (= 0 (:exit-code result)))
@@ -112,7 +112,7 @@
 
 (deftest ^:long test-cli-logout-integration
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "cli-logout-data")
+         (let [root-dir (node-helper/create-tmp-dir "cli-logout-data")
                cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                auth-path (node-path/join (node-helper/create-tmp-dir "cli-auth") "auth.json")
                open-calls (atom [])]
@@ -127,7 +127,7 @@
                                                             (-> (js/fetch logout-uri)
                                                                 (p/then (fn [_]
                                                                           {:opened? true})))))]
-                   (p/let [result (run-cli ["logout"] data-dir cfg-path)
+                   (p/let [result (run-cli ["logout"] root-dir cfg-path)
                            payload (parse-json-output-safe result "logout")]
                      (is (= 0 (:exit-code result)))
                      (is (= "ok" (:status payload)))
@@ -145,7 +145,7 @@
 
 (deftest ^:long test-cli-sync-remote-graphs-refreshes-auth-file-and-injects-runtime-token
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "cli-sync-auth")
+         (let [root-dir (node-helper/create-tmp-dir "cli-sync-auth")
                cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                auth-path (node-path/join (node-helper/create-tmp-dir "cli-auth") "auth.json")
                invoke-calls (atom [])
@@ -174,7 +174,7 @@
                                                       :thread-api/db-sync-list-remote-graphs
                                                       (p/resolved [])
                                                       (p/resolved nil)))]
-                   (p/let [result (run-cli ["sync" "remote-graphs"] data-dir cfg-path)
+                   (p/let [result (run-cli ["sync" "remote-graphs"] root-dir cfg-path)
                            payload (parse-json-output-safe result "sync remote-graphs")
                            stored (cli-auth/read-auth-file {:auth-path auth-path})]
                      (is (= 0 (:exit-code result)))
@@ -191,14 +191,14 @@
 
 (deftest ^:long test-cli-sync-download-and-start-readiness-with-mocked-sync
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "db-worker-sync-cli")
+         (let [root-dir (node-helper/create-tmp-dir "db-worker-sync-cli")
                download-repo "sync-download-graph"
                start-repo "sync-start-graph"
                invoke-calls (atom [])
                status-calls (atom 0)]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
-                       create-result (run-cli ["graph" "create" "--graph" start-repo] data-dir cfg-path)
+                       create-result (run-cli ["graph" "create" "--graph" start-repo] root-dir cfg-path)
                        create-payload (parse-json-output-safe create-result "graph create")
                        _ (is (= 0 (:exit-code create-result)))
                        _ (is (= "ok" (:status create-payload)))
@@ -246,8 +246,8 @@
                                                             (p/resolved 0)
 
                                                             (p/resolved nil)))]
-                         (p/let [download-result (run-cli ["--graph" download-repo "sync" "download" "--e2ee-password" "pw"] data-dir cfg-path)
-                                 start-result (run-cli ["--graph" start-repo "sync" "start" "--e2ee-password" "pw"] data-dir cfg-path)]
+                         (p/let [download-result (run-cli ["--graph" download-repo "sync" "download" "--e2ee-password" "pw"] root-dir cfg-path)
+                                 start-result (run-cli ["--graph" start-repo "sync" "start" "--e2ee-password" "pw"] root-dir cfg-path)]
                            [download-result start-result]))
                        download-payload (parse-json-output-safe download-result "sync download")
                        start-payload (parse-json-output-safe start-result "sync start")]
@@ -263,7 +263,7 @@
                      (pr-str start-payload))
                  (is (contains? #{"open" :open}
                                 (get-in start-payload [:data :ws-state])))
-                 (stop-repo! data-dir cfg-path start-repo)
+                 (stop-repo! root-dir cfg-path start-repo)
                  (done))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))
@@ -271,12 +271,12 @@
 
 (deftest ^:long test-cli-sync-upload-with-mocked-worker-bootstrap
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "db-worker-sync-upload-cli")
+         (let [root-dir (node-helper/create-tmp-dir "db-worker-sync-upload-cli")
                upload-repo "sync-upload-graph"
                invoke-calls (atom [])]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
-                       create-result (run-cli ["graph" "create" "--graph" upload-repo] data-dir cfg-path)
+                       create-result (run-cli ["graph" "create" "--graph" upload-repo] root-dir cfg-path)
                        create-payload (parse-json-output-safe create-result "graph create")
                        _ (is (= 0 (:exit-code create-result)))
                        _ (is (= "ok" (:status create-payload)))
@@ -295,7 +295,7 @@
                                                             (p/resolved {:graph-id "created-graph-id"})
 
                                                             (p/resolved nil)))]
-                                       (run-cli ["--graph" upload-repo "sync" "upload"] data-dir cfg-path))
+                                       (run-cli ["--graph" upload-repo "sync" "upload"] root-dir cfg-path))
                        upload-payload (parse-json-output-safe upload-result "sync upload")]
                  (is (= 0 (:exit-code upload-result)))
                  (is (= "ok" (:status upload-payload)))
@@ -307,20 +307,20 @@
                         (second @invoke-calls)))
                  (is (= [:thread-api/db-sync-upload-graph ["logseq_db_sync-upload-graph"]]
                         (nth @invoke-calls 2)))
-                 (stop-repo! data-dir cfg-path upload-repo))
+                 (stop-repo! root-dir cfg-path upload-repo))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
 (deftest ^:long test-cli-sync-upload-followed-by-graph-info-shows-graph-uuid-test
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "db-worker-sync-upload-info-cli")
+         (let [root-dir (node-helper/create-tmp-dir "db-worker-sync-upload-info-cli")
                upload-repo "sync-upload-graph-info"
                uploaded-graph-id "0f64b4a9-6f31-4f35-a83c-6b16f9ddf1ff"
                invoke-calls (atom [])]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
-                       create-result (run-cli ["graph" "create" "--graph" upload-repo] data-dir cfg-path)
+                       create-result (run-cli ["graph" "create" "--graph" upload-repo] root-dir cfg-path)
                        create-payload (parse-json-output-safe create-result "graph create")
                        _ (is (= 0 (:exit-code create-result)))
                        _ (is (= "ok" (:status create-payload)))
@@ -343,8 +343,8 @@
                                                                          [:logseq.kv/schema-version "65"]])
 
                                                             (p/resolved nil)))]
-                         (p/let [upload-result (run-cli ["--graph" upload-repo "sync" "upload"] data-dir cfg-path)
-                                 info-result (run-cli ["--graph" upload-repo "graph" "info"] data-dir cfg-path)]
+                         (p/let [upload-result (run-cli ["--graph" upload-repo "sync" "upload"] root-dir cfg-path)
+                                 info-result (run-cli ["--graph" upload-repo "graph" "info"] root-dir cfg-path)]
                            [upload-result info-result]))
                        upload-payload (parse-json-output-safe upload-result "sync upload")
                        info-payload (parse-json-output-safe info-result "graph info after upload")
@@ -360,7 +360,7 @@
                  (is (= uploaded-graph-id
                         (get-in info-payload [:data :kv :logseq.kv/graph-uuid])))
                  (is (= "logseq_db_sync-upload-graph-info" (first q-call)))
-                 (stop-repo! data-dir cfg-path upload-repo))
+                 (stop-repo! root-dir cfg-path upload-repo))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

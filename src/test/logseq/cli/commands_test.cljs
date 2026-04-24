@@ -100,7 +100,7 @@
       (is (not (string/includes? plain-summary "example upsert")))
       (is (string/includes? plain-summary "skill"))
       (is (not (string/includes? plain-summary "skill show")))
-      (is (string/includes? plain-summary "Path to db-worker data dir (default ~/logseq/graphs)"))
+      (is (string/includes? plain-summary "Path to CLI root dir (default ~/logseq)"))
       (is (contains-bold? summary "list page"))
       (is (contains-bold? summary "list tag"))
       (is (contains-bold? summary "list property"))
@@ -3903,10 +3903,10 @@
   (async done
          (-> (p/with-redefs [server-command/execute-cleanup (fn [action config]
                                                               (is (= :server-cleanup (:type action)))
-                                                              (is (= {:data-dir "/tmp/demo"} config))
+                                                              (is (= {:root-dir "/tmp/demo"} config))
                                                               (p/resolved {:status :ok
                                                                            :data {:checked 3}}))]
-               (p/let [result (commands/execute {:type :server-cleanup} {:data-dir "/tmp/demo"})]
+               (p/let [result (commands/execute {:type :server-cleanup} {:root-dir "/tmp/demo"})]
                  (is (= :ok (:status result)))
                  (is (= :server-cleanup (:command result)))
                  (is (= 3 (get-in result [:data :checked])))))
@@ -3982,7 +3982,7 @@
                                                    :graph "demo"
                                                    :allow-missing-graph true
                                                    :require-missing-graph true}
-                                                  {:data-dir "/tmp"})]
+                                                  {:root-dir "/tmp"})]
                    (is (= :ok (:status result)))
                    (is (= "logseq_db_demo" (get-in result [:data :repo])))
                    (is (= :sync-download (get-in @captured [0 :type])))))
@@ -4110,7 +4110,7 @@
                                                             {:kind :legacy-undecodable
                                                              :legacy-dir "mystery"
                                                              :reason :undecodable}])]
-               (p/let [result (commands/execute {:type :graph-list} {:data-dir "/tmp/graphs"})]
+               (p/let [result (commands/execute {:type :graph-list} {:root-dir "/tmp/graphs"})]
                  (is (= :ok (:status result)))
                  (is (= ["alpha" "legacy/name" "mystery"]
                         (get-in result [:data :graphs])))

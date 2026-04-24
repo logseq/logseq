@@ -536,7 +536,7 @@ _logseq_multi_values() {
   [table]
   (let [groups (extract-groups table)
         global-spec (-> table first :spec
-                        (select-keys [:help :version :config :graph :data-dir
+                        (select-keys [:help :version :config :graph :root-dir
                                       :timeout-ms :output :verbose :profile]))
         global-keys (set (keys global-spec))
         ;; Collect group names that have subcommands (dispatchers own these)
@@ -787,7 +787,7 @@ _logseq_multi_values_bash() {
   [table]
   (let [groups (extract-groups table)
         global-spec (-> table first :spec
-                        (select-keys [:help :version :config :graph :data-dir
+                        (select-keys [:help :version :config :graph :root-dir
                                       :timeout-ms :output :verbose :profile]))
         global-str (bash-global-opts-string global-spec)
         ;; Build case branches
@@ -1100,7 +1100,7 @@ _logseq_multi_values_bash() {
   "Generate the _logseq() main completion function."
   [table]
   (let [global-spec (-> table first :spec
-                        (select-keys [:help :version :config :graph :data-dir
+                        (select-keys [:help :version :config :graph :root-dir
                                       :timeout-ms :output :verbose :profile]))
         global-keys (set (keys global-spec))
         ;; Find options with conflicting completions across commands

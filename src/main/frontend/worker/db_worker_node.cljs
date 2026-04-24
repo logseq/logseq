@@ -10,9 +10,8 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.version :as worker-version]
             [lambdaisland.glogi :as log]
-            [logseq.cli.data-dir :as data-dir]
+            [logseq.cli.root-dir :as root-dir]
             [logseq.cli.style :as style]
-            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db-worker.server-list :as server-list]
             [promesa.core :as p]))
@@ -52,7 +51,7 @@
       opts
       (let [flag (first args)]
         (case flag
-          "--data-dir" (recur (subvec args 2) (assoc opts :data-dir (second args)))
+          "--root-dir" (recur (subvec args 2) (assoc opts :root-dir (second args)))
           "--repo" (recur (subvec args 2) (assoc opts :repo (second args)))
           "--owner-source" (recur (subvec args 2) (assoc opts :owner-source (second args)))
           "--server-list-file" (recur (subvec args 2) (assoc opts :server-list-file (second args)))
@@ -131,7 +130,6 @@
                                 {:method (or method-kw method-str)
                                  :elapsed-ms (- (js/Date.now) started-at)}))
                     10000)]
-    ;;  wraps .remoteInvoke so synchronous throws become proper promise rejections with ex-data preserved
     (-> (p/do! (.remoteInvoke proxy method-str (boolean direct-pass?) args'))
         (p/finally (fn []
                      (js/clearTimeout timeout-id))))))
@@ -244,19 +242,46 @@
   [data]
   (= :parser/query (:error data)))
 
+(defn- notification-validation-error?
+  [data]
+  (= :notification (:type data)))
+
+(defn- invoke-error-status
+  [data]
+  (cond
+    (query-validation-error? data) 400
+    (notification-validation-error? data) 400
+    (#{:missing-repo :repo-mismatch :repo-locked} (:code data)) 409
+    (number? (:status data)) (:status data)
+    :else 500))
+
+(defn- invoke-error-code
+  [data]
+  (cond
+    (query-validation-error? data) :invalid-query
+    (:code data) (:code data)
+    (notification-validation-error? data) :validation-error
+    :else :exception))
+
+(defn- invoke-error-message
+  [error data]
+  (or (get-in data [:payload :message])
+      (.-message error)
+      (str error)))
+
 (defn- health-payload
-  [{:keys [bound-repo host port owner-source data-dir]}]
+  [{:keys [bound-repo host port owner-source root-dir]}]
   {:repo bound-repo
    :status (if @*ready? "ready" "starting")
    :host host
    :port (if (satisfies? IDeref port) @port port)
    :pid (.-pid js/process)
    :owner-source (name (normalize-owner-source owner-source))
-   :data-dir data-dir
+   :root-dir root-dir
    :revision (worker-version/revision)})
 
 (defn- make-server
-  [proxy {:keys [bound-repo stop-fn host port owner-source data-dir]}]
+  [proxy {:keys [bound-repo stop-fn host port owner-source root-dir]}]
   (http/createServer
    (fn [^js req ^js res]
      (let [url (.-url req)
@@ -268,7 +293,7 @@
                                       :host host
                                       :port port
                                       :owner-source owner-source
-                                      :data-dir data-dir}))
+                                      :root-dir root-dir}))
 
          (= url "/v1/events")
          (sse-handler req res)
@@ -298,34 +323,19 @@
                      (send-json! res 200 (if direct-pass?
                                            {:ok true :result result}
                                            {:ok true :resultTransit result})))))
-               (p/catch (fn [e]
-                          (let [data (ex-data e)]
-                            (cond
-                              (= :repo-locked (:code data))
-                              (send-json! res 409 {:ok false
-                                                   :error {:code :repo-locked
-                                                           :message (or (.-message e) "graph is locked")}})
-
-                              (query-validation-error? data)
-                              (send-json! res 400 {:ok false
-                                                   :error {:code :invalid-query
-                                                           :message (or (.-message e) "invalid query")}})
-
-                              ;; CLI should see same errors that app is seeing
-                              (= :notification (:type data))
-                              (send-json! res 400 {:ok false
-                                                   :error {:code :validation-failed
-                                                           :message (or (get-in data [:payload :message])
-                                                                        (.-message e))}})
-
-                              :else
-                              (do
-                                (log/error :db-worker-node-http-invoke-failed e)
-                                (send-json! res 500 {:ok false
-                                                     :error (if (instance? js/Error e)
-                                                              {:message (.-message e)
-                                                               :stack (.-stack e)}
-                                                              e)})))))))
+               (p/catch (fn [error]
+                          (let [data (ex-data error)
+                                status (invoke-error-status data)
+                                code (invoke-error-code data)
+                                message (invoke-error-message error data)
+                                payload {:ok false
+                                         :error {:code code
+                                                 :message message}}]
+                            (log/error :db-worker-node-invoke-failed
+                                       {:status status
+                                        :code code
+                                        :message message})
+                            (send-json! res status payload)))))
            (send-text! res 405 "method-not-allowed"))
 
          (= url "/v1/shutdown")
@@ -344,12 +354,12 @@
 (defn- show-help!
   []
   (println (str (style/bold "db-worker-node") " " (style/bold "options") ":"))
-  (println (str "  " (style/bold "--data-dir") " <path>    (default " common-config/default-graphs-dir ")"))
+  (println (str "  " (style/bold "--root-dir") " <path>    (default ~/logseq)"))
   (println (str "  " (style/bold "--repo") " <name>        (required)"))
   (println (str "  " (style/bold "--create-empty-db") "  (start with empty initial datoms)"))
   (println (str "  " (style/bold "--log-level") " <level>  (default info)"))
   (println (str "  " (style/bold "--version") "            (print build metadata and exit)"))
-  (println "  logs: <data-dir>/<graph-dir>/db-worker-node-YYYYMMDD.log (retains 7)"))
+  (println "  logs: <root-dir>/graphs/<graph-dir>/db-worker-node-YYYYMMDD.log (retains 7)"))
 
 (defn- startup-db-opts
   [{:keys [create-empty-db?]}]
@@ -371,9 +381,9 @@
        (pad2 (.getDate date))))
 
 (defn- log-path
-  [data-dir repo]
-  (let [data-dir (db-lock/resolve-data-dir data-dir)
-        repo-dir (db-lock/repo-dir data-dir repo)
+  [root-dir repo]
+  (let [root-dir (db-lock/resolve-root-dir root-dir)
+        repo-dir (db-lock/repo-dir (db-lock/graphs-dir root-dir) repo)
         date-str (yyyymmdd (js/Date.))]
     (node-path/join repo-dir (str "db-worker-node-" date-str ".log"))))
 
@@ -405,10 +415,10 @@
     (str base (when exception (str " " (pr-str exception))) "\n")))
 
 (defn- install-file-logger!
-  [{:keys [data-dir repo log-level]}]
-  (let [data-dir (db-lock/resolve-data-dir data-dir)
-        repo-dir (db-lock/repo-dir data-dir repo)
-        file-path (log-path data-dir repo)]
+  [{:keys [root-dir repo log-level]}]
+  (let [root-dir (db-lock/resolve-root-dir root-dir)
+        repo-dir (db-lock/repo-dir (db-lock/graphs-dir root-dir) repo)
+        file-path (log-path root-dir repo)]
     (fs/mkdirSync repo-dir #js {:recursive true})
     (fs/writeFileSync file-path "" #js {:flag "a"})
     (enforce-log-retention! repo-dir)
@@ -444,29 +454,29 @@
     nil))
 
 (defn start-daemon!
-  [{:keys [data-dir repo log-level owner-source on-stopped! server-list-file] :as opts}]
+  [{:keys [root-dir repo log-level owner-source on-stopped! server-list-file] :as opts}]
   (let [host "127.0.0.1"
         port 0
         owner-source (normalize-owner-source owner-source)]
     (if-not (seq repo)
       (p/rejected (ex-info "repo is required" {:code :missing-repo}))
       (try
-        (let [data-dir (data-dir/ensure-data-dir! data-dir)]
-          (install-file-logger! {:data-dir data-dir
+        (let [root-dir (root-dir/ensure-root-dir! root-dir)]
+          (install-file-logger! {:root-dir root-dir
                                  :repo repo
                                  :log-level (keyword (or log-level "info"))})
           (reset! *ready? false)
           (reset! *lock-info nil)
           (reset! *server-list-file server-list-file)
           (set-main-thread-stub!)
-          (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir
+          (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
                                                              :event-fn handle-event!
                                                              :write-guard-fn assert-lock-owner!
                                                              :owner-source owner-source
                                                              :recreate-lock-fn recreate-lock!})
                       proxy (db-core/init-core! platform)
                       _ (<init-worker! proxy)
-                      {:keys [path lock]} (db-lock/ensure-lock! {:data-dir data-dir
+                      {:keys [path lock]} (db-lock/ensure-lock! {:root-dir root-dir
                                                                  :repo repo
                                                                  :owner-source owner-source})
                       _ (reset! *lock-info {:path path :lock lock})
@@ -480,7 +490,7 @@
                                                  :host host
                                                  :port port*
                                                  :owner-source owner-source
-                                                 :data-dir data-dir
+                                                 :root-dir root-dir
                                                  :stop-fn (fn []
                                                             (when-let [stop! @stop!*]
                                                               (stop!)))})]
@@ -543,7 +553,7 @@
 
 (defn main
   []
-  (let [{:keys [data-dir repo help? version? owner-source server-list-file] :as opts}
+  (let [{:keys [root-dir repo help? version? owner-source server-list-file] :as opts}
         (parse-args (.-argv js/process))]
     (when help?
       (show-help!)
@@ -555,7 +565,7 @@
       (show-help!)
       (.exit js/process 1))
     (-> (p/let [{:keys [stop!] :as daemon}
-                (start-daemon! {:data-dir data-dir
+                (start-daemon! {:root-dir root-dir
                                 :repo repo
                                 :create-empty-db? (:create-empty-db? opts)
                                 :owner-source owner-source
@@ -573,7 +583,7 @@
                          code (:code data)
                          message (or (.-message error) (str error))]
                      (cond
-                       (= :data-dir-permission code)
+                       (= :root-dir-permission code)
                        (.error js/console message)
 
                        (or (string/includes? message ".node")

@@ -5,7 +5,7 @@
              "--version"
              "--config"
              "--graph"
-             "--data-dir"
+             "--root-dir"
              "--output"
              "--verbose"]}
 

@@ -53,7 +53,7 @@
                  "while ! mkdir \"$LOCK_DIR\" 2>/dev/null; do [ -f \"$DONE_FILE\" ] && exit 0; sleep 0.1; done; "
                  "trap 'rmdir \"$LOCK_DIR\" 2>/dev/null || true' EXIT; "
                  "if [ ! -f \"$DONE_FILE\" ]; then "
-                 "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}} --upload-keys >/dev/null && touch \"$DONE_FILE\"; "
+                 "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}} --upload-keys >/dev/null && touch \"$DONE_FILE\"; "
                  "fi")
             lock-dir
             done-file)))
@@ -66,7 +66,7 @@
         suite-tmp-dir (str (fs/create-temp-dir {:prefix "logseq-cli-e2e-sync-suite-"}))
         db-sync-pid-file (str (fs/path suite-tmp-dir "db-sync-server.pid"))
         db-sync-log-file (str (fs/path suite-tmp-dir "db-sync-server.log"))
-        db-sync-data-dir (str (fs/path suite-tmp-dir "db-sync-server-data"))
+        db-sync-root-dir (str (fs/path suite-tmp-dir "db-sync-server-data"))
         sync-http-base (str "http://127.0.0.1:" sync-port)
         sync-ws-url (str "ws://127.0.0.1:" sync-port "/sync/%s")
         auth-path (str (fs/path (System/getProperty "user.home") "logseq" "auth.json"))
@@ -75,7 +75,7 @@
                                   (shell-quote (paths/repo-root))
                                   (shell-quote db-sync-pid-file)
                                   (shell-quote db-sync-log-file)
-                                  (shell-quote db-sync-data-dir)
+                                  (shell-quote db-sync-root-dir)
                                   sync-port
                                   (shell-quote auth-path))]
     (run-command {:cmd start-db-sync-cmd
@@ -83,7 +83,7 @@
     {:suite-tmp-dir suite-tmp-dir
      :db-sync-pid-file db-sync-pid-file
      :db-sync-log-file db-sync-log-file
-     :db-sync-data-dir db-sync-data-dir
+     :db-sync-root-dir db-sync-root-dir
      :sync-port sync-port
      :sync-http-base sync-http-base
      :sync-ws-url sync-ws-url}))

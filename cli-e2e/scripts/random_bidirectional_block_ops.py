@@ -25,7 +25,7 @@ class CliCommandError(RuntimeError):
 class ClientContext:
     name: str
     config: Path
-    data_dir: Path
+    root_dir: Path
 
 
 def fail(message: str, **context: object) -> None:
@@ -46,8 +46,8 @@ def run_cli_json(
     command = [
         "node",
         str(cli_path),
-        "--data-dir",
-        str(client.data_dir),
+        "--root-dir",
+        str(client.root_dir),
         "--config",
         str(client.config),
         "--output",
@@ -378,9 +378,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cli", required=True, help="Path to static/logseq-cli.js")
     parser.add_argument("--graph", required=True)
     parser.add_argument("--config-a", required=True)
-    parser.add_argument("--data-dir-a", required=True)
+    parser.add_argument("--root-dir-a", required=True)
     parser.add_argument("--config-b", required=True)
-    parser.add_argument("--data-dir-b", required=True)
+    parser.add_argument("--root-dir-b", required=True)
     parser.add_argument("--page", required=True)
     parser.add_argument(
         "--profile",
@@ -406,12 +406,12 @@ def main() -> None:
     client_a = ClientContext(
         name="a",
         config=Path(args.config_a).expanduser().resolve(),
-        data_dir=Path(args.data_dir_a).expanduser().resolve(),
+        root_dir=Path(args.root_dir_a).expanduser().resolve(),
     )
     client_b = ClientContext(
         name="b",
         config=Path(args.config_b).expanduser().resolve(),
-        data_dir=Path(args.data_dir_b).expanduser().resolve(),
+        root_dir=Path(args.root_dir_b).expanduser().resolve(),
     )
     clients = [client_a, client_b]
 

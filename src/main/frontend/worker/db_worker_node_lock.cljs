@@ -8,7 +8,6 @@
             [lambdaisland.glogi :as log]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.common.config :as common-config]
-            [logseq.common.graph :as common-graph]
             [promesa.core :as p]))
 
 (defn- expand-home
@@ -17,9 +16,13 @@
     (node-path/join (.homedir os) (subs path 1))
     path))
 
-(defn resolve-data-dir
-  [data-dir]
-  (expand-home (or data-dir (common-graph/get-default-graphs-dir))))
+(defn resolve-root-dir
+  [root-dir]
+  (expand-home (or root-dir (node-path/join (.homedir os) "logseq"))))
+
+(defn graphs-dir
+  [root-dir]
+  (node-path/join (resolve-root-dir root-dir) "graphs"))
 
 (defn repo->graph-dir-key
   [repo]
@@ -37,12 +40,12 @@
       decoded)))
 
 (defn repo-dir
-  [data-dir repo]
-  (node-path/join data-dir (worker-util/encode-graph-dir-name (repo->graph-dir-key repo))))
+  [graphs-root repo]
+  (node-path/join graphs-root (worker-util/encode-graph-dir-name (repo->graph-dir-key repo))))
 
 (defn lock-path
-  [data-dir repo]
-  (node-path/join (repo-dir data-dir repo) "db-worker.lock"))
+  [root-dir repo]
+  (node-path/join (repo-dir (graphs-dir root-dir) repo) "db-worker.lock"))
 
 (defn- pid-status
   [pid]
@@ -87,12 +90,12 @@
     (fs/unlinkSync path)))
 
 (defn create-lock!
-  [{:keys [data-dir repo owner-source]}]
+  [{:keys [root-dir repo owner-source]}]
   (p/create
    (fn [resolve reject]
      (try
-       (let [data-dir (resolve-data-dir data-dir)
-             path (lock-path data-dir repo)
+       (let [root-dir (resolve-root-dir root-dir)
+             path (lock-path root-dir repo)
              existing (read-lock path)]
          (when (and existing (contains? #{:alive :no-permission} (pid-status (:pid existing))))
            (throw (ex-info "graph already locked" {:code :repo-locked :lock existing})))
@@ -180,10 +183,10 @@
       lock)))
 
 (defn ensure-lock!
-  [{:keys [data-dir repo owner-source]}]
-  (let [data-dir (resolve-data-dir data-dir)
-        path (lock-path data-dir repo)]
-    (p/let [lock (create-lock! {:data-dir data-dir
+  [{:keys [root-dir repo owner-source]}]
+  (let [root-dir (resolve-root-dir root-dir)
+        path (lock-path root-dir repo)]
+    (p/let [lock (create-lock! {:root-dir root-dir
                                 :repo repo
                                 :owner-source owner-source})]
       {:path path
