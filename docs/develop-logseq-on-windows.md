@@ -21,7 +21,7 @@ Winget is a package manager installed by default on windows.
   winget install --id CoreyButler.NVMforWindows
   nvm install 18
   nvm use 18
-  npm install -g yarn
+  npm install -g pnpm
   winget install --id Microsoft.OpenJDK.17
   winget install --id Microsoft.VisualStudio.2022.Community
   ```
@@ -38,7 +38,7 @@ Chocolatey installs Clojure as a PowerShell module and alias, and does not provi
 choco install nvm
 nvm install 18
 nvm use 18
-npm install -g yarn
+npm install -g pnpm
 choco install visualstudio2022community
 choco install javaruntime
 choco install clojure

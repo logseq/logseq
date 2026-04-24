@@ -31,7 +31,7 @@ For one-time setup, install the [CloudFlare cli wrangler](https://developers.clo
 
 To test the publish features locally, follow these steps:
 
-* Run `yarn watch` or `yarn release` to build the publish worker js asset.
+* Run `pnpm watch` or `pnpm release` to build the publish worker js asset.
 * Run `wrangler dev` in worker/ to start a local cloudflare worker server.
 * In `frontend.config`, enable the commented out `PUBLISH-API-BASE` which points to a localhost url.
 * Login on the desktop app.
@@ -39,4 +39,4 @@ To test the publish features locally, follow these steps:
 
 ### Deploy
 
-When changes are ready to be deployed, run `yarn deploy`.
+When changes are ready to be deployed, run `pnpm deploy`.

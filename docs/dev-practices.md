@@ -202,7 +202,7 @@ To run end to end tests, see [clj-e2e tests](/clj-e2e/README.md).
 Our unit tests use the [shadow-cljs test-runner](https://shadow-cljs.github.io/docs/UsersGuide.html#_testing). To run them:
 
 ```bash
-yarn test
+pnpm test
 ```
 
 By convention, a namespace's tests are found at a corresponding namespace
@@ -362,7 +362,7 @@ point out:
 
   ```sh
   # One time setup
-  $ cd scripts && yarn install && cd -
+  $ cd scripts && pnpm install && cd -
 
   # Build a release publishing app
   $ bb dev:publishing /path/to/graph-dir tmp/publish
@@ -389,7 +389,7 @@ docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.
 These tasks are specific to database graphs. For these tasks there is a one time setup:
 
 ```sh
-  $ cd deps/db && yarn install && cd ../outliner && yarn install && cd ../graph-parser && yarn install && cd ../..
+  $ cd deps/db && pnpm install && cd ../outliner && pnpm install && cd ../graph-parser && pnpm install && cd ../..
 ```
 * `dev:db-cli` - Run a CLI command from deps/db using latest deps/db code
 * `dev:query` - Query a DB graph
@@ -533,15 +533,15 @@ include a JS console and HTML inspector.
 
 If dev app launch failed after electron upgrade:
 ```sh
-yarn
-yarn watch
+pnpm install
+pnpm watch
 ```
 In another window:
 ```sh
 cd static
-yarn
+pnpm install
 cd ..
-yarn dev-electron-app
+pnpm dev-electron-app
 ```
 and kill all electron process
-Then a normal start happens via `yarn dev-electron-app`
+Then a normal start happens via `pnpm dev-electron-app`
