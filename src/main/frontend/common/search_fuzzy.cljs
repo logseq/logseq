@@ -31,9 +31,11 @@
 
 (defn search-normalize
   "Normalize string for searching (loose)"
-  [s remove-accents?]
+  [s remove-accents? & {:keys [lower-case?]
+                        :or {lower-case? true}}]
   (when s
-    (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
+    (let [s' (if lower-case? (string/lower-case s) s)
+          normalize-str (.normalize s' "NFKC")]
       (if remove-accents?
         (removeAccents normalize-str)
         normalize-str))))
