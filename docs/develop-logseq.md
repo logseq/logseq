@@ -1,4 +1,4 @@
-﻿# Develop Logseq
+# Develop Logseq
 ## Requirements
 
 - [Node.js](https://nodejs.org/en/download/) (See [build.yml](https://github.com/logseq/logseq/blob/master/.github/workflows/build.yml) for allowed version)  & [pnpm](https://pnpm.io/installation)

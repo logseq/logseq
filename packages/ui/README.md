@@ -1,4 +1,4 @@
-﻿## Logseq UI
+## Logseq UI
 
 Logseq UI components based on shadcn UI.
 

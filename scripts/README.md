@@ -1,4 +1,4 @@
-﻿## Description
+## Description
 This is a collection of development related scripts, written as bash scripts, bb/babashka scripts and nbb scripts.
 
 ## Usage
