@@ -87,7 +87,8 @@ async function main() {
     logLevel: "error",
     build: {
       codeSplitting: false,
-      minify: false,
+      minify: "terser",
+      target: "node22",
       sourcemap: false,
       write: true,
       emptyOutDir: false,
