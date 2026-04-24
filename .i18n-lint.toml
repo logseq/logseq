@@ -29,6 +29,8 @@ i18n_functions = [
   "tt",
   "i18n/t",
   "i18n/tt",
+  # Parameterized translation function.
+  "t-fn",
 ]
 
 # Alert/notification functions.
