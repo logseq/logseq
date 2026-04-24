@@ -25,11 +25,11 @@ def test_parse_args_supports_repeated_queries(monkeypatch) -> None:
             "demo",
             "--config-a",
             "/tmp/a.edn",
-            "--data-dir-a",
+            "--root-dir-a",
             "/tmp/a",
             "--config-b",
             "/tmp/b.edn",
-            "--data-dir-b",
+            "--root-dir-b",
             "/tmp/b",
             "--query",
             "[:find ?x]",
@@ -40,6 +40,8 @@ def test_parse_args_supports_repeated_queries(monkeypatch) -> None:
 
     args = compare_graph_queries.parse_args()
 
+    assert args.root_dir_a == "/tmp/a"
+    assert args.root_dir_b == "/tmp/b"
     assert args.query == ["[:find ?x]", "[:find ?y]"]
 
 
@@ -50,11 +52,11 @@ def test_main_batches_multiple_queries_in_one_process(tmp_path: Path) -> None:
     cli_path = tmp_path / "logseq-cli.js"
     cli_path.write_text("// mock cli\n")
 
-    def fake_run_query(cli_path, config_path, data_dir, graph, query):
+    def fake_run_query(cli_path, config_path, root_dir, graph, query):
         record = {
             "cli_path": str(cli_path),
             "config_path": str(config_path),
-            "data_dir": str(data_dir),
+            "root_dir": str(root_dir),
             "graph": graph,
             "query": query,
         }
@@ -73,9 +75,9 @@ def test_main_batches_multiple_queries_in_one_process(tmp_path: Path) -> None:
         graph="demo",
         query=["[:find ?x]", "[:find ?y]"],
         config_a="/tmp/a.edn",
-        data_dir_a="/tmp/a",
+        root_dir_a="/tmp/a",
         config_b="/tmp/b.edn",
-        data_dir_b="/tmp/b",
+        root_dir_b="/tmp/b",
         require_result=False,
     )
     compare_graph_queries.print = lambda value, **kwargs: printed.append(json.loads(value))

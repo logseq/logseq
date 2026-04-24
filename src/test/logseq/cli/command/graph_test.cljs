@@ -60,7 +60,7 @@
 (deftest test-execute-graph-backup-create-invokes-worker-backup-api
   (async done
          (let [invoke-calls (atom [])
-               data-dir (node-helper/create-tmp-dir "cli-backup-create-path")]
+               root-dir (node-helper/create-tmp-dir "cli-backup-create-path")]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [config _repo]
                                                            (p/resolved (assoc config :base-url "http://example")))
@@ -71,7 +71,7 @@
                                                    :repo "logseq_db_demo"
                                                    :graph "demo"
                                                    :backup-name "demo-nightly-20260101T000000Z"}
-                                                  {:data-dir data-dir})]
+                                                  {:root-dir root-dir})]
                    (is (= :ok (:status result)))
                    (is (= 1 (count @invoke-calls)))
                    (let [[method _ [repo backup-db-path]] (first @invoke-calls)
@@ -90,17 +90,19 @@
 
 (deftest test-execute-graph-backup-list-only-returns-current-graph-backups
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "cli-backup-list-scope")
+         (let [root-dir (node-helper/create-tmp-dir "cli-backup-list-scope")
                demo-repo "logseq_db_demo"
                other-repo "logseq_db_other"
                demo-backup "demo-nightly"
                other-backup "other-nightly"
-               demo-db-path (node-path/join data-dir
+               demo-db-path (node-path/join root-dir
+                                            "graphs"
                                             (graph-dir/repo->encoded-graph-dir-name demo-repo)
                                             "backup"
                                             (graph-dir/graph-dir-key->encoded-dir-name demo-backup)
                                             "db.sqlite")
-               other-db-path (node-path/join data-dir
+               other-db-path (node-path/join root-dir
+                                             "graphs"
                                              (graph-dir/repo->encoded-graph-dir-name other-repo)
                                              "backup"
                                              (graph-dir/graph-dir-key->encoded-dir-name other-backup)
@@ -112,7 +114,7 @@
            (-> (p/let [result (commands/execute {:type :graph-backup-list
                                                  :repo demo-repo
                                                  :graph "demo"}
-                                                {:data-dir data-dir})
+                                                {:root-dir root-dir})
                        backup-names (mapv :name (get-in result [:data :backups]))]
                  (is (= :ok (:status result)))
                  (is (= [demo-backup] backup-names)))
@@ -122,7 +124,7 @@
 
 (deftest test-execute-graph-backup-restore-fails-when-source-backup-missing
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "cli-backup-restore-missing")]
+         (let [root-dir (node-helper/create-tmp-dir "cli-backup-restore-missing")]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] [])]
                  (p/let [result (commands/execute {:type :graph-backup-restore
                                                    :repo "logseq_db_demo-restored"
@@ -133,7 +135,7 @@
                                                    :dst "demo-restored"
                                                    :allow-missing-graph true
                                                    :require-missing-graph true}
-                                                  {:data-dir data-dir})]
+                                                  {:root-dir root-dir})]
                    (is (= :error (:status result)))
                    (is (= :backup-not-found (get-in result [:error :code])))))
                (p/catch (fn [e]
@@ -152,7 +154,7 @@
                                                  :dst "demo-restored"
                                                  :allow-missing-graph true
                                                  :require-missing-graph true}
-                                                {:data-dir "/tmp/graphs"})]
+                                                {:root-dir "/tmp/graphs"})]
                  (is (= :error (:status result)))
                  (is (= :graph-exists (get-in result [:error :code])))))
              (p/catch (fn [e]
@@ -165,8 +167,9 @@
                read-calls (atom [])
                stop-calls (atom [])
                restart-calls (atom [])
-               data-dir (node-helper/create-tmp-dir "cli-backup-restore-flow")
-               backup-db-path (node-path/join data-dir
+               root-dir (node-helper/create-tmp-dir "cli-backup-restore-flow")
+               backup-db-path (node-path/join root-dir
+                                              "graphs"
                                               (graph-dir/repo->encoded-graph-dir-name "logseq_db_demo")
                                               "backup"
                                               (graph-dir/graph-dir-key->encoded-dir-name "demo-nightly")
@@ -197,7 +200,7 @@
                                                    :dst "demo-restored"
                                                    :allow-missing-graph true
                                                    :require-missing-graph true}
-                                                  {:data-dir data-dir})]
+                                                  {:root-dir root-dir})]
                    (is (= :ok (:status result)))
                    (is (= true (get-in result [:data :new-graph?])))
                    (is (= ["logseq_db_demo-restored"] @stop-calls))
@@ -220,13 +223,13 @@
 
 (deftest test-execute-graph-backup-remove-fails-when-source-backup-missing
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "cli-backup-remove-missing")]
+         (let [root-dir (node-helper/create-tmp-dir "cli-backup-remove-missing")]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])]
                  (p/let [result (commands/execute {:type :graph-backup-remove
                                                    :repo "logseq_db_demo"
                                                    :graph "demo"
                                                    :src "demo-nightly"}
-                                                  {:data-dir data-dir})]
+                                                  {:root-dir root-dir})]
                    (is (= :error (:status result)))
                    (is (= :backup-not-found (get-in result [:error :code])))))
                (p/catch (fn [e]

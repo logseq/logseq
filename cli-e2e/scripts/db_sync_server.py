@@ -128,9 +128,10 @@ def auth_cognito_from_auth_file(auth_path: Path) -> Dict[str, str]:
 def wait_health(base_url: str, timeout_s: float, interval_s: float) -> bool:
     deadline = time.time() + timeout_s
     url = base_url.rstrip("/") + "/health"
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=2) as response:
+            with opener.open(url, timeout=2) as response:
                 if response.status == 200:
                     return True
         except (urllib.error.URLError, TimeoutError, socket.timeout):

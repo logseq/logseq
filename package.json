@@ -190,7 +190,8 @@
         "send-intent": "^7.0.0",
         "string-width": "8.2.0",
         "url": "^0.11.4",
-        "util": "^0.12.5"
+        "util": "^0.12.5",
+	"keytar": "^7.9.0"
     },
     "resolutions": {
         "pixi-graph-fork/@pixi/app": "6.2.0",

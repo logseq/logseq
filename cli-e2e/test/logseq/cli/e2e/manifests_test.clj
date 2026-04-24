@@ -195,7 +195,7 @@
     (is (not-any? #(= "sleep 1" %) commands))
     (is (= 1 (count upload-commands)))
     (is (= 5 (count wait-commands)))
-    (is (= 3 (count (filter #(re-find #"--data-dir '\{\{tmp-dir\}\}/graphs-b'.+--timeout-s 30 --interval-s 1" %) wait-commands))))))
+    (is (= 3 (count (filter #(re-find #"--root-dir '\{\{tmp-dir\}\}/graphs-b'.+--timeout-s 30 --interval-s 1" %) wait-commands))))))
 
 (deftest sync-manifest-includes-duplicate-upload-negative-case
   (let [cases (manifests/load-cases :sync)
@@ -219,7 +219,7 @@
 (deftest sync-status-steady-state-does-not-repeat-identical-b-side-steady-state-waits
   (let [cases (manifests/load-cases :sync)
         steady-state (some #(when (= "sync-status-steady-state" (:id %)) %) cases)
-        steady-waits (filter #(re-find #"wait_sync_status\.py.+--data-dir '\{\{tmp-dir\}\}/graphs-b'.+--timeout-s 30 --interval-s 1" %) (:cmds steady-state))]
+        steady-waits (filter #(re-find #"wait_sync_status\.py.+--root-dir '\{\{tmp-dir\}\}/graphs-b'.+--timeout-s 30 --interval-s 1" %) (:cmds steady-state))]
     (is (some? steady-state))
     (is (= 1 (count steady-waits)))
     (is (= 1 (count (filter #(re-find #"sync status --graph" %) (:cmds steady-state)))))))

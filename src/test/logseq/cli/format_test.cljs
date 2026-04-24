@@ -141,7 +141,7 @@
                                                               :reason :undecodable}]}}
                                        {:output-format nil
                                         :graph "legacy/name"
-                                        :data-dir "/tmp/graphs"})]
+                                        :graphs-dir "/tmp/graphs"})]
       (is (string/includes? result "* legacy/name [legacy]"))
       (is (string/includes? result "mystery [legacy]"))
       (is (string/includes? result "Warning: 2 legacy graph directories detected."))
@@ -158,7 +158,7 @@
                                                               :target-graph-dir "space name"
                                                               :conflict? false}]}}
                                        {:output-format nil
-                                        :data-dir "/tmp/graphs"})]
+                                        :graphs-dir "/tmp/graphs"})]
       (is (string/includes? result "mv '/tmp/graphs/space~20name' '/tmp/graphs/space name'"))))
 
   (testing "graph list conflict warning does not print mv command"
@@ -171,7 +171,7 @@
                                                               :target-graph-dir "legacy~2Fname"
                                                               :conflict? true}]}}
                                        {:output-format nil
-                                        :data-dir "/tmp/graphs"})]
+                                        :graphs-dir "/tmp/graphs"})]
       (is (string/includes? result "Warning: target directory already exists for legacy graph 'legacy/name'."))
       (is (not (string/includes? result "mv '/tmp/graphs/legacy++name' '/tmp/graphs/legacy~2Fname'")))))
 
@@ -185,7 +185,7 @@
                                                               :target-graph-dir "weird~27~2Fname"
                                                               :conflict? false}]}}
                                        {:output-format nil
-                                        :data-dir "/tmp/graphs"})]
+                                        :graphs-dir "/tmp/graphs"})]
       (is (string/includes? result "mv '/tmp/graphs/weird'\"'\"'++name' '/tmp/graphs/weird~27~2Fname'"))))
 
   )
@@ -208,7 +208,7 @@
                                                             :target-graph-dir "legacy~2Fname"
                                                             :conflict? false}]}}
                                      {:output-format nil
-                                      :data-dir "/tmp/graphs"})]
+                                      :graphs-dir "/tmp/graphs"})]
     (is (string/includes? result "Warning: 1 legacy graph directory detected."))))
 
 (deftest test-human-output-list-page
@@ -1293,16 +1293,16 @@
                                                :checks [{:id :db-worker-script
                                                          :status :ok
                                                          :message "Found readable file: /tmp/db-worker-node.js"}
-                                                        {:id :data-dir
+                                                        {:id :root-dir
                                                          :status :ok
-                                                         :message "Read/write access confirmed: /tmp/logseq/graphs"}
+                                                         :message "Read/write access confirmed: /tmp/logseq"}
                                                         {:id :running-servers
                                                          :status :warning
                                                          :message "1 server is still starting"}]}}
                                        {:output-format nil})]
       (is (= (str "Doctor: warning\n"
                   "[ok] db-worker-script - Found readable file: /tmp/db-worker-node.js\n"
-                  "[ok] data-dir - Read/write access confirmed: /tmp/logseq/graphs\n"
+                  "[ok] root-dir - Read/write access confirmed: /tmp/logseq\n"
                   "[warning] running-servers - 1 server is still starting")
              result))))
 
@@ -1327,31 +1327,31 @@
     (let [payload {:checks [{:id :db-worker-script
                              :status :ok
                              :message "Found readable file: /tmp/db-worker-node.js"}
-                            {:id :data-dir
+                            {:id :root-dir
                              :status :error
-                             :code :data-dir-permission
-                             :message "data-dir is not readable/writable: /tmp/logseq"}]}
+                             :code :root-dir-permission
+                             :message "root-dir is not readable/writable: /tmp/logseq"}]}
           json-result (format/format-result {:status :error
                                              :command :doctor
-                                             :error {:code :data-dir-permission
-                                                     :message "data-dir check failed"}
+                                             :error {:code :root-dir-permission
+                                                     :message "root-dir check failed"}
                                              :data payload}
                                             {:output-format :json})
           edn-result (format/format-result {:status :error
                                             :command :doctor
-                                            :error {:code :data-dir-permission
-                                                    :message "data-dir check failed"}
+                                            :error {:code :root-dir-permission
+                                                    :message "root-dir check failed"}
                                             :data payload}
                                            {:output-format :edn})
           parsed-json (js->clj (js/JSON.parse json-result) :keywordize-keys true)
           parsed-edn (reader/read-string edn-result)]
       (is (= "error" (:status parsed-json)))
-      (is (= "data-dir-permission" (get-in parsed-json [:error :code])))
-      (is (= "data-dir" (get-in parsed-json [:data :checks 1 :id])))
+      (is (= "root-dir-permission" (get-in parsed-json [:error :code])))
+      (is (= "root-dir" (get-in parsed-json [:data :checks 1 :id])))
       (is (= "error" (get-in parsed-json [:data :checks 1 :status])))
       (is (= :error (:status parsed-edn)))
-      (is (= :data-dir-permission (get-in parsed-edn [:error :code])))
-      (is (= :data-dir (get-in parsed-edn [:data :checks 1 :id])))
+      (is (= :root-dir-permission (get-in parsed-edn [:error :code])))
+      (is (= :root-dir (get-in parsed-edn [:data :checks 1 :id])))
       (is (= :error (get-in parsed-edn [:data :checks 1 :status]))))))
 
 (deftest test-doctor-json-edn-output-includes-revision-mismatch-check

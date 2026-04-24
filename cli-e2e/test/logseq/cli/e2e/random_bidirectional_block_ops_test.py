@@ -25,11 +25,11 @@ def test_default_profile_is_faster_than_high_stress(monkeypatch) -> None:
             "demo",
             "--config-a",
             "/tmp/a.edn",
-            "--data-dir-a",
+            "--root-dir-a",
             "/tmp/a",
             "--config-b",
             "/tmp/b.edn",
-            "--data-dir-b",
+            "--root-dir-b",
             "/tmp/b",
             "--page",
             "Home",
@@ -48,11 +48,11 @@ def test_default_profile_is_faster_than_high_stress(monkeypatch) -> None:
             "demo",
             "--config-a",
             "/tmp/a.edn",
-            "--data-dir-a",
+            "--root-dir-a",
             "/tmp/a",
             "--config-b",
             "/tmp/b.edn",
-            "--data-dir-b",
+            "--root-dir-b",
             "/tmp/b",
             "--page",
             "Home",
@@ -62,6 +62,8 @@ def test_default_profile_is_faster_than_high_stress(monkeypatch) -> None:
     )
     high_stress_args = random_bidirectional_block_ops.parse_args()
 
+    assert default_args.root_dir_a == "/tmp/a"
+    assert default_args.root_dir_b == "/tmp/b"
     assert default_args.profile == "default"
     assert high_stress_args.profile == "high-stress"
     assert default_args.rounds_per_client < high_stress_args.rounds_per_client
@@ -79,11 +81,11 @@ def test_explicit_rounds_override_profile_default(monkeypatch) -> None:
             "demo",
             "--config-a",
             "/tmp/a.edn",
-            "--data-dir-a",
+            "--root-dir-a",
             "/tmp/a",
             "--config-b",
             "/tmp/b.edn",
-            "--data-dir-b",
+            "--root-dir-b",
             "/tmp/b",
             "--page",
             "Home",

@@ -12,12 +12,12 @@
           :coerce :boolean}
    :version {:desc "Show version"
              :coerce :boolean}
-   :config {:desc "Path to cli.edn (default ~/logseq/cli.edn)"
+   :config {:desc "Path to cli.edn (default <root-dir>/cli.edn)"
             :complete :file}
    :graph {:desc "Graph name"
            :alias :g
            :complete :graphs}
-   :data-dir {:desc (str "Path to db-worker data dir (default " common-config/default-graphs-dir ")")
+   :root-dir {:desc "Path to CLI root dir (default ~/logseq)"
               :complete :dir}
    :timeout-ms {:desc "Request timeout in ms (default 10000)"
                 :coerce :long}

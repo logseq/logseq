@@ -70,16 +70,16 @@
      :assets assets}))
 
 (defn- lock-path
-  [data-dir repo]
-  (node-path/join (db-lock/repo-dir data-dir repo) "db-worker.lock"))
+  [root-dir repo]
+  (node-path/join (db-lock/repo-dir (db-lock/graphs-dir root-dir) repo) "db-worker.lock"))
 
 (defn- spawn-daemon!
-  [runtime-dir repo data-dir server-list-file]
+  [runtime-dir repo root-dir server-list-file]
   (let [child (.spawn child-process
                       "node"
                       #js ["./db-worker-node.js"
                            "--repo" repo
-                           "--data-dir" data-dir
+                           "--root-dir" root-dir
                            "--owner-source" "cli"
                            "--server-list-file" server-list-file]
                       #js {:cwd runtime-dir})
@@ -133,11 +133,11 @@
                child-output* (atom nil)]
            (-> (p/let [_ (ensure-bundle-built!)
                        {:keys [runtime-dir]} (copy-bundle-to-temp!)
-                       data-dir (absolute-path (node-helper/create-tmp-dir "db-worker-node-bundle-data"))
+                       root-dir (absolute-path (node-helper/create-tmp-dir "db-worker-node-bundle-data"))
                        repo (str "logseq_db_ncc_smoke_" (subs (str (random-uuid)) 0 8))
-                       lock-file (lock-path data-dir repo)
-                       server-list-file (node-path/join data-dir "server-list")
-                       {:keys [child stdout stderr]} (spawn-daemon! runtime-dir repo data-dir server-list-file)
+                       lock-file (lock-path root-dir repo)
+                       server-list-file (node-path/join root-dir "server-list")
+                       {:keys [child stdout stderr]} (spawn-daemon! runtime-dir repo root-dir server-list-file)
                        _ (reset! child* child)
                        _ (reset! child-output* {:stdout stdout :stderr stderr})
                        _ (daemon/wait-for-lock lock-file)
@@ -184,11 +184,11 @@
                        _ (reset! original-manifest* original-manifest)
                        _ (write-asset-manifest! (assoc original-manifest :assets []))
                        {:keys [runtime-dir]} (copy-bundle-to-temp!)
-                       data-dir (absolute-path (node-helper/create-tmp-dir "db-worker-node-bundle-empty-assets"))
+                       root-dir (absolute-path (node-helper/create-tmp-dir "db-worker-node-bundle-empty-assets"))
                        repo (str "logseq_db_ncc_empty_assets_" (subs (str (random-uuid)) 0 8))
-                       lock-file (lock-path data-dir repo)
-                       server-list-file (node-path/join data-dir "server-list")
-                       {:keys [child stdout stderr]} (spawn-daemon! runtime-dir repo data-dir server-list-file)
+                       lock-file (lock-path root-dir repo)
+                       server-list-file (node-path/join root-dir "server-list")
+                       {:keys [child stdout stderr]} (spawn-daemon! runtime-dir repo root-dir server-list-file)
                        _ (reset! child* child)
                        _ (reset! child-output* {:stdout stdout :stderr stderr})
                        result (-> (p/let [_ (daemon/wait-for-lock lock-file)
@@ -269,13 +269,13 @@
         {:keys [runtime-dir]} (copy-bundle-to-temp!)
         missing-entry-path (node-path/join runtime-dir "db-worker-node.js")
         _ (fs/unlinkSync missing-entry-path)
-        data-dir (absolute-path (node-helper/create-tmp-dir "db-worker-node-bundle-missing-entry"))
+        root-dir (absolute-path (node-helper/create-tmp-dir "db-worker-node-bundle-missing-entry"))
         repo (str "logseq_db_ncc_missing_entry_" (subs (str (random-uuid)) 0 8))
         result (.spawnSync child-process
                            "node"
                            #js ["./db-worker-node.js"
                                 "--repo" repo
-                                "--data-dir" data-dir
+                                "--root-dir" root-dir
                                 "--owner-source" "cli"]
                            #js {:cwd runtime-dir
                                 :encoding "utf8"})

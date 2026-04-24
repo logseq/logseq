@@ -91,8 +91,8 @@
                   payload)))
 
 (defn- lock-path
-  [data-dir repo]
-  (db-lock/lock-path data-dir repo))
+  [root-dir repo]
+  (db-lock/lock-path root-dir repo))
 
 (defn- pad2
   [value]
@@ -107,8 +107,8 @@
        (pad2 (.getDate date))))
 
 (defn- log-path
-  [data-dir repo]
-  (let [repo-dir (db-lock/repo-dir data-dir repo)
+  [root-dir repo]
+  (let [repo-dir (db-lock/repo-dir (db-lock/graphs-dir root-dir) repo)
         date-str (yyyymmdd (js/Date.))]
     (node-path/join repo-dir (str "db-worker-node-" date-str ".log"))))
 
@@ -159,20 +159,20 @@
 (use-fixtures :each {:before normalize-db-worker-state-before
                      :after normalize-db-worker-state-after})
 
-(deftest db-worker-node-data-dir-permission-error
+(deftest db-worker-node-root-dir-permission-error
   (async done
          (if (= "win32" (.-platform js/process))
            (done)
            (let [data-dir (node-helper/create-tmp-dir "db-worker-readonly")
                  repo (str "logseq_db_perm_" (subs (str (random-uuid)) 0 8))]
              (fs/chmodSync data-dir 365)
-             (-> (start-daemon! {:data-dir data-dir
+             (-> (start-daemon! {:root-dir data-dir
                                  :repo repo})
                  (p/then (fn [_]
-                           (is false "expected data-dir permission error")))
+                           (is false "expected root-dir permission error")))
                  (p/catch (fn [e]
                             (let [data (ex-data e)]
-                              (is (= :data-dir-permission (:code data)))
+                              (is (= :root-dir-permission (:code data)))
                               (is (= (node-path/resolve data-dir) (:path data))))))
                  (p/finally (fn [] (done))))))))
 
@@ -183,7 +183,7 @@
                repo (str "logseq_db_log_" (subs (str (random-uuid)) 0 8))
                log-file (log-path data-dir repo)]
            (-> (p/let [{:keys [stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        _ (p/delay 50)]
@@ -202,7 +202,7 @@
                repo (str "logseq_db_log_entries_" (subs (str (random-uuid)) 0 8))
                log-file (log-path data-dir repo)]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        {:keys [status]} (invoke-raw host port "thread-api/not-found" [repo nil])
@@ -252,19 +252,19 @@
                                 "--host" "0.0.0.0"
                                 "--port" "1234"
                                 "--repo" "logseq_db_parse_args"
-                                "--data-dir" "/tmp/db-worker"])]
+                                "--root-dir" "/tmp/logseq-root"])]
     (is (nil? (:host result)))
     (is (nil? (:port result)))
     (is (= "logseq_db_parse_args" (:repo result)))
-    (is (= "/tmp/db-worker" (:data-dir result)))))
+    (is (= "/tmp/logseq-root" (:root-dir result)))))
 
 (deftest db-worker-node-parse-args-ignores-auth-token
   (let [parse-args #'db-worker-node/parse-args
         result (parse-args #js ["node" "dist/db-worker-node.js"
                                 "--auth-token" "secret"
-                                "--data-dir" "/tmp/db-worker"])]
+                                "--root-dir" "/tmp/logseq-root"])]
     (is (nil? (:auth-token result)))
-    (is (= "/tmp/db-worker" (:data-dir result)))))
+    (is (= "/tmp/logseq-root" (:root-dir result)))))
 
 (deftest db-worker-node-parse-args-ignores-rtc-ws-url
   (let [parse-args #'db-worker-node/parse-args
@@ -337,7 +337,7 @@
                repo (str "logseq_db_owner_cli_" (subs (str (random-uuid)) 0 8))
                lock-file (lock-path data-dir repo)]
            (-> (p/let [{:keys [stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo
                                        :owner-source :cli})
                        _ (reset! daemon {:stop! stop!})
@@ -357,7 +357,7 @@
                repo (str "logseq_db_owner_electron_" (subs (str (random-uuid)) 0 8))
                lock-file (lock-path data-dir repo)]
            (-> (p/let [{:keys [stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo
                                        :owner-source :electron})
                        _ (reset! daemon {:stop! stop!})
@@ -413,10 +413,10 @@
         plain-output (style/strip-ansi output)]
     (is (not (string/includes? (style/strip-ansi output) "--auth-token")))
     (is (not (string/includes? plain-output "--rtc-ws-url")))
-    (is (string/includes? plain-output "(default ~/logseq/graphs)"))
+    (is (string/includes? plain-output "(default ~/logseq)"))
     (is (re-find #"\u001b\[[0-9;]*moptions\u001b\[[0-9;]*m:" output))
     (is (contains-bold? output "db-worker-node"))
-    (is (contains-bold? output "--data-dir"))
+    (is (contains-bold? output "--root-dir"))
     (is (contains-bold? output "--repo"))
     (is (string/includes? plain-output "--create-empty-db"))
     (is (contains-bold? output "--create-empty-db"))
@@ -447,7 +447,7 @@
                                                                           :port 0
                                                                           :lock-id "create-empty-lock"}}))
                                db-lock/update-lock! (fn [_path lock] lock)]
-                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:data-dir data-dir
+                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
                                                                         :repo repo
                                                                         :create-empty-db? true
                                                                         :log-level "error"})
@@ -486,7 +486,7 @@
                                                                           :port 0
                                                                           :lock-id "default-lock"}}))
                                db-lock/update-lock! (fn [_path lock] lock)]
-                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:data-dir data-dir
+                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
                                                                         :repo repo
                                                                         :log-level "error"})
                          _ (is (= ["thread-api/init" true []]
@@ -523,7 +523,7 @@
                                                                           :port 0
                                                                           :lock-id "stop-close-lock"}}))
                                db-lock/update-lock! (fn [_path lock] lock)]
-                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:data-dir data-dir
+                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
                                                                         :repo repo
                                                                         :log-level "error"})
                          _ (stop!)]
@@ -554,7 +554,7 @@
                                                                           :lock-id "server-list-lock"
                                                                           :owner-source :cli}}))
                                db-lock/update-lock! (fn [_path lock] lock)]
-                 (p/let [{:keys [port stop!]} (db-worker-node/start-daemon! {:data-dir data-dir
+                 (p/let [{:keys [port stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
                                                                              :repo repo
                                                                              :server-list-file server-list-file
                                                                              :log-level "error"})
@@ -603,7 +603,7 @@
                data-dir (node-helper/create-tmp-dir "db-worker-set-context")
                repo (str "logseq_db_set_context_" (subs (str (random-uuid)) 0 8))]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:host host :port port :stop! stop!})
                        _ (invoke host port "thread-api/set-db-sync-config"
@@ -628,7 +628,7 @@
                data-dir (node-helper/create-tmp-dir "db-worker-empty-initial-data")
                repo (str "logseq_db_empty_initial_" (subs (str (random-uuid)) 0 8))]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo
                                        :create-empty-db? true})
                        _ (reset! daemon {:stop! stop!})
@@ -652,7 +652,7 @@
                data-dir (node-helper/create-tmp-dir "db-worker-sync-status")
                repo (str "logseq_db_sync_status_" (subs (str (random-uuid)) 0 8))]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:host host :port port :stop! stop!})
                        {:keys [status body]} (invoke-raw host port "thread-api/db-sync-status" [])
@@ -683,7 +683,7 @@
                data-dir (node-helper/create-tmp-dir "db-worker-sync-start")
                repo (str "logseq_db_sync_start_" (subs (str (random-uuid)) 0 8))]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:host host :port port :stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
@@ -714,7 +714,7 @@
                page-uuid (random-uuid)
                block-uuid (random-uuid)]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon!  {:data-dir data-dir
+                       (start-daemon!  {:root-dir data-dir
                                         :repo repo
                                         :server-list-file server-list-file})
                        health (http-get host port "/healthz")
@@ -730,7 +730,7 @@
                            (is (= host (:host health-body)))
                            (is (= port (:port health-body)))
                            (is (= (.-pid js/process) (:pid health-body)))
-                           (is (= (node-path/resolve data-dir) (:data-dir health-body)))
+                           (is (= (node-path/resolve data-dir) (:root-dir health-body)))
                            (is (contains? health-body :owner-source))
                            (is (contains? health-body :revision))
                            (is (string/includes? server-list-contents (str (.-pid js/process) " " port))))
@@ -792,7 +792,7 @@
                now (js/Date.now)
                page-uuid (random-uuid)]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo-a})
                        _ (reset! daemon-a {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo-a {}])
@@ -810,7 +810,7 @@
                  (is (map? export-edn))
                  (p/let [_ ((:stop! @daemon-a))
                          {:keys [host port stop!]}
-                         (start-daemon! {:data-dir data-dir
+                         (start-daemon! {:root-dir data-dir
                                          :repo repo-b})
                          _ (reset! daemon-b {:stop! stop!})
                          _ (invoke host port "thread-api/create-or-open-db" [repo-b {}])
@@ -852,7 +852,7 @@
                now (js/Date.now)
                page-uuid (random-uuid)]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo-a})
                        _ (reset! daemon-a {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo-a {}])
@@ -871,7 +871,7 @@
                  (is (pos? (count export-base64)))
                  (p/let [_ ((:stop! @daemon-a))
                          {:keys [host port stop!]}
-                         (start-daemon! {:data-dir data-dir
+                         (start-daemon! {:root-dir data-dir
                                          :repo repo-b})
                          _ (reset! daemon-b {:stop! stop!})
                          _ (invoke host port "thread-api/import-db-base64" [repo-b export-base64])
@@ -913,7 +913,7 @@
                backup-path (node-path/join data-dir "backup" "snapshot.sqlite")
                now (js/Date.now)
                page-uuid (random-uuid)]
-           (-> (p/let [{:keys [host port stop!]} (start-daemon! {:data-dir data-dir
+           (-> (p/let [{:keys [host port stop!]} (start-daemon! {:root-dir data-dir
                                                                  :repo repo-a})
                        _ (reset! daemon-a {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo-a {}])
@@ -934,7 +934,7 @@
                  (is (string? backup-base64))
                  (is (pos? (count backup-base64)))
                  (p/let [_ ((:stop! @daemon-a))
-                         {:keys [host port stop!]} (start-daemon! {:data-dir data-dir
+                         {:keys [host port stop!]} (start-daemon! {:root-dir data-dir
                                                                    :repo repo-b})
                          _ (reset! daemon-b {:stop! stop!})
                          _ (invoke host port "thread-api/import-db-base64" [repo-b backup-base64])
@@ -973,7 +973,7 @@
                repo (str "logseq_db_mismatch_" (subs (str (random-uuid)) 0 8))
                other-repo (str repo "_other")]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:host host :port port :stop! stop!})
                        {:keys [status body]} (invoke-raw host port "thread-api/create-or-open-db" [other-repo {}])
@@ -994,10 +994,10 @@
                data-dir (node-helper/create-tmp-dir "db-worker-lock")
                repo (str "logseq_db_lock_" (subs (str (random-uuid)) 0 8))]
            (-> (p/let [{:keys [stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:stop! stop!})]
-                 (-> (start-daemon! {:data-dir data-dir
+                 (-> (start-daemon! {:root-dir data-dir
                                      :repo repo})
                      (p/then (fn [_]
                                (is false "expected lock error")))
@@ -1017,7 +1017,7 @@
                repo (str "logseq_db_write_lease_pid_" (subs (str (random-uuid)) 0 8))
                lock-file (lock-path data-dir repo)]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
@@ -1047,7 +1047,7 @@
                repo (str "logseq_db_backup_write_lease_pid_" (subs (str (random-uuid)) 0 8))
                lock-file (lock-path data-dir repo)
                backup-path (node-path/join data-dir "backup" "non-owner.sqlite")]
-           (-> (p/let [{:keys [host port stop!]} (start-daemon! {:data-dir data-dir
+           (-> (p/let [{:keys [host port stop!]} (start-daemon! {:root-dir data-dir
                                                                  :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
@@ -1076,7 +1076,7 @@
                repo (str "logseq_db_write_lease_owner_" (subs (str (random-uuid)) 0 8))
                lock-file (lock-path data-dir repo)]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
@@ -1102,7 +1102,7 @@
                repo (str "logseq_db_write_lease_replaced_" (subs (str (random-uuid)) 0 8))
                lock-file (lock-path data-dir repo)]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
@@ -1137,7 +1137,7 @@
            (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
            (fs/writeFileSync lock-file (js/JSON.stringify (clj->js stale-lock)))
            (-> (p/let [{:keys [stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        lock' (js->clj (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
@@ -1157,12 +1157,12 @@
          (let [daemon (atom nil)
                data-dir (node-helper/create-tmp-dir "db-worker-desktop-cli")
                config-path (node-path/join data-dir "cli.edn")
-               server-list-file (cli-config/server-list-path config-path)
+               server-list-file (cli-config/server-list-path data-dir)
                repo (str "logseq_db_desktop_cli_" (subs (str (random-uuid)) 0 8))
                now (js/Date.now)
                page-uuid (random-uuid)]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir
+                       (start-daemon! {:root-dir data-dir
                                        :repo repo
                                        :server-list-file server-list-file})
                        _ (reset! daemon {:stop! stop!})
@@ -1180,7 +1180,7 @@
                        _ (is (fs/existsSync server-list-file))
                        _ (is (string/includes? (.toString (fs/readFileSync server-list-file) "utf8")
                                                (str (.-pid js/process) " " port)))
-                       ensured (cli-server/ensure-server! {:data-dir data-dir
+                       ensured (cli-server/ensure-server! {:root-dir data-dir
                                                            :config-path config-path}
                                                           repo)
                        url (js/URL. (:base-url ensured))
@@ -1207,7 +1207,7 @@
                data-dir (node-helper/create-tmp-dir "db-worker-validation-error")
                repo (str "logseq_db_validation_" (subs (str (random-uuid)) 0 8))]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir :repo repo})
+                       (start-daemon! {:root-dir data-dir :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        ;; Build a deterministic block to use as target and fetch Journal tag db/id
                        journal (invoke host port "thread-api/pull"
@@ -1256,7 +1256,7 @@
                data-dir (node-helper/create-tmp-dir "db-worker-query-validate-error")
                repo (str "logseq_db_query_validate_" (subs (str (random-uuid)) 0 8))]
            (-> (p/let [{:keys [host port stop!]}
-                       (start-daemon! {:data-dir data-dir :repo repo})
+                       (start-daemon! {:root-dir data-dir :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
                        {:keys [status body]}

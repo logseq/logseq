@@ -46,12 +46,12 @@ def normalize(value: Any) -> Any:
     return value
 
 
-def run_query(cli_path: Path, config_path: Path, data_dir: Path, graph: str, query: str) -> Dict[str, Any]:
+def run_query(cli_path: Path, config_path: Path, root_dir: Path, graph: str, query: str) -> Dict[str, Any]:
     command = [
         "node",
         str(cli_path),
-        "--data-dir",
-        str(data_dir),
+        "--root-dir",
+        str(root_dir),
         "--config",
         str(config_path),
         "--output",
@@ -100,9 +100,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--graph", required=True)
     parser.add_argument("--query", required=True, action="append")
     parser.add_argument("--config-a", required=True)
-    parser.add_argument("--data-dir-a", required=True)
+    parser.add_argument("--root-dir-a", required=True)
     parser.add_argument("--config-b", required=True)
-    parser.add_argument("--data-dir-b", required=True)
+    parser.add_argument("--root-dir-b", required=True)
     parser.add_argument("--require-result", action="store_true")
     return parser.parse_args()
 
@@ -117,9 +117,9 @@ def main() -> None:
 
     queries = args.query
     left_config = Path(args.config_a).expanduser().resolve()
-    left_data_dir = Path(args.data_dir_a).expanduser().resolve()
+    left_root_dir = Path(args.root_dir_a).expanduser().resolve()
     right_config = Path(args.config_b).expanduser().resolve()
-    right_data_dir = Path(args.data_dir_b).expanduser().resolve()
+    right_root_dir = Path(args.root_dir_b).expanduser().resolve()
 
     normalized_results = {}
 
@@ -127,14 +127,14 @@ def main() -> None:
         left = run_query(
             cli_path,
             left_config,
-            left_data_dir,
+            left_root_dir,
             args.graph,
             query,
         )
         right = run_query(
             cli_path,
             right_config,
-            right_data_dir,
+            right_root_dir,
             args.graph,
             query,
         )

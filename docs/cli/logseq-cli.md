@@ -23,7 +23,7 @@ Desktop + CLI shared semantics:
 - If lock ownership is invalid or stale, startup cleans stale lock state before retrying.
 - Lock metadata includes an `owner-source` value (`cli`, `electron`, `unknown`) and lifecycle actions enforce owner boundaries.
 - `server stop` and `server restart` are owner-aware: CLI can only stop/restart servers it owns (or legacy `unknown` ownership).
-- If lock is missing but a matching orphan `db-worker-node` process still exists for the same repo/data-dir, startup performs orphan cleanup before retrying.
+- If lock is missing but a matching orphan `db-worker-node` process still exists for the same repo/root-dir, startup performs orphan cleanup before retrying.
 
 ## Run the CLI
 
@@ -44,11 +44,15 @@ logseq graph list
 
 ## Configuration
 
-The CLI config file is located at `~/logseq/cli.edn`.
+The CLI config file defaults to `<root-dir>/cli.edn`, where `root-dir` defaults to `~/logseq`.
 
 Supported keys include:
 - `:graph` - The current active graph. Set this with `graph switch`.
-- `:data-dir` - Directory where graphs are stored. Default is `~/logseq/graphs`. The graphs in this directory are user-facing graph names e.g. `demo` and do not start with `logseq_db_`.
+- `:root-dir` - CLI root directory. Default is `~/logseq`.
+  - Graph data directory is derived as `<root-dir>/graphs`.
+  - Config file default is derived as `<root-dir>/cli.edn`.
+  - Server list file default is derived as `<root-dir>/server-list`.
+  - Graph directories under `<root-dir>/graphs` are user-facing graph names e.g. `demo` and do not start with `logseq_db_`.
 - `:output-format` - Format for output. Default is `:human`. Use `:json` or `:edn` for scripting.
 - `:list-title-max-display-width` - For `:human` output, the max display width for TITLE column, defaulting to `40`.
 - `:http-base` - Http base domain for sync service. Interact with this via `sync config`.
@@ -63,14 +67,14 @@ CLI global flags take precedence over environment variables, which take preceden
 | Config key | Environment variable | Global flag |
 | --- | --- | --- |
 | :graph | $LOGSEQ_CLI_GRAPH | --graph |
-| :data-dir | $LOGSEQ_CLI_DATA_DIR | --data-dir |
+| :root-dir | $LOGSEQ_CLI_ROOT_DIR | --root-dir |
 | :output-format | $LOGSEQ_CLI_OUTPUT | --output |
 | :timeout-ms | $LOGSEQ_CLI_TIMEOUT_MS | --timeout-ms |
 | :login-timeout-ms | $LOGSEQ_CLI_LOGIN_TIMEOUT_MS | n/a |
 | :logout-timeout-ms | $LOGSEQ_CLI_LOGOUT_TIMEOUT_MS | n/a  |
 
 Legacy notes:
-* Migration note: If you previously used `~/.logseq/cli-graphs` or `~/.logseq/cli.edn`, pass `--data-dir` or `--config` to continue using those locations.
+* Migration note: If you previously used `~/.logseq/cli-graphs` or `~/.logseq/cli.edn`, pass `--root-dir` and/or `--config` to continue using equivalent custom locations.
 * `:e2ee-password` in `cli.edn` is ignored and removed silently during config read/update. Use `sync start --e2ee-password` or `sync download --e2ee-password` instead.
 * `cli.edn` no longer persists cloud auth tokens. CLI login state is stored separately in `~/logseq/auth.json`.
 
@@ -113,7 +117,7 @@ Graph commands:
 - `graph info [--graph <name>]` - show graph metadata (defaults to current graph)
 - `graph export --type edn|sqlite --file <path> [--graph <name>]` - export a graph to EDN or SQLite
 - `graph import --type edn|sqlite --input <path> --graph <name>` - import a graph from EDN or SQLite (new graph only)
-- `graph backup list` - list backup snapshots under `<data-dir>/backup`
+- `graph backup list` - list backup snapshots under `<root-dir>/graphs/<graph>/backup`
 - `graph backup create [--graph <name>] [--name <label>]` - create a backup snapshot for the selected graph
 - `graph backup restore --src <backup-name> --dst <graph-name>` - restore one backup snapshot into a new graph
 - `graph backup remove --src <backup-name>` - delete one backup snapshot
@@ -126,11 +130,11 @@ Backup scope note:
 
 Server commands:
 - `server list` - list running db-worker-node servers
-- `server cleanup` - terminate revision-mismatched CLI-owned db-worker-node servers discovered from lock files in the current data-dir
+- `server cleanup` - terminate revision-mismatched CLI-owned db-worker-node servers discovered from lock files in the current root-dir
 - `server start --graph <name>` - start db-worker-node for a graph
 - `server stop --graph <name>` - stop db-worker-node for a graph
 - `server restart --graph <name>` - restart db-worker-node for a graph
-- `doctor [--dev-script]` - run runtime diagnostics for `db-worker-node.js`, `data-dir` permissions, and running server readiness (`--dev-script` checks `static/db-worker-node.js` explicitly)
+- `doctor [--dev-script]` - run runtime diagnostics for `db-worker-node.js`, `root-dir` permissions, and running server readiness (`--dev-script` checks `static/db-worker-node.js` explicitly)
 
 Auth commands:
 - `login` - authenticate this machine and create/update `~/logseq/auth.json`
@@ -182,7 +186,7 @@ Server ownership behavior:
 - `server start` can return `server-start-timeout-orphan` when lock creation times out and orphan matching processes are detected.
 - `server list` human output includes both `OWNER` and `REVISION` columns.
 - `server list` prints a compatibility warning in human output when any server revision string is not exactly equal to the local CLI revision string.
-- `server cleanup` checks discovered servers in the current data-dir, treats `revision != local CLI revision` (including missing revision) as mismatch, and attempts graceful-first termination only for `:owner-source :cli` targets.
+- `server cleanup` checks discovered servers in the current root-dir, treats `revision != local CLI revision` (including missing revision) as mismatch, and attempts graceful-first termination only for `:owner-source :cli` targets.
 - `server cleanup` structured output includes `checked`, `mismatched`, `eligible`, `skipped-owner`, `killed`, and `failed` summaries.
 - Structured output (`--output json|edn`) includes per-server `revision` data but does not include human warning text.
 

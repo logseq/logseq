@@ -26,12 +26,12 @@
     (try
       (daemon/spawn-server! {:script "/tmp/db-worker-node.js"
                              :repo "logseq_db_spawn_helper_test"
-                             :data-dir "/tmp/logseq-db-worker"
+                             :root-dir "/tmp/logseq-root"
                              :server-list-file "/tmp/server-list"})
       (is (= (.-execPath js/process) (:cmd @captured)))
       (is (= "/tmp/db-worker-node.js" (first (:args @captured))))
       (is (some #{"--repo"} (:args @captured)))
-      (is (some #{"--data-dir"} (:args @captured)))
+      (is (some #{"--root-dir"} (:args @captured)))
       (is (some #{"--server-list-file"} (:args @captured)))
       (is (some #{"/tmp/server-list"} (:args @captured)))
       (is (not-any? #{"--host" "--port"} (:args @captured)))
@@ -54,7 +54,7 @@
     (try
       (daemon/spawn-server! {:script "/tmp/db-worker-node.js"
                              :repo "logseq_db_spawn_helper_test"
-                             :data-dir "/tmp/logseq-db-worker"
+                             :root-dir "/tmp/logseq-root"
                              :owner-source :electron})
       (is (= false (get-in @captured [:opts :detached])))
       (is (= "inherit" (get-in @captured [:opts :stdio])))
@@ -74,7 +74,7 @@
     (try
       (daemon/spawn-server! {:script "/tmp/db-worker-node.js"
                              :repo "logseq_db_spawn_helper_test"
-                             :data-dir "/tmp/logseq-db-worker"
+                             :root-dir "/tmp/logseq-root"
                              :create-empty-db? true})
       (is (some #{"--create-empty-db"} (:args @captured)))
       (finally
@@ -90,10 +90,10 @@
     (try
       (daemon/spawn-server! {:script "/tmp/db-worker-node.js"
                              :repo "logseq_db_spawn_helper_test"
-                             :data-dir "/tmp/logseq-db-worker"})
+                             :root-dir "/tmp/logseq-root"})
       (daemon/spawn-server! {:script "/tmp/db-worker-node.js"
                              :repo "logseq_db_spawn_helper_test"
-                             :data-dir "/tmp/logseq-db-worker"
+                             :root-dir "/tmp/logseq-root"
                              :create-empty-db? false})
       (is (every? (fn [args]
                     (not-any? #{"--create-empty-db"} args))
@@ -103,14 +103,14 @@
 
 (deftest cleanup-stale-lock-removes-invalid-lock
   (async done
-    (let [data-dir (node-helper/create-tmp-dir "db-worker-daemon-helper")
+    (let [root-dir (node-helper/create-tmp-dir "db-worker-daemon-helper")
           repo (str "logseq_db_helper_stale_" (subs (str (random-uuid)) 0 8))
-          path (node-path/join data-dir "db-worker.lock")
+          path (node-path/join root-dir "db-worker.lock")
           invalid-lock {:repo repo
                         :pid (.-pid js/process)
                         :host "127.0.0.1"
                         :port 0}]
-      (fs/mkdirSync data-dir #js {:recursive true})
+      (fs/mkdirSync root-dir #js {:recursive true})
       (fs/writeFileSync path (js/JSON.stringify (clj->js invalid-lock)))
       (-> (p/let [_ (daemon/cleanup-stale-lock! path invalid-lock)]
             (is (not (fs/existsSync path)))

@@ -29,9 +29,9 @@
 
 (defn- <open-test-db
   []
-  (let [data-dir (node-helper/create-tmp-dir "platform-node")
-        db-path (node-path/join data-dir "db.sqlite")]
-    (p/let [platform (platform-node/node-platform {:data-dir data-dir})
+  (let [root-dir (node-helper/create-tmp-dir "platform-node")
+        db-path (node-path/join root-dir "db.sqlite")]
+    (p/let [platform (platform-node/node-platform {:root-dir root-dir})
             sqlite (:sqlite platform)
             db ((:open-db sqlite) {:path db-path})]
       {:sqlite sqlite
@@ -67,10 +67,10 @@
 
 (deftest node-platform-env-owner-source-is-propagated
   (async done
-    (let [data-dir (node-helper/create-tmp-dir "platform-node-owner-source")]
-      (-> (p/let [platform-cli (platform-node/node-platform {:data-dir data-dir
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-owner-source")]
+      (-> (p/let [platform-cli (platform-node/node-platform {:root-dir root-dir
                                                               :owner-source :cli})
-                  platform-default (platform-node/node-platform {:data-dir data-dir})]
+                  platform-default (platform-node/node-platform {:root-dir root-dir})]
             (is (= :cli (get-in platform-cli [:env :owner-source])))
             (is (= :unknown (get-in platform-default [:env :owner-source]))))
           (p/catch (fn [e]
@@ -79,7 +79,7 @@
 
 (deftest node-platform-cli-owner-bypasses-keychain-in-cli-e2e-test
   (async done
-    (let [data-dir (node-helper/create-tmp-dir "platform-node-cli-secrets")
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-cli-secrets")
           process-env (.-env js/process)
           original-cli-e2e-test (gobj/get process-env "CLI_E2E_TEST")
           calls (atom {:save 0 :read 0 :delete 0})
@@ -96,7 +96,7 @@
       (gobj/set keytar "deletePassword" (fn [& _]
                                            (swap! calls update :delete inc)
                                            (js/Promise.resolve true)))
-      (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
                                                          :owner-source :cli})
                   crypto (:crypto platform)
                   kv (:kv platform)
@@ -122,7 +122,7 @@
 
 (deftest node-platform-cli-owner-uses-keychain-when-keychain-present
   (async done
-    (let [data-dir (node-helper/create-tmp-dir "platform-node-cli-secrets-keychain")
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-cli-secrets-keychain")
           process-env (.-env js/process)
           original-cli-e2e-test (gobj/get process-env "CLI_E2E_TEST")
           calls (atom {:save 0 :read 0 :delete 0})
@@ -142,7 +142,7 @@
                                            (swap! calls update :delete inc)
                                            (swap! secrets dissoc key)
                                            (js/Promise.resolve true)))
-      (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir
                                                          :owner-source :cli})
                   crypto (:crypto platform)
                   kv (:kv platform)
@@ -168,14 +168,14 @@
 
 (deftest kv-store-preserves-uint8array-values-across-reloads-test
   (async done
-    (let [data-dir (node-helper/create-tmp-dir "platform-node-kv-store")
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-kv-store")
           key "rtc-encrypted-aes-key###graph-1"
           value (js/Uint8Array. #js [1 2 3 255])]
-      (-> (p/let [platform-a (platform-node/node-platform {:data-dir data-dir})
+      (-> (p/let [platform-a (platform-node/node-platform {:root-dir root-dir})
                   kv-a (:kv platform-a)
                   _ ((:set! kv-a) key value)
                   loaded-a ((:get kv-a) key)
-                  platform-b (platform-node/node-platform {:data-dir data-dir})
+                  platform-b (platform-node/node-platform {:root-dir root-dir})
                   kv-b (:kv platform-b)
                   loaded-b ((:get kv-b) key)]
             (is (instance? js/Uint8Array loaded-a))
@@ -313,11 +313,11 @@
 (deftest sqlite-backup-db-creates-importable-copy
   (async done
     (let [conn* (atom nil)
-          data-dir (node-helper/create-tmp-dir "platform-node-backup")
-          backup-path (node-path/join data-dir "backup" "copy.sqlite")]
-      (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir})
+          root-dir (node-helper/create-tmp-dir "platform-node-backup")
+          backup-path (node-path/join root-dir "backup" "copy.sqlite")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
                   sqlite (:sqlite platform)
-                  db-path (node-path/join data-dir "source.sqlite")
+                  db-path (node-path/join root-dir "source.sqlite")
                   db ((:open-db sqlite) {:path db-path})
                   _ (reset! conn* {:sqlite sqlite :db db})
                   _ (exec! sqlite db "create table kvs (addr text primary key, content text);")
@@ -336,10 +336,11 @@
 
 (deftest storage-list-graphs-ignores-backup-root
   (async done
-    (let [data-dir (node-helper/create-tmp-dir "platform-node-list-graphs")]
-      (fs/mkdirSync (node-path/join data-dir "alpha") #js {:recursive true})
-      (fs/mkdirSync (node-path/join data-dir "backup") #js {:recursive true})
-      (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir})
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-list-graphs")
+          graphs-dir (node-path/join root-dir "graphs")]
+      (fs/mkdirSync (node-path/join graphs-dir "alpha") #js {:recursive true})
+      (fs/mkdirSync (node-path/join graphs-dir "backup") #js {:recursive true})
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
                   graphs ((get-in platform [:storage :list-graphs]))]
             (is (= ["alpha"] graphs)))
           (p/catch (fn [e]
@@ -348,9 +349,9 @@
 
 (deftest remove-vfs-removes-lock-file
   (async done
-    (let [data-dir (node-helper/create-tmp-dir "platform-node-remove-vfs")
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-remove-vfs")
           lock-json "{\"repo\":\"logseq_db_demo\",\"pid\":1,\"host\":\"127.0.0.1\",\"port\":9001}"]
-      (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir})
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
                   storage (:storage platform)
                   pool ((:install-opfs-pool storage) nil "logseq_db_demo")
                   repo-dir (gobj/get pool "repoDir")

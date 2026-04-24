@@ -57,7 +57,7 @@
   (async done
          (-> (p/with-redefs [cli-version/revision (fn [] "cli-rev")
                              cli-server/cleanup-revision-mismatched-servers! (fn [config revision]
-                                                                               (is (= {:data-dir "/tmp/demo"} config))
+                                                                               (is (= {:root-dir "/tmp/demo"} config))
                                                                                (is (= "cli-rev" revision))
                                                                                (p/resolved {:ok? true
                                                                                             :data {:checked 2
@@ -66,7 +66,7 @@
                                                                                                    :skipped-owner 0
                                                                                                    :killed [{:repo "graph-a" :pid 11}]
                                                                                                    :failed []}}))]
-               (server-command/execute-cleanup {:type :server-cleanup} {:data-dir "/tmp/demo"}))
+               (server-command/execute-cleanup {:type :server-cleanup} {:root-dir "/tmp/demo"}))
              (p/then (fn [result]
                        (is (= :ok (:status result)))
                        (is (= 2 (get-in result [:data :checked])))

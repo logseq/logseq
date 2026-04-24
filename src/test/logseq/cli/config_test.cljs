@@ -25,7 +25,7 @@
         cfg-path (node-path/join dir "cli.edn")
         _ (fs/writeFileSync cfg-path
                             (str "{:graph \"file-repo\" "
-                                 ":data-dir \"file-data\" "
+                                 ":root-dir \"file-root\" "
                                  ":timeout-ms 111 "
                                  ":login-timeout-ms 444 "
                                  ":logout-timeout-ms 555 "
@@ -33,14 +33,14 @@
                                  ":auth-token \"file-secret\" "
                                  ":e2ee-password \"legacy-password\"}"))
         env {"LOGSEQ_CLI_GRAPH" "env-repo"
-             "LOGSEQ_CLI_DATA_DIR" "env-data"
+             "LOGSEQ_CLI_ROOT_DIR" "env-root"
              "LOGSEQ_CLI_TIMEOUT_MS" "222"
              "LOGSEQ_CLI_LOGIN_TIMEOUT_MS" "666"
              "LOGSEQ_CLI_LOGOUT_TIMEOUT_MS" "777"
              "LOGSEQ_CLI_OUTPUT" "json"}
         opts {:config-path cfg-path
               :graph "cli-repo"
-              :data-dir "cli-data"
+              :root-dir "cli-root"
               :timeout-ms 333
               :login-timeout-ms 888
               :logout-timeout-ms 999
@@ -48,7 +48,7 @@
         result (with-env env #(config/resolve-config opts))]
     (is (= cfg-path (:config-path result)))
     (is (= "cli-repo" (:graph result)))
-    (is (= "cli-data" (:data-dir result)))
+    (is (= "cli-root" (:root-dir result)))
     (is (= 333 (:timeout-ms result)))
     (is (= 888 (:login-timeout-ms result)))
     (is (= 999 (:logout-timeout-ms result)))
@@ -60,12 +60,12 @@
 (deftest test-env-overrides-file
   (let [dir (node-helper/create-tmp-dir)
         cfg-path (node-path/join dir "cli.edn")
-        _ (fs/writeFileSync cfg-path "{:graph \"file-repo\" :data-dir \"file-data\"}")
+        _ (fs/writeFileSync cfg-path "{:graph \"file-repo\" :root-dir \"file-root\"}")
         env {"LOGSEQ_CLI_GRAPH" "env-repo"
-             "LOGSEQ_CLI_DATA_DIR" "env-data"}
+             "LOGSEQ_CLI_ROOT_DIR" "env-root"}
         result (with-env env #(config/resolve-config {:config-path cfg-path}))]
     (is (= "env-repo" (:graph result)))
-    (is (= "env-data" (:data-dir result)))))
+    (is (= "env-root" (:root-dir result)))))
 
 (deftest test-output-format-env-overrides-file
   (let [dir (node-helper/create-tmp-dir)
@@ -102,7 +102,7 @@
   (let [dir (node-helper/create-tmp-dir)
         cfg-path (node-path/join dir "missing-cli.edn")
         result (with-env {"LOGSEQ_CLI_GRAPH" nil
-                          "LOGSEQ_CLI_DATA_DIR" nil
+                          "LOGSEQ_CLI_ROOT_DIR" nil
                           "LOGSEQ_CLI_TIMEOUT_MS" nil
                           "LOGSEQ_CLI_LOGIN_TIMEOUT_MS" nil
                           "LOGSEQ_CLI_LOGOUT_TIMEOUT_MS" nil
@@ -110,7 +110,7 @@
                           "LOGSEQ_CLI_CONFIG" nil}
                  #(config/resolve-config {:config-path cfg-path}))]
     (is (= cfg-path (:config-path result)))
-    (is (= "~/logseq/graphs" (:data-dir result)))
+    (is (= "~/logseq" (:root-dir result)))
     (is (= "wss://api.logseq.io/sync/%s" (:ws-url result)))
     (is (= "https://api.logseq.io" (:http-base result)))
     (is (= 10000 (:timeout-ms result)))
@@ -118,13 +118,33 @@
     (is (= 120000 (:logout-timeout-ms result)))
     (is (= 40 (:list-title-max-display-width result)))))
 
-(deftest test-server-list-path-follows-config-path
-  (let [config-dir (node-helper/create-tmp-dir "cli-config-dir")
-        config-path (node-path/join config-dir "nested" "custom-cli.edn")
-        expected (node-path/join config-dir "nested" "server-list")]
-    (is (= expected (config/server-list-path config-path)))))
+(deftest test-default-config-path-follows-root-dir
+  (let [result (with-env {"LOGSEQ_CLI_GRAPH" nil
+                          "LOGSEQ_CLI_ROOT_DIR" nil
+                          "LOGSEQ_CLI_TIMEOUT_MS" nil
+                          "LOGSEQ_CLI_LOGIN_TIMEOUT_MS" nil
+                          "LOGSEQ_CLI_LOGOUT_TIMEOUT_MS" nil
+                          "LOGSEQ_CLI_OUTPUT" nil
+                          "LOGSEQ_CLI_CONFIG" nil}
+                 #(config/resolve-config {:root-dir "~/custom-logseq"}))]
+    (is (= "~/custom-logseq" (:root-dir result)))
+    (is (= (node-path/join "~/custom-logseq" "cli.edn")
+           (:config-path result)))))
 
-(deftest test-server-list-path-defaults-next-to-default-config
+(deftest test-explicit-config-path-does-not-change-root-dir-derived-defaults
+  (let [dir (node-helper/create-tmp-dir "cli-config-dir")
+        cfg-path (node-path/join dir "nested" "custom-cli.edn")
+        result (config/resolve-config {:config-path cfg-path
+                                       :root-dir "~/custom-logseq"})]
+    (is (= cfg-path (:config-path result)))
+    (is (= "~/custom-logseq" (:root-dir result)))))
+
+(deftest test-server-list-path-follows-root-dir
+  (let [root-dir (node-path/join (node-helper/create-tmp-dir "cli-root") "nested-root")
+        expected (node-path/join root-dir "server-list")]
+    (is (= expected (config/server-list-path root-dir)))))
+
+(deftest test-server-list-path-defaults-under-default-root-dir
   (let [expected (node-path/join (.homedir os) "logseq" "server-list")]
     (is (= expected (config/server-list-path nil)))))
 

@@ -15,8 +15,8 @@
                             "python3 '{{repo-root}}/cli-e2e/scripts/prepare_sync_config.py' --output '{{config-path}}' --auth-path '{{tmp-dir}}/home/logseq/auth.json' --http-base '{{sync-http-base}}' --ws-url '{{sync-ws-url}}'"
                             "python3 '{{repo-root}}/cli-e2e/scripts/prepare_sync_config.py' --output '{{tmp-dir}}/cli-b.edn' --auth-path '{{tmp-dir}}/home/logseq/auth.json' --http-base '{{sync-http-base}}' --ws-url '{{sync-ws-url}}'"
                             "python3 '{{repo-root}}/cli-e2e/scripts/db_sync_server.py' start --port 18080"
-                            "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
-                    :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
+                            "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+                    :cleanup ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
                               "python3 '{{repo-root}}/cli-e2e/scripts/db_sync_server.py' stop --pid-file '{{tmp-dir}}/db-sync-server.pid'"]}
         prepared (sync-fixture/prepare-case input-case suite-context)]
     (is (= "sync-case" (:id prepared)))
@@ -25,9 +25,9 @@
             "cp ~/logseq/auth.json '{{tmp-dir}}/home/logseq/auth.json'"
             "python3 '{{repo-root}}/cli-e2e/scripts/prepare_sync_config.py' --output '{{config-path}}' --auth-path '{{tmp-dir}}/home/logseq/auth.json' --http-base '{{sync-http-base}}' --ws-url '{{sync-ws-url}}'"
             "python3 '{{repo-root}}/cli-e2e/scripts/prepare_sync_config.py' --output '{{tmp-dir}}/cli-b.edn' --auth-path '{{tmp-dir}}/home/logseq/auth.json' --http-base '{{sync-http-base}}' --ws-url '{{sync-ws-url}}'"
-            "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+            "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
            (:setup prepared)))
-    (is (= ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+    (is (= ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
            (:cleanup prepared)))
     (is (= "http://127.0.0.1:18080" (get-in prepared [:vars :sync-http-base])))
     (is (= "ws://127.0.0.1:18080/sync/%s" (get-in prepared [:vars :sync-ws-url])))
@@ -49,8 +49,8 @@
         prepared (sync-fixture/prepare-case
                   {:id "sync-case"
                    :setup ["mkdir -p '{{tmp-dir}}/graphs-b'"
-                           "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
-                           "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"]
+                           "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+                           "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"]
                    :cleanup []}
                   suite-context)
         setup (:setup prepared)
@@ -66,9 +66,9 @@
     (is (string/includes? bootstrap-cmd "--upload-keys"))
     (is (string/includes? bootstrap-cmd "/tmp/sync-suite/user-rsa-keys.lock"))
     (is (string/includes? bootstrap-cmd "/tmp/sync-suite/user-rsa-keys.ready"))
-    (is (= "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+    (is (= "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
            (nth setup 6)))
-    (is (= "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"
+    (is (= "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"
            (nth setup 7)))
     (is (not-any? #(and (string/includes? % "sync ensure-keys")
                         (not= % bootstrap-cmd)
@@ -99,6 +99,8 @@
       (is (= 1 (count @calls)))
       (is (string/includes? (:cmd (first @calls)) "db_sync_server.py"))
       (is (string/includes? (:cmd (first @calls)) " start "))
+      (is (string/includes? (:cmd (first @calls)) "--data-dir"))
+      (is (not (string/includes? (:cmd (first @calls)) "--root-dir")))
       (is (string/includes? (:cmd (first @calls)) "--port 18080"))
       (is (string/includes? (:cmd (first @calls)) "--startup-timeout-s 60"))
       (is (not (string/includes? (:cmd (first @calls)) "prepare_sync_config.py")))

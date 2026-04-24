@@ -5,11 +5,11 @@
             [logseq.cli.command.core :as command-core]
             [logseq.cli.commands :as commands]
             [logseq.cli.config :as config]
-            [logseq.cli.data-dir :as data-dir]
             [logseq.cli.format :as format]
             [logseq.cli.log :as cli-log]
             [logseq.cli.output-mode :as output-mode]
             [logseq.cli.profile :as profile]
+            [logseq.cli.root-dir :as root-dir]
             [logseq.cli.version :as version]
             [promesa.core :as p]))
 
@@ -18,11 +18,6 @@
   (or (:exit-code result)
       (if (= :error (:status result)) 1 0)))
 
-;; NOTE:
-;; `--profile` is intentionally detected from raw argv before command parsing.
-;; This lets profiling include early stages (especially `cli.parse-args`) and
-;; still emit profile output for parse/help/error paths that may short-circuit
-;; before a fully parsed options map exists.
 (defn- profile-enabled-argv?
   [args]
   (boolean (some #{"--profile"} args)))
@@ -71,11 +66,10 @@
     {}))
 
 (defn- handle-unexpected-error
-  "Provide clean, consistent error handling for unexpected errors in run!"
   [profile-session parsed cfg error]
   (let [data (ex-data error)
         message (or (.-message error) (:message error) (str error))]
-    (if (= :data-dir-permission (:code data))
+    (if (= :root-dir-permission (:code data))
       (p/resolved
        (attach-profile-lines
         profile-session
@@ -84,7 +78,7 @@
          :output (profile/time! profile-session "cli.format-result"
                                 (fn []
                                   (format/format-result {:status :error
-                                                         :error {:code :data-dir-permission
+                                                         :error {:code :root-dir-permission
                                                                  :message message
                                                                  :path (:path data)}}
                                                         cfg)))}))
@@ -164,10 +158,10 @@
                                        (dissoc cfg :auth-token))))
          (try
            (let [cfg (assoc cfg
-                            :data-dir
-                            (profile/time! profile-session "cli.ensure-data-dir"
+                            :root-dir
+                            (profile/time! profile-session "cli.ensure-root-dir"
                                            (fn []
-                                             (data-dir/ensure-data-dir! (:data-dir cfg)))))
+                                             (root-dir/ensure-root-dir! (:root-dir cfg)))))
                  action-result (profile/time! profile-session "cli.build-action"
                                               (fn []
                                                 (commands/build-action parsed cfg)))]
@@ -199,7 +193,6 @@
                                                           (format/format-result result opts)))}))))
                    (p/catch (partial handle-unexpected-error profile-session parsed cfg)))))
            (catch :default error
-             ;; Cleanly handle errors especially for commands/build-action which handles error-prone options
              (handle-unexpected-error profile-session parsed cfg error))))))))
 
 (defn- print-profile-lines!

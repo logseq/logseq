@@ -6,8 +6,7 @@
             ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
-            [logseq.cli.output-mode :as output-mode]
-            [logseq.common.graph :as common-graph]))
+            [logseq.cli.output-mode :as output-mode]))
 
 (defn- parse-int
   [value]
@@ -31,14 +30,19 @@
 
     :else nil))
 
+(defn- default-root-dir
+  []
+  "~/logseq")
 
 (defn- default-config-path
-  []
-  (node-path/join (.homedir os) "logseq" "cli.edn"))
+  ([]
+   (default-config-path (default-root-dir)))
+  ([root-dir]
+   (node-path/join root-dir "cli.edn")))
 
 (defn server-list-path
-  [config-path]
-  (node-path/join (node-path/dirname (or config-path (default-config-path))) "server-list"))
+  [root-dir]
+  (node-path/join (or root-dir (node-path/join (.homedir os) "logseq")) "server-list"))
 
 (def ^:private removed-config-keys
   #{:auth-token :retries :e2ee-password})
@@ -62,8 +66,8 @@
         (.mkdirSync fs dir #js {:recursive true})))))
 
 (defn update-config!
-  [{:keys [config-path]} updates]
-  (let [path (or config-path (default-config-path))
+  [{:keys [config-path root-dir]} updates]
+  (let [path (or config-path (default-config-path (or root-dir (default-root-dir))))
         current (or (read-config-file path) {})
         filtered-current (sanitize-file-config current)
         filtered-updates (sanitize-file-config updates)
@@ -86,8 +90,8 @@
       (seq (gobj/get env "LOGSEQ_CLI_GRAPH"))
       (assoc :graph (gobj/get env "LOGSEQ_CLI_GRAPH"))
 
-      (seq (gobj/get env "LOGSEQ_CLI_DATA_DIR"))
-      (assoc :data-dir (gobj/get env "LOGSEQ_CLI_DATA_DIR"))
+      (seq (gobj/get env "LOGSEQ_CLI_ROOT_DIR"))
+      (assoc :root-dir (gobj/get env "LOGSEQ_CLI_ROOT_DIR"))
 
       (seq (gobj/get env "LOGSEQ_CLI_TIMEOUT_MS"))
       (assoc :timeout-ms (parse-int (gobj/get env "LOGSEQ_CLI_TIMEOUT_MS")))
@@ -111,22 +115,29 @@
                   :logout-timeout-ms 120000
                   :list-title-max-display-width list-title-max-display-width-default
                   :output-format nil
-                  :data-dir (common-graph/get-default-graphs-dir)
+                  :root-dir (default-root-dir)
                   :ws-url "wss://api.logseq.io/sync/%s"
-                  :http-base "https://api.logseq.io"
-                  :config-path (default-config-path)}
+                  :http-base "https://api.logseq.io"}
         env (env-config)
+        root-dir (or (:root-dir opts)
+                     (:root-dir env)
+                     (:root-dir defaults))
         config-path (or (:config-path opts)
                         (:config-path env)
-                        (:config-path defaults))
+                        (default-config-path root-dir))
         file-config (or (read-config-file config-path) {})
+        root-dir (or (:root-dir opts)
+                     (:root-dir env)
+                     (:root-dir file-config)
+                     root-dir)
         output-format (or (output-mode/parse (:output-format opts))
                           (output-mode/parse (:output opts))
                           (output-mode/parse (:output-format env))
                           (output-mode/parse (:output env))
                           (output-mode/parse (:output-format file-config))
                           (output-mode/parse (:output file-config)))
-        merged (merge defaults file-config env opts {:config-path config-path})
+        merged (merge defaults file-config env opts {:root-dir root-dir
+                                                     :config-path config-path})
         list-title-max-display-width (or (parse-positive-int (:list-title-max-display-width merged))
                                          list-title-max-display-width-default)]
     (cond-> merged
