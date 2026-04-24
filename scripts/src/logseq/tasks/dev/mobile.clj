@@ -43,31 +43,31 @@
   []
   (println "set-system-env")
   (set-system-env)
-  (doseq [cmd ["yarn clean"
-               "yarn app-watch"]]
+  (doseq [cmd ["pnpm clean"
+               "pnpm app-watch"]]
     (println cmd)
     (shell cmd)))
 
-(defn npx-cap-run-ios
+(defn cap-run-ios
   "Copy assets files to iOS build directory, and run app in Xcode"
   []
-  (open-dev-app "npx cap sync ios")
-  (shell "npx cap open ios"))
+  (open-dev-app "pnpm exec cap sync ios")
+  (shell "pnpm exec cap open ios"))
 
-(defn npx-cap-run-android
+(defn cap-run-android
   "Copy assets files to Android build directory, and run app in Android Studio"
   []
-  (open-dev-app "npx cap sync android")
-  (shell "npx cap open android"))
+  (open-dev-app "pnpm exec cap sync android")
+  (shell "pnpm exec cap open android"))
 
 (defn run-ios-release
   "Build iOS app release"
   []
   (shell "git checkout capacitor.config.ts")
-  (shell "yarn run-ios-release"))
+  (shell "pnpm run-ios-release"))
 
 (defn run-android-release
   "Build Android app release"
   []
   (shell "git checkout capacitor.config.ts")
-  (shell "yarn run-android-release"))
+  (shell "pnpm run-android-release"))

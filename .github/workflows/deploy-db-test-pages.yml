@@ -5,7 +5,7 @@ on:
     branches: ["test/db"]
 
 env:
-  CLOJURE_VERSION: "1.11.1.1413"
+  CLOJURE_VERSION: "1.12.4.1618"
   NODE_VERSION: '24'
   JAVA_VERSION: "21"
 
@@ -41,13 +41,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
       - name: Setup clojure
         uses: DeLaGuardo/setup-clojure@13.5
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
-      - name: Fetch yarn deps
-        run: yarn install --frozen-lockfile
+      - name: Fetch pnpm deps
+        run: pnpm install --frozen-lockfile
 
       - name: Set Build Environment Variables
         run: |
@@ -56,7 +61,7 @@ jobs:
 
       - name: Build Released-Web
         run: |
-          yarn gulp:build && clojure -M:cljs release app db-worker  --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}' && yarn webpack-app-build
+          pnpm gulp:build && clojure -M:cljs release app db-worker --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}' && pnpm webpack-app-build
           rsync -avz --exclude node_modules --exclude android --exclude ios --exclude mobile ./static/ ./public/
           ls -lR ./public && mkdir r2 && mv ./public/js/main.js.map ./r2/db-test.main.js.map
           sed -i 's/=main.js.map/=https:\/\/assets.logseq.io\/db-test.main.js.map/g' ./public/js/main.js

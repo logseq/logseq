@@ -1,6 +1,7 @@
 {
   "name": "@logseq/cli",
   "version": "0.4.3",
+  "packageManager": "pnpm@10.33.0",
   "description": "Logseq CLI",
   "bin": {
     "logseq": "cli.mjs"
@@ -10,7 +11,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v34",
+    "@logseq/nbb-logseq": "git+https://github.com/logseq/nbb-logseq.git#feat-db-v34",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.8.0",
     "fastify": "5.8.2",
@@ -36,6 +37,6 @@
     "vendor"
   ],
   "scripts": {
-    "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"
+    "test": "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner"
   }
 }
