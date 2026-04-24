@@ -46,7 +46,7 @@
 (def checksum-attrs (set (vals checksum-attr-map)))
 
 (defn usage []
-  (str "Usage: yarn -s nbb-logseq -cp src:script:../db-sync/src script/replay_sync_artifact.cljs --artifact <path> [--client <n>] [--round <n>] [--pretty]\n"
+  (str "Usage: pnpm exec nbb-logseq -cp src:script:../db-sync/src script/replay_sync_artifact.cljs --artifact <path> [--client <n>] [--round <n>] [--pretty]\n"
        "Options:\n"
        (cli/format-opts {:spec cli-spec})))
 

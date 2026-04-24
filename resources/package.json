@@ -2,6 +2,7 @@
   "name": "Logseq",
   "productName": "Logseq",
   "version": "2.0.1",
+  "packageManager": "pnpm@10.33.0",
   "main": "electron.js",
   "author": "Logseq",
   "license": "AGPL-3.0",

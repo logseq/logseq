@@ -5,7 +5,7 @@
 #### Installation
 
 ```shell
-yarn add @logseq/libs
+pnpm add @logseq/libs
 ```
 
 #### Usage
@@ -37,7 +37,7 @@ https://discord.gg/KpN4eHY
 To regenerate the ClojureScript facade from the JS SDK declarations (keeping the same argument shapes as the JS APIs while auto-converting to/from CLJS data):
 
 ```bash
-yarn run generate:schema              # emits dist/logseq-sdk-schema.json
+pnpm generate:schema              # emits dist/logseq-sdk-schema.json
 bb libs:generate-cljs-sdk            # emits logseq/core.cljs and per-proxy files under target/generated-cljs
 ```
 

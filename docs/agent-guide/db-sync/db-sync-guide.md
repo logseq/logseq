@@ -45,10 +45,10 @@ This guide helps AI agents implement and review db-sync features consistently ac
 - See `docs/agent-guide/db-sync/protocol.md` for request/response shapes.
 
 ## Testing & Verification
-- Local dev(client+server): `bb dev:db-sync-start` runs the db-sync watcher, `wrangler dev`, and `yarn watch` with `ENABLE_DB_SYNC_LOCAL=true`
+- Local dev(client+server): `bb dev:db-sync-start` runs the db-sync watcher, `wrangler dev`, and `pnpm watch` with `ENABLE_DB_SYNC_LOCAL=true`
 - DB-sync server side unit-tests: `bb dev:db-sync-test`
-- Node adapter tests: `cd deps/db-sync && npm run test:node-adapter`
-- Node adapter build/run: `cd deps/db-sync && npm run build:node-adapter && npm run start:node-adapter`
+- Node adapter tests: `cd deps/db-sync && pnpm test:node-adapter`
+- Node adapter build/run: `cd deps/db-sync && pnpm build:node-adapter && pnpm start:node-adapter`
 
 ## Review Checklist
 - Protocol versioning and error handling are consistent across client/server.
