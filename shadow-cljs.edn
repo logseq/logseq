@@ -95,14 +95,18 @@
                                       :externs ["datascript/externs.js"
                                                 "externs.js"]
                                       :warnings {:fn-deprecated false
-                                                 :redef false}}}
+                                                 :redef false}}
+                   :closure-defines {goog.debug.LOGGING_ENABLED true}}
 
   :logseq-cli {:target :node-script
                :output-to "static/logseq-cli.js"
                :main logseq.cli.main/main
                :devtools {:enabled false}
                :build-hooks [(shadow.hooks/logseq-cli-metadata-hook "--long --always --dirty")]
-               :closure-defines {logseq.common.cognito-config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]}
+               :closure-defines {logseq.common.cognito-config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
+                                 goog.debug.LOGGING_ENABLED true
+                                 lambdaisland.glogi.console/colorize "false"
+                                 lambdaisland.glogi.console/timestamp "true"}
                :compiler-options {:infer-externs :auto
                                   :source-map true
                                   :externs ["datascript/externs.js"
