@@ -20,7 +20,7 @@
             :coerce :long}
    :sort {:desc "Sort field. Default: updated-at"
           :alias :s}
-   :order {:desc "Sort order. Default: asc"
+   :order {:desc "Sort order. Default: desc"
            :validate #{"asc" "desc"}}})
 
 ;; Common for all page-related subcommands
@@ -330,7 +330,7 @@
               items (transport/invoke cfg :thread-api/cli-list-pages false
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
-              order (or (:order options) "asc")
+              order (or (:order options) "desc")
               fields (parse-field-list (:fields options))
               sorted (apply-sort items sort-field order list-page-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
@@ -347,7 +347,7 @@
               items (transport/invoke cfg :thread-api/cli-list-tags false
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
-              order (or (:order options) "asc")
+              order (or (:order options) "desc")
               fields (parse-field-list (:fields options))
               prepared (mapv #(prepare-tag-item % options) items)
               sorted (apply-sort prepared sort-field order list-tag-field-map)
@@ -364,7 +364,7 @@
               items (transport/invoke cfg :thread-api/cli-list-properties false
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
-              order (or (:order options) "asc")
+              order (or (:order options) "desc")
               fields (parse-field-list (:fields options))
               prepared (mapv #(prepare-property-item % options) items)
               sorted (apply-sort prepared sort-field order list-property-field-map)
@@ -419,7 +419,7 @@
               items (transport/invoke cfg :thread-api/cli-list-nodes false
                                       [(:repo action) worker-options])
               sort-field (effective-sort-field options)
-              order (or (:order options) "asc")
+              order (or (:order options) "desc")
               fields (parse-field-list (:fields options))
               sorted (apply-sort items sort-field order list-node-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
@@ -448,7 +448,7 @@
               items (transport/invoke cfg :thread-api/cli-list-nodes false
                                       [(:repo action) worker-options])
               sort-field (effective-sort-field options)
-              order (or (:order options) "asc")
+              order (or (:order options) "desc")
               fields (parse-field-list (:fields options))
               sorted (apply-sort items sort-field order list-asset-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
@@ -485,7 +485,7 @@
             (p/let [items (transport/invoke cfg :thread-api/cli-list-tasks false
                                             [(:repo action) normalized-options])
                     sort-field (effective-sort-field normalized-options)
-                    order (or (:order normalized-options) "asc")
+                    order (or (:order normalized-options) "desc")
                     fields (parse-field-list (:fields normalized-options))
                     sorted (apply-sort items sort-field order list-task-field-map)
                     limited (apply-offset-limit sorted (:offset normalized-options) (:limit normalized-options))
