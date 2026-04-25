@@ -21,16 +21,16 @@
   @apply -ml-5 flex flex-1;
 }
 
+.ls-bidirectional-block-container {
+  @apply w-full;
+}
+
 .ls-page-properties > .ls-properties-area > .property-block {
   margin-left: -22px;
 }
 
 .ls-block .ls-properties-area {
   margin-left: 0;
-}
-
-.ls-block .property-pair, .ls-sidebar-page-properties .property-pair, .property-block .property-value, .block-property-value {
-  margin-left: 7px;
 }
 
 .grid-auto-fit {

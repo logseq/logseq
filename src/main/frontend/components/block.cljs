@@ -2006,9 +2006,10 @@
         order-list? (boolean own-number-list?)
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
+        collapsable-page-title? (or page-title? (:collapsable-page-title? config))
         collapsable? (editor-handler/collapsable? uuid {:semantic? true
                                                         :ignore-children? page-title?
-                                                        :page-title? page-title?})
+                                                        :page-title? collapsable-page-title?})
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
@@ -2748,7 +2749,10 @@
 
 (rum/defc block-positioned-properties
   [config block position]
-  (let [properties (outliner-property/get-block-positioned-properties (db/get-db) (:db/id block) position)
+  (let [properties (cond->> (outliner-property/get-block-positioned-properties (db/get-db) (:db/id block) position)
+                     (= position :block-below)
+                     (remove (fn [property]
+                               (= (:db/ident property) :logseq.property/icon))))
         has-viewable-properties? (seq properties)
         opts (merge config
                     {:icon? true

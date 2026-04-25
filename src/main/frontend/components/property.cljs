@@ -324,32 +324,45 @@
                 :container-id container-id
                 :editor-box (state/get-component :editor/box)
                 :default-collapsed? true
+                :bidirectional? true
+                :collapsable-page-title? true
+                :page-title? false
                 :ref? true}]
     (if (and blocks-container (seq entities))
-      [:div.property-block-container.content.w-full
+      [:div.ls-bidirectional-block-container.w-full
        (blocks-container config entities)]
       [:span.opacity-60 (t :view.filter/empty)])))
 
 (rum/defc bidirectional-properties-section < rum/static
   [bidirectional-properties]
   (when (seq bidirectional-properties)
-    (for [{:keys [class title entities]} bidirectional-properties]
-      [:div.property-pair.property-panel-row {:key (str "bidirectional-" title)}
-       [:div.property-key-panel
-        [:div.property-key-inner
-         (if class
-           [:a.property-k.flex.select-none.w-full.jtrigger
-            {:on-click (fn [e]
-                         (util/stop e)
-                         (route-handler/redirect-to-page! (:block/uuid class)))}
-            title]
-           [:div.property-k.flex.select-none.w-full title])]]
-       [:div.ls-block.property-value-container.property-value-panel
-        [:div.property-panel-bullet {:aria-hidden true}
-         [:span.bullet-container
-          [:span.bullet]]]
-        [:div.property-value.property-value-panel-inner.flex.flex-1
-         (bidirectional-values-cp entities)]]])))
+    (let [normalized-items (map-indexed
+                            (fn [idx {:keys [class title entities]}]
+                              (let [value (str (or (:db/id class) (str "idx-" idx)))]
+                                {:value value
+                                 :class class
+                                 :title title
+                                 :entities entities}))
+                            bidirectional-properties)
+          default-value (:value (first normalized-items))]
+      [:div.w-full.ls-bidirectional-properties.mt-8
+        (shui/tabs
+        {:defaultValue default-value
+         :class "w-full"}
+        (shui/tabs-list
+         {:variant :line
+          :class "h-8 gap-3"}
+         (for [{:keys [value title]} normalized-items]
+           (shui/tabs-trigger
+            {:key (str "bidirectional-tab-" value)
+             :value value
+             :class "px-0 py-1 text-base text-foreground"}
+            [:span title])))
+        (for [{:keys [value entities]} normalized-items]
+          (shui/tabs-content
+           {:key (str "bidirectional-tab-content-" value)
+            :value value}
+           (bidirectional-values-cp entities))))])))
 
 (rum/defcs ^:large-vars/cleanup-todo property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
@@ -940,7 +953,7 @@
              :tab-index 0}
             [:<>
              (when show-properties-panel?
-               [:div.properties-panel
+               [:div.properties-panel.gap-8
                 (properties-section block properties' opts)
                 (bidirectional-properties-section bidirectional-properties)])
 
