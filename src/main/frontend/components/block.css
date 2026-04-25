@@ -1070,7 +1070,7 @@ html.is-mac {
   }
 
   .bottom-property-pill {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 h-6 max-w-full text-base;
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 h-6 max-w-full text-sm;
     background-color: var(--ls-secondary-background-color);
     box-shadow: none;
     position: relative;
@@ -1111,7 +1111,7 @@ html.is-mac {
   }
 
   .bottom-property-content {
-    @apply flex items-center gap-1 min-w-0 relative text-base;
+    @apply flex items-center gap-1 min-w-0 relative text-sm;
   }
 
   .bottom-property-content.bottom-property-content-wrap {

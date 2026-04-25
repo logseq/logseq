@@ -952,16 +952,15 @@
                (let [properties (->> (:logseq.property.class/properties block)
                                      (map (fn [e] [(:db/ident e)])))
                      opts' (assoc opts :class-schema? true)]
-                 [:div.flex.flex-col.gap-1
+                 [:div.flex.flex-col.gap-1.ml-3.mt-2
                   [:div {:style {:font-size 15}}
-                   [:div.property-pair
-                    [:div.property-key.text-sm
-                     (property-key-cp block (db/entity :logseq.property.class/properties) {})]]
-                   [:div.text-muted-foreground {:style {:margin-left 26}}
+                   [:div.property-key.text-sm
+                    (property-key-cp block (db/entity :logseq.property.class/properties) {})]
+                   [:div.text-muted-foreground
                     (t :class/tag-properties-desc)]]
-                  [:div.ml-4.gap-1.flex.flex-col
+                  [:div.gap-1.flex.flex-col
                    (properties-section block properties opts')
                    (hidden-properties-cp block hidden-properties
                                          (assoc opts :show-hidden-properties? show-hidden-properties?))
-                   [:div.ml-3
+                   [:div.mt-1
                     (rum/with-key (new-property block opts') (str id "-class-add-property"))]]]))]])))]))

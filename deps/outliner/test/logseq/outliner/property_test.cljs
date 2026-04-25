@@ -448,6 +448,14 @@
   (testing "a schema property is part of the shared schema set"
     (is (contains? db-property/schema-properties :logseq.property/public?))))
 
+(deftest get-block-positioned-properties-filters-non-public
+  (let [conn (db-test/create-conn-with-blocks [])
+        journal-class (d/entity @conn :logseq.class/Journal)
+        positioned-properties (outliner-property/get-block-positioned-properties @conn (:db/id journal-class) :block-below)]
+    (is (every? #(not (false? (:logseq.property/public? %))) positioned-properties))
+    (is (not-any? #(= :logseq.property.journal/title-format (:db/ident %))
+                  positioned-properties))))
+
 (deftest extends-cycle
   (testing "Fail when creating a cycle of extends"
     (let [conn (db-test/create-conn-with-blocks

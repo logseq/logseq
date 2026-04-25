@@ -809,6 +809,7 @@
   (when-let [property (entity-plus/entity-memoized db property-id)]
     (let [property-position' (resolved-property-position db block property)]
       (and
+       (not (false? (:logseq.property/public? property)))
        (= property-position' position)
        (not (and (:logseq.property/hide-empty-value property)
                  (nil? (get block property-id))))
