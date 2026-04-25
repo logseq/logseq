@@ -55,11 +55,9 @@
 
 (rum/defc property-empty-btn-value
   [property & [opts]]
-  (let [text (if (= (:property-position opts) :block-below)
-               (ui/icon "line-dashed")
-               (if (= (:db/ident property) :logseq.property/description)
+  (let [text (if (= (:db/ident property) :logseq.property/description)
                (t :property/add-description)
-               (t :ui/empty)))]
+               (ui/icon "line-dashed"))]
     (shui/button (merge {:class "empty-btn" :variant :text} (or opts {}))
                  text)))
 
@@ -70,11 +68,9 @@
    (when-not table-view?
      (if (= property-position :block-below)
        (ui/icon "line-dashed")
-       (if property-position
-         (if-let [icon (:logseq.property/icon property)]
-           (icon-component/icon icon {:color? true})
-           (ui/icon "line-dashed"))
-         (t :ui/empty))))])
+       (if-let [icon (:logseq.property/icon property)]
+         (icon-component/icon icon {:color? true})
+         (ui/icon "line-dashed"))))])
 
 (defn- get-selected-blocks
   []
