@@ -1163,13 +1163,12 @@ html.is-mac {
   }
 
   .bottom-property-edit-icon {
-    @apply inline-flex items-center justify-end pr-0 py-2 px-2 border-0 cursor-pointer opacity-0 pointer-events-none;
-    position: absolute;
-    right: -10px;
-    top: 1px;
-    height: calc(100% - 2px);
+    @apply inline-flex items-center justify-center p-0 border-0 cursor-pointer opacity-50 pointer-events-auto;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
     color: var(--ls-primary-text-color);
-    background: linear-gradient(to left, var(--ls-secondary-background-color) 65%, transparent);
+    background: transparent;
   }
 
   .bottom-property-pill:hover .bottom-property-edit-icon,
