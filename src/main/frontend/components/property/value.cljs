@@ -54,11 +54,13 @@
   (and (map? m) (:db/id m)))
 
 (rum/defc property-empty-btn-value
-  [property & opts]
-  (let [text (if (= (:db/ident property) :logseq.property/description)
+  [property & [opts]]
+  (let [text (if (= (:property-position opts) :block-below)
+               (ui/icon "line-dashed")
+               (if (= (:db/ident property) :logseq.property/description)
                (t :property/add-description)
-               (t :ui/empty))]
-    (shui/button (merge {:class "empty-btn" :variant :text} opts)
+               (t :ui/empty)))]
+    (shui/button (merge {:class "empty-btn" :variant :text} (or opts {}))
                  text)))
 
 (rum/defc property-empty-text-value
@@ -66,11 +68,13 @@
   [:span.inline-flex.items-center.cursor-pointer.w-full
    (merge {:class "empty-text-btn" :variant :text})
    (when-not table-view?
-     (if property-position
-       (if-let [icon (:logseq.property/icon property)]
-         (icon-component/icon icon {:color? true})
-         (ui/icon "line-dashed"))
-       (t :ui/empty)))])
+     (if (= property-position :block-below)
+       (ui/icon "line-dashed")
+       (if property-position
+         (if-let [icon (:logseq.property/icon property)]
+           (icon-component/icon icon {:color? true})
+           (ui/icon "line-dashed"))
+         (t :ui/empty))))])
 
 (defn- get-selected-blocks
   []
@@ -464,7 +468,8 @@
                                            (:db/ident property)))
 
 (rum/defc date-picker
-  [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position? suppress-inline-edit-icon?]}]
+  [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?
+                 suppress-inline-edit-icon? property-position]}]
   (let [*el (hooks/use-ref nil)
         content-fn (fn [{:keys [id]}] (calendar-inner id
                                                       {:block block
@@ -536,7 +541,7 @@
                              :suppress-inline-edit-icon? suppress-inline-edit-icon?})
 
             :else
-            (property-empty-btn-value nil))])))))
+            (property-empty-btn-value nil {:property-position property-position}))])))))
 
 (rum/defc property-value-date-picker
   [block property value opts]
@@ -1198,7 +1203,7 @@
     [:div.select-item.cursor-pointer
      (cond
        (= value :logseq.property/empty-placeholder)
-       (property-empty-btn-value property)
+       (property-empty-btn-value property opts)
 
        closed-values?
        (closed-value-item value opts)

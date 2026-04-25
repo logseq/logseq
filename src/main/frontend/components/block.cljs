@@ -2693,7 +2693,10 @@
 (defn- bottom-property-pill-cp
   [block property opts]
   (let [many-node? (and (= :node (:logseq.property/type property))
-                        (= :db.cardinality/many (:db/cardinality property)))]
+                        (= :db.cardinality/many (:db/cardinality property)))
+        property-value (get block (:db/ident property))
+        empty-placeholder? (= :logseq.property/empty-placeholder (:db/ident property-value))
+        has-value? (and (some? property-value) (not empty-placeholder?))]
     [:div.bottom-property-pill.bottom-property-pill-focusable
      {:key (str (:db/id block) "-" (:db/id property))
       :class (util/classnames [{:bottom-property-pill-wrap many-node?}])
@@ -2709,7 +2712,8 @@
                    {:bottom-property-content-wrap many-node?}])
           :style {:min-height 20}}
     (pv/property-value block property opts)
-    (when (contains? #{:date :datetime} (:logseq.property/type property))
+    (when (and has-value?
+               (contains? #{:date :datetime} (:logseq.property/type property)))
       [:button.bottom-property-edit-icon.select-none
        {:type "button"
         :on-click (fn [e]

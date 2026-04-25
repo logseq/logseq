@@ -805,7 +805,7 @@
       :properties)))
 
 (defn- property-with-position?
-  [db property-id block position]
+  [db property-id block position {:keys [allow-empty-block-below?]}]
   (when-let [property (entity-plus/entity-memoized db property-id)]
     (let [property-position' (resolved-property-position db block property)]
       (and
@@ -817,6 +817,7 @@
        (not (and
              (= property-position' :block-below)
              (nil? (get block property-id))
+             (not allow-empty-block-below?)
              (not (tag-class-page? db block))))))))
 
 (defn property-with-other-position?
@@ -827,18 +828,24 @@
   [db eid position]
   (let [block (d/entity db eid)
         own-properties (:block.temp/property-keys block)
+        classes-properties (when-not (tag-class-page? db block)
+                             (:classes-properties (get-block-classes-properties db eid)))
+        classes-properties-set (set (map :db/ident classes-properties))
         tag-page-pill-properties (when (tag-class-page? db block)
                                    [:logseq.property.class/extends
                                     :logseq.property.class/enable-bidirectional?])
         positioned-property-ids (if (tag-class-page? db block)
                                   (->> (concat own-properties tag-page-pill-properties)
                                        distinct)
-                                  (->> (:classes-properties (get-block-classes-properties db eid))
+                                  (->> classes-properties
                                        (map :db/ident)
                                        (concat own-properties)
                                        distinct))]
     (->> positioned-property-ids
-         (filter (fn [id] (property-with-position? db id block position)))
+         (filter (fn [id]
+                   (property-with-position? db id block position
+                                            {:allow-empty-block-below?
+                                             (contains? classes-properties-set id)})))
          (map #(d/entity db %))
          (ldb/sort-by-order))))
 
