@@ -440,11 +440,9 @@
                  :ls-fold-button-on-right fold-button-on-right?
                  :ls-hl-colored ls-block-hl-colored?}])
        :on-pointer-up (fn []
-                        (when-let [container (gdom/getElement "app-container-wrapper")]
-                          (d/remove-class! container "blocks-selection-mode")
-                          (when (and (> (count (state/get-selection-blocks)) 1)
-                                     (not (util/input? js/document.activeElement)))
-                            (util/clear-selection!))))}
+                        (when (and (> (count (state/get-selection-blocks)) 1)
+                                   (not (util/input? js/document.activeElement)))
+                          (util/clear-selection!)))}
 
       [:button#skip-to-main
        {:on-click #(ui/focus-element (ui/main-node))

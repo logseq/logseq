@@ -691,8 +691,6 @@
       ;; exit editing mode
       :else
       (let [select? (= type :esc)]
-        (when-let [container (gdom/getElement "app-container")]
-          (dom/remove-class! container "blocks-selection-mode"))
         (p/do!
          (editor-handler/escape-editing {:select? select?
                                          :editing-another-block? editing-another-block?})
