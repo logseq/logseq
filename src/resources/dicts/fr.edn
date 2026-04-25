@@ -1264,7 +1264,6 @@
  :property/drag-to-reorder "Glisser pour réordonner"
  :property/existing-values "Valeurs existantes"
  :property/go-to-this-property "Aller à la page de propriété"
- :property/hidden-properties "Propriétés masquées"
  :property/hide-by-default "Masquer par défaut"
  :property/hide-choice-for-tag "Masquer le choix pour le tag"
  :property/hide-empty-value "Masquer les valeurs vides"

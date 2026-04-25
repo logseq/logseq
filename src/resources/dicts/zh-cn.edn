@@ -1268,7 +1268,6 @@
  :property/drag-to-reorder "拖拽以重新排序"
  :property/existing-values "已有值："
  :property/go-to-this-property "跳转到此属性"
- :property/hidden-properties "隐藏属性"
  :property/hide-by-default "默认隐藏"
  :property/hide-choice-for-tag "对此标签隐藏选项"
  :property/hide-empty-value "隐藏空值"
