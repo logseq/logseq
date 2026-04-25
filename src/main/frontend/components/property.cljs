@@ -952,14 +952,14 @@
              :class (util/classnames [{:ls-page-properties page?}])
              :tab-index 0}
             [:<>
+             (when-not class?
+               (hidden-properties-cp block hidden-properties
+                                     (assoc opts :show-hidden-properties? show-hidden-properties?)))
+
              (when show-properties-panel?
                [:div.properties-panel.gap-8
                 (properties-section block properties' opts)
                 (bidirectional-properties-section bidirectional-properties)])
-
-             (when-not class?
-               (hidden-properties-cp block hidden-properties
-                                     (assoc opts :show-hidden-properties? show-hidden-properties?)))
 
              (when class?
                (let [properties (->> (:logseq.property.class/properties block)
