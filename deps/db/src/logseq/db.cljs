@@ -873,7 +873,8 @@
    * :title - pluralized class title
    * :entities - node entities that reference the target via ref properties"
   [db target-id]
-  (when (and db target-id (d/entity db target-id))
+  (when (and db target-id
+             (not (:logseq.property/created-from-property (d/entity db target-id))))
     (let [*attr->bidirectional? (volatile! {})
           bidirectional-property-attr-cached?
           (fn [attr]

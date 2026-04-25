@@ -776,25 +776,26 @@
 (defn- bottom-position-property?
   [db block property]
   (let [property-id (:db/ident property)
-        property-type (:logseq.property/type property)]
+        property-type (:logseq.property/type property)
+        node-many? (and (= :node property-type)
+                        (= :db.cardinality/many (:db/cardinality property)))
+        default-bottom? (and (not= :url property-type)
+                             (or node-many?
+                                 (not= :default property-type)
+                                 (seq (:property/closed-values property)))
+                             (not (schema-or-tag-related-property? property-id)))]
     (if (tag-class-page? db block)
       (or (contains? #{:logseq.property.class/extends
                        :logseq.property.class/enable-bidirectional?}
                      property-id)
-          (and (not= :url property-type)
-               (or (not= :default property-type)
-                   (seq (:property/closed-values property)))
-               (not (schema-or-tag-related-property? property-id))))
-      (and (not= :url property-type)
-           (or (not= :default property-type)
-               (seq (:property/closed-values property)))
-           (not (schema-or-tag-related-property? property-id))))))
+          default-bottom?)
+      default-bottom?)))
 
 (defn- resolved-property-position
   [db block property]
   (let [ui-position (:logseq.property/ui-position property)]
     (cond
-      (contains? #{:block-left :block-right :block-below} ui-position)
+      (contains? #{:properties :block-left :block-right :block-below} ui-position)
       ui-position
 
       (bottom-position-property? db block property)

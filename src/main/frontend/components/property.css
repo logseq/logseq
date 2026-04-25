@@ -291,7 +291,9 @@
 }
 
 .ui__button.empty-btn, .empty-text-btn {
-  @apply !h-6 !px-0 !text-base opacity-50 font-normal;
+  @apply !h-6 !px-0 opacity-50 font-normal;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .ui__button.empty-btn:hover, .empty-text-btn:hover {
