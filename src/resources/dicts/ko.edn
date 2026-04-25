@@ -1264,7 +1264,6 @@
  :property/drag-to-reorder "드래그로 재정렬"
  :property/existing-values "기존 값"
  :property/go-to-this-property "이 속성의 페이지로"
- :property/hidden-properties "숨겨진 속성"
  :property/hide-by-default "기본적으로 숨기기"
  :property/hide-choice-for-tag "태그의 선택지 숨기기"
  :property/hide-empty-value "빈 값 숨기기"

@@ -801,8 +801,8 @@
     (when block-uuid
       (let [button
             (shui/button
-             {:variant :outline
-              :size :small
+             {:variant :secondary
+              :size :sm
               :class (str "bottom-property-control-btn"
                           (when icon-only? " bottom-property-add-btn"))
               :tab-index (or tab-index 0)

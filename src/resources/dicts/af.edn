@@ -1264,7 +1264,6 @@
  :property/drag-to-reorder "Sleep om te herordenen"
  :property/existing-values "Bestaande waarden"
  :property/go-to-this-property "Ga na eienskapsbladsy"
- :property/hidden-properties "Versteekte eienskappe"
  :property/hide-by-default "Versteek by verstek"
  :property/hide-choice-for-tag "Keuze versteek vir tag"
  :property/hide-empty-value "Lege waarden versteek"

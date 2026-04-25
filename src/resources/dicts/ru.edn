@@ -1264,7 +1264,6 @@
  :property/drag-to-reorder "Перетащите для изменения порядка"
  :property/existing-values "Существующие значения"
  :property/go-to-this-property "Перейти к странице свойства"
- :property/hidden-properties "Скрытые свойства"
  :property/hide-by-default "Скрывать по умолчанию"
  :property/hide-choice-for-tag "Скрыть вариант для тега"
  :property/hide-empty-value "Скрыть пустые значения"

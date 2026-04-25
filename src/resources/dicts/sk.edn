@@ -1264,7 +1264,6 @@
  :property/drag-to-reorder "Přetáhněte pro změnu pořadí"
  :property/existing-values "Existující hodnoty"
  :property/go-to-this-property "Prejsť na stránku vlastnosťi"
- :property/hidden-properties "Skryté vlastnosti"
  :property/hide-by-default "Skryť ve predvoleným nastavenia"
  :property/hide-choice-for-tag "Skryť volbu pro štítok"
  :property/hide-empty-value "Skryť prázdné hodnoty"

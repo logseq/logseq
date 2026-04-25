@@ -1264,7 +1264,6 @@
  :property/drag-to-reorder "برای مرتب‌سازی بکشید"
  :property/existing-values "مقادیر موجود"
  :property/go-to-this-property "رفتن به صفحه ویژگی"
- :property/hidden-properties "ویژگی‌های پنهان"
  :property/hide-by-default "مخفی به‌طور پیش‌فرض"
  :property/hide-choice-for-tag "مخفی کردن گزینه برای برچسب"
  :property/hide-empty-value "مخفی کردن مقادیر خالی"
