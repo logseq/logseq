@@ -2154,6 +2154,10 @@
   [node]
   (some-> node (.closest ".bottom-properties-row")))
 
+(defn- bottom-properties-row-in-block
+  [block-node]
+  (some-> block-node (.querySelector ".bottom-properties-row")))
+
 (defn- focus-trigger
   [_current-block sibling-block]
   (if-let [trigger (first (dom/by-class sibling-block "jtrigger"))]
@@ -2182,9 +2186,11 @@
                                              (assoc :exclude-property? true)))
             {:block/keys [uuid title]} (state/get-edit-block)
             sibling-block (or (when (property-value-node? sibling-block)
-                                (first (dom/by-class sibling-block "ls-block")))
+                                (util/rec-get-node sibling-block "ls-block"))
                               sibling-block)
+            current-bottom-properties-row (bottom-properties-row-in-block current-block)
             bottom-properties-row (bottom-properties-row-node sibling-block)
+            sibling-bottom-properties-row (bottom-properties-row-in-block sibling-block)
             property-value-container? (property-value-node? sibling-block)]
         (if sibling-block
           (let [sibling-block-id (dom/attr sibling-block "blockid")
@@ -2198,6 +2204,20 @@
                (save-block! repo uuid value))
 
              (cond
+               (and (= :down direction)
+                    input
+                    (= active-element input)
+                    current-bottom-properties-row)
+               (do
+                 (state/clear-edit!)
+                 (.focus current-bottom-properties-row))
+
+               (and (= :up direction)
+                    sibling-bottom-properties-row)
+               (do
+                 (state/clear-edit!)
+                 (.focus sibling-bottom-properties-row))
+
                (and (dom/has-class? sibling-block "block-add-button")
                     (util/rec-get-node current-block "ls-page-title"))
                (.click sibling-block)
@@ -2264,7 +2284,7 @@
         sibling-block (or (when (and sibling-block (property-value-node? sibling-block))
                             (if (and up? editing-block (gdom/contains sibling-block editing-block))
                               (f sibling-block)
-                              (first (dom/by-class sibling-block "ls-block"))))
+                              (util/rec-get-node sibling-block "ls-block")))
                           sibling-block)]
     (when sibling-block
       (let [content (:block/title block)
