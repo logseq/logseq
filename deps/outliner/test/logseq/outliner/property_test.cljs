@@ -456,6 +456,19 @@
     (is (not-any? #(= :logseq.property.journal/title-format (:db/ident %))
                   positioned-properties))))
 
+(deftest get-block-positioned-properties-keeps-empty-inherited-tag-properties
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:authors {:logseq.property/type :node
+                                      :db/cardinality :db.cardinality/many}}
+               :classes {:Paper {:build/class-properties [:authors]}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "paper1"
+                                             :build/tags [:Paper]}]}]})
+        paper1 (db-test/find-block-by-content @conn "paper1")
+        positioned-properties (outliner-property/get-block-positioned-properties @conn (:db/id paper1) :block-below)
+        positioned-idents (set (map :db/ident positioned-properties))]
+    (is (contains? positioned-idents :user.property/authors))))
+
 (deftest extends-cycle
   (testing "Fail when creating a cycle of extends"
     (let [conn (db-test/create-conn-with-blocks
