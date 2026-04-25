@@ -1268,7 +1268,6 @@
  :property/drag-to-reorder "Drag && Drop to reorder"
  :property/existing-values "Existing values:"
  :property/go-to-this-property "Go to this property"
- :property/hidden-properties "Hidden properties"
  :property/hide-by-default "Hide by default"
  :property/hide-choice-for-tag "Hide choice for this tag"
  :property/hide-empty-value "Hide empty value"

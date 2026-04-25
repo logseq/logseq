@@ -1264,7 +1264,6 @@
  :property/drag-to-reorder "拖曳以重新排序"
  :property/existing-values "現有值："
  :property/go-to-this-property "跳至此屬性"
- :property/hidden-properties "隱藏的屬性"
  :property/hide-by-default "預設隱藏"
  :property/hide-choice-for-tag "對此標籤隱藏選項"
  :property/hide-empty-value "隱藏空值"

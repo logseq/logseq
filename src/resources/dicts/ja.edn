@@ -1264,7 +1264,6 @@
  :property/drag-to-reorder "ドラッグで並び替え"
  :property/existing-values "既存の値"
  :property/go-to-this-property "このプロパティのページへ"
- :property/hidden-properties "非表示のプロパティ"
  :property/hide-by-default "デフォルトで非表示"
  :property/hide-choice-for-tag "タグの選択肢を非表示"
  :property/hide-empty-value "空の値を非表示"

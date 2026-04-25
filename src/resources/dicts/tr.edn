@@ -1264,7 +1264,6 @@
  :property/drag-to-reorder "Sıralamak için sürükleyin"
  :property/existing-values "Mevcut değerler"
  :property/go-to-this-property "Özellik sayfasına git"
- :property/hidden-properties "Gizli özellikler"
  :property/hide-by-default "Varsayılan olarak gizle"
  :property/hide-choice-for-tag "Etiket için seçeneği gizle"
  :property/hide-empty-value "Boş değerleri gizle"

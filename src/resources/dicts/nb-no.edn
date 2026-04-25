@@ -1264,7 +1264,6 @@
  :property/drag-to-reorder "Dra for å omorganisere"
  :property/existing-values "Eksisterende verdier"
  :property/go-to-this-property "Gå til egenskapsside"
- :property/hidden-properties "Skjulte egenskaper"
  :property/hide-by-default "Skjul som standard"
  :property/hide-choice-for-tag "Skjul valg for tagg"
  :property/hide-empty-value "Skjul tomme verdier"

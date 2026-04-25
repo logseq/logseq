@@ -1264,7 +1264,6 @@
  :property/drag-to-reorder "اسحب لإعادة الترتيب"
  :property/existing-values "القيم الموجودة"
  :property/go-to-this-property "الانتقال إلى صفحة الخاصية"
- :property/hidden-properties "خصائص مخفية"
  :property/hide-by-default "إخفاء افتراضياً"
  :property/hide-choice-for-tag "إخفاء الخيار للوسم"
  :property/hide-empty-value "إخفاء القيم الفارغة"
