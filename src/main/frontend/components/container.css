@@ -765,9 +765,7 @@ html[data-theme='dark'] {
   }
 }
 
-.blocks-selection-mode .page-title,
-.blocks-selection-mode .block-content-inner,
-.blocks-selection-mode .block-body,
-.blocks-selection-mode .ls-properties-area {
-  @apply select-none;
+.ls-block.selected,
+.ls-block.selected * {
+  user-select: none;
 }

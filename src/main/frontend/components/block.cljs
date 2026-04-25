@@ -2709,7 +2709,7 @@
     (property-component/property-key-cp block property opts)
     [:div.select-none ":"]]
    [:div {:class (util/classnames
-                  ["bottom-property-content ls-block property-value-container"
+                  ["bottom-property-content property-value-container"
                    {:bottom-property-content-wrap many-node?}])
           :style {:min-height 20}}
     (pv/property-value block property opts)
@@ -3380,8 +3380,6 @@
           (when doc-mode?
             (dom/remove-class! node "hide-inner-bullet"))))
       (when (non-dragging? e)
-        (when-let [container (gdom/getElement "app-container-wrapper")]
-          (dom/add-class! container "blocks-selection-mode"))
         (editor-handler/highlight-selection-area! block-id block-dom-node {:append? true})))))
 
 (defn- block-mouse-leave
