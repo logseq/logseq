@@ -399,6 +399,24 @@
            :logseq.property/type :url
            :logseq.property/ui-position :block-left}))))
 
+  (testing "explicit properties ui-position keeps property in normal property rows"
+    (is (false?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :user.property/p1
+           :logseq.property/type :number
+           :logseq.property/ui-position :properties}))))
+
+  (testing "many node property without explicit ui-position defaults to bottom position"
+    (is (true?
+         (outliner-property/property-with-other-position?
+          nil
+          {}
+          {:db/ident :user.property/p1
+           :logseq.property/type :node
+           :db/cardinality :db.cardinality/many}))))
+
   (testing "bidirectional config property stays in normal property rows"
     (is (false?
          (outliner-property/property-with-other-position?

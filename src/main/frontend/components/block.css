@@ -1070,10 +1070,17 @@ html.is-mac {
   }
 
   .bottom-property-pill {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 h-6 max-w-full;
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 h-6 max-w-full text-base;
     background-color: var(--ls-secondary-background-color);
     box-shadow: inset 0 0 0 1px var(--ls-border-color);
     position: relative;
+  }
+
+  .bottom-property-pill.bottom-property-pill-wrap {
+    @apply h-auto;
+    min-height: 1.5rem; /* keep default 24px baseline, allow growth only when wrapped */
+    padding-top: 0;
+    padding-bottom: 0;
   }
 
   .bottom-property-pill-focusable:focus {
@@ -1090,7 +1097,15 @@ html.is-mac {
   }
 
   .bottom-property-content {
-    @apply flex items-center gap-1 min-w-0 relative;
+    @apply flex items-center gap-1 min-w-0 relative text-base;
+  }
+
+  .bottom-property-content.bottom-property-content-wrap {
+    @apply flex-1 flex-wrap min-w-0;
+  }
+
+  .bottom-property-pill-wrap .multi-values.jtrigger {
+    @apply min-w-0;
   }
 
   .bottom-property-pill .property-key-inner {

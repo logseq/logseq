@@ -1359,7 +1359,8 @@
         *ref (hooks/use-ref nil)
         *input-ref (hooks/use-ref nil)
         number-value (db-property/property-value-content value-block)
-        [value set-value!] (hooks/use-state number-value)
+        number-value-str (if (some? number-value) (str number-value) "")
+        [value set-value!] (hooks/use-state number-value-str)
         [*value _] (hooks/use-state (atom value))
         set-property-value! (fn [value & {:keys [exit-editing?]
                                           :or {exit-editing? true}}]
@@ -1385,9 +1386,9 @@
 
     (hooks/use-effect!
      (fn []
-       (set-value! number-value)
+       (set-value! number-value-str)
        #())
-     [number-value])
+     [number-value-str])
 
     [:div.ls-number.flex.flex-1.jtrigger
      {:ref *ref
@@ -1433,7 +1434,9 @@
                                (.focus (rum/deref *ref)))
 
                               nil))))})
-       value)]))
+       (if (string/blank? value)
+         (property-empty-btn-value property)
+         value))]))
 
 (rum/defcs property-scalar-value-aux < rum/static rum/reactive
   [state block property value* {:keys [editing? on-chosen]
