@@ -333,6 +333,29 @@
   }
 }
 
+/* Bottom property pills need wrapping for long node references.
+   Keep this override in property.css so it wins against the default
+   `.property-value-inner .select-item { whitespace-nowrap; }` rule. */
+.positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .multi-values.jtrigger {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+}
+
+.positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .select-item,
+.positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .page-ref,
+.positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .block-title-wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.positioned-properties.block-below .bottom-property-content .property-value-inner[data-type=node] .select-item {
+  display: block;
+}
+
 .block-main-container .ls-properties-area {
   margin-top: 0.25em;
 }
