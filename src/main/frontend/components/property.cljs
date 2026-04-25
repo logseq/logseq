@@ -465,25 +465,28 @@
           bottom-row-nav? (:bottom-row-nav? opts)
           add-new-property! (fn [e]
                               (state/pub-event! [:editor/new-property (merge opts {:block block
-                                                                                   :target (.-target e)})]))]
+                                                                                   :target (.-target e)})]))
+          button
+          (shui/button
+             {:variant :secondary
+              :size :sm
+             :class (str "jtrigger flex"
+                         (when bottom-property-add-button? " bottom-property-add-btn"))
+             :tab-index (or tab-index 0)
+             :data-bottom-row-nav (when bottom-row-nav? true)
+             :aria-label (t :property/add-new)
+             :on-click add-new-property!
+             :on-key-press (fn [e]
+                             (when (contains? #{"Enter" " "} (util/ekey e))
+                               (.preventDefault e)
+                               (add-new-property! e)))}
+            (ui/icon "plus" {:size 16 :class "bottom-property-action-icon"})
+            (when-not icon-only?
+              (t :property/add-new)))]
       [:div.ls-new-property
-       (shui/button
-         {:variant :outline
-          :size :small
-          :class (util/classnames
-                  ["jtrigger flex !px-2 !py-1"
-                   {:bottom-property-add-btn bottom-property-add-button?}])
-          :tab-index (or tab-index 0)
-          :data-bottom-row-nav (when bottom-row-nav? true)
-          :title (t :property/add-new)
-          :on-click add-new-property!
-          :on-key-press (fn [e]
-                          (when (contains? #{"Enter" " "} (util/ekey e))
-                            (.preventDefault e)
-                            (add-new-property! e)))}
-         (ui/icon "plus")
-         (when-not icon-only?
-           (t :property/add-new)))])))
+       (if icon-only?
+         (ui/tooltip button [:span (t :property/add-new)])
+         button)])))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
@@ -689,6 +692,12 @@
   [block-uuid]
   (contains? @*show-hidden-properties-block-ids block-uuid))
 
+(defn- hidden-properties-toggle-label
+  [show-hidden-properties?]
+  (if show-hidden-properties?
+    "Collapse hidden properties"
+    "Show hidden properties"))
+
 (defn has-hidden-properties?
   [block {:keys [gallery-view?]}]
   (let [current-db (db/get-db)
@@ -783,25 +792,30 @@
                               (remove-built-in-or-other-position-properties true))]
     (boolean (seq hidden-properties))))
 
-(rum/defc hidden-properties-toggle-button
+(rum/defc hidden-properties-toggle-button < rum/reactive
   [block {:keys [icon-only? tab-index bottom-row-nav?] :as _opts}]
-  (let [block-uuid (:block/uuid block)]
+  (let [block-uuid (:block/uuid block)
+        shown-block-ids (rum/react *show-hidden-properties-block-ids)
+        show-hidden-properties? (contains? shown-block-ids block-uuid)
+        label (hidden-properties-toggle-label show-hidden-properties?)]
     (when block-uuid
-      (shui/button
-       {:variant :outline
-        :size :small
-        :class (util/classnames
-                ["bottom-property-control-btn"
-                 {:bottom-property-add-btn icon-only?}])
-        :tab-index (or tab-index 0)
-        :data-bottom-row-nav (when bottom-row-nav? true)
-        :title (t :property/hidden-properties)
-        :on-click (fn [e]
-                    (util/stop e)
-                    (toggle-hidden-properties-visibility! block-uuid))}
-       (if icon-only?
-         [:span.select-none "⋯"]
-         (t :property/hidden-properties))))))
+      (let [button
+            (shui/button
+             {:variant :outline
+              :size :small
+              :class (str "bottom-property-control-btn"
+                          (when icon-only? " bottom-property-add-btn"))
+              :tab-index (or tab-index 0)
+              :data-bottom-row-nav (when bottom-row-nav? true)
+              :aria-label label
+              :on-click (fn [e]
+                          (util/stop e)
+                          (toggle-hidden-properties-visibility! block-uuid))}
+             (ui/icon (if show-hidden-properties? "chevron-up" "chevron-down")
+                      {:size 16 :class "bottom-property-action-icon"})
+             (when-not icon-only?
+               label))]
+        (ui/tooltip button [:span label])))))
 
 (rum/defc hidden-properties-cp
   [block hidden-properties {:keys [show-hidden-properties?] :as opts}]

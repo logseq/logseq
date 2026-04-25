@@ -1148,12 +1148,27 @@ html.is-mac {
 
   .ls-new-property .jtrigger,
   .bottom-property-control-btn {
-    @apply inline-flex items-center rounded-full px-1.5 py-0.5 h-6 text-xs text-muted-foreground;
+    @apply inline-flex items-center justify-center w-6 h-6 p-0 rounded-full text-xs;
+    color: var(--ls-secondary-text-color);
+    background-color: var(--ls-secondary-background-color);
+    border: 0;
     box-shadow: inset 0 0 0 1px var(--ls-border-color);
+  }
+
+  .ls-new-property .jtrigger:hover,
+  .bottom-property-control-btn:hover {
+    color: var(--ls-secondary-text-color);
+    background-color: var(--ls-secondary-background-color);
   }
 
   .bottom-property-add-btn {
     @apply justify-center w-6 h-6 p-0 rounded-full;
+    border-radius: 9999px;
+  }
+
+  .bottom-property-action-icon {
+    width: 16px;
+    height: 16px;
   }
 
   .ls-new-property .jtrigger.bottom-property-add-btn:focus,
