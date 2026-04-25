@@ -1672,7 +1672,9 @@
 
 (rum/defcs list-view < rum/static mixins/container-id
   [state {:keys [config ref-matched-children-ids disable-virtualized?] :as option} view-entity {:keys [rows]} *scroller-ref]
-  (let [config (assoc config :container-id (:container-id state))
+  (let [view-feature-type (:logseq.property.view/feature-type view-entity)
+        references-view? (contains? #{:linked-references :unlinked-references} view-feature-type)
+        config (assoc config :container-id (:container-id state))
         lazy-item-render (fn [rows idx]
                            (lazy-item rows idx (assoc option :list-view? true)
                                       (fn [block]
@@ -1680,7 +1682,9 @@
                                                        (assoc config
                                                               :list-view? true
                                                               :block-level 1)
-                                                        (= :linked-references (:logseq.property.view/feature-type view-entity))
+                                                        references-view?
+                                                        (assoc :ref? true)
+                                                        (= :linked-references view-feature-type)
                                                         (assoc :ref-matched-children-ids ref-matched-children-ids))]
                                           (block-container config' block)))))
         list-cp (fn [rows]

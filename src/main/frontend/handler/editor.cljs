@@ -3038,13 +3038,18 @@
   (let [class-properties (:classes-properties (outliner-property/get-block-classes-properties (db/get-db) (:db/id block)))
         db (db/get-db)
         attributes (set (remove #{:block/alias} db-property/db-attribute-properties))
+        bottom-positioned-property-idents (when-not page-title?
+                                            (->> (outliner-property/get-block-positioned-properties db (:db/id block) :block-below)
+                                                 (map :db/ident)
+                                                 set))
         properties (->> (:block.temp/property-keys block)
                         (map (partial entity-plus/entity-memoized db))
                         (concat class-properties)
                         (remove (fn [e] (attributes (:db/ident e))))
-                        (remove (fn [k]
+                        (remove (fn [property]
                                   (when-not page-title?
-                                    (outliner-property/property-with-other-position? db block k))))
+                                    (and (outliner-property/property-with-other-position? db block property)
+                                         (not (contains? bottom-positioned-property-idents (:db/ident property)))))))
                         (remove (fn [e] (:logseq.property/hide? e)))
                         (remove nil?))]
     (or (seq properties)
@@ -3146,6 +3151,17 @@
   (let [config (last (state/get-editor-args))]
     (:ref? config)))
 
+(defn- collapse-block-opts
+  []
+  (let [config (last (state/get-editor-args))
+        collapsable-page-title? (or (:page-title? config)
+                                    (:collapsable-page-title? config))]
+    {:page-title? collapsable-page-title?}))
+
+(defn- current-editor-container-id
+  []
+  (some-> (state/get-editor-args) last :container-id))
+
 (defn set-blocks-collapsed!
   [block-ids value]
   (let [block-ids (map (fn [block-id] (if (string? block-id) (uuid block-id) block-id)) block-ids)
@@ -3162,19 +3178,22 @@
       (doseq [block-id block-ids]
         (state/set-collapsed-block! block-id value)))))
 
-(defn collapse-block! [block-id]
-  (when (collapsable? block-id)
-    (when-not (skip-collapsing-in-db?)
-      (set-blocks-collapsed! [block-id] true))
-    (state/set-collapsed-block! block-id true)))
+(defn collapse-block!
+  ([block-id]
+   (collapse-block! block-id nil))
+  ([block-id container-id]
+   (when (collapsable? block-id (collapse-block-opts))
+     (when-not (skip-collapsing-in-db?)
+       (set-blocks-collapsed! [block-id] true))
+     (state/set-collapsed-block! block-id true (or container-id (current-editor-container-id))))))
 
-(defn expand-block! [block-id & {:keys [skip-db-collpsing?]}]
+(defn expand-block! [block-id & {:keys [skip-db-collpsing? container-id]}]
   (let [repo (state/get-current-repo)]
     (p/do!
      (db-async/<get-block repo block-id {:include-collapsed-children? true})
      (when-not (or skip-db-collpsing? (skip-collapsing-in-db?))
        (set-blocks-collapsed! [block-id] false))
-     (state/set-collapsed-block! block-id false))))
+     (state/set-collapsed-block! block-id false (or container-id (current-editor-container-id))))))
 
 (defn expand!
   ([e] (expand! e false))
@@ -3189,9 +3208,10 @@
      (do
        (->> (get-selected-blocks)
             (map (fn [dom]
-                   (-> (dom/attr dom "blockid")
-                       uuid
-                       expand-block!)))
+                   (let [block-id (some-> (dom/attr dom "blockid") uuid)
+                         container-id (dom/attr dom "containerid")]
+                     (when block-id
+                       (expand-block! block-id :container-id container-id)))))
             doall)
        (and clear-selection? (clear-selection!)))
 
@@ -3223,9 +3243,10 @@
      (do
        (->> (get-selected-blocks)
             (map (fn [dom]
-                   (-> (dom/attr dom "blockid")
-                       uuid
-                       collapse-block!)))
+                   (let [block-id (some-> (dom/attr dom "blockid") uuid)
+                         container-id (dom/attr dom "containerid")]
+                     (when block-id
+                       (collapse-block! block-id container-id)))))
             doall)
        (and clear-selection? (clear-selection!)))
 
@@ -3459,17 +3480,21 @@
   Currently, this handles all the kinds of views."
   [block config]
   (let [block (or (db/entity (:db/id block)) block)]
-    (or
-     (util/collapsed? block)
-     (and (util/mobile?) (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block))
-     (and (or (:list-view? config) (:ref? config))
-          (or (:block/_parent block) (:block.temp/has-children? block))
-          (integer? (:block-level config))
-          (>= (:block-level config) (state/get-ref-open-blocks-level)))
-     (:default-collapsed? config)
-     (and (or (:view? config) (:popup? config))
-          (or (ldb/page? block)
-              (:table-block-title? config))))))
+    (if (:bidirectional? config)
+      (if (:ref-query-child? config)
+        (util/collapsed? block)
+        true)
+      (or
+       (util/collapsed? block)
+       (and (util/mobile?) (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block))
+       (and (or (:list-view? config) (:ref? config))
+            (or (:block/_parent block) (:block.temp/has-children? block))
+            (integer? (:block-level config))
+            (>= (:block-level config) (state/get-ref-open-blocks-level)))
+       (:default-collapsed? config)
+       (and (or (:view? config) (:popup? config))
+            (or (ldb/page? block)
+                (:table-block-title? config)))))))
 
 (defn batch-set-heading!
   [block-ids heading]
