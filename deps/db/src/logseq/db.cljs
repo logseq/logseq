@@ -825,24 +825,29 @@
 (def get-class-title-with-extends db-db/get-class-title-with-extends)
 
 (defn- bidirectional-property-attr?
-  [db attr]
+  [attr]
   (when (qualified-keyword? attr)
     (let [attr-ns (namespace attr)]
-      (and (or (db-property/user-property-namespace? attr-ns)
-               (db-property/plugin-property? attr))
-           (when-let [property (d/entity db attr)]
-             (= :db.type/ref (:db/valueType property)))))))
+      (or (db-property/user-property-namespace? attr-ns)
+          (db-property/plugin-property? attr)))))
+
+(defn- get-bidirectional-property-attrs
+  [db]
+  (->> (d/q '[:find [?a ...]
+              :where
+              [?property :db/ident ?a]
+              [?property :db/valueType :db.type/ref]
+              [?property :logseq.property/classes ?class]]
+            db)
+       (filter bidirectional-property-attr?)))
 
 (defn- get-ea-by-v
-  [db v]
-  (d/q '[:find ?e ?a
-         :in $ ?v
-         :where
-         [?e ?a ?v]
-         [?ea :db/ident ?a]
-         [?ea :logseq.property/classes ?c]]
-       db
-       v))
+  [db attrs v]
+  (->> attrs
+       (mapcat (fn [attr]
+                 (map (fn [datom]
+                        [(:e datom) attr])
+                      (d/datoms db :avet attr v))))))
 
 (defn- add-entity
   [acc class-id entity]
@@ -875,30 +880,21 @@
   [db target-id]
   (when (and db target-id
              (not (:logseq.property/created-from-property (d/entity db target-id))))
-    (let [*attr->bidirectional? (volatile! {})
-          bidirectional-property-attr-cached?
-          (fn [attr]
-            (let [cache @*attr->bidirectional?]
-              (if (contains? cache attr)
-                (get cache attr)
-                (let [result (bidirectional-property-attr? db attr)]
-                  (vswap! *attr->bidirectional? assoc attr result)
-                  result))))]
-      (->> (get-ea-by-v db target-id)
-           (keep (fn [[e a]]
-                   (when (bidirectional-property-attr-cached? a)
-                     (when-let [entity (d/entity db e)]
-                       (when (and (not= (:db/id entity) target-id)
-                                  (not (entity-util/recycled? entity))
-                                  (not (entity-util/class? entity))
-                                  (not (entity-util/property? entity)))
-                         (let [classes (filter entity-util/class? (:block/tags entity))]
-                           (when (seq classes)
-                             (keep (fn [class-ent]
-                                     (when (and (not (built-in? class-ent))
-                                                (not (entity-util/recycled? class-ent)))
-                                       [(:db/id class-ent) entity]))
-                                   classes))))))))
+    (let [bidirectional-attrs (get-bidirectional-property-attrs db)]
+      (->> (get-ea-by-v db bidirectional-attrs target-id)
+           (keep (fn [[e _a]]
+                   (when-let [entity (d/entity db e)]
+                     (when (and (not= (:db/id entity) target-id)
+                                (not (entity-util/recycled? entity))
+                                (not (entity-util/class? entity))
+                                (not (entity-util/property? entity)))
+                       (let [classes (filter entity-util/class? (:block/tags entity))]
+                         (when (seq classes)
+                           (keep (fn [class-ent]
+                                   (when (and (not (built-in? class-ent))
+                                              (not (entity-util/recycled? class-ent)))
+                                     [(:db/id class-ent) entity]))
+                                 classes)))))))
            (mapcat identity)
            (reduce (fn [acc [class-ent entity]]
                      (add-entity acc class-ent entity))
