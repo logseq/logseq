@@ -2692,16 +2692,21 @@
 
 (defn- bottom-property-pill-cp
   [block property opts]
-  [:div.bottom-property-pill.bottom-property-pill-focusable
-   {:key (str (:db/id block) "-" (:db/id property))
-    :data-bottom-pill-focusable true
-    :data-bottom-row-nav true
-    :tab-index -1
-    :on-key-down handle-bottom-pill-key-down!}
+  (let [many-node? (and (= :node (:logseq.property/type property))
+                        (= :db.cardinality/many (:db/cardinality property)))]
+    [:div.bottom-property-pill.bottom-property-pill-focusable
+     {:key (str (:db/id block) "-" (:db/id property))
+      :class (util/classnames [{:bottom-property-pill-wrap many-node?}])
+      :data-bottom-pill-focusable true
+      :data-bottom-row-nav true
+      :tab-index -1
+      :on-key-down handle-bottom-pill-key-down!}
    [:div.flex.flex-row.items-center
     (property-component/property-key-cp block property opts)
     [:div.select-none ":"]]
-   [:div {:class "bottom-property-content ls-block property-value-container"
+   [:div {:class (util/classnames
+                  ["bottom-property-content ls-block property-value-container"
+                   {:bottom-property-content-wrap many-node?}])
           :style {:min-height 20}}
     (pv/property-value block property opts)
     (when (contains? #{:date :datetime} (:logseq.property/type property))
@@ -2715,7 +2720,7 @@
                                        (.querySelector ".jtrigger"))]
                       (.click trigger)
                       (some-> trigger .focus)))}
-       (ui/icon "edit" {:size 15})])]])
+       (ui/icon "edit" {:size 15})])]]))
 
 (defn- block-below-positioned-properties-cp
   [block properties opts show-hidden-properties-toggle? show-add-property-button?]
