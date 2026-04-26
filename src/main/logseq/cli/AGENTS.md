@@ -12,5 +12,5 @@
 - `--profile` - performance check
 - Logseq-cli skill - explore cli self in agent
 - db-worker-node.log - logs for db-worker-node process
-- db-worker-node-repl skill - Directly validate some db worker node code in the REPL
+- logseq-repl skill - Directly validate some db worker node code in the REPL
 

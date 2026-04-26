@@ -32,7 +32,7 @@ Useful tools:
 
 ### `db-worker-node`
 
-Before controlling or attaching to `db-worker-node`, load repo-local `db-worker-node-repl`.
+Before controlling or attaching to `db-worker-node`, load repo-local `logseq-repl`.
 
 Useful tools:
 
