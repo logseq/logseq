@@ -359,6 +359,40 @@
                                    :style {:line-height 1}}
                                   opts)]]
 
+               ;; "Pick an image" placeholder shown during icon-picker hover
+               ;; preview when the user navigates to the Custom-tab Image
+               ;; button. Mirrors Logseq's universal "no icon yet, click to
+               ;; add" affordance (plus inside a dashed rounded square),
+               ;; signalling awaiting-input rather than a committed photo
+               ;; icon. Sized to match the surrounding tabler icons.
+               (and (map? normalized) (= :image-placeholder (:type normalized)))
+               ;; Pin neutral grays explicitly (override the parent color
+               ;; cascade). Image asset icons can't be tinted, so the
+               ;; preview shouldn't promise a colored outcome the actual
+               ;; commit won't deliver. Matches the Custom-tab Image tile
+               ;; (custom-tab-cp:1920-1929) for visual continuity.
+               ;;
+               ;; Inline width/height on the inner SVG: the page-title's
+               ;; CSS forces all svgs inside .ls-page-icon to 38x38,
+               ;; ignoring the :size prop. Inline style outranks that
+               ;; class selector and lets the plus actually shrink.
+               (let [size (or (:size opts) 20)
+                     inner (max 8 (int (* size 0.45)))
+                     inner-px (str inner "px")]
+                 [:span.ui__icon.image-placeholder-icon
+                  {:style {:display "inline-flex"
+                           :align-items "center"
+                           :justify-content "center"
+                           :width (str size "px")
+                           :height (str size "px")
+                           :border "1px dashed var(--rx-gray-08)"
+                           :border-radius "5px"
+                           :background "var(--rx-gray-03-alpha)"
+                           :color "var(--lx-gray-11)"}}
+                  (ui/icon "plus" {:size inner
+                                   :style {:width inner-px
+                                           :height inner-px}})])
+
                (and (map? normalized) (= :icon (:type normalized)) (get-in normalized [:data :value]))
                (ui/icon (get-in normalized [:data :value]) opts)
 
@@ -551,29 +585,34 @@
                          (or (:size opts) 20)
                          (or (:size opts) 14))
         opts' (assoc opts :size effective-size)
-        ;; Hover preview from color picker — overrides node's color while hovering.
+        ;; Hover preview from icon-picker — overrides node's icon and/or
+        ;; color while the user is hovering tiles in the picker. The state
+        ;; can carry `:icon` (full normalized item override), `:color`
+        ;; (color override), or both.
         preview (state/sub :ui/icon-hover-preview)
         preview-active? (and preview (= (:db-id preview) (:db/id entity)))
+        preview-icon (when preview-active? (:icon preview))
         effective-color (cond
                           preview-active? (or (:color preview) "inherit")
                           :else (or (:color node-icon) "inherit"))
-        ;; During hover preview, override the icon's stored colors so the
-        ;; inner `icon` fn renders with the preview color. Without this, its
-        ;; inline `style: color` (computed from the committed `:color`) wins
-        ;; over the outer wrapper's cascade, and the page icon stays frozen
-        ;; on the committed color until the user releases the slider.
+        ;; Source icon for the preview overlay: either the previewed icon
+        ;; (cross-type swap) or the committed node-icon. Then layer the
+        ;; preview color into [:data :color] so the inner `icon` fn renders
+        ;; with the preview color — its inline `style: color` would
+        ;; otherwise win over our outer wrapper's cascade.
         ;;
         ;; For avatars: also override [:data :backgroundColor], since the
         ;; circle's bg-color is inline and doesn't inherit from `color`.
-        effective-node-icon (cond-> node-icon
-                              (and preview-active? (map? node-icon))
+        base-icon (or preview-icon node-icon)
+        effective-node-icon (cond-> base-icon
+                              (and preview-active? (map? base-icon))
                               (-> (normalize-icon)
                                   (assoc :color effective-color)
                                   (assoc-in [:data :color] effective-color))
 
                               (and preview-active?
-                                   (map? node-icon)
-                                   (= :avatar (:type node-icon)))
+                                   (map? base-icon)
+                                   (= :avatar (:type (normalize-icon base-icon))))
                               (assoc-in [:data :backgroundColor] effective-color))
         ;; Lift contrast vs the page background to WCAG 3:1 (non-text UI
         ;; threshold) — same logic the inner `icon` fn applies when called
@@ -589,7 +628,10 @@
                                page-bg)
                         (colors/adjust-for-contrast effective-color page-bg 3.0)
                         effective-color)]
-    (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "file"} node-icon) (:not-text-or-page? opts)))
+    (when-not (and (nil? preview-icon)
+                   (or (string/blank? node-icon)
+                       (and (contains? #{"letter-n" "file"} node-icon)
+                            (:not-text-or-page? opts))))
       [:div.icon-cp-container.flex.items-center.justify-center
        {:style {:color display-color}
         :class (str (when photo-icon? "photo-icon")
@@ -691,6 +733,14 @@
                   :label (or label asset-uuid)
                   :data {:asset-uuid asset-uuid
                          :asset-type asset-type}})
+        ;; Synthetic placeholder type used by the icon-picker hover preview
+        ;; when the user navigates to the Custom-tab "Image" button. Has no
+        ;; payload — the renderer in `icon` produces a self-contained plus-
+        ;; in-dashed-square visual.
+        :image-placeholder {:type :image-placeholder
+                            :id (or id "image-placeholder")
+                            :label "Pick an image"
+                            :data {}}
         ;; Fallback: try to guess from value
         (or (guess-from-value v)
             {:type :icon
@@ -1391,12 +1441,16 @@
   [:div.its.icons-row items])
 
 (rum/defc icon-cp < rum/static
-  [icon-item {:keys [on-chosen hover highlighted-id ghost-highlighted-id wave]}]
+  [icon-item {:keys [on-chosen hover on-tile-hover! highlighted-id ghost-highlighted-id wave]}]
   (let [icon-id (get-in icon-item [:data :value])
         icon-name (or (:label icon-item) icon-id)
         color (get-in icon-item [:data :color])
         icon-id' (when icon-id (cond-> icon-id (string? icon-id) (string/replace " " "")))
-        my-id (:id icon-item)]
+        my-id (:id icon-item)
+        item-shape (cond-> {:type :tabler-icon
+                            :id icon-id'
+                            :value icon-id'}
+                     color (assoc :color color))]
     [:button.w-9.h-9.transition-opacity
      (when icon-id'
        {:key icon-id'
@@ -1407,76 +1461,64 @@
                  (= my-id ghost-highlighted-id) "is-ghost-highlighted")
         :style (when wave {"--r" (:r wave) "--c" (:c wave)})
         :title icon-name
-        :on-click (fn [e]
-                    (on-chosen e (cond-> {:type :tabler-icon
-                                          :id icon-id'
-                                          :value icon-id'}
-                                   color (assoc :color color))))
-        :on-mouse-over #(some-> hover
-                                (reset! (cond-> {:type :tabler-icon
-                                                 :id icon-id'
-                                                 :value icon-id'}
-                                          color (assoc :color color))))
+        :on-click (fn [e] (on-chosen e item-shape))
+        :on-mouse-over (fn []
+                         (some-> hover (reset! item-shape))
+                         (some-> on-tile-hover! (apply [item-shape])))
         :on-mouse-out #()})
      (when icon-id'
        (ui/icon icon-id' {:size 24}))]))
 
 (rum/defc emoji-cp < rum/static
-  [icon-item {:keys [on-chosen hover highlighted-id ghost-highlighted-id wave]}]
+  [icon-item {:keys [on-chosen hover on-tile-hover! highlighted-id ghost-highlighted-id wave]}]
   (let [emoji-id (get-in icon-item [:data :value])
         emoji-name (or (:label icon-item) emoji-id)
-        my-id (:id icon-item)]
+        my-id (:id icon-item)
+        item-shape {:type :emoji :id emoji-id :name emoji-name}]
     [:button.text-2xl.w-9.h-9.transition-opacity
-     (cond->
-      {:tabIndex "-1"
-       :data-item-id my-id
-       :class (cond
-                (= my-id highlighted-id) "is-highlighted"
-                (= my-id ghost-highlighted-id) "is-ghost-highlighted")
-       :style (when wave {"--r" (:r wave) "--c" (:c wave)})
-       :title emoji-name
-       :on-click (fn [e]
-                   (on-chosen e {:type :emoji
-                                 :id emoji-id
-                                 :name emoji-name}))}
-       (not (nil? hover))
-       (assoc :on-mouse-over #(reset! hover {:type :emoji
-                                             :id emoji-id
-                                             :name emoji-name})
-              :on-mouse-out #()))
+     {:tabIndex "-1"
+      :data-item-id my-id
+      :class (cond
+               (= my-id highlighted-id) "is-highlighted"
+               (= my-id ghost-highlighted-id) "is-ghost-highlighted")
+      :style (when wave {"--r" (:r wave) "--c" (:c wave)})
+      :title emoji-name
+      :on-click (fn [e] (on-chosen e item-shape))
+      :on-mouse-over (fn []
+                       (some-> hover (reset! item-shape))
+                       (some-> on-tile-hover! (apply [item-shape])))
+      :on-mouse-out #()}
      [:em-emoji {:id emoji-id
                  :style {:line-height 1}}]]))
 
 (rum/defc text-cp < rum/static
-  [icon-item {:keys [on-chosen hover highlighted-id ghost-highlighted-id wave]}]
+  [icon-item {:keys [on-chosen hover on-tile-hover! highlighted-id ghost-highlighted-id wave]}]
   (let [text-value (get-in icon-item [:data :value])
         text-color (get-in icon-item [:data :color])
         my-id (:id icon-item)
         display-text (if (> (count text-value) 8)
                        (subs text-value 0 8)
-                       text-value)]
+                       text-value)
+        item-shape {:type :text
+                    :data (cond-> {:value text-value}
+                            text-color (assoc :color text-color))}]
     [:button.w-9.h-9.transition-opacity.text-sm.font-medium
-     (cond->
-      {:tabIndex "-1"
-       :data-item-id my-id
-       :class (cond
-                (= my-id highlighted-id) "is-highlighted"
-                (= my-id ghost-highlighted-id) "is-ghost-highlighted")
-       :style (when wave {"--r" (:r wave) "--c" (:c wave)})
-       :title text-value
-       :on-click (fn [e]
-                   (on-chosen e {:type :text
-                                 :data (cond-> {:value text-value}
-                                         text-color (assoc :color text-color))}))}
-       (not (nil? hover))
-       (assoc :on-mouse-over #(reset! hover {:type :text
-                                             :data (cond-> {:value text-value}
-                                                     text-color (assoc :color text-color))})
-              :on-mouse-out #()))
+     {:tabIndex "-1"
+      :data-item-id my-id
+      :class (cond
+               (= my-id highlighted-id) "is-highlighted"
+               (= my-id ghost-highlighted-id) "is-ghost-highlighted")
+      :style (when wave {"--r" (:r wave) "--c" (:c wave)})
+      :title text-value
+      :on-click (fn [e] (on-chosen e item-shape))
+      :on-mouse-over (fn []
+                       (some-> hover (reset! item-shape))
+                       (some-> on-tile-hover! (apply [item-shape])))
+      :on-mouse-out #()}
      display-text]))
 
 (rum/defc avatar-cp < rum/static
-  [icon-item {:keys [on-chosen hover highlighted-id ghost-highlighted-id wave]}]
+  [icon-item {:keys [on-chosen hover on-tile-hover! highlighted-id ghost-highlighted-id wave]}]
   (let [avatar-value (get-in icon-item [:data :value])
         backgroundColor (or (get-in icon-item [:data :backgroundColor])
                             (colors/variable :gray :09))
@@ -1484,28 +1526,25 @@
                   (colors/variable :gray :09))
         my-id (:id icon-item)
         display-text (subs avatar-value 0 (min 3 (count avatar-value)))
-        bg-color-rgba (convert-bg-color-to-rgba backgroundColor)]
+        bg-color-rgba (convert-bg-color-to-rgba backgroundColor)
+        item-shape {:type :avatar
+                    :data {:value avatar-value
+                           :backgroundColor backgroundColor
+                           :color color}}]
     [:button.w-9.h-9.transition-opacity.flex.items-center.justify-center
-     (cond->
-      {:tabIndex "-1"
-       :data-item-id my-id
-       :title avatar-value
-       :style (when wave {"--r" (:r wave) "--c" (:c wave)})
-       :class (str "p-0 border-0 bg-transparent cursor-pointer"
-                   (cond
-                     (= my-id highlighted-id) " is-highlighted"
-                     (= my-id ghost-highlighted-id) " is-ghost-highlighted"))
-       :on-click (fn [e]
-                   (on-chosen e {:type :avatar
-                                 :data {:value avatar-value
-                                        :backgroundColor backgroundColor
-                                        :color color}}))}
-       (not (nil? hover))
-       (assoc :on-mouse-over #(reset! hover {:type :avatar
-                                             :data {:value avatar-value
-                                                    :backgroundColor backgroundColor
-                                                    :color color}})
-              :on-mouse-out #()))
+     {:tabIndex "-1"
+      :data-item-id my-id
+      :title avatar-value
+      :style (when wave {"--r" (:r wave) "--c" (:c wave)})
+      :class (str "p-0 border-0 bg-transparent cursor-pointer"
+                  (cond
+                    (= my-id highlighted-id) " is-highlighted"
+                    (= my-id ghost-highlighted-id) " is-ghost-highlighted"))
+      :on-click (fn [e] (on-chosen e item-shape))
+      :on-mouse-over (fn []
+                       (some-> hover (reset! item-shape))
+                       (some-> on-tile-hover! (apply [item-shape])))
+      :on-mouse-out #()}
      (shui/avatar
       {:class "w-7 h-7"}
       (shui/avatar-fallback
@@ -1854,7 +1893,7 @@
 
 (rum/defc custom-tab-cp
   "Combined tab showing Text, Avatar, and Image options side by side"
-  [*q page-title *color *view icon-value opts]
+  [*q page-title *color *view *asset-picker-initial-mode icon-value opts]
   (let [query @*q
         ;; Text item
         text-value (if (string/blank? query)
@@ -1889,7 +1928,13 @@
                               :backgroundColor backgroundColor
                               :color color}})
         on-chosen (:on-chosen opts)
-        highlighted-id (:highlighted-id opts)]
+        highlighted-id (:highlighted-id opts)
+        on-tile-hover! (:on-tile-hover! opts)
+        ;; Mouse-hover preview broadcast: pass the synthesized preview item
+        ;; the page-icon should render for each button. Keyboard hover
+        ;; broadcasts `:custom-*` markers and relies on icon-search's
+        ;; translation; here we pass the resolved item directly.
+        image-placeholder-item {:type :image-placeholder :id "image-placeholder"}]
     [:div.custom-tab-content
      ;; Text option
      (when text-item
@@ -1897,28 +1942,45 @@
         {:data-item-id "custom-text"
          :tabIndex "-1"
          :class (when (= "custom-text" highlighted-id) "is-highlighted")
-         :on-click #(reset! *view :text-picker)}
+         :on-click #(reset! *view :text-picker)
+         :on-mouse-over (fn [] (some-> on-tile-hover! (apply [text-item])))}
         [:div.custom-tab-item-preview
          (icon text-item {:size 32})]
         [:span.custom-tab-item-label "Text"]])
 
-     ;; Avatar option
+     ;; Avatar option — commits the synthesized initials avatar immediately
+     ;; (`keep-popup? true` keeps the icon-picker mounted) and lands on the
+     ;; asset-picker's Avatar tab. The user can then pick / upload an image
+     ;; to use as the avatar background, or back out and the initials avatar
+     ;; stays as the committed icon. Mirrors the visual continuity the user
+     ;; gets from the hover preview.
      (when avatar-item
        [:button.custom-tab-item
         {:data-item-id "custom-avatar"
          :tabIndex "-1"
          :class (when (= "custom-avatar" highlighted-id) "is-highlighted")
-         :on-click #(on-chosen % avatar-item)}
+         :on-click (fn [e]
+                     (when on-chosen (on-chosen e avatar-item true))
+                     (reset! *asset-picker-initial-mode :avatar)
+                     (reset! *view :asset-picker))
+         :on-mouse-over (fn [] (some-> on-tile-hover! (apply [avatar-item])))}
         [:div.custom-tab-item-preview
          (icon avatar-item {:size 32})]
         [:span.custom-tab-item-label "Avatar"]])
 
-     ;; Image option — always show dashed placeholder with camera icon
+     ;; Image option — commits the placeholder icon immediately so the page
+     ;; icon stays as the plus+dashed placeholder while the asset-picker
+     ;; opens. Picking an image inside the asset-picker replaces the
+     ;; placeholder; backing out keeps it.
      [:button.custom-tab-item
       {:data-item-id "custom-image"
        :tabIndex "-1"
        :class (when (= "custom-image" highlighted-id) "is-highlighted")
-       :on-click #(reset! *view :asset-picker)}
+       :on-click (fn [e]
+                   (when on-chosen (on-chosen e image-placeholder-item true))
+                   (reset! *asset-picker-initial-mode :image)
+                   (reset! *view :asset-picker))
+       :on-mouse-over (fn [] (some-> on-tile-hover! (apply [image-placeholder-item])))}
       [:div.custom-tab-item-preview
        [:span.image-tile-placeholder
         {:style {:width 32
@@ -2593,11 +2655,16 @@
   {:will-mount (fn [state]
                  (let [*web-query-debounced (::web-query-debounced state)
                        *mode (::mode state)
-                       {:keys [current-icon avatar-context]} (first (:rum/args state))
+                       {:keys [current-icon avatar-context initial-mode]} (first (:rum/args state))
                        initial-mode (cond
-                                      (= :image  (:type current-icon))  :image
-                                      (= :avatar (:type current-icon))  :avatar
-                                      (some?     avatar-context)        :avatar
+                                      ;; Caller-provided initial mode wins
+                                      ;; (e.g., Custom-tab Avatar/Image tiles
+                                      ;; want to land on a specific tab even
+                                      ;; when no current-icon hints at it).
+                                      (#{:avatar :image} initial-mode)   initial-mode
+                                      (= :image  (:type current-icon))   :image
+                                      (= :avatar (:type current-icon))   :avatar
+                                      (some?     avatar-context)         :avatar
                                       :else                              :avatar)]
                    (reset! *mode initial-mode)
                    (assoc state ::update-web-query!
@@ -4974,6 +5041,29 @@
                           (persist!))}
              (shui/tabler-icon (str "align-" align) {:size 16}))))]]]]]))
 
+(rum/defc icon-hover-effects
+  "Phantom function-component hosting React hooks for icon-hover-preview.
+   `icon-search` is a class component (rum/defcs + rum/reactive mixin) and
+   can't host hooks itself, so the lifecycle effects live here. Renders nil.
+
+   - On `current-id` change → broadcast hovered item or clear when invalid.
+     Deps on `current-id` (a stable string) so refires when flat-items
+     shift under a stable index — section collapse, search refilter.
+   - On unmount → clear preview. Catches every popover-close path
+     (Esc, click-outside, commit, programmatic) without threading a
+     callback through Radix's onCloseAutoFocus."
+  [{:keys [current-id current-item broadcast! clear!]}]
+  (hooks/use-effect!
+   (fn []
+     (if current-item
+       (broadcast! current-item)
+       (clear!)))
+   [current-id])
+  (hooks/use-effect!
+   (fn [] (fn [] (clear!)))
+   [])
+  nil)
+
 (rum/defcs ^:large-vars/cleanup-todo icon-search < rum/reactive db-mixins/query
   (rum/local "" ::q)
   (rum/local nil ::result)
@@ -4983,6 +5073,7 @@
   (rum/local false ::input-focused?)
   (rum/local nil ::virtuoso-ref)
   (rum/local :icon-picker ::view) ;; Default view, updated in :will-mount for avatars/images
+  (rum/local nil ::asset-picker-initial-mode) ;; Optional :avatar | :image override when navigating from Custom tab tiles
   {:will-mount (fn [s]
                  (let [opts (first (:rum/args s))
                        icon-value (:icon-value opts)
@@ -5007,10 +5098,84 @@
         *color (::color state)
         *input-focused? (::input-focused? state)
         *view (::view state)
+        *asset-picker-initial-mode (::asset-picker-initial-mode state)
         *input-ref (::input-ref state)
         *result-ref (::result-ref state)
         *virtuoso-ref (::virtuoso-ref state)
         result @*result
+        ;; Live preview broadcast: writes the hovered icon (mouse hover or
+        ;; keyboard nav) into the global :ui/icon-hover-preview slot, which
+        ;; the page-icon readers (get-node-icon-cp, icon-picker-trigger-icon)
+        ;; sub. Carries `@*color` along so the previewed icon shows in the
+        ;; user's pending tint, not the icon's stored color.
+        ;;
+        ;; Allow-list of types whose render path can produce a meaningful
+        ;; page icon.
+        previewable-tile-type? #{:icon :tabler-icon :emoji :text :avatar :image :image-placeholder}
+        ;; Custom-tab buttons broadcast the *synthesized* preview item
+        ;; that the button itself renders (mirrors custom-tab-cp:1865-
+        ;; 1929), not the navigational marker. Keyboard hover on "Text"
+        ;; previews the page icon as the same Pe-style text icon shown in
+        ;; the button; "Avatar" → the PE circle; "Image" → a photo glyph.
+        ;; Synthesized inline so we avoid plumbing values out of custom-
+        ;; tab-cp (which is a child component).
+        derived-title (or page-title
+                          (some-> (state/get-current-page) (db/get-page) (:block/title)))
+        custom-text-value (if (string/blank? @*q)
+                            (derive-initials derived-title)
+                            (subs @*q 0 (min 8 (count @*q))))
+        custom-avatar-value (if (string/blank? @*q)
+                              (derive-avatar-initials derived-title)
+                              (subs @*q 0 (min 3 (count @*q))))
+        custom-bg (or (when-not (string/blank? @*color) @*color)
+                      (colors/variable :gray :09))
+        custom-fg (or (when-not (string/blank? @*color) @*color)
+                      (colors/variable :gray :09))
+        custom-preview-items
+        {:custom-text   (when custom-text-value
+                          {:type :text
+                           :id (str "text-" custom-text-value)
+                           :label custom-text-value
+                           :data (cond-> {:value custom-text-value}
+                                   (not (string/blank? @*color)) (assoc :color @*color))})
+         :custom-avatar (when custom-avatar-value
+                          {:type :avatar
+                           :id (str "avatar-" custom-avatar-value)
+                           :label custom-avatar-value
+                           :data {:value custom-avatar-value
+                                  :backgroundColor custom-bg
+                                  :color custom-fg}})
+         ;; Image has no concrete asset yet (clicking the button opens the
+         ;; asset-picker), so we preview Logseq's universal "no icon yet,
+         ;; click to add" placeholder — plus inside a dashed rounded
+         ;; square. Avoids reading as a committed photo-themed icon.
+         :custom-image  {:type :image-placeholder
+                         :id "image-placeholder"}}
+        clear-tile-hover!
+        (fn []
+          (when preview-target-db-id
+            ;; Stale-db-id guard: if a different picker has since taken over
+            ;; the slot, don't clear its preview. Prevents cleanup-races
+            ;; between pickers opening on different blocks back-to-back.
+            (let [current (:ui/icon-hover-preview @state/state)]
+              (when (or (nil? current) (= preview-target-db-id (:db-id current)))
+                (state/set-state! :ui/icon-hover-preview nil)))))
+        broadcast-tile-hover!
+        (fn [item]
+          ;; Custom-tab navigational markers (:custom-text/:custom-avatar/
+          ;; :custom-image) map to the synthesized preview items above.
+          ;; Everything else falls through with its own type.
+          (let [resolved (or (get custom-preview-items (:type item)) item)]
+            (cond
+              (not (previewable-tile-type? (:type resolved)))
+              (clear-tile-hover!)
+
+              preview-target-db-id
+              (let [normalized (normalize-icon resolved)]
+                (state/set-state! :ui/icon-hover-preview
+                                  (cond-> {:db-id preview-target-db-id}
+                                    normalized (assoc :icon normalized)
+                                    (not (string/blank? @*color)) (assoc :color @*color)))))))
         ;; When the picker is opened against an entity, derive del-btn? reactively
         ;; from the live entity. The static del-btn? prop is captured in the popup
         ;; closure and goes stale across keep-popup? flows (e.g. picking a color
@@ -5024,6 +5189,7 @@
         opts (assoc opts
                     :input-focused? @*input-focused?
                     :*virtuoso-ref *virtuoso-ref
+                    :on-tile-hover! broadcast-tile-hover!
                     :on-chosen (fn [e m & [keep-popup?]]
                                  (let [icon-item (normalize-icon m)
                                        can-have-color? (contains? #{:icon :avatar :text} (:type icon-item))
@@ -5071,6 +5237,7 @@
                     (reset! *result {})
                     (reset! *focus-region :search)
                     (reset! *highlighted-index nil)
+                    (clear-tile-hover!)
                     (set! (. input -value) "")
                     (util/schedule
                      (fn []
@@ -5090,6 +5257,10 @@
                      :current-icon normalized-icon-value
                      :avatar-context (when (= :avatar (:type normalized-icon-value))
                                        normalized-icon-value)
+                     ;; Custom-tab tile clicks set this so the asset-picker
+                     ;; lands on the requested tab; otherwise nil and it
+                     ;; falls back to current-icon / avatar-context cues.
+                     :initial-mode @*asset-picker-initial-mode
                      :page-title page-title})
 
       :text-picker
@@ -5178,6 +5349,17 @@
            [:span.title "Drop to set as icon"]
            [:span.subtitle "PNG, JPG, SVG, GIF, WebP"]]])
 
+       ;; Phantom component hosting hover-preview lifecycle hooks.
+       ;; Renders nothing; lives here because icon-search itself can't
+       ;; host React hooks (class component via rum/reactive mixin).
+       (icon-hover-effects
+        {:current-id   highlighted-id
+         :current-item (when (and @*highlighted-index
+                                  (< @*highlighted-index (count flat-items)))
+                         (nth flat-items @*highlighted-index))
+         :broadcast!   broadcast-tile-hover!
+         :clear!       clear-tile-hover!})
+
        ;; Topbar: tabs + separator + search
        [:div.icon-picker-topbar
         [:div.tabs-section {:role "tablist"}
@@ -5202,8 +5384,16 @@
                         ;; arrow-rove (handle-topbar-keys auto-activate)
                         ;; has e.detail = 0; real clicks are >= 1. Keeps
                         ;; arrow nav inside the topbar region.
+                        ;;
+                        ;; Move DOM focus to the input alongside the
+                        ;; region reset — otherwise the keyboard-nav-
+                        ;; controller routes the next keypress to the
+                        ;; :search branch (which is no-op) while the
+                        ;; input itself can't fire its own on-key-down
+                        ;; because it isn't focused.
                         (when (and e (pos? (.-detail e)))
-                          (reset! *focus-region :search)))
+                          (reset! *focus-region :search)
+                          (some-> (rum/deref *input-ref) (.focus))))
            :button-attrs {:data-topbar-stop "tab"}})
          [:div.tab-actions
           ;; color picker (always visible)
@@ -5341,11 +5531,16 @@
        ;; Body
        [:div.bd.bd-scroll
         {:ref *result-ref
-         :class (or (some-> @*tab (name)) "other")}
+         :class (or (some-> @*tab (name)) "other")
+         ;; Mouse leaves the grid region → clear hover preview. Catches
+         ;; the case where a tile gets unmounted (Virtuoso scroll, search
+         ;; refilter) while the mouse is still inside the popover, so its
+         ;; on-mouse-out never fires.
+         :on-mouse-leave (fn [] (clear-tile-hover!))}
         [:div.content-pane
          ;; Custom tab always shows its own content (Text/Avatar/Image buttons)
          (if (= @*tab :custom)
-           (custom-tab-cp *q page-title *color *view icon-value opts)
+           (custom-tab-cp *q page-title *color *view *asset-picker-initial-mode icon-value opts)
            ;; Other tabs: show search results if present, else show tab content.
            ;; Tabs scope the search results by content type — :all shows both,
            ;; :emoji only emojis, :icon only icons. Mirrors the same gate in
@@ -5400,32 +5595,61 @@
   [icon-value preview-target-db-id icon-props]
   (let [preview (when preview-target-db-id (state/sub :ui/icon-hover-preview))
         preview-active? (and preview (= (:db-id preview) preview-target-db-id))
+        preview-icon (when preview-active? (:icon preview))
+        ;; Source: previewed icon (cross-type swap) or the committed value.
+        ;; Both go through the same color-overlay path below.
+        base-value (or preview-icon icon-value)
         ;; IMPORTANT: pre-normalize before mutating. The icon fn's normalize-icon
         ;; early-exits when :data is present, so adding [:data :color] to a non-
         ;; unified shape (e.g. {:type :icon :id "house"} with no :data :value)
         ;; bypasses normalization and the render cond fails → icon disappears.
-        effective-icon-value (if (and preview-active? (map? icon-value))
+        effective-icon-value (if (and preview-active? (map? base-value))
                                (let [c (or (:color preview) "inherit")
-                                     normalized (normalize-icon icon-value)
+                                     normalized (normalize-icon base-value)
                                      avatar? (= :avatar (:type normalized))]
                                  (cond-> normalized
                                    true    (assoc-in [:data :color] c)
                                    ;; Mirror :data :color into :backgroundColor for
                                    ;; avatars so the circle previews along with text.
                                    avatar? (assoc-in [:data :backgroundColor] c)))
-                               icon-value)]
+                               base-value)]
     (icon effective-icon-value (merge {:color? true} icon-props))))
 
 (rum/defc icon-picker
   [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts page-title preview-target-db-id]}]
   (let [*trigger-ref (rum/use-ref nil)
-        normalized-icon-value (normalize-icon icon-value)
+        ;; Optimistic post-commit override. Holds the just-committed
+        ;; icon-value during the ~15ms SharedWorker round-trip between
+        ;; the DB write and the entity update propagating back via the
+        ;; reactive read chain. Without this, the page-icon trigger
+        ;; reader falls back to the (still-old) entity for that window
+        ;; and visibly flashes the previous icon.
+        ;;
+        ;; Cleared automatically by the use-effect below when icon-value
+        ;; (passed by parent) catches up — Logseq's hooks/use-effect!
+        ;; uses Clojure value equality (logseq.shui.hooks/memo-deps), so
+        ;; the dep [icon-value] fires when the map's *content* changes,
+        ;; not on every render reference flip.
+        [pending-icon set-pending-icon!] (rum/use-state nil)
+        _ (hooks/use-effect!
+           (fn [] (set-pending-icon! nil))
+           [icon-value])
+        effective-icon-value (or pending-icon icon-value)
+        normalized-icon-value (normalize-icon effective-icon-value)
         content-fn
         (if config/publishing?
           (constantly [])
           (fn [{:keys [id]}]
             (icon-search
              {:on-chosen (fn [e icon-value keep-popup?]
+                           ;; Set the optimistic local mirror BEFORE the
+                           ;; async DB write fires. Lives at this
+                           ;; outermost wrapper so every commit path
+                           ;; benefits (custom-tab tiles, search-result
+                           ;; tiles, asset-picker image picks, text-
+                           ;; picker close commits) — they all funnel
+                           ;; through this on-chosen.
+                           (set-pending-icon! icon-value)
                            (on-chosen e icon-value)
                            (when-not (true? keep-popup?) (shui/popup-hide! id)))
               :icon-value normalized-icon-value
@@ -5447,8 +5671,9 @@
            (on-chosen nil healed))))
      [icon-value])
 
-    ;; trigger
-    (let [has-icon? (some? icon-value)]
+    ;; trigger — render from `effective-icon-value` so the just-committed
+    ;; icon shows immediately, before the entity reactive read catches up.
+    (let [has-icon? (some? effective-icon-value)]
       (shui/button
        (merge
         {:ref *trigger-ref
@@ -5467,7 +5692,7 @@
                                           popup-opts))))}
         button-opts)
        (if has-icon?
-         (if (vector? icon-value) ; hiccup
-           icon-value
-           (icon-picker-trigger-icon icon-value preview-target-db-id icon-props))
+         (if (vector? effective-icon-value) ; hiccup
+           effective-icon-value
+           (icon-picker-trigger-icon effective-icon-value preview-target-db-id icon-props))
          (or empty-label "Empty"))))))
