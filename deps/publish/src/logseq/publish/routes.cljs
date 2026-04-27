@@ -194,9 +194,7 @@
                                    (some-> err .-message)
                                    (some-> err .-stack))
                  (publish-common/json-response
-                  {:error "internal"
-                   :name (some-> err .-name)
-                   :message (some-> err .-message)}
+                  {:error "internal"}
                   500)))))
 
 (defn handle-tag-page-html [graph-uuid tag-uuid env]
