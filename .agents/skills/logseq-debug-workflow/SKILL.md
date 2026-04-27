@@ -1,76 +1,108 @@
 ---
 name: logseq-debug-workflow
-description: Debug Logseq bugs by using repo-local debugging tools and always producing concrete reproduction steps, plus a reproduction script when possible.
+description: Debug Logseq bugs with the right runtime, concrete before/after evidence, and end-to-end reproduction steps.
 ---
 
 # Logseq Debug Workflow
 
 Use for any Logseq bug investigation.
 
-## Available debugging tools
+## Core rule
 
-### General code debugging
+Treat this as a debugging workflow, not a code-only change.
 
-- Add labeled `prn` checkpoints for Clojure/ClojureScript values.
-- Use small REPL/eval checks when available.
+Before claiming a fix, you must:
+
+1. Choose the correct *runtime repl* and say why:
+   - `:app` for renderer, DOM, UI, frontend state
+   - `:electron` for main-process, BrowserWindow, IPC, app config
+   - `:db-worker-node` for worker DB behavior, worker IPC, queries, transactions
+   - CLI for `logseq` command behavior
+2. Reproduce the bug in *runtime REPL* before editing code.
+3. Capture concrete evidence from that runtime: REPL output, CLI output, logs, or a failing test that matches the real runtime path.
+4. Check relevant logs early.
+5. Apply the smallest justified fix.
+6. Re-run the same reproduction flow after the fix and capture evidence again.
+7. Include restart/reload/reopen verification when the bug involves settings, startup, persistence, window creation, or cross-process behavior.
+
+## Do not conclude early
+
+Do **not** say the bug is fixed if any of these is missing:
+
+- pre-fix reproduction evidence
+- relevant log evidence, or an explicit statement that checked logs had nothing useful
+- post-fix evidence from the same runtime/path
+- required end-to-end lifecycle verification
+
+Unit tests alone are **not** enough when this skill applies, unless the bug is truly unit-level and you explicitly justify that.
+
+If the environment blocks full verification, report:
+
+- the blocker
+- what you tried
+- which evidence is still missing
+- the strongest partial evidence you have
+
+## Debugging tools
+
+### General
+
+- Add labeled `prn` checkpoints when helpful.
+- Use small REPL/eval checks.
 - Use targeted tests to confirm behavior.
-- Inspect only relevant inputs, branch decisions, transformed values, outputs, and errors.
+- Inspect only relevant inputs, branches, transformed values, outputs, and errors.
 - For async flows, inspect both sides of the async boundary.
 
 ### Logseq REPL
 
-Prefer repo-local `logseq-repl` for runtime debugging. Load it before starting or attaching to Logseq REPLs.
+check `logseq-repl` skill.
 
-Use it to pick and run the right runtime:
+### Logs
 
-- `:app` for Desktop renderer, DOM, UI, frontend state, and page rendering.
-- `:electron` for Electron main-process behavior, BrowserWindow setup, IPC handlers, and app config.
-- `:db-worker-node` for Node worker behavior, graph DB operations, worker IPC, queries, transactions, and serialization.
+Logs are evidence. Check them early for Electron, CLI, worker, IPC, async, or persistence issues.
 
-Use small REPL scripts to reproduce at the narrowest useful level, then confirm with logs and tests when possible.
-
-### Logs are important evidence
-
-Check relevant logs early for Electron, CLI, worker, IPC, async, or surprising REPL results. Logs can reveal hidden promise failures, serialization errors, and swallowed exceptions.
-
-Common locations: `tmp/desktop-app-repl/desktop-electron.log`, `tmp/logseq-repl/shared-shadow-watch.log`, `~/Library/Logs/Logseq/main.log`, `~/Library/Logs/Logseq/main.old.log`, `~/Library/Application Support/Logseq/configs.edn`, and graph-local `db-worker-node-<timestamp>.log` files.
+Common locations:
+- `tmp/desktop-app-repl/desktop-electron.log` (logseq-repl skill)
+- `tmp/logseq-repl/shared-shadow-watch.log` (logseq-repl skill)
+- `~/Library/Logs/Logseq/main.log`
+- `~/Library/Logs/Logseq/main.old.log`
+- `~/Library/Application Support/Logseq/configs.edn`
+- graph-local `db-worker-node-<timestamp>.log`
 
 ### Logseq CLI
 
-Before running or interpreting any `logseq` command, load repo-local `logseq-cli`.
+Before using `logseq`, load `logseq-cli` skill.
 
-Useful tools:
+## Required final output
 
-- `--verbose` for detailed stderr/debug output.
-- `--profile` for timing and performance debugging.
-- `logseq debug` for CLI diagnostics.
-- Any `logseq` command needed for inspection or reproduction.
-- Read-only inspection commands first when possible: `graph info`, `graph validate`, `doctor`, `list`, `show`, `query`, `search`.
-- `--output edn` or `--output json` when exact data shape matters.
+The final response must include these sections or an equivalent structure:
 
-## Reproduction output requirements
+1. **Runtime chosen** — which *runtime REPL* you used and why
+2. **Pre-fix reproduction** — reproduce bug in *runtime REPL*, exact steps and evidence
+3. **Root cause** — concrete cause and relevant files/flow
+4. **Fix applied** — short description of the change
+5. **Post-fix verification** — same steps again with new evidence
+6. **Additional verification** — tests/checks run, and what was not verified
+7. **Gaps or blockers** — any missing evidence and why
 
-Every debugging result must include:
+## Quick checklist
 
-1. Concrete reproduction steps with exact commands, inputs, graph/data-dir info if relevant, and expected vs actual result.
-2. Evidence used: logs, stack trace, CLI output, profile output, REPL result, test failure, or captured data shape.
-3. Root cause, if found; otherwise the most likely narrowed boundary.
-4. Verification performed or why verification was not possible.
+Before ending, make sure the answer is yes to all:
 
-Also provide a reproduction script whenever possible:
-
-- Prefer a Clojure/ClojureScript snippet that can be pasted directly into the relevant REPL.
-- If there is no usable repo/runtime REPL, provide a Babashka or shell script instead.
-- Use a scratch graph or disposable test data when mutation is needed.
-- Do not mutate a user graph unless it is explicitly disposable or backed up.
-- If no script is possible, explain why and provide the closest exact command sequence instead.
+- Did I reproduce the bug before fixing it?
+- Did I show evidence, not just claim reproduction?
+- Did I inspect relevant logs?
+- Did I verify in the correct runtime?
+- Did I rerun the same scenario after the fix?
+- Did I include both before and after evidence in the final output?
+- Did I avoid claiming completion if required evidence is missing?
 
 ## Verification reminders
 
 - Never run tests, lint, build, or E2E verification in the background.
-- Check relevant logs before concluding from REPL/CLI output alone.
+- Check logs before trusting REPL/CLI output alone.
 - For performance bugs, compare `--profile` before/after on the same graph and command.
 - For CLI bugs, reuse the same `--graph`, `--data-dir`, and output mode.
-- For REPL debugging, verify against the intended runtime (`:app`, `:electron`, or `:db-worker-node`), not a stale or wrong one.
+- For REPL debugging, verify against the intended runtime, not a stale one.
 
 Common checks: `bb dev:test -v <namespace/testcase-name>`, `bb dev:lint-and-test`, `bb dev:cli-e2e`.

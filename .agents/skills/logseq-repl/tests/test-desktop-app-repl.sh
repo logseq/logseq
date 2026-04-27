@@ -55,7 +55,7 @@ EOF
 set -euo pipefail
 
 input=""
-if [[ "${1:-}" == "shadow-cljs" && "${2:-}" == "cljs-repl" && "${3:-}" == "app" ]] && [[ -p /dev/stdin ]]; then
+if [[ "${1:-}" == "shadow-cljs" && "${2:-}" == "cljs-repl" && ( "${3:-}" == "app" || "${3:-}" == "electron" ) ]] && [[ -p /dev/stdin ]]; then
   input="$(cat)"
 fi
 
@@ -83,6 +83,21 @@ if [[ "${1:-}" == "shadow-cljs" && "${2:-}" == "cljs-repl" && "${3:-}" == "app" 
   fi
 
   echo "npx-attach $*" >> "$FAKE_CMD_LOG"
+  echo "shadow-cljs - connected to server"
+  echo "cljs.user=>"
+  exit 0
+fi
+
+if [[ "${1:-}" == "shadow-cljs" && "${2:-}" == "cljs-repl" && "${3:-}" == "electron" ]]; then
+  if [[ "$input" == *":runtime :electron"* ]]; then
+    echo "npx-electron-smoke $*" >> "$FAKE_CMD_LOG"
+    echo "shadow-cljs - connected to server"
+    echo "cljs.user=> {:runtime :electron, :process? true, :type \"browser\"}"
+    echo "cljs.user=>"
+    exit 0
+  fi
+
+  echo "npx-electron-attach $*" >> "$FAKE_CMD_LOG"
   echo "shadow-cljs - connected to server"
   echo "cljs.user=>"
   exit 0
@@ -218,6 +233,19 @@ start_attaches_repl_by_default_test() {
   assert_contains "npx-attach shadow-cljs cljs-repl app" "$CMD_LOG"
 }
 
+electron_attach_works_after_desktop_start_test() {
+  create_fake_env
+  trap cleanup_fake_env RETURN
+
+  bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --no-repl > "$TEST_ROOT/start.log" 2>&1
+  printf '(prn {:runtime :electron :process? (some? js/process) :type (.-type js/process)})\n:cljs/quit\n' | npx shadow-cljs cljs-repl electron > "$TEST_ROOT/electron.log" 2>&1
+
+  assert_contains "Startup complete. REPL attach skipped (--no-repl)." "$TEST_ROOT/start.log"
+  assert_contains "shadow-cljs - connected to server" "$TEST_ROOT/electron.log"
+  assert_contains ":runtime :electron" "$TEST_ROOT/electron.log"
+  assert_contains "npx-electron-smoke shadow-cljs cljs-repl electron" "$CMD_LOG"
+}
+
 start_works_without_setsid_test() {
   create_fake_env_without_setsid
   trap cleanup_fake_env RETURN
@@ -324,13 +352,16 @@ help_and_docs_are_portable_test() {
   assert_contains "start-desktop-app-repl.sh" "$SKILL_FILE"
   assert_contains "start-db-worker-node-repl.sh" "$SKILL_FILE"
   assert_contains "tmp/logseq-repl" "$SKILL_FILE"
-  assert_contains 'Run both `:app` and `:db-worker-node` together' "$SKILL_FILE"
+  assert_contains 'Run multiple runtimes together' "$SKILL_FILE"
   assert_contains "close browser dev app instances" "$SKILL_FILE"
   assert_contains "shared-shadow-watch.log" "$SKILL_FILE"
+  assert_contains "shadow.user/electron-repl" "$SKILL_FILE"
   assert_contains "shadow.user/worker-node-repl" "$SKILL_FILE"
   assert_contains "Non-interactive verification examples" "$SKILL_FILE"
   assert_contains "printf '(prn {:runtime :app" "$SKILL_FILE"
+  assert_contains "printf '(prn {:runtime :electron" "$SKILL_FILE"
   assert_contains "printf '(prn {:runtime :db-worker-node" "$SKILL_FILE"
+  assert_contains 'Electron main-process `:electron` REPL' "$SKILL_FILE"
   assert_contains "Cleanup both workflows" "$SKILL_FILE"
   assert_not_contains_text "name: repl-workflows" "$SKILL_FILE"
 
@@ -347,6 +378,7 @@ run_test "start --no-repl launches watch and electron" start_no_repl_launches_wa
 run_test "start reuses running processes" start_reuses_running_processes_test
 run_test "start fails when multiple app runtimes exist" start_fails_when_multiple_app_runtimes_exist_test
 run_test "start attaches repl by default" start_attaches_repl_by_default_test
+run_test "electron attach works after desktop start" electron_attach_works_after_desktop_start_test
 run_test "start works without setsid" start_works_without_setsid_test
 run_test "start accepts non-Logseq window title" start_accepts_non_logseq_window_title_test
 run_test "cleanup stops tracked processes" cleanup_stops_tracked_processes_test
