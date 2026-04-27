@@ -314,3 +314,4 @@ exports.build = gulp.series(common.clean, common.syncResourceFile,
   common.syncAssetFiles, css.buildCSS)
 exports.buildMobile = gulp.series(common.clean, common.syncResourceFile,
   common.syncAssetFiles, css.buildMobileCSS)
+exports.syncWorkersToMobile = common.syncWorkersToMobile

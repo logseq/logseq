@@ -81,7 +81,7 @@
                                                     (fs/glob "." "{src/main,deps/graph-parser/src}/**")))))]
     (do
       (println "Building publishing js asset...")
-      (shell "clojure -M:cljs release publishing db-worker"))
+      (shell "pnpm cljs:release-publishing"))
     (println "Publishing js asset is up to date")))
 
 (defn publishing-backend
@@ -93,7 +93,7 @@
 
 (defn watch-publishing-frontend
   [& _args]
-  (shell "pnpm exec shadow-cljs watch publishing"))
+  (shell "pnpm publishing-watch"))
 
 (defn watch-publishing-backend
   "Builds publishing backend once watch-publishing-frontend has built initial frontend"
