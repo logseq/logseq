@@ -17,6 +17,24 @@ Use for any Logseq bug investigation.
 - Inspect only relevant inputs, branch decisions, transformed values, outputs, and errors.
 - For async flows, inspect both sides of the async boundary.
 
+### Logseq REPL
+
+Prefer repo-local `logseq-repl` for runtime debugging. Load it before starting or attaching to Logseq REPLs.
+
+Use it to pick and run the right runtime:
+
+- `:app` for Desktop renderer, DOM, UI, frontend state, and page rendering.
+- `:electron` for Electron main-process behavior, BrowserWindow setup, IPC handlers, and app config.
+- `:db-worker-node` for Node worker behavior, graph DB operations, worker IPC, queries, transactions, and serialization.
+
+Use small REPL scripts to reproduce at the narrowest useful level, then confirm with logs and tests when possible.
+
+### Logs are important evidence
+
+Check relevant logs early for Electron, CLI, worker, IPC, async, or surprising REPL results. Logs can reveal hidden promise failures, serialization errors, and swallowed exceptions.
+
+Common locations: `tmp/desktop-app-repl/desktop-electron.log`, `tmp/logseq-repl/shared-shadow-watch.log`, `~/Library/Logs/Logseq/main.log`, `~/Library/Logs/Logseq/main.old.log`, `~/Library/Application Support/Logseq/configs.edn`, and graph-local `db-worker-node-<timestamp>.log` files.
+
 ### Logseq CLI
 
 Before running or interpreting any `logseq` command, load repo-local `logseq-cli`.
@@ -29,24 +47,6 @@ Useful tools:
 - Any `logseq` command needed for inspection or reproduction.
 - Read-only inspection commands first when possible: `graph info`, `graph validate`, `doctor`, `list`, `show`, `query`, `search`.
 - `--output edn` or `--output json` when exact data shape matters.
-
-### `db-worker-node`
-
-Before controlling or attaching to `db-worker-node`, load repo-local `logseq-repl`.
-
-Useful tools:
-
-- `db-worker-node-<timestamp>.log` files in the graph directory when a graph directory is known.
-- Provided log lines, stack traces, request payloads, and bad data shapes when no graph is known.
-- REPL checks against relevant vars/functions using captured data.
-- Small reproductions at any useful level: function, handler, query, transaction, serialization, or full graph flow.
-- Graph/process checks only when graph or process context exists.
-
-Do not require a complete graph-based reproducer for `db-worker-node` bugs.
-
-### User-facing UI text
-
-Before editing user-facing text or translation keys, load repo-local `logseq-i18n`.
 
 ## Reproduction output requirements
 
@@ -68,8 +68,9 @@ Also provide a reproduction script whenever possible:
 ## Verification reminders
 
 - Never run tests, lint, build, or E2E verification in the background.
+- Check relevant logs before concluding from REPL/CLI output alone.
 - For performance bugs, compare `--profile` before/after on the same graph and command.
 - For CLI bugs, reuse the same `--graph`, `--data-dir`, and output mode.
-- For `db-worker-node`, verify at the smallest reproducing level; if graph/process is involved, verify against the expected worker, not a stale one.
+- For REPL debugging, verify against the intended runtime (`:app`, `:electron`, or `:db-worker-node`), not a stale or wrong one.
 
 Common checks: `bb dev:test -v <namespace/testcase-name>`, `bb dev:lint-and-test`, `bb dev:cli-e2e`.
