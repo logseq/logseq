@@ -1,6 +1,6 @@
 (ns frontend.components.cmdk.list-item
   (:require
-   ["remove-accents" :as remove-accents]
+   ["remove-accents$default" :as removeAccents]
    [clojure.string :as string]
    [frontend.components.icon :as icon-component]
    [frontend.handler.block :as block-handler]
@@ -22,7 +22,7 @@
   (cond-> (to-string text)
     ;; :lower-case (string/lower-case)
     :normalize (.normalize "NFKC")
-    (:feature/enable-search-remove-accents? app-config) (remove-accents)))
+    (:feature/enable-search-remove-accents? app-config) (removeAccents)))
 
 (defn highlight-query* [app-config query text]
   (cond

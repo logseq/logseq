@@ -12,6 +12,14 @@ type ShadowBridgeConfigOptions = {
   globals?: Record<string, string>
 }
 
+function getBuildNodeEnv(): 'production' | 'development' {
+  return process.env.NODE_ENV === 'production' ? 'production' : 'development'
+}
+
+function isProductionBuild(): boolean {
+  return getBuildNodeEnv() === 'production'
+}
+
 function listFilesRecursive(rootDir: string): string[] {
   if (!existsSync(rootDir)) {
     return []
@@ -31,12 +39,12 @@ function listFilesRecursive(rootDir: string): string[] {
   return files
 }
 
-function createShadowEntryPlugin(options: ShadowBridgeConfigOptions): Plugin {
-  const virtualId = `virtual:logseq-shadow-bridge:${options.name}`
+function createShadowExternalEntryPlugin(options: ShadowBridgeConfigOptions): Plugin {
+  const virtualId = `virtual:logseq-shadow-externals:${options.name}`
   const resolvedVirtualId = `\0${virtualId}`
 
   return {
-    name: `logseq-shadow-entry:${options.name}`,
+    name: `logseq-shadow-externals-entry:${options.name}`,
     resolveId(id) {
       if (id === virtualId) {
         return resolvedVirtualId
@@ -49,12 +57,7 @@ function createShadowEntryPlugin(options: ShadowBridgeConfigOptions): Plugin {
         return null
       }
 
-      const imports = [
-        `import ${JSON.stringify(normalizePath(path.resolve(options.externalsEntry)))};`,
-        `import ${JSON.stringify(normalizePath(path.resolve(options.shadowEntry)))};`,
-      ]
-
-      return imports.join('\n')
+      return `import ${JSON.stringify(normalizePath(path.resolve(options.externalsEntry)))};`
     },
   }
 }
@@ -123,12 +126,73 @@ function createShadowSyncPlugin(options: ShadowBridgeConfigOptions): Plugin {
   }
 }
 
+function createIifeRequireShim(globals: Record<string, string>): string {
+  const requireCases = Object.keys(globals)
+    .map((id) => {
+      const parameter = id.replace(/[^a-zA-Z0-9_$]/g, '_')
+      return `    case ${JSON.stringify(id)}: return ${parameter};`
+    })
+    .join('\n')
+
+  return [
+    'var require = function(mod) {',
+    '  switch (mod) {',
+    requireCases,
+    '    default: throw new Error("Cannot require external module " + mod + " from Vite IIFE bridge");',
+    '  }',
+    '};',
+  ].join('\n')
+}
+
+function createBrowserExternalRuntimeShim(): string {
+  const nodeEnv = JSON.stringify(getBuildNodeEnv())
+
+  return [
+    'var global = globalThis;',
+    'var process = globalThis.process || {};',
+    'process.env || (process.env = {});',
+    `process.env.NODE_ENV || (process.env.NODE_ENV = ${nodeEnv});`,
+    'process.browser = true;',
+  ].join('\n')
+}
+
+function createWorkerRuntimeShim(): string {
+  const nodeEnv = JSON.stringify(getBuildNodeEnv())
+
+  return [
+    'var global = globalThis.global || globalThis;',
+    'globalThis.global || (globalThis.global = global);',
+    "var document = globalThis.document || { baseURI: self.location.href, location: self.location, currentScript: { tagName: 'SCRIPT', src: self.location.href, href: self.location.href } };",
+    'var process = globalThis.process || {};',
+    'process.env || (process.env = {});',
+    `process.env.NODE_ENV || (process.env.NODE_ENV = ${nodeEnv});`,
+    'process.argv || (process.argv = []);',
+    "process.version || (process.version = '');",
+    'process.versions || (process.versions = {});',
+    'process.browser = true;',
+    "process.platform || (process.platform = (typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent || navigator.platform || '')) ? 'win32' : 'browser');",
+    "process.cwd || (process.cwd = function() { return '/'; });",
+    'process.nextTick || (process.nextTick = function(callback) {',
+    '  var args = Array.prototype.slice.call(arguments, 1);',
+    '  Promise.resolve().then(function() { callback.apply(null, args); });',
+    '});',
+  ].join('\n')
+}
+
+function createBrowserExternalIifeIntro(globals: Record<string, string>): string {
+  return `${createBrowserExternalRuntimeShim()}\n${createIifeRequireShim(globals)}`
+}
+
+function createWorkerIifeIntro(globals: Record<string, string>): string {
+  return `${createWorkerRuntimeShim()}\n${createIifeRequireShim(globals)}`
+}
+
 export function createShadowBridgeConfig(options: ShadowBridgeConfigOptions): UserConfig {
   const globals = options.globals ?? {
     react: 'React',
     'react-dom': 'ReactDOM',
   }
-  const virtualId = `virtual:logseq-shadow-bridge:${options.name}`
+  const virtualId = `virtual:logseq-shadow-externals:${options.name}`
 
   return defineConfig({
     publicDir: false,
@@ -136,7 +200,7 @@ export function createShadowBridgeConfig(options: ShadowBridgeConfigOptions): Us
       emptyOutDir: false,
       outDir: options.outDir,
       sourcemap: true,
-      minify: process.env.NODE_ENV === 'production',
+      minify: isProductionBuild(),
       rollupOptions: {
         input: virtualId,
         external: Object.keys(globals),
@@ -146,12 +210,61 @@ export function createShadowBridgeConfig(options: ShadowBridgeConfigOptions): Us
           entryFileNames: options.outputFile,
           name: `logseq${options.name[0].toUpperCase()}${options.name.slice(1)}Bridge`,
           globals,
+          intro: createBrowserExternalIifeIntro(globals),
         },
       },
     },
+    define: {
+      'process.env.NODE_ENV': JSON.stringify(getBuildNodeEnv()),
+    },
     plugins: [
-      createShadowEntryPlugin(options),
+      createShadowExternalEntryPlugin(options),
       createShadowSyncPlugin(options),
     ],
+  })
+}
+
+type WorkerBundleConfigOptions = {
+  entry: string
+  outDir: string
+  outputFile: string
+}
+
+export function createWorkerBundleConfig(options: WorkerBundleConfigOptions): UserConfig {
+  const globals = {
+    react: 'React',
+    'react-dom': 'ReactDOM',
+  }
+
+  return defineConfig({
+    base: './',
+    publicDir: false,
+    build: {
+      emptyOutDir: false,
+      outDir: options.outDir,
+      sourcemap: true,
+      minify: isProductionBuild(),
+      rollupOptions: {
+        input: options.entry,
+        external: Object.keys(globals),
+        output: {
+          format: 'iife',
+          inlineDynamicImports: true,
+          entryFileNames: options.outputFile,
+          name: 'logseqDbWorkerBundle',
+          globals,
+          intro: createWorkerIifeIntro(globals),
+        },
+      },
+    },
+    define: {
+      'process.env.NODE_ENV': JSON.stringify(getBuildNodeEnv()),
+      'import.meta.url': 'self.location.href',
+    },
+    resolve: {
+      alias: {
+        process: 'process/browser',
+      },
+    },
   })
 }

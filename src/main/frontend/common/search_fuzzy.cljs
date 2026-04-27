@@ -1,6 +1,6 @@
 (ns frontend.common.search-fuzzy
   "fuzzy search. Used by frontend and worker namespaces"
-  (:require ["remove-accents" :as removeAccents]
+  (:require ["remove-accents$default" :as removeAccents]
             ["tiny-pinyin" :as tp]
             [cljs-bean.core :as bean]
             [clojure.string :as string]))

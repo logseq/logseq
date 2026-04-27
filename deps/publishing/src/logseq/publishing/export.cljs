@@ -8,7 +8,7 @@
 
 (def ^:api js-files
   "js files from publishing release build"
-  (->> ["main.js" "code-editor.js"]
+  (->> ["publishing-externals.js" "main.js" "code-editor.js"]
        ;; Add source maps for all js files as it doesn't affect initial load time
        (mapcat #(vector % (str % ".map")))
        vec))

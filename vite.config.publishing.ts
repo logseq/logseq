@@ -6,5 +6,5 @@ export default createShadowBridgeConfig({
   externalsEntry: 'target/publishing-externals.js',
   shadowEntry: 'target/publishing/main.js',
   outDir: 'static/js/publishing',
-  outputFile: 'main.js',
+  outputFile: 'publishing-externals.js',
 })

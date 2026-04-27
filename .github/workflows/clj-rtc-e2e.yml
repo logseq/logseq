@@ -91,7 +91,7 @@ jobs:
       # NOTE: require the app to be build with DEV-RELEASE flag
       - name: Prepare E2E test build
         run: |
-          pnpm gulp:build && clojure -M:cljs release app db-worker --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && pnpm webpack-app-build
+          pnpm gulp:build && clojure -M:cljs release app db-worker --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && pnpm vite:app-build && pnpm vite:workers-build
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

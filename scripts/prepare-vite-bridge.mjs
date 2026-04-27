@@ -33,3 +33,9 @@ for (const bridgeTarget of bridgeTargets) {
     writeFileSync(externalsEntry, 'export {}\n')
   }
 }
+
+// Create placeholder for db-worker externals index
+const workerExternals = path.resolve('target/db-worker.js')
+if (!existsSync(workerExternals)) {
+  writeFileSync(workerExternals, 'export {}\n')
+}
