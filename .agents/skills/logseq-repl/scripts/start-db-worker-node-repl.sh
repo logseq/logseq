@@ -8,6 +8,9 @@ DB_REPO="${DB_REPO:-demo}"
 ATTACH_REPL=1
 EXTRA_NODE_ARGS=()
 
+# shellcheck source=common.sh
+source "$SCRIPT_DIR/common.sh"
+
 usage() {
   cat <<'EOF'
 Start or reuse db-worker-node REPL workflow.
@@ -86,6 +89,10 @@ SHARED_LOG_DIR="$REPO_ROOT/tmp/logseq-repl"
 mkdir -p "$LOG_DIR"
 mkdir -p "$SHARED_LOG_DIR"
 
+if ! logseq_repl_require_clean_standard_ports; then
+  exit 1
+fi
+
 SHADOW_PID_FILE="$LOG_DIR/shadow-db-worker-node.pid"
 DB_PID_FILE="$LOG_DIR/db-worker-node.pid"
 DB_REPO_FILE="$LOG_DIR/db-worker-node.repo"
@@ -93,18 +100,6 @@ SHADOW_LOG="$LOG_DIR/shadow-db-worker-node.log"
 DB_LOG="$LOG_DIR/db-worker-node.log"
 SHARED_SHADOW_PID_FILE="$SHARED_LOG_DIR/shared-shadow-watch.pid"
 SHARED_SHADOW_LOG="$SHARED_LOG_DIR/shared-shadow-watch.log"
-
-is_running_pid() {
-  local pid="$1"
-  [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
-}
-
-read_pid() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
-    tr -d '[:space:]' < "$file"
-  fi
-}
 
 wait_for_log_pattern() {
   local file="$1"
@@ -161,15 +156,15 @@ start_background_command() {
 
 ensure_shadow_watch() {
   local existing_pid shared_pid
-  existing_pid="$(read_pid "$SHADOW_PID_FILE" || true)"
+  existing_pid="$(logseq_repl_read_pid "$SHADOW_PID_FILE" || true)"
 
-  if [[ -n "${existing_pid:-}" ]] && is_running_pid "$existing_pid"; then
+  if [[ -n "${existing_pid:-}" ]] && logseq_repl_is_running_pid "$existing_pid"; then
     echo "Reusing shared shadow-cljs watch (pid=$existing_pid)"
     return 0
   fi
 
-  shared_pid="$(read_pid "$SHARED_SHADOW_PID_FILE" || true)"
-  if [[ -n "${shared_pid:-}" ]] && is_running_pid "$shared_pid"; then
+  shared_pid="$(logseq_repl_read_pid "$SHARED_SHADOW_PID_FILE" || true)"
+  if [[ -n "${shared_pid:-}" ]] && logseq_repl_is_running_pid "$shared_pid"; then
     echo "$shared_pid" > "$SHADOW_PID_FILE"
     : > "$SHADOW_LOG"
     echo "Reusing shared shadow-cljs watch (pid=$shared_pid)"
@@ -191,7 +186,7 @@ ensure_shadow_watch() {
   : > "$SHADOW_LOG"
   sleep 1
 
-  if ! is_running_pid "$shadow_pid"; then
+  if ! logseq_repl_is_running_pid "$shadow_pid"; then
     echo "Error: yarn watch exited early. Check $SHARED_SHADOW_LOG" >&2
     exit 1
   fi
@@ -212,10 +207,10 @@ ensure_shadow_watch() {
 
 ensure_db_worker_node() {
   local existing_pid existing_repo
-  existing_pid="$(read_pid "$DB_PID_FILE" || true)"
-  existing_repo="$(read_pid "$DB_REPO_FILE" || true)"
+  existing_pid="$(logseq_repl_read_pid "$DB_PID_FILE" || true)"
+  existing_repo="$(logseq_repl_read_pid "$DB_REPO_FILE" || true)"
 
-  if [[ -n "${existing_pid:-}" ]] && is_running_pid "$existing_pid"; then
+  if [[ -n "${existing_pid:-}" ]] && logseq_repl_is_running_pid "$existing_pid"; then
     if [[ "$existing_repo" == "$DB_REPO" ]]; then
       echo "Reusing db-worker-node runtime (pid=$existing_pid, repo=$DB_REPO)"
       return 0
@@ -240,12 +235,31 @@ ensure_db_worker_node() {
   echo "$DB_REPO" > "$DB_REPO_FILE"
   sleep 1
 
-  if ! is_running_pid "$db_pid"; then
+  if ! logseq_repl_is_running_pid "$db_pid"; then
     echo "Error: db-worker-node exited early. Check $DB_LOG" >&2
     exit 1
   fi
 
   echo "db-worker-node is running (pid=$db_pid, repo=$DB_REPO)"
+}
+
+ensure_worker_node_runtime() {
+  local runtime_count second
+
+  for ((second=0; second<60; second++)); do
+    runtime_count="$(logseq_repl_runtime_count "$REPO_ROOT" db-worker-node)"
+
+    if [[ "$runtime_count" != "0" ]]; then
+      echo "Detected live :db-worker-node runtime count: $runtime_count"
+      return 0
+    fi
+
+    sleep 1
+  done
+
+  echo "Error: expected a live :db-worker-node runtime, but runtime count stayed 0." >&2
+  echo "Check $DB_LOG and $SHARED_SHADOW_LOG before retrying." >&2
+  exit 1
 }
 
 verify_repl_connectivity() {
@@ -286,6 +300,7 @@ verify_repl_connectivity() {
 
 ensure_shadow_watch
 ensure_db_worker_node
+ensure_worker_node_runtime
 verify_repl_connectivity
 
 echo
