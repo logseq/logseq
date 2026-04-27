@@ -3188,7 +3188,7 @@
                                                (when (ldb/property? block)
                                                  {:type :tabler-icon
                                                   :id "letter-p"})))]
-                        [:div.ls-page-icon.flex.self-start
+                        [:div.ls-page-icon.flex.items-center
                          (icon-component/icon-picker icon
                                                      {:on-chosen (fn [_e icon]
                                                                    (if icon
@@ -3222,18 +3222,12 @@
                                                       :page-title (:block/title block)
                                                       :preview-target-db-id (:db/id block)
                                                       :button-opts (when (:page-title? config)
+                                                                     ;; Drop shui's default sizing/padding so the
+                                                                     ;; CSS rule on .ls-page-title .ls-page-icon
+                                                                     ;; button (38×38 flex-center) takes effect.
                                                                      {:size nil
-                                                                      :class "!p-0.5 !h-auto !w-auto"})
-                                                      :icon-props {:size (cond
-                                                                           (and (util/mobile?) (:page-title? config)) 28
-                                                                           (:page-title? config) 38
-                                                                           :else 20)
-                                                                   :style {:width "1lh"
-                                                                           :height "1lh"
-                                                                           :font-size (cond
-                                                                                        (and (util/mobile?) (:page-title? config)) 24
-                                                                                        (:page-title? config) 38
-                                                                                        :else 18)}}})])))]
+                                                                      :class "!p-0"})
+                                                      :icon-props {:size (if (:page-title? config) 38 20)}})])))]
     [:div.ls-block.swipe-item
      (cond->
       {:id (str "ls-block-"

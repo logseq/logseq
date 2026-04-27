@@ -1141,34 +1141,39 @@ html.is-mac {
   color: var(--rx-gray-09);
 }
 
-.ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
+/* Page-title icon container: vertically center the trigger button so the
+   icon optically aligns with the title text. The previous `.self-start`
+   on this element top-aligned the icon, which left every type relying on
+   its own intrinsic baseline (emoji on font baseline, SVG on bottom
+   anchor, etc.) — visible as cross-type misalignment when the hover
+   preview swapped types mid-row. */
+.ls-page-title .ls-page-icon {
+  display: flex;
+  align-items: center;
+}
+
+/* Trigger button: fixed-size flex-center box. All icon types (emoji,
+   tabler, text, avatar, image, image-placeholder) render at :size 38
+   inside this box, so flex-centering puts every type's visual centroid
+   at the box midpoint — uniform vertical anchor regardless of the
+   element's intrinsic baseline. */
+.ls-page-title .ls-page-icon button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 38px;
   height: 38px;
 }
 
-/* Image icons in page title - fill the button like avatars do */
-.ls-page-title .ls-page-icon .image-icon {
-  width: 2rem !important; /* 32px, matching avatar size */
-  height: 2rem !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Per-type fixups: avatar fallback font size and image asset fill. */
+.ls-page-title .ls-page-icon .ui__avatar span {
+  font-size: 16px;
 }
 
 .ls-page-title .ls-page-icon .image-icon img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-}
-
-/* Scale up avatars in page title context */
-.ls-page-title .ls-page-icon .ui__avatar {
-  width: 38px;
-  height: 38px;
-}
-
-.ls-page-title .ls-page-icon .ui__avatar span {
-  font-size: 16px;
 }
 
 .ls-page-title .positioned-properties.block-left svg,
@@ -1210,10 +1215,6 @@ html.is-mac {
     .positioned-properties, .time-spent {
         margin-top: initial;
     }
-}
-
-.ls-page-title .ls-page-icon button {
-  margin-top: 8px;
 }
 
 .ls-page-title .block-tags {
