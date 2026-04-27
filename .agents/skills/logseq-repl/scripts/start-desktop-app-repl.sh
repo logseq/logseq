@@ -6,6 +6,9 @@ DEFAULT_REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 REPO_ROOT="${REPO_ROOT:-$DEFAULT_REPO_ROOT}"
 ATTACH_REPL=1
 
+# shellcheck source=common.sh
+source "$SCRIPT_DIR/common.sh"
+
 usage() {
   cat <<'EOF'
 Start or reuse the Desktop app `:app` REPL workflow.
@@ -66,24 +69,16 @@ SHARED_LOG_DIR="$REPO_ROOT/tmp/logseq-repl"
 mkdir -p "$LOG_DIR"
 mkdir -p "$SHARED_LOG_DIR"
 
+if ! logseq_repl_require_clean_standard_ports; then
+  exit 1
+fi
+
 SHADOW_PID_FILE="$LOG_DIR/shadow-watch.pid"
 DESKTOP_PID_FILE="$LOG_DIR/desktop-electron.pid"
 SHADOW_LOG="$LOG_DIR/shadow-watch.log"
 DESKTOP_LOG="$LOG_DIR/desktop-electron.log"
 SHARED_SHADOW_PID_FILE="$SHARED_LOG_DIR/shared-shadow-watch.pid"
 SHARED_SHADOW_LOG="$SHARED_LOG_DIR/shared-shadow-watch.log"
-
-is_running_pid() {
-  local pid="$1"
-  [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
-}
-
-read_pid() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
-    tr -d '[:space:]' < "$file"
-  fi
-}
 
 wait_for_all_patterns() {
   local file="$1"
@@ -148,15 +143,15 @@ start_background_command() {
 
 ensure_shadow_watch() {
   local existing_pid shared_pid
-  existing_pid="$(read_pid "$SHADOW_PID_FILE" || true)"
+  existing_pid="$(logseq_repl_read_pid "$SHADOW_PID_FILE" || true)"
 
-  if [[ -n "${existing_pid:-}" ]] && is_running_pid "$existing_pid"; then
+  if [[ -n "${existing_pid:-}" ]] && logseq_repl_is_running_pid "$existing_pid"; then
     echo "Reusing shared shadow-cljs watch (pid=$existing_pid)"
     return 0
   fi
 
-  shared_pid="$(read_pid "$SHARED_SHADOW_PID_FILE" || true)"
-  if [[ -n "${shared_pid:-}" ]] && is_running_pid "$shared_pid"; then
+  shared_pid="$(logseq_repl_read_pid "$SHARED_SHADOW_PID_FILE" || true)"
+  if [[ -n "${shared_pid:-}" ]] && logseq_repl_is_running_pid "$shared_pid"; then
     echo "$shared_pid" > "$SHADOW_PID_FILE"
     : > "$SHADOW_LOG"
     echo "Reusing shared shadow-cljs watch (pid=$shared_pid)"
@@ -171,18 +166,17 @@ ensure_shadow_watch() {
   : > "$SHADOW_LOG"
   sleep 1
 
-  if ! is_running_pid "$shadow_pid"; then
+  if ! logseq_repl_is_running_pid "$shadow_pid"; then
     echo "Error: yarn watch exited early. Check $SHARED_SHADOW_LOG" >&2
     exit 1
   fi
 
   if wait_for_all_patterns "$SHARED_SHADOW_LOG" 180 \
-    "shadow-cljs - nREPL server started on port 8701" \
     "[:electron] Build completed." \
     "[:app] Build completed."; then
-    echo "shadow-cljs watch is ready (pid=$shadow_pid)"
+    echo "shadow-cljs watch builds are ready (pid=$shadow_pid)"
   else
-    echo "Error: yarn watch did not become ready in time. Check $SHARED_SHADOW_LOG" >&2
+    echo "Error: yarn watch did not finish the :app/:electron builds in time. Check $SHARED_SHADOW_LOG" >&2
     exit 1
   fi
 }
@@ -215,36 +209,11 @@ ensure_desktop_app() {
   fi
 }
 
-get_app_runtime_count() {
-  local output
-  pushd "$REPO_ROOT" >/dev/null
-  if ! output="$(npx shadow-cljs clj-eval "(do (require '[shadow.cljs.devtools.api :as api]) (println (count (api/repl-runtimes :app))))" 2>&1)"; then
-    popd >/dev/null
-    echo "Error: failed to inspect :app runtimes." >&2
-    echo "--- clj-eval output ---" >&2
-    echo "$output" >&2
-    echo "-----------------------" >&2
-    exit 1
-  fi
-  popd >/dev/null
-
-  local runtime_count
-  runtime_count="$(printf '%s\n' "$output" | awk '/^[0-9]+$/{n=$0} END{if (n != "") print n; else exit 1}')" || {
-    echo "Error: could not parse :app runtime count." >&2
-    echo "--- clj-eval output ---" >&2
-    echo "$output" >&2
-    echo "-----------------------" >&2
-    exit 1
-  }
-
-  printf '%s\n' "$runtime_count"
-}
-
 ensure_single_app_runtime() {
   local runtime_count second
 
   for ((second=0; second<60; second++)); do
-    runtime_count="$(get_app_runtime_count)"
+    runtime_count="$(logseq_repl_runtime_count "$REPO_ROOT" app)"
 
     if [[ "$runtime_count" == "1" ]]; then
       echo "Detected exactly one live :app runtime"
@@ -260,7 +229,7 @@ ensure_single_app_runtime() {
 
   if [[ "$runtime_count" == "0" ]]; then
     echo "Error: Expected exactly one live :app runtime, found 0 after waiting for the Desktop renderer to connect." >&2
-    echo "Make sure the Desktop dev app window is fully open, then retry." >&2
+    echo "Check $DESKTOP_LOG and $SHARED_SHADOW_LOG, make sure the Desktop window is fully open, then retry." >&2
     exit 1
   fi
 
