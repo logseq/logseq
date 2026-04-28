@@ -215,8 +215,7 @@
 
 (defn backup-db-graph
   [repo]
-  (when (and util/web-platform?
-             (not (util/capacitor?)))
+  (when util/web-platform?
     (web-backup-db-graph repo)))
 
 (defonce *backup-interval (atom nil))

@@ -30,15 +30,15 @@
 
 (defn- publish-endpoint
   []
-  (str config/PUBLISH-API-BASE "/pages"))
+  (str (config/publish-api-base) "/pages"))
 
 (defn- publish-page-endpoint
   [graph-uuid page-uuid]
-  (str config/PUBLISH-API-BASE "/pages/" graph-uuid "/" page-uuid))
+  (str (config/publish-api-base) "/pages/" graph-uuid "/" page-uuid))
 
 (defn- asset-upload-endpoint
   []
-  (str config/PUBLISH-API-BASE "/assets"))
+  (str (config/publish-api-base) "/assets"))
 
 (defn- asset-content-type
   [ext]
@@ -382,10 +382,11 @@
                                   data (bean/->clj json)]
                             (let [short-url (:short_url data)
                                   page-id (str (:block/uuid page))
+                                  api-base (config/publish-api-base)
                                   fallback-url (when (and graph-id page-id)
-                                                 (str config/PUBLISH-API-BASE "/page/" graph-id "/" page-id))
+                                                 (str api-base "/page/" graph-id "/" page-id))
                                   url (or (when short-url
-                                            (str config/PUBLISH-API-BASE short-url))
+                                            (str api-base short-url))
                                           fallback-url)]
                               (when (and url (:db/id page))
                                 (property-handler/set-block-property! (:db/id page)
