@@ -8,7 +8,7 @@
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t interpolate-rich-text]]
+            [frontend.context.i18n :refer [t interpolate-rich-text-node]]
             [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.handler.common.plugin :as plugin-common-handler]
@@ -873,13 +873,12 @@
          [:span.text-red-rx-10.flex.items-center (shui/tabler-icon "alert-triangle-filled" {:size 20})]
          [:span name "  " [:code "#" (str pid)]]])
       [:p
-       (interpolate-rich-text
+       (interpolate-rich-text-node
          (t :plugin/report-modal-desc)
-         {:support-email
-          [:a.hover:underline
+         [[:a.hover:underline
            {:href (str "mailto://support@logseq.com?subject=Report plugin from Logseq Marketplace"
                        (when pid (str " (#" pid ")")))}
-           "support@logseq.com"]})]])))
+           "support@logseq.com"]])]])))
 
 (defn parse-user-md-content
   [content {:keys [url]}]
