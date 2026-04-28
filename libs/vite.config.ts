@@ -26,9 +26,9 @@ const targets = {
 const target = targets[targetName as keyof typeof targets]
 const browserProcess =
   '({ env: {}, platform: "browser", cwd: () => "/", noDeprecation: false, throwDeprecation: false, traceDeprecation: false, pid: 0 })'
-const browserGlobalsBanner = [
+const browserGlobalsIntro = [
   'var global = globalThis;',
-  `var process = global.process || (global.process = ${browserProcess});`,
+  `var process = globalThis.process || ${browserProcess};`,
   'process.env || (process.env = {});',
   'process.cwd || (process.cwd = function () { return "/" });',
   'process.platform || (process.platform = "browser");',
@@ -64,7 +64,7 @@ export default defineConfig(({ mode }) => {
       outDir: target.outDir,
       rollupOptions: {
         output: {
-          banner: browserGlobalsBanner,
+          intro: browserGlobalsIntro,
         },
       },
       lib: {

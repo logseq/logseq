@@ -7,6 +7,7 @@
   "scripts": {
     "watch:ui:examples": "vite --host 0.0.0.0 examples",
     "build:ui:only": "vite build",
+    "build:ui:watch": "vite build --watch",
     "build:ui": "pnpm build:ui:only",
     "test": "node --experimental-strip-types --test src/i18n.test.mts"
   },
