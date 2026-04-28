@@ -223,11 +223,31 @@
         on-click-error (:on-click-error opts)]
     (cond
       error?
-      [:span.ui__icon.image-icon.image-error.bg-gray-04.flex.items-center.justify-center.cursor-pointer
-       (cond-> {:style {:width size :height size}
-                :title "Image not found - click to replace"}
-         on-click-error (assoc :on-click on-click-error))
-       (shui/tabler-icon "photo-off" {:size (* size 0.6)})]
+      ;; Broken/missing asset. Match the visual language of the "pick an image"
+      ;; placeholder (icon.cljs:382-394) — bordered tile, transparent fill,
+      ;; muted icon — but with a solid border (vs dashed) and a `photo-off`
+      ;; glyph to signal "settled but broken" rather than "awaiting input".
+      ;; Inner icon sized at 0.45 to match placeholder; the heavy filled
+      ;; `bg-gray-04` look it replaced was visually loud at page-icon scale
+      ;; (38px) and read as a real piece of chrome rather than a fallback.
+      (let [inner (max 8 (int (* size 0.45)))
+            inner-px (str inner "px")]
+        [:span.ui__icon.image-icon.image-error
+         (cond-> {:style {:display "inline-flex"
+                          :align-items "center"
+                          :justify-content "center"
+                          :width (str size "px")
+                          :height (str size "px")
+                          :border "1px solid var(--rx-gray-07)"
+                          :border-radius "5px"
+                          :background "var(--rx-gray-03-alpha)"
+                          :color "var(--lx-gray-11)"}
+                  :title "Image not found - click to replace"}
+           on-click-error (assoc :on-click on-click-error
+                                 :class "cursor-pointer"))
+         (shui/tabler-icon "photo-off" {:size inner
+                                        :style {:width inner-px
+                                                :height inner-px}})])
 
       url
       [:span.ui__icon.image-icon.flex.items-center.justify-center
@@ -2304,11 +2324,14 @@
    hover card. Hover (or keyboard focus) reveals title + source + license
    + larger preview + maximize affordance. Click commits."
   [{:keys [url thumb-url title license license-desc source] :as web-image}
-   {:keys [on-click avatar-mode? item-id highlighted? ghost-highlighted?]}]
+   {:keys [on-click avatar-mode? item-id highlighted? ghost-highlighted? saved?]}]
   (let [display-url (or thumb-url url)
         ;; Carry full info through the trigger button's aria-label so screen-
         ;; reader users get title + license + source without entering the card.
-        aria (str "Add image: "
+        ;; When the asset is already in the user's library, lead the label with
+        ;; "Saved:" so AT users get the same signal the green badge gives
+        ;; sighted users.
+        aria (str (if saved? "Saved: " "Add image: ")
                   (or title "Web image")
                   (when license (str ", " license))
                   (when license-desc
@@ -2336,9 +2359,16 @@
         (if display-url
           [:img {:src display-url :loading "lazy" :alt ""}]
           [:div.bg-gray-04.animate-pulse])
-        ;; External indicator badge
-        [:div.external-badge
-         (shui/tabler-icon "world" {:size 10})]
+        ;; Corner badge. Default = globe (web provenance). When this image is
+        ;; already saved as a local asset (matched by source-url), swap to a
+        ;; green check so the user sees at a glance which results they already
+        ;; have. Click semantics on the parent route saved tiles to the
+        ;; existing asset instead of re-downloading.
+        (if saved?
+          [:div.saved-badge
+           (shui/tabler-icon "check" {:size 10})]
+          [:div.external-badge
+           (shui/tabler-icon "world" {:size 10})])
         ;; Touch-only license byline. CSS toggles via @media (hover: none) so
         ;; touch users see attribution without a hover affordance.
         (when (or license license-desc)
@@ -2434,18 +2464,13 @@
         *loading? (::loading? state)
         *current-query (::current-query state)
         *search-error? (::search-error? state)
-        all-images (rum/react *images)
-        ;; Hide web results that have already been saved as assets locally —
-        ;; the same image will appear in "Available assets" with full metadata,
-        ;; so showing it twice is just clutter. Join key: `:source-url` on the
-        ;; web-image (Wikimedia descriptionurl) ↔ `:logseq.property.asset/source-url`
-        ;; on the saved asset.
-        images (if (seq saved-source-urls)
-                 (remove (fn [img]
-                           (when-let [u (:source-url img)]
-                             (contains? saved-source-urls u)))
-                         all-images)
-                 all-images)
+        images (rum/react *images)
+        ;; `saved-source-urls` is a set of source URLs for assets the user has
+        ;; already downloaded locally. We don't filter those tiles out — hiding
+        ;; them on a 5-wide row collapses the layout and reads as a broken
+        ;; search when the user has saved 3 of the top hits. Instead, the per-
+        ;; tile `saved?` flag swaps the corner globe overlay for a green check
+        ;; badge, and the click routes through the existing asset (no redownload).
         loading? (rum/react *loading?)
         current-query (rum/react *current-query)
         search-error? (rum/react *search-error?)
@@ -2504,13 +2529,20 @@
                  (shui/skeleton {:class "w-full h-full rounded"})])
               ;; Actual images
               (for [web-image images
-                    :let [web-id (str "web-" (:url web-image))]]
+                    :let [web-id (str "web-" (:url web-image))
+                          saved? (and (seq saved-source-urls)
+                                      (contains? saved-source-urls (:source-url web-image)))]]
                 (rum/with-key
                   (web-image-item
                    web-image
                    {:item-id web-id
                     :highlighted? (= highlighted-id web-id)
                     :ghost-highlighted? (= ghost-highlighted-id web-id)
+                    ;; True when this tile's source-url matches a locally saved
+                    ;; asset. Drives the green "saved" badge (vs the default
+                    ;; globe) and lets the parent's on-select route the click
+                    ;; to the existing asset instead of re-downloading.
+                    :saved? saved?
                   ;; Click commits directly. The hover card already showed the
                   ;; user the preview + license; a modal confirmation is excise
                   ;; work given click-to-revert is one click away.
@@ -2965,13 +2997,12 @@
           (and (string? url)
                (string/ends-with? (string/lower-case url) ".svg")))
 
-        ;; Handle web image selection (download and save)
-        ;; For SVGs, prefer PNG thumbnail to avoid binary corruption issues
-        handle-web-image-select
-        (fn [_e web-image]
-          (let [repo (state/get-current-repo)
-                {:keys [url thumb-url title source license author source-url]} web-image
-                ;; Use PNG thumbnail for SVGs (avoids blob rendering issues)
+        ;; Download + save path. Called from `handle-web-image-select` when no
+        ;; local asset matches the web image's source-url. Defined first so
+        ;; the dispatcher below can close over it.
+        handle-web-image-download
+        (fn [repo url thumb-url title source license author source-url]
+          (let [;; Use PNG thumbnail for SVGs (avoids blob rendering issues)
                 ;; Fall back to original URL for non-SVGs or if no thumbnail
                 download-url (if (and (svg-url? url) thumb-url)
                                thumb-url ; PNG thumbnail for SVG
@@ -3017,6 +3048,41 @@
                            ;; toasts on rapid successive picks.
                            (when (= my-save-id @*web-image-save-id)
                              (shui/toast! (url-save-error-copy err) :error)))))))
+
+        ;; Click dispatcher for the web-image grid. Splits between two paths:
+        ;;
+        ;; - Already-saved fast path: when the web image's source-url matches
+        ;;   an asset already in `assets`, route the click to that asset
+        ;;   without re-downloading. The green "saved" badge on the tile is
+        ;;   the visible promise of this — re-fetching would create an orphan
+        ;;   duplicate.
+        ;; - Fresh download: otherwise, fall through to `handle-web-image-download`
+        ;;   which downloads the image, writes the asset, and selects it.
+        handle-web-image-select
+        (fn [_e web-image]
+          (let [repo (state/get-current-repo)
+                {:keys [url thumb-url title source license author source-url]} web-image
+                existing-asset (when (and source-url (not (string/blank? source-url)))
+                                 (some #(when (= source-url
+                                                 (:logseq.property.asset/source-url %))
+                                          %)
+                                       assets))]
+            (if existing-asset
+              (let [image-data {:asset-uuid (str (:block/uuid existing-asset))
+                                :asset-type (:logseq.property.asset/type existing-asset)}]
+                (add-used-asset! (:block/uuid existing-asset))
+                (on-chosen nil
+                           (if (= :avatar mode)
+                             {:type :avatar
+                              :id (:id synthesized-avatar-context)
+                              :label (:label synthesized-avatar-context)
+                              :data (merge (:data synthesized-avatar-context) image-data)}
+                             {:type :image
+                              :id (str "image-" (:block/uuid existing-asset))
+                              :label (or (:block/title existing-asset) "")
+                              :data image-data})))
+              (handle-web-image-download repo url thumb-url title source license author source-url))))
+
         ;; Process upload (actual upload logic extracted for reuse)
         process-upload (fn [files]
                          (let [repo (state/get-current-repo)
@@ -3371,26 +3437,26 @@
            section-states (rum/react *section-states)
            recently-used-expanded? (get section-states "Recently used" true)
            available-expanded? (get section-states "Available assets" true)
-           ;; Set of source URLs already saved as assets locally. Used to hide
-           ;; web search results that the user has already downloaded — both
-           ;; visually (web-images-section render) and in the keyboard-nav flat
-           ;; list, which must stay in sync with what's on screen.
+           ;; Set of source URLs already saved as assets locally. Threaded into
+           ;; web-images-section so each tile knows whether it's a saved image
+           ;; and can render the green "saved" badge instead of the default
+           ;; globe overlay. Same set is used by handle-web-image-select to
+           ;; route saved-tile clicks to the existing asset (no re-download).
            saved-source-urls (->> assets
                                   (keep :logseq.property.asset/source-url)
                                   (remove string/blank?)
                                   set)
            ;; Keyboard navigation: flat-items + sections mirror the icon-picker model.
            ;; Include only sections that are currently rendered and expanded so
-           ;; flat indices align with visible DOM buttons.
+           ;; flat indices align with visible DOM buttons. Web tiles that match
+           ;; a saved asset stay in the list — they're still visible on screen
+           ;; (with the saved badge) so the keyboard cursor must reach them.
            recent-nav-row (when (and recently-used-expanded?
                                      (seq recently-used-row)
                                      (string/blank? search-q))
                             recently-used-row)
            web-nav-list   (when (not (string/blank? effective-web-query))
-                            (vec (->> (or web-images [])
-                                      (remove (fn [img]
-                                                (when-let [u (:source-url img)]
-                                                  (contains? saved-source-urls u)))))))
+                            (vec (or web-images [])))
            empty-state?   (and available-expanded?
                                (not loading?)
                                (empty? filtered-assets)

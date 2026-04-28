@@ -1328,7 +1328,7 @@
     border-radius: 4px;
   }
 
-  > div:not(.external-badge) {
+  > div:not(.external-badge):not(.saved-badge) {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -1349,8 +1349,12 @@
     }
   }
 
-  /* External indicator badge */
-  .external-badge {
+  /* Corner badge — `.external-badge` for unsaved web hits (globe), `.saved-badge`
+     for hits whose source-url already matches a local asset (green check). The
+     two share geometry so the tile silhouette is identical regardless of which
+     one is shown; only the disc color and the inner glyph differ. */
+  .external-badge,
+  .saved-badge {
     @apply flex items-center justify-center;
     position: absolute;
     bottom: 2px;
@@ -1358,9 +1362,23 @@
     width: 16px;
     height: 16px;
     border-radius: 4px;
-    background-color: rgba(0, 0, 0, 0.6);
     color: white;
     z-index: 1;
+  }
+
+  .external-badge {
+    background-color: rgba(0, 0, 0, 0.6);
+  }
+
+  .saved-badge {
+    /* Deep forest green, fixed across themes. Radix green-9/10 are the
+       "solid" tones intended for colored backgrounds, but the scale *flips*
+       between light and dark mode — they read brighter in dark theme,
+       which leaves the white check washed out at 10px. A fixed deep
+       saturated green (~5.5:1 contrast with white) keeps the check legible
+       in both themes and against any thumbnail. Distinct from the blue
+       selected-asset ring used elsewhere on tiles. */
+    background-color: #137333;
   }
 }
 
@@ -1427,43 +1445,66 @@
 }
 
 /* Web image tooltip with bordered arrow */
-.web-image-tooltip-content {
-  /* Border connects to arrow via BorderedArrowSvg stroke */
+/* Web image hover card (Radix Tooltip with rich content).
+   Tooltip-content has default px-3 py-1.5 + overflow-hidden. We strip the
+   padding so the preview block can go edge-to-edge to the rounded corners. */
+.web-image-card-popup {
+  padding: 0 !important;
+  /* Tooltip default keeps overflow-hidden; the popup's rounded-md corners
+     clip the preview image cleanly. */
 }
 
-.web-image-tooltip {
-  @apply flex flex-col gap-0.5;
-  max-width: 200px;
-}
-
-/* Web image confirm pane (popover) */
-.web-image-confirm-popup {
-  @apply overflow-visible;
-}
-
-.web-image-confirm-pane {
-  @apply flex flex-col gap-3 p-3;
+.web-image-card {
+  @apply flex flex-col;
   width: 280px;
   background-color: var(--lx-gray-02);
 
+  /* Edge-to-edge preview area: blurred image fills the rectangle as a backdrop,
+     the sharp image is layered on top with object-fit: contain so any aspect
+     ratio displays without distortion. */
   .preview-image {
-    @apply flex justify-center;
+    @apply relative overflow-hidden;
+    height: 180px;
+    background-color: var(--lx-gray-03);
 
-    img {
-      width: 80px;
-      height: 80px;
-      object-fit: contain;
-      border-radius: 8px;
+    .blur-bg {
+      @apply absolute inset-0 w-full h-full;
+      object-fit: cover;
+      filter: blur(20px) saturate(1.4);
+      /* Scale slightly so the blur edges don't reveal the unblurred bounds. */
+      transform: scale(1.15);
+      opacity: 0.85;
     }
 
-    &.avatar-mode img {
-      object-fit: cover;
-      border-radius: 50%;
+    .preview-img {
+      @apply absolute inset-0 w-full h-full;
+      object-fit: contain;
+    }
+
+    .maximize-btn {
+      @apply absolute top-2 right-2 inline-flex items-center justify-center;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background-color: rgba(0, 0, 0, 0.45);
+      color: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: background-color 120ms, color 120ms;
+
+      &:hover {
+        background-color: rgba(0, 0, 0, 0.65);
+        color: white;
+      }
     }
   }
 
+  .content-wrapper {
+    @apply flex flex-col gap-3 p-3;
+  }
+
   .image-info {
-    @apply flex flex-col gap-1 text-center;
+    @apply flex flex-col gap-1;
 
     .image-title {
       @apply font-medium text-sm;
@@ -1475,24 +1516,48 @@
     }
 
     .license-badge {
-      @apply text-xs px-2 py-1 rounded mt-1 text-center;
+      @apply text-xs px-2 py-0.5 rounded mt-1 self-start;
       background-color: var(--lx-gray-04);
       color: var(--lx-gray-11);
     }
   }
+}
 
-  .skip-confirm-checkbox {
-    @apply flex items-center gap-2 cursor-pointer;
-    @apply text-xs py-1;
-    color: var(--rx-gray-11);
+/* Inline message shown when both Wikipedia + Commons searches fail.
+   Distinct from the empty-result hidden state — surfaces a real connection
+   problem instead of silently hiding the section. */
+.web-images-error {
+  @apply flex items-center gap-2 px-3 py-2;
+  font-size: 12px;
+  color: var(--lx-gray-11);
+  background-color: var(--lx-gray-03);
+  border-radius: 4px;
+  margin: 0 8px;
+}
 
-    &:hover {
-      color: var(--rx-gray-12);
-    }
-  }
+/* Compact license byline overlaid on the tile for touch devices (no hover).
+   Hidden on hover-capable devices since the rich card covers the same info. */
+.web-image-item .touch-byline {
+  display: none;
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  font-size: 10px;
+  line-height: 1.2;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.95);
+  pointer-events: none;
+  max-width: calc(100% - 8px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-  .pane-footer {
-    @apply flex justify-end gap-2 pt-1;
+@media (hover: none) {
+  .web-image-item .touch-byline {
+    display: inline-block;
   }
 }
 
