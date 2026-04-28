@@ -106,6 +106,7 @@ exclude_patterns = [
   "src/main/frontend/handler/shell.cljs",                        # Run shell command
   "src/main/frontend/undo_redo/debug_ui.cljs",                   # Developer undo/redo tool
   "src/main/frontend/worker/commands.cljs",                      # Internal command identifier strings
+  "src/main/frontend/**/plugin*",                                # Plugin namespaces — may contain hardcoded strings that are not
 ]
 
 # Maximum character length of the text preview in output.
