@@ -22,6 +22,7 @@
             [electron.i18n :as i18n]
             [electron.keychain :as keychain]
             [electron.logger :as logger]
+            [electron.spell-check :as spell-check]
             [electron.plugin :as plugin]
             [electron.server :as server]
             [electron.shell :as shell]
@@ -302,11 +303,13 @@
 (defmethod handle :quitApp []
   (.quit app))
 
-(defmethod handle :userAppCfgs [_window [_ k v]]
+(defmethod handle :userAppCfgs [window [_ k v]]
   (let [config (cfgs/get-config)]
     (if-let [k (and k (keyword k))]
       (if-not (nil? v)
         (do (cfgs/set-item! k v)
+            (when (= k :spell-check)
+              (spell-check/apply-window-spellcheck! window (spell-check/session-spellcheck-enabled? v)))
             (state/set-state! [:config k] v))
         (cfgs/get-item k))
       config)))

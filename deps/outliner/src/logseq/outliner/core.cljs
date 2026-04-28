@@ -617,7 +617,8 @@
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup ", block: " block)))))
         blocks-tx (build-insert-blocks-tx db target-block blocks uuids get-new-id opts)]
     {:blocks-tx blocks-tx
-     :id->new-uuid id->new-uuid}))
+     :id->new-uuid id->new-uuid
+     :uuid->new-uuid uuids}))
 
 (defn- get-target-block
   [db blocks target-block {:keys [outliner-op bottom? top? indent? sibling? up? replace-empty-target?]}]
@@ -768,11 +769,11 @@
                           :keep-block-order? keep-block-order?
                           :outliner-op outliner-op
                           :insert-template? insert-template?}
-             {:keys [id->new-uuid blocks-tx]} (insert-blocks-aux db blocks' target-block insert-opts)]
-         (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/order b)))) blocks-tx)
-           (throw (ex-info "Invalid outliner data"
-                           {:opts insert-opts
-                            :tx (vec blocks-tx)
+            {:keys [id->new-uuid uuid->new-uuid blocks-tx]} (insert-blocks-aux db blocks' target-block insert-opts)]
+        (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/order b)))) blocks-tx)
+          (throw (ex-info "Invalid outliner data"
+                          {:opts insert-opts
+                           :tx (vec blocks-tx)
                             :blocks (vec blocks)
                             :target-block target-block}))
            (let [tx (assign-temp-id blocks-tx target-block replace-empty-target?)
@@ -783,12 +784,14 @@
                                (remove old-db-id-blocks)
                                (remove nil?)
                                (map (fn [uuid'] {:block/uuid uuid'})))
-                 from-property (:logseq.property/created-from-property target-block)
-                 many? (= :db.cardinality/many (:db/cardinality from-property))
-                 property-values-tx (when (and sibling? from-property many?)
+                from-property (:logseq.property/created-from-property target-block)
+                many? (= :db.cardinality/many (:db/cardinality from-property))
+                property-values-tx (when (and sibling? from-property many?)
                                       (let [top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
                                         (mapcat (fn [block]
-                                                  (when-let [new-id (or (id->new-uuid (:db/id block)) (:block/uuid block))]
+                                                  (when-let [new-id (or (id->new-uuid (:db/id block))
+                                                                        (uuid->new-uuid (:block/uuid block))
+                                                                        (:block/uuid block))]
                                                     [{:block/uuid new-id
                                                       :logseq.property/created-from-property (:db/id from-property)}
                                                      [:db/add

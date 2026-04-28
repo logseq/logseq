@@ -15,24 +15,22 @@
             [logseq.tasks.util :as task-util]))
 
 (defn test
-  "Run tests. Pass args through to cmd 'yarn cljs:run-test'"
+  "Run tests. Pass args through to cmd 'pnpm cljs:run-test'"
   [& args]
-  (shell {:shutdown nil} "yarn cljs:test")
-  (let [args* (or (seq args) ["-e" "long" "-e" "fix-me"])]
-    (apply shell {:shutdown nil} "yarn cljs:run-test" args*)))
+  (shell {:shutdown nil} "pnpm cljs:test")
+  (apply shell {:shutdown nil} "pnpm cljs:run-test" args))
 
 (defn test-no-worker
-  "Run tests without compiling worker namespaces. Pass args through to cmd 'yarn cljs:run-test-no-worker'"
+  "Run tests without compiling worker namespaces. Pass args through to cmd 'pnpm cljs:run-test-no-worker'"
   [& args]
-  (shell "yarn cljs:test-no-worker")
-  (apply shell "yarn cljs:run-test-no-worker" args))
+  (shell "pnpm cljs:test-no-worker")
+  (apply shell "pnpm cljs:run-test-no-worker" args))
 
 (defn lint-and-test
-  "Run all lint tasks, then run tests(exclude testcases tagged by :long).
-  pass args through to cmd 'yarn cljs:run-test'"
+  "Run all lint tasks, then run tests excluding testcases tagged by :long and :fix-me."
   []
   (dev-lint/dev)
-  (test))
+  (test "-e" "long" "-e" "fix-me"))
 
 (defn e2e-basic-test
   "Run e2e basic tests. HTTP server should be available at localhost:3001"
@@ -90,12 +88,12 @@
   "Builds publishing backend and copies over supporting frontend assets"
   [& args]
   (apply shell {:dir "deps/publishing" :extra-env {"ORIGINAL_PWD" (fs/cwd)} :shutdown nil}
-         "yarn -s nbb-logseq -cp src:../graph-parser/src script/publishing.cljs"
+         "pnpm exec nbb-logseq -cp src:../graph-parser/src script/publishing.cljs"
          (into ["static"] args)))
 
 (defn watch-publishing-frontend
   [& _args]
-  (shell {:shutdown nil} "npx shadow-cljs watch publishing"))
+  (shell {:shutdown nil} "pnpm exec shadow-cljs watch publishing"))
 
 (defn watch-publishing-backend
   "Builds publishing backend once watch-publishing-frontend has built initial frontend"

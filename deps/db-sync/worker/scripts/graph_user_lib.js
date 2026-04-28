@@ -88,7 +88,7 @@ order by g.updated_at desc;`;
 
 function buildWranglerArgs({ database, config, env, sql }) {
   return [
-    "--yes",
+    "dlx",
     "wrangler",
     "d1",
     "execute",
@@ -105,7 +105,7 @@ function buildWranglerArgs({ database, config, env, sql }) {
 }
 
 function runWranglerQuery(args) {
-  const output = execFileSync("npx", args, {
+  const output = execFileSync("pnpm", args, {
     cwd: repoRoot,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "inherit"],

@@ -1,10 +1,18 @@
 (ns frontend.worker.state
   "State hub for worker"
   (:require [frontend.worker.platform :as platform]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [promesa.core :as p]))
 
 (defonce *main-thread (atom nil))
 (defonce *deleted-block-uuid->db-id (atom {}))
+
+(defn <invoke-main-thread
+  [qkw & args]
+  (if-let [main-thread @*main-thread]
+    (apply main-thread qkw false args)
+    (p/rejected (ex-info "main thread is not available in db-worker"
+                         {:method qkw}))))
 
 (defonce *state (atom {:db/latest-transact-time {}
                        :worker/context {}

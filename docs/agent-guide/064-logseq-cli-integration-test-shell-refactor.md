@@ -88,7 +88,7 @@ The existing `src/test/logseq/cli/integration_test.cljs` namespace will be reduc
 4. Add `/Users/rcmerci/gh-repos/logseq/cli-e2e/src/logseq/cli/e2e/paths.clj` to resolve absolute repo-root aware paths.
 5. Add `/Users/rcmerci/gh-repos/logseq/cli-e2e/src/logseq/cli/e2e/shell.clj` with a single shell execution utility that records exact command strings.
 6. Add `/Users/rcmerci/gh-repos/logseq/cli-e2e/src/logseq/cli/e2e/preflight.clj` to run build preflight commands.
-7. Implement preflight commands as `clojure -M:cljs compile logseq-cli db-worker-node` followed by `yarn db-worker-node:compile:bundle`.
+7. Implement preflight commands as `clojure -M:cljs compile logseq-cli db-worker-node` followed by `pnpm db-worker-node:compile:bundle`.
 8. Add preflight artifact existence checks for `/Users/rcmerci/gh-repos/logseq/static/logseq-cli.js`, `/Users/rcmerci/gh-repos/logseq/static/db-worker-node.js`, `/Users/rcmerci/gh-repos/logseq/dist/db-worker-node.js`, and `/Users/rcmerci/gh-repos/logseq/dist/db-worker-node-assets.json`.
 9. Add `/Users/rcmerci/gh-repos/logseq/cli-e2e/spec/non_sync_inventory.edn` to declare required command and key-option coverage excluding sync, login, and logout.
 10. Add `/Users/rcmerci/gh-repos/logseq/cli-e2e/spec/non_sync_cases.edn` to declare all shell cases with `:cmd`, `:expect`, and `:covers`.

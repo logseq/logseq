@@ -17,8 +17,8 @@
 
 (deftest build-plan-matches-required-commands
   (is (= ["clojure -M:cljs compile logseq-cli"
-          "yarn db-worker-node:compile:bundle"
-          "yarn --cwd deps/db-sync build:node-adapter"]
+          "pnpm db-worker-node:compile:bundle"
+          "pnpm --dir deps/db-sync build:node-adapter"]
          (mapv :cmd preflight/build-plan))))
 
 (deftest missing-artifacts-returns-unreadable-paths
@@ -51,8 +51,8 @@
                                      :file-exists? (set required-artifacts)})]
          (is (= :ok (:status result)))
          (is (= ["clojure -M:cljs compile logseq-cli"
-                 "yarn db-worker-node:compile:bundle"
-                 "yarn --cwd deps/db-sync build:node-adapter"]
+                 "pnpm db-worker-node:compile:bundle"
+                 "pnpm --dir deps/db-sync build:node-adapter"]
                 @calls))))))
 
 (deftest build-runs-commands-when-artifacts-are-partially-present
@@ -71,8 +71,8 @@
                                                      (contains? @existing path))})]
          (is (= :ok (:status result)))
          (is (= ["clojure -M:cljs compile logseq-cli"
-                 "yarn db-worker-node:compile:bundle"
-                 "yarn --cwd deps/db-sync build:node-adapter"]
+                 "pnpm db-worker-node:compile:bundle"
+                 "pnpm --dir deps/db-sync build:node-adapter"]
                 @calls))))))
 
 (deftest build-runs-commands-when-artifacts-are-absent
@@ -90,6 +90,6 @@
                                                      (contains? @existing path))})]
          (is (= :ok (:status result)))
          (is (= ["clojure -M:cljs compile logseq-cli"
-                 "yarn db-worker-node:compile:bundle"
-                 "yarn --cwd deps/db-sync build:node-adapter"]
+                 "pnpm db-worker-node:compile:bundle"
+                 "pnpm --dir deps/db-sync build:node-adapter"]
                 @calls))))))
