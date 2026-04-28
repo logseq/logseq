@@ -7,6 +7,7 @@
     "dev": "cd ./worker && pnpm exec wrangler dev",
     "watch": "clojure -M:cljs watch publish-worker",
     "release": "clojure -M:cljs release publish-worker",
+    "test": "clojure -M:cljs compile publish-test && node worker/dist/worker-test.js",
     "clean": "rm -rf ./worker/dist/",
     "bump-publish-version": "node ./scripts/bump-publish-version.js",
     "deploy": "pnpm bump-publish-version && pnpm clean && pnpm release && cd ./worker && pnpm exec wrangler deploy --env prod"
