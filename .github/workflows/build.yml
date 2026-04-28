@@ -40,12 +40,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'yarn'
-          cache-dependency-path: yarn.lock
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -73,24 +78,24 @@ jobs:
         if: steps.clojure-deps.outputs.cache-hit != 'true'
         run: clojure -A:cljs -P
 
-      - name: Fetch yarn deps
-        run: yarn install --frozen-lockfile
+      - name: Fetch pnpm deps
+        run: pnpm install --frozen-lockfile
 
       - name: Build test asset
         run: clojure -M:test compile test
 
       - name: Run ClojureScript query tests against basic query type
-        run: DB_QUERY_TYPE=basic yarn cljs:run-test -r frontend.db.query-dsl-test
+        run: DB_QUERY_TYPE=basic pnpm cljs:run-test -r frontend.db.query-dsl-test
 
-      - name: Run ClojureScript unit tests
-        run: yarn cljs:run-test
+      - name: Run ClojureScript tests
+        run: pnpm cljs:run-test
 
       - name: Setup CLI integration test
         # logseq-cli.js needed just for test-cli-query-human-output-pipes-to-show
-        run: clojure -M:cljs compile logseq-cli && yarn db-worker-node:release:bundle
+        run: clojure -M:cljs compile logseq-cli && pnpm db-worker-node:release:bundle
 
       - name: Run ClojureScript integration tests
-        run: yarn cljs:run-integration-test
+        run: pnpm cljs:run-integration-test
 
       - name: Run CLI E2E tests
         run: bb dev:cli-e2e --verbose --skip-build
@@ -146,14 +151,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'yarn'
+          cache: 'pnpm'
           cache-dependency-path: |
-            deps/db/yarn.lock
-            scripts/yarn.lock
+            deps/db/pnpm-lock.yaml
+            scripts/pnpm-lock.yaml
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -167,22 +177,22 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
-      - name: Fetch scripts yarn deps
-        run: cd scripts && yarn install --frozen-lockfile
+      - name: Fetch scripts pnpm deps
+        run: cd scripts && pnpm install --frozen-lockfile
 
       - name: Create DB graph with properties
-        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./properties-graph
+        run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./properties-graph
 
       # TODO: Use a smaller, test-focused graph to test classes
       - name: Create DB graph with classes
-        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./schema-graph
+        run: cd scripts && pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./schema-graph
 
-      - name: Fetch deps/db yarn deps
-        run: cd deps/db && yarn install --frozen-lockfile
+      - name: Fetch deps/db pnpm deps
+        run: cd deps/db && pnpm install --frozen-lockfile
 
       # Can run from deps/db since all JS deps for this command are available in deps/db
       - name: Validate created DB graphs
-        run: cd deps/db && yarn nbb-logseq -cp src:../cli/src -m logseq.cli validate -g ../../scripts/properties-graph ../../scripts/schema-graph
+        run: cd deps/db && pnpm exec nbb-logseq -cp src:../cli/src -m logseq.cli validate -g ../../scripts/properties-graph ../../scripts/schema-graph
 
       - name: Export a created DB graph and confirm the export is idempotent
-        run: cd deps/db && yarn nbb-logseq -cp src:../cli/src -m logseq.cli export-edn -g ../../scripts/properties-graph -f properties.edn --roundtrip
+        run: cd deps/db && pnpm exec nbb-logseq -cp src:../cli/src -m logseq.cli export-edn -g ../../scripts/properties-graph -f properties.edn --roundtrip

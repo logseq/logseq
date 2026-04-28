@@ -1,6 +1,7 @@
 (ns frontend.worker.db-worker
   "Browser worker entrypoint."
   (:require ["comlink" :as Comlink]
+            [frontend.common.idb :as idb]
             [frontend.worker.db-core :as db-core]
             [frontend.worker.platform.browser :as platform-browser]
             [frontend.worker.state :as worker-state]
@@ -8,8 +9,7 @@
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.db :as ldb]
-            [promesa.core :as p]
-            [frontend.common.idb :as idb]))
+            [promesa.core :as p]))
 
 (def ^:private worker-bootstrap-loaded-key "__logseq_db_worker_bootstrap_loaded__")
 

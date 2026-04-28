@@ -6,6 +6,11 @@
 
 (defonce subtle (.. js/crypto -subtle))
 
+(defn- expected-crypto-operation-error?
+  [e]
+  (= "OperationError" (or (some-> e .-name)
+                          (some-> e ex-cause .-name))))
+
 (defn <export-aes-key
   [aes-key]
   (assert (instance? js/CryptoKey aes-key))
@@ -148,7 +153,8 @@
                                    #js ["decrypt"])]
      private-key)
    (p/catch (fn [e]
-              (log/error "decrypt-private-key" e)
+              (when-not (expected-crypto-operation-error? e)
+                (log/error "decrypt-private-key" e))
               (ex-info "decrypt-private-key" {} e)))))
 
 (defn <encrypt-aes-key
@@ -177,7 +183,8 @@
                                         encrypted-aes-key)]
      (<import-aes-key (js/Uint8Array. decrypted-key-data)))
    (p/catch (fn [e]
-              (log/error "decrypt-aes-key failed" e)
+              (when-not (expected-crypto-operation-error? e)
+                (log/error "decrypt-aes-key failed" e))
               (ex-info "decrypt-aes-key" {} e)))))
 
 (defn <encrypt-uint8array

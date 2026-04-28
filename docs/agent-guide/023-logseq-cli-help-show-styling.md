@@ -37,7 +37,7 @@ The `logseq -h` help output should omit the commands list section.
 | Area | Path | Notes |
 | --- | --- | --- |
 | npm dependency | package.json | Add picocolors dependency used by ClojureScript Node targets. |
-| npm lockfile | yarn.lock | Update to include picocolors. |
+| npm lockfile | pnpm-lock.yaml | Update to include picocolors. |
 | CLI help summary | src/main/logseq/cli/command/core.cljs | Apply bold styling to command names and option names in help summaries and error text. |
 | CLI show output | src/main/logseq/cli/command/show.cljs | Apply status color and tag bold styling in tree labels. |
 | CLI show output | src/main/logseq/cli/command/show.cljs | Apply lighter styling to tree glyphs in human output. |
@@ -50,7 +50,7 @@ The `logseq -h` help output should omit the commands list section.
 
 ## Implementation plan
 
-1. Add picocolors to package.json dependencies and update yarn.lock with the new dependency using the existing package manager.
+1. Add picocolors to package.json dependencies and update pnpm-lock.yaml with the new dependency using pnpm.
 2. Create a small styling helper in a new namespace such as src/main/logseq/cli/style.cljs that wraps picocolors functions for bold and color and exposes a no-color flag for tests.
 3. Add a companion helper in a shared location for db-worker-node, or reuse the same namespace if it is available in that build target, to avoid duplicated color logic.
 4. In src/main/logseq/cli/style.cljs, add a color support check that disables styling when color is not supported or TERM is dumb.

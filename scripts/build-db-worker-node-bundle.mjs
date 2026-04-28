@@ -13,7 +13,7 @@ const distDir = path.join(repoRoot, "dist");
 const shadowEntry = path.join(repoRoot, "static", "db-worker-node.js");
 const bundleEntry = path.join(distDir, "db-worker-node.js");
 const manifestPath = path.join(distDir, "db-worker-node-assets.json");
-const previousNccOutDir = path.join(distDir, ".db-worker-node-ncc");
+const legacyNccOutDir = path.join(distDir, ".db-worker-node-ncc");
 const builtinModuleSet = new Set([
   ...builtinModules,
   ...builtinModules.map((moduleName) => `node:${moduleName}`),
@@ -49,7 +49,8 @@ async function removeIfExists(targetPath) {
 }
 
 async function cleanupPreviousBundle() {
-  await removeIfExists(previousNccOutDir);
+  // Remove the legacy ncc output directory if it still exists from older builds.
+  await removeIfExists(legacyNccOutDir);
   await removeIfExists(bundleEntry);
 
   if (await exists(manifestPath)) {

@@ -234,7 +234,7 @@
 (defn- set-main-thread-stub!
   []
   (reset! worker-state/*main-thread
-          (fn [qkw _direct-pass? _args]
+          (fn [qkw _direct-pass? & _args]
             (p/rejected (ex-info "main-thread is not available in db-worker-node"
                                  {:method qkw})))))
 
@@ -592,7 +592,7 @@
                            (string/includes? message "bindings file"))
                        (.error js/console
                                (str "db-worker-node failed to start: bundled runtime files are missing or incomplete. "
-                                    "Rebuild with `yarn db-worker-node:release:bundle` and ensure "
+                                    "Rebuild with `pnpm db-worker-node:release:bundle` and ensure "
                                     "`dist/db-worker-node.js` exists and assets listed in "
                                     "`dist/db-worker-node-assets.json` are next to it. "
                                     "Root error: "

@@ -34,5 +34,5 @@ Shell-first end-to-end tests for logseq CLI.
 - Required build artifact for local db-sync server:
   - `deps/db-sync/worker/dist/node-adapter.js`
 - If artifact is missing, build it before running sync suite:
-  - `yarn --cwd deps/db-sync build:node-adapter`
+  - `pnpm --dir deps/db-sync build:node-adapter`
 

@@ -9,9 +9,9 @@
    {:name "wrangler-dev"
     :dir "deps/db-sync/worker"
     :cmd "wrangler dev"}
-   {:name "yarn-watch"
+   {:name "pnpm-watch"
     :dir "."
-    :cmd "ENABLE_DB_SYNC_LOCAL=true yarn watch"}])
+    :cmd "ENABLE_DB_SYNC_LOCAL=true pnpm watch"}])
 
 (defn start
   []

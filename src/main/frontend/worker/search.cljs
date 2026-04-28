@@ -12,8 +12,7 @@
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
-            [logseq.graph-parser.text :as text]
-            [missionary.core :as m]))
+            [logseq.graph-parser.text :as text]))
 
 (def fuse
   ;; Fuse 6 exposed the constructor on `default`, while Fuse 7's CJS path returns
@@ -135,7 +134,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   (assert db ::upsert-blocks!)
   (.transaction db (fn [tx]
                      (doseq [batch (partition-all upsert-blocks-batch-size blocks)]
-                       (doseq [item blocks]
+                       (doseq [item batch]
                          (when-not (valid-upsert-block? item)
                            (throw-upsert-blocks-error! item)))
                        (.exec tx #js {:sql (upsert-blocks-sql (count batch))
@@ -439,15 +438,14 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- sanitize
   [content]
   (some-> content
-          (fuzzy/search-normalize true)))
+          (fuzzy/search-normalize true {:lower-case? false})))
 
 (defn- block-search-title
   "Build display title from block entity with original casing."
   [block]
   (cond->
-   (-> block
-       (update :block/title ldb/get-title-with-parents)
-       db-content/recur-replace-uuid-in-block-title)
+    (let [block' (update block :block/title ldb/get-title-with-parents)]
+      (db-content/recur-replace-uuid-in-block-title block'))
     (ldb/journal? block)
     (str " " (:block/journal-day block))))
 
@@ -566,7 +564,7 @@ DROP TRIGGER IF EXISTS blocks_au;
     (when-let [block (d/entity @conn [:block/uuid block-id])]
       (when (include-search-block? conn block code-class option)
         (let [display-title (if (:enable-snippet? option)
-                              (ensure-highlighted-snippet snippet (or (block-search-title block) title) q)
+                              (ensure-highlighted-snippet snippet title q)
                               (or snippet title))]
           {:db/id (:db/id block)
            :block/uuid (:block/uuid block)
@@ -595,47 +593,46 @@ DROP TRIGGER IF EXISTS blocks_au;
   [repo conn search-db q {:keys [limit search-limit page enable-snippet? page-only? code-only?]
                           :as option
                           :or {enable-snippet? true}}]
-  (m/sp
-    (when-not (string/blank? q)
-      (let [option (assoc option :enable-snippet? enable-snippet?)
-            match-input (get-match-input q)
-            page-count (count (d/datoms @conn :avet :block/name))
-            large-graph? (> page-count 2500)
-            non-match-input (when (<= (count q) 2)
-                              (str "%" (string/replace q #"\s+" "%") "%"))
-            limit (or limit 100)
-            limit-p (or search-limit limit)
-           ;; don't use sqlite snippet function anymore, all snippets will be handled by ensure-highlighted-snippet
-            select "select id, page, title, rank from blocks_fts where "
-            pg-sql (if page "page = ? and" "")
-            match-sql (if (ns-util/namespace-page? q)
-                        (str select pg-sql " title match ? or title match ? order by rank limit ?")
-                        (str select pg-sql " title match ? order by rank limit ?"))
-            non-match-sql (str select pg-sql " title like ? limit ?")
-            matched-result (when-not page-only?
-                             (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
-            non-match-result (when (and (not page-only?) non-match-input)
-                               (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
-                                    (map (fn [result]
-                                           (assoc result :keyword-score (fuzzy/score q (:title result)))))))
-            ;; fuzzy is too slow for large graphs
-            fuzzy-result (when-not (or page large-graph?)
-                           (->> (fuzzy-search repo @conn q option)
-                                (map (fn [result]
-                                       (assoc result :keyword-score (fuzzy/score q (:title result)))))))
+  (when-not (string/blank? q)
+    (let [option (assoc option :enable-snippet? enable-snippet?)
+          match-input (get-match-input q)
+          page-count (count (d/datoms @conn :avet :block/name))
+          large-graph? (> page-count 2500)
+          non-match-input (when (<= (count q) 2)
+                            (str "%" (string/replace q #"\s+" "%") "%"))
+          limit (or limit 100)
+          limit-p (or search-limit limit)
+          ;; don't use sqlite snippet function anymore, all snippets will be handled by ensure-highlighted-snippet
+          select "select id, page, title, rank from blocks_fts where "
+          pg-sql (if page "page = ? and" "")
+          match-sql (if (ns-util/namespace-page? q)
+                      (str select pg-sql " title match ? or title match ? order by rank limit ?")
+                      (str select pg-sql " title match ? order by rank limit ?"))
+          non-match-sql (str select pg-sql " title like ? limit ?")
+          matched-result (when-not page-only?
+                           (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
+          non-match-result (when (and (not page-only?) non-match-input)
+                             (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
+                                  (map (fn [result]
+                                         (assoc result :keyword-score (fuzzy/score q (:title result)))))))
+          ;; fuzzy is too slow for large graphs
+          fuzzy-result (when-not (or page large-graph?)
+                         (->> (fuzzy-search repo @conn q option)
+                              (map (fn [result]
+                                     (assoc result :keyword-score (fuzzy/score q (:title result)))))))
           ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
           ;;  _ (doseq [item (concat fuzzy-result matched-result)]
           ;;      (prn :debug :keyword-search-result item))
-            combined-result (combine-results @conn (concat fuzzy-result matched-result non-match-result))
-            code-class (when code-only?
-                         (d/entity @conn :logseq.class/Code-block))
-            result (->> combined-result
-                        (common-util/distinct-by :id)
-                        (keep #(search-result->block-result conn q code-class option %)))
-            result (cond->> result
-                     search-limit
-                     (take limit))]
-        (common-util/distinct-by :block/uuid result)))))
+          combined-result (combine-results @conn (concat fuzzy-result matched-result non-match-result))
+          code-class (when code-only?
+                       (d/entity @conn :logseq.class/Code-block))
+          result (->> combined-result
+                      (common-util/distinct-by :id)
+                      (keep #(search-result->block-result conn q code-class option %)))
+          result (cond->> result
+                   search-limit
+                   (take limit))]
+      (common-util/distinct-by :block/uuid result))))
 
 (defn truncate-table!
   [db]

@@ -93,8 +93,8 @@ NOTE: I will write *all* tests before I add any implementation behavior.
 ### Phase 3: Update dependency and bundle assumptions.
 
 21. Remove `better-sqlite3` from `/Users/rcmerci/gh-repos/logseq/package.json` dependencies.
-22. Run `yarn install` to refresh `/Users/rcmerci/gh-repos/logseq/yarn.lock` and verify `better-sqlite3` is removed from runtime dependency graph.
-23. Verify no remaining runtime require for `better-sqlite3` via `rg -n "better-sqlite3" /Users/rcmerci/gh-repos/logseq/src /Users/rcmerci/gh-repos/logseq/package.json /Users/rcmerci/gh-repos/logseq/yarn.lock`.
+22. Run `pnpm install` to refresh `/Users/rcmerci/gh-repos/logseq/pnpm-lock.yaml` and verify `better-sqlite3` is removed from runtime dependency graph.
+23. Verify no remaining runtime require for `better-sqlite3` via `rg -n "better-sqlite3" /Users/rcmerci/gh-repos/logseq/src /Users/rcmerci/gh-repos/logseq/package.json /Users/rcmerci/gh-repos/logseq/pnpm-lock.yaml`.
 24. Keep `/Users/rcmerci/gh-repos/logseq/scripts/package.json` unchanged in this task because scope is limited to `logseq-cli` and `db-worker-node` runtime paths.
 25. Update `/Users/rcmerci/gh-repos/logseq/scripts/build-db-worker-node-bundle.mjs` only if manifest handling needs explicit support for empty asset arrays.
 
@@ -115,7 +115,7 @@ NOTE: I will write *all* tests before I add any implementation behavior.
 35. Run `bb dev:test -v 'logseq.db-worker.ncc-bundle-test'` and expect standalone bundle smoke tests to pass.
 36. Run `bb dev:test -v 'logseq.cli.integration-test/test-cli-graph-export-import-sqlite'` and expect end-to-end CLI sqlite flow to pass.
 37. Run `clojure -M:cljs compile db-worker-node logseq-cli` and expect successful node-script builds.
-38. Run `yarn db-worker-node:release:bundle` and verify `dist/db-worker-node.js` still starts with `node ./dist/db-worker-node.js --help`.
+38. Run `pnpm db-worker-node:release:bundle` and verify `dist/db-worker-node.js` still starts with `node ./dist/db-worker-node.js --help`.
 39. Run `bb dev:lint-and-test` and expect full lint and test checks to pass.
 40. Review changed files against `/Users/rcmerci/gh-repos/logseq/prompts/review.md` checklist before merge.
 

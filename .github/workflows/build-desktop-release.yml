@@ -66,23 +66,28 @@ jobs:
         with:
           ref: ${{ github.event.inputs.git-ref }}
 
-      - name: Install Node.js, NPM and Yarn
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
-
-      - name: Cache yarn cache directory
-        uses: actions/cache@v4
-        id: yarn-cache
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          version: 10.33.0
+
+      - name: Get pnpm store directory path
+        id: pnpm-store-dir-path
+        run: echo "dir=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store directory
+        uses: actions/cache@v4
+        id: pnpm-cache
+        with:
+          path: ${{ steps.pnpm-store-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-
+            ${{ runner.os }}-pnpm-
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -130,7 +135,7 @@ jobs:
           echo "ENABLE_FILE_SYNC_PRODUCTION=${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS
-        run: yarn install && gulp build && yarn cljs:release-electron && yarn webpack-app-build
+        run: pnpm install --frozen-lockfile && gulp build && pnpm cljs:release-electron && pnpm webpack-app-build
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
@@ -187,10 +192,15 @@ jobs:
           pkgver=$(cat ./static/VERSION)
           echo "version=$pkgver" >> $GITHUB_OUTPUT
 
-      - name: Install Node.js, NPM and Yarn
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
 
       # - name: Cache Node Modules
       #   uses: actions/cache@v4
@@ -200,7 +210,7 @@ jobs:
       #     key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App
-        run: yarn install && yarn electron:make
+        run: pnpm install --frozen-lockfile && pnpm electron:make
         working-directory: ./static
 
       - name: Save artifacts
@@ -239,20 +249,26 @@ jobs:
           pkgver=$(cat ./static/VERSION)
           echo "version=$pkgver" >> $GITHUB_OUTPUT
 
-      - name: Install Node.js, NPM and Yarn
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
       - name: Fetch deps
         env:
           npm_config_arch: arm64
+          npm_config_target_platform: linux
         run: |
-          yarn install --target_arch=arm64 --target_platform=linux
+          pnpm install --frozen-lockfile
         working-directory: ./static
 
       - name: Build/Release Electron App
-        run: yarn electron:make-linux-arm64
+        run: pnpm electron:make-linux-arm64
         working-directory: ./static
 
       - name: Save artifacts
@@ -289,10 +305,15 @@ jobs:
         id: ref
         run: echo "version=$(cat ./static/VERSION)" >> $env:GITHUB_OUTPUT
 
-      - name: Install Node.js, NPM and Yarn
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
 
       # - name: Cache Node Modules
       #   uses: actions/cache@v4
@@ -302,7 +323,7 @@ jobs:
       #    key: ${{ runner.os }}-node-modules
 
       - name: Deps Electron app
-        run: yarn install
+        run: pnpm install --frozen-lockfile
         working-directory: ./static
 
       - name: Build/Release Electron app
@@ -323,7 +344,7 @@ jobs:
           '@
           $signCfgPath = Join-Path $PWD "electron-builder.sign-win.json"
           $signCfg | Out-File -FilePath $signCfgPath -Encoding utf8NoBOM
-          node_modules/.bin/electron-builder --config $signCfgPath --publish never
+          pnpm exec electron-builder --config $signCfgPath --publish never
         working-directory: ./static
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -358,10 +379,15 @@ jobs:
         id: ref
         run: echo "version=$(cat ./static/VERSION)" >> $env:GITHUB_OUTPUT
 
-      - name: Install Node.js, NPM and Yarn
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
 
       # - name: Cache Node Modules
       #   uses: actions/cache@v4
@@ -371,7 +397,7 @@ jobs:
       #    key: ${{ runner.os }}-node-modules
 
       - name: Deps Electron app
-        run: yarn install
+        run: pnpm install --frozen-lockfile
         working-directory: ./static
 
       - name: Build/Release Electron app
@@ -392,7 +418,7 @@ jobs:
           '@
           $signCfgPath = Join-Path $PWD "electron-builder.sign-win.json"
           $signCfg | Out-File -FilePath $signCfgPath -Encoding utf8NoBOM
-          node_modules/.bin/electron-builder --config $signCfgPath --win nsis zip --arm64 --publish never
+          pnpm exec electron-builder --config $signCfgPath --win nsis zip --arm64 --publish never
         working-directory: ./static
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -432,28 +458,32 @@ jobs:
       - name: List Static Files
         run: ls -al ./static
 
-      - name: Install Node.js, NPM and Yarn
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
 
       - name: Install Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
-
-      - name: Cache yarn cache directory
+      - name: Get pnpm store directory path
+        id: pnpm-store-dir-path
+        run: echo "dir=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+      - name: Cache pnpm store directory
         uses: actions/cache@v4
-        id: yarn-cache
+        id: pnpm-cache
         with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          path: ${{ steps.pnpm-store-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-
+            ${{ runner.os }}-pnpm-
 
       - name: Signing By Apple Developer ID
         if: ${{ github.repository == 'logseq/logseq' }}
@@ -470,7 +500,7 @@ jobs:
       #     key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App for x64
-        run: yarn install && yarn rebuild:all && yarn electron:make
+        run: pnpm install --frozen-lockfile && pnpm rebuild:all && pnpm electron:make
         working-directory: ./static
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
@@ -508,23 +538,27 @@ jobs:
           pkgver=$(cat ./static/VERSION)
           echo "version=$pkgver" >> $GITHUB_OUTPUT
 
-      - name: Install Node.js, NPM and Yarn
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
-
-      - name: Cache yarn cache directory
-        uses: actions/cache@v4
-        id: yarn-cache
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-arm64-yarn-${{ hashFiles('**/yarn.lock') }}
+          version: 10.33.0
+
+      - name: Get pnpm store directory path
+        id: pnpm-store-dir-path
+        run: echo "dir=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+      - name: Cache pnpm store directory
+        uses: actions/cache@v4
+        id: pnpm-cache
+        with:
+          path: ${{ steps.pnpm-store-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-arm64-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-arm64-yarn-
+            ${{ runner.os }}-arm64-pnpm-
 
       - name: Install Python
         uses: actions/setup-python@v4
@@ -546,11 +580,11 @@ jobs:
       #     key: ${{ runner.os }}-node-modules
 
       - name: Fetch deps
-        run: yarn install --ignore-platform && yarn rebuild:all
+        run: pnpm install --frozen-lockfile --config.supportedArchitectures.os=darwin --config.supportedArchitectures.cpu=arm64 && pnpm rebuild:all
         working-directory: ./static
 
       - name: Build/Release Electron App for arm64
-        run: yarn electron:make-macos-arm64
+        run: pnpm electron:make-macos-arm64
         working-directory: ./static
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}

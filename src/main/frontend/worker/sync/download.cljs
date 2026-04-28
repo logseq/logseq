@@ -209,6 +209,13 @@
     (-> (platform/remove-storage-pool! (platform/current) rows-pool)
         (p/catch (fn [_] nil)))))
 
+(defn close-import-state-for-repo!
+  [repo]
+  (when-let [state @*import-state]
+    (when (= repo (:repo state))
+      (close-import-state! state)
+      (reset! *import-state nil))))
+
 (defn- clear-import-state!
   [import-id]
   (when-let [state @*import-state]
