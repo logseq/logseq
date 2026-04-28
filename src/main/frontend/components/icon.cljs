@@ -103,6 +103,21 @@
   "Common image extensions to try when asset-type is unknown"
   ["png" "jpg" "jpeg" "gif" "webp" "svg" "bmp" "ico"])
 
+(defn- worker-not-ready-err?
+  "True when an error from `<make-asset-url` is the db-worker hasn't-finished-
+  booting transient (vs. a real failure like a missing file). Worth a longer
+  retry window than other errors since the only thing to do is wait."
+  [err]
+  (string/includes? (str err) "not been initialized"))
+
+;; Retry budgets. Worker-not-ready is a pure timing problem — the call will
+;; succeed once the SharedWorker finishes booting — so spend a longer wallclock
+;; window on it (~7.5s) at a tighter cadence. Real failures (missing file, etc.)
+;; stay on the original 3×1s budget; further retries there don't change the
+;; outcome and just delay surfacing the error icon.
+(def ^:private worker-not-ready-max-retries 15)
+(def ^:private worker-not-ready-delay-ms 500)
+
 (defn- <load-asset-url!
   "Resolve an asset blob URL, retrying on transient failures (e.g. db-worker not ready).
    When asset-type is nil and :try-extensions? is true, tries common image extensions.
@@ -137,11 +152,11 @@
                           (p/catch (fn [err]
                                      (if (stale?)
                                        (js/console.log "[DEBUG <load-asset-url!] stale, aborting" (pr-str {:uuid asset-uuid :load-id load-id}))
-                                       ;; If this was a worker-not-ready error and we have retries left, delay and retry same ext
-                                       (if (and (< attempt max-retries)
-                                                (string/includes? (str err) "not been initialized"))
-                                         (js/setTimeout #(try-ext exts (inc attempt)) delay-ms)
-                                         ;; Otherwise try next extension
+                                       ;; Worker-not-ready: retry the same ext on a tighter cadence
+                                       ;; with a wider budget. Other errors fall through to next ext.
+                                       (if (and (worker-not-ready-err? err)
+                                                (< attempt worker-not-ready-max-retries))
+                                         (js/setTimeout #(try-ext exts (inc attempt)) worker-not-ready-delay-ms)
                                          (try-ext (rest exts) 0)))))))))]
           (try-ext common-image-extensions 0)))
       ;; Known extension — retry with delay on failure
@@ -158,10 +173,12 @@
                       (p/catch (fn [err]
                                  (if (stale?)
                                    (js/console.log "[DEBUG <load-asset-url!] stale, aborting" (pr-str {:uuid asset-uuid :load-id load-id}))
-                                   (do
-                                     (js/console.error "[DEBUG <load-asset-url!] FAILED" (pr-str {:uuid asset-uuid :attempt n :max max-retries :load-id load-id :error (str err)}))
-                                     (if (< n max-retries)
-                                       (js/setTimeout #(attempt (inc n)) delay-ms)
+                                   (let [worker-not-ready? (worker-not-ready-err? err)
+                                         budget (if worker-not-ready? worker-not-ready-max-retries max-retries)
+                                         next-delay (if worker-not-ready? worker-not-ready-delay-ms delay-ms)]
+                                     (js/console.error "[DEBUG <load-asset-url!] FAILED" (pr-str {:uuid asset-uuid :attempt n :max budget :worker-not-ready? worker-not-ready? :load-id load-id :error (str err)}))
+                                     (if (< n budget)
+                                       (js/setTimeout #(attempt (inc n)) next-delay)
                                        (reset! *error true))))))))]
           (attempt 0))))))
 
@@ -447,8 +464,15 @@
                (let [avatar-data (get normalized :data)
                      asset-uuid (get avatar-data :asset-uuid)
                      asset-type (get avatar-data :asset-type)]
-                 (if (asset-uuid->entity asset-uuid)
-                   ;; Avatar with image - use async loading component
+                 (if (and (string? asset-uuid) (not (string/blank? asset-uuid)))
+                   ;; Avatar with image — let avatar-image-cp resolve via the
+                   ;; filesystem loader. Don't gate on a renderer-side
+                   ;; `db/entity` check: assets hydrate lazily, so a direct
+                   ;; navigation can find the entity missing while the file
+                   ;; is on disk. The loader retries on transient failures
+                   ;; and shui/avatar-fallback (initials) shows underneath
+                   ;; until the image lands; if the asset is truly gone the
+                   ;; initials persist as the natural error state.
                    (avatar-image-cp asset-uuid asset-type avatar-data opts)
                    ;; Text-only avatar
                    (let [size (or (:size opts) 20)
@@ -473,10 +497,16 @@
                                  (assoc :color explicit-color))}
                        display-text)))))
 
-               ;; Image with asset - use image icon component. Skip if asset-uuid
-               ;; is dangling (entity deleted) so we don't crash during async load.
+               ;; Image with asset — let image-icon-cp resolve via the filesystem
+               ;; loader. Don't gate on a renderer-side `db/entity` check:
+               ;; assets hydrate lazily into the renderer DataScript, so a
+               ;; direct navigation to a page whose icon points at an asset
+               ;; can find the entity missing while the file is on disk.
+               ;; image-icon-cp retries the load on transient failures and
+               ;; shows a `photo-off` icon if the file is truly gone.
                (and (map? normalized) (= :image (:type normalized))
-                    (asset-uuid->entity (get-in normalized [:data :asset-uuid])))
+                    (let [u (get-in normalized [:data :asset-uuid])]
+                      (and (string? u) (not (string/blank? u)))))
                (let [asset-uuid (get-in normalized [:data :asset-uuid])
                      asset-type (get-in normalized [:data :asset-type])]
                  (image-icon-cp asset-uuid asset-type opts))
@@ -791,9 +821,14 @@
   "True when icon-value would produce a visible element via `icon`. For :icon type
    this includes verifying that the underlying Tabler component actually exists,
    which catches stored values whose :id no longer resolves (e.g. data saved from a
-   stale picker entry before the tabler-icons filter was added). For :image/:avatar
-   with an asset-uuid, the asset entity must still exist — otherwise the picker
-   treats the icon as unrenderable (and for avatars falls back to the text value)."
+   stale picker entry before the tabler-icons filter was added).
+
+   For :image/:avatar we trust the presence of an asset-uuid string rather than
+   probing the renderer-side entity: assets hydrate lazily, so a synchronous
+   `db/entity` check races with cold loads (and would also flap the page-title
+   'Add icon' button while the entity is still being fetched). The actual
+   render path resolves via the filesystem loader and surfaces error states
+   on real failure."
   [icon-value]
   (boolean
    (when-let [normalized (normalize-icon icon-value)]
@@ -804,33 +839,38 @@
                (and (exists? js/tablerIcons)
                     (some? (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase v))))))
        :text (not (string/blank? (get-in normalized [:data :value])))
-       :avatar (or (some? (asset-uuid->entity (get-in normalized [:data :asset-uuid])))
-                   (not (string/blank? (get-in normalized [:data :value]))))
-       :image (some? (asset-uuid->entity (get-in normalized [:data :asset-uuid])))
+       :avatar (let [u (get-in normalized [:data :asset-uuid])]
+                 (or (and (string? u) (not (string/blank? u)))
+                     (not (string/blank? (get-in normalized [:data :value])))))
+       :image (let [u (get-in normalized [:data :asset-uuid])]
+                (and (string? u) (not (string/blank? u))))
        false))))
 
 (defn get-image-assets
   "Get image assets from frontend Datascript (fast, but may be empty on cold start)"
   []
   (let [image-extensions (set (map name config/image-formats))
-        results (db-utils/q '[:find ?uuid ?type ?title ?updated ?checksum
+        results (db-utils/q '[:find ?uuid ?type ?title ?updated ?checksum ?source-url
                               :where
                               [?e :logseq.property.asset/type ?type]
                               [?e :logseq.property.asset/checksum ?checksum]
                               [?e :block/uuid ?uuid]
                               [(get-else $ ?e :block/title "") ?title]
-                              [(get-else $ ?e :block/updated-at 0) ?updated]])]
+                              [(get-else $ ?e :block/updated-at 0) ?updated]
+                              [(get-else $ ?e :logseq.property.asset/source-url "") ?source-url]])]
     (->> results
-         (filter (fn [[_uuid type _title _updated _checksum]]
+         (filter (fn [[_uuid type _title _updated _checksum _source-url]]
                    (contains? image-extensions (some-> type string/lower-case))))
-         (sort-by (fn [[_uuid _type _title updated _checksum]] updated) >)
+         (sort-by (fn [[_uuid _type _title updated _checksum _source-url]] updated) >)
          ;; Deduplicate by checksum — keep the most recently updated entry
-         (medley/distinct-by (fn [[_uuid _type _title _updated checksum]] checksum))
-         (map (fn [[uuid type title _updated checksum]]
-                {:block/uuid uuid
-                 :block/title (if (string/blank? title) (str uuid) title)
-                 :logseq.property.asset/type type
-                 :logseq.property.asset/checksum checksum})))))
+         (medley/distinct-by (fn [[_uuid _type _title _updated checksum _source-url]] checksum))
+         (map (fn [[uuid type title _updated checksum source-url]]
+                (cond-> {:block/uuid uuid
+                         :block/title (if (string/blank? title) (str uuid) title)
+                         :logseq.property.asset/type type
+                         :logseq.property.asset/checksum checksum}
+                  (not (string/blank? source-url))
+                  (assoc :logseq.property.asset/source-url source-url)))))))
 
 (defn <get-image-assets
   "Async fetch image assets from DB worker (works on cold start).
@@ -840,7 +880,7 @@
   (when-let [graph (state/get-current-repo)]
     (p/let [results (db-async/<q graph
                                  {:transact-db? false}
-                                 '[:find (pull ?e [:block/uuid :block/title :logseq.property.asset/type :logseq.property.asset/checksum :block/updated-at])
+                                 '[:find (pull ?e [:block/uuid :block/title :logseq.property.asset/type :logseq.property.asset/checksum :logseq.property.asset/source-url :block/updated-at])
                                    :where
                                    [?e :logseq.property.asset/type ?type]
                                    [?e :logseq.property.asset/checksum _]])]
@@ -1167,98 +1207,145 @@
 ;; Asset Saving
 ;; ============================================================================
 
+(defn- source-meta->properties
+  "Build the property map for source-meta keys to write on the asset entity.
+   Returns nil when no meta was supplied."
+  [{:keys [source-url source-name license attribution]}]
+  (let [pairs (cond-> {}
+                (and source-url (not (string/blank? source-url)))
+                (assoc :logseq.property.asset/source-url source-url)
+                (and source-name (not (string/blank? source-name)))
+                (assoc :logseq.property.asset/source-name source-name)
+                (and license (not (string/blank? license)))
+                (assoc :logseq.property.asset/license license)
+                (and attribution (not (string/blank? attribution)))
+                (assoc :logseq.property.asset/attribution attribution))]
+    (when (seq pairs) pairs)))
+
 (defn save-image-asset!
   "Save an image file as an asset using api-insert-new-block! approach.
    Creates the asset as a child of the Asset class page (like tag tables do),
-   avoiding journal entries."
-  [repo ^js file]
-  (p/let [file-name (node-path/basename (.-name file))
-          file-name-without-ext* (db-asset/asset-name->title file-name)
-          file-name-without-ext (if (= file-name-without-ext* "image")
-                                  (date/get-date-time-string-2)
-                                  file-name-without-ext*)
-          checksum (assets-handler/get-file-checksum file)
-          existing-asset (some->> checksum (db-async/<get-asset-with-checksum repo))]
-    (js/console.log "[DEBUG save-image-asset!]"
-                    (pr-str {:file-name file-name :checksum (subs (str checksum) 0 16)
-                             :existing? (some? existing-asset)
-                             :existing-uuid (when existing-asset (str (:block/uuid existing-asset)))}))
-    (if existing-asset
-      ;; Reuse existing asset — skip file write and block creation
-      existing-asset
-      (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
-              size (.-size file)
-              ext (db-asset/asset-path->type file-name)
-              asset-class (db/entity :logseq.class/Asset)
-              block-id (ldb/new-block-id)]
-        (js/console.log "[DEBUG save-image-asset!] creating"
-                        (pr-str {:block-id block-id :ext ext :size size
-                                 :repo-dir repo-dir :asset-dir asset-dir-rpath
-                                 :write-path (str asset-dir-rpath "/" block-id "." ext)}))
-        (when (and ext asset-class)
-          ;; Write file to disk
-          (p/let [_ (let [file-path (str block-id "." ext)
-                          file-rpath (str asset-dir-rpath "/" file-path)]
-                      (js/console.log "[DEBUG save-image-asset!] writing file" file-rpath)
-                      (write-asset-file! repo repo-dir file file-rpath))
-                  _ (js/console.log "[DEBUG save-image-asset!] file written OK, creating block...")
-                  ;; Create block using api-insert-new-block! (same approach as tag tables)
-                  block (editor-handler/api-insert-new-block!
-                         file-name-without-ext
-                         {:page (:block/uuid asset-class)
-                          :custom-uuid block-id
-                          :properties {:block/tags (:db/id asset-class)
-                                       :logseq.property.asset/type ext
-                                       :logseq.property.asset/checksum checksum
-                                       :logseq.property.asset/size size}
-                          :edit-block? false})]
-            (let [entity (db/entity [:block/uuid (:block/uuid block)])]
-              (js/console.log "[DEBUG save-image-asset!] done"
-                              (pr-str {:block-uuid (str (:block/uuid block))
-                                       :entity-found? (some? entity)
-                                       :entity-type (:logseq.property.asset/type entity)}))
-              entity)))))))
+   avoiding journal entries.
+   Optional source-meta map: {:source-url, :source-name, :license, :attribution}
+   is persisted as additional asset properties when provided."
+  ([repo file] (save-image-asset! repo file nil))
+  ([repo ^js file source-meta]
+   (p/let [file-name (node-path/basename (.-name file))
+           file-name-without-ext* (db-asset/asset-name->title file-name)
+           file-name-without-ext (if (= file-name-without-ext* "image")
+                                   (date/get-date-time-string-2)
+                                   file-name-without-ext*)
+           checksum (assets-handler/get-file-checksum file)
+           existing-asset (some->> checksum (db-async/<get-asset-with-checksum repo))]
+     (js/console.log "[DEBUG save-image-asset!]"
+                     (pr-str {:file-name file-name :checksum (subs (str checksum) 0 16)
+                              :existing? (some? existing-asset)
+                              :existing-uuid (when existing-asset (str (:block/uuid existing-asset)))}))
+     (if existing-asset
+       ;; Reuse existing asset — skip file write and block creation
+       existing-asset
+       (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
+               size (.-size file)
+               ext (db-asset/asset-path->type file-name)
+               asset-class (db/entity :logseq.class/Asset)
+               block-id (ldb/new-block-id)
+               extra-props (source-meta->properties source-meta)]
+         (js/console.log "[DEBUG save-image-asset!] creating"
+                         (pr-str {:block-id block-id :ext ext :size size
+                                  :repo-dir repo-dir :asset-dir asset-dir-rpath
+                                  :write-path (str asset-dir-rpath "/" block-id "." ext)
+                                  :source-meta? (some? extra-props)}))
+         (when (and ext asset-class)
+           ;; Write file to disk
+           (p/let [_ (let [file-path (str block-id "." ext)
+                           file-rpath (str asset-dir-rpath "/" file-path)]
+                       (js/console.log "[DEBUG save-image-asset!] writing file" file-rpath)
+                       (write-asset-file! repo repo-dir file file-rpath))
+                   _ (js/console.log "[DEBUG save-image-asset!] file written OK, creating block...")
+                   ;; Create block using api-insert-new-block! (same approach as tag tables)
+                   block (editor-handler/api-insert-new-block!
+                          file-name-without-ext
+                          {:page (:block/uuid asset-class)
+                           :custom-uuid block-id
+                           :properties (merge {:block/tags (:db/id asset-class)
+                                               :logseq.property.asset/type ext
+                                               :logseq.property.asset/checksum checksum
+                                               :logseq.property.asset/size size}
+                                              extra-props)
+                           :edit-block? false})]
+             (let [entity (db/entity [:block/uuid (:block/uuid block)])]
+               (js/console.log "[DEBUG save-image-asset!] done"
+                               (pr-str {:block-uuid (str (:block/uuid block))
+                                        :entity-found? (some? entity)
+                                        :entity-type (:logseq.property.asset/type entity)}))
+               entity))))))))
 
 (defn <save-url-asset!
-  "Download image from URL and save as asset. Returns promise with asset entity."
-  [repo url asset-name]
-  (p/let [{:keys [data content-type size kind]} (<download-url-asset url)]
-    ;; Validate kind / content-type
-    (cond
-      (= :html kind)
-      (throw (ex-info "URL is a webpage" {:kind :html-page :content-type content-type}))
+  "Download image from URL and save as asset. Returns promise with asset entity.
+   Optional source-meta map propagates attribution metadata to the asset entity."
+  ([repo url asset-name] (<save-url-asset! repo url asset-name nil))
+  ([repo url asset-name source-meta]
+   (p/let [{:keys [data content-type size kind]} (<download-url-asset url)]
+     ;; Validate kind / content-type
+     (cond
+       (= :html kind)
+       (throw (ex-info "URL is a webpage" {:kind :html-page :content-type content-type}))
 
-      (= :unknown kind)
-      (throw (ex-info "Unknown content type" {:kind :unknown :content-type content-type}))
+       (= :unknown kind)
+       (throw (ex-info "Unknown content type" {:kind :unknown :content-type content-type}))
 
-      (not (valid-image-content-type? content-type))
-      (throw (ex-info "Not an image" {:kind :not-image :content-type content-type}))
+       (not (valid-image-content-type? content-type))
+       (throw (ex-info "Not an image" {:kind :not-image :content-type content-type}))
 
-      (and size (> size max-url-asset-size))
-      (throw (ex-info "File too large" {:kind :too-large :size size :max max-url-asset-size})))
-    ;; Create a File object from the ArrayBuffer
-    (let [ext (or (content-type->extension content-type) "png")
-          filename (str asset-name "." ext)
-          blob (js/Blob. #js [data] #js {:type content-type})
-          file (js/File. #js [blob] filename #js {:type content-type})]
-      ;; Delegate to existing save function
-      (save-image-asset! repo file))))
+       (and size (> size max-url-asset-size))
+       (throw (ex-info "File too large" {:kind :too-large :size size :max max-url-asset-size})))
+     ;; Create a File object from the ArrayBuffer
+     (let [ext (or (content-type->extension content-type) "png")
+           filename (str asset-name "." ext)
+           blob (js/Blob. #js [data] #js {:type content-type})
+           file (js/File. #js [blob] filename #js {:type content-type})]
+       ;; Delegate to existing save function
+       (save-image-asset! repo file source-meta)))))
 
 ;; ============================================================================
 ;; Web Image Search (Wikipedia Commons)
 ;; ============================================================================
 
-(def ^:private web-image-skip-confirm-key "ls-web-image-skip-confirm")
+;; The legacy "Always add without asking" preference is meaningless now that
+;; clicks commit directly. Drop the lingering localStorage key once per app
+;; load so it doesn't sit around as a footgun for future debugging.
+(defonce ^:private web-image-skip-confirm-cleanup
+  (try (storage/remove "ls-web-image-skip-confirm") (catch :default _ nil)))
 
-(defn- get-web-image-skip-confirm
-  "Get user preference for skipping web image confirmation"
-  []
-  (boolean (storage/get web-image-skip-confirm-key)))
+(def ^:private license-name->spdx
+  "Static map of Commons LicenseShortName values to SPDX identifiers."
+  {"CC0" "CC0-1.0"
+   "CC0 1.0" "CC0-1.0"
+   "CC BY 1.0" "CC-BY-1.0"
+   "CC BY 2.0" "CC-BY-2.0"
+   "CC BY 2.5" "CC-BY-2.5"
+   "CC BY 3.0" "CC-BY-3.0"
+   "CC BY 4.0" "CC-BY-4.0"
+   "CC BY-SA 1.0" "CC-BY-SA-1.0"
+   "CC BY-SA 2.0" "CC-BY-SA-2.0"
+   "CC BY-SA 2.5" "CC-BY-SA-2.5"
+   "CC BY-SA 3.0" "CC-BY-SA-3.0"
+   "CC BY-SA 4.0" "CC-BY-SA-4.0"
+   "CC BY-NC 3.0" "CC-BY-NC-3.0"
+   "CC BY-NC 4.0" "CC-BY-NC-4.0"
+   "CC BY-NC-SA 3.0" "CC-BY-NC-SA-3.0"
+   "CC BY-NC-SA 4.0" "CC-BY-NC-SA-4.0"
+   "GFDL" "GFDL-1.3-or-later"
+   "Public domain" "Public-Domain"})
 
-(defn- set-web-image-skip-confirm!
-  "Set user preference for skipping web image confirmation"
-  [skip?]
-  (storage/set web-image-skip-confirm-key skip?))
+(defn- license->spdx
+  "Normalize a Commons LicenseShortName to an SPDX-style identifier.
+   Falls back to space→dash replacement for unknown values."
+  [license]
+  (when (and license (not (string/blank? license)))
+    (or (license-name->spdx license)
+        ;; Fallback: trim, replace internal spaces with dashes
+        (-> license string/trim (string/replace #"\s+" "-")))))
 
 (defn- license->description
   "Convert license code to human-readable description"
@@ -1283,9 +1370,55 @@
         :else
         "Check license terms"))))
 
+(defn- strip-html
+  "Strip HTML tags and decode common entities from an extmetadata string.
+   Wikipedia Commons returns Artist/Credit fields as wikitext-rendered HTML."
+  [s]
+  (when (and s (string? s))
+    (-> s
+        (string/replace #"<[^>]+>" "")
+        (string/replace #"&amp;" "&")
+        (string/replace #"&lt;" "<")
+        (string/replace #"&gt;" ">")
+        (string/replace #"&quot;" "\"")
+        (string/replace #"&#39;" "'")
+        (string/replace #"&nbsp;" " ")
+        string/trim)))
+
+(defn- source-name-for
+  "Map source keyword to display name."
+  [source]
+  (case source
+    :wikipedia "Wikipedia"
+    :wikipedia-commons "Wikimedia Commons"
+    "Web"))
+
+(defn- build-attribution
+  "Pre-render a TASL credit string. Returns nil when there's nothing useful
+   to attribute (e.g. Wikipedia PageImages with no metadata)."
+  [{:keys [title author source license]}]
+  (let [source-display (source-name-for source)
+        has-title? (and title (not (string/blank? title)))]
+    (cond
+      (and has-title? author license)
+      (str title " by " author " (" source-display ", " license ")")
+
+      (and has-title? author)
+      (str title " by " author " (" source-display ")")
+
+      (and has-title? license)
+      (str title " (" source-display ", " license ")")
+
+      has-title?
+      (str title " (" source-display ")")
+
+      :else nil)))
+
 (defn- <search-wikipedia-image
   "Fetch the main/best image for a Wikipedia article via PageImages API.
-   Returns a promise with image data or nil if not found."
+   Returns a promise resolving to one of:
+     {:status :ok :image image-or-nil}  — request succeeded; image may be nil
+     {:status :error}                    — network/fetch failed"
   [query]
   (p/create
    (fn [resolve _reject]
@@ -1303,7 +1436,7 @@
            (.then (fn [^js response]
                     (if (.-ok response)
                       (.json response)
-                      (resolve nil))))
+                      (resolve {:status :error}))))
            (.then (fn [data]
                     (when data
                       (let [pages (some-> data
@@ -1311,19 +1444,25 @@
                                           js->clj)
                             page (first (vals pages))]
                         (if-let [original (get page "original")]
-                          (resolve {:url (get original "source")
-                                    :thumb-url (get-in page ["thumbnail" "source"])
-                                    :title query
-                                    :source :wikipedia
-                                    :license nil ; PageImages doesn't return license
-                                    :license-desc nil})
-                          (resolve nil))))))
+                          (resolve {:status :ok
+                                    :image {:url (get original "source")
+                                            :thumb-url (get-in page ["thumbnail" "source"])
+                                            :title query
+                                            :source :wikipedia
+                                            :license nil ; PageImages doesn't return license
+                                            :license-desc nil
+                                            :author nil
+                                            :source-url (str "https://en.wikipedia.org/wiki/"
+                                                             (js/encodeURIComponent query))}})
+                          (resolve {:status :ok :image nil}))))))
            (.catch (fn [_err]
-                     (resolve nil))))))))
+                     (resolve {:status :error}))))))))
 
 (defn- <search-commons-images
   "Search Wikimedia Commons for images matching query.
-   Returns a promise with vector of image data."
+   Returns a promise resolving to one of:
+     {:status :ok :images [...]}  — request succeeded; vector may be empty
+     {:status :error}              — network/fetch failed"
   [query limit]
   (p/create
    (fn [resolve _reject]
@@ -1335,7 +1474,7 @@
                     "&gsrlimit=" limit
                     "&prop=imageinfo"
                     "&iiprop=url|extmetadata"
-                    "&iiextmetadatafilter=LicenseShortName"
+                    "&iiextmetadatafilter=Artist|Credit|LicenseShortName|LicenseUrl|UsageTerms"
                     "&iiurlwidth=200"
                     "&format=json"
                     "&origin=*")]
@@ -1345,7 +1484,7 @@
            (.then (fn [^js response]
                     (if (.-ok response)
                       (.json response)
-                      (resolve []))))
+                      (resolve {:status :error}))))
            (.then (fn [data]
                     (when data
                       (let [pages (some-> data
@@ -1353,32 +1492,48 @@
                                           js->clj
                                           vals)]
                         (resolve
-                         (->> pages
-                              (map (fn [page]
-                                     (let [imageinfo (first (get page "imageinfo"))
-                                           license (get-in imageinfo ["extmetadata" "LicenseShortName" "value"])
-                                           title (-> (get page "title" "")
-                                                     (string/replace #"^File:" "")
-                                                     (string/replace #"\.[^.]+$" ""))]
-                                       {:url (get imageinfo "url")
-                                        :thumb-url (get imageinfo "thumburl")
-                                        :title title
-                                        :source :wikipedia-commons
-                                        :license license
-                                        :license-desc (license->description license)})))
-                              (filter :url)
-                              vec))))))
+                         {:status :ok
+                          :images
+                          (->> pages
+                               (map (fn [page]
+                                      (let [imageinfo (first (get page "imageinfo"))
+                                            ext (get imageinfo "extmetadata")
+                                            license-raw (get-in ext ["LicenseShortName" "value"])
+                                            license-spdx (license->spdx license-raw)
+                                            artist-html (or (get-in ext ["Artist" "value"])
+                                                            (get-in ext ["Credit" "value"]))
+                                            author (strip-html artist-html)
+                                            title (-> (get page "title" "")
+                                                      (string/replace #"^File:" "")
+                                                      (string/replace #"\.[^.]+$" ""))]
+                                        {:url (get imageinfo "url")
+                                         :thumb-url (get imageinfo "thumburl")
+                                         :title title
+                                         :source :wikipedia-commons
+                                         :license license-spdx
+                                         :license-desc (license->description license-raw)
+                                         :author (when-not (string/blank? author) author)
+                                         :source-url (get imageinfo "descriptionurl")})))
+                               (filter :url)
+                               vec)})))))
            (.catch (fn [_err]
-                     (resolve []))))))))
+                     (resolve {:status :error}))))))))
 
 (defn- <search-web-images
   "Combined web image search. Returns up to 5 images from Wikipedia + Commons.
-   Wikipedia PageImages result is prioritized (slot 1), Commons fills remaining."
+   Wikipedia PageImages result is prioritized (slot 1), Commons fills remaining.
+   Returns a promise resolving to {:images [...] :network-error? boolean}.
+   network-error? is true only when BOTH inner searches failed; partial
+   network failure is silent (we still surface whatever succeeded)."
   [query]
   (when-not (string/blank? query)
     (p/let [;; Fire both requests in parallel
-            [wiki-image commons-images] (p/all [(<search-wikipedia-image query)
-                                                (<search-commons-images query 5)])]
+            [wiki-result commons-result] (p/all [(<search-wikipedia-image query)
+                                                 (<search-commons-images query 5)])
+            wiki-error? (= :error (:status wiki-result))
+            commons-error? (= :error (:status commons-result))
+            wiki-image (when-not wiki-error? (:image wiki-result))
+            commons-images (if commons-error? [] (:images commons-result))]
       ;; Combine results: Wikipedia first, then Commons (deduplicated)
       (let [wiki-url (:url wiki-image)
             ;; Filter out Commons images that match the Wikipedia image
@@ -1389,7 +1544,8 @@
             combined (if wiki-image
                        (cons wiki-image filtered-commons)
                        filtered-commons)]
-        (vec (take 5 combined))))))
+        {:images (vec (take 5 combined))
+         :network-error? (and wiki-error? commons-error?)}))))
 
 (defn- search-emojis
   [q]
@@ -1944,7 +2100,7 @@
          :class (when (= "custom-text" highlighted-id) "is-highlighted")
          :on-click #(reset! *view :text-picker)
          :on-mouse-over (fn [] (some-> on-tile-hover! (apply [text-item])))}
-        [:div.custom-tab-item-preview
+        [:div.custom-tab-item-preview {:aria-hidden "true"}
          (icon text-item {:size 32})]
         [:span.custom-tab-item-label "Text"]])
 
@@ -1964,7 +2120,7 @@
                      (reset! *asset-picker-initial-mode :avatar)
                      (reset! *view :asset-picker))
          :on-mouse-over (fn [] (some-> on-tile-hover! (apply [avatar-item])))}
-        [:div.custom-tab-item-preview
+        [:div.custom-tab-item-preview {:aria-hidden "true"}
          (icon avatar-item {:size 32})]
         [:span.custom-tab-item-label "Avatar"]])
 
@@ -1981,7 +2137,7 @@
                    (reset! *asset-picker-initial-mode :image)
                    (reset! *view :asset-picker))
        :on-mouse-over (fn [] (some-> on-tile-hover! (apply [image-placeholder-item])))}
-      [:div.custom-tab-item-preview
+      [:div.custom-tab-item-preview {:aria-hidden "true"}
        [:span.image-tile-placeholder
         {:style {:width 32
                  :height 32
@@ -2071,38 +2227,6 @@
        :else
        [:div.bg-gray-04.animate-pulse])]))
 
-(rum/defc web-image-item
-  "Renders a single web image thumbnail with external indicator and tooltip.
-   Shows license description on hover (simplified for glanceability)."
-  [{:keys [url thumb-url title license license-desc source] :as web-image}
-   {:keys [on-click avatar-mode? item-id highlighted? ghost-highlighted?]}]
-  (let [display-url (or thumb-url url)]
-    (shui/tooltip-provider
-     {:delay-duration 300}
-     (shui/tooltip
-      (shui/tooltip-trigger
-       {:as-child true}
-       [:button.web-image-item
-        {:data-item-id item-id
-         :class (util/classnames [{:avatar-mode avatar-mode?
-                                   :is-highlighted highlighted?
-                                   :is-ghost-highlighted ghost-highlighted?}])
-         :on-click (fn [e] (on-click e web-image))}
-        (if display-url
-          [:img {:src display-url :loading "lazy"}]
-          [:div.bg-gray-04.animate-pulse])
-        ;; External indicator badge
-        [:div.external-badge
-         (shui/tabler-icon "world" {:size 10})]])
-      (shui/tooltip-content
-       {:side "top" :align "center" :class "web-image-tooltip-content"
-        :show-arrow true :arrow-class-name "web-image-tooltip-arrow"}
-       [:div.web-image-tooltip {:style {:text-align "center"}}
-        [:div.font-medium (or title "Web image")]
-        ;; Show license description only (more glanceable than code)
-        (when license-desc
-          [:div.text-xs {:style {:color "var(--lx-gray-11)"}} license-desc])])))))
-
 (defn- should-use-blur-bg?
   "Determine if blurred background should be used based on image format.
    SVGs and potentially transparent formats should not use blur."
@@ -2128,40 +2252,34 @@
     {:on-click on-close}
     (shui/tabler-icon "x" {:size 16})]])
 
-(rum/defcs web-image-confirm-pane < rum/reactive
-  (rum/local false ::skip-confirm)
-  (rum/local false ::saving?)
-  [state {:keys [web-image on-close on-save avatar-context]}]
-  (let [*skip-confirm (::skip-confirm state)
-        *saving? (::saving? state)
-        skip-confirm? @*skip-confirm
-        saving? @*saving?
-        {:keys [url thumb-url title license license-desc source]} web-image
-        avatar-mode? (some? avatar-context)
-        ;; Build source string with optional license code
-        source-text (str (case source
+(rum/defc web-image-card-content
+  "Pure-render preview block: blurred-bg + sharp overlay + maximize button +
+   title + source · license + license badge. Used as the tooltip content for
+   web-image tiles. No buttons, no checkbox — clicking the tile commits."
+  [{:keys [url thumb-url title license license-desc source]}]
+  (let [source-text (str (case source
                            :wikipedia "From: Wikipedia"
                            :wikipedia-commons "From: Wikipedia Commons"
                            "From: Web")
                          (when license (str " · " license)))
-        ;; Determine if we should use blur based on format
         display-url (or thumb-url url)
         use-blur? (should-use-blur-bg? display-url)]
-    [:div.web-image-confirm-pane
-     ;; Preview image with blur background layer
+    [:div.web-image-card
      [:div.preview-image
-      ;; Blurred background image (only for opaque formats)
       (when use-blur?
-        [:img.blur-bg {:src display-url}])
-      ;; Main image with object-fit: contain
+        [:img.blur-bg {:src display-url :alt ""}])
       [:img.preview-img {:src display-url
                          :alt (str title " from " (case source
                                                     :wikipedia "Wikipedia"
                                                     :wikipedia-commons "Wikipedia Commons"
                                                     "Web"))}]
-      ;; Maximize button - opens full image view
       [:button.maximize-btn
-       {:on-click (fn [e]
+       {:on-pointer-down (fn [e]
+                           ;; Stop the click bubbling to the underlying tile.
+                           ;; Without this, opening the maximize popover would
+                           ;; also commit the image to the page-icon.
+                           (.stopPropagation e))
+        :on-click (fn [e]
                     (.stopPropagation e)
                     (shui/popup-show!
                      (.-target e)
@@ -2174,52 +2292,74 @@
                       :content-props {:class "full-image-view-popup"
                                       :sideOffset 8}}))}
        (shui/tabler-icon "arrows-maximize" {:size 16})]]
-
-     ;; Content wrapper - adds padding back for non-preview content
      [:div.content-wrapper
-      ;; Image info
       [:div.image-info
        [:div.image-title (or title "Web image")]
        [:div.image-source {:style {:color "var(--lx-gray-11)"}} source-text]
-       ;; License description badge
        (when license-desc
-         [:div.license-badge license-desc])]
+         [:div.license-badge license-desc])]]]))
 
-      ;; Skip confirmation checkbox
-      [:label.skip-confirm-checkbox
-       (shui/checkbox
-        {:checked skip-confirm?
-         :on-checked-change #(reset! *skip-confirm %)})
-       [:span "Always add without asking"]]
-
-      ;; Action buttons
-      [:div.pane-footer
-       (shui/button
-        {:variant :outline
-         :size :sm
-         :on-click on-close}
-        "Cancel")
-       (shui/button
-        {:variant :default
-         :size :sm
-         :disabled saving?
-         :on-click (fn []
-                     (reset! *saving? true)
-                     ;; Save preference if checkbox was checked
-                     (when skip-confirm?
-                       (set-web-image-skip-confirm! true))
-                     ;; Delegate saving to parent
-                     (on-save web-image))}
-        (if saving?
-          [:span.flex.items-center.gap-1
-           [:span.animate-spin (shui/tabler-icon "loader-2" {:size 14})]
-           "Adding..."]
-          "Add to assets"))]]]))
+(rum/defc web-image-item
+  "Renders a single web image thumbnail with external indicator and rich
+   hover card. Hover (or keyboard focus) reveals title + source + license
+   + larger preview + maximize affordance. Click commits."
+  [{:keys [url thumb-url title license license-desc source] :as web-image}
+   {:keys [on-click avatar-mode? item-id highlighted? ghost-highlighted?]}]
+  (let [display-url (or thumb-url url)
+        ;; Carry full info through the trigger button's aria-label so screen-
+        ;; reader users get title + license + source without entering the card.
+        aria (str "Add image: "
+                  (or title "Web image")
+                  (when license (str ", " license))
+                  (when license-desc
+                    (when-not license (str ", " license-desc)))
+                  ", from "
+                  (case source
+                    :wikipedia "Wikipedia"
+                    :wikipedia-commons "Wikimedia Commons"
+                    "the web"))]
+    (shui/tooltip-provider
+     ;; 400ms first-hover delay matches NN/g rich-tooltip guidance and the
+     ;; existing color-picker hover timings; 100ms on subsequent hovers gives
+     ;; instant swap when arrowing/hovering between sibling tiles.
+     {:delay-duration 400 :skip-delay-duration 100}
+     (shui/tooltip
+      (shui/tooltip-trigger
+       {:as-child true}
+       [:button.web-image-item
+        {:data-item-id item-id
+         :aria-label aria
+         :class (util/classnames [{:avatar-mode avatar-mode?
+                                   :is-highlighted highlighted?
+                                   :is-ghost-highlighted ghost-highlighted?}])
+         :on-click (fn [e] (on-click e web-image))}
+        (if display-url
+          [:img {:src display-url :loading "lazy" :alt ""}]
+          [:div.bg-gray-04.animate-pulse])
+        ;; External indicator badge
+        [:div.external-badge
+         (shui/tabler-icon "world" {:size 10})]
+        ;; Touch-only license byline. CSS toggles via @media (hover: none) so
+        ;; touch users see attribution without a hover affordance.
+        (when (or license license-desc)
+          [:div.touch-byline
+           (str (case source
+                  :wikipedia-commons "Commons"
+                  :wikipedia "Wikipedia"
+                  "Web")
+                (when license (str " · " license)))])])
+      (shui/tooltip-content
+       {:side "top" :align "center" :class "web-image-card-popup"
+        :side-offset 8 :collision-padding 8}
+       (web-image-card-content web-image))))))
 
 (rum/defcs web-images-section < rum/reactive
   (rum/local nil ::images)
   (rum/local true ::loading?)
   (rum/local nil ::current-query)
+  ;; True when the latest fetch reported a network error (both Wikipedia and
+  ;; Commons calls failed). Cleared when a fresh fetch begins.
+  (rum/local false ::search-error?)
   ;; Generation counter — responses whose id no longer matches are stale
   ;; (e.g. a "do" prefix response arriving after "donald trump" was issued)
   ;; and must not overwrite the current images.
@@ -2230,21 +2370,24 @@
                       *loading? (::loading? state)
                       *current-query (::current-query state)
                       *request-id (::request-id state)
-                      publish! (fn [results]
+                      *search-error? (::search-error? state)
+                      publish! (fn [results error?]
                                  (reset! *images results)
+                                 (reset! *search-error? (boolean error?))
                                  (when *result-sink (reset! *result-sink (vec results))))]
                   (when-not (string/blank? query)
                     (reset! *current-query query)
                     (reset! *loading? true)
+                    (reset! *search-error? false)
                     (let [my-id (swap! *request-id inc)]
                       (-> (<search-web-images query)
-                          (p/then (fn [results]
+                          (p/then (fn [{:keys [images network-error?]}]
                                     (when (= my-id @*request-id)
-                                      (publish! results)
+                                      (publish! images network-error?)
                                       (reset! *loading? false))))
                           (p/catch (fn [_err]
                                      (when (= my-id @*request-id)
-                                       (publish! [])
+                                       (publish! [] true)
                                        (reset! *loading? false))))))))
                 state)
    :did-update (fn [state]
@@ -2253,44 +2396,59 @@
                        *loading? (::loading? state)
                        *current-query (::current-query state)
                        *request-id (::request-id state)
+                       *search-error? (::search-error? state)
                        current-query @*current-query
-                       publish! (fn [results]
+                       publish! (fn [results error?]
                                   (reset! *images results)
+                                  (reset! *search-error? (boolean error?))
                                   (when *result-sink (reset! *result-sink (vec results))))]
                    ;; Only refetch if query changed
                    (when (and (not= query current-query)
                               (not (string/blank? query)))
                      (reset! *current-query query)
                      (reset! *loading? true)
+                     (reset! *search-error? false)
                      (let [my-id (swap! *request-id inc)]
                        (-> (<search-web-images query)
-                           (p/then (fn [results]
+                           (p/then (fn [{:keys [images network-error?]}]
                                      (when (= my-id @*request-id)
-                                       (publish! results)
+                                       (publish! images network-error?)
                                        (reset! *loading? false))))
                            (p/catch (fn [_err]
                                       (when (= my-id @*request-id)
-                                        (publish! [])
+                                        (publish! [] true)
                                         (reset! *loading? false))))))))
                  state)}
   "Renders the web images section with loading states.
    query: search query (page title or user input)
    on-select: callback when user selects a web image
    avatar-context: if set, picker is in avatar mode
-   on-popover-change: callback when confirmation popover opens/closes
    *result-sink: optional atom to publish current results to (for parent
      keyboard-nav)
    highlighted-id: stable id of currently-highlighted tile (string), or nil
    ghost-highlighted-id: stable id of the ghost-highlighted tile (hint that
      Enter-from-search will pick this one), or nil"
-  [state {:keys [query on-select avatar-context on-popover-change user-typing?
-                 highlighted-id ghost-highlighted-id]}]
+  [state {:keys [query on-select avatar-context user-typing?
+                 highlighted-id ghost-highlighted-id saved-source-urls]}]
   (let [*images (::images state)
         *loading? (::loading? state)
         *current-query (::current-query state)
-        images (rum/react *images)
+        *search-error? (::search-error? state)
+        all-images (rum/react *images)
+        ;; Hide web results that have already been saved as assets locally —
+        ;; the same image will appear in "Available assets" with full metadata,
+        ;; so showing it twice is just clutter. Join key: `:source-url` on the
+        ;; web-image (Wikimedia descriptionurl) ↔ `:logseq.property.asset/source-url`
+        ;; on the saved asset.
+        images (if (seq saved-source-urls)
+                 (remove (fn [img]
+                           (when-let [u (:source-url img)]
+                             (contains? saved-source-urls u)))
+                         all-images)
+                 all-images)
         loading? (rum/react *loading?)
         current-query (rum/react *current-query)
+        search-error? (rum/react *search-error?)
         ;; `pending?` captures two transition states where skeletons should
         ;; show even though `loading?` hasn't flipped yet:
         ;; 1. `user-typing?` — user has typed but the 500ms debounce hasn't
@@ -2302,12 +2460,12 @@
                           (not= query current-query)))
         show-loading? (or loading? pending?)
         avatar-mode? (some? avatar-context)
-        skip-confirm? (get-web-image-skip-confirm)
         web-expanded? (get (rum/react *section-states) "Web images" true)]
-    ;; Hide only when a settled fetch returned no results. During any
-    ;; transition (loading? or pending?) we keep the section mounted and
-    ;; show skeletons so the layout below doesn't jump.
-    (when-not (and (not show-loading?) (empty? images))
+    ;; Hide only when a settled fetch returned no results AND there was no
+    ;; network error. During any transition we keep the section mounted and
+    ;; show skeletons so the layout below doesn't jump. When the network
+    ;; failed and we have nothing to show, we surface an inline error.
+    (when-not (and (not show-loading?) (not search-error?) (empty? images))
       [:div.pane-section.web-images-section
        ;; Section header with info icon
        [:div.section-header-row
@@ -2326,54 +2484,39 @@
            {:side "top" :show-arrow true}
            [:span "Images from Wikipedia Commons. Check licensing before commercial use."])))]
 
-       ;; Image grid
+       ;; Image grid (or inline network-error message)
        (when web-expanded?
-         [:div.asset-picker-grid.web-images-row
-          {:class (when avatar-mode? "avatar-mode")}
-          (if show-loading?
-            ;; Loading skeletons — inherit avatar-mode so they render as circles
-            (for [i (range 5)]
-              [:div.web-image-placeholder
-               {:key (str "skeleton-" i)
-                :class (when avatar-mode? "avatar-mode")}
-               (shui/skeleton {:class "w-full h-full rounded"})])
-            ;; Actual images
-            (for [web-image images
-                  :let [web-id (str "web-" (:url web-image))]]
-              (rum/with-key
-                (web-image-item
-                 web-image
-                 {:item-id web-id
-                  :highlighted? (= highlighted-id web-id)
-                  :ghost-highlighted? (= ghost-highlighted-id web-id)
-                  :on-click (fn [e img]
-                              (if skip-confirm?
-                                ;; Skip confirmation, save immediately
-                                (on-select e img true)
-                                ;; Show confirmation popover
-                                (do
-                                  (when on-popover-change (on-popover-change true))
-                                  (shui/popup-show!
-                                   (.-target e)
-                                   (fn [{:keys [id]}]
-                                     (web-image-confirm-pane
-                                      {:web-image img
-                                       :avatar-context avatar-context
-                                       :on-close (fn []
-                                                   (when on-popover-change (on-popover-change false))
-                                                   (shui/popup-hide! id))
-                                       :on-save (fn [confirmed-img]
-                                                  (when on-popover-change (on-popover-change false))
-                                                  (shui/popup-hide! id)
-                                                  (on-select e confirmed-img false))}))
-                                   {:align :center
-                                    :side "top"
-                                    :content-props {:class "web-image-confirm-popup"
-                                                    :sideOffset 8}
-                                    :on-after-hide (fn []
-                                                     (when on-popover-change (on-popover-change false)))}))))
-                  :avatar-mode? avatar-mode?})
-                web-id)))])])))
+         (cond
+           (and search-error? (not show-loading?) (empty? images))
+           [:div.web-images-error
+            (shui/tabler-icon "wifi-off" {:size 14})
+            [:span "Couldn't reach Wikipedia. Check your connection."]]
+
+           :else
+           [:div.asset-picker-grid.web-images-row
+            {:class (when avatar-mode? "avatar-mode")}
+            (if show-loading?
+              ;; Loading skeletons — inherit avatar-mode so they render as circles
+              (for [i (range 5)]
+                [:div.web-image-placeholder
+                 {:key (str "skeleton-" i)
+                  :class (when avatar-mode? "avatar-mode")}
+                 (shui/skeleton {:class "w-full h-full rounded"})])
+              ;; Actual images
+              (for [web-image images
+                    :let [web-id (str "web-" (:url web-image))]]
+                (rum/with-key
+                  (web-image-item
+                   web-image
+                   {:item-id web-id
+                    :highlighted? (= highlighted-id web-id)
+                    :ghost-highlighted? (= ghost-highlighted-id web-id)
+                  ;; Click commits directly. The hover card already showed the
+                  ;; user the preview + license; a modal confirmation is excise
+                  ;; work given click-to-revert is one click away.
+                    :on-click (fn [e img] (on-select e img))
+                    :avatar-mode? avatar-mode?})
+                  web-id)))]))])))
 
 ;; ============================================================================
 ;; URL Asset Pane (Popover content for "Add asset via URL")
@@ -2647,6 +2790,10 @@
   (rum/local :search ::focus-region)    ;; :search | :grid
   (rum/local nil    ::highlighted-index) ;; flat index into computed flat-items
   (rum/local nil    ::web-images-result) ;; web-images-section publishes its current images here
+  ;; Monotonic counter for web-image saves. Captured per-click; only the
+  ;; latest captured id applies its on-chosen — so a quick A→B sequence ends
+  ;; up showing B regardless of resolution order.
+  (rum/local 0      ::web-image-save-id)
   ;; Create a single stable debounced setter. Must live in state (not the
    ;; render `let`) so the debounce timer persists across renders — otherwise
    ;; every keystroke gets a fresh timer and no debouncing happens, causing
@@ -2740,6 +2887,7 @@
         *focus-region      (::focus-region state)
         *highlighted-index (::highlighted-index state)
         *web-images-result (::web-images-result state)
+        *web-image-save-id (::web-image-save-id state)
         *search-input-ref  (::search-input-ref state)
         web-images         (rum/react *web-images-result)
         highlighted-idx    (rum/react *highlighted-index)
@@ -2820,18 +2968,31 @@
         ;; Handle web image selection (download and save)
         ;; For SVGs, prefer PNG thumbnail to avoid binary corruption issues
         handle-web-image-select
-        (fn [_e web-image skip-confirm?]
+        (fn [_e web-image]
           (let [repo (state/get-current-repo)
-                {:keys [url thumb-url title]} web-image
+                {:keys [url thumb-url title source license author source-url]} web-image
                 ;; Use PNG thumbnail for SVGs (avoids blob rendering issues)
                 ;; Fall back to original URL for non-SVGs or if no thumbnail
                 download-url (if (and (svg-url? url) thumb-url)
                                thumb-url ; PNG thumbnail for SVG
                                url) ; Original for other formats
-                asset-name (or title "web-image")]
-            (-> (<save-url-asset! repo download-url asset-name)
+                asset-name (or title "web-image")
+                source-name (source-name-for source)
+                attribution (build-attribution {:title title :author author
+                                                :source source :license license})
+                source-meta (cond-> {}
+                              source-url   (assoc :source-url source-url)
+                              source-name  (assoc :source-name source-name)
+                              license      (assoc :license license)
+                              attribution  (assoc :attribution attribution))
+                ;; Capture save-id for race protection. A later click supersedes
+                ;; this one's on-chosen so the icon reflects the LAST pick, even
+                ;; if saves resolve out of order.
+                my-save-id (swap! *web-image-save-id inc)]
+            (-> (<save-url-asset! repo download-url asset-name source-meta)
                 (p/then (fn [asset-entity]
-                          (when asset-entity
+                          (when (and asset-entity
+                                     (= my-save-id @*web-image-save-id))
                             ;; Track as recently used
                             (add-used-asset! (:block/uuid asset-entity))
                             ;; Refresh asset list
@@ -2851,7 +3012,11 @@
                                             :label (or (:block/title asset-entity) "")
                                             :data image-data}))))))
                 (p/catch (fn [err]
-                           (shui/toast! (url-save-error-copy err) :error))))))
+                           ;; Only show error for the latest save attempt;
+                           ;; superseded saves fail silently to avoid double
+                           ;; toasts on rapid successive picks.
+                           (when (= my-save-id @*web-image-save-id)
+                             (shui/toast! (url-save-error-copy err) :error)))))))
         ;; Process upload (actual upload logic extracted for reuse)
         process-upload (fn [files]
                          (let [repo (state/get-current-repo)
@@ -3206,6 +3371,14 @@
            section-states (rum/react *section-states)
            recently-used-expanded? (get section-states "Recently used" true)
            available-expanded? (get section-states "Available assets" true)
+           ;; Set of source URLs already saved as assets locally. Used to hide
+           ;; web search results that the user has already downloaded — both
+           ;; visually (web-images-section render) and in the keyboard-nav flat
+           ;; list, which must stay in sync with what's on screen.
+           saved-source-urls (->> assets
+                                  (keep :logseq.property.asset/source-url)
+                                  (remove string/blank?)
+                                  set)
            ;; Keyboard navigation: flat-items + sections mirror the icon-picker model.
            ;; Include only sections that are currently rendered and expanded so
            ;; flat indices align with visible DOM buttons.
@@ -3214,7 +3387,10 @@
                                      (string/blank? search-q))
                             recently-used-row)
            web-nav-list   (when (not (string/blank? effective-web-query))
-                            (vec (or web-images [])))
+                            (vec (->> (or web-images [])
+                                      (remove (fn [img]
+                                                (when-let [u (:source-url img)]
+                                                  (contains? saved-source-urls u)))))))
            empty-state?   (and available-expanded?
                                (not loading?)
                                (empty? filtered-assets)
@@ -3313,10 +3489,10 @@
                                (not= search-q web-query))
             :avatar-context effective-avatar-context
             :on-select handle-web-image-select
-            :on-popover-change #(reset! *popover-open? %)
             :*result-sink *web-images-result
             :highlighted-id highlighted-id
-            :ghost-highlighted-id ghost-highlighted-id}))
+            :ghost-highlighted-id ghost-highlighted-id
+            :saved-source-urls saved-source-urls}))
 
         ;; "Available assets" section — header is hidden when there are no
         ;; assets at all (the action rows below communicate the zero state on
@@ -5662,14 +5838,15 @@
          (js/setTimeout #(some-> (rum/deref *trigger-ref) (.click)) 32)))
      [initial-open?])
 
-    ;; Self-heal: if the stored icon references a deleted asset, rewrite it.
-    ;; :avatar degrades to text-only; :image clears the icon entirely.
-    (hooks/use-effect!
-     (fn []
-       (let [healed (heal-dangling-asset-icon icon-value)]
-         (when (not= healed ::no-change)
-           (on-chosen nil healed))))
-     [icon-value])
+    ;; NOTE: an earlier auto-heal use-effect ran `heal-dangling-asset-icon` on
+    ;; every `[icon-value]` change and called `on-chosen` with the healed value
+    ;; (nil for :image, stripped data for :avatar). On page reload the asset
+    ;; entity often isn't hydrated into the renderer's conn yet — the lookup
+    ;; raced and returned nil, so the heal nuked the icon and persisted the
+    ;; loss. The renderer already shows nothing when the asset is genuinely
+    ;; missing (icon.cljs:478-482) without mutating the stored value, which
+    ;; lets a slow-hydrating asset reappear once it lands. If a user wants to
+    ;; clear a permanently dangling icon they can use the trash affordance.
 
     ;; trigger — render from `effective-icon-value` so the just-committed
     ;; icon shows immediately, before the entity reactive read catches up.
