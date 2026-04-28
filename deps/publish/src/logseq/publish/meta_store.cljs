@@ -318,11 +318,12 @@
                                                     "pages.short_id, "
                                                     "MAX(page_refs.updated_at) AS updated_at "
                                                     "FROM page_refs "
-                                                    "LEFT JOIN pages "
+                                                    "INNER JOIN pages "
                                                     "ON pages.graph_uuid = page_refs.graph_uuid "
                                                     "AND pages.page_uuid = page_refs.source_page_uuid "
-                                                    "WHERE (lower(page_refs.target_page_title) = lower(?)) "
-                                                    "OR (page_refs.target_page_name = lower(?)) "
+                                                    "WHERE ((lower(page_refs.target_page_title) = lower(?)) "
+                                                    "OR (page_refs.target_page_name = lower(?))) "
+                                                    "AND pages.password_hash IS NULL "
                                                     "GROUP BY page_refs.graph_uuid, page_refs.source_page_uuid, page_refs.source_page_title, pages.short_id "
                                                     "ORDER BY updated_at DESC;")
                                                ref-name
@@ -347,7 +348,10 @@
                 rows (publish-common/get-sql-rows
                       (publish-common/sql-exec sql
                                                (str "SELECT page_uuid, page_title, short_id, graph_uuid, updated_at, owner_username "
-                                                    "FROM pages WHERE owner_username = ? ORDER BY updated_at DESC;")
+                                                    "FROM pages "
+                                                    "WHERE owner_username = ? "
+                                                    "AND password_hash IS NULL "
+                                                    "ORDER BY updated_at DESC;")
                                                username))]
             (publish-common/json-response {:user {:username username}
                                            :pages (map (fn [row]
