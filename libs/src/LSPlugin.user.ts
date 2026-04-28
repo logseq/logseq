@@ -47,6 +47,8 @@ import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { LSPluginRequest } from './modules/LSPlugin.Request'
 import { LSPluginSearchService } from './modules/LSPlugin.Search'
 
+declare const LIB_VERSION: string
+
 declare global {
   interface Window {
     __LSP__HOST__: boolean

@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { setLocale, setNSDicts, setTranslate, translate } from './i18n'
-import { getAuthErrorMessageKey } from './amplify/errors'
+import { setLocale, setNSDicts, setTranslate, translate } from './i18n.ts'
+import { getAuthErrorMessageKey } from './amplify/errors.ts'
 
 test('translate uses the selected locale when the namespace dict contains it', () => {
   setTranslate((locale, dicts, key, ...args) => dicts[locale]?.[key] ?? args[0] ?? key)
