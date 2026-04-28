@@ -623,15 +623,11 @@
   (-> (p/let [config' (resolve-runtime-config! action config)
               cfg (cli-server/ensure-server! config' (:repo action))
               _ (<sync-worker-runtime! cfg config')
-              graph-e2ee? (transport/invoke cfg :thread-api/q false [(:repo action) [graph-e2ee-query]])
-              _ (<ensure-e2ee-password-available! cfg config' action (true? graph-e2ee?))
               result (transport/invoke cfg :thread-api/db-sync-status false [(:repo action)])]
         {:status :ok
          :data result})
       (p/catch (fn [error]
-                 (if (= :e2ee-password-not-found (:code (ex-data error)))
-                   (e2ee-password-not-found-error :sync-status (:repo action))
-                   (exception->error error {:repo (:repo action)}))))))
+                 (exception->error error {:repo (:repo action)})))))
 
 (defn- run-sync-start
   [action config]
