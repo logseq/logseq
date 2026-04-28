@@ -1,5 +1,6 @@
 (ns logseq.publish.test-runner
   (:require [cljs.test :as ct]
+            [logseq.publish.common-test]
             [logseq.publish.render-test]
             [logseq.publish.routes-test]
             [shadow.test :as st]
