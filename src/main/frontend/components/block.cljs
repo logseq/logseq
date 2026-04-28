@@ -3303,6 +3303,9 @@
         *control-show? (get container-state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond
+                     (:ignore-block-collapsed? config)
+                     false
+
                      (or ref-or-custom-query?
                          (:view? config)
                          (root-block? config block)
@@ -3644,21 +3647,25 @@
 (rum/defc block-container
   [config block* & {:as opts}]
   (let [[block set-block!] (hooks/use-state block*)
-        id (or (:db/id block*) (:block/uuid block*))]
-    (when-not (or (:page-title? config)
-                  (:view? config))
-      (hooks/use-effect!
-       (fn []
+        id (or (:db/id block*) (:block/uuid block*))
+        temporary-collapsed-state (state/get-block-collapsed (:block/uuid block)
+                                                             (:container-id config))
+        ignore-block-collapsed? (:ignore-block-collapsed? config)
+        load-children? (editor-handler/load-children? block
+                                                      temporary-collapsed-state
+                                                      ignore-block-collapsed?)]
+    (hooks/use-effect!
+     (fn []
+       (when-not (or (:page-title? config) (:view? config))
          (p/let [block (db-async/<get-block (state/get-current-repo)
                                             id
-                                            {:children? (not
-                                                         (if-some [result (state/get-block-collapsed (:block/uuid block)
-                                                                                                     (:container-id config))]
-                                                           result
-                                                           (:block/collapsed? block)))
+                                            {:children? load-children?
+                                             :include-collapsed-children? (and load-children?
+                                                                               ignore-block-collapsed?)
                                              :skip-refresh? false})]
-           (set-block! block)))
-       []))
+            (set-block! block)))
+       nil)
+    [id load-children? ignore-block-collapsed? temporary-collapsed-state])
     (when (or (:view? config) (:block/title block))
       (loaded-block-container config block opts))))
 
@@ -4295,77 +4302,77 @@
          [:div.only-page-blocks items]))]))
 
 ;; headers to hiccup
-(defn ->hiccup
-  [blocks config option]
-  [:div.content
-   (cond-> option
-     (:document/mode? config) (assoc :class "doc-mode"))
-   (cond
-     (and (:custom-query? config) (:group-by-page? config))
-     [:div.flex.flex-col
-      (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
-        (for [[page blocks] blocks]
-          (let [alias? (:block/alias? page)
-                page (db/entity (:db/id page))
-                blocks (tree/non-consecutive-blocks->vec-tree blocks)
-                parent-blocks (group-by :block/parent blocks)]
-            [:div.custom-query-page-result {:key (str "page-" (:db/id page))}
-             (ui/foldable
-              [:div
-               (page-cp config page)
-               (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
-              (fn []
-                (let [{top-level-blocks true others false} (group-by
-                                                            (fn [b] (= (:db/id page) (:db/id (first b))))
-                                                            parent-blocks)
-                      sorted-parent-blocks (concat top-level-blocks others)]
-                  (for [[parent blocks] sorted-parent-blocks]
-                    (let [top-level? (= (:db/id parent) (:db/id page))]
-                      (rum/with-key
-                        (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
-                        (:db/id parent))))))
-              {:debug-id page})])))]
+  (defn ->hiccup
+    [blocks config option]
+    [:div.content
+     (cond-> option
+       (:document/mode? config) (assoc :class "doc-mode"))
+     (cond
+       (and (:custom-query? config) (:group-by-page? config))
+       [:div.flex.flex-col
+        (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
+          (for [[page blocks] blocks]
+            (let [alias? (:block/alias? page)
+                  page (db/entity (:db/id page))
+                  blocks (tree/non-consecutive-blocks->vec-tree blocks)
+                  parent-blocks (group-by :block/parent blocks)]
+              [:div.custom-query-page-result {:key (str "page-" (:db/id page))}
+               (ui/foldable
+                [:div
+                 (page-cp config page)
+                 (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
+                (fn []
+                  (let [{top-level-blocks true others false} (group-by
+                                                              (fn [b] (= (:db/id page) (:db/id (first b))))
+                                                              parent-blocks)
+                        sorted-parent-blocks (concat top-level-blocks others)]
+                    (for [[parent blocks] sorted-parent-blocks]
+                      (let [top-level? (= (:db/id parent) (:db/id page))]
+                        (rum/with-key
+                          (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
+                          (:db/id parent))))))
+                {:debug-id page})])))]
 
-     (and (:ref? config) (:group-by-page? config) (vector? (first blocks)))
-     [:div.flex.flex-col.references-blocks-wrap
-      (let [blocks (sort-by (comp :block/journal-day first) > blocks)
-            scroll-container (or (:scroll-container config)
-                                 (util/app-scroll-container-node))
-            scroll-container (if (fn? scroll-container)
-                               (scroll-container) scroll-container)]
-        (when (seq blocks)
-          (if (:sidebar? config)
-            (for [block blocks]
-              (rum/with-key
-                (ref-block-container config block)
-                (str "ref-" (:container-id config) "-" (:db/id (first block)))))
-            (ui/virtualized-list
-             {:custom-scroll-parent scroll-container
-              :compute-item-key (fn [idx]
-                                  (let [block (nth blocks idx)]
-                                    (str "ref-" (:container-id config) "-" (:db/id (first block)))))
-              :total-count (count blocks)
-              :item-content (fn [idx]
-                              (let [block (nth blocks idx)]
-                                (ref-block-container config block)))}))))]
+       (and (:ref? config) (:group-by-page? config) (vector? (first blocks)))
+       [:div.flex.flex-col.references-blocks-wrap
+        (let [blocks (sort-by (comp :block/journal-day first) > blocks)
+              scroll-container (or (:scroll-container config)
+                                   (util/app-scroll-container-node))
+              scroll-container (if (fn? scroll-container)
+                                 (scroll-container) scroll-container)]
+          (when (seq blocks)
+            (if (:sidebar? config)
+              (for [block blocks]
+                (rum/with-key
+                  (ref-block-container config block)
+                  (str "ref-" (:container-id config) "-" (:db/id (first block)))))
+              (ui/virtualized-list
+               {:custom-scroll-parent scroll-container
+                :compute-item-key (fn [idx]
+                                    (let [block (nth blocks idx)]
+                                      (str "ref-" (:container-id config) "-" (:db/id (first block)))))
+                :total-count (count blocks)
+                :item-content (fn [idx]
+                                (let [block (nth blocks idx)]
+                                  (ref-block-container config block)))}))))]
 
-     (and (:group-by-page? config)
-          (vector? (first blocks)))
-     [:div.flex.flex-col
-      (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
-        (for [[page blocks] blocks]
-          (let [blocks (remove nil? blocks)]
-            (when (seq blocks)
-              (let [alias? (:block/alias? page)
-                    page (db/entity (:db/id page))]
-                [:div.my-2 {:key (str "page-" (:db/id page))}
-                 (ui/foldable
-                  [:div
-                   (page-cp config page)
-                   (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
-                  (fn []
-                    (blocks-container config blocks))
-                  {})])))))]
+       (and (:group-by-page? config)
+            (vector? (first blocks)))
+       [:div.flex.flex-col
+        (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
+          (for [[page blocks] blocks]
+            (let [blocks (remove nil? blocks)]
+              (when (seq blocks)
+                (let [alias? (:block/alias? page)
+                      page (db/entity (:db/id page))]
+                  [:div.my-2 {:key (str "page-" (:db/id page))}
+                   (ui/foldable
+                    [:div
+                     (page-cp config page)
+                     (when alias? [:span.text-sm.font-medium.opacity-50 (str " " (t :property.built-in/alias))])]
+                    (fn []
+                      (blocks-container config blocks))
+                    {})])))))]
 
-     :else
-     (blocks-container config blocks))])
+       :else
+       (blocks-container config blocks))])

@@ -61,8 +61,7 @@ android/app/src/main/assets/capacitor.config.json
 
 *.sublime-*
 /public
-.yarn/
-.yarnrc.yml
+.pnpm-store/
 
 deps/shui/.lsp
 deps/shui/.lsp-cache

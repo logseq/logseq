@@ -5,12 +5,11 @@ The Logseq CLI is a Node.js program compiled from ClojureScript that connects to
 ## Build the CLI
 
 ```bash
-npm install -g @vercel/ncc
 clojure -M:cljs compile logseq-cli
-yarn db-worker-node:release:bundle
+pnpm db-worker-node:release:bundle
 ```
 
-`yarn db-worker-node:release:bundle` compiles and bundles `db-worker-node` with `@vercel/ncc`, and writes a standalone runtime to `dist/db-worker-node.js` plus an asset manifest at `dist/db-worker-node-assets.json` (which may contain an empty `assets` array when no extra files are required).
+`pnpm db-worker-node:release:bundle` compiles and bundles `db-worker-node` with Vite, and writes a standalone runtime to `dist/db-worker-node.js` plus an asset manifest at `dist/db-worker-node-assets.json` (which may contain an empty `assets` array when no extra files are required).
 
 ## db-worker-node lifecycle
 
@@ -382,7 +381,7 @@ JSON key migration (flat -> namespaced):
   - `data-dir-permission`: configured data dir is not readable or writable.
   - `doctor-server-not-ready`: one or more lock-discovered servers are still in `:starting` state (warning).
   - `doctor-server-revision-mismatch`: one or more discovered servers use a different revision than the local CLI revision (warning). Follow the printed remediation command for each affected graph: `logseq server restart --graph <name>`.
-  - If bundled runtime startup fails with missing-module or missing-file errors, rebuild with `yarn db-worker-node:release:bundle` and confirm `dist/db-worker-node.js` exists and every path listed in `dist/db-worker-node-assets.json` is present next to it.
+  - If bundled runtime startup fails with missing-module or missing-file errors, rebuild with `pnpm db-worker-node:release:bundle` and confirm `dist/db-worker-node.js` exists and every path listed in `dist/db-worker-node-assets.json` is present next to it.
 - `query` human output returns a plain string (the query result rendered via `pr-str`), which is convenient for pipelines like `logseq query ... | xargs logseq show --id`.
 - Built-in named queries currently include `block-search`, `task-search`, `recent-updated`, `list-status`, and `list-priority`. Use `query list` to see the full set for your config.
 - Show output resolves block reference UUIDs inside text, replacing `[[<uuid>]]` with the referenced block content. Nested references are resolved recursively up to 10 levels to avoid excessive expansion. For example: `[[<uuid1>]]` → `[[some text [[<uuid2>]]]]` and then `<uuid2>` is also replaced.

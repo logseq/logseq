@@ -1,13 +1,14 @@
 {
   "name": "ui",
   "version": "0.0.1",
+  "packageManager": "pnpm@10.33.0",
   "description": "UI components for Logseq.",
   "author": "Logseq",
   "scripts": {
     "watch:ui:examples": "parcel serve ./examples/index.html",
     "build:ui:only": "parcel build --target ui",
-    "build:ui": "rm -rf .parcel-cache && yarn build:ui:only",
-    "postinstall": "yarn build:ui",
+    "build:ui": "rm -rf .parcel-cache && pnpm build:ui:only",
+    "postinstall": "pnpm build:ui",
     "test": "node --experimental-strip-types --test src/i18n.test.mts"
   },
   "dependencies": {
@@ -90,10 +91,12 @@
       }
     }
   },
-  "resolutions": {
-    "jackspeak": "^2",
-    "string-width": "^8",
-    "strip-ansi": "^7"
+  "pnpm": {
+    "overrides": {
+      "jackspeak": "^2",
+      "string-width": "^8",
+      "strip-ansi": "^7"
+    }
   },
   "license": "MIT"
 }

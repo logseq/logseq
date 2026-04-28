@@ -116,10 +116,11 @@
   (m/reduce {} nil (m/eduction (take 1) f)))
 
 (defn- fail-case-default-handler
-  [key' e]
-  (when-not (or (instance? Cancelled e)
-                (= "missionary.Cancelled" (ex-message e)))
-    (log/error :run-task-failed e :key key')))
+  [key' & fail-args]
+  (let [e (first fail-args)]
+    (when-not (or (instance? Cancelled e)
+                  (= "missionary.Cancelled" (ex-message e)))
+      (log/error :run-task-failed e :key key'))))
 
 (defn run-task
   "Return the canceler"
@@ -150,8 +151,13 @@
   (when-let [canceler (get @*background-task-cancelers key')]
     (canceler)
     (vswap! *background-task-cancelers assoc key' nil))
-  (prn :run-background-task key')
-  (let [canceler (run-task key' task :fail (fn [e] (log/error :background-task-stopped {:k key' :e e})))]
+  (let [canceler (run-task key'
+                           task
+                           :fail (fn [& fail-args]
+                                   (log/error :background-task-stopped
+                                              {:k key'
+                                               :e (first fail-args)
+                                               :fail-args fail-args})))]
     (vswap! *background-task-cancelers assoc key' canceler)
     nil))
 
