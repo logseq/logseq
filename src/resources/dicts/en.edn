@@ -1663,6 +1663,12 @@
  :settings.sync-server/url "Sync Server URL"
  :settings.sync-server/url-desc "Set a custom HTTPS sync server URL for self-hosted sync. Your Logseq authentication tokens will be sent to this server, so only use a trusted URL. Leave empty to use the official Logseq Sync."
  :settings.sync-server/url-invalid-error "URL must start with https:// or http://"
+ :settings-page/publish-server-url "Publish server URL"
+ :settings-page/publish-server-url-desc "Set a custom HTTPS publish server URL for self-hosted single-page publishing. Your Logseq authentication tokens will be sent to this server, so only use a trusted URL. Leave empty to use the official Logseq publish service."
+ :settings-page/publish-server-url-saved "Publish server URL saved."
+ :settings-page/publish-server-url-cleared "Publish server URL cleared. Using official Logseq publish."
+ :settings-page/publish-server-url-default "Logseq publish"
+ :settings-page/publish-server-url-reset "Reset to default"
 
  :shell/input-command-title "Input command"
 
