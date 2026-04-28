@@ -1,4 +1,4 @@
-{:paths ["src" "../../resources"]
+{:paths ["src" "test" "../../resources"]
  :deps
  {org.clojure/clojure                   {:mvn/version "1.12.4"}
   rum/rum                               {:git/url "https://github.com/logseq/rum" ;; fork

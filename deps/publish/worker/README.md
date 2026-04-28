@@ -32,8 +32,6 @@ metadata in a Durable Object backed by SQLite.
   - Deletes a published page
 - `DELETE /pages/:graph-uuid`
   - Deletes all pages for a graph
-- `GET /pages`
-  - Lists metadata entries (from the index DO)
 - `GET /tag/:tag-name`
   - List all pages tagged with `:tag-name`
 - `GET /ref/:page-name`
