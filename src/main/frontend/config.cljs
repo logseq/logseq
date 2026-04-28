@@ -34,17 +34,17 @@
       (def REGION "us-east-1")
       (def USER-POOL-ID "us-east-1_dtagLnju8")
       (def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
-      (def PUBLISH-API-BASE "https://logseq.io"))
+      (def default-publish-api-base "https://logseq.io"))
 
   (do (def API-DOMAIN "api-dev.logseq.com")
       (def COGNITO-IDP "https://cognito-idp.us-east-2.amazonaws.com/")
       (def REGION "us-east-2")
       (def USER-POOL-ID "us-east-2_kAqZcxIeM")
       (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
-      (def PUBLISH-API-BASE "https://logseq-publish-staging.logseq.workers.dev")))
+      (def default-publish-api-base "https://logseq-publish-staging.logseq.workers.dev")))
 
 ;; Enable for local development
-;; (def PUBLISH-API-BASE "http://localhost:8787")
+;; (def default-publish-api-base "http://localhost:8787")
 
 (goog-define ENABLE-DB-SYNC-LOCAL false)
 (defonce db-sync-local? ENABLE-DB-SYNC-LOCAL)
@@ -109,6 +109,43 @@
   (if-let [custom (get-custom-sync-server-url)]
     (custom-url->http-base custom)
     default-db-sync-http-base))
+
+(defn get-custom-publish-server-url
+  "Read the user-configured custom publish server URL from localStorage.
+   Returns nil when not set or empty."
+  []
+  (when-not util/node-test?
+    (let [v (.getItem js/localStorage "publish-server-url")]
+      (when (and (string? v) (not (string/blank? v)))
+        v))))
+
+(defn set-custom-publish-server-url!
+  "Persist the custom publish server URL to localStorage. Pass nil or empty string to clear."
+  [url]
+  (when-not util/node-test?
+    (if (or (nil? url) (string/blank? url))
+      (.removeItem js/localStorage "publish-server-url")
+      (.setItem js/localStorage "publish-server-url" (string/trim url)))))
+
+(defn valid-publish-server-url?
+  "Return true when `url` looks like a valid HTTP(S) base URL."
+  [url]
+  (and (string? url)
+       (re-find #"^https?://" url)))
+
+(defn custom-url->publish-api-base
+  "Normalize a custom publish base URL by stripping trailing slashes. Pure function."
+  [custom-url]
+  (string/replace custom-url #"/+$" ""))
+
+(defn publish-api-base
+  "Return the base URL for the single-page publish service. Uses the user-configured
+   URL from localStorage when set, otherwise the default from the ENABLE-FILE-SYNC-PRODUCTION
+   branch above. Read on each call so URL changes take effect without a restart."
+  []
+  (if-let [custom (get-custom-publish-server-url)]
+    (custom-url->publish-api-base custom)
+    default-publish-api-base))
 
 ;; Feature flags
 ;; =============
