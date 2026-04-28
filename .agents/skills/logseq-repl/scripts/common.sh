@@ -51,7 +51,7 @@ logseq_repl_runtime_count() {
   local output
 
   pushd "$repo_root" >/dev/null
-  if ! output="$(npx shadow-cljs clj-eval "(do (require '[shadow.cljs.devtools.api :as api]) (println (count (api/repl-runtimes :$build_name))))" 2>&1)"; then
+  if ! output="$(pnpm exec shadow-cljs clj-eval "(do (require '[shadow.cljs.devtools.api :as api]) (println (count (api/repl-runtimes :$build_name))))" 2>&1)"; then
     popd >/dev/null
     echo "Error: failed to inspect :$build_name runtimes." >&2
     echo "--- clj-eval output ---" >&2

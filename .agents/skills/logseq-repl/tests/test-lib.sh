@@ -67,7 +67,13 @@ run_test() {
   local name="$1"
   local fn="$2"
 
-  if (set -e; "$fn"); then
+  local status
+  set +e
+  (set -e; "$fn")
+  status=$?
+  set -e
+
+  if [[ "$status" -eq 0 ]]; then
     echo "PASS: $name"
     PASS_COUNT=$((PASS_COUNT + 1))
   else
