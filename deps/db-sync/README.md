@@ -13,7 +13,7 @@ It includes the Cloudflare Worker implementation and a Node.js adapter for self-
 
 ```bash
 cd deps/db-sync
-yarn watch
+pnpm watch
 
 # open another terminal
 cd deps/db-sync/worker
@@ -39,8 +39,8 @@ Show the graphs available to a production user by `username` or `user id`:
 
 ```bash
 cd deps/db-sync
-yarn show-graphs-for-user --username alice
-yarn show-graphs-for-user --user-id us-east-1:example-user-id
+pnpm show-graphs-for-user --username alice
+pnpm show-graphs-for-user --user-id us-east-1:example-user-id
 ```
 
 The script uses `worker/wrangler.toml`, runs against the remote D1 binding `DB`,
@@ -50,7 +50,7 @@ Download a graph snapshot into a local sqlite debug file matching local graph DB
 
 ```bash
 cd deps/db-sync
-yarn download-graph-db --graph-id 6f2d7f6f-xxxx-xxxx-xxxx-xxxxxxxxxxxx --admin-token <admin-token>
+pnpm run download-graph-db -- --graph-id 6f2d7f6f-xxxx-xxxx-xxxx-xxxxxxxxxxxx --admin-token <admin-token>
 ```
 
 You can also pass `--admin-token <token>` or set `DB_SYNC_ADMIN_TOKEN`. The output defaults to
@@ -60,15 +60,15 @@ Show stored and recomputed checksum for a local sqlite graph db:
 
 ```bash
 cd deps/db-sync
-yarn show-sqlite-checksum --db ~/Downloads/test.sqlite
+pnpm run show-sqlite-checksum -- --db ~/Downloads/test.sqlite
 ```
 
 Delete the graphs owned by a production user after an explicit confirmation:
 
 ```bash
 cd deps/db-sync
-yarn delete-graphs-for-user --username alice
-yarn delete-graphs-for-user --user-id us-east-1:example-user-id
+pnpm delete-graphs-for-user --username alice
+pnpm delete-graphs-for-user --user-id us-east-1:example-user-id
 ```
 
 The delete script shows the owned graphs first and requires typing `DELETE`
@@ -80,8 +80,8 @@ Delete a user completely (owned graphs, memberships, keys, and user row):
 
 ```bash
 cd deps/db-sync
-yarn delete-user-totally --username alice
-yarn delete-user-totally --user-id us-east-1:example-user-id
+pnpm run delete-user-totally -- --username alice
+pnpm run delete-user-totally -- --user-id us-east-1:example-user-id
 ```
 
 The script prints all linked graphs first, deletes owned graphs through the
@@ -94,7 +94,7 @@ Build the adapter:
 
 ```bash
 cd deps/db-sync
-npm run build:node-adapter
+pnpm build:node-adapter
 ```
 
 Run the adapter with Cognito auth:
@@ -113,7 +113,7 @@ Run db-sync tests (includes Node adapter tests):
 
 ```bash
 cd deps/db-sync
-npm run test:node-adapter
+pnpm test:node-adapter
 ```
 
 ## Environment Variables

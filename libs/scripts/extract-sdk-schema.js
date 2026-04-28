@@ -20,6 +20,7 @@ const OUTPUT_FILE = path.join(DIST_DIR, 'logseq-sdk-schema.json');
 const DECL_FILES = [
   'LSPlugin.d.ts',
   'LSPlugin.user.d.ts',
+  'modules/LSPlugin.Experiments.d.ts',
 ];
 
 /**
@@ -34,6 +35,11 @@ const TARGET_INTERFACES = [
   'IUtilsProxy',
   'IGitProxy',
   'IAssetsProxy',
+];
+
+const TARGET_CLASSES = [
+  'LSPluginUser',
+  'LSPluginExperiments',
 ];
 
 /**
@@ -153,7 +159,7 @@ sourceFiles.forEach((source) => {
 
   source.getClasses().forEach((cls) => {
     const name = cls.getName();
-    if (name !== 'LSPluginUser') {
+    if (!TARGET_CLASSES.includes(name)) {
       return;
     }
 

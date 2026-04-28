@@ -19,6 +19,7 @@
             [rum.core :as rum]))
 
 ;; sidebars
+(def *left-sidebar-resized-at (atom (js/Date.now)))
 (def *right-sidebar-resized-at (atom (js/Date.now)))
 
 (defn persist-right-sidebar-width!

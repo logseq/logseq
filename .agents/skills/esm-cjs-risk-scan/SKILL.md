@@ -154,7 +154,7 @@ Probe columns contain raw probe strings (e.g. `static=OK;resources=ERR:MODULE_NO
 5. **OK**: Verify `S:OK`-only packages are expected (installed in `static/node_modules` only).
 6. For Electron code, also verify with runtime test:
    ```bash
-   npx electron static/electron.js
+   pnpm exec electron static/electron.js
    ```
 
 ## Common Patterns & FAQ

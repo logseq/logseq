@@ -8,6 +8,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.query.builder :as query-builder]
             [frontend.mixins :as mixins]
@@ -42,6 +43,23 @@
   (swap! *tree #(query-builder/append-element % loc x))
   (when toggle? (toggle-fn)))
 
+(defn- filter-label
+  [value]
+  (case value
+    "tags" (t :property.built-in/tags)
+    "page reference" (t :query.builder/filter-page-reference-label)
+    "property" (t :class.built-in/property)
+    "task" (t :class.built-in/task)
+    "priority" (t :property.built-in/priority)
+    "page" (t :query.builder/filter-page-label)
+    "full text search" (t :query.builder/filter-full-text-search-label)
+    "between" (t :view.filter/operator-between)
+    "sample" (t :query.builder/filter-sample-label)
+    "and" (t :query.builder/operator-and-label)
+    "or" (t :view.filter/or)
+    "not" (t :query.builder/operator-not-label)
+    value))
+
 (rum/defcs search < (rum/local nil ::input-value)
   (mixins/event-mixin
    (fn [state]
@@ -63,8 +81,8 @@
   (let [*input-value (::input-value state)]
     [:input#query-builder-search.form-input.block.sm:text-sm.sm:leading-5
      {:auto-focus true
-      :placeholder "Full text search"
-      :aria-label "Full text search"
+      :placeholder (t :search/full-text-placeholder)
+      :aria-label (t :search/full-text-placeholder)
       :on-change #(reset! *input-value (util/evalue %))}]))
 
 (defonce *between-dates (atom {}))
@@ -102,15 +120,15 @@
   [state {:keys [tree loc] :as opts}]
   [:div.between-date.p-4 {:on-pointer-down (fn [e] (util/stop-propagation e))}
    [:div.flex.flex-row.items-center.gap-2
-    [:div.font-medium "Between: "]
-    (datepicker :start "Start date"
+    (datepicker :start (t :query.builder/between-start-label)
                 (merge opts {:on-select (fn []
                                           (when-let [^js end-input (js/document.querySelector ".query-builder-datepicker[data-key=end]")]
                                             (when (string/blank? (.-value end-input))
                                               (.focus end-input))))}))
-    (datepicker :end "End date" opts)]
+    "~"
+    (datepicker :end (t :query.builder/between-end-label) opts)]
    [:p.pt-2
-    (ui/button "Submit"
+    (ui/button (t :ui/submit)
                :on-click (fn []
                            (let [{:keys [start end]} @*between-dates]
                              (when (and start end)
@@ -134,7 +152,7 @@
      [:div.flex.flex-row.justify-between.gap-1.items-center.px-1.pb-1.border-b
       [:label.opacity-50.cursor.select-none.text-sm
        {:for "built-in"}
-       "Show built-in properties"]
+       (t :query.builder/show-built-in-properties)]
       (shui/checkbox
        {:id "built-in"
         :value @*private-property?
@@ -149,8 +167,9 @@
 (rum/defc property-value-select-inner
   < rum/reactive db-mixins/query
   [*property *private-property? *tree opts loc values]
-  (let [values' (cons {:label "Select all"
-                       :value "Select all"}
+  (let [select-all-label (t :view.table/select-all)
+        values' (cons {:label select-all-label
+                       :value select-all-label}
                       (map #(hash-map :value (str (:value %))
                                       ;; Preserve original-value as non-string values like boolean do not display in select
                                       :original-value (:value %))
@@ -158,7 +177,7 @@
     (select values'
             (fn [{:keys [value original-value]}]
               (let [k (if @*private-property? :private-property :property)
-                    x (if (= value "Select all")
+                    x (if (= value select-all-label)
                         [k @*property]
                         [k @*property original-value])]
                 (reset! *property nil)
@@ -292,14 +311,18 @@
   (let [*mode (::mode state)
         filters query-builder/db-based-block-filters
         filters-and-ops (concat filters query-builder/operators)
-        operator? #(contains? query-builder/operators-set (keyword %))]
+        operator? #(contains? query-builder/operators-set (keyword %))
+        select-items (mapv (fn [value]
+                             {:value value
+                              :label (filter-label value)})
+                           (map name filters-and-ops))]
     [:div.query-builder-picker
      (if @*mode
        (when-not (operator? @*mode)
          (db-based-query-filter-picker state *tree loc clause opts))
        [:div
         (select
-         (map name filters-and-ops)
+         select-items
          (fn [{:keys [value]}]
            (cond
              (operator? value)
@@ -307,7 +330,11 @@
 
              :else
              (reset! *mode value)))
-         {:input-default-placeholder "Add filter/operator"})])]))
+         {:extract-fn (fn [{:keys [label value]}]
+                        (if label
+                          (str label " " value)
+                          value))
+          :input-default-placeholder (t :query.builder/add-filter-or-operator-placeholder)})])]))
 
 (rum/defc add-filter
   [*tree loc clause]
@@ -322,7 +349,7 @@
                                     (picker *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
                                   {:align :start}))}
    (ui/icon "plus" {:size 14})
-   (when (= [0] loc) "Filter")))
+   (when (= [0] loc) (t :query.builder/filter))))
 
 (declare clauses-group)
 
@@ -340,7 +367,7 @@
       (str clause)
 
       (string? clause)
-      (str "Search: " clause)
+      (t :query.builder/search-label clause)
 
       (= (keyword f) :page-ref)
       (ref/->page-ref (uuid->page-title (second clause)))
@@ -384,9 +411,9 @@
                   (second end))]
         (str (cond
                (= k :block/created-at)
-               "Created"
+               (t :query.builder/created-label)
                (= k :block/updated-at)
-               "Updated"
+               (t :query.builder/updated-label)
                :else
                (or (:block/title (db/entity k)) (name k)))
              " " start
@@ -403,7 +430,7 @@
                         (symbol? (last clause)))
                   (name (last  clause))
                   (second (last clause)))]
-        (str "between: " (uuid->page-title start) " ~ " (uuid->page-title end)))
+        (t :query.builder/between-journal-label (uuid->page-title start) (uuid->page-title end)))
 
       (contains? #{:task :priority} (keyword f))
       (str (name f) ": "
@@ -423,24 +450,24 @@
 (rum/defc clause-inner
   [*tree loc clause & {:keys [operator?]}]
   (let [popup [:div.p-4.flex.flex-col.gap-2
-               [:a {:title "Delete"
+               [:a {:title (t :ui/delete)
                     :on-click (fn []
                                 (swap! *tree (fn [q]
                                                (let [loc' (if operator? (vec (butlast loc)) loc)]
                                                  (query-builder/remove-element q loc'))))
                                 (shui/popup-hide!))}
-                "Delete"]
+                (t :ui/delete)]
 
                (when operator?
-                 [:a {:title "Unwrap this operator"
+                 [:a {:title (t :query.builder/unwrap-operator)
                       :on-click (fn []
                                   (swap! *tree (fn [q]
                                                  (let [loc' (vec (butlast loc))]
                                                    (query-builder/unwrap-operator q loc'))))
                                   (shui/popup-hide!))}
-                  "Unwrap"])
+                  (t :query.builder/unwrap-operator)])
 
-               [:div.font-medium.text-sm "Wrap this filter with: "]
+               [:div.font-medium.text-sm (t :query.builder/wrap-filter-with-label)]
                [:div.flex.flex-row.gap-2
                 (for [op query-builder/operators]
                   (ui/button (string/upper-case (name op))
@@ -454,7 +481,7 @@
 
                (when operator?
                  [:div
-                  [:div.font-medium.text-sm "Replace with: "]
+                  [:div.font-medium.text-sm (t :query.builder/replace-with-label)]
                   [:div.flex.flex-row.gap-2
                    (for [op (remove #{(keyword (string/lower-case clause))} query-builder/operators)]
                      (ui/button (string/upper-case (name op))

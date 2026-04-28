@@ -2,6 +2,7 @@
   "Native bottom tabs"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
@@ -146,23 +147,23 @@
   (configure-tabs
    (cond->
     [{:id "home"
-      :title "Home"
+      :title (t :nav/home)
       :systemImage "house"
       :role "normal"}
      {:id "graphs"
-      :title "Graphs"
+      :title (t :mobile.tab/graphs)
       :systemImage "app.background.dotted"
       :role "normal"}
      {:id "capture"
-      :title "Capture"
+      :title (t :mobile.tab/capture)
       :systemImage "tray"
       :role "normal"}
      {:id "go to"
-      :title "Go To"
+      :title (t :mobile.tab/go-to)
       :systemImage "square.stack.3d.down.right"
       :role "normal"}]
      (mobile-util/native-android?)
      (conj {:id "search"
-            :title "Search"
+        :title (t :nav/search)
             :systemImage "search"
             :role "search"}))))

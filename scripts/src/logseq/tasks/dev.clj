@@ -15,20 +15,20 @@
             [logseq.tasks.util :as task-util]))
 
 (defn test
-  "Run tests. Pass args through to cmd 'yarn cljs:run-test'"
+  "Run tests. Pass args through to cmd 'pnpm cljs:run-test'"
   [& args]
-  (shell "yarn cljs:test")
-  (apply shell "yarn cljs:run-test" args))
+  (shell "pnpm cljs:test")
+  (apply shell "pnpm cljs:run-test" args))
 
 (defn test-no-worker
-  "Run tests without compiling worker namespaces. Pass args through to cmd 'yarn cljs:run-test-no-worker'"
+  "Run tests without compiling worker namespaces. Pass args through to cmd 'pnpm cljs:run-test-no-worker'"
   [& args]
-  (shell "yarn cljs:test-no-worker")
-  (apply shell "yarn cljs:run-test-no-worker" args))
+  (shell "pnpm cljs:test-no-worker")
+  (apply shell "pnpm cljs:run-test-no-worker" args))
 
 (defn lint-and-test
   "Run all lint tasks, then run tests(exclude testcases tagged by :long).
-  pass args through to cmd 'yarn cljs:run-test'"
+  pass args through to cmd 'pnpm cljs:run-test'"
   []
   (dev-lint/dev)
   (test "-e" "long" "-e" "fix-me"))
@@ -88,12 +88,12 @@
   "Builds publishing backend and copies over supporting frontend assets"
   [& args]
   (apply shell {:dir "deps/publishing" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-         "yarn -s nbb-logseq -cp src:../graph-parser/src script/publishing.cljs"
+         "pnpm exec nbb-logseq -cp src:../graph-parser/src script/publishing.cljs"
          (into ["static"] args)))
 
 (defn watch-publishing-frontend
   [& _args]
-  (shell "npx shadow-cljs watch publishing"))
+  (shell "pnpm exec shadow-cljs watch publishing"))
 
 (defn watch-publishing-backend
   "Builds publishing backend once watch-publishing-frontend has built initial frontend"

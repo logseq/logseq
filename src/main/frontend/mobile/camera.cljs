@@ -1,6 +1,7 @@
 (ns frontend.mobile.camera
   (:require ["@capacitor/camera" :refer [Camera CameraResultType]]
             [clojure.string :as string]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -17,7 +18,7 @@
 (defn- notify-camera-permission-denied!
   []
   (notification/show!
-   "Camera access is denied. Enable it in Settings > Logseq."
+  (t :mobile/camera-access-denied)
    :warning))
 
 (defn- camera-denied-error?

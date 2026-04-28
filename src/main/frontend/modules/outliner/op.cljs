@@ -1,8 +1,8 @@
 (ns frontend.modules.outliner.op
   "Build outliner ops"
   (:require [datascript.impl.entity :as de]
-            [frontend.handler.user :as user-handler]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.utils :as db-utils]
+            [frontend.handler.user :as user-handler]))
 
 (defn- current-user-delete-opts
   [opts]
@@ -50,7 +50,8 @@
   [block & {:as opts}]
   (op-transact!
    (when-let [block' (if (de/entity? block)
-                       (dissoc (.-kv ^js block) :db/id)
+                       (-> (dissoc (.-kv ^js block) :db/id)
+                           (assoc :block/uuid (:block/uuid block)))
                        block)]
      [:save-block [block' opts]])))
 

@@ -9,6 +9,7 @@
             [frontend.components.select :as select]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
@@ -50,7 +51,7 @@
       (do
         (when (and (not (ldb/public-built-in-property? property))
                    (ldb/built-in? property))
-          (notification/show! "This is a private built-in property that can't be used." :error))
+          (notification/show! (t :property/private-built-in-not-usable) :error))
         property)
       ;; new property entered or converting page to property
       (if (db-property/valid-property-name? property-title)
@@ -62,7 +63,7 @@
                 _ (when add-class-property?
                     (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema? :exit-edit? false}))]
           property)
-        (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)))))
+        (notification/show! (t :property.validation/invalid-name) :error)))))
 
 ;; TODO: This component should be cleaned up as it's only used for new properties and used to be used for existing properties
 (rum/defcs property-type-select <
@@ -72,7 +73,7 @@
                           *show-class-select?
                           default-open? class-schema?]
                    :as opts}]
-  (let [property-name (or (and *property-name @*property-name) (:block/title property))
+  (let [property-name (or (and *property-name @*property-name) (db-property/built-in-display-title property t))
         property-schema (or (and *property-schema @*property-schema)
                             (select-keys property [:logseq.property/type]))
         schema-types (->> (concat db-property-type/user-built-in-property-types
@@ -134,7 +135,7 @@
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
        (shui/select-value
-        {:placeholder "Select a property type"}))
+        {:placeholder (t :property/select-type-placeholder)}))
       (shui/select-content
        (shui/select-group
         (for [{:keys [label value disabled]} schema-types]
@@ -144,7 +145,7 @@
                                               (util/stop-propagation e)))} label)))))
      (when show-type-change-hints?
        (ui/tooltip (svg/info)
-                   [:span "Changing the property type clears some property configurations."]))]))
+                   [:span (t :property/type-change-warning)]))]))
 
 (rum/defc property-select
   [select-opts]
@@ -155,7 +156,8 @@
        (p/let [repo (state/get-current-repo)
                properties (if (:class-schema? select-opts)
                             (property-handler/get-class-property-choices)
-                            (db-model/get-all-properties repo {:remove-ui-non-suitable-properties? true}))]
+                            (db-model/get-all-properties repo {:remove-ui-non-suitable-properties? true
+                                                               :block (:block select-opts)}))]
          (set-properties! properties)))
      [])
     (hooks/use-effect!
@@ -172,7 +174,7 @@
                  (map (fn [x]
                         (let [convert? (:convert-page-to-property? x)]
                           {:label (if convert?
-                                    (util/format "Convert \"%s\" to property" (:block/title x))
+                                    (t :property/convert-page-to-property (:block/title x))
                                     (let [ident (:db/ident x)
                                           ns' (some-> ident (namespace))
                                           plugin? (some-> ident (api-block/plugin-property-key?))
@@ -200,7 +202,7 @@
                          :new-case-sensitive? true
                          :show-new-when-not-exact-match? true
                          ;; :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
-                         :input-default-placeholder "Add or change property"
+                         :input-default-placeholder (t :property/add-or-change)
                          :on-input set-q!}
                         select-opts))]])))
 
@@ -279,7 +281,7 @@
    :a
    {:tabIndex 0
     :title (or (:block/title (:logseq.property/description property))
-               (:block/title property))
+               (db-property/built-in-display-title property t))
     :class "property-k flex select-none jtrigger w-full"
     :on-pointer-down (fn [^js e]
                        (when (util/meta-key? e)
@@ -302,7 +304,7 @@
                                      :dropdown-menu? true
                                      :as-dropdown? true})))}
 
-   (:block/title property)))
+   (db-property/built-in-display-title property t)))
 
 (rum/defc property-key-cp < rum/static
   [block property {:keys [other-position? class-schema?]}]
@@ -339,7 +341,7 @@
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger
         {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
-        (:block/title property)]
+        (db-property/built-in-display-title property t)]
        (property-key-title block property class-schema?))]))
 
 (defn- bidirectional-property-icon-cp
@@ -362,7 +364,7 @@
     (if (and blocks-container (seq entities))
       [:div.property-block-container.content.w-full
        (blocks-container config entities)]
-      [:span.opacity-60 "Empty"])))
+      [:span.opacity-60 (t :view.filter/empty)])))
 
 (rum/defc bidirectional-properties-section < rum/static
   [bidirectional-properties]
@@ -493,7 +495,7 @@
         [:div.flex.flex-row.items-center.shrink-0
          (ui/icon "plus" {:size 15 :class "opacity-50"})
          [:div.ml-1 {:style {:margin-top 1}}
-          "Add property"]]]])))
+          (t :property/add-new)]]]])))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
@@ -684,7 +686,7 @@
     [:details.my-1
      [:summary.text-sm.opacity-50.hover:opacity-90.cursor-pointer
       {:style {:margin-left 11}}
-      [:span.ml-1 "Hidden properties"]]
+      [:span.ml-1 (t :property/hidden-properties)]]
      [:div.mt-1
       (properties-section block hidden-properties opts)]]))
 
@@ -854,7 +856,7 @@
                     [:div.property-key.text-sm
                      (property-key-cp block (db/entity :logseq.property.class/properties) {})]]
                    [:div.text-muted-foreground {:style {:margin-left 26}}
-                    "Tag properties are inherited by all nodes using the tag. For example, each #Task node inherits 'Status' and 'Priority'."]]
+                    (t :class/tag-properties-desc)]]
                   [:div.ml-4
                    (properties-section block properties opts')
                    (hidden-properties-cp block hidden-properties

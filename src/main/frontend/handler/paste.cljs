@@ -2,6 +2,7 @@
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.format.block :as block]
@@ -173,7 +174,7 @@
                (when-let [current-block (state/get-edit-block)]
                  (cond
                    (some #(= block-id (:block/uuid %)) (db/get-block-parents repo (:block/uuid current-block) {}))
-                   (notification/show! "Can't embed parent block as its own property" :error)
+                   (notification/show! (t :asset/cannot-embed-parent-as-own-property) :error)
 
                    :else
                    (p/do!

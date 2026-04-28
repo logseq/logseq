@@ -19,8 +19,10 @@
             [electron.db :as db]
             [electron.find-in-page :as find]
             [electron.handler-interface :refer [handle]]
+            [electron.i18n :as i18n]
             [electron.keychain :as keychain]
             [electron.logger :as logger]
+            [electron.spell-check :as spell-check]
             [electron.plugin :as plugin]
             [electron.server :as server]
             [electron.shell :as shell]
@@ -121,15 +123,16 @@
                             (backup-file/backup-file repo :backup-dir path (node-path/extname path) content)
                             (catch :default e
                               (logger/error ::write-file "backup file failed:" e)))]
-          (utils/send-to-renderer window "notification" {:type "error"
-                                                         :payload (str "Write to the file " path
-                                                                       " failed, "
-                                                                       e
-                                                                       (when backup-path
-                                                                         (str ". A backup file was saved to "
-                                                                              backup-path
-                                                                              ".")))}))))))
-
+          (utils/send-to-renderer window "notification"
+                                 (if backup-path
+                                   {:type "error"
+                                    :payload (str "Write to the file " path " failed, " e ". A backup file was saved to " backup-path ".")
+                                    :i18n-key :electron/write-file-error-with-backup
+                                    :i18n-args [path e backup-path]}
+                                   {:type "error"
+                                    :payload (str "Write to the file " path " failed, " e)
+                                    :i18n-key :electron/write-file-error
+                                    :i18n-args [path e]})))))))
 (defmethod handle :rename [_window [_ old-path new-path]]
   (logger/info ::rename "from" old-path "to" new-path)
   (fs/renameSync old-path new-path))
@@ -181,9 +184,12 @@
                                 :files (get-files path)}))
         (catch js/Error e
           (do
-            (utils/send-to-renderer window "notification" {:type "error"
-                                                           :payload (str "Opening the specified directory failed.\n"
-                                                                         (or (pretty-print-js-error e) (str "Unexpected error: " e)))})
+            (utils/send-to-renderer window "notification"
+                                   {:type "error"
+                                    :payload (str "Opening the specified directory failed.\n"
+                                                  (or (pretty-print-js-error e) (str "Unexpected error: " e)))
+                                    :i18n-key :electron/open-dir-error
+                                    :i18n-args [(or (pretty-print-js-error e) (str "Unexpected error: " e))]})
             (p/rejected e))))
 
       (p/rejected (js/Error "path empty")))))
@@ -284,11 +290,13 @@
 (defmethod handle :quitApp []
   (.quit app))
 
-(defmethod handle :userAppCfgs [_window [_ k v]]
+(defmethod handle :userAppCfgs [window [_ k v]]
   (let [config (cfgs/get-config)]
     (if-let [k (and k (keyword k))]
       (if-not (nil? v)
         (do (cfgs/set-item! k v)
+            (when (= k :spell-check)
+              (spell-check/apply-window-spellcheck! window (spell-check/session-spellcheck-enabled? v)))
             (state/set-state! [:config k] v))
         (cfgs/get-item k))
       config)))
@@ -312,6 +320,9 @@
 (defmethod handle :setCurrentGraph [^js window [_ graph-name]]
   (when graph-name
     (set-current-graph! window (utils/get-graph-dir graph-name))))
+
+(defmethod handle :updateElectronLocale [_window [_ locale]]
+  (i18n/update-locale! locale))
 
 (defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
   (try

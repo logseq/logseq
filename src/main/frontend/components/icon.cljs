@@ -5,6 +5,7 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.search :as search]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -196,7 +197,9 @@
 
 (defn- normalize-tabs
   [tabs default-tab]
-  (let [tabs (or tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"]])
+  (let [tabs (or tabs [[:all (t :icon/tab-all)]
+                       [:emoji (t :icon/tab-emojis)]
+                       [:icon (t :icon/tab-icons)]])
         default-tab (or default-tab (ffirst tabs) :all)
         default-tab (if (some #(= (first %) default-tab) tabs)
                       default-tab
@@ -211,11 +214,11 @@
                            (filterv #(= :emoji (:type %)) used-items))
         sections (cond-> []
                    (and show-used? (seq emoji-used-items))
-                   (conj {:title "Frequently used"
+                   (conj {:title (t :ui/frequently-used)
                           :items emoji-used-items
                           :virtual-list? false})
                    true
-                   (conj {:title (util/format "Emojis (%s)" (count emojis*))
+                   (conj {:title (t :icon/emojis-count (count emojis*))
                           :items emojis*
                           :virtual-list? true}))]
     sections))
@@ -242,7 +245,7 @@
 (rum/defc icons-cp < rum/static
   [icons opts]
   (pane-section
-   (util/format "Icons (%s)" (count icons))
+   (t :icon/icons-count (count icons))
    icons
    opts))
 
@@ -254,11 +257,11 @@
         opts (assoc opts :virtual-list? false)]
     [:div.all-pane.pb-10
      (when (count used-items)
-       (pane-section "Frequently used" used-items opts))
-     (pane-section (util/format "Emojis (%s)" (count emojis))
+       (pane-section (t :ui/frequently-used) used-items opts))
+     (pane-section (t :icon/emojis-count (count emojis))
                    emoji-items
                    opts)
-     (pane-section (util/format "Icons (%s)" (count (get-tabler-icons)))
+     (pane-section (t :icon/icons-count (count (get-tabler-icons)))
                    icon-items
                    opts)]))
 
@@ -414,7 +417,10 @@
        [(shui/input
          {:auto-focus true
           :ref *input-ref
-          :placeholder (util/format "Search %ss" (string/lower-case (name tab)))
+          :placeholder (case tab
+                         :emoji (t :icon/search-emojis)
+                         :icon (t :icon/search-icons)
+                         (t :icon/search-all))
           :default-value ""
           :on-focus #(reset! *select-mode? false)
           :on-key-down (fn [^js e]
@@ -451,7 +457,7 @@
           (let [matched (concat (:emojis result) (:icons result))]
             (when (seq matched)
               (pane-section
-               (util/format "Matched (%s)" (count matched))
+               (t :icon/matched-count (count matched))
                matched
                opts)))]
          [:div.flex.flex-1.flex-col.gap-1
@@ -532,4 +538,4 @@
          (if (vector? icon-value)       ; hiccup
            icon-value
            (icon icon-value (merge {:color? true} icon-props)))
-         (or empty-label "Empty"))))))
+         (or empty-label (t :ui/empty)))))))

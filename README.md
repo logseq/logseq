@@ -14,7 +14,7 @@
     <a href="https://logseq.com">Home Page</a> |
     <a href="https://blog.logseq.com/">Blog</a> |
     <a href="https://docs.logseq.com/">Documentation</a> |
-    <a href="https://discuss.logseq.com/t/logseq-product-roadmap/34267">Roadmap</a>
+    <a href="https://logseq.io/p/NX4mc_ggEV">Roadmap</a>
 </div>
 <br></br>
 
@@ -74,7 +74,7 @@ The DB version is in beta status while the new mobile app and RTC is in alpha. T
 
 To get started with the DB version:
 * To try the latest web version, go to https://test.logseq.com/.
-* To try the latest desktop version, login to Github and go to https://github.com/logseq/logseq/actions/workflows/build-desktop-release.yml and click on the latest release. Scroll to the bottom and under the `Artifacts` section download the artifact for your operating system.
+* To try the latest desktop version, login to GitHub and go to https://github.com/logseq/logseq/actions/workflows/build-desktop-release.yml and click on the latest release. Scroll to the bottom and under the `Artifacts` section download the artifact for your operating system.
 * To try the latest by building from the source code
     * Use `test/db` for stable releases. Fewer bugs and slower updates. Update frequency: days or weeks.
     * Use `master` for the latest updates as they are developed. Expect more bugs and faster changes. Update frequency: hours or days.

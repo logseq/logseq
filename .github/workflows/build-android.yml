@@ -54,23 +54,28 @@ jobs:
         with:
           ref: ${{ github.event.inputs.git-ref }}
 
-      - name: Install Node.js, NPM and Yarn
+      - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
-
-      - name: Cache yarn cache directory
-        uses: actions/cache@v4
-        id: yarn-cache
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          version: 10.33.0
+
+      - name: Get pnpm store directory path
+        id: pnpm-store-dir-path
+        run: echo "dir=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store directory
+        uses: actions/cache@v4
+        id: pnpm-cache
+        with:
+          path: ${{ steps.pnpm-store-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-
+            ${{ runner.os }}-pnpm-
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -108,7 +113,7 @@ jobs:
           echo "ENABLE_FILE_SYNC_PRODUCTION=${{ inputs.enable-file-sync-production || github.event.inputs.enable-file-sync-production || inputs.build-target == '' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS - app variant, use es6 instead of es-next
-        run: yarn install && yarn release-mobile
+        run: pnpm install --frozen-lockfile && pnpm release-mobile
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
@@ -127,7 +132,7 @@ jobs:
           SENTRY_PROJECT: logseq
 
       - name: Sync public to Android Project
-        run: npx cap sync android
+        run: pnpm exec cap sync android
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3.2.2

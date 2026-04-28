@@ -21,35 +21,10 @@
   [closed-schema?]
   (if closed-schema? closed-db-schema-explainer db-schema-explainer))
 
-(defn- block-uuid-immutability-errors
-  [{:keys [db-before db-after tx-data tx-meta]}]
-  (let [uuid-touched-existing-eids
-        (->> tx-data
-             (keep (fn [{:keys [e a]}]
-                     (when (and (= :block/uuid a)
-                                (number? e)
-                                (some? (:block/uuid (d/entity db-before e))))
-                       e)))
-             distinct)]
-    (->> uuid-touched-existing-eids
-         (keep (fn [eid]
-                 (let [before-uuid (:block/uuid (d/entity db-before eid))
-                       after-ent (d/entity db-after eid)
-                       after-uuid (:block/uuid after-ent)
-                       deleted? (nil? after-ent)]
-                   (when (and (not deleted?)
-                              (not= before-uuid after-uuid))
-                     {:entity-map {:db/id eid
-                                   :block/uuid before-uuid
-                                   :block/uuid-after after-uuid}
-                      :errors {:block/uuid ["immutable for existing entities; use :db/retractEntity to delete entities"]}
-                      :tx-meta tx-meta}))))
-         vec)))
-
 (defn validate-tx-report
   "Validates the datascript tx-report for entities that have changed. Returns
   boolean indicating if db is valid"
-  [{:keys [db-after tx-data tx-meta] :as tx-report} {:keys [closed-schema?]}]
+  [{:keys [db-after tx-data tx-meta]} {:keys [closed-schema?]}]
   (binding [db-malli-schema/*skip-strict-url-validate?* true]
     (let [changed-ids (->> tx-data (keep :e) distinct)
           tx-datoms (mapcat (fn [id]
@@ -85,8 +60,7 @@
                             (prn data)))
                         data))
                     invalid-ent-maps))))
-              uuid-errors (block-uuid-immutability-errors tx-report)
-              errors (->> (concat schema-errors uuid-errors)
+              errors (->> schema-errors
                           (remove nil?)
                           vec)]
           (if (seq errors)

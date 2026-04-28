@@ -2,7 +2,7 @@
     "name": "logseq",
     "version": "0.0.1",
     "private": true,
-    "packageManager": "yarn@1.22.22",
+    "packageManager": "pnpm@10.33.0",
     "main": "static/electron.js",
     "engines": {
         "node": ">=22.20.0"
@@ -53,18 +53,18 @@
         "release-mobile": "run-s gulp:buildMobile cljs:release-mobile webpack-mobile-build",
         "dev-release-app": "run-s gulp:build cljs:dev-release-app webpack-app-build",
         "dev-electron-app": "gulp electron",
-        "release-electron": "run-s gulp:build && yarn webpack-app-build && gulp electronMaker",
-        "debug-electron": "cd static/ && yarn electron:debug",
+        "release-electron": "run-s gulp:build && pnpm webpack-app-build && gulp electronMaker",
+        "debug-electron": "cd static/ && pnpm electron:debug",
         "webpack-watch": "webpack --watch",
-        "webpack-app-watch": "npx webpack --watch --config-name app",
-        "webpack-mobile-watch": "npx webpack --watch --config-name mobile",
-        "webpack-app-build": "npx webpack build --mode production --config-name app",
-        "webpack-mobile-build": "npx webpack build --mode production --config-name mobile",
-        "sync-android-release": "yarn clean && yarn release-mobile && rm -rf ./static/mobile/**/*.map && npx cap sync android",
-        "sync-ios-release": "yarn clean && yarn release-mobile && rm -rf ./static/mobile/**/*.map && npx cap sync ios",
+        "webpack-app-watch": "pnpm exec webpack --watch --config-name app",
+        "webpack-mobile-watch": "pnpm exec webpack --watch --config-name mobile",
+        "webpack-app-build": "pnpm exec webpack build --mode production --config-name app",
+        "webpack-mobile-build": "pnpm exec webpack build --mode production --config-name mobile",
+        "sync-android-release": "pnpm clean && pnpm release-mobile && rm -rf ./static/mobile/**/*.map && pnpm exec cap sync android",
+        "sync-ios-release": "pnpm clean && pnpm release-mobile && rm -rf ./static/mobile/**/*.map && pnpm exec cap sync ios",
         "clean": "gulp clean",
         "test": "run-s cljs:test cljs:run-test",
-        "test:node-adapter": "yarn --cwd deps/db-sync test:node-adapter",
+        "test:node-adapter": "pnpm --dir deps/db-sync run test:node-adapter",
         "report": "run-s cljs:report",
         "style:lint": "stylelint \"src/**/*.css\"",
         "gulp:watch": "gulp watch",
@@ -97,8 +97,8 @@
         "cljs:lint": "clojure -M:clj-kondo --parallel --lint src --cache false",
         "ios:dev": "cross-env PLATFORM=ios gulp cap",
         "android:dev": "cross-env PLATFORM=android gulp cap",
-        "ui:build": "yarn --cwd packages/ui install",
-        "postinstall": "yarn ui:build"
+        "ui:build": "pnpm --dir packages/ui install",
+        "postinstall": "pnpm ui:build"
     },
     "dependencies": {
         "@aparajita/capacitor-secure-storage": "^8.0.0",
@@ -169,28 +169,43 @@
         "react-transition-group": "4.4.5",
         "react-virtuoso": "4.18.3",
         "remove-accents": "0.5.0",
+        "tiny-pinyin": "1.3.2",
         "sanitize-filename": "1.6.4",
         "send-intent": "^7.0.0",
         "url": "^0.11.4",
         "util": "^0.12.5"
     },
-    "resolutions": {
-        "pixi-graph-fork/@pixi/app": "6.2.0",
-        "pixi-graph-fork/@pixi/constants": "6.2.0",
-        "pixi-graph-fork/@pixi/core": "6.2.0",
-        "pixi-graph-fork/@pixi/display": "6.2.0",
-        "pixi-graph-fork/@pixi/graphics": "6.2.0",
-        "pixi-graph-fork/@pixi/interaction": "6.2.0",
-        "pixi-graph-fork/@pixi/loaders": "6.2.0",
-        "pixi-graph-fork/@pixi/ticker": "6.2.0",
-        "pixi-graph-fork/@pixi/sprite": "6.2.0",
-        "pixi-graph-fork/@pixi/text": "6.2.0",
-        "pixi-graph-fork/@pixi/text-bitmap": "6.2.0",
-        "pixi-graph-fork/@pixi/utils": "6.2.0",
-        "pixi-graph-fork/@pixi/runner": "6.2.0",
-        "pixi-graph-fork/@pixi/mesh": "6.2.0",
-        "pixi-graph-fork/@pixi/settings": "6.2.0",
-        "pixi-graph-fork/@pixi/mixin-get-child-by-name": "6.2.0",
-        "pixi-graph-fork/@pixi/math": "6.2.0"
+    "pnpm": {
+        "overrides": {
+            "pixi-graph-fork>@pixi/app": "6.2.0",
+            "pixi-graph-fork>@pixi/constants": "6.2.0",
+            "pixi-graph-fork>@pixi/core": "6.2.0",
+            "pixi-graph-fork>@pixi/display": "6.2.0",
+            "pixi-graph-fork>@pixi/graphics": "6.2.0",
+            "pixi-graph-fork>@pixi/interaction": "6.2.0",
+            "pixi-graph-fork>@pixi/loaders": "6.2.0",
+            "pixi-graph-fork>@pixi/ticker": "6.2.0",
+            "pixi-graph-fork>@pixi/sprite": "6.2.0",
+            "pixi-graph-fork>@pixi/text": "6.2.0",
+            "pixi-graph-fork>@pixi/text-bitmap": "6.2.0",
+            "pixi-graph-fork>@pixi/utils": "6.2.0",
+            "pixi-graph-fork>@pixi/runner": "6.2.0",
+            "pixi-graph-fork>@pixi/mesh": "6.2.0",
+            "pixi-graph-fork>@pixi/settings": "6.2.0",
+            "pixi-graph-fork>@pixi/mixin-get-child-by-name": "6.2.0",
+            "pixi-graph-fork>@pixi/math": "6.2.0"
+        },
+        "ignoredBuiltDependencies": [
+            "canvas",
+            "core-js",
+            "onnxruntime-node",
+            "protobufjs",
+            "sharp"
+        ],
+        "onlyBuiltDependencies": [
+            "better-sqlite3",
+            "electron",
+            "keytar"
+        ]
     }
 }

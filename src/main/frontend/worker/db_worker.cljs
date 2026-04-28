@@ -54,7 +54,8 @@
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [missionary.core :as m]
             [promesa.core :as p]
-            [goog.functions :as gfun]))
+            [goog.functions :as gfun]
+            [frontend.common.idb :as idb]))
 
 (def ^:private worker-bootstrap-loaded-key "__logseq_db_worker_bootstrap_loaded__")
 
@@ -340,7 +341,7 @@
                       :skip-validate-db? true}))))
 
 (defn- <create-or-open-db!
-  [repo {:keys [config datoms sync-download-graph?] :as opts}]
+  [repo {:keys [config datoms sync-download-graph? remote-graph?] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)]
@@ -396,6 +397,9 @@
             (db-migrate/migrate conn)
             (gc-sqlite-dbs! db client-ops-db conn {})
             (maybe-run-recycle-gc! conn))
+
+          (when remote-graph?
+            (client-op/update-local-tx repo 0))
 
           (when initial-tx-report
             (db-sync/handle-local-tx! repo initial-tx-report))
@@ -656,19 +660,18 @@
 
 (def-thread-api :thread-api/block-refs-check
   [repo id {:keys [unlinked?]}]
-  (m/sp
-    (when-let [conn (worker-state/get-datascript-conn repo)]
-      (let [db @conn
-            block (d/entity db id)]
-        (if unlinked?
-          (let [title (string/lower-case (:block/title block))
-                result (m/? (search-blocks repo title {:limit 100}))]
-            (boolean (some (fn [b]
-                             (let [block (d/entity db (:db/id b))]
-                               (and (not= id (:db/id block))
-                                    (not ((set (map :db/id (:block/refs block))) id))
-                                    (string/includes? (string/lower-case (:block/title block)) title)))) result)))
-          (some? (first (common-initial-data/get-block-refs db (:db/id block)))))))))
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn
+          block (d/entity db id)]
+      (if unlinked?
+        (let [title (string/lower-case (:block/title block))
+              result (search-blocks repo title {:limit 100})]
+          (boolean (some (fn [b]
+                           (let [block (d/entity db (:db/id b))]
+                             (and (not= id (:db/id block))
+                                  (not ((set (map :db/id (:block/refs block))) id))
+                                  (string/includes? (string/lower-case (:block/title block)) title)))) result)))
+        (some? (first (common-initial-data/get-block-refs db (:db/id block))))))))
 
 (def-thread-api :thread-api/get-block-parents
   [repo id depth]
@@ -982,7 +985,9 @@
             :notification
             (do
               (log/error ::apply-outliner-ops-failed e)
-              (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload) (:clear? payload) (:uid payload) (:timeout payload)]))
+              (shared-service/broadcast-to-clients! :notification
+                                                    [(:message payload) (:type payload) (:clear? payload) (:uid payload) (:timeout payload)
+                                                     {:i18n-key (:i18n-key payload) :i18n-args (:i18n-args payload)}]))
             (throw e)))))))
 
 (def-thread-api :thread-api/sync-app-state
@@ -1038,8 +1043,7 @@
         (js/console.error "export-edn error: " e)
         (js/console.error "Stack:\n" (.-stack e))
         (worker-util/post-message :notification
-                                  ["An unexpected error occurred during export. See the javascript console for details."
-                                   :error])
+                                  [nil :error nil nil nil {:i18n-key :export/error-unexpected}])
         {:export-edn-error (.-message e)}))))
 
 (def-thread-api :thread-api/get-view-data
@@ -1181,7 +1185,8 @@
   (when-not (and (or (:undo? tx-meta) (:redo? tx-meta))
                  (not worker-util/dev?))
     (shared-service/broadcast-to-clients! :notification
-                                          [["Invalid data writing to db!"] :error])
+                                          [nil :error nil nil nil
+                                           {:i18n-key :storage/invalid-data-writing}])
     (worker-util/post-message :capture-error
                               {:error (ex-info "Invalid data writing to db" tx-meta)
                                :payload {}
@@ -1191,6 +1196,8 @@
 (defn init
   "web worker entry"
   []
+  (idb/start)
+
   (ldb/register-transact-invalid-callback-fn! notify-invalid-data)
 
   (let [proxy-object (->>

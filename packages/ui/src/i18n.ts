@@ -13,7 +13,7 @@ let _translate: TranslateFn = (
   key: string,
   ...args: any
 ) => {
-  return dicts[locale]?.[key] || args[0] || key
+  return dicts[locale]?.[key] ?? args[0] ?? key
 }
 
 export function setTranslate(t: TranslateFn) {
@@ -24,7 +24,7 @@ export function setLocale(locale: string) {
   _locale = locale
 }
 
-export function setNSDicts(ns: string, dicts: Record<string, string>) {
+export function setNSDicts(ns: string, dicts: Record<string, any>) {
   (_nsDicts as any)[ns] = dicts
 }
 
@@ -34,7 +34,7 @@ export const translate = (
   ...args: any
 ) => {
   const dicts = (_nsDicts as any)[ns] || {}
-  return _translate(
-    _nsDicts?.hasOwnProperty(_locale) ? _locale : 'en',
-    dicts, key, ...args)
+  const localeDict = dicts[_locale]
+  const locale = (localeDict && Object.prototype.hasOwnProperty.call(localeDict, key)) ? _locale : 'en'
+  return _translate(locale, dicts, key, ...args)
 }

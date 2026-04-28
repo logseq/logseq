@@ -1,7 +1,7 @@
 (ns frontend.extensions.pdf.assets
   (:require [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
@@ -70,7 +70,7 @@
           ref-block)
         (let [ref-asset-id (:image content)
               image? (not (nil? ref-asset-id))
-              text (if image? (.toLocaleString (js/Date.))
+              text (if image? (i18n/locale-format-date (js/Date.))
                        (:text content))
               colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
               color-id (some (fn [color] (when (= (:block/title color) (:color properties))
@@ -306,7 +306,7 @@
                  :on-click (fn [e]
                              (util/stop e)
                              (-> (util/copy-image-to-clipboard (common-config/remove-asset-protocol @*src))
-                                 (p/then #(notification/show! "Copied!" :success))))}
+                                 (p/then #(notification/show! (t :notification/copied) :success))))}
                 (ui/icon "copy")])
 
              [:button.asset-action-btn

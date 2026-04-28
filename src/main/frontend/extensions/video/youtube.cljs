@@ -2,6 +2,7 @@
   (:require [cljs.core.async :refer [<! chan go] :as a]
             [clojure.string :as string]
             [frontend.components.svg :as svg]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -128,7 +129,7 @@
 
 (defn- notify-timestamp-unavailable! []
   (notification/show!
-   "YouTube timestamps aren't available on mobile yet."
+   (t :youtube/timestamps-not-available-mobile)
    :warning
    false))
 
@@ -147,7 +148,7 @@
                     (if-let [seek-to (player-method player "seekTo")]
                       (.call seek-to player seconds true)
                       (notification/show!
-                       "YouTube player isn't ready yet."
+                       (t :youtube/player-not-ready)
                        :warning
                        false)))))}
    svg/clock
@@ -164,14 +165,13 @@
                      (Math/floor (.call get-current-time player)))
         (do
           (notification/show!
-           "YouTube player isn't ready yet."
+           (t :youtube/player-not-ready)
            :warning
            false)
           nil))
       (when (mobile-util/native-platform?)
         (notification/show!
-         "Please embed a YouTube video at first, then use this icon.
-Remember: You can paste a raw YouTube url as embedded video on mobile."
+         (t :youtube/embed-first-reminder-mobile)
          :warning
          false)
         nil))))

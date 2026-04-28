@@ -1,9 +1,10 @@
 {
   "name": "@logseq/db-sync",
   "version": "1.0.0",
+  "packageManager": "pnpm@10.33.0",
   "private": true,
   "scripts": {
-    "dev": "cd ./worker && npx wrangler dev",
+    "dev": "cd ./worker && pnpm exec wrangler dev",
     "watch": "clojure -M:cljs watch db-sync db-sync-node",
     "release": "clojure -M:cljs release db-sync",
     "delete-graphs-for-user": "node worker/scripts/delete_graphs_for_user.js",
@@ -22,8 +23,8 @@
     "test": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
     "clean": "rm -rf ./worker/dist/",
     "sentry:sourcemaps": "sentry-cli sourcemaps upload --release $SENTRY_RELEASE --rewrite --strip-prefix worker/dist/worker --url-prefix \"~/\" worker/dist/worker",
-    "deploy-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && yarn release && yarn sentry:sourcemaps && cd ./worker && wrangler deploy --env prod",
-    "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && yarn release && yarn sentry:sourcemaps && cd ./worker && wrangler deploy --env staging"
+    "deploy-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env prod",
+    "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env staging"
   },
   "dependencies": {
     "@sentry/cloudflare": "^10.45.0",
@@ -35,5 +36,10 @@
   },
   "devDependencies": {
     "@sentry/cli": "^3.3.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }
