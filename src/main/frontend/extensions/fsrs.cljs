@@ -237,7 +237,8 @@
                         :show-cloze
                         {:show-cloze? true
                          :hide-children? true}
-                        {:show-cloze? true})]
+                        {:show-cloze? true
+                         :ignore-block-collapsed? true})]
            (component-block/blocks-container option [block-entity]))
          [:div.mt-8.pb-2
           (if (contains? #{:show-cloze :show-answer} next-phase)

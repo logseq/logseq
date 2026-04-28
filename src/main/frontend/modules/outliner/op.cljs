@@ -50,7 +50,8 @@
   [block & {:as opts}]
   (op-transact!
    (when-let [block' (if (de/entity? block)
-                       (dissoc (.-kv ^js block) :db/id)
+                       (-> (dissoc (.-kv ^js block) :db/id)
+                           (assoc :block/uuid (:block/uuid block)))
                        block)]
      [:save-block [block' opts]])))
 
