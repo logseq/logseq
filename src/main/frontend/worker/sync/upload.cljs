@@ -17,7 +17,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
-(def upload-kvs-batch-size 2000)
+(def upload-kvs-batch-size 500)
 (def upload-prepare-datoms-batch-size 100000)
 (def snapshot-content-type "application/transit+json")
 (def snapshot-content-encoding "gzip")
