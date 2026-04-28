@@ -61,18 +61,6 @@
                    :else (authorization/verify-jwt token env))]
     {:claims claims}))
 
-(defn- log-type [label v]
-  (js/console.log "publish:post-pages" label
-                  "type=" (cond
-                            (nil? v) "nil"
-                            (string? v) (str "string(" (count v) ")")
-                            (boolean? v) "boolean"
-                            (number? v) "number"
-                            (array? v) "array"
-                            (and (some? v) (some? (.-then v))) "thenable"
-                            :else (type v))
-                  "ctor=" (some-> v .-constructor .-name)))
-
 (defn handle-post-pages [request env]
   (-> (p/let [auth-header (.get (.-headers request) "authorization")
               token (when (and auth-header (string/starts-with? auth-header "Bearer "))
@@ -80,12 +68,9 @@
               claims (cond
                        (nil? token) nil
                        :else (authorization/verify-jwt token env))]
-        (js/console.log "publish:post-pages step=claims claims?" (some? claims))
         (if (nil? claims)
           (publish-common/unauthorized)
           (p/let [body (.arrayBuffer request)]
-            (js/console.log "publish:post-pages step=body")
-            (log-type "body" body)
             (let [{:keys [content_hash content_length graph page_uuid schema_version block_count created_at] :as meta}
                   (or (publish-common/parse-meta-header request)
                       (publish-common/meta-from-body body))
@@ -107,7 +92,6 @@
                          (publish-index/page-refs-from-payload payload page-eid page_uuid page-title graph))
                   tagged-nodes (when (and page-eid page-title)
                                  (publish-index/page-tagged-nodes-from-payload payload page-eid page_uuid page-title graph))]
-              (js/console.log "publish:post-pages step=parsed meta-valid?" (publish-common/valid-meta? meta))
               (cond
                 (not (publish-common/valid-meta? meta))
                 (publish-common/bad-request "missing publish metadata")
