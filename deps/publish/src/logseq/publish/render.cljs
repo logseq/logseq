@@ -11,7 +11,7 @@
             [logseq.publish.model :as publish-model]))
 
 ;; Timestamp in milliseconds used for cache busting static assets.
-(defonce version 1777363019629)
+(defonce version 1777365821532)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
@@ -261,6 +261,11 @@
   (or (get property-type-by-ident prop-key)
       (get-in db-property/built-in-properties [prop-key :schema :type])))
 
+(defn property-hidden?
+  [prop-key property-hidden-by-ident]
+  (or (true? (get property-hidden-by-ident prop-key))
+      (true? (get-in db-property/built-in-properties [prop-key :schema :hide?]))))
+
 (defn page-ref->uuid [name name->uuid]
   (or (get name->uuid name)
       (get name->uuid (common-util/page-name-sanity-lc name))))
@@ -357,7 +362,7 @@
                 props)
         props (->> props
                    (remove (fn [[k _]]
-                             (true? (get (:property-hidden-by-ident ctx) k))))
+                             (property-hidden? k (:property-hidden-by-ident ctx))))
                    (map (fn [[k v]]
                           (if (= k :block/tags)
                             [k (filter-tags v entities)]
