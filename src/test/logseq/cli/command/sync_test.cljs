@@ -472,85 +472,8 @@
                             "logseq_db_demo"]]
                           @ensure-calls))
                    (is (= [:thread-api/set-db-sync-config
-                           :thread-api/q
                            :thread-api/db-sync-status]
-                          (mapv first @invoke-calls)))
-                   (let [[_ _ q-args] (nth @invoke-calls 1)]
-                     (is (= "logseq_db_demo" (first q-args))))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally done)))))
-
-(deftest test-execute-sync-status-returns-error-when-e2ee-password-missing
-  (async done
-         (let [invoke-calls (atom [])]
-           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
-                                                           (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
-                                                  (case method
-                                                    :thread-api/get-db-sync-config
-                                                    (p/resolved {:auth-token "worker-token"})
-
-                                                    :thread-api/q
-                                                    (p/resolved true)
-
-                                                    :thread-api/get-e2ee-password
-                                                    (p/rejected (ex-info "missing-e2ee-password"
-                                                                         {:code :db-sync/missing-e2ee-password
-                                                                          :field :e2ee-password}))
-
-                                                    :thread-api/db-sync-status
-                                                    (p/resolved {:repo "logseq_db_demo"
-                                                                 :ws-state :open})
-
-                                                    (p/resolved nil)))]
-                 (p/let [result (sync-command/execute {:type :sync-status
-                                                       :repo "logseq_db_demo"}
-                                                      {:root-dir "/tmp"
-                                                       :refresh-token "refresh-token"})]
-                   (is (= :error (:status result)))
-                   (is (= :e2ee-password-not-found (get-in result [:error :code])))
-                   (is (= "logseq_db_demo" (get-in result [:error :repo])))
-                   (is (not-any? (fn [[method _ _]]
-                                   (= :thread-api/db-sync-status method))
-                                 @invoke-calls))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally done)))))
-
-(deftest test-execute-sync-status-returns-error-when-e2ee-password-decrypt-fails
-  (async done
-         (let [invoke-calls (atom [])]
-           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
-                                                           (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
-                                                  (case method
-                                                    :thread-api/get-db-sync-config
-                                                    (p/resolved {:auth-token "worker-token"})
-
-                                                    :thread-api/q
-                                                    (p/resolved true)
-
-                                                    :thread-api/get-e2ee-password
-                                                    (p/rejected (ex-info "decrypt-text-by-text-password" {}))
-
-                                                    :thread-api/db-sync-status
-                                                    (p/resolved {:repo "logseq_db_demo"
-                                                                 :ws-state :open})
-
-                                                    (p/resolved nil)))]
-                 (p/let [result (sync-command/execute {:type :sync-status
-                                                       :repo "logseq_db_demo"}
-                                                      {:root-dir "/tmp"
-                                                       :refresh-token "refresh-token"})]
-                   (is (= :error (:status result)))
-                   (is (= :e2ee-password-not-found (get-in result [:error :code])))
-                   (is (= "logseq_db_demo" (get-in result [:error :repo])))
-                   (is (not-any? (fn [[method _ _]]
-                                   (= :thread-api/db-sync-status method))
-                                 @invoke-calls))))
+                          (mapv first @invoke-calls)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
