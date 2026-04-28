@@ -1,11 +1,12 @@
 (ns frontend.common.search-fuzzy
   "fuzzy search. Used by frontend and worker namespaces"
-  (:require ["remove-accents$default" :as removeAccents]
+  (:require ["remove-accents" :refer [remove]]
             ["tiny-pinyin" :as tp]
             [cljs-bean.core :as bean]
             [clojure.string :as string]))
 
 (def MAX-STRING-LENGTH 1000.0)
+(def strip-accents remove)
 
 (defn clean-str
   [s]
@@ -37,7 +38,7 @@
     (let [s' (if lower-case? (string/lower-case s) s)
           normalize-str (.normalize s' "NFKC")]
       (if remove-accents?
-        (removeAccents normalize-str)
+        (strip-accents normalize-str)
         normalize-str))))
 
 (defn score
@@ -104,14 +105,13 @@
                               (for [item data]
                                 (let [strings (->> extract-fns
                                                    (map (fn [f] (str (f item))))
-                                                   (remove string/blank?))
+                                                   (cljs.core/remove string/blank?))
                                       best-score (if (seq strings)
                                                    (apply max (map #(score query %) strings))
                                                    0)]
                                   {:data item
                                    :score best-score})))))
        (map :data)))
-
 
 (defn- zh-simplified-char?
   "True for characters in the CJK Unified Ideographs blocks
@@ -135,7 +135,7 @@
   (when (seq seg)
     (->> (string/replace seg #"[^a-zA-Z0-9 ]" "")
          (#(string/split % #"\s+"))
-         (remove string/blank?)
+         (cljs.core/remove string/blank?)
          (map #(string/lower-case (subs % 0 1))))))
 
 (defn hanzi->initials
