@@ -11,7 +11,7 @@
             [logseq.publish.model :as publish-model]))
 
 ;; Timestamp in milliseconds used for cache busting static assets.
-(defonce version 1767194868810)
+(defonce version 1777363019629)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
@@ -100,13 +100,19 @@
 (defn- icon-span
   [icon]
   (when (and (map? icon) (string? (:id icon)) (not (string/blank? (:id icon))))
+    (let [icon-type (:type icon)
+          icon-id (:id icon)
+          class-name (str "property-icon"
+                          (when (and (= :tabler-icon icon-type)
+                                     (not (string/blank? icon-id)))
+                            (str " ls-icon-" icon-id)))]
     [:span
      (cond->
-      {:class "property-icon"
+      {:class class-name
        :data-icon-id (:id icon)
        :data-icon-type (name (:type icon))}
        (:color icon)
-       (assoc :style (str "color: " (:color icon) ";")))]))
+       (assoc :style (str "color: " (:color icon) ";")))])))
 
 (defn- with-icon
   [icon nodes]
@@ -445,12 +451,12 @@
          [:div.positioned-property
           [:span.property-name (property-title k (:property-title-by-ident ctx))]
           [:span.property-value
-           (into [:span] (positioned-value-nodes v k ctx entities))]])]
+           (into [:span.inline-flex] (positioned-value-nodes v k ctx entities))]])]
 
       [:div {:class (str "positioned-properties " (name position))}
        (for [[k v] (sorted-properties props ctx)]
          [:span.positioned-property
-          (into [:span] (positioned-value-nodes v k ctx entities))])])))
+          (into [:span.inline-flex] (positioned-value-nodes v k ctx entities))])])))
 
 (def ^:private youtube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be|y2u.be|youtube-nocookie.com))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)([\S^\?]+)?$")
 (def ^:private vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com))(/(?:video/)?)([\w-]+)(\S+)?$")
