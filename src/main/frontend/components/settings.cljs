@@ -681,17 +681,17 @@
           :on-change #(set-url! (util/evalue %))}]]]
       [:p.pt-2.flex.gap-2
        (shui/button
-        {:size :sm
-         :on-click (fn []
-                     (let [trimmed (string/trim url)]
-                       (if (string/blank? trimmed)
-                         (reset-url!)
-                         (if-not (config/valid-publish-server-url? trimmed)
-                           (notification/show! "URL must start with https:// or http://" :error)
-                           (do
-                             (config/set-custom-publish-server-url! trimmed)
-                             (notification/show! (t :settings-page/publish-server-url-saved) :success))))))}
-        (t :save))
+         {:size :sm
+          :on-click (fn []
+                      (let [trimmed (string/trim url)]
+                        (if (string/blank? trimmed)
+                          (reset-url!)
+                          (if-not (config/valid-publish-server-url? trimmed)
+                            (notification/show! "URL must start with https:// or http://" :error)
+                            (do
+                              (config/set-custom-publish-server-url! trimmed)
+                              (notification/show! (t :settings-page/publish-server-url-saved) :success))))))}
+         (t :ui/save))
        (when (seq url)
          (shui/button
           {:size :sm
