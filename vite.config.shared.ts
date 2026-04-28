@@ -127,10 +127,9 @@ function createShadowSyncPlugin(options: ShadowBridgeConfigOptions): Plugin {
 }
 
 function createIifeRequireShim(globals: Record<string, string>): string {
-  const requireCases = Object.keys(globals)
-    .map((id) => {
-      const parameter = id.replace(/[^a-zA-Z0-9_$]/g, '_')
-      return `    case ${JSON.stringify(id)}: return ${parameter};`
+  const requireCases = Object.entries(globals)
+    .map(([id, globalName]) => {
+      return `    case ${JSON.stringify(id)}: return ${createIifeGlobalAccessExpression(globalName)};`
     })
     .join('\n')
 
@@ -142,6 +141,23 @@ function createIifeRequireShim(globals: Record<string, string>): string {
     '  }',
     '};',
   ].join('\n')
+}
+
+function createIifeGlobalAccessExpression(globalName: string): string {
+  if (/^(globalThis|window|self|global)\b/.test(globalName)) {
+    return globalName
+  }
+
+  return globalName
+    .split('.')
+    .map((segment, index) => {
+      const accessor = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(segment)
+        ? `.${segment}`
+        : `[${JSON.stringify(segment)}]`
+
+      return index === 0 ? `globalThis${accessor}` : accessor
+    })
+    .join('')
 }
 
 function createBrowserExternalRuntimeShim(): string {
