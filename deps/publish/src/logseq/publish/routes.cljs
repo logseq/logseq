@@ -312,20 +312,6 @@
                 (p/let [tags (.json tags-resp)]
                   (publish-common/json-response (js->clj tags :keywordize-keys true) 200))))))))))
 
-(defn handle-list-pages [env]
-  (let [^js do-ns (aget env "PUBLISH_META_DO")
-        do-id (.idFromName do-ns "index")
-        do-stub (.get do-ns do-id)]
-    (p/let [meta-resp (.fetch do-stub "https://publish/pages" #js {:method "GET"})]
-      (if-not (.-ok meta-resp)
-        (js/Response.
-         (publish-render/render-404-html)
-         #js {:headers (publish-common/merge-headers
-                        #js {"content-type" "text/html; charset=utf-8"}
-                        (publish-common/cors-headers))})
-        (p/let [meta (.json meta-resp)]
-          (publish-common/json-response (js->clj meta :keywordize-keys true) 200))))))
-
 (defn handle-list-graph-pages-by-uuid [graph-uuid env]
   (if-not graph-uuid
     (publish-common/bad-request "missing graph uuid")
@@ -668,9 +654,6 @@
 
       (and (= path "/pages") (= method "POST"))
       (handle-post-pages request env)
-
-      (and (= path "/pages") (= method "GET"))
-      (handle-list-pages env)
 
       (and (string/starts-with? path "/search/") (= method "GET"))
       (handle-graph-search request env)
