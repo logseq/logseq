@@ -606,6 +606,13 @@
                            (publish-render/render-page-html transit page-uuid refs-json tagged-nodes)
                            #js {:headers headers}))))))))))))))
 
+(defn- rewrite-request-path
+  [request new-path]
+  (let [request-url (js/URL. (.-url request))
+        new-url (js/URL. (str (.-origin request-url) new-path))]
+    (set! (.-search new-url) (.-search request-url))
+    (js/Request. (str new-url) request)))
+
 (defn ^:large-vars/cleanup-todo handle-fetch [request env]
   (let [url (js/URL. (.-url request))
         path (.-pathname url)
@@ -709,7 +716,9 @@
                     (js/Response. (.-body object)
                                   #js {:headers headers}))))))))
 
-      (and (string/starts-with? path "/p/") (= method "GET"))
+      (and (or (string/starts-with? path "/p/")
+               (string/starts-with? path "/s/"))
+           (= method "GET"))
       (let [parts (string/split path #"/")
             short-id (nth parts 2 nil)]
         (if (string/blank? short-id)
@@ -727,11 +736,9 @@
                     (publish-common/not-found)
                     (let [graph-uuid (aget row "graph_uuid")
                           page-uuid (aget row "page_uuid")
-                          location (str "/page/" graph-uuid "/" page-uuid)]
-                      (js/Response. nil #js {:status 302
-                                             :headers (publish-common/merge-headers
-                                                       #js {"location" location}
-                                                       (publish-common/cors-headers))})))))))))
+                          page-path (str "/page/" graph-uuid "/" page-uuid)
+                          page-request (rewrite-request-path request page-path)]
+                      (handle-page-html page-request env)))))))))
 
       (and (string/starts-with? path "/u/") (= method "GET"))
       (let [parts (string/split path #"/")
