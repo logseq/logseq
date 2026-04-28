@@ -281,10 +281,11 @@
                                                            "page_tags.source_block_content, page_tags.source_block_format, page_tags.updated_at, "
                                                            "pages.short_id "
                                                            "FROM page_tags "
-                                                           "LEFT JOIN pages "
+                                                           "INNER JOIN pages "
                                                            "ON pages.graph_uuid = page_tags.graph_uuid "
                                                            "AND pages.page_uuid = page_tags.source_page_uuid "
                                                            "WHERE page_tags.tag_title = ? "
+                                                           "AND pages.password_hash IS NULL "
                                                            "ORDER BY page_tags.updated_at DESC;")
                                                       tag-name))
                 page-rows (publish-common/get-sql-rows
@@ -293,10 +294,11 @@
                                                          "pages.short_id, "
                                                          "MAX(page_tags.updated_at) AS updated_at "
                                                          "FROM page_tags "
-                                                         "LEFT JOIN pages "
+                                                         "INNER JOIN pages "
                                                          "ON pages.graph_uuid = page_tags.graph_uuid "
                                                          "AND pages.page_uuid = page_tags.source_page_uuid "
                                                          "WHERE page_tags.tag_title = ? "
+                                                         "AND pages.password_hash IS NULL "
                                                          "GROUP BY page_tags.graph_uuid, page_tags.source_page_uuid, page_tags.source_page_title, pages.short_id "
                                                          "ORDER BY updated_at DESC;")
                                                     tag-name))]
@@ -381,11 +383,16 @@
           (= (nth parts 4 nil) "tagged_nodes")
           (let [rows (publish-common/get-sql-rows
                       (publish-common/sql-exec sql
-                                               (str "SELECT graph_uuid, tag_page_uuid, tag_title, source_page_uuid, "
-                                                    "source_page_title, source_block_uuid, source_block_content, "
-                                                    "source_block_format, updated_at "
-                                                    "FROM page_tags WHERE graph_uuid = ? AND tag_page_uuid = ? "
-                                                    "ORDER BY updated_at DESC;")
+                                               (str "SELECT page_tags.graph_uuid, page_tags.tag_page_uuid, page_tags.tag_title, page_tags.source_page_uuid, "
+                                                    "page_tags.source_page_title, page_tags.source_block_uuid, page_tags.source_block_content, "
+                                                    "page_tags.source_block_format, page_tags.updated_at "
+                                                    "FROM page_tags "
+                                                    "INNER JOIN pages "
+                                                    "ON pages.graph_uuid = page_tags.graph_uuid "
+                                                    "AND pages.page_uuid = page_tags.source_page_uuid "
+                                                    "WHERE page_tags.graph_uuid = ? AND page_tags.tag_page_uuid = ? "
+                                                    "AND pages.password_hash IS NULL "
+                                                    "ORDER BY page_tags.updated_at DESC;")
                                                graph-uuid
                                                page-uuid))]
             (publish-common/json-response {:tagged_nodes (map (fn [row]

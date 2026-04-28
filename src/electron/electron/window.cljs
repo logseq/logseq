@@ -9,6 +9,7 @@
             [electron.context-menu :as context-menu]
             [electron.i18n :refer [t]]
             [electron.logger :as logger]
+            [electron.spell-check :as spell-check]
             [electron.state :as state]
             [electron.utils :refer [mac? win32? linux? dev? open] :as utils]))
 
@@ -45,7 +46,6 @@
                       :sandbox                 false
                       :webSecurity             (not dev?)
                       :contextIsolation        true
-                      :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
                        ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
                        ;; to use `scollbar-gutter` after the feature is implemented in browsers.
                       :enableBlinkFeatures     'OverlayScrollbars'
@@ -56,7 +56,9 @@
 
                      linux?
                      (assoc :icon (node-path/join js/__dirname "icons/logseq.png")))
-         win       (BrowserWindow. (clj->js win-opts))]
+         win       (BrowserWindow. (clj->js win-opts))
+         spell-check-enabled? (spell-check/session-spellcheck-enabled? (cfgs/get-item :spell-check))]
+     (spell-check/apply-window-spellcheck! win spell-check-enabled?)
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
                            (clj->js {:urls (array "*://*.youtube.com/*")})
                            (fn [^js details callback]
