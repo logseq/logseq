@@ -72,3 +72,22 @@
                 (fn [error]
                   (is false (str error))
                   (done)))))))
+
+(deftest drop-oversized-upload-datoms-drops-large-tldraw-page-values-test
+  (let [datoms [{:e 1 :a :block/title :v "safe"}
+                {:e 2 :a :logseq.property.tldraw/page :v {:id "small"}}
+                {:e 3 :a :logseq.property.tldraw/page :v {:id "huge"}}]]
+    (with-redefs [sync-upload/datom-value-byte-length
+                  (fn [value]
+                    (case (:id value)
+                      "small" 32
+                      "huge" 1500000
+                      0))]
+      (let [{:keys [kept dropped]} (#'sync-upload/drop-oversized-upload-datoms datoms)]
+        (is (= 2 (count kept)))
+        (is (= [1 2] (mapv :e kept)))
+        (is (= 1 (count dropped)))
+        (is (= {:a :logseq.property.tldraw/page
+                :e 3
+                :bytes 1500000}
+               (first dropped)))))))
