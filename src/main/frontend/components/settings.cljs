@@ -659,6 +659,63 @@
    {:left-label (t :settings.sync-server/url)
     :action (sync-server-url-button)}))
 
+(rum/defc publish-server-url-settings-container
+  []
+  (let [current-url (config/get-custom-publish-server-url)
+        [url set-url!] (rum/use-state (or current-url ""))
+        reset-url! (fn []
+                     (config/set-custom-publish-server-url! nil)
+                     (set-url! "")
+                     (notification/show! (t :settings-page/publish-server-url-cleared) :success))]
+    [:div.cp__settings-publish-server-cnt
+     [:h1.mb-2.text-2xl.font-bold (t :settings-page/publish-server-url)]
+     [:div.p-2
+      [:p.text-sm.opacity-70.mb-4 (t :settings-page/publish-server-url-desc)]
+      [:p
+       [:label
+        [:strong "URL"]
+        [:input.form-input.is-small
+         {:value url
+          :placeholder config/default-publish-api-base
+          :style {:width "100%"}
+          :on-change #(set-url! (util/evalue %))}]]]
+      [:p.pt-2.flex.gap-2
+       (shui/button
+         {:size :sm
+          :on-click (fn []
+                      (let [trimmed (string/trim url)]
+                        (if (string/blank? trimmed)
+                          (reset-url!)
+                          (if-not (config/valid-publish-server-url? trimmed)
+                            (notification/show! (t :settings.sync-server/url-invalid-error) :error)
+                            (do
+                              (config/set-custom-publish-server-url! trimmed)
+                              (notification/show! (t :settings-page/publish-server-url-saved) :success))))))}
+         (t :ui/save))
+       (when (seq url)
+         (shui/button
+          {:size :sm
+           :variant :outline
+           :on-click (fn [] (reset-url!))}
+          (t :settings-page/publish-server-url-reset)))]]]))
+
+(rum/defc publish-server-url-button
+  []
+  (let [current-url (config/get-custom-publish-server-url)]
+    (ui/button [:span.flex.items-center
+                [:span.pr-1
+                 (if (seq current-url)
+                   current-url
+                   (t :settings-page/publish-server-url-default))]
+                (ui/icon "edit")]
+               :class "text-sm"
+               :on-click #(state/pub-event! [:go/publish-server-settings]))))
+
+(defn publish-server-url-row []
+  (row-with-button-action
+   {:left-label (t :settings-page/publish-server-url)
+    :action (publish-server-url-button)}))
+
 (rum/defc user-proxy-settings
   [{:keys [type protocol host port] :as agent-opts}]
   (ui/button [:span.flex.items-center
@@ -774,6 +831,7 @@
      (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (sync-server-url-row)
+     (publish-server-url-row)
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (when (util/electron?) (auto-chmod-row t))
      ;; (clear-cache-row t)

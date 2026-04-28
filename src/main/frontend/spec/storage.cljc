@@ -29,6 +29,7 @@
 (s/def :copy/export-block-text-remove-options set?)
 (s/def :copy/export-block-text-other-options map?)
 (s/def ::sync-server-url string?)
+(s/def ::publish-server-url string?)
 ;; Dynamic keys which aren't as easily validated:
 ;; :ls-pdf-last-page-*
 ;; :ls-js-allowed-*
@@ -68,4 +69,5 @@
             :copy/export-block-text-indent-style
             :copy/export-block-text-remove-options
             :copy/export-block-text-other-options
-            ::sync-server-url]))
+            ::sync-server-url
+            ::publish-server-url]))

@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.plugins-settings :as plugins-settings]
+            [frontend.components.plugin-logs :as plugin-logs]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [interpolate-rich-text interpolate-rich-text-node t]]
@@ -258,6 +259,7 @@
      [:strong (ui/icon "settings")]
      [:ul.menu-list
       [:li {:on-click #(plugin-handler/open-plugin-settings! id false)} (t :plugin/open-settings)]
+      [:li {:on-click #(plugin-logs/open-plugin-logs! {:pid id :name name})} (t :plugin/open-logs)]
       (when (util/electron?)
         [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)])
       [:li {:on-click #(plugin-handler/open-report-modal! id name)} (t :plugin/report-security)]
