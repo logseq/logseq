@@ -48,7 +48,7 @@
         result (with-env env #(config/resolve-config opts))]
     (is (= cfg-path (:config-path result)))
     (is (= "cli-repo" (:graph result)))
-    (is (= "cli-root" (:root-dir result)))
+    (is (= (node-path/resolve "cli-root") (:root-dir result)))
     (is (= 333 (:timeout-ms result)))
     (is (= 888 (:login-timeout-ms result)))
     (is (= 999 (:logout-timeout-ms result)))
@@ -65,7 +65,7 @@
              "LOGSEQ_CLI_ROOT_DIR" "env-root"}
         result (with-env env #(config/resolve-config {:config-path cfg-path}))]
     (is (= "env-repo" (:graph result)))
-    (is (= "env-root" (:root-dir result)))))
+    (is (= (node-path/resolve "env-root") (:root-dir result)))))
 
 (deftest test-output-format-env-overrides-file
   (let [dir (node-helper/create-tmp-dir)
@@ -110,7 +110,7 @@
                           "LOGSEQ_CLI_CONFIG" nil}
                  #(config/resolve-config {:config-path cfg-path}))]
     (is (= cfg-path (:config-path result)))
-    (is (= "~/logseq" (:root-dir result)))
+    (is (= (node-path/join (.homedir os) "logseq") (:root-dir result)))
     (is (= "wss://api.logseq.io/sync/%s" (:ws-url result)))
     (is (= "https://api.logseq.io" (:http-base result)))
     (is (= 10000 (:timeout-ms result)))
@@ -127,8 +127,8 @@
                           "LOGSEQ_CLI_OUTPUT" nil
                           "LOGSEQ_CLI_CONFIG" nil}
                  #(config/resolve-config {:root-dir "~/custom-logseq"}))]
-    (is (= "~/custom-logseq" (:root-dir result)))
-    (is (= (node-path/join "~/custom-logseq" "cli.edn")
+    (is (= (node-path/join (.homedir os) "custom-logseq") (:root-dir result)))
+    (is (= (node-path/join (.homedir os) "custom-logseq" "cli.edn")
            (:config-path result)))))
 
 (deftest test-explicit-config-path-does-not-change-root-dir-derived-defaults
@@ -137,7 +137,7 @@
         result (config/resolve-config {:config-path cfg-path
                                        :root-dir "~/custom-logseq"})]
     (is (= cfg-path (:config-path result)))
-    (is (= "~/custom-logseq" (:root-dir result)))))
+    (is (= (node-path/join (.homedir os) "custom-logseq") (:root-dir result)))))
 
 (deftest test-server-list-path-follows-root-dir
   (let [root-dir (node-path/join (node-helper/create-tmp-dir "cli-root") "nested-root")
@@ -202,3 +202,11 @@
         parsed (reader/read-string contents)]
     (is (= "old" (:graph parsed)))
     (is (not (contains? parsed :auth-token)))))
+
+(deftest test-update-config-expands-tilde-in-root-dir
+  (let [dir (node-helper/create-tmp-dir "cli-tilde")
+        cfg-path (node-path/join dir "cli.edn")
+        _ (config/update-config! {:root-dir dir} {:ws-url "wss://example.com"})
+        contents (.toString (fs/readFileSync cfg-path) "utf8")
+        parsed (reader/read-string contents)]
+    (is (= "wss://example.com" (:ws-url parsed)))))

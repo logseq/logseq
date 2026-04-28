@@ -4,9 +4,9 @@
             [clojure.string :as string]
             [goog.object :as gobj]
             ["fs" :as fs]
-            ["os" :as os]
             ["path" :as node-path]
-            [logseq.cli.output-mode :as output-mode]))
+            [logseq.cli.output-mode :as output-mode]
+            [logseq.cli.root-dir :as root-dir]))
 
 (defn- parse-int
   [value]
@@ -30,19 +30,15 @@
 
     :else nil))
 
-(defn- default-root-dir
-  []
-  "~/logseq")
-
 (defn- default-config-path
   ([]
-   (default-config-path (default-root-dir)))
+   (default-config-path (root-dir/default-root-dir)))
   ([root-dir]
    (node-path/join root-dir "cli.edn")))
 
 (defn server-list-path
   [root-dir]
-  (node-path/join (or root-dir (node-path/join (.homedir os) "logseq")) "server-list"))
+  (node-path/join (or root-dir (root-dir/default-root-dir)) "server-list"))
 
 (def ^:private removed-config-keys
   #{:auth-token :retries :e2ee-password})
@@ -67,7 +63,7 @@
 
 (defn update-config!
   [{:keys [config-path root-dir]} updates]
-  (let [path (or config-path (default-config-path (or root-dir (default-root-dir))))
+  (let [path (or config-path (default-config-path (root-dir/normalize-root-dir root-dir)))
         current (or (read-config-file path) {})
         filtered-current (sanitize-file-config current)
         filtered-updates (sanitize-file-config updates)
@@ -115,21 +111,23 @@
                   :logout-timeout-ms 120000
                   :list-title-max-display-width list-title-max-display-width-default
                   :output-format nil
-                  :root-dir (default-root-dir)
+                  :root-dir (root-dir/default-root-dir)
                   :ws-url "wss://api.logseq.io/sync/%s"
                   :http-base "https://api.logseq.io"}
         env (env-config)
-        root-dir (or (:root-dir opts)
-                     (:root-dir env)
-                     (:root-dir defaults))
+        root-dir (root-dir/normalize-root-dir
+                  (or (:root-dir opts)
+                      (:root-dir env)
+                      (:root-dir defaults)))
         config-path (or (:config-path opts)
                         (:config-path env)
                         (default-config-path root-dir))
         file-config (or (read-config-file config-path) {})
-        root-dir (or (:root-dir opts)
-                     (:root-dir env)
-                     (:root-dir file-config)
-                     root-dir)
+        root-dir (root-dir/normalize-root-dir
+                  (or (:root-dir opts)
+                      (:root-dir env)
+                      (:root-dir file-config)
+                      root-dir))
         output-format (or (output-mode/parse (:output-format opts))
                           (output-mode/parse (:output opts))
                           (output-mode/parse (:output-format env))
