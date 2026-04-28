@@ -19,6 +19,8 @@
 
 (def upload-kvs-batch-size 500)
 (def upload-prepare-datoms-batch-size 100000)
+(def snapshot-upload-max-bytes 1000000)
+(def snapshot-frame-header-bytes 4)
 (def snapshot-content-type "application/transit+json")
 (def snapshot-content-encoding "gzip")
 (def snapshot-text-encoder (js/TextEncoder.))
@@ -63,6 +65,44 @@
   [rows]
   (.encode snapshot-text-encoder (sqlite-util/write-transit-str rows)))
 
+(defn- snapshot-rows-byte-length
+  [rows]
+  (+ snapshot-frame-header-bytes
+     (.-byteLength ^js (encode-snapshot-rows rows))))
+
+(defn- max-prefix-rows-within-bytes
+  [rows max-bytes]
+  (let [rows-count (count rows)]
+    (loop [low 1
+           high rows-count
+           best 0]
+      (if (> low high)
+        best
+        (let [mid (quot (+ low high) 2)
+              rows' (subvec rows 0 mid)
+              size (snapshot-rows-byte-length rows')]
+          (if (<= size max-bytes)
+            (recur (inc mid) high mid)
+            (recur low (dec mid) best)))))))
+
+(defn- split-snapshot-rows-by-max-bytes
+  [rows max-bytes]
+  (loop [remaining rows
+         batches []]
+    (if (empty? remaining)
+      batches
+      (let [prefix-count (max-prefix-rows-within-bytes remaining max-bytes)]
+        (if (pos? prefix-count)
+          (let [batch (subvec remaining 0 prefix-count)
+                remaining' (subvec remaining prefix-count)]
+            (recur remaining' (conj batches batch)))
+          (let [row (first remaining)
+                row-size (snapshot-rows-byte-length [row])]
+            (fail-fast :db-sync/snapshot-row-too-large
+                       {:max-bytes max-bytes
+                        :row-size row-size
+                        :addr (first row)})))))))
+
 (defn frame-bytes
   [^js data]
   (let [len (.-byteLength data)
@@ -97,6 +137,30 @@
       (p/let [buf (<buffer-stream body)]
         {:body buf :encoding snapshot-content-encoding})
       (p/resolved {:body frame :encoding nil}))))
+
+(defn- snapshot-upload-url
+  [base graph-id reset? finished? checksum]
+  (str base "/sync/" graph-id "/snapshot/upload?reset="
+       (if reset? "true" "false")
+       "&finished="
+       (if finished? "true" "false")
+       (when finished?
+         (str "&checksum=" (js/encodeURIComponent checksum)))))
+
+(defn- <upload-snapshot-rows-batches!
+  [rows-batches {:keys [base graph-id first-batch? finished? checksum auth-fetch-f]}]
+  (p/loop [remaining rows-batches
+           first-request? first-batch?]
+    (if-let [rows-batch (first remaining)]
+      (let [last-request? (nil? (next remaining))
+            finished-request? (and finished? last-request?)
+            upload-url (snapshot-upload-url base graph-id first-request? finished-request? checksum)]
+        (p/let [{:keys [body encoding]} (<snapshot-upload-body rows-batch)
+                headers (cond-> {"content-type" snapshot-content-type}
+                          (string? encoding) (assoc "content-encoding" encoding))
+                _ (auth-fetch-f upload-url headers body)]
+          (p/recur (next remaining) false)))
+      nil)))
 
 (defn set-graph-sync-metadata!
   [repo graph-e2ee?]
@@ -186,25 +250,38 @@
                                 rows* (normalize-snapshot-rows rows)
                                 loaded' (+ loaded (count rows*))
                                 finished? (= loaded' total-rows)
-                                upload-url (str base "/sync/" graph-id "/snapshot/upload?reset="
-                                                (if first-batch? "true" "false")
-                                                "&finished="
-                                                (if finished? "true" "false")
-                                                (when finished?
-                                                  (str "&checksum=" (js/encodeURIComponent snapshot-checksum))))]
-                            (p/let [{:keys [body encoding]} (<snapshot-upload-body rows*)
-                                    headers (cond-> {"content-type" snapshot-content-type}
-                                              (string? encoding) (assoc "content-encoding" encoding))
-                                    _ (sync-transport/fetch-json
-                                       (fn [opts]
-                                         (sync-auth/with-auth-headers
-                                           #(sync-auth/auth-headers (worker-state/get-id-token))
-                                           opts))
-                                       upload-url
-                                       {:method "POST"
-                                        :headers headers
-                                        :body body}
-                                       {:response-schema :sync/snapshot-upload})]
+                                row-batches (split-snapshot-rows-by-max-bytes rows* snapshot-upload-max-bytes)
+                                batch-payloads
+                                (mapv (fn [rows-batch]
+                                        {:rows (count rows-batch)
+                                         :payload-bytes (snapshot-rows-byte-length rows-batch)})
+                                      row-batches)]
+                            (prn :db-sync/upload-kvs-batch
+                                 {:total-kvs-rows total-rows
+                                  :fetched-kvs-rows (count rows*)
+                                  :upload-kvs-batch-size upload-kvs-batch-size
+                                  :split-batch-count (count row-batches)
+                                  :split-batches batch-payloads
+                                  :max-request-bytes snapshot-upload-max-bytes})
+                            (p/let [_ (<upload-snapshot-rows-batches!
+                                       row-batches
+                                       {:base base
+                                        :graph-id graph-id
+                                        :first-batch? first-batch?
+                                        :finished? finished?
+                                        :checksum snapshot-checksum
+                                        :auth-fetch-f
+                                        (fn [upload-url headers body]
+                                          (sync-transport/fetch-json
+                                           (fn [opts]
+                                             (sync-auth/with-auth-headers
+                                               #(sync-auth/auth-headers (worker-state/get-id-token))
+                                               opts))
+                                           upload-url
+                                           {:method "POST"
+                                            :headers headers
+                                            :body body}
+                                           {:response-schema :sync/snapshot-upload}))})]
                               (update-progress {:sub-type :upload-progress
                                                 :message (str "Uploading " loaded' "/" total-rows)})
                               (p/recur max-addr false loaded'))))))
