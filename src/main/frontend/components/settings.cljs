@@ -687,7 +687,7 @@
                         (if (string/blank? trimmed)
                           (reset-url!)
                           (if-not (config/valid-publish-server-url? trimmed)
-                            (notification/show! "URL must start with https:// or http://" :error)
+                            (notification/show! (t :settings.sync-server/url-invalid-error) :error)
                             (do
                               (config/set-custom-publish-server-url! trimmed)
                               (notification/show! (t :settings-page/publish-server-url-saved) :success))))))}
