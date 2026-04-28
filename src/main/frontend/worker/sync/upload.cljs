@@ -21,6 +21,7 @@
 (def upload-prepare-datoms-batch-size 100000)
 (def snapshot-upload-max-bytes 1000000)
 (def snapshot-frame-header-bytes 4)
+(def ignored-oversized-upload-attrs #{:logseq.property.tldraw/page})
 (def snapshot-content-type "application/transit+json")
 (def snapshot-content-encoding "gzip")
 (def snapshot-text-encoder (js/TextEncoder.))
@@ -64,6 +65,28 @@
 (defn encode-snapshot-rows
   [rows]
   (.encode snapshot-text-encoder (sqlite-util/write-transit-str rows)))
+
+(defn- datom-value-byte-length
+  [value]
+  (.-byteLength ^js (.encode snapshot-text-encoder (sqlite-util/write-transit-str value))))
+
+(defn- drop-oversized-upload-datoms
+  [datoms]
+  (let [threshold (- snapshot-upload-max-bytes snapshot-frame-header-bytes)]
+    (reduce (fn [{:keys [kept dropped]} datom]
+              (let [attr (:a datom)
+                    size (when (contains? ignored-oversized-upload-attrs attr)
+                           (datom-value-byte-length (:v datom)))]
+                (if (and size (> size threshold))
+                  {:kept kept
+                   :dropped (conj dropped {:a attr
+                                           :e (:e datom)
+                                           :bytes size})}
+                  {:kept (conj kept datom)
+                   :dropped dropped})))
+            {:kept []
+             :dropped []}
+            datoms)))
 
 (defn- snapshot-rows-byte-length
   [rows]
@@ -190,9 +213,16 @@
               (fn [batch]
                 (p/let [datoms* (sync-large-title/offload-large-titles-in-datoms-batch
                                  repo graph-id batch aes-key sync-apply/upload-large-title!)
+                        {:keys [kept dropped]} (drop-oversized-upload-datoms datoms*)
+                        _ (when (seq dropped)
+                            (prn :db-sync/drop-oversized-upload-datoms
+                                 {:repo repo
+                                  :count (count dropped)
+                                  :attrs (vec (distinct (map :a dropped)))
+                                  :max-bytes (apply max (map :bytes dropped))}))
                         encrypted-datoms (if aes-key
-                                           (sync-crypt/<encrypt-datoms aes-key datoms*)
-                                           datoms*)
+                                           (sync-crypt/<encrypt-datoms aes-key kept)
+                                           kept)
                         tx-data (mapv sync-large-title/datom->tx encrypted-datoms)]
                   (d/transact! (:conn temp) tx-data {:initial-db? true})
                   nil))
