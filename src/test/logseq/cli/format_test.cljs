@@ -83,7 +83,15 @@
                                                 :context {:code :missing-auth
                                                           :hint "Run `logseq login` first."}}}
                                        {:output-format nil})]
-      (is (= "Error (missing-auth): missing auth\nHint: Run `logseq login` first." result)))))
+      (is (= "Error (missing-auth): missing auth\nHint: Run `logseq login` first." result))))
+
+  (testing "human error with hint directly on error map"
+    (let [result (format/format-result {:status :error
+                                        :error {:code :e2ee-password-not-found
+                                                :message "e2ee-password not found"
+                                                :hint "Provide --e2ee-password to verify and persist it."}}
+                                       {:output-format nil})]
+      (is (= "Error (e2ee-password-not-found): e2ee-password not found\nHint: Provide --e2ee-password to verify and persist it." result)))))
 
 (deftest test-format-graph-validation
   (testing "graph validation success prints validated"
