@@ -8,14 +8,14 @@ FORCE_KILL=0
 
 usage() {
   cat <<'EOF'
-Stop processes started by start-desktop-app-repl.sh.
+Stop all processes started by start-repl.sh.
 
 Usage:
-  cleanup-desktop-app-repl.sh [options]
+  cleanup-repl.sh [options]
 
 Options:
   --repo-root <path>    Logseq repository root (default: auto-detect from script location)
-  --force               Use SIGKILL if process does not stop gracefully
+  --force               Use SIGKILL if a process does not stop gracefully
   -h, --help            Show this help
 EOF
 }
@@ -42,13 +42,9 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-LOG_DIR="$REPO_ROOT/tmp/desktop-app-repl"
-DB_WORKER_LOG_DIR="$REPO_ROOT/tmp/db-worker-node-repl"
-SHARED_LOG_DIR="$REPO_ROOT/tmp/logseq-repl"
-SHADOW_PID_FILE="$LOG_DIR/shadow-watch.pid"
-DESKTOP_PID_FILE="$LOG_DIR/desktop-electron.pid"
-DB_WORKER_SHADOW_PID_FILE="$DB_WORKER_LOG_DIR/shadow-db-worker-node.pid"
-SHARED_SHADOW_PID_FILE="$SHARED_LOG_DIR/shared-shadow-watch.pid"
+LOG_DIR="$REPO_ROOT/tmp/logseq-repl"
+LEGACY_DESKTOP_LOG_DIR="$REPO_ROOT/tmp/desktop-app-repl"
+LEGACY_DB_LOG_DIR="$REPO_ROOT/tmp/db-worker-node-repl"
 
 is_running_pid() {
   local pid="$1"
@@ -94,7 +90,7 @@ stop_by_pid_file() {
   pid="$(read_pid "$pid_file" || true)"
 
   if [[ -z "${pid:-}" ]]; then
-    echo "$label: no pid file, nothing to stop"
+    rm -f "$pid_file"
     return 0
   fi
 
@@ -132,39 +128,47 @@ stop_by_pid_file() {
   rm -f "$pid_file"
 }
 
-stop_shadow_watch() {
-  local own_pid shared_pid other_pid
-  own_pid="$(read_pid "$SHADOW_PID_FILE" || true)"
-  shared_pid="$(read_pid "$SHARED_SHADOW_PID_FILE" || true)"
-  other_pid="$(read_pid "$DB_WORKER_SHADOW_PID_FILE" || true)"
-
-  if [[ -n "${own_pid:-}" && -n "${other_pid:-}" && "$own_pid" == "$other_pid" ]] && is_running_pid "$other_pid"; then
-    echo "shadow-cljs watch: shared with other workflows, leaving it running"
-    rm -f "$SHADOW_PID_FILE"
-    return 0
-  fi
-
-  if [[ -n "${shared_pid:-}" && -n "${other_pid:-}" && "$shared_pid" == "$other_pid" ]] && is_running_pid "$other_pid"; then
-    echo "shadow-cljs watch: shared with other workflows, leaving it running"
-    rm -f "$SHADOW_PID_FILE"
-    return 0
-  fi
-
-  if [[ -f "$SHARED_SHADOW_PID_FILE" ]]; then
-    stop_by_pid_file "$SHARED_SHADOW_PID_FILE" "shadow-cljs watch"
-    rm -f "$SHADOW_PID_FILE"
-  else
-    stop_by_pid_file "$SHADOW_PID_FILE" "shadow-cljs watch"
-  fi
+repo_owns_pid() {
+  local pid="$1"
+  local cwd
+  cwd="$(lsof -nP -a -p "$pid" -d cwd 2>/dev/null | awk 'NR > 1 {print $NF; exit}' || true)"
+  [[ "$cwd" == "$REPO_ROOT" ]]
 }
 
-if [[ ! -d "$LOG_DIR" && ! -d "$SHARED_LOG_DIR" ]]; then
+stop_repo_port_listener() {
+  local port="$1"
+  local pid
+
+  while read -r pid; do
+    [[ -n "${pid:-}" ]] || continue
+    if is_running_pid "$pid" && repo_owns_pid "$pid"; then
+      echo "port $port listener: stopping pid=$pid"
+      signal_process_group TERM "$pid"
+    fi
+  done < <(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+}
+
+if [[ ! -d "$LOG_DIR" && ! -d "$LEGACY_DESKTOP_LOG_DIR" && ! -d "$LEGACY_DB_LOG_DIR" ]]; then
   echo "State directory not found: $LOG_DIR"
   echo "Nothing to clean up."
   exit 0
 fi
 
-stop_by_pid_file "$DESKTOP_PID_FILE" "desktop-electron"
-stop_shadow_watch
+stop_by_pid_file "$LOG_DIR/db-worker-node.pid" "db-worker-node"
+stop_by_pid_file "$LOG_DIR/desktop-electron.pid" "desktop-electron"
+stop_by_pid_file "$LOG_DIR/shared-shadow-watch.pid" "shadow-cljs watch"
+
+stop_by_pid_file "$LEGACY_DB_LOG_DIR/db-worker-node.pid" "legacy db-worker-node"
+stop_by_pid_file "$LEGACY_DB_LOG_DIR/shadow-db-worker-node.pid" "legacy shadow-cljs watch"
+stop_by_pid_file "$LEGACY_DESKTOP_LOG_DIR/desktop-electron.pid" "legacy desktop-electron"
+stop_by_pid_file "$LEGACY_DESKTOP_LOG_DIR/shadow-watch.pid" "legacy shadow-cljs watch"
+
+rm -f "$LOG_DIR/db-worker-node.repo" "$LEGACY_DB_LOG_DIR/db-worker-node.repo"
+
+for port in 8701 3001 3002 9630 9631; do
+  stop_repo_port_listener "$port"
+done
+
+rm -f "$LOG_DIR"/*.pid "$LEGACY_DB_LOG_DIR"/*.pid "$LEGACY_DESKTOP_LOG_DIR"/*.pid 2>/dev/null || true
 
 echo "Cleanup done."
