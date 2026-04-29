@@ -25,3 +25,26 @@
                     2 {:db/ident :user.property/custom}}
           result (render/filter-tags [1 2] entities)]
       (is (= [2] result)))))
+
+(deftest block-content-nodes-use-auto-dir
+  (let [node (render/block-content-nodes
+              {:block/content "english then عربي"}
+              {:uuid->title {} :graph-uuid "g"}
+              1)]
+    (is (= "auto" (get-in node [1 :dir])))))
+
+(deftest block-content-from-ref-uses-auto-dir
+  (let [node (render/block-content-from-ref
+              {"source_block_content" "كلام عربي then english"}
+              {:uuid->title {} :graph-uuid "g"})]
+    (is (= "auto" (get-in node [1 :dir])))))
+
+(deftest render-properties-use-auto-dir
+  (let [props {:user.property/sample "english then عربي"}
+        ctx {:property-title-by-ident {}
+             :property-type-by-ident {}}
+        rendered (render/render-properties props ctx {})
+        entry (first (second rendered))
+        dd-node (nth entry 2)]
+    (is (= :dd.property-value (first dd-node)))
+    (is (= "auto" (get-in dd-node [1 :dir])))))
