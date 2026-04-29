@@ -229,7 +229,9 @@
                    (notification/show! (t :storage/sqlitedb-save-error error) :error) {}))))
 
   (<import-db [_this repo data]
-    (-> (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)
-        (p/catch (fn [error]
-                   (log/error :import-db-error repo error "SQLiteDB import error")
-                   (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))
+    (->
+     (p/let [result-str (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)]
+       (ldb/read-transit-str result-str))
+     (p/catch (fn [error]
+                (log/error :import-db-error repo error "SQLiteDB import error")
+                (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))
