@@ -514,29 +514,21 @@
       (string? command) command
       :else nil)))
 
-(defn- <encode-main-ipc-result
-  [result]
-  (if (or (p/promise? result)
-          (instance? js/Promise result))
-    (p/let [result' result]
-      (sqlite-util/write-transit-str result'))
-    (sqlite-util/write-transit-str result)))
-
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]
     (.handle ipcMain main-channel
              (fn [^js event args-js]
                (let [message* (volatile! nil)]
-                 (try
-                   (let [message (decode-main-ipc-message args-js)
-                         _ (vreset! message* message)
-                         result (handle (or (utils/get-win-from-sender event) window) message)]
-                     (<encode-main-ipc-result result))
-                   (catch :default e
-                     (let [command (command-name @message*)]
-                       (when-not (contains? #{"mkdir" "stat"} command)
-                         (logger/error "IPC error: " {:event event
-                                                      :args args-js}
-                                       e)))
-                     e)))))
+                 (->
+                  (p/let [message (decode-main-ipc-message args-js)
+                          _ (vreset! message* message)
+                          result (handle (or (utils/get-win-from-sender event) window) message)]
+                    (sqlite-util/write-transit-str result))
+                  (p/catch (fn [e]
+                             (let [command (command-name @message*)]
+                               (when-not (contains? #{"mkdir" "stat"} command)
+                                 (logger/error "IPC error: " {:event event
+                                                              :args args-js}
+                                               e)))
+                             (throw e)))))))
     #(.removeHandler ipcMain main-channel)))
