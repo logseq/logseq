@@ -5,7 +5,9 @@
             [logseq.cli.commands :as commands]
             [logseq.cli.main :as cli-main]
             [logseq.cli.test-helper :as test-helper]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            ["fs" :as fs]
+            ["path" :as node-path]))
 
 (deftest test-version-output
   (async done
@@ -159,14 +161,35 @@
 
 (deftest test-build-action-sync-error-produces-clean-output
   (async done
-         (-> (p/with-redefs [commands/build-action
-                             (fn [_ _]
-                               (throw (js/Error. "ENOENT: no such file or directory, open 'blah'")))]
-               (p/let [result (cli-main/run! ["upsert" "block" "-g" "test" "--blocks-file=blah"])]
-                 (is (= 1 (:exit-code result)))
-                 (is (string/includes? (:output result) "ENOENT"))
-                 (is (string/includes? (:output result) "blah"))
-                 (is (not (string/includes? (:output result) "at "))
-                     "output should not contain a stack trace")))
-             (p/catch (fn [e] (is false (str "unexpected error: " e))))
-             (p/finally (fn [] (done))))))
+         (let [tilde-dir (node-path/join (.cwd js/process) "~")
+               tmp-home (node-path/join (.cwd js/process) "tmp" "cli-main-home")]
+           (when (fs/existsSync tilde-dir)
+             (fs/rmSync tilde-dir #js {:recursive true :force true}))
+           (when (fs/existsSync tmp-home)
+             (fs/rmSync tmp-home #js {:recursive true :force true}))
+           (fs/mkdirSync tmp-home #js {:recursive true})
+           (-> (test-helper/with-js-property-override
+                js/process
+                "env"
+                (doto (js/Object.assign #js {} (.-env js/process))
+                  (aset "HOME" tmp-home)
+                  (js-delete "USERPROFILE"))
+                (fn []
+                  (p/with-redefs [commands/build-action
+                                  (fn [_ _]
+                                    (throw (js/Error. "ENOENT: no such file or directory, open 'blah'")))]
+                    (p/let [result (cli-main/run! ["upsert" "block" "-g" "test" "--blocks-file=blah"])]
+                      (is (= 1 (:exit-code result)))
+                      (is (string/includes? (:output result) "ENOENT"))
+                      (is (string/includes? (:output result) "blah"))
+                      (is (not (string/includes? (:output result) "at "))
+                          "output should not contain a stack trace")
+                      (is (not (fs/existsSync tilde-dir))
+                          "should not create a literal ~/ directory under cwd")))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (when (fs/existsSync tilde-dir)
+                              (fs/rmSync tilde-dir #js {:recursive true :force true}))
+                            (when (fs/existsSync tmp-home)
+                              (fs/rmSync tmp-home #js {:recursive true :force true}))
+                            (done)))))))
