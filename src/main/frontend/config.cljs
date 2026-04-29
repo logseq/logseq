@@ -28,20 +28,12 @@
 (def COGNITO-CLIENT-ID cognito-config/COGNITO-CLIENT-ID)
 (def OAUTH-DOMAIN cognito-config/OAUTH-DOMAIN)
 
-(if cognito-config/ENABLE-FILE-SYNC-PRODUCTION
-  (do (def API-DOMAIN "api.logseq.com")
-      (def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/")
-      (def REGION "us-east-1")
-      (def USER-POOL-ID "us-east-1_dtagLnju8")
-      (def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
-      (def default-publish-api-base "https://logseq.io"))
-
-  (do (def API-DOMAIN "api-dev.logseq.com")
-      (def COGNITO-IDP "https://cognito-idp.us-east-2.amazonaws.com/")
-      (def REGION "us-east-2")
-      (def USER-POOL-ID "us-east-2_kAqZcxIeM")
-      (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
-      (def default-publish-api-base "https://logseq-publish-staging.logseq.workers.dev")))
+(def API-DOMAIN "api.logseq.com")
+(def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/")
+(def REGION "us-east-1")
+(def USER-POOL-ID "us-east-1_dtagLnju8")
+(def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
+(def default-publish-api-base "https://logseq.io")
 
 ;; Enable for local development
 ;; (def default-publish-api-base "http://localhost:8787")
@@ -140,8 +132,7 @@
 
 (defn publish-api-base
   "Return the base URL for the single-page publish service. Uses the user-configured
-   URL from localStorage when set, otherwise the default from the ENABLE-FILE-SYNC-PRODUCTION
-   branch above. Read on each call so URL changes take effect without a restart."
+   URL from localStorage when set, otherwise the default url above. Read on each call so URL changes take effect without a restart."
   []
   (if-let [custom (get-custom-publish-server-url)]
     (custom-url->publish-api-base custom)
