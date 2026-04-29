@@ -576,6 +576,11 @@
   [repo]
   (db-sync/upload-graph! repo))
 
+(def-thread-api :thread-api/db-sync-create-remote-graph
+  [repo graph-e2ee? graph-ready-for-use?]
+  (db-sync/create-remote-graph! repo {:graph-e2ee? graph-e2ee?
+                                      :graph-ready-for-use? graph-ready-for-use?}))
+
 (def-thread-api :thread-api/db-sync-stop-upload
   [repo]
   (db-sync/stop-upload! repo))

@@ -11,8 +11,7 @@
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.large-title :as sync-large-title]
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
-   [frontend.worker.sync.util :refer [coerce-http-request fail-fast fetch-json
-                                      get-graph-id] :as sync-util]
+   [frontend.worker.sync.util :refer [coerce-http-request fail-fast fetch-json] :as sync-util]
    [logseq.common.config :as common-config]
    [logseq.db :as ldb]
    [logseq.db-sync.checksum :as sync-checksum]
@@ -245,8 +244,8 @@
     {:graph-id graph-id
      :graph-e2ee? graph-e2ee?}))
 
-(defn- <create-remote-graph!
-  [repo graph-e2ee?]
+(defn- <create-remote-graph-aux!
+  [repo {:keys [graph-e2ee? graph-ready-for-use?]}]
   (let [base (http-base-url)
         graph-name (some-> repo common-config/strip-leading-db-version-prefix)
         schema-version (some-> (worker-state/get-datascript-conn repo)
@@ -265,10 +264,12 @@
       :else
       (do
         (sync-util/require-auth-token! {:repo repo :field :auth-token})
-        (p/let [body (coerce-http-request :graphs/create
+        (p/let [_ (sync-crypt/ensure-user-rsa-keys! {:ensure-server? true})
+                body (coerce-http-request :graphs/create
                                           {:graph-name graph-name
                                            :schema-version schema-version
-                                           :graph-e2ee? graph-e2ee?})
+                                           :graph-e2ee? graph-e2ee?
+                                           :graph-ready-for-use? (not= false graph-ready-for-use?)})
                 _ (when (nil? body)
                     (fail-fast :db-sync/invalid-field {:repo repo
                                                        :field :create-graph-body}))
@@ -285,7 +286,9 @@
             (fail-fast :db-sync/missing-field {:repo repo
                                                :field :graph-id
                                                :op :create-graph}))
-          (persist-upload-graph-identity! repo graph-id graph-e2ee?))))))
+          (persist-upload-graph-identity! repo graph-id graph-e2ee?)
+          {:graph-id graph-id
+           :graph-e2ee? graph-e2ee?})))))
 
 (defn list-remote-graphs!
   []
@@ -308,52 +311,49 @@
                    :graph-name graph-name})))
 
 (defn- remote-graph-matches-upload-target?
-  [target-graph-name existing-graph-id {:keys [graph-id graph-name]}]
-  (or (and (seq existing-graph-id)
-           (= existing-graph-id graph-id))
-      (= target-graph-name graph-name)))
+  [target-graph-name {:keys [graph-name]}]
+  (= target-graph-name graph-name))
 
-(defn- <ensure-upload-graph-identity!
-  [repo]
-  (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)
-        local-graph-e2ee? (normalize-graph-e2ee? (sync-crypt/graph-e2ee? repo))
-        existing-graph-id (get-graph-id repo)]
-    (if-not (seq target-graph-name)
+(defn create-remote-graph!
+  [repo {:keys [graph-e2ee? graph-ready-for-use?]}]
+  (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)]
+    (cond
+      (not (seq target-graph-name))
       (fail-fast :db-sync/missing-field {:repo repo :field :graph-name})
+
+      :else
       (p/let [remote-graphs (list-remote-graphs!)
               matching-graphs (filterv (partial remote-graph-matches-upload-target?
-                                                target-graph-name
-                                                existing-graph-id)
+                                                target-graph-name)
                                        remote-graphs)]
         (cond
           (> (count matching-graphs) 1)
           (fail-fast :db-sync/ambiguous-graph-match {:repo repo
                                                      :graph-name target-graph-name
-                                                     :graph-id existing-graph-id
                                                      :match-count (count matching-graphs)})
 
           (= 1 (count matching-graphs))
-          (fail-upload-graph-already-exists! repo (select-keys (first matching-graphs)
-                                                               [:graph-id :graph-name]))
+          (fail-upload-graph-already-exists! repo {:graph-name target-graph-name})
 
           :else
-          (p/let [_ (sync-crypt/<preflight-upload-e2ee! repo local-graph-e2ee?)]
-            (<create-remote-graph! repo local-graph-e2ee?)))))))
+          (p/let [_ (sync-crypt/<preflight-upload-e2ee! repo graph-e2ee?)]
+            (<create-remote-graph-aux! repo {:graph-e2ee? graph-e2ee?
+                                             :graph-ready-for-use? graph-ready-for-use?})))))))
 
 (defn upload-graph!
   [repo]
   (let [base (http-base-url)
-        graph-id (get-graph-id repo)
         update-progress (fn [payload]
                           (worker-util/post-message :rtc-log
-                                                    (merge {:type :rtc.log/upload
-                                                            :graph-uuid graph-id}
+                                                    (merge {:type :rtc.log/upload}
                                                            payload)))]
     (if-not (seq base)
       (p/rejected (ex-info "db-sync missing base"
                            {:repo repo :base base}))
       (if-let [source-conn (worker-state/get-datascript-conn repo)]
-        (p/let [{:keys [graph-id graph-e2ee?]} (<ensure-upload-graph-identity! repo)]
+        (p/let [graph-e2ee? (normalize-graph-e2ee? (sync-crypt/graph-e2ee? repo))
+                {:keys [graph-id]} (create-remote-graph! repo {:graph-e2ee? graph-e2ee?
+                                                               :graph-ready-for-use? false})]
           (p/let [aes-key (when graph-e2ee?
                             (sync-crypt/<ensure-graph-aes-key repo graph-id))
                   _ (when (and graph-e2ee? (nil? aes-key))

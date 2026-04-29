@@ -391,6 +391,10 @@
   [repo]
   (sync-upload/upload-graph! repo))
 
+(defn create-remote-graph!
+  [repo opts]
+  (sync-upload/create-remote-graph! repo opts))
+
 (def list-remote-graphs! sync-upload/list-remote-graphs!)
 
 (defn stop-upload!
