@@ -67,13 +67,16 @@
       (is (false? (:ok? unset-result)))
       (is (= :invalid-options (get-in unset-result [:error :code])))))
 
-  (testing "sync start, download and ensure-keys actions carry e2ee-password option"
+  (testing "sync start, upload, download and ensure-keys actions carry e2ee-password option"
     (let [start-result (sync-command/build-action :sync-start {:e2ee-password "pw"} [] "logseq_db_demo")
+          upload-result (sync-command/build-action :sync-upload {:e2ee-password "pw"} [] "logseq_db_demo")
           download-result (sync-command/build-action :sync-download {:e2ee-password "pw"} [] "logseq_db_demo")
           ensure-keys-result (sync-command/build-action :sync-ensure-keys {:e2ee-password "pw"
                                                                             :upload-keys true} [] nil)]
       (is (true? (:ok? start-result)))
       (is (= "pw" (get-in start-result [:action :e2ee-password])))
+      (is (true? (:ok? upload-result)))
+      (is (= "pw" (get-in upload-result [:action :e2ee-password])))
       (is (true? (:ok? download-result)))
       (is (= "pw" (get-in download-result [:action :e2ee-password])))
       (is (true? (:ok? ensure-keys-result)))
@@ -507,6 +510,46 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-execute-sync-upload-verifies-and-persists-e2ee-password-when-provided
+  (async done
+         (let [invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (case method
+                                                    :thread-api/verify-and-save-e2ee-password
+                                                    (p/resolved nil)
+
+                                                    :thread-api/db-sync-upload-graph
+                                                    (p/resolved {:graph-id "graph-1"})
+
+                                                    (p/resolved nil)))]
+                 (p/let [result (sync-command/execute {:type :sync-upload
+                                                       :repo "logseq_db_demo"
+                                                       :e2ee-password "pw"}
+                                                      {:base-url "http://example"
+                                                       :root-dir "/tmp"
+                                                       :refresh-token "refresh-token"
+                                                       :id-token "runtime-token"})]
+                   (is (= :ok (:status result)))
+                   (is (some #(= [:thread-api/verify-and-save-e2ee-password false ["refresh-token" "pw"]]
+                                 %)
+                             @invoke-calls))
+                   (is (some #(= [:thread-api/db-sync-upload-graph false ["logseq_db_demo"]]
+                                 %)
+                             @invoke-calls))
+                   (let [method-index (fn [method]
+                                        (first (keep-indexed (fn [idx [method' _direct-pass? _args]]
+                                                              (when (= method method')
+                                                                idx))
+                                                            @invoke-calls)))]
+                     (is (< (method-index :thread-api/verify-and-save-e2ee-password)
+                            (method-index :thread-api/db-sync-upload-graph))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest test-execute-sync-upload-propagates-worker-error
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
@@ -530,6 +573,35 @@
                  (is (= :snapshot-upload-failed (get-in result [:error :code])))
                  (is (= 500 (get-in result [:error :context :status])))
                  (is (= "graph-1" (get-in result [:error :context :graph-id])))))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
+(deftest test-execute-sync-upload-surfaces-missing-e2ee-password-hint
+  (async done
+         (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                         (p/resolved (assoc config :base-url "http://example")))
+                             transport/invoke (fn [_ method _direct-pass? _args]
+                                                (case method
+                                                  :thread-api/set-db-sync-config
+                                                  (p/resolved nil)
+
+                                                  :thread-api/db-sync-upload-graph
+                                                  (p/rejected (ex-info "missing-e2ee-password"
+                                                                       {:code :db-sync/missing-e2ee-password
+                                                                        :field :e2ee-password
+                                                                        :reason :missing-persisted-password
+                                                                        :hint "Provide --e2ee-password to persist it."}))
+
+                                                  (p/resolved nil)))]
+               (p/let [result (execute-with-runtime-auth {:type :sync-upload
+                                                         :repo "logseq_db_demo"}
+                                                        {:root-dir "/tmp"})]
+                 (is (= :error (:status result)))
+                 (is (= :db-sync/missing-e2ee-password (get-in result [:error :code])))
+                 (is (= "missing-e2ee-password" (get-in result [:error :message])))
+                 (is (= "Provide --e2ee-password to persist it."
+                        (get-in result [:error :context :hint])))))
              (p/catch (fn [e]
                         (is false (str "unexpected error: " e))))
              (p/finally done))))
