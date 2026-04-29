@@ -18,7 +18,8 @@
    [logseq.db-sync.snapshot :as snapshot]
    [logseq.db.common.sqlite :as common-sqlite]
    [logseq.db.frontend.schema :as db-schema]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   [logseq.db :as ldb]))
 
 (defn- ->uint8 [data]
   (cond
@@ -453,6 +454,14 @@
                    (clear-import-state! import-id))
                  (throw error)))))
 
+(defn- set-graph-sync-metadata!
+  [conn graph-id graph-e2ee?]
+  (assert (uuid? graph-id))
+  (ldb/transact! conn [(ldb/kv :logseq.kv/graph-uuid graph-id)
+                       (ldb/kv :logseq.kv/graph-remote? true)
+                       (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))]
+    {:persist-op? false}))
+
 (defn download-graph-by-id!
   [repo graph-id graph-e2ee?]
   (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
@@ -508,6 +517,8 @@
                         _ (when-let [import-id @import-id*]
                             (reset! stage* :finalize-import)
                             (finalize-import! repo graph-id remote-tx import-id))]
+                  (when-let [conn (worker-state/get-datascript-conn repo)]
+                    (set-graph-sync-metadata! conn (uuid graph-id) graph-e2ee?))
                   {:repo repo
                    :graph-id graph-id
                    :remote-tx remote-tx
