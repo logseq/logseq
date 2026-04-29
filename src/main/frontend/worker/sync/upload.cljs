@@ -307,28 +307,29 @@
                    :graph-id graph-id
                    :graph-name graph-name})))
 
+(defn- remote-graph-matches-upload-target?
+  [target-graph-name existing-graph-id {:keys [graph-id graph-name]}]
+  (or (and (seq existing-graph-id)
+           (= existing-graph-id graph-id))
+      (= target-graph-name graph-name)))
+
 (defn- <ensure-upload-graph-identity!
   [repo]
   (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)
         local-graph-e2ee? (normalize-graph-e2ee? (sync-crypt/graph-e2ee? repo))
         existing-graph-id (get-graph-id repo)]
-    (cond
-      (not (seq target-graph-name))
+    (if-not (seq target-graph-name)
       (fail-fast :db-sync/missing-field {:repo repo :field :graph-name})
-
-      existing-graph-id
-      (fail-upload-graph-already-exists! repo {:graph-id existing-graph-id
-                                               :graph-name target-graph-name})
-
-      :else
       (p/let [remote-graphs (list-remote-graphs!)
-              matching-graphs (filterv (fn [{:keys [graph-name]}]
-                                         (= target-graph-name graph-name))
+              matching-graphs (filterv (partial remote-graph-matches-upload-target?
+                                                target-graph-name
+                                                existing-graph-id)
                                        remote-graphs)]
         (cond
           (> (count matching-graphs) 1)
           (fail-fast :db-sync/ambiguous-graph-match {:repo repo
                                                      :graph-name target-graph-name
+                                                     :graph-id existing-graph-id
                                                      :match-count (count matching-graphs)})
 
           (= 1 (count matching-graphs))
@@ -336,7 +337,8 @@
                                                                [:graph-id :graph-name]))
 
           :else
-          (<create-remote-graph! repo local-graph-e2ee?))))))
+          (p/let [_ (sync-crypt/<preflight-upload-e2ee! repo local-graph-e2ee?)]
+            (<create-remote-graph! repo local-graph-e2ee?)))))))
 
 (defn upload-graph!
   [repo]
