@@ -512,38 +512,35 @@
 
 (deftest ensure-server-reuses-discovered-server-across-symlinked-root-dir-spellings
   (async done
-         (let [repo (str "logseq_db_symlink_dir_" (subs (str (random-uuid)) 0 8))
+         (let [base-dir (node-path/resolve (node-helper/create-tmp-dir "cli-server-symlink-root-dir"))
+               real-root-dir (node-path/join base-dir "real-root-dir")
+               symlink-root-dir (node-path/join base-dir "symlink-root-dir")
+               symlink-type (if (= "win32" (.-platform js/process)) "junction" "dir")
+               repo (str "logseq_db_symlink_dir_" (subs (str (random-uuid)) 0 8))
                lock {:repo repo
                      :pid (.-pid js/process)
                      :lock-id "symlink-lock"
                      :owner-source :cli}
                spawned? (atom false)]
-           (-> (test-helper/with-js-property-override
-                 fs
-                 "realpathSync"
-                 (fn [path]
-                   (case path
-                     "/var/tmp/shared-graphs" "/private/var/tmp/shared-graphs"
-                     "/private/var/tmp/shared-graphs" "/private/var/tmp/shared-graphs"
-                     path))
-                 (fn []
-                   (p/with-redefs [daemon/read-lock (fn [_] lock)
-                                   daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
-                                   daemon/spawn-server! (fn [_]
-                                                          (reset! spawned? true)
-                                                          nil)
-                                   cli-server/discover-servers (fn [_]
-                                                                (p/resolved [{:repo repo
-                                                                              :host "127.0.0.1"
-                                                                              :port 9322
-                                                                              :pid (.-pid js/process)
-                                                                              :owner-source :cli
-                                                                              :revision nil
-                                                                              :status :ready
-                                                                              :root-dir "/var/tmp/shared-graphs"}]))
-                                   daemon/wait-for-ready (fn [_] (p/resolved true))]
-                     (cli-server/ensure-server! {:root-dir "/private/var/tmp/shared-graphs"}
-                                                repo))))
+           (fs/mkdirSync real-root-dir #js {:recursive true})
+           (fs/symlinkSync real-root-dir symlink-root-dir symlink-type)
+           (-> (p/with-redefs [daemon/read-lock (fn [_] lock)
+                               daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/spawn-server! (fn [_]
+                                                      (reset! spawned? true)
+                                                      nil)
+                               cli-server/discover-servers (fn [_]
+                                                            (p/resolved [{:repo repo
+                                                                          :host "127.0.0.1"
+                                                                          :port 9322
+                                                                          :pid (.-pid js/process)
+                                                                          :owner-source :cli
+                                                                          :revision nil
+                                                                          :status :ready
+                                                                          :root-dir symlink-root-dir}]))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir real-root-dir}
+                                            repo))
                (p/then (fn [config]
                          (is (false? @spawned?))
                          (is (= "http://127.0.0.1:9322" (:base-url config)))
