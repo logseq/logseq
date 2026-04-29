@@ -11,13 +11,12 @@
     (sqlite-util/read-transit-str result)
     result))
 
-;; TODO: handle errors
 (defn ipc
   [& args]
   (when (util/electron?)
     (p/let [payload (sqlite-util/write-transit-str (vec args))
-            result (js/window.apis.doAction payload)]
-      (maybe-read-transit result))))
+            maybe-result-str (js/window.apis.doAction payload)]
+      (maybe-read-transit maybe-result-str))))
 
 (defn invoke
   [channel & args]
