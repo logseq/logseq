@@ -529,6 +529,6 @@
                                (when-not (contains? #{"mkdir" "stat"} command)
                                  (logger/error "IPC error: " {:event event
                                                               :args args-js}
-                                               e)))
-                             (throw e)))))))
+                                               e)
+                                 (throw e)))))))))
     #(.removeHandler ipcMain main-channel)))
