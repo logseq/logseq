@@ -1,8 +1,10 @@
 (ns logseq.cli.command.sync
   "Sync-related CLI commands."
   (:require [clojure.string :as string]
+            [lambdaisland.glogi :as log]
             [logseq.cli.auth :as cli-auth]
             [logseq.cli.command.core :as core]
+            [logseq.cli.common :as cli-common]
             [logseq.cli.config :as cli-config]
             [logseq.cli.output-mode :as output-mode]
             [logseq.cli.server :as cli-server]
@@ -602,48 +604,94 @@
              (= graph-id (:graph-uuid payload)))
     (:message payload)))
 
+(defn- cleanup-error-details
+  [error]
+  (let [data (ex-data error)]
+    (cond-> {:code (or (:code data) :exception)
+             :message (or (ex-message error) (str error))}
+      (seq data) (assoc :context data))))
+
+(defn- <cleanup-created-download-graph!
+  [config repo]
+  (-> (p/let [stop-result (cli-server/stop-server! config repo)
+              _ (when-not (or (:ok? stop-result)
+                              (= :server-not-found (get-in stop-result [:error :code])))
+                  (throw (ex-info (get-in stop-result [:error :message] "failed to stop server")
+                                  {:code (get-in stop-result [:error :code])
+                                   :repo repo
+                                   :stage :stop-server
+                                   :stop-result stop-result})))
+              graphs-after-stop (cli-server/list-graphs config)
+              graph-exists? (some #(= (core/repo->graph repo) %) graphs-after-stop)
+              unlinked-dir (when graph-exists?
+                             (cli-common/unlink-graph! (cli-server/graphs-dir config) repo))
+              _ (when (and graph-exists? (not unlinked-dir))
+                  (throw (ex-info "unable to remove graph"
+                                  {:code :graph-not-removed
+                                   :repo repo
+                                   :stage :unlink-graph})))]
+        {:status :ok
+         :data {:repo repo
+                :unlinked-dir unlinked-dir}})
+      (p/catch (fn [error]
+                 (log/warn :cli-sync-download-cleanup-failed
+                           {:repo repo
+                            :error (cleanup-error-details error)})
+                 {:status :error
+                  :error (cleanup-error-details error)}))))
+
 (defn- execute-sync-download
   [action config]
   (let [config' (download-config config)
         progress-enabled? (sync-download-progress-enabled? action config')]
-    (-> (p/let [remote-graphs (invoke-global config'
-                                             :thread-api/db-sync-list-remote-graphs
-                                             [])
-                remote-graph (some (fn [graph]
-                                     (when (= (:graph action) (:graph-name graph))
-                                       graph))
-                                   remote-graphs)]
-          (if-not remote-graph
-            {:status :error
-             :error {:code :remote-graph-not-found
-                     :message (str "remote graph not found: " (:graph action))
-                     :graph (:graph action)}}
-            (p/let [cfg (cli-server/ensure-server! config' (:repo action))
-                    _ (<sync-worker-runtime! cfg config')
-                    _ (<ensure-e2ee-password-available! cfg config' action (true? (:graph-e2ee? remote-graph)))
-                    _ (ensure-empty-download-db! cfg (:repo action))
-                    download-cfg (sync-download-invoke-config cfg)
-                    graph-id (:graph-id remote-graph)
-                    events-sub (when progress-enabled?
-                                 (transport/connect-events!
-                                  download-cfg
-                                  (fn [event-type payload]
-                                    (when-let [message (download-progress-message graph-id event-type payload)]
-                                      (print-progress-line! message)))))
-                    result (-> (transport/invoke download-cfg :thread-api/db-sync-download-graph-by-id false
-                                                 [(:repo action) graph-id (:graph-e2ee? remote-graph)])
-                               (p/finally (fn []
-                                            (when-let [close! (:close! events-sub)]
-                                              (close!)))))]
-              {:status :ok
-               :data (if (map? result)
-                       result
-                       {:result result})})))
-        (p/catch (fn [error]
-                   (if (= :e2ee-password-not-found (:code (ex-data error)))
-                     (e2ee-password-not-found-error :sync-download (:repo action))
-                     (exception->error error {:repo (:repo action)
-                                              :graph (:graph action)})))))))
+    (p/let [local-graphs-before (cli-server/list-graphs config')
+            graph-existed-before? (some #(= (:graph action) %) local-graphs-before)]
+      (-> (p/let [remote-graphs (invoke-global config'
+                                               :thread-api/db-sync-list-remote-graphs
+                                               [])
+                  remote-graph (some (fn [graph]
+                                       (when (= (:graph action) (:graph-name graph))
+                                         graph))
+                                     remote-graphs)]
+            (if-not remote-graph
+              {:status :error
+               :error {:code :remote-graph-not-found
+                       :message (str "remote graph not found: " (:graph action))
+                       :graph (:graph action)}}
+              (p/let [cfg (cli-server/ensure-server! config' (:repo action))
+                      _ (<sync-worker-runtime! cfg config')
+                      _ (<ensure-e2ee-password-available! cfg config' action (true? (:graph-e2ee? remote-graph)))
+                      _ (ensure-empty-download-db! cfg (:repo action))
+                      download-cfg (sync-download-invoke-config cfg)
+                      graph-id (:graph-id remote-graph)
+                      events-sub (when progress-enabled?
+                                   (transport/connect-events!
+                                    download-cfg
+                                    (fn [event-type payload]
+                                      (when-let [message (download-progress-message graph-id event-type payload)]
+                                        (print-progress-line! message)))))
+                      result (-> (transport/invoke download-cfg :thread-api/db-sync-download-graph-by-id false
+                                                   [(:repo action) graph-id (:graph-e2ee? remote-graph)])
+                                 (p/finally (fn []
+                                              (when-let [close! (:close! events-sub)]
+                                                (close!)))))]
+                {:status :ok
+                 :data (if (map? result)
+                         result
+                         {:result result})})))
+          (p/then (fn [result]
+                    (if (and (not graph-existed-before?)
+                             (= :error (:status result)))
+                      (p/let [_ (<cleanup-created-download-graph! config' (:repo action))]
+                        result)
+                      result)))
+          (p/catch (fn [error]
+                     (p/let [_ (when-not graph-existed-before?
+                                  (<cleanup-created-download-graph! config' (:repo action)))]
+                       (if (= :e2ee-password-not-found (:code (ex-data error)))
+                         (e2ee-password-not-found-error :sync-download (:repo action))
+                         (exception->error error {:repo (:repo action)
+                                                  :graph (:graph action)})))))))))
 
 (defn- run-sync-status
   [action config]
