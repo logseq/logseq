@@ -896,7 +896,7 @@
           backup-db-fn (get-in (platform/current) [:sqlite :backup-db])]
       (when-not db
         (throw (ex-info "graph not opened" {:code :graph-not-opened
-                                             :repo repo})))
+                                            :repo repo})))
       (when-not (fn? backup-db-fn)
         (throw (ex-info "platform sqlite backup not supported"
                         {:code :backup-not-supported
