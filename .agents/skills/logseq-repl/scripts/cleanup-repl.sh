@@ -163,7 +163,9 @@ stop_by_pid_file "$LEGACY_DB_LOG_DIR/shadow-db-worker-node.pid" "legacy shadow-c
 stop_by_pid_file "$LEGACY_DESKTOP_LOG_DIR/desktop-electron.pid" "legacy desktop-electron"
 stop_by_pid_file "$LEGACY_DESKTOP_LOG_DIR/shadow-watch.pid" "legacy shadow-cljs watch"
 
-rm -f "$LOG_DIR/db-worker-node.repo" "$LEGACY_DB_LOG_DIR/db-worker-node.repo"
+rm -f "$LOG_DIR/db-worker-node.repo" \
+      "$LOG_DIR/db-worker-node.options.json" \
+      "$LEGACY_DB_LOG_DIR/db-worker-node.repo"
 
 for port in 8701 3001 3002 9630 9631; do
   stop_repo_port_listener "$port"

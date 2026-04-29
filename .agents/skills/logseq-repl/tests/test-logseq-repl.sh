@@ -19,10 +19,12 @@ FAIL_COUNT=0
 create_fake_env() {
   TEST_ROOT="$(mktemp -d)"
   REPO_ROOT="$TEST_ROOT/repo"
+  DB_ROOT_DIR="$TEST_ROOT/logseq-root"
   BIN_DIR="$TEST_ROOT/bin"
   CMD_LOG="$TEST_ROOT/commands.log"
 
-  mkdir -p "$REPO_ROOT/static" "$BIN_DIR"
+  mkdir -p "$REPO_ROOT/static" "$DB_ROOT_DIR" "$BIN_DIR"
+  DB_ROOT_DIR="$(cd "$DB_ROOT_DIR" && pwd -P)"
   : > "$CMD_LOG"
 
   cat > "$BIN_DIR/pnpm" <<'EOF'
@@ -125,6 +127,48 @@ EOF
 set -euo pipefail
 
 echo "node $*" >> "$FAKE_CMD_LOG"
+
+repo=""
+root_dir=""
+owner_source=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    ./static/db-worker-node.js)
+      shift
+      ;;
+    --repo)
+      repo="${2:-}"
+      shift 2
+      ;;
+    --root-dir)
+      root_dir="${2:-}"
+      shift 2
+      ;;
+    --owner-source)
+      owner_source="${2:-}"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$repo" ]]; then
+  echo "repo is required" >&2
+  exit 1
+fi
+
+if [[ -z "$root_dir" ]]; then
+  echo "root-dir is required" >&2
+  exit 1
+fi
+
+if [[ "$owner_source" != "cli" ]]; then
+  echo "owner-source cli is required" >&2
+  exit 1
+fi
+
 echo "shadow-cljs - #6 ready!"
 while true; do sleep 1; done
 EOF
@@ -181,7 +225,7 @@ start_launches_all_repl_processes_without_attaching_test() {
   create_fake_env
   trap cleanup_fake_env RETURN
 
-  bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --repo demo > "$TEST_ROOT/start.log" 2>&1
+  bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --root-dir "$DB_ROOT_DIR" --repo demo > "$TEST_ROOT/start.log" 2>&1
 
   assert_contains "Verifying CLJS REPL targets ..." "$TEST_ROOT/start.log"
   assert_contains "REPL verification passed for :app" "$TEST_ROOT/start.log"
@@ -193,7 +237,7 @@ start_launches_all_repl_processes_without_attaching_test() {
   assert_contains "pnpm exec shadow-cljs cljs-repl db-worker-node" "$TEST_ROOT/start.log"
   assert_contains "pnpm watch" "$CMD_LOG"
   assert_contains "pnpm dev-electron-app" "$CMD_LOG"
-  assert_contains "node ./static/db-worker-node.js --repo demo" "$CMD_LOG"
+  assert_contains "node ./static/db-worker-node.js --repo demo --root-dir $DB_ROOT_DIR --owner-source cli" "$CMD_LOG"
   assert_file_exists "$REPO_ROOT/tmp/logseq-repl/shared-shadow-watch.pid"
   assert_file_exists "$REPO_ROOT/tmp/logseq-repl/desktop-electron.pid"
   assert_file_exists "$REPO_ROOT/tmp/logseq-repl/db-worker-node.pid"
@@ -250,15 +294,34 @@ start_reuses_all_running_processes_test() {
   create_fake_env
   trap cleanup_fake_env RETURN
 
-  bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --repo demo > "$TEST_ROOT/first.log" 2>&1
-  bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --repo demo > "$TEST_ROOT/second.log" 2>&1
+  bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --root-dir "$DB_ROOT_DIR" --repo demo > "$TEST_ROOT/first.log" 2>&1
+  bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --root-dir "$DB_ROOT_DIR" --repo demo > "$TEST_ROOT/second.log" 2>&1
 
   assert_equals "1" "$(grep -c '^pnpm watch$' "$CMD_LOG")"
   assert_equals "1" "$(grep -c '^pnpm dev-electron-app$' "$CMD_LOG")"
-  assert_equals "1" "$(grep -c '^node ./static/db-worker-node.js --repo demo$' "$CMD_LOG")"
+  assert_equals "1" "$(grep -Fc "node ./static/db-worker-node.js --repo demo --root-dir $DB_ROOT_DIR --owner-source cli" "$CMD_LOG")"
   assert_contains "Reusing shared shadow-cljs watch" "$TEST_ROOT/second.log"
   assert_contains "Reusing Desktop dev app" "$TEST_ROOT/second.log"
   assert_contains "Reusing db-worker-node runtime" "$TEST_ROOT/second.log"
+}
+
+start_restarts_db_worker_when_root_dir_changes_test() {
+  create_fake_env
+  trap cleanup_fake_env RETURN
+
+  local first_root second_root
+  first_root="$TEST_ROOT/logseq-root-a"
+  second_root="$TEST_ROOT/logseq-root-b"
+  mkdir -p "$first_root" "$second_root"
+  first_root="$(cd "$first_root" && pwd -P)"
+  second_root="$(cd "$second_root" && pwd -P)"
+
+  bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --root-dir "$first_root" --repo demo > "$TEST_ROOT/first.log" 2>&1
+  bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --root-dir "$second_root" --repo demo > "$TEST_ROOT/second.log" 2>&1
+
+  assert_equals "1" "$(grep -Fc "node ./static/db-worker-node.js --repo demo --root-dir $first_root --owner-source cli" "$CMD_LOG")"
+  assert_equals "1" "$(grep -Fc "node ./static/db-worker-node.js --repo demo --root-dir $second_root --owner-source cli" "$CMD_LOG")"
+  assert_contains "Stopping existing db-worker-node" "$TEST_ROOT/second.log"
 }
 
 start_fails_when_app_runtime_is_ambiguous_test() {
@@ -266,7 +329,7 @@ start_fails_when_app_runtime_is_ambiguous_test() {
   trap cleanup_fake_env RETURN
   export FAKE_APP_RUNTIME_COUNT=2
 
-  if bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --repo demo > "$TEST_ROOT/start.log" 2>&1; then
+  if bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --root-dir "$DB_ROOT_DIR" --repo demo > "$TEST_ROOT/start.log" 2>&1; then
     fail "expected start script to fail when more than one :app runtime exists"
   fi
 
@@ -277,7 +340,7 @@ cleanup_stops_all_repl_processes_test() {
   create_fake_env
   trap cleanup_fake_env RETURN
 
-  bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --repo demo > "$TEST_ROOT/start.log" 2>&1
+  bash "$START_SCRIPT" --repo-root "$REPO_ROOT" --root-dir "$DB_ROOT_DIR" --repo demo > "$TEST_ROOT/start.log" 2>&1
 
   local watch_pid desktop_pid db_pid
   watch_pid="$(tr -d '[:space:]' < "$REPO_ROOT/tmp/logseq-repl/shared-shadow-watch.pid")"
@@ -360,6 +423,7 @@ run_test "start launches all REPL processes without attaching" start_launches_al
 run_test "verify script checks all targets" verify_script_checks_all_targets_test
 run_test "verify script fails when target REPL fails" verify_script_fails_when_target_repl_fails_test
 run_test "start reuses all running processes" start_reuses_all_running_processes_test
+run_test "start restarts db-worker when root-dir changes" start_restarts_db_worker_when_root_dir_changes_test
 run_test "start fails when app runtime is ambiguous" start_fails_when_app_runtime_is_ambiguous_test
 run_test "cleanup stops all REPL processes" cleanup_stops_all_repl_processes_test
 run_test "cleanup removes legacy state files" cleanup_removes_legacy_state_files_test
