@@ -284,16 +284,25 @@
 
 (defn unregister_plugin_simple_command
   [pid]
-  ;; remove simple commands
-  (plugin-handler/unregister-plugin-simple-command pid)
+  (let [pid-key (keyword pid)
+        pid-name (name pid-key)
+        command-ids (->> (get-in @state/state [:plugin/simple-commands pid-key])
+                         (keep (fn [[_type {:keys [key]} _action _pid]]
+                                 (when key
+                                   (keyword (str "plugin." pid-name "/" key)))))
+                         distinct)
+        cmds-matched (->> (vals @shortcut-config/*shortcut-cmds)
+                          (filter #(string/includes? (str (:id %)) (str "plugin." pid-name))))]
+    ;; remove simple commands
+    (plugin-handler/unregister-plugin-simple-command pid-key)
 
-  ;; remove palette commands
-  (let [cmds-matched (->> (vals @shortcut-config/*shortcut-cmds)
-                          (filter #(string/includes? (str (:id %)) (str "plugin." pid))))]
+    ;; remove palette commands, including palette-only commands without shortcuts
+    (doseq [id command-ids]
+      (palette-handler/unregister id))
+
+    ;; remove keybinding commands
     (when (seq cmds-matched)
       (doseq [cmd cmds-matched]
-        (palette-handler/unregister (:id cmd))
-        ;; remove keybinding commands
         (when (seq (:shortcut cmd))
           (println :shortcut/unregister-shortcut cmd)
           (st/unregister-shortcut! (:handler-id cmd) (:id cmd)))))))
