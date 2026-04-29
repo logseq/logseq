@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [frontend.worker.db-worker-node-lock :as db-lock]
             [lambdaisland.glogi :as log]
-            [logseq.cli.config :as cli-config]
             [logseq.cli.profile :as profile]
             [logseq.cli.root-dir :as root-dir]
             [logseq.common.config :as common-config]
@@ -55,7 +54,7 @@
 
 (defn- server-list-path
   [config]
-  (cli-config/server-list-path (resolve-root-dir config)))
+  (server-list/path (resolve-root-dir config)))
 
 (defn db-worker-dev-script-path
   []
@@ -145,12 +144,11 @@
     (assoc payload :http-status status)))
 
 (defn- spawn-server!
-  [{:keys [repo root-dir owner-source create-empty-db? server-list-file]}]
+  [{:keys [repo root-dir owner-source create-empty-db?]}]
   (daemon/spawn-server! {:script (db-worker-script-path)
                          :repo repo
                          :root-dir root-dir
                          :owner-source owner-source
-                         :server-list-file server-list-file
                          :create-empty-db? create-empty-db?}))
 
 (defn- rewrite-lock-owner-source!
@@ -232,8 +230,7 @@
   (let [root-dir (resolve-root-dir config)
         path (lock-path root-dir repo)
         requester-owner (requester-owner-source config)
-        profile-session (:profile-session config)
-        server-list-file (server-list-path config)]
+        profile-session (:profile-session config)]
     (profile/time! profile-session "server.ensure-started"
                    (fn []
                      (ensure-repo-dir! root-dir repo)
@@ -248,7 +245,6 @@
                                                   (spawn-server! {:repo repo
                                                                   :root-dir root-dir
                                                                   :owner-source requester-owner
-                                                                  :server-list-file server-list-file
                                                                   :create-empty-db? (:create-empty-db? config)})))
                                  (-> (profile/time! profile-session
                                                     "server.wait-lock"

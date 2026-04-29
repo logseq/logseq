@@ -1,6 +1,7 @@
 (ns electron.db-worker-manager-test
   (:require [cljs.test :refer [async deftest is]]
             [electron.db-worker :as db-worker]
+            [logseq.cli.server :as cli-server]
             [promesa.core :as p]))
 
 (defn- runtime
@@ -235,6 +236,25 @@
             (is (empty? @stop-calls))
             (is (nil? (get-in state [:repos "graph-a"])))
             (is (nil? (get-in state [:window->repo :window-1]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest managed-daemon-start-uses-cli-shared-server-path-with-electron-owner
+  (async done
+    (let [captured (atom nil)]
+      (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
+                                                      (reset! captured {:config config
+                                                                        :repo repo})
+                                                      (p/resolved {:base-url "http://127.0.0.1:9300"
+                                                                   :owned? true}))]
+            ((get db-worker/manager :start-daemon!) "graph-a"))
+          (p/then (fn [runtime-info]
+                    (is (= "graph-a" (:repo @captured)))
+                    (is (= :electron (get-in @captured [:config :owner-source])))
+                    (is (nil? (get-in @captured [:config :server-list-file])))
+                    (is (= "http://127.0.0.1:9300" (:base-url runtime-info)))
+                    (is (= true (:owned? runtime-info)))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))

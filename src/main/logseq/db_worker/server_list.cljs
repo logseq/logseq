@@ -4,6 +4,12 @@
             ["fs" :as fs]
             ["path" :as node-path]))
 
+(defn path
+  [root-dir-path]
+  (when-not (seq root-dir-path)
+    (throw (js/Error. "root-dir is required")))
+  (node-path/join root-dir-path "server-list"))
+
 (defn- parse-int
   [value]
   (when (re-matches #"\d+" value)
@@ -21,39 +27,39 @@
              :port port}))))))
 
 (defn read-entries
-  [path]
-  (if (and (seq path) (fs/existsSync path))
-    (->> (.toString (fs/readFileSync path) "utf8")
+  [file-path]
+  (if (and (seq file-path) (fs/existsSync file-path))
+    (->> (.toString (fs/readFileSync file-path) "utf8")
          string/split-lines
          (keep parse-line)
          vec)
     []))
 
 (defn rewrite-entries!
-  [path entries]
-  (when (seq path)
-    (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
+  [file-path entries]
+  (when (seq file-path)
+    (fs/mkdirSync (node-path/dirname file-path) #js {:recursive true})
     (let [payload (if (seq entries)
                     (str (string/join "\n" (map (fn [{:keys [pid port]}]
                                                      (str pid " " port))
                                                    entries))
                          "\n")
                     "")]
-      (fs/writeFileSync path payload "utf8"))))
+      (fs/writeFileSync file-path payload "utf8"))))
 
 (defn append-entry!
-  [path {:keys [pid port] :as entry}]
-  (when (and (seq path) (pos-int? pid) (pos-int? port))
-    (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
-    (fs/appendFileSync path (str pid " " port "\n") "utf8")
+  [file-path {:keys [pid port] :as entry}]
+  (when (and (seq file-path) (pos-int? pid) (pos-int? port))
+    (fs/mkdirSync (node-path/dirname file-path) #js {:recursive true})
+    (fs/appendFileSync file-path (str pid " " port "\n") "utf8")
     entry))
 
 (defn remove-entry!
-  [path {:keys [pid port]}]
-  (when (seq path)
-    (let [entries (->> (read-entries path)
+  [file-path {:keys [pid port]}]
+  (when (seq file-path)
+    (let [entries (->> (read-entries file-path)
                        (remove (fn [entry]
                                  (and (= pid (:pid entry))
                                       (= port (:port entry)))))
                        vec)]
-      (rewrite-entries! path entries))))
+      (rewrite-entries! file-path entries))))

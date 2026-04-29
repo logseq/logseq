@@ -13,7 +13,7 @@
   (when-let [v (get (ns-interns 'logseq.db-worker.daemon) sym)]
     (apply @v args)))
 
-(deftest spawn-server-uses-detached-process-and-no-host-port-args
+(deftest spawn-server-ignores-server-list-file-and-uses-detached-process
   (let [captured (atom nil)
         unref-called? (atom false)
         original-spawn (.-spawn child-process)]
@@ -32,8 +32,8 @@
       (is (= "/tmp/db-worker-node.js" (first (:args @captured))))
       (is (some #{"--repo"} (:args @captured)))
       (is (some #{"--root-dir"} (:args @captured)))
-      (is (some #{"--server-list-file"} (:args @captured)))
-      (is (some #{"/tmp/server-list"} (:args @captured)))
+      (is (not-any? #{"--server-list-file"} (:args @captured)))
+      (is (not-any? #{"/tmp/server-list"} (:args @captured)))
       (is (not-any? #{"--host" "--port"} (:args @captured)))
       (is (= true (get-in @captured [:opts :detached])))
       (is (= "1" (get-in @captured [:opts :env :ELECTRON_RUN_AS_NODE])))
