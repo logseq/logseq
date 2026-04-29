@@ -17,7 +17,7 @@
 (defn- build-test-platform
   ([]
    (build-test-platform {}))
-  ([{:keys [post-message! remove-vfs! runtime]
+  ([{:keys [post-message! remove-vfs! runtime import-db]
      :or {post-message! (fn [& _] nil)
           remove-vfs! (fn [_] nil)
           runtime :browser}}]
@@ -30,7 +30,7 @@
               :db-exists? (fn [_] (p/resolved false))
               :resolve-db-path (fn [_repo _pool path] path)
               :export-file (fn [_pool _path] (p/resolved (js/Uint8Array. 0)))
-              :import-db (fn [_pool _path _data] (p/resolved nil))
+              :import-db (or import-db (fn [_pool _path _data] (p/resolved nil)))
               :remove-vfs! remove-vfs!
               :read-text! (fn [_path] (p/resolved ""))
               :write-text! (fn [_path _text] (p/resolved nil))
@@ -113,6 +113,27 @@
     (is (contains? api-map :thread-api/db-sync-grant-graph-access))
     (is (contains? api-map :thread-api/db-sync-ensure-user-rsa-keys))
     (is (contains? api-map :thread-api/db-sync-upload-graph))))
+
+(deftest import-db-rejects-non-sqlite-payload
+  (async done
+    (restoring-worker-state
+     (fn []
+       (let [import-db! (get @thread-api/*thread-apis :thread-api/import-db)
+             imports (atom [])
+             invalid-payload (.encode (js/TextEncoder.) "[\"~#js/Error\",[\"^ \",\"~:message\",\"File not found: /db.sqlite\"]]")]
+         (platform/set-platform!
+          (build-test-platform
+           {:import-db (fn [_pool _path data]
+                         (swap! imports conj data)
+                         (p/resolved nil))}))
+         (-> (import-db! test-repo invalid-payload)
+             (p/then (fn [_]
+                       (is false "expected import-db to reject invalid payload")))
+             (p/catch (fn [error]
+                        (is (= :invalid-sqlite-import-data (:code (ex-data error))))))
+             (p/finally (fn []
+                          (is (empty? @imports))
+                          (done)))))))))
 
 (deftest set-db-sync-config-keeps-only-non-auth-fields-test
   (let [set-config! (get @thread-api/*thread-apis :thread-api/set-db-sync-config)

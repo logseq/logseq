@@ -3,7 +3,10 @@
   (:require [clojure.string :as string]
             [frontend.persist-db.protocol :as protocol]
             [logseq.db :as ldb]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [lambdaisland.glogi :as log]
+            [frontend.handler.notification :as notification]
+            [frontend.context.i18n :refer [t]]))
 
 (defn- normalize-base-url
   [base-url]
@@ -182,7 +185,12 @@
         data)))
 
   (<import-db [_this repo data]
-    (invoke! client "thread-api/import-db" true [repo data])))
+    (->
+     (p/let [result-str (invoke! client "thread-api/import-db" true [repo data])]
+       (ldb/read-transit-str result-str))
+     (p/catch (fn [error]
+                (log/error :import-db-error repo error "SQLiteDB import error")
+                (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))
 
 (defn start!
   [{:keys [base-url auth-token event-handler] :as opts}]
