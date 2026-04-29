@@ -260,6 +260,7 @@ export type CommandPlacement =
   | 'simple'
 export type CommandContext<E = any> = IHookEvent & E & Record<string, any>
 export type CommandCallback<E = any> = (e: CommandContext<E>) => unknown
+export type CommandUnregister = () => void
 export type CommandWhen = string | Array<string>
 export type CommandRegisterOptions = {
   key?: string
@@ -414,7 +415,7 @@ export interface IAppProxy {
       keybinding?: SimpleCommandKeybinding
     },
     action: SimpleCommandCallback
-  ) => void
+  ) => CommandUnregister | false
 
   registerCommandPalette: (
     opts: {
@@ -423,7 +424,7 @@ export interface IAppProxy {
       keybinding?: SimpleCommandKeybinding
     },
     action: SimpleCommandCallback
-  ) => void
+  ) => CommandUnregister | false
 
   /**
    * Supported key names
@@ -440,7 +441,7 @@ export interface IAppProxy {
       desc: string
       extras: Record<string, any>
     }>
-  ) => void
+  ) => CommandUnregister | false
 
   /**
    * Supported all registered palette commands
@@ -543,7 +544,7 @@ export interface IAppProxy {
   registerPageMenuItem: (
     tag: string,
     action: (e: IHookEvent & { page: string }) => void
-  ) => void
+  ) => CommandUnregister | false
 
   // hook events
   onCurrentGraphChanged: IUserHook
@@ -613,7 +614,7 @@ export interface ICommandsProxy {
     id: string,
     options: CommandRegisterOptions,
     action?: CommandCallback | BlockCommandCallback | Array<SlashCommandAction>
-  ) => unknown
+  ) => CommandUnregister | false
 
   /**
    * Execute a built-in or plugin command.
@@ -655,7 +656,7 @@ export interface IEditorProxy extends Record<string, any> {
   registerSlashCommand: (
     tag: string,
     action: BlockCommandCallback | Array<SlashCommandAction>
-  ) => unknown
+  ) => CommandUnregister | false
 
   /**
    * register a custom command in the block context menu (triggered by right-clicking the block dot)
@@ -665,7 +666,7 @@ export interface IEditorProxy extends Record<string, any> {
   registerBlockContextMenuItem: (
     label: string,
     action: BlockCommandCallback
-  ) => unknown
+  ) => CommandUnregister | false
 
   /**
    * Current it's only available for pdf viewer
@@ -679,7 +680,7 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: {
       clearSelection: boolean
     }
-  ) => unknown
+  ) => CommandUnregister | false
 
   // block related APIs
 

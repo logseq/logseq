@@ -44,6 +44,7 @@ import {
   CommandRegisterOptions,
   CommandPlacement,
   CommandCallback,
+  CommandUnregister,
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -69,6 +70,16 @@ const logger = new PluginLogger('', { console: true })
 type RuntimeCommandRegisterOptions = CommandRegisterOptions & {
   key?: string
   handler?: CommandCallback | BlockCommandCallback | Array<SlashCommandAction>
+}
+
+function once(fn: () => void): CommandUnregister {
+  let called = false
+
+  return () => {
+    if (called) return
+    called = true
+    fn()
+  }
 }
 
 /**
@@ -119,6 +130,15 @@ function registerSimpleCommand(
       palette,
     ],
   })
+
+  return once(() => {
+    this.Editor['off' + eventKey](action)
+    this._execCallableAPI(
+      'unregister_plugin_simple_command',
+      this.baseInfo.id,
+      normalizedKey
+    )
+  })
 }
 
 function normalizeCommandKeybinding(
@@ -160,6 +180,7 @@ function registerSlashCommand(
   actions: BlockCommandCallback | Array<SlashCommandAction>
 ) {
   debug('Register slash command #', this.baseInfo.id, tag, actions)
+  const hookOffs: Array<CommandUnregister> = []
 
   if (typeof actions === 'function') {
     actions = [
@@ -188,7 +209,7 @@ function registerSlashCommand(
         it[1] = eventKey
 
         // register command listener
-        this.Editor['on' + eventKey](fn)
+        hookOffs.push(this.Editor['on' + eventKey](fn))
         break
       default:
     }
@@ -199,6 +220,15 @@ function registerSlashCommand(
   this.caller?.call(`api:call`, {
     method: 'register-plugin-slash-command',
     args: [this.baseInfo.id, [tag, actions]],
+  })
+
+  return once(() => {
+    hookOffs.forEach((off) => off())
+    this._execCallableAPI(
+      'unregister_plugin_slash_command',
+      this.baseInfo.id,
+      tag
+    )
   })
 }
 
@@ -220,7 +250,7 @@ function registerCommand(
   const keybinding = normalizeCommandKeybinding(opts.keybinding)
   const extras = commandExtras(opts)
 
-  return commandPlacements(opts).map((placement) => {
+  const unregs = commandPlacements(opts).map((placement) => {
     switch (placement) {
       case 'palette':
         return registerSimpleCommand.call(
@@ -297,6 +327,12 @@ function registerCommand(
           action as SimpleCommandCallback
         )
     }
+  })
+
+  return once(() => {
+    unregs.forEach((unreg) => {
+      if (typeof unreg === 'function') unreg()
+    })
   })
 }
 

@@ -411,9 +411,12 @@
       true)))
 
 (defn unregister-plugin-slash-command
-  [pid]
-  (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid)])
-  (state/pub-event! [:rebuild-slash-commands-list]))
+  ([pid]
+   (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid)])
+   (state/pub-event! [:rebuild-slash-commands-list]))
+  ([pid cmd]
+   (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid) cmd])
+   (state/pub-event! [:rebuild-slash-commands-list])))
 
 (def keybinding-mode-handler-map
   {:global :shortcut.handler/editor-global
@@ -459,8 +462,14 @@
       true)))
 
 (defn unregister-plugin-simple-command
-  [pid]
-  (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
+  ([pid]
+   (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
+  ([pid key]
+   (swap! state/state update-in [:plugin/simple-commands (keyword pid)]
+     (fn [commands]
+       (->> commands
+            (remove #(= key (:key (second %))))
+            vec)))))
 
 (defn register-plugin-ui-item
   [pid {:keys [key type] :as opts}]
