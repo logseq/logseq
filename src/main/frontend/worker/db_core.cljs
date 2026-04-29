@@ -201,6 +201,20 @@
   (let [storage (platform/storage (platform/current))]
     ((:import-db storage) pool repo-path data)))
 
+(def ^:private sqlite-file-header "SQLite format 3\u0000")
+
+(defn- require-sqlite-payload
+  [repo data]
+  (let [payload (->uint8array data)]
+    (when-not (and (instance? js/Uint8Array payload)
+                   (>= (.-byteLength payload) (count sqlite-file-header))
+                   (= sqlite-file-header
+                      (.decode (js/TextDecoder.) (.subarray payload 0 (count sqlite-file-header)))))
+      (throw (ex-info "invalid sqlite import data"
+                      {:code :invalid-sqlite-import-data
+                       :repo repo})))
+    payload))
+
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
   [db data]
@@ -908,15 +922,16 @@
 (def-thread-api :thread-api/import-db
   [repo data]
   (when-not (string/blank? repo)
-    (p/let [pool (<get-opfs-pool repo)]
-      (<import-db pool data)
+    (p/let [pool (<get-opfs-pool repo)
+            payload (require-sqlite-payload repo data)]
+      (<import-db pool payload)
       nil)))
 
 (def-thread-api :thread-api/import-db-base64
   [repo base64]
   (when-not (string/blank? repo)
     (p/let [pool (<get-opfs-pool repo)
-            data (js/Buffer.from base64 "base64")
+            data (require-sqlite-payload repo (js/Buffer.from base64 "base64"))
             _ (close-db! repo)
             _ (<import-db pool data)
             _ (start-db! repo {:import-type :sqlite-db})]
