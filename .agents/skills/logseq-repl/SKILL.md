@@ -16,10 +16,16 @@ The workflow uses one shared state directory: `<repo>/tmp/logseq-repl/`.
 
 ## Scripts
 
-Start everything:
+Start everything with the default Logseq data root (`$LOGSEQ_CLI_ROOT_DIR` or `~/logseq`):
 
 ```bash
 ./scripts/start-repl.sh --repo demo
+```
+
+Start everything with an explicit Logseq data root:
+
+```bash
+./scripts/start-repl.sh --repo demo --root-dir ~/logseq
 ```
 
 Clean up everything:
@@ -38,7 +44,7 @@ Verify all REPL targets after startup:
 
 1. shared `pnpm watch`
 2. Desktop dev app via `pnpm dev-electron-app`
-3. `db-worker-node` via `node ./static/db-worker-node.js --repo <name>`
+3. `db-worker-node` via `node ./static/db-worker-node.js --repo <name> --root-dir <path> --owner-source cli`
 
 `start-repl.sh` is a small shell wrapper around `start-repl.py`. The Python script verifies that `:app`, `:electron`, and `:db-worker-node` runtimes are live, runs `verify-repls.sh` to connect to each target REPL and print a small result, then prints attach commands. It does not attach an interactive REPL by itself and exits after verification.
 
@@ -59,6 +65,8 @@ Then start all runtimes:
 ```bash
 ./scripts/start-repl.sh --repo demo
 ```
+
+Use `--root-dir <path>` if the target graph lives outside `$LOGSEQ_CLI_ROOT_DIR` or `~/logseq`.
 
 Attach only to the target you need:
 
