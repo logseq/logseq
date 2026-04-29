@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is testing]]
             [logseq.cli.auth :as cli-auth]
             [logseq.cli.command.sync :as sync-command]
+            [logseq.cli.common :as cli-common]
             [logseq.cli.config :as cli-config]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
@@ -347,10 +348,24 @@
 (deftest test-execute-sync-download-missing-e2ee-password-for-e2ee-graph-is-error
   (async done
          (let [ensure-calls (atom [])
-               invoke-calls (atom [])]
-           (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
+               invoke-calls (atom [])
+               stop-calls (atom [])
+               unlink-calls (atom [])
+               list-graphs-calls (atom 0)]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_config]
+                                                        (let [idx (swap! list-graphs-calls inc)]
+                                                          (if (= idx 1)
+                                                            []
+                                                            ["demo"])))
+                               cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
+                               cli-server/stop-server! (fn [config repo]
+                                                         (swap! stop-calls conj [config repo])
+                                                         (p/resolved {:ok? true}))
+                               cli-common/unlink-graph! (fn [& args]
+                                                          (swap! unlink-calls conj args)
+                                                          "/tmp/unlinked-demo")
                                transport/invoke (fn [_ method direct-pass? args]
                                                   (swap! invoke-calls conj [method direct-pass? args])
                                                   (case method
@@ -382,9 +397,143 @@
                    (is (= :error (:status result)))
                    (is (= :e2ee-password-not-found (get-in result [:error :code])))
                    (is (= "logseq_db_demo" (get-in result [:error :repo])))
+                   (is (= ["logseq_db_demo"] (mapv second @stop-calls)))
+                   (is (= ["logseq_db_demo"] (mapv last @unlink-calls)))
                    (is (not-any? (fn [[method _ _]]
                                    (= :thread-api/db-sync-download-graph-by-id method))
                                  @invoke-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-download-preserves-e2ee-error-when-cleanup-fails
+  (async done
+         (let [stop-calls (atom [])
+               unlink-calls (atom [])]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_config]
+                                                        [])
+                               cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               cli-server/stop-server! (fn [config repo]
+                                                         (swap! stop-calls conj [config repo])
+                                                         (p/rejected (ex-info "stop failed"
+                                                                              {:code :stop-failed})))
+                               cli-common/unlink-graph! (fn [& args]
+                                                          (swap! unlink-calls conj args)
+                                                          "/tmp/unlinked-demo")
+                               transport/invoke (fn [_ method _direct-pass? _args]
+                                                  (case method
+                                                    :thread-api/db-sync-list-remote-graphs
+                                                    (p/resolved [{:graph-id "remote-graph-id"
+                                                                  :graph-name "demo"
+                                                                  :graph-e2ee? true}])
+
+                                                    :thread-api/get-e2ee-password
+                                                    (p/rejected (ex-info "missing-e2ee-password"
+                                                                         {:code :db-sync/missing-e2ee-password}))
+
+                                                    :thread-api/db-sync-download-graph-by-id
+                                                    (p/resolved {:ok true})
+
+                                                    (p/resolved nil)))]
+                 (p/let [result (sync-command/execute {:type :sync-download
+                                                       :repo "logseq_db_demo"
+                                                       :graph "demo"}
+                                                      {:base-url "http://example"
+                                                       :root-dir "/tmp"
+                                                       :http-base "https://api.logseq.io"
+                                                       :id-token "runtime-token"
+                                                       :refresh-token "refresh-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :e2ee-password-not-found (get-in result [:error :code])))
+                   (is (= ["logseq_db_demo"] (mapv second @stop-calls)))
+                   (is (= [] @unlink-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-download-uses-persisted-e2ee-password-when-option-missing
+  (async done
+         (let [invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_config]
+                                                        [])
+                               cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (case method
+                                                    :thread-api/db-sync-list-remote-graphs
+                                                    (p/resolved [{:graph-id "remote-graph-id"
+                                                                  :graph-name "demo"
+                                                                  :graph-e2ee? true}])
+                                                    :thread-api/get-e2ee-password
+                                                    (p/resolved "persisted-password")
+                                                    :thread-api/q
+                                                    (p/resolved 0)
+                                                    :thread-api/db-sync-download-graph-by-id
+                                                    (p/resolved {:graph-id "remote-graph-id"
+                                                                 :remote-tx 22})
+                                                    (p/resolved nil)))]
+                 (p/let [result (sync-command/execute {:type :sync-download
+                                                       :repo "logseq_db_demo"
+                                                       :graph "demo"}
+                                                      {:base-url "http://example"
+                                                       :root-dir "/tmp"
+                                                       :http-base "https://api.logseq.io"
+                                                       :id-token "runtime-token"
+                                                       :refresh-token "refresh-token"})]
+                   (is (= :ok (:status result)))
+                   (is (= "remote-graph-id" (get-in result [:data :graph-id])))
+                   (is (some #(= [:thread-api/get-e2ee-password false ["refresh-token"]]
+                                 %)
+                             @invoke-calls))
+                   (is (not-any? #(= :thread-api/verify-and-save-e2ee-password (first %))
+                                 @invoke-calls))
+                   (is (some #(= [:thread-api/db-sync-download-graph-by-id false ["logseq_db_demo" "remote-graph-id" true]]
+                                 %)
+                             @invoke-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-download-skips-cleanup-for-preexisting-graph
+  (async done
+         (let [stop-calls (atom [])
+               unlink-calls (atom [])]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_config]
+                                                        ["demo"])
+                               cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               cli-server/stop-server! (fn [config repo]
+                                                         (swap! stop-calls conj [config repo])
+                                                         (p/resolved {:ok? true}))
+                               cli-common/unlink-graph! (fn [& args]
+                                                          (swap! unlink-calls conj args)
+                                                          "/tmp/unlinked-demo")
+                               transport/invoke (fn [_ method _direct-pass? _args]
+                                                  (case method
+                                                    :thread-api/db-sync-list-remote-graphs
+                                                    (p/resolved [{:graph-id "remote-graph-id"
+                                                                  :graph-name "demo"
+                                                                  :graph-e2ee? true}])
+
+                                                    :thread-api/get-e2ee-password
+                                                    (p/rejected (ex-info "missing-e2ee-password"
+                                                                         {:code :db-sync/missing-e2ee-password}))
+
+                                                    (p/resolved nil)))]
+                 (p/let [result (sync-command/execute {:type :sync-download
+                                                       :repo "logseq_db_demo"
+                                                       :graph "demo"}
+                                                      {:base-url "http://example"
+                                                       :root-dir "/tmp"
+                                                       :http-base "https://api.logseq.io"
+                                                       :id-token "runtime-token"
+                                                       :refresh-token "refresh-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :e2ee-password-not-found (get-in result [:error :code])))
+                   (is (= [] @stop-calls))
+                   (is (= [] @unlink-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

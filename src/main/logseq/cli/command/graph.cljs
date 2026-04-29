@@ -464,7 +464,7 @@
                               (= :server-not-found (get-in stop-result [:error :code])))
                   (throw (ex-info (get-in stop-result [:error :message] "failed to stop server")
                                   {:code (get-in stop-result [:error :code])})))
-              unlinked-dir (cli-common/unlink-graph! (:repo action))]
+              unlinked-dir (cli-common/unlink-graph! (cli-server/graphs-dir config) (:repo action))]
         (if unlinked-dir
           {:status :ok
            :data {:result nil}}

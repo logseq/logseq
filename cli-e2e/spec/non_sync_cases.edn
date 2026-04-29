@@ -894,10 +894,14 @@
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
     "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}} >/dev/null"],
    :cmds
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph remove --graph {{graph-arg}}"],
-   :expect {:exit 1, :stdout-contains ["graph-not-removed"]},
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph remove --graph {{graph-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph list"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"},
+    :stdout-not-contains ["{{graph}}"]},
    :covers
-   {:commands ["graph remove"],
+   {:commands ["graph remove" "graph list"],
     :options {:global ["--config" "--graph" "--root-dir" "--output"]}},
    :tags [:graph :remove]}
   {:id "remove-block-uuid-human",

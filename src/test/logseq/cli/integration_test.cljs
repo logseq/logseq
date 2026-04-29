@@ -269,6 +269,80 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest ^:long test-cli-sync-download-missing-e2ee-password-cleans-created-graph-and-allows-retry
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "db-worker-sync-download-cleanup-cli")
+               download-graph "sync-download-cleanup-graph"
+               download-calls (atom 0)
+               invoke-calls (atom [])]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (p/with-redefs [cli-auth/resolve-auth! (fn [_config]
+                                                                  (p/resolved {:id-token "runtime-token"
+                                                                               :refresh-token "refresh-token"}))
+                                         transport/invoke (fn [_ method direct-pass? args]
+                                                            (swap! invoke-calls conj [method direct-pass? args])
+                                                            (case method
+                                                              :thread-api/set-db-sync-config
+                                                              (p/resolved nil)
+
+                                                              :thread-api/db-sync-list-remote-graphs
+                                                              (p/resolved [{:graph-id "remote-graph-id"
+                                                                            :graph-name download-graph
+                                                                            :graph-e2ee? true}])
+
+                                                              :thread-api/get-e2ee-password
+                                                              (p/rejected (ex-info "missing-e2ee-password"
+                                                                                   {:code :db-sync/missing-e2ee-password
+                                                                                    :field :e2ee-password
+                                                                                    :reason :missing-persisted-password}))
+
+                                                              :thread-api/verify-and-save-e2ee-password
+                                                              (p/resolved nil)
+
+                                                              :thread-api/q
+                                                              (p/resolved 0)
+
+                                                              :thread-api/db-sync-download-graph-by-id
+                                                              (do
+                                                                (swap! download-calls inc)
+                                                                (p/resolved {:repo download-graph
+                                                                             :graph-id "remote-graph-id"
+                                                                             :remote-tx 22
+                                                                             :graph-e2ee? true}))
+
+                                                              (p/resolved nil)))]
+                           (p/let [failed-result (run-cli ["--graph" download-graph "sync" "download"] root-dir cfg-path)
+                                   failed-payload (parse-json-output-safe failed-result "failed encrypted sync download")
+                                   list-after-fail (run-cli ["graph" "list"] root-dir cfg-path)
+                                   list-payload (parse-json-output-safe list-after-fail "graph list after failed sync download")
+                                   servers-after-fail (run-cli ["server" "list"] root-dir cfg-path)
+                                   servers-payload (parse-json-output-safe servers-after-fail "server list after failed sync download")
+                                   _ (is (= 1 (:exit-code failed-result)))
+                                   _ (is (= "error" (:status failed-payload)))
+                                   _ (is (= "e2ee-password-not-found" (get-in failed-payload [:error :code])))
+                                   _ (is (not (some #(= download-graph %) (get-in list-payload [:data :graphs]))))
+                                   _ (is (not (some #(= download-graph (:repo %)) (get-in servers-payload [:data :servers]))))
+                                   _ (is (= 0 @download-calls))
+                                   retry-result (run-cli ["--graph" download-graph "sync" "download" "--e2ee-password" "pw"] root-dir cfg-path)
+                                   retry-payload (parse-json-output-safe retry-result "retry encrypted sync download")
+                                   _ (is (= 0 (:exit-code retry-result)))
+                                   _ (is (= "ok" (:status retry-payload))
+                                         (pr-str retry-payload))
+                                   _ (is (= "remote-graph-id" (get-in retry-payload [:data :graph-id])))
+                                   _ (is (= 1 @download-calls))]
+                             nil))
+                       _ (stop-repo! root-dir cfg-path download-graph)]
+                 nil)
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (try
+                              (fs/rmSync root-dir #js {:recursive true :force true})
+                              (catch :default _
+                                nil))
+                            (done)))))))
+
 (deftest ^:long test-cli-sync-upload-with-mocked-worker-bootstrap
   (async done
          (let [root-dir (node-helper/create-tmp-dir "db-worker-sync-upload-cli")
@@ -295,7 +369,7 @@
                                                             (p/resolved {:graph-id "created-graph-id"})
 
                                                             (p/resolved nil)))]
-                                       (run-cli ["--graph" upload-repo "sync" "upload"] root-dir cfg-path))
+                                      (run-cli ["--graph" upload-repo "sync" "upload"] root-dir cfg-path))
                        upload-payload (parse-json-output-safe upload-result "sync upload")]
                  (is (= 0 (:exit-code upload-result)))
                  (is (= "ok" (:status upload-payload)))
