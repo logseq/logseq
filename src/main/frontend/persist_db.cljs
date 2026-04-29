@@ -4,7 +4,6 @@
             [frontend.config :as config]
             [frontend.db.transact :as db-transact]
             [frontend.persist-db.browser :as browser]
-            [frontend.persist-db.node :as node]
             [frontend.persist-db.protocol :as protocol]
             [frontend.persist-db.remote :as remote]
             [frontend.handler.worker :as worker-handler]
@@ -15,7 +14,6 @@
             [promesa.core :as p]))
 
 (defonce opfs-db (browser/->InBrowser))
-(defonce node-db (atom nil))
 (defonce remote-db (atom nil))
 (defonce remote-repo (atom nil))
 
@@ -83,14 +81,6 @@
 (defn <start-runtime!
   []
   (cond
-    (node-runtime?)
-    (p/resolved (or @node-db
-                    (let [client (node/start! (assoc (node/default-config)
-                                                     :event-handler worker-handler/handle))]
-                      (reset! node-db client)
-                      (reset! state/*db-worker (:wrapped-worker client))
-                      client)))
-
     (electron-runtime?)
     (if-let [repo (state/get-current-repo)]
       (<ensure-remote! repo)
@@ -102,14 +92,7 @@
 (defn- get-impl
   "Get the actual implementation of PersistentDB"
   []
-  (if (node-runtime?)
-    (or @node-db
-        (let [client (node/start! (assoc (node/default-config)
-                                         :event-handler worker-handler/handle))]
-          (reset! node-db client)
-          (reset! state/*db-worker (:wrapped-worker client))
-          client))
-    opfs-db))
+  opfs-db)
 
 (defn <list-db []
   (if (electron-runtime?)
