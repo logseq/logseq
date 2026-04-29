@@ -263,7 +263,9 @@
 (defn reset-local-tx
   "Should be used only when uploading a graph"
   [repo]
-  (update-local-tx repo 0))
+  (let [store (sqlite-store-or-throw repo)]
+    (assert (some? store) repo)
+    (sqlite-set-meta! store :local-tx 0)))
 
 (defn update-local-checksum
   [repo checksum]

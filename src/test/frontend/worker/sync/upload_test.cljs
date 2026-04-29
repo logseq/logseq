@@ -2,7 +2,6 @@
   (:require [cljs.test :refer [async deftest is]]
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.upload :as sync-upload]
-            [frontend.worker.sync.util :as sync-util]
             [promesa.core :as p]
             [clojure.string :as string]))
 
@@ -94,63 +93,59 @@
                 :bytes 1500000}
                (first dropped)))))))
 
-(deftest ensure-upload-graph-identity-ignores-stale-local-graph-id-test
+(deftest create-remote-graph-creates-new-remote-graph-when-no-remote-match-test
   (async done
          (let [calls* (atom [])]
-           (-> (p/with-redefs [sync-util/get-graph-id (fn [_repo] "stale-graph-id")
-                               sync-crypt/graph-e2ee? (fn [_repo] true)
-                               sync-crypt/<preflight-upload-e2ee! (fn [_repo graph-e2ee?]
+           (-> (p/with-redefs [sync-crypt/<preflight-upload-e2ee! (fn [_repo graph-e2ee?]
                                                                     (swap! calls* conj [:preflight graph-e2ee?])
                                                                     (p/resolved nil))
                                sync-upload/list-remote-graphs! (fn []
                                                                   (swap! calls* conj [:list-remote-graphs])
                                                                   (p/resolved []))
-                               sync-upload/<create-remote-graph! (fn [repo graph-e2ee?]
-                                                                    (swap! calls* conj [:create repo graph-e2ee?])
-                                                                    (p/resolved {:graph-id "new-graph-id"
-                                                                                 :graph-e2ee? graph-e2ee?}))]
-                 (#'sync-upload/<ensure-upload-graph-identity! "repo-1"))
+                               sync-upload/<create-remote-graph-aux! (fn [repo opts]
+                                                                       (swap! calls* conj [:create-aux repo opts])
+                                                                       (p/resolved {:graph-id "new-graph-id"
+                                                                                    :graph-e2ee? (:graph-e2ee? opts)}))]
+                 (sync-upload/create-remote-graph! "repo-1" {:graph-e2ee? true
+                                                              :graph-ready-for-use? false}))
                (p/then (fn [identity]
                          (is (= {:graph-id "new-graph-id" :graph-e2ee? true}
                                 identity))
                          (is (= [[:list-remote-graphs]
                                  [:preflight true]
-                                 [:create "repo-1" true]]
+                                 [:create-aux "repo-1" {:graph-e2ee? true
+                                                        :graph-ready-for-use? false}]]
                                 @calls*))))
                (p/catch (fn [error]
                           (is false (str "unexpected error: " error))))
                (p/finally done)))))
 
-(deftest ensure-upload-graph-identity-rejects-matching-remote-graph-test
+(deftest create-remote-graph-rejects-matching-remote-graph-test
   (async done
-         (let [create-called? (atom false)]
-           (-> (p/with-redefs [sync-util/get-graph-id (fn [_repo] "existing-graph-id")
-                               sync-crypt/graph-e2ee? (fn [_repo] true)
-                               sync-crypt/<preflight-upload-e2ee! (fn [_repo _graph-e2ee?]
+         (let [create-aux-called? (atom false)]
+           (-> (p/with-redefs [sync-crypt/<preflight-upload-e2ee! (fn [_repo _graph-e2ee?]
                                                                     (p/resolved nil))
                                sync-upload/list-remote-graphs! (fn []
-                                                                  (p/resolved [{:graph-id "existing-graph-id"
-                                                                               :graph-name "repo-1"}]))
-                               sync-upload/<create-remote-graph! (fn [_repo _graph-e2ee?]
-                                                                    (reset! create-called? true)
-                                                                    (p/resolved {:graph-id "new-graph-id"}))]
-                 (#'sync-upload/<ensure-upload-graph-identity! "repo-1"))
+                                                                  (p/resolved [{:graph-name "repo-1"}]))
+                               sync-upload/<create-remote-graph-aux! (fn [_repo _opts]
+                                                                       (reset! create-aux-called? true)
+                                                                       (p/resolved {:graph-id "new-graph-id"}))]
+                 (sync-upload/create-remote-graph! "repo-1" {:graph-e2ee? true
+                                                              :graph-ready-for-use? false}))
                (p/then (fn [_]
                          (is false "expected graph-already-exists error")))
                (p/catch (fn [error]
                           (is (= "remote graph already exists; delete it before uploading again"
                                  (ex-message error)))
                           (is (= :db-sync/graph-already-exists (:code (ex-data error))))
-                          (is (= "existing-graph-id" (:graph-id (ex-data error))))
-                          (is (false? @create-called?))))
+                          (is (= "repo-1" (:graph-name (ex-data error))))
+                          (is (false? @create-aux-called?))))
                (p/finally done)))))
 
-(deftest ensure-upload-graph-identity-missing-e2ee-password-does-not-create-remote-graph-test
+(deftest create-remote-graph-missing-e2ee-password-does-not-create-remote-graph-test
   (async done
          (let [calls* (atom [])]
-           (-> (p/with-redefs [sync-util/get-graph-id (fn [_repo] nil)
-                               sync-crypt/graph-e2ee? (fn [_repo] true)
-                               sync-upload/list-remote-graphs! (fn []
+           (-> (p/with-redefs [sync-upload/list-remote-graphs! (fn []
                                                                   (swap! calls* conj :list-remote-graphs)
                                                                   (p/resolved []))
                                sync-crypt/<preflight-upload-e2ee! (fn [_repo _graph-e2ee?]
@@ -160,13 +155,11 @@
                                                                                           :field :e2ee-password
                                                                                           :reason :missing-persisted-password
                                                                                           :hint "Provide --e2ee-password to persist it."})))
-                               sync-upload/<create-remote-graph! (fn [_repo _graph-e2ee?]
-                                                                    (swap! calls* conj :create-remote-graph)
-                                                                    (p/resolved {:graph-id "new-graph-id"}))
-                               sync-upload/persist-upload-graph-identity! (fn [& _args]
-                                                                            (swap! calls* conj :persist-identity)
-                                                                            {:graph-id "new-graph-id"})]
-                 (#'sync-upload/<ensure-upload-graph-identity! "repo-1"))
+                               sync-upload/<create-remote-graph-aux! (fn [_repo _opts]
+                                                                       (swap! calls* conj :create-remote-graph)
+                                                                       (p/resolved {:graph-id "new-graph-id"}))]
+                 (sync-upload/create-remote-graph! "repo-1" {:graph-e2ee? true
+                                                              :graph-ready-for-use? false}))
                (p/then (fn [_]
                          (is false "expected missing e2ee password error")))
                (p/catch (fn [error]
@@ -175,23 +168,20 @@
                           (is (= [:list-remote-graphs :preflight] @calls*))))
                (p/finally done)))))
 
-(deftest ensure-upload-graph-identity-missing-e2ee-password-does-not-persist-identity-test
+(deftest create-remote-graph-missing-e2ee-password-does-not-run-create-aux-test
   (async done
-         (let [persist-called? (atom false)]
-           (-> (p/with-redefs [sync-util/get-graph-id (fn [_repo] nil)
-                               sync-crypt/graph-e2ee? (fn [_repo] true)
-                               sync-upload/list-remote-graphs! (fn [] (p/resolved []))
+         (let [create-aux-called? (atom false)]
+           (-> (p/with-redefs [sync-upload/list-remote-graphs! (fn [] (p/resolved []))
                                sync-crypt/<preflight-upload-e2ee! (fn [_repo _graph-e2ee?]
                                                                     (p/rejected (ex-info "missing-e2ee-password"
                                                                                          {:code :db-sync/missing-e2ee-password})))
-                               sync-upload/<create-remote-graph! (fn [_repo _graph-e2ee?]
-                                                                    (p/resolved {:graph-id "new-graph-id"}))
-                               sync-upload/persist-upload-graph-identity! (fn [& _args]
-                                                                            (reset! persist-called? true)
-                                                                            {:graph-id "new-graph-id"})]
-                 (#'sync-upload/<ensure-upload-graph-identity! "repo-1"))
+                               sync-upload/<create-remote-graph-aux! (fn [_repo _opts]
+                                                                       (reset! create-aux-called? true)
+                                                                       (p/resolved {:graph-id "new-graph-id"}))]
+                 (sync-upload/create-remote-graph! "repo-1" {:graph-e2ee? true
+                                                              :graph-ready-for-use? false}))
                (p/then (fn [_]
                          (is false "expected missing e2ee password error")))
                (p/catch (fn [_error]
-                          (is (false? @persist-called?))))
+                          (is (false? @create-aux-called?))))
                (p/finally done)))))

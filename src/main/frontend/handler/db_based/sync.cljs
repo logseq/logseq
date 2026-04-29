@@ -13,7 +13,6 @@
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.malli-schema :as db-sync-schema]
-            [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
 (defn- ws->http-base [ws-url]
@@ -238,44 +237,8 @@
   ([repo graph-e2ee?]
    (<rtc-create-graph! repo graph-e2ee? true))
   ([repo graph-e2ee? graph-ready-for-use?]
-   (let [schema-version (some-> (ldb/get-graph-schema-version (db/get-db)) :major str)
-         graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
-         graph-ready-for-use? (not= false graph-ready-for-use?)
-         base (http-base)]
-     (if base
-       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-               _ (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys
-                                          {:ensure-server? true})
-               body (coerce-http-request :graphs/create
-                                         {:graph-name (string/replace repo config/db-version-prefix "")
-                                          :schema-version schema-version
-                                          :graph-e2ee? graph-e2ee?
-                                          :graph-ready-for-use? graph-ready-for-use?})
-               result (if (nil? body)
-                        (p/rejected (ex-info "db-sync invalid create-graph body"
-                                             {:repo repo}))
-                        (fetch-json (str base "/graphs")
-                                    {:method "POST"
-                                     :headers {"content-type" "application/json"}
-                                     :body (js/JSON.stringify (clj->js body))}
-                                    {:response-schema :graphs/create}))
-               graph-id (:graph-id result)
-               graph-e2ee? (normalize-graph-e2ee?
-                            (if (contains? result :graph-e2ee?)
-                              (:graph-e2ee? result)
-                              graph-e2ee?))]
-         (if graph-id
-           (p/do!
-            (ldb/transact! repo [(sqlite-util/kv :logseq.kv/db-type "db")
-                                 (sqlite-util/kv :logseq.kv/graph-uuid (uuid graph-id))
-                                 (sqlite-util/kv :logseq.kv/graph-rtc-e2ee? graph-e2ee?)])
-            graph-id)
-           (p/rejected (ex-info "db-sync missing graph id in create response"
-                                {:type :db-sync/invalid-graph
-                                 :response result}))))
-       (p/rejected (ex-info "db-sync missing graph info"
-                            {:type :db-sync/invalid-graph
-                             :base base}))))))
+   (state/<invoke-db-worker :thread-api/db-sync-create-remote-graph
+                            repo graph-e2ee? graph-ready-for-use?)))
 
 (defn <rtc-delete-graph!
   [graph-uuid _schema-version]
@@ -421,14 +384,11 @@
                           :graph-uuid graph-uuid}))))
 
 (defn <rtc-upload-graph!
-  [repo graph-e2ee?]
-  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee? false)]
-    (when (nil? graph-id)
-      (throw (ex-info "graph id doesn't exist when uploading to server" {:repo repo})))
-    (p/do!
-     (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
-     (<get-remote-graphs)
-     (<rtc-start! repo))))
+  [repo _graph-e2ee?]
+  (p/do!
+   (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
+   (<get-remote-graphs)
+   (<rtc-start! repo)))
 
 (defn <rtc-create-graph-and-start-sync!
   [repo graph-e2ee?]

@@ -2,14 +2,12 @@
   (:require [cljs.test :refer [deftest is async]]
             [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.db :as db]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.persist-db :as persist-db]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (deftest remove-member-request-test
@@ -62,43 +60,24 @@
 
 (deftest rtc-create-graph-persists-disabled-e2ee-flag-test
   (async done
-         (let [fetch-called (atom nil)
-               tx-called (atom nil)
-               ensure-calls (atom [])]
+         (let [worker-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/task--ensure-id&access-token (fn [resolve _reject]
                                                                            (resolve true))
-                               db/get-db (fn [] :db)
-                               ldb/get-graph-schema-version (fn [_] {:major 65})
                                state/<invoke-db-worker (fn [& args]
-                                                         (when (= :thread-api/db-sync-ensure-user-rsa-keys
-                                                                  (first args))
-                                                           (swap! ensure-calls conj args))
-                                                         (p/resolved {:public-key "pk"}))
-                               db-sync/fetch-json (fn [url opts _]
-                                                    (reset! fetch-called {:url url :opts opts})
-                                                    (p/resolved {:graph-id "graph-1"
-                                                                 :graph-e2ee? false}))
-                               ldb/transact! (fn [repo tx-data]
-                                               (reset! tx-called {:repo repo :tx-data tx-data})
-                                               nil)]
+                                                         (swap! worker-calls conj args)
+                                                         (p/resolved {:graph-id "graph-1"
+                                                                      :graph-e2ee? false}))]
                  (db-sync/<rtc-create-graph! "logseq_db_demo" false))
-               (p/then (fn [graph-id]
-                         (let [request-body (-> @fetch-called
-                                                (get-in [:opts :body])
-                                                js/JSON.parse
-                                                (js->clj :keywordize-keys true))
-                               tx-data (:tx-data @tx-called)]
-                           (is (= "graph-1" graph-id))
-                           (is (= "http://base/graphs" (:url @fetch-called)))
-                           (is (= false (:graph-e2ee? request-body)))
-                           (is (= [[:thread-api/db-sync-ensure-user-rsa-keys
-                                    {:ensure-server? true}]]
-                                  @ensure-calls))
-                           (is (= :logseq.kv/graph-rtc-e2ee?
-                                  (get-in tx-data [2 :db/ident])))
-                           (is (= false
-                                  (get-in tx-data [2 :kv/value]))))
+               (p/then (fn [result]
+                         (is (= {:graph-id "graph-1"
+                                 :graph-e2ee? false}
+                                result))
+                         (is (= [[:thread-api/db-sync-create-remote-graph
+                                  "logseq_db_demo"
+                                  false
+                                  true]]
+                                @worker-calls))
                          (done)))
                (p/catch (fn [e]
                           (is false (str e))
@@ -106,43 +85,24 @@
 
 (deftest rtc-create-graph-defaults-e2ee-enabled-test
   (async done
-         (let [fetch-called (atom nil)
-               tx-called (atom nil)
-               ensure-calls (atom [])]
+         (let [worker-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/task--ensure-id&access-token (fn [resolve _reject]
                                                                            (resolve true))
-                               db/get-db (fn [] :db)
-                               ldb/get-graph-schema-version (fn [_] {:major 65})
                                state/<invoke-db-worker (fn [& args]
-                                                         (when (= :thread-api/db-sync-ensure-user-rsa-keys
-                                                                  (first args))
-                                                           (swap! ensure-calls conj args))
-                                                         (p/resolved {:public-key "pk"}))
-                               db-sync/fetch-json (fn [url opts _]
-                                                    (reset! fetch-called {:url url :opts opts})
-                                                    (p/resolved {:graph-id "graph-2"}))
-                               ldb/transact! (fn [repo tx-data]
-                                               (reset! tx-called {:repo repo :tx-data tx-data})
-                                               nil)]
+                                                         (swap! worker-calls conj args)
+                                                         (p/resolved {:graph-id "graph-2"
+                                                                      :graph-e2ee? true}))]
                  (db-sync/<rtc-create-graph! "logseq_db_demo"))
-               (p/then (fn [graph-id]
-                         (let [request-body (-> @fetch-called
-                                                (get-in [:opts :body])
-                                                js/JSON.parse
-                                                (js->clj :keywordize-keys true))
-                               tx-data (:tx-data @tx-called)]
-                           (is (= "graph-2" graph-id))
-                           (is (= "http://base/graphs" (:url @fetch-called)))
-                           (is (= true (:graph-e2ee? request-body)))
-                           (is (= true (:graph-ready-for-use? request-body)))
-                           (is (= [[:thread-api/db-sync-ensure-user-rsa-keys
-                                    {:ensure-server? true}]]
-                                  @ensure-calls))
-                           (is (= :logseq.kv/graph-rtc-e2ee?
-                                  (get-in tx-data [2 :db/ident])))
-                           (is (= true
-                                  (get-in tx-data [2 :kv/value]))))
+               (p/then (fn [result]
+                         (is (= {:graph-id "graph-2"
+                                 :graph-e2ee? true}
+                                result))
+                         (is (= [[:thread-api/db-sync-create-remote-graph
+                                  "logseq_db_demo"
+                                  true
+                                  true]]
+                                @worker-calls))
                          (done)))
                (p/catch (fn [e]
                           (is false (str e))
@@ -150,23 +110,12 @@
 
 (deftest rtc-upload-graph-creates-remote-graph-as-not-ready-test
   (async done
-         (let [fetch-called (atom nil)
-               tx-called (atom nil)
-               upload-calls (atom [])
+         (let [upload-calls (atom [])
                refresh-calls (atom 0)
                start-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/task--ensure-id&access-token (fn [resolve _reject]
                                                                            (resolve true))
-                               db/get-db (fn [] :db)
-                               ldb/get-graph-schema-version (fn [_] {:major 65})
-                               db-sync/fetch-json (fn [url opts _]
-                                                    (reset! fetch-called {:url url :opts opts})
-                                                    (p/resolved {:graph-id "graph-3"
-                                                                 :graph-e2ee? false}))
-                               ldb/transact! (fn [repo tx-data]
-                                               (reset! tx-called {:repo repo :tx-data tx-data})
-                                               nil)
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! upload-calls conj args)
                                                          (p/resolved :ok))
@@ -178,19 +127,10 @@
                                                      (p/resolved :ok))]
                  (db-sync/<rtc-upload-graph! "logseq_db_demo" false))
                (p/then (fn [_]
-                         (let [request-body (-> @fetch-called
-                                                (get-in [:opts :body])
-                                                js/JSON.parse
-                                                (js->clj :keywordize-keys true))]
-                           (is (= false (:graph-ready-for-use? request-body)))
-                           (is (= [[:thread-api/db-sync-ensure-user-rsa-keys
-                                    {:ensure-server? true}]
-                                   [:thread-api/db-sync-upload-graph "logseq_db_demo"]]
-                                  @upload-calls))
-                           (is (= 1 @refresh-calls))
-                           (is (= ["logseq_db_demo"] @start-calls))
-                           (is (= :logseq.kv/graph-rtc-e2ee?
-                                  (get-in (:tx-data @tx-called) [2 :db/ident]))))
+                         (is (= [[:thread-api/db-sync-upload-graph "logseq_db_demo"]]
+                                @upload-calls))
+                         (is (= 1 @refresh-calls))
+                         (is (= ["logseq_db_demo"] @start-calls))
                          (done)))
                (p/catch (fn [e]
                           (is false (str e))
