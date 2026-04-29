@@ -499,6 +499,20 @@
                                              :retry-error retry-error})
                                   (throw retry-error)))))))))
 
+(defn <preflight-upload-e2ee!
+  [repo encrypted-graph?]
+  (if-not (true? encrypted-graph?)
+    (p/resolved nil)
+    (let [base (e2ee-base)]
+      (p/let [user-id (<resolve-user-uuid)]
+        (when-not (and (string? base) (string? user-id))
+          (fail-fast :db-sync/missing-field {:repo repo
+                                             :base base
+                                             :user-id user-id
+                                             :field :user-rsa-key-pair}))
+        (p/let [_ (<load-user-rsa-key-material base user-id nil)]
+          nil)))))
+
 (defn <ensure-graph-aes-key
   [repo graph-id]
   (if-not (graph-e2ee? repo)

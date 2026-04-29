@@ -18,6 +18,10 @@
   {:e2ee-password {:desc "Verify and persist E2EE password before sync"
                    :coerce :string}})
 
+(def ^:private sync-upload-spec
+  {:e2ee-password {:desc "Verify and persist E2EE password before upload"
+                   :coerce :string}})
+
 (def ^:private sync-download-spec
   {:progress {:desc "Stream realtime download progress to stdout"
               :coerce :boolean}
@@ -38,8 +42,9 @@
                                    "logseq sync start --graph my-graph --e2ee-password \"my-secret\""]})
    (core/command-entry ["sync" "stop"] :sync-stop "Stop db-sync client" {}
                        {:examples ["logseq sync stop --graph my-graph"]})
-   (core/command-entry ["sync" "upload"] :sync-upload "Upload current graph snapshot" {}
-                       {:examples ["logseq sync upload --graph my-graph"]})
+   (core/command-entry ["sync" "upload"] :sync-upload "Upload current graph snapshot" sync-upload-spec
+                       {:examples ["logseq sync upload --graph my-graph"
+                                   "logseq sync upload --graph my-graph --e2ee-password \"my-secret\""]})
    (core/command-entry ["sync" "download"] :sync-download "Download remote graph snapshot" sync-download-spec
                        {:examples ["logseq sync download --graph my-graph"
                                    "logseq sync download --graph my-graph --progress"
@@ -268,6 +273,16 @@
               :graph (core/repo->graph repo)
               :e2ee-password (:e2ee-password options)}}))
 
+(defn- build-sync-upload-action
+  [options repo]
+  (if-not (seq repo)
+    (missing-repo "sync-upload")
+    {:ok? true
+     :action {:type :sync-upload
+              :repo repo
+              :graph (core/repo->graph repo)
+              :e2ee-password (:e2ee-password options)}}))
+
 (defn- build-sync-download-action
   [options repo]
   (if-not (seq repo)
@@ -361,8 +376,11 @@
 (defn build-action
   [command options args repo]
   (case command
-    (:sync-status :sync-stop :sync-upload)
+    (:sync-status :sync-stop)
     (build-basic-repo-action command repo)
+
+    :sync-upload
+    (build-sync-upload-action options repo)
 
     :sync-start
     (build-sync-start-action options repo)
@@ -549,11 +567,20 @@
                     (poll! false)))))]
       (poll! true))))
 
+(defn- <verify-and-save-e2ee-password-on-worker-if-provided!
+  [cfg config {:keys [e2ee-password]}]
+  (if (seq e2ee-password)
+    (p/let [refresh-token (ensure-refresh-token! config)
+            _ (transport/invoke cfg :thread-api/verify-and-save-e2ee-password false [refresh-token e2ee-password])]
+      nil)
+    (p/resolved nil)))
+
 (defn- execute-sync-upload
   [action config]
-  (-> (p/let [result (invoke-with-repo config (:repo action)
-                                       :thread-api/db-sync-upload-graph
-                                       [(:repo action)])]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              _ (<sync-worker-runtime! cfg config)
+              _ (<verify-and-save-e2ee-password-on-worker-if-provided! cfg config action)
+              result (transport/invoke cfg :thread-api/db-sync-upload-graph false [(:repo action)])]
         {:status :ok
          :data (if (map? result)
                  result
