@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import os
 import re
 import signal
@@ -29,6 +30,8 @@ def parse_args():
     )
     parser.add_argument("--repo", default=os.environ.get("DB_REPO", "demo"),
                         help="Graph repo name passed to db-worker-node (default: demo)")
+    parser.add_argument("--root-dir", default=os.environ.get("LOGSEQ_CLI_ROOT_DIR", str(Path.home() / "logseq")),
+                        help="Logseq data root passed to db-worker-node (default: $LOGSEQ_CLI_ROOT_DIR or ~/logseq)")
     parser.add_argument("--repo-root", default=os.environ.get("REPO_ROOT", str(DEFAULT_REPO_ROOT)),
                         help="Logseq repository root (default: auto-detect from script location)")
     parser.add_argument("extra_node_args", nargs=argparse.REMAINDER,
@@ -118,6 +121,18 @@ def has_managed_processes(paths):
     return any(is_running(read_pid(path)) for path in paths)
 
 
+def read_json(path):
+    try:
+        return json.loads(path.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def write_json(path, payload):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, sort_keys=True) + "\n")
+
+
 def require_clean_ports():
     had_conflict = False
     for port in STANDARD_PORTS:
@@ -185,32 +200,48 @@ def ensure_desktop_app(repo_root, desktop_pid_file, desktop_log):
     return process.pid
 
 
-def ensure_db_worker_node(repo_root, db_pid_file, db_repo_file, db_log, repo, extra_args):
+def ensure_db_worker_node(repo_root, db_pid_file, db_options_file, db_log, repo, root_dir, extra_args):
     pid = read_pid(db_pid_file)
-    existing_repo = db_repo_file.read_text().strip() if db_repo_file.exists() else None
+    startup_options = {
+        "repo": repo,
+        "root_dir": str(root_dir),
+        "owner_source": "cli",
+        "extra_args": list(extra_args),
+    }
+    existing_options = read_json(db_options_file)
 
     if is_running(pid):
-        if existing_repo == repo:
-            print(f"Reusing db-worker-node runtime (pid={pid}, repo={repo})")
+        if existing_options == startup_options:
+            print(f"Reusing db-worker-node runtime (pid={pid}, repo={repo}, root-dir={root_dir})")
             return pid
-        print(f"Stopping existing db-worker-node (pid={pid}) due to repo mismatch")
+        print(f"Stopping existing db-worker-node (pid={pid}) due to startup option mismatch")
         terminate_pid(pid)
         time.sleep(1)
 
-    print(f"Starting db-worker-node (repo={repo}) ...")
+    print(f"Starting db-worker-node (repo={repo}, root-dir={root_dir}) ...")
     process = start_process(
         repo_root,
         db_log,
-        ["node", "./static/db-worker-node.js", "--repo", repo, *extra_args],
+        [
+            "node",
+            "./static/db-worker-node.js",
+            "--repo",
+            repo,
+            "--root-dir",
+            str(root_dir),
+            "--owner-source",
+            "cli",
+            *extra_args,
+        ],
     )
     write_pid(db_pid_file, process.pid)
-    db_repo_file.write_text(f"{repo}\n")
+    write_json(db_options_file, startup_options)
     time.sleep(1)
 
     if process.poll() is not None:
         raise SystemExit(f"Error: db-worker-node exited early. Check {db_log}")
 
-    print(f"db-worker-node is running (pid={process.pid}, repo={repo})")
+    print(f"db-worker-node is running (pid={process.pid}, repo={repo}, root-dir={root_dir})")
     return process.pid
 
 
@@ -294,6 +325,7 @@ def terminate_pid(pid):
 def main():
     args = parse_args()
     repo_root = Path(args.repo_root).resolve()
+    db_root_dir = Path(args.root_dir).expanduser().resolve()
     if not repo_root.is_dir():
         raise SystemExit(f"Error: repo root not found: {repo_root}")
 
@@ -308,7 +340,7 @@ def main():
     shadow_pid_file = log_dir / "shared-shadow-watch.pid"
     desktop_pid_file = log_dir / "desktop-electron.pid"
     db_pid_file = log_dir / "db-worker-node.pid"
-    db_repo_file = log_dir / "db-worker-node.repo"
+    db_options_file = log_dir / "db-worker-node.options.json"
     shadow_log = log_dir / "shared-shadow-watch.log"
     desktop_log = log_dir / "desktop-electron.log"
     db_log = log_dir / "db-worker-node.log"
@@ -328,7 +360,7 @@ def main():
 
     ensure_shadow_watch(repo_root, shadow_pid_file, shadow_log)
     ensure_desktop_app(repo_root, desktop_pid_file, desktop_log)
-    ensure_db_worker_node(repo_root, db_pid_file, db_repo_file, db_log, args.repo, args.extra_node_args)
+    ensure_db_worker_node(repo_root, db_pid_file, db_options_file, db_log, args.repo, db_root_dir, args.extra_node_args)
     wait_for_runtime_count(repo_root, "app", "exactly-one", 60)
     wait_for_runtime_count(repo_root, "electron", "nonzero", 60)
     wait_for_runtime_count(repo_root, "db-worker-node", "nonzero", 60)
