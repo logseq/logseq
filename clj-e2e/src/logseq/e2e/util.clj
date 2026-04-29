@@ -185,15 +185,18 @@
            {:delay 20}))
 
 (defn input-command
-  [command]
-  (let [content (get-edit-content)]
-    (when (and (not= (str (last content)) " ")
-               (not= content ""))
-      (press-seq " ")))
-  (press-seq "/" {:delay 20})
-  (w/wait-for ".ui__popover-content")
-  (press-seq command {:delay 20})
-  (w/click "a.menu-link.chosen"))
+  ([command]
+   (input-command command {:chosen-text command}))
+  ([command {:keys [chosen-text]}]
+   (let [content (get-edit-content)]
+     (when (and (not= (str (last content)) " ")
+                (not= content ""))
+       (press-seq " ")))
+   (press-seq "/" {:delay 20})
+   (w/wait-for ".ui__popover-content")
+   (press-seq command {:delay 20})
+   (w/wait-for (format "a.menu-link.chosen:has-text('%s')" chosen-text))
+   (w/click "a.menu-link.chosen")))
 
 (defn set-tag
   "`hidden?`: some tags may be hidden from the UI, e.g. Page"

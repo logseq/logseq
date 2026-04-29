@@ -12,6 +12,21 @@ type ShadowBridgeConfigOptions = {
   globals?: Record<string, string>
 }
 
+type ExternalInteropManifestEntry =
+  | { kind: 'default' }
+  | { kind: 'named'; names: string[] }
+  | { kind: 'namespace' }
+
+const externalInteropManifest: Record<string, ExternalInteropManifestEntry> = {
+  '@logseq/react-tweet-embed': { kind: 'default' },
+  codemirror: { kind: 'default' },
+  'react-textarea-autosize': { kind: 'default' },
+  'react-intersection-observer': { kind: 'named', names: ['useInView'] },
+  'react-transition-group': { kind: 'named', names: ['CSSTransition', 'TransitionGroup'] },
+  'react-virtuoso': { kind: 'named', names: ['Virtuoso', 'VirtuosoGrid'] },
+  'remove-accents': { kind: 'named', names: ['remove'] },
+}
+
 function getBuildNodeEnv(): 'production' | 'development' {
   return process.env.NODE_ENV === 'production' ? 'production' : 'development'
 }
@@ -37,6 +52,90 @@ function listFilesRecursive(rootDir: string): string[] {
   }
 
   return files
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function isIdentifier(value: string): boolean {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(value)
+}
+
+function interopIdentifier(importName: string, exportName: string): string {
+  const suffix = exportName.replace(/[^A-Za-z0-9_$]/g, '_')
+  return `${importName}_${suffix || 'export'}`
+}
+
+function createNamedImportSpec(importName: string, exportName: string): string {
+  const localName = interopIdentifier(importName, exportName)
+  const importedName = isIdentifier(exportName) ? exportName : JSON.stringify(exportName)
+  return `${importedName} as ${localName}`
+}
+
+function createNamedInteropObject(importName: string, exportNames: string[]): string {
+  return `{ ${exportNames.map((exportName) => {
+    const propertyName = isIdentifier(exportName) ? exportName : JSON.stringify(exportName)
+    return `${propertyName}: ${interopIdentifier(importName, exportName)}`
+  }).join(', ')} }`
+}
+
+function rewriteExternalInterop(code: string): string {
+  let rewritten = code
+
+  for (const [moduleId, interop] of Object.entries(externalInteropManifest)) {
+    if (interop.kind === 'namespace') {
+      continue
+    }
+
+    const quotedModuleId = JSON.stringify(moduleId)
+    const importPattern = new RegExp(
+      `import \\* as ([A-Za-z_$][A-Za-z0-9_$]*) from ${escapeRegExp(quotedModuleId)};`,
+    )
+    const match = rewritten.match(importPattern)
+
+    if (!match) {
+      continue
+    }
+
+    const importName = match[1]
+    const assignmentPattern = new RegExp(
+      `ALL\\[${escapeRegExp(quotedModuleId)}\\] = ${escapeRegExp(importName)};`,
+    )
+
+    if (interop.kind === 'default') {
+      rewritten = rewritten
+        .replace(importPattern, `import ${importName} from ${quotedModuleId};`)
+        .replace(assignmentPattern, `ALL[${quotedModuleId}] = ${importName};`)
+    } else if (interop.kind === 'named') {
+      const importSpec = interop.names.map((name) => createNamedImportSpec(importName, name)).join(', ')
+      rewritten = rewritten
+        .replace(importPattern, `import { ${importSpec} } from ${quotedModuleId};`)
+        .replace(assignmentPattern, `ALL[${quotedModuleId}] = ${createNamedInteropObject(importName, interop.names)};`)
+    }
+  }
+
+  return rewritten
+}
+
+function createExternalInteropPlugin(options: ShadowBridgeConfigOptions): Plugin {
+  const externalsEntry = normalizePath(path.resolve(options.externalsEntry))
+
+  return {
+    name: `logseq-shadow-externals-interop:${options.name}`,
+    enforce: 'pre',
+    transform(code, id) {
+      const cleanId = normalizePath(id.split('?')[0])
+      if (cleanId !== externalsEntry) {
+        return null
+      }
+
+      return {
+        code: rewriteExternalInterop(code),
+        map: null,
+      }
+    },
+  }
 }
 
 function createShadowExternalEntryPlugin(options: ShadowBridgeConfigOptions): Plugin {
@@ -234,6 +333,7 @@ export function createShadowBridgeConfig(options: ShadowBridgeConfigOptions): Us
       'process.env.NODE_ENV': JSON.stringify(getBuildNodeEnv()),
     },
     plugins: [
+      createExternalInteropPlugin(options),
       createShadowExternalEntryPlugin(options),
       createShadowSyncPlugin(options),
     ],

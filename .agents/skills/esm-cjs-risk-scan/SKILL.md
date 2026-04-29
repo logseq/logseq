@@ -24,6 +24,9 @@ node .agents/skills/esm-cjs-risk-scan/scripts/scan_esm_cjs_risk.mjs --format jso
 
 # Show full error details in probe results
 node .agents/skills/esm-cjs-risk-scan/scripts/scan_esm_cjs_risk.mjs --verbose
+
+# Optional: browser external interop manifest candidate for Vite bridge work
+node .agents/skills/esm-cjs-risk-scan/scripts/scan_browser_external_interop.mjs --format ts
 ```
 
 ## Parameters
@@ -53,7 +56,19 @@ node .agents/skills/esm-cjs-risk-scan/scripts/scan_esm_cjs_risk.mjs --verbose
 | `deps/graph-parser/src`, `test`, `script` | Graph parser CLI and tests |
 | `deps/publishing/script`, `test` | Publishing CLI and tests |
 
-Browser/Worker builds (`:app`, `:db-worker`, `:inference-worker`, `:mobile`) are intentionally excluded — their npm deps are resolved at bundle time and never `require()`-called directly in Node.
+Browser/Worker builds (`:app`, `:db-worker`, `:mobile`) are intentionally excluded — their npm deps are resolved at bundle time and never `require()`-called directly in Node.
+
+### Browser External Interop Candidate
+
+`scan_browser_external_interop.mjs` is a separate helper for Vite bridge maintenance. It scans browser-target CLJS namespace requires and emits a reviewed-by-human manifest candidate shaped for `vite.config.shared.ts`.
+
+Use it only when changing browser `:js-provider :external`, auditing Vite bridge interop, or preparing an explicit external import manifest. It is not part of the default Node/Electron ESM/CJS risk workflow, and its output is a candidate rather than an authoritative manifest.
+
+```bash
+node .agents/skills/esm-cjs-risk-scan/scripts/scan_browser_external_interop.mjs --format json
+node .agents/skills/esm-cjs-risk-scan/scripts/scan_browser_external_interop.mjs --format ts
+```
+
 ## What Gets Scanned
 
 The scanner detects three import patterns in `.cljs` / `.cljc` / `.clj` files:
@@ -194,7 +209,7 @@ The scanner runs `require()` and `import()` probes in a plain Node.js process (`
 
 If a build has already been compiled, you can inspect `.shadow-cljs/builds/electron/release/closure-inputs/` for `shadow.js.shim.module$<package>.js` files (plain JS, immediately readable). The presence of `require("pkg")` in the shim content confirms shadow-cljs successfully resolved the package for the Electron Node target. This is the definitive ground truth; the scanner's probe is a pre-build approximation.
 
-> **Note:** `static/js/cljs-runtime/` contains shims for browser worker targets that use `:js-provider :external` (currently `:db-worker` and `:inference-worker`). Those shims use `shadow$bridge("pkg")` — not `require()` — delegating actual module loading to the Webpack-bundled worker bundle. The `:app` target does not use `:js-provider :external` and its missing modules throw `"Module not provided"` at runtime instead. Electron (`:node-script`) shims never appear in this directory either.
+> **Note:** `static/js/cljs-runtime/` contains shims for browser worker targets that use `:js-provider :external` (currently `:db-worker`). Those shims use `shadow$bridge("pkg")` — not `require()` — delegating actual module loading to the Webpack-bundled worker bundle. The `:app` target does not use `:js-provider :external` and its missing modules throw `"Module not provided"` at runtime instead. Electron (`:node-script`) shims never appear in this directory either.
 
 ## Recommended Fixes
 
@@ -214,3 +229,4 @@ Re-run the scanner after changes to verify fixes.
 ## Script
 
 - Main script: [scan_esm_cjs_risk.mjs](./scripts/scan_esm_cjs_risk.mjs)
+- Browser external interop helper: [scan_browser_external_interop.mjs](./scripts/scan_browser_external_interop.mjs)

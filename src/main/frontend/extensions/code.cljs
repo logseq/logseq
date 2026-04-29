@@ -137,6 +137,7 @@
             [frontend.schema.handler.common-config :refer [Config-edn]]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.js-module :as js-module]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [malli.core :as m]
@@ -145,14 +146,15 @@
 
 ;; codemirror
 
-(def from-textarea (gobj/get CodeMirror "fromTextArea"))
-(def Pos (gobj/get CodeMirror "Pos"))
+(def CodeMirror$ (js-module/default-export CodeMirror))
+(def from-textarea (gobj/get CodeMirror$ "fromTextArea"))
+(def Pos (gobj/get CodeMirror$ "Pos"))
 
 (def textarea-ref-name "textarea")
 (def codemirror-ref-name "codemirror-instance")
 
 ;; export CodeMirror to global scope
-(set! js/window -CodeMirror CodeMirror)
+(set! js/window -CodeMirror CodeMirror$)
 
 (defn- all-tokens-by-cursor
   "All tokens from the beginning of the document to the cursor(inclusive)."
@@ -263,7 +265,7 @@
   ([?schema] (malli-to-map-syntax ?schema nil))
   ([?schema options] (m/walk ?schema -map-syntax-walker options)))
 
-(.registerHelper CodeMirror "hint" "clojure"
+(.registerHelper CodeMirror$ "hint" "clojure"
                  (fn [cm _options]
                    (let [cur (.getCursor cm)
                          token (.getTokenAt cm cur)
@@ -363,7 +365,7 @@
        (when (not (.-completionActive (.-state cm)))
          (.showHint cm #js {:completeSingle false})))
      100))
-  (.-Pass CodeMirror))
+  (.-Pass CodeMirror$))
 
 (defn- extra-codemirror-options []
   (get (state/get-config)
@@ -380,7 +382,7 @@
                           :ext "findModeByExtension"
                           :file-name "findModeByFileName"
                           "findModeByName")
-           find-fn (gobj/get CodeMirror find-fn-name)
+           find-fn (gobj/get CodeMirror$ find-fn-name)
            cm-mode (find-fn mode)]
        (if cm-mode
          (.-mime cm-mode)
