@@ -6,8 +6,8 @@
             [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
             [frontend.worker.db-core :as db-core]
-            [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.db-worker-node :as db-worker-node]
+            [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.platform.node :as platform-node]
             [goog.object :as gobj]
             [logseq.cli.config :as cli-config]
@@ -156,6 +156,36 @@
   (reset-daemon-state!)
   (quiet-debug-output-after))
 
+(defn- run-main-with-overrides
+  [{:keys [argv on-exit on-log on-error start-daemon-fn]}]
+  (test-helper/with-js-property-override
+    js/process
+    "argv"
+    argv
+    (fn []
+      (test-helper/with-js-property-override
+        js/process
+        "exit"
+        on-exit
+        (fn []
+          (test-helper/with-js-property-override
+            js/console
+            "log"
+            on-log
+            (fn []
+              (test-helper/with-js-property-override
+                js/console
+                "error"
+                on-error
+                (fn []
+                  (p/with-redefs [db-worker-node/start-daemon! start-daemon-fn]
+                    (p/resolved
+                     (try
+                       (db-worker-node/main)
+                       (catch :default e
+                         (when-not (= "process-exit" (.-message e))
+                           (throw e)))))))))))))))
+
 (use-fixtures :each {:before normalize-db-worker-state-before
                      :after normalize-db-worker-state-after})
 
@@ -282,13 +312,15 @@
     (is (= "logseq_db_parse_args" (:repo result)))
     (is (= true (:create-empty-db? result)))))
 
-(deftest db-worker-node-parse-args-recognizes-server-list-file
+(deftest db-worker-node-parse-args-ignores-server-list-file
   (let [parse-args #'db-worker-node/parse-args
         result (parse-args #js ["node" "dist/db-worker-node.js"
                                 "--repo" "logseq_db_parse_args"
+                                "--root-dir" "/tmp/logseq-root"
                                 "--server-list-file" "/tmp/server-list"])]
     (is (= "logseq_db_parse_args" (:repo result)))
-    (is (= "/tmp/server-list" (:server-list-file result)))))
+    (is (= "/tmp/logseq-root" (:root-dir result)))
+    (is (nil? (:server-list-file result)))))
 
 (deftest db-worker-node-parse-args-recognizes-version
   (let [parse-args #'db-worker-node/parse-args
@@ -299,36 +331,92 @@
 
 (deftest db-worker-node-main-version-exits-early-without-repo
   (async done
-    (let [exit-code* (atom nil)
-          start-called? (atom false)]
-      (-> (test-helper/with-js-property-override
-           js/process
-           "argv"
-           #js ["node" "dist/db-worker-node.js" "--version"]
-           (fn []
-             (test-helper/with-js-property-override
-              js/process
-              "exit"
-              (fn [code]
-                (reset! exit-code* code)
-                (throw (ex-info "process-exit" {:code code})))
-              (fn []
-                (p/with-redefs [db-worker-node/start-daemon! (fn [_]
-                                                               (reset! start-called? true)
-                                                               (p/rejected (ex-info "should-not-start-daemon" {})))]
-                  (p/resolved
-                   (let [output (with-out-str
-                                  (try
-                                    (db-worker-node/main)
-                                    (catch :default e
-                                      (when-not (= "process-exit" (.-message e))
-                                        (throw e)))))]
-                     (is (= 0 @exit-code*))
-                     (is (= false @start-called?))
-                     (is (string/includes? output "Revision:")))))))))
-          (p/catch (fn [e]
-                     (is false (str "unexpected error: " e))))
-          (p/finally done)))))
+         (let [exit-code* (atom nil)
+               start-called? (atom false)]
+           (-> (test-helper/with-js-property-override
+                 js/process
+                 "argv"
+                 #js ["node" "dist/db-worker-node.js" "--version"]
+                 (fn []
+                   (test-helper/with-js-property-override
+                     js/process
+                     "exit"
+                     (fn [code]
+                       (reset! exit-code* code)
+                       (throw (ex-info "process-exit" {:code code})))
+                     (fn []
+                       (p/with-redefs [db-worker-node/start-daemon! (fn [_]
+                                                                      (reset! start-called? true)
+                                                                      (p/rejected (ex-info "should-not-start-daemon" {})))]
+                         (p/resolved
+                          (let [output (with-out-str
+                                         (try
+                                           (db-worker-node/main)
+                                           (catch :default e
+                                             (when-not (= "process-exit" (.-message e))
+                                               (throw e)))))]
+                            (is (= 0 @exit-code*))
+                            (is (= false @start-called?))
+                            (is (string/includes? output "Revision:")))))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest db-worker-node-main-missing-root-dir-prints-error-and-exits-1
+  (async done
+         (let [exit-code* (atom nil)
+               stdout* (atom [])
+               stderr* (atom [])
+               start-called? (atom false)]
+           (-> (run-main-with-overrides
+                {:argv #js ["node" "dist/db-worker-node.js" "--repo" "logseq_db_missing_root"]
+                 :on-exit (fn [code]
+                            (reset! exit-code* code)
+                            (throw (ex-info "process-exit" {:code code})))
+                 :on-log (fn [& args]
+                           (swap! stdout* conj (string/join " " args)))
+                 :on-error (fn [& args]
+                             (swap! stderr* conj (string/join " " args)))
+                 :start-daemon-fn (fn [_]
+                                    (reset! start-called? true)
+                                    (p/rejected (ex-info "should-not-start-daemon" {})))})
+               (p/then (fn [_]
+                         (is (= 1 @exit-code*))
+                         (is (= false @start-called?))
+                         (is (empty? @stdout*))
+                         (is (some #(string/includes? % "root-dir is required")
+                                   @stderr*))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest db-worker-node-main-missing-repo-prints-error-and-exits-1
+  (async done
+         (let [exit-code* (atom nil)
+               stdout* (atom [])
+               stderr* (atom [])
+               start-called? (atom false)]
+           (-> (run-main-with-overrides
+                {:argv #js ["node" "dist/db-worker-node.js" "--root-dir" "/tmp/logseq-root"]
+                 :on-exit (fn [code]
+                            (reset! exit-code* code)
+                            (throw (ex-info "process-exit" {:code code})))
+                 :on-log (fn [& args]
+                           (swap! stdout* conj (string/join " " args)))
+                 :on-error (fn [& args]
+                             (swap! stderr* conj (string/join " " args)))
+                 :start-daemon-fn (fn [_]
+                                    (reset! start-called? true)
+                                    (p/rejected (ex-info "should-not-start-daemon" {})))})
+               (p/then (fn [_]
+                         (is (= 1 @exit-code*))
+                         (is (= false @start-called?))
+                         (is (empty? @stdout*))
+                         (is (some #(string/includes? % "repo is required")
+                                   @stderr*))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest db-worker-node-owner-source-cli-is-written-into-lock
   (async done
@@ -406,18 +494,21 @@
       (is (= {:request-id "r1"}
              (ldb/read-transit-str (:payload parsed)))))))
 
-(deftest db-worker-node-help-omits-auth-token
+(deftest db-worker-node-help-documents-required-root-dir-and-omits-server-list-file
   (let [show-help! #'db-worker-node/show-help!
         output (binding [style/*color-enabled?* true]
                  (with-out-str (show-help!)))
         plain-output (style/strip-ansi output)]
     (is (not (string/includes? (style/strip-ansi output) "--auth-token")))
     (is (not (string/includes? plain-output "--rtc-ws-url")))
-    (is (string/includes? plain-output "(default ~/logseq)"))
+    (is (not (string/includes? plain-output "--server-list-file")))
+    (is (not (string/includes? plain-output "(default ~/logseq)")))
     (is (re-find #"\u001b\[[0-9;]*moptions\u001b\[[0-9;]*m:" output))
     (is (contains-bold? output "db-worker-node"))
     (is (contains-bold? output "--root-dir"))
     (is (contains-bold? output "--repo"))
+    (is (string/includes? plain-output "--root-dir"))
+    (is (string/includes? plain-output "(required)"))
     (is (string/includes? plain-output "--create-empty-db"))
     (is (contains-bold? output "--create-empty-db"))
     (is (not (contains-bold? output "--rtc-ws-url")))
@@ -537,12 +628,12 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest db-worker-node-start-daemon-registers-and-unregisters-server-list-entry
+(deftest db-worker-node-start-daemon-registers-and-unregisters-derived-server-list-entry
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-server-list")
                repo (str "logseq_db_server_list_" (subs (str (random-uuid)) 0 8))
                lock-file-path (lock-path data-dir repo)
-               server-list-file (node-path/join data-dir "server-list")]
+               server-list-file (cli-config/server-list-path data-dir)]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
                                                     #js {:remoteInvoke (fn [_method _direct-pass? _args]
@@ -556,7 +647,6 @@
                                db-lock/update-lock! (fn [_path lock] lock)]
                  (p/let [{:keys [port stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
                                                                              :repo repo
-                                                                             :server-list-file server-list-file
                                                                              :log-level "error"})
                          contents-after-start (.toString (fs/readFileSync server-list-file) "utf8")
                          _ (is (string/includes? contents-after-start (str (.-pid js/process) " " port)))
@@ -709,14 +799,13 @@
          (let [daemon (atom nil)
                data-dir (node-helper/create-tmp-dir "db-worker-daemon")
                repo (str "logseq_db_smoke_" (subs (str (random-uuid)) 0 8))
-               server-list-file (node-path/join data-dir "server-list")
+               server-list-file (cli-config/server-list-path data-dir)
                now (js/Date.now)
                page-uuid (random-uuid)
                block-uuid (random-uuid)]
            (-> (p/let [{:keys [host port stop!]}
                        (start-daemon!  {:root-dir data-dir
-                                        :repo repo
-                                        :server-list-file server-list-file})
+                                        :repo repo})
                        health (http-get host port "/healthz")
                        missing-readyz (http-get host port "/readyz")
                        health-body (js->clj (js/JSON.parse (:body health)) :keywordize-keys true)
@@ -1163,8 +1252,7 @@
                page-uuid (random-uuid)]
            (-> (p/let [{:keys [host port stop!]}
                        (start-daemon! {:root-dir data-dir
-                                       :repo repo
-                                       :server-list-file server-list-file})
+                                       :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
                        _ (invoke host port "thread-api/transact"

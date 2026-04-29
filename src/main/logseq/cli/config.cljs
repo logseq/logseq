@@ -6,7 +6,8 @@
             ["fs" :as fs]
             ["path" :as node-path]
             [logseq.cli.output-mode :as output-mode]
-            [logseq.cli.root-dir :as root-dir]))
+            [logseq.cli.root-dir :as root-dir]
+            [logseq.db-worker.server-list :as server-list]))
 
 (defn- parse-int
   [value]
@@ -38,7 +39,7 @@
 
 (defn server-list-path
   [root-dir]
-  (node-path/join (or root-dir (root-dir/default-root-dir)) "server-list"))
+  (server-list/path (or root-dir (root-dir/default-root-dir))))
 
 (def ^:private removed-config-keys
   #{:auth-token :retries :e2ee-password})

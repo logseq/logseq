@@ -60,6 +60,28 @@
   (is (= (cli-server/db-worker-script-path)
          (cli-server/db-worker-runtime-script-path))))
 
+(deftest cli-server-spawn-server-does-not-forward-server-list-file
+  (async done
+         (let [spawn-server! #'cli-server/spawn-server!
+               captured (atom nil)]
+           (-> (p/with-redefs [daemon/spawn-server! (fn [opts]
+                                                      (reset! captured opts)
+                                                      nil)]
+                 (p/resolved
+                  (spawn-server! {:repo "logseq_db_spawn_test"
+                                  :root-dir "/tmp/logseq-root"
+                                  :owner-source :cli
+                                  :server-list-file "/tmp/server-list"
+                                  :create-empty-db? true})))
+               (p/then (fn [_]
+                         (is (= "logseq_db_spawn_test" (:repo @captured)))
+                         (is (= "/tmp/logseq-root" (:root-dir @captured)))
+                         (is (= true (:create-empty-db? @captured)))
+                         (is (nil? (:server-list-file @captured)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest ensure-server-repairs-stale-lock
   (async done
          (let [root-dir (node-helper/create-tmp-dir "cli-server")
@@ -290,8 +312,7 @@
                          (is (= (cli-server/resolve-root-dir {:root-dir root-dir})
                                 (:root-dir @captured)))
                          (is (= true (:create-empty-db? @captured)))
-                         (is (= (cli-config/server-list-path root-dir)
-                                (:server-list-file @captured)))))
+                         (is (nil? (:server-list-file @captured)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
