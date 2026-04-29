@@ -36,7 +36,6 @@ Make `frontend.worker.db-worker` and its dependencies run in both browser and No
    - Browser: `js/WebSocket`.
    - Node: `ws` client with the same interface shape.
 9. Update caller-side initialization.
-   - Add a Node-specific db worker client (e.g. `frontend.persist-db.node` or `frontend.persist-db.remote`) that talks to the HTTP daemon.
    - Keep browser `frontend.persist-db.browser` using WebWorker + Comlink.
 10. Build config changes.
     - Add a Node build target in `shadow-cljs.edn` for db-worker (e.g. `:db-worker-node`).
@@ -172,7 +171,7 @@ Event delivery options:
 - `BroadcastChannel` and `navigator.locks` are browser-only; Node should use a simpler single-client mode.
 - `Comlink` is browser-optimized; the Node daemon should use HTTP, not Comlink.
 - sqlite-wasm must remain browser-only; Node uses built-in `node:sqlite` directly.
-- only db-graph supported in Node db-worker 
+- only db-graph supported in Node db-worker
 
 ## Success Criteria
 - Browser build continues to work with WebWorker + Comlink.
