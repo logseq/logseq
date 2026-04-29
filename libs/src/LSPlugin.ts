@@ -250,6 +250,31 @@ export type SimpleCommandCallback<E = any> = (e: IHookEvent & E) => void
 export type BlockCommandCallback = (
   e: IHookEvent & { uuid: BlockUUID }
 ) => Promise<void>
+export type CommandPlacement =
+  | 'palette'
+  | 'shortcut'
+  | 'slash'
+  | 'block-context-menu'
+  | 'highlight-context-menu'
+  | 'page-menu'
+  | 'simple'
+export type CommandContext<E = any> = IHookEvent & E & Record<string, any>
+export type CommandCallback<E = any> = (e: CommandContext<E>) => unknown
+export type CommandWhen = string | Array<string>
+export type CommandRegisterOptions = {
+  key?: string
+  title?: string
+  label?: string
+  desc?: string
+  handler?: CommandCallback | BlockCommandCallback | Array<SlashCommandAction>
+  when?: CommandWhen
+  placement?: CommandPlacement
+  placements?: Array<CommandPlacement>
+  keybinding?: SimpleCommandKeybinding | string
+  extras?: Record<string, any>
+  type?: string
+  palette?: boolean
+}
 export type BlockCursorPosition = {
   left: number
   top: number
@@ -315,7 +340,7 @@ export type ExternalCommandType =
   | 'logseq.ui/toggle-theme'
   | 'logseq.ui/toggle-wide-mode'
 
-export type UserProxyNSTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets' | 'utils'
+export type UserProxyNSTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets' | 'utils' | 'commands'
 
 export type SearchIndiceInitStatus = boolean
 export type SearchBlockItem = {
@@ -571,6 +596,33 @@ export interface IAppProxy {
   // internal
   _installPluginHook: (pid: string, hook: string, opts?: any) => void
   _uninstallPluginHook: (pid: string, hookOrAll: string | boolean) => void
+}
+
+/**
+ * Unified command bus APIs.
+ */
+export interface ICommandsProxy {
+  /**
+   * Register a plugin command with one or more placements.
+   *
+   * v1 keeps compatibility with the existing command APIs by mapping placements
+   * to palette commands, shortcuts, slash commands, and context-menu entries.
+   * `when` is stored as command metadata for future host-side evaluation.
+   */
+  register: (
+    id: string,
+    options: CommandRegisterOptions,
+    action?: CommandCallback | BlockCommandCallback | Array<SlashCommandAction>
+  ) => unknown
+
+  /**
+   * Execute a built-in or plugin command.
+   *
+   * Built-in commands use the existing `logseq.*` ids. Plugin commands can be
+   * addressed as `plugin-id/key`, `plugin-id.commands.key`, or a local command
+   * key registered by the current plugin.
+   */
+  execute: (id: string, ...args: Array<any>) => Promise<unknown>
 }
 
 /**
@@ -1185,6 +1237,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   resolveResourceFullUrl(filePath: string): string
 
   App: IAppProxy
+  Commands: ICommandsProxy
   Editor: IEditorProxy
   DB: IDBProxy
   Git: IGitProxy

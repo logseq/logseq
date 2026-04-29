@@ -29,6 +29,7 @@ const DECL_FILES = [
  */
 const TARGET_INTERFACES = [
   'IAppProxy',
+  'ICommandsProxy',
   'IEditorProxy',
   'IDBProxy',
   'IUIProxy',
