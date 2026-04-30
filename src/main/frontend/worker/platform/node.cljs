@@ -4,7 +4,6 @@
             ["node:sqlite" :as node-sqlite]
             ["os" :as os]
             ["path" :as node-path]
-            ["ws" :as ws]
             [clojure.string :as string]
             [cognitect.transit :as transit]
             [frontend.worker.db-worker-node-lock :as db-lock]
@@ -290,7 +289,8 @@
 
 (defn- websocket-connect
   [url]
-  (ws. url))
+  (let [WebSocket (js/require "ws")]
+    (new WebSocket url)))
 
 (def ^:private kv-transit-writer
   (transit/writer
