@@ -18,6 +18,10 @@ const builtinModuleSet = new Set([
   ...builtinModules,
   ...builtinModules.map((moduleName) => `node:${moduleName}`),
 ]);
+const externalModuleSet = new Set([
+  "keytar",
+  "ws",
+]);
 
 async function exists(targetPath) {
   try {
@@ -101,7 +105,10 @@ async function main() {
       },
       rollupOptions: {
         external: (id) =>
-          id.endsWith(".node") || id.startsWith("node:") || builtinModuleSet.has(id),
+          id.endsWith(".node") ||
+          id.startsWith("node:") ||
+          builtinModuleSet.has(id) ||
+          externalModuleSet.has(id),
         output: {
           format: "cjs",
           exports: "auto",
@@ -114,6 +121,18 @@ async function main() {
 
   if (!(await exists(bundleEntry))) {
     throw new Error(`vite bundle missing output file: ${bundleEntry}`);
+  }
+
+  const bundleContents = await fs.readFile(bundleEntry, "utf8");
+  if (bundleContents.includes("node_modules/.pnpm/keytar")) {
+    throw new Error(
+      "vite bundle contains a pnpm keytar native path; keytar must stay external"
+    );
+  }
+  if (bundleContents.includes("ws does not work in the browser")) {
+    throw new Error(
+      "vite bundle contains the ws browser stub; ws must stay external"
+    );
   }
 
   let filesAfter = await listFilesRecursive(distDir);
