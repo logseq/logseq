@@ -1,5 +1,8 @@
 # Logseq CLI
 
+## COMPACT-GIT-COMMIT (oldest first)
+- 1a91084894
+
 ## Scope and sources of truth
 
 This document is the current-state agent guide for the Logseq CLI under `docs/agent-guide/`.
