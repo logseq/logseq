@@ -47,5 +47,11 @@
   },
   "resolutions": {
     "node-abi": "4.28.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "keytar"
+    ]
   }
 }

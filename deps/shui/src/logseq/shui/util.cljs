@@ -42,14 +42,25 @@
 (defn $LSUtils [] (aget js/window "LSUtils"))
 (def dev? (some-> ($LSUtils) (aget "isDev")))
 
+(defn- callable-export
+  [module]
+  (or (when (fn? module)
+        module)
+      (when-let [default (some-> module (gobj/get "default"))]
+        (when (fn? default)
+          default))
+      (when-let [module-exports (some-> module (gobj/get "module.exports"))]
+        (when (fn? module-exports)
+          module-exports))))
+
 (defn uuid-color
   [uuid-str]
-  (some-> ($LSUtils) (aget "uniqolor")
-          (apply [uuid-str
-                  #js {:saturation #js [55, 70],
-                       :lightness 70,
-                       :differencePoint 60}])
-          (aget "color")))
+  (when-let [uniqolor (some-> ($LSUtils) (aget "uniqolor") callable-export)]
+    (some-> (uniqolor uuid-str
+              #js {:saturation #js [55, 70],
+                   :lightness 70,
+                   :differencePoint 60})
+            (aget "color"))))
 
 (defn get-path
   "Returns the component path."

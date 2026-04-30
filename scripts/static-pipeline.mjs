@@ -23,9 +23,19 @@ const staticCleanKeep = new Set([
 ])
 
 function run(command, args, options = {}) {
+  const env = { ...process.env }
+
+  for (const [key, value] of Object.entries(options.env ?? {})) {
+    if (value == null) {
+      delete env[key]
+    } else {
+      env[key] = value
+    }
+  }
+
   execFileSync(command, args, {
     cwd: options.cwd ?? rootDir,
-    env: { ...process.env, ...(options.env ?? {}) },
+    env,
     shell: process.platform === 'win32',
     stdio: 'inherit',
   })
@@ -56,7 +66,10 @@ function ensureStaticNodeModules() {
 
 function electron() {
   ensureStaticNodeModules()
-  run('pnpm', ['electron:dev'], { cwd: staticDir })
+  run('pnpm', ['electron:dev'], {
+    cwd: staticDir,
+    env: { ELECTRON_RUN_AS_NODE: null },
+  })
 }
 
 function versionFromSource() {

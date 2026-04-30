@@ -5,7 +5,9 @@
 (defn default-export
   "Returns the callable/default value from ESM, CommonJS interop, or namespace-shaped modules."
   [module]
-  (or (when (some? module)
+  (or (when (fn? module)
+        module)
+      (when (some? module)
         (gobj/get module "default"))
       (when (some? module)
         (gobj/get module "module.exports"))
