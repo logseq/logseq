@@ -26,7 +26,7 @@
      * :cardinality - property cardinality. Default to one/single cardinality if not set
      * :hide? - Boolean which hides property when set on a block or exported e.g. slides
      * :public? - Boolean which allows property to be used by user: add and remove property to blocks/pages
-       and queryable via property and has-property rules
+       and queryable via property and has-property rules. When it's not set, it's the same as false
      * :view-context - Keyword to indicate which view contexts a property can be
        seen in when :public? is set. Valid values are :page, :block and :never. Property can
        be viewed in any context if not set
@@ -635,6 +635,11 @@
                                                         :public? false
                                                         :hide? true}})))
 
+(def public-built-in-properties
+  (->> built-in-properties
+       (keep (fn [[k v]] (when (get-in v [:schema :public?]) k)))
+       set))
+
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"
   #{:block/alias :block/tags :block/parent
@@ -740,6 +745,11 @@
   {:pre [(string? s)]}
   ;; Disallow tags or page refs as they would create unreferenceable page names
   (not (re-find #"^(#|\[\[)" s)))
+
+(defn built-in-closed-values
+  "Gets :closed-values for given built-in property ident"
+  [ident]
+  (get-in built-in-properties [ident :closed-values]))
 
 (defn get-closed-property-values
   [db property-id]

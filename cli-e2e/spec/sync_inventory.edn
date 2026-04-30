@@ -1,0 +1,13 @@
+{:excluded-command-prefixes ["login" "logout"]
+ :scopes
+ {:global
+  {:options ["--config"
+             "--graph"
+             "--root-dir"
+             "--output"]}
+
+  :sync
+  {:commands ["sync upload"
+              "sync download"
+              "sync status"]
+   :options []}}}

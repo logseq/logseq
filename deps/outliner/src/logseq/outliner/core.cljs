@@ -6,6 +6,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -300,7 +301,10 @@
               (outliner-validate/validate-page-title-characters block-title {:node m*}))
           m (if page-title-changed?
               (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
-                    page-name (common-util/page-name-sanity-lc (:block/title m*))]
+                    page-name (if-let [journal-day (:block/journal-day block-entity)]
+                                (common-util/page-name-sanity-lc
+                                 (date-time-util/int->journal-title journal-day date-time-util/default-journal-title-formatter))
+                                (common-util/page-name-sanity-lc (:block/title m*)))]
                 (assoc m* :block/name page-name))
               m*)
           _ (when (and ;; page or object changed?
@@ -457,6 +461,11 @@
       (throw (ex-info "Block eid doesn't exist"
                       {:block block})))
     (when-let [entity (d/entity db eid)]
+      (when (outliner-validate/built-in-entity? entity)
+        (throw (ex-info "Built-in nodes can't be modified"
+                        {:type :notification
+                         :payload {:message "Built-in nodes can't be modified"
+                                   :type :error}})))
       (let [*txs-state (atom [])
             block' (if (de/entity? block)
                      block
@@ -612,7 +621,8 @@
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup ", block: " block)))))
         blocks-tx (build-insert-blocks-tx db target-block blocks uuids get-new-id opts)]
     {:blocks-tx blocks-tx
-     :id->new-uuid id->new-uuid}))
+     :id->new-uuid id->new-uuid
+     :uuid->new-uuid uuids}))
 
 (defn- get-target-block
   [db blocks target-block {:keys [outliner-op bottom? top? indent? sibling? up? replace-empty-target?]}]
@@ -763,11 +773,11 @@
                           :keep-block-order? keep-block-order?
                           :outliner-op outliner-op
                           :insert-template? insert-template?}
-             {:keys [id->new-uuid blocks-tx]} (insert-blocks-aux db blocks' target-block insert-opts)]
-         (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/order b)))) blocks-tx)
-           (throw (ex-info "Invalid outliner data"
-                           {:opts insert-opts
-                            :tx (vec blocks-tx)
+            {:keys [id->new-uuid uuid->new-uuid blocks-tx]} (insert-blocks-aux db blocks' target-block insert-opts)]
+        (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/order b)))) blocks-tx)
+          (throw (ex-info "Invalid outliner data"
+                          {:opts insert-opts
+                           :tx (vec blocks-tx)
                             :blocks (vec blocks)
                             :target-block target-block}))
            (let [tx (assign-temp-id blocks-tx target-block replace-empty-target?)
@@ -778,12 +788,14 @@
                                (remove old-db-id-blocks)
                                (remove nil?)
                                (map (fn [uuid'] {:block/uuid uuid'})))
-                 from-property (:logseq.property/created-from-property target-block)
-                 many? (= :db.cardinality/many (:db/cardinality from-property))
-                 property-values-tx (when (and sibling? from-property many?)
+                from-property (:logseq.property/created-from-property target-block)
+                many? (= :db.cardinality/many (:db/cardinality from-property))
+                property-values-tx (when (and sibling? from-property many?)
                                       (let [top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
                                         (mapcat (fn [block]
-                                                  (when-let [new-id (or (id->new-uuid (:db/id block)) (:block/uuid block))]
+                                                  (when-let [new-id (or (id->new-uuid (:db/id block))
+                                                                        (uuid->new-uuid (:block/uuid block))
+                                                                        (:block/uuid block))]
                                                     [{:block/uuid new-id
                                                       :logseq.property/created-from-property (:db/id from-property)}
                                                      [:db/add
@@ -831,15 +843,15 @@
   (let [top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
         top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
-        top-level-blocks (remove :logseq.property/built-in? top-level-blocks*)
+        top-level-blocks (remove outliner-validate/built-in-entity? top-level-blocks*)
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
         end-block (last top-level-blocks)
         delete-one-block? (or (= 1 (count top-level-blocks)) (= start-block end-block))]
 
-    ;; Validate before `when` since top-level-blocks will be empty when deleting one built-in block
-    (when (seq (filter :logseq.property/built-in? top-level-blocks*))
+    ;; Validate before `when` since top-level-blocks will be empty when deleting one built-in/internal block
+    (when (seq (filter outliner-validate/built-in-entity? top-level-blocks*))
       (throw (ex-info "Built-in nodes can't be deleted"
                       {:type :notification
                        :payload {:message "Built-in nodes can't be deleted."
@@ -927,6 +939,13 @@
                              :as opts}]
   {:pre [(seq blocks)]}
   (when (m/validate block-map-or-entity target-block)
+    (doseq [b blocks]
+      (let [entity (d/entity @conn (:db/id b))]
+        (when (outliner-validate/built-in-entity? entity)
+          (throw (ex-info "Built-in nodes can't be modified"
+                          {:type :notification
+                           :payload {:message "Built-in nodes can't be modified"
+                                     :type :error}})))))
     (let [db @conn
           top-level-blocks (filter-top-level-blocks db blocks)
           [target-block sibling?] (get-target-block db top-level-blocks target-block opts)

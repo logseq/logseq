@@ -221,42 +221,42 @@
                  {:fix-db? true})))
 
 (defn validate-db
-  ([conn]
-   (validate-db nil conn nil))
-  ([_repo conn _options]
-   (fix-extends-cardinality! conn)
-   (fix-icon-wrong-type! conn)
-   (db-migrate/ensure-built-in-data-exists! conn)
-   (fix-non-closed-values! conn)
-   (fix-num-prefix-db-idents! conn)
+  [conn & {:keys [fix] :or {fix true}}]
+  (when fix
+    (fix-extends-cardinality! conn)
+    (fix-icon-wrong-type! conn)
+    (db-migrate/ensure-built-in-data-exists! conn)
+    (fix-non-closed-values! conn)
+    (fix-num-prefix-db-idents! conn))
 
-   (let [db @conn
-         {:keys [errors datom-count entities]} (db-validate/validate-db db)
-         invalid-entity-ids (distinct (map (fn [e] (:db/id (:entity e))) errors))]
+  (let [db @conn
+        {:keys [errors datom-count entities]} (db-validate/validate-db db)
+        invalid-entity-ids (distinct (map (fn [e] (:db/id (:entity e))) errors))]
 
-     (doseq [error errors]
-       (prn :debug
-            :entity (:entity error)
-            :error (dissoc error :entity)))
+    (doseq [error errors]
+      (prn :debug
+           :entity (:entity error)
+           :error (dissoc error :entity)))
 
     (if errors
       (do
-        (fix-invalid-blocks! conn errors)
+        (when fix
+          (fix-invalid-blocks! conn errors))
         (shared-service/broadcast-to-clients! :log [:db-invalid :error
                                                     {:msg "Validation errors"
                                                      :errors errors}])
         (shared-service/broadcast-to-clients! :notification
-                                              [nil :warning false nil nil
-                                               {:i18n-key :graph.validation/invalid-blocks-detected
-                                                :i18n-args [(count errors)]}]))
+                                              [(str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy."
+                                                    (when fix
+                                                      " Attempting to fix invalid blocks. Run validation again to see if they were fixed."))
+                                               :warning false]))
 
       (shared-service/broadcast-to-clients! :notification
-                                            [nil :success false nil nil
-                                             {:i18n-key :graph.validation/valid
-                                              :i18n-args [(assoc (db-validate/graph-counts db entities) :datoms datom-count)]}]))
+                                            [(str "Your graph is valid! " (assoc (db-validate/graph-counts db entities) :datoms datom-count))
+                                             :success false]))
     {:errors errors
      :datom-count datom-count
-     :invalid-entity-ids invalid-entity-ids})))
+     :invalid-entity-ids invalid-entity-ids}))
 
 (defn recompute-checksum-diagnostics
   [_repo conn {:keys [local-checksum remote-checksum] :as _sync-diagnostics}]

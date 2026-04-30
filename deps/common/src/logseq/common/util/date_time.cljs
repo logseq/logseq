@@ -7,11 +7,12 @@
             [logseq.common.util :as common-util]))
 
 (def ^:private yyyyMMdd-formatter (tf/formatter "yyyyMMdd"))
+(def ^:api default-journal-title-formatter "MMM do, yyyy")
 
 ;; (tf/parse (tf/formatter "dd.MM.yyyy") "2021Q4") => 20040120T000000
 (defn safe-journal-title-formatters
   [date-formatter]
-  (->> [date-formatter "MMM do, yyyy" "yyyy-MM-dd" "yyyy_MM_dd"]
+  (->> [date-formatter default-journal-title-formatter "yyyy-MM-dd" "yyyy_MM_dd"]
        (remove string/blank?)
        distinct))
 
