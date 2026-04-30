@@ -1,6 +1,7 @@
 (ns electron.core
   (:require ["/electron/utils" :as js-utils]
             ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
+            ["fs-extra" :as fs]
 
             ["os" :as os]
             ["path" :as node-path]
@@ -34,6 +35,7 @@
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
 (defonce *quit-dirty? (volatile! true))
+(defonce CLI_LAUNCHER_MARKER "logseq-cli-managed")
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
@@ -266,6 +268,119 @@
          (fn [error]
            (logger/warn :electron/wrong-release-warning-failed error))))))
 
+(defn- path-separator
+  []
+  (if utils/win32? ";" ":"))
+
+(defn- split-path-env
+  [path-env]
+  (->> (string/split (or path-env "") (re-pattern (path-separator)))
+       (remove string/blank?)
+       distinct))
+
+(defn- writable-dir?
+  [dir]
+  (try
+    (when (and (string? dir)
+               (fs/existsSync dir)
+               (.isDirectory (fs/statSync dir)))
+      (fs/accessSync dir (aget fs "constants" "W_OK"))
+      true)
+    (catch :default _
+      false)))
+
+(defn- find-first-writable-dir
+  [dirs]
+  (some #(when (writable-dir? %) %) dirs))
+
+(defn- ensure-dir!
+  [dir]
+  (when (and (string? dir) (not (fs/existsSync dir)))
+    (fs/mkdirSync dir #js {:recursive true})))
+
+(defn- preferred-unix-cli-dir
+  []
+  (let [path-dirs (split-path-env (.-PATH js/process.env))
+        user-bin (node-path/join (.homedir os) ".local" "bin")]
+    (or (find-first-writable-dir path-dirs)
+        (do
+          (ensure-dir! user-bin)
+          (when (writable-dir? user-bin)
+            user-bin)))))
+
+(defn- preferred-win-cli-dir
+  []
+  (let [path-env (or (.-PATH js/process.env) (.-Path js/process.env))
+        path-dirs (split-path-env path-env)
+        local-appdata (.-LOCALAPPDATA js/process.env)
+        windows-apps-dir (when local-appdata
+                           (node-path/join local-appdata "Microsoft" "WindowsApps"))]
+    (or (when windows-apps-dir
+          (ensure-dir! windows-apps-dir)
+          (when (writable-dir? windows-apps-dir)
+            windows-apps-dir))
+        (find-first-writable-dir path-dirs))))
+
+(defn- cli-script-path
+  []
+  (if (.-isPackaged ^js app)
+    (node-path/join js/process.resourcesPath "app.asar" "js" "logseq-cli.js")
+    (node-path/join js/__dirname "logseq-cli.js")))
+
+(defn- render-unix-cli-launcher
+  [exe-path cli-path]
+  (str "#!/usr/bin/env sh\n"
+       "# " CLI_LAUNCHER_MARKER "\n"
+       "set -eu\n"
+       "ELECTRON_RUN_AS_NODE=1 exec \"" exe-path "\" \"" cli-path "\" \"$@\"\n"))
+
+(defn- render-win-cli-launcher
+  [exe-path cli-path]
+  (str "@echo off\r\n"
+       "REM " CLI_LAUNCHER_MARKER "\r\n"
+       "set ELECTRON_RUN_AS_NODE=1\r\n"
+       "\"" exe-path "\" \"" cli-path "\" %*\r\n"))
+
+(defn- write-cli-launcher!
+  [path content windows?]
+  (let [should-write? (if (fs/existsSync path)
+                        (let [existing (.readFileSync fs path "utf8")]
+                          (and (string/includes? existing CLI_LAUNCHER_MARKER)
+                               (not= existing content)))
+                        true)]
+    (when should-write?
+      (.writeFileSync fs path content "utf8")
+      (when-not windows?
+        (fs/chmodSync path "755"))
+      true)))
+
+(defn- install-cli-launcher!
+  []
+  (try
+    (let [cli-path (cli-script-path)
+          cli-dir (if utils/win32?
+                    (preferred-win-cli-dir)
+                    (preferred-unix-cli-dir))]
+      (cond
+        (not (fs/existsSync cli-path))
+        (logger/warn :cli/install (str "Missing CLI script at " cli-path ", skip installing launcher"))
+
+        (nil? cli-dir)
+        (logger/warn :cli/install "No writable PATH directory found; skip installing logseq launcher")
+
+        :else
+        (let [target-path (if utils/win32?
+                            (node-path/join cli-dir "logseq.cmd")
+                            (node-path/join cli-dir "logseq"))
+              exe-path (.getPath app "exe")
+              content (if utils/win32?
+                        (render-win-cli-launcher exe-path cli-path)
+                        (render-unix-cli-launcher exe-path cli-path))]
+          (when (write-cli-launcher! target-path content utils/win32?)
+            (logger/info :cli/install (str "Installed launcher at " target-path))))))
+    (catch :default e
+      (logger/warn :cli/install "Failed to install logseq launcher" e))))
+
 (defn- on-app-ready!
   [^js app']
   (.on app' "ready"
@@ -286,6 +401,7 @@
            (js-utils/disableXFrameOptions win)
 
            (db/ensure-graphs-dir!)
+           (install-cli-launcher!)
 
            ;; Windows/Linux: handle deeplink URL passed on first launch via argv
            (handle-initial-deeplink! win)
