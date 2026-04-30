@@ -3502,10 +3502,12 @@
   (let [block (or (db/entity (:db/id block)) block)]
     (if (:bidirectional? config)
       (if (:ref-query-child? config)
-        (util/collapsed? block)
+        (and (not (:ignore-block-collapsed? config))
+             (util/collapsed? block))
         true)
       (or
-       (util/collapsed? block)
+       (and (not (:ignore-block-collapsed? config))
+            (util/collapsed? block))
        (and (util/mobile?) (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block))
        (and (or (:list-view? config) (:ref? config))
             (or (:block/_parent block) (:block.temp/has-children? block))
@@ -3515,6 +3517,13 @@
        (and (or (:view? config) (:popup? config))
             (or (ldb/page? block)
                 (:table-block-title? config)))))))
+
+(defn load-children?
+  [block temporary-collapsed-state ignore-block-collapsed?]
+  (or ignore-block-collapsed?
+      (not (if-some [result temporary-collapsed-state]
+             result
+             (:block/collapsed? block)))))
 
 (defn batch-set-heading!
   [block-ids heading]

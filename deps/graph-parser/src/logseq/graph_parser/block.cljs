@@ -297,8 +297,9 @@
                  ;; for page names to change which breaks looking up journal refs for unconfigured journal pages
                  (if export-to-db-graph? [date-formatter] (date-time-util/safe-journal-title-formatters date-formatter))))]
       (if day
-        (let [original-page-name' (date-time-util/int->journal-title day date-formatter)]
-          [original-page-name' (common-util/page-name-sanity-lc original-page-name') day])
+        (let [original-page-name' (date-time-util/int->journal-title day date-formatter)
+              default-journal-page-name (date-time-util/int->journal-title day date-time-util/default-journal-title-formatter)]
+          [original-page-name' (common-util/page-name-sanity-lc default-journal-page-name) day])
         [original-page-name page-name day]))))
 
 (def convert-page-if-journal (memoize convert-page-if-journal-impl))

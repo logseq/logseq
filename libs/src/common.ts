@@ -57,65 +57,155 @@ export function deepMerge<T>(a: Partial<T>, b: Partial<T>): T {
   return merge(a, b, { arrayMerge: overwriteArrayMerge })
 }
 
-export class PluginLogger extends EventEmitter<'change'> {
-  private _logs: Array<[type: string, payload: any]> = []
+export type PluginLogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
+
+export interface PluginLogEntry {
+  ts: number
+  level: PluginLogLevel
+  tag: string
+  message: string
+}
+
+export interface PluginLoggerOptions {
+  console?: boolean
+  maxSize?: number
+  level?: PluginLogLevel
+}
+
+const LOG_LEVEL_WEIGHT: Record<PluginLogLevel, number> = {
+  DEBUG: 10,
+  INFO: 20,
+  WARN: 30,
+  ERROR: 40,
+}
+
+const DEFAULT_LOG_MAX_SIZE = 500
+
+function safeStringifyArg(it: any): string {
+  if (it == null) return String(it)
+  if (it instanceof Error) return `${it.message}${it.stack ? '\n' + it.stack : ''}`
+  if (typeof it === 'string') return it
+  if (typeof it === 'object') {
+    try {
+      const seen = new WeakSet()
+      return JSON.stringify(it, (_k, v) => {
+        if (typeof v === 'object' && v !== null) {
+          if (seen.has(v)) return '[Circular]'
+          seen.add(v)
+        }
+        return v
+      })
+    } catch (_e) {
+      try { return String(it) } catch (_) { return '[Unserializable]' }
+    }
+  }
+  try { return String(it) } catch (_e) { return '[Unserializable]' }
+}
+
+export class PluginLogger extends EventEmitter<'change' | 'append' | 'clear'> {
+  private _logs: PluginLogEntry[] = []
+  private _maxSize: number
+  private _level: PluginLogLevel
 
   constructor(
     private _tag?: string,
-    private _opts?: {
-      console: boolean
-    }
+    private _opts?: PluginLoggerOptions
   ) {
     super()
+    this._maxSize = Math.max(50, _opts?.maxSize ?? DEFAULT_LOG_MAX_SIZE)
+    this._level = _opts?.level ?? 'DEBUG'
   }
 
-  write(type: string, payload: any[], inConsole?: boolean) {
-    if (payload?.length && true === payload[payload.length - 1]) {
+  /**
+   * Write a log entry.
+   * Backwards compatible: the legacy boolean tail flag in `payload` to force
+   * console output is still honored.
+   */
+  write(level: PluginLogLevel | string, payload: any[], inConsole?: boolean) {
+    // back-compat: trailing boolean === true means "force console"
+    if (Array.isArray(payload) && payload.length &&
+      payload[payload.length - 1] === true) {
       inConsole = true
-      payload.pop()
+      payload = payload.slice(0, -1)
     }
 
-    const msg = payload.reduce((ac, it) => {
-      if (it && it instanceof Error) {
-        ac += `${it.message} ${it.stack}`
-      } else {
-        ac += it.toString()
-      }
-      return ac
-    }, `[${this._tag}][${new Date().toLocaleTimeString()}] `)
+    const lvl = (typeof level === 'string'
+      ? (level.toUpperCase() as PluginLogLevel)
+      : level) as PluginLogLevel
+    const normalizedLevel: PluginLogLevel =
+      lvl in LOG_LEVEL_WEIGHT ? lvl : 'INFO'
 
-    this._logs.push([type, msg])
+    // level filtering
+    if (LOG_LEVEL_WEIGHT[normalizedLevel] < LOG_LEVEL_WEIGHT[this._level]) {
+      return
+    }
+
+    const message = (payload || []).map(safeStringifyArg).join(' ')
+    const entry: PluginLogEntry = {
+      ts: Date.now(),
+      level: normalizedLevel,
+      tag: this._tag || '',
+      message,
+    }
+
+    this._logs.push(entry)
+    // ring buffer
+    if (this._logs.length > this._maxSize) {
+      this._logs.splice(0, this._logs.length - this._maxSize)
+    }
 
     if (inConsole || this._opts?.console) {
-      console?.['ERROR' === type ? 'error' : 'debug'](`${type}: ${msg}`)
+      const fn = normalizedLevel === 'ERROR'
+        ? 'error'
+        : normalizedLevel === 'WARN'
+          ? 'warn'
+          : normalizedLevel === 'DEBUG' ? 'debug' : 'info'
+      try {
+        // eslint-disable-next-line no-console
+        console[fn](`[${entry.tag}][${new Date(entry.ts).toLocaleTimeString()}] ${normalizedLevel}: ${message}`)
+      } catch (_e) { /* noop */ }
     }
 
+    this.emit('append', entry)
     this.emit('change')
   }
 
   clear() {
     this._logs = []
+    this.emit('clear')
     this.emit('change')
   }
 
-  info(...args: any[]) {
-    this.write('INFO', args)
+  debug(...args: any[]) { this.write('DEBUG', args) }
+  info(...args: any[]) { this.write('INFO', args) }
+  warn(...args: any[]) { this.write('WARN', args) }
+  error(...args: any[]) { this.write('ERROR', args) }
+
+  setTag(s: string) { this._tag = s }
+  getTag() { return this._tag }
+
+  setLevel(l: PluginLogLevel) {
+    if (l in LOG_LEVEL_WEIGHT) this._level = l
+  }
+  getLevel(): PluginLogLevel { return this._level }
+
+  setMaxSize(n: number) {
+    this._maxSize = Math.max(50, n | 0)
+    if (this._logs.length > this._maxSize) {
+      this._logs.splice(0, this._logs.length - this._maxSize)
+      this.emit('change')
+    }
   }
 
-  error(...args: any[]) {
-    this.write('ERROR', args)
+  /** Structured entries (preferred). */
+  getEntries(): PluginLogEntry[] {
+    return this._logs.slice()
   }
 
-  warn(...args: any[]) {
-    this.write('WARN', args)
-  }
-
-  setTag(s: string) {
-    this._tag = s
-  }
-
-  toJSON() {
-    return this._logs
+  /** Legacy tuple format kept for backwards compatibility. */
+  toJSON(): Array<[PluginLogLevel, string]> {
+    return this._logs.map((e) => [e.level,
+      `[${e.tag}][${new Date(e.ts).toLocaleTimeString()}] ${e.message}`])
   }
 }
 

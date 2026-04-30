@@ -22,18 +22,35 @@
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
 
-(defn set-router!
+(defn- build-router
   []
-  (.addEventListener js/window "popstate" route-handler/restore-scroll-pos)
-  (rfe/start!
-   (rf/router (plugins/hook-custom-routes routes/routes) nil)
-   (fn [route]
-     (route-handler/set-route-match! route)
-     (plugin-handler/hook-plugin-app
-      :route-changed (select-keys route [:template :path :parameters])))
+  (rf/router (plugins/hook-custom-routes routes/routes) nil))
 
+(defn- on-navigate
+  [route]
+  (route-handler/set-route-match! route)
+  (plugin-handler/hook-plugin-app
+   :route-changed (select-keys route [:template :path :parameters])))
+
+(defn refresh-router!
+  "Rebuilds the reitit router so route renderers registered by plugins after
+   the app started take effect. Safe to call repeatedly; `rfe/start!` stops the
+   previous history instance internally."
+  []
+  (rfe/start!
+   (build-router)
+   on-navigate
    ;; set to false to enable HistoryAPI
    {:use-fragment true}))
+
+(defonce ^:private *popstate-installed? (atom false))
+
+(defn set-router!
+  []
+  (when (compare-and-set! *popstate-installed? false true)
+    (.addEventListener js/window "popstate" route-handler/restore-scroll-pos))
+  (refresh-router!)
+  (plugin-handler/set-route-renderer-refresh-fn! refresh-router!))
 
 (defn display-welcome-message
   []

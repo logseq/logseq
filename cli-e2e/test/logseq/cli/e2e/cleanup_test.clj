@@ -1,0 +1,149 @@
+(ns logseq.cli.e2e.cleanup-test
+  (:require [babashka.fs :as fs]
+            [clojure.test :refer [deftest is testing]]
+            [logseq.cli.e2e.cleanup :as cleanup]))
+
+(deftest list-cli-e2e-db-worker-pids-filters-processes
+  (let [shell-fn (fn [& _]
+                   {:exit 0
+                    :out (str " 101 node /repo/dist/db-worker-node.js --repo graph-a --root-dir /tmp/logseq-cli-e2e-graph-a-123/graphs --owner-source cli\n"
+                              " 202 node /repo/dist/db-worker-node.js --repo production --root-dir /tmp/production-graphs --owner-source cli\n"
+                              " 303 node /repo/static/logseq-cli.js graph list\n"
+                              " 404 /usr/bin/python3 background.py\n"
+                              " 505 node /repo/static/db-worker-node.js --repo graph-b --root-dir /private/tmp/logseq-cli-e2e-graph-b-999/graphs --owner-source cli\n")
+                    :err ""})]
+    (is (= [101 505]
+           (cleanup/list-cli-e2e-db-worker-pids {:shell-fn shell-fn}))))
+
+  (testing "throws when ps invocation fails"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"Unable to scan processes"
+         (cleanup/list-cli-e2e-db-worker-pids {:shell-fn (fn [& _]
+                                                            {:exit 1
+                                                             :out ""
+                                                             :err "permission denied"})})))))
+
+(deftest cleanup-db-worker-processes-separates-killed-and-failed
+  (let [killed (atom [])
+        result (cleanup/cleanup-db-worker-processes! {:list-pids-fn (fn [] [11 22 33])
+                                                      :kill-pid-fn (fn [pid]
+                                                                     (swap! killed conj pid)
+                                                                     (if (= pid 22)
+                                                                       :failed
+                                                                       :killed))})]
+    (is (= [11 22 33] (:found-pids result)))
+    (is (= [11 33] (:killed-pids result)))
+    (is (= [22] (:failed-pids result)))
+    (is (= [11 22 33] @killed))))
+
+(deftest cleanup-db-worker-processes-dry-run-does-not-kill
+  (let [killed (atom [])
+        result (cleanup/cleanup-db-worker-processes! {:dry-run true
+                                                      :list-pids-fn (fn [] [11 22])
+                                                      :kill-pid-fn (fn [pid]
+                                                                     (swap! killed conj pid)
+                                                                     :killed)})]
+    (is (= [11 22] (:found-pids result)))
+    (is (true? (:dry-run? result)))
+    (is (= [11 22] (:would-kill-pids result)))
+    (is (= [] (:killed-pids result)))
+    (is (= [] (:failed-pids result)))
+    (is (= [] @killed))))
+
+(deftest list-cli-e2e-db-sync-port-pids-filters-port-18080
+  (let [shell-fn (fn [& _]
+                   {:exit 0
+                    :out (str "COMMAND   PID USER   FD   TYPE DEVICE SIZE/OFF NODE NAME\n"
+                              "node    111 me    13u  IPv6 0x0 0t0 TCP *:18080 (LISTEN)\n"
+                              "python  222 me    13u  IPv4 0x0 0t0 TCP 127.0.0.1:18080 (LISTEN)\n"
+                              "node    333 me    13u  IPv6 0x0 0t0 TCP *:18081 (LISTEN)\n")
+                    :err ""})]
+    (is (= [111 222]
+           (cleanup/list-cli-e2e-db-sync-port-pids {:shell-fn shell-fn}))))
+
+  (testing "returns empty when no listener exists"
+    (is (= []
+           (cleanup/list-cli-e2e-db-sync-port-pids {:shell-fn (fn [& _]
+                                                                 {:exit 1
+                                                                  :out ""
+                                                                  :err ""})}))))
+
+  (testing "throws when lsof invocation fails"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"Unable to scan db-sync server port listeners"
+         (cleanup/list-cli-e2e-db-sync-port-pids {:shell-fn (fn [& _]
+                                                               {:exit 1
+                                                                :out ""
+                                                                :err "permission denied"})})))))
+
+(deftest cleanup-db-sync-port-processes-separates-killed-and-failed
+  (let [killed (atom [])
+        result (cleanup/cleanup-db-sync-port-processes! {:list-pids-fn (fn [] [44 55])
+                                                         :kill-pid-fn (fn [pid]
+                                                                        (swap! killed conj pid)
+                                                                        (if (= pid 55)
+                                                                          :failed
+                                                                          :killed))})]
+    (is (= [44 55] (:found-pids result)))
+    (is (= [44] (:killed-pids result)))
+    (is (= [55] (:failed-pids result)))
+    (is (= [44 55] @killed))))
+
+(deftest cleanup-db-sync-port-processes-dry-run-does-not-kill
+  (let [killed (atom [])
+        result (cleanup/cleanup-db-sync-port-processes! {:dry-run true
+                                                         :list-pids-fn (fn [] [44])
+                                                         :kill-pid-fn (fn [pid]
+                                                                        (swap! killed conj pid)
+                                                                        :killed)})]
+    (is (= [44] (:found-pids result)))
+    (is (true? (:dry-run? result)))
+    (is (= [44] (:would-kill-pids result)))
+    (is (= [] (:killed-pids result)))
+    (is (= [] (:failed-pids result)))
+    (is (= [] @killed))))
+
+(deftest cleanup-temp-roots-removes-only-cli-e2e-temp-roots
+  (let [tmp-root (fs/create-temp-dir {:prefix "cleanup-e2e-test-"})
+        matching-root (fs/path tmp-root "logseq-cli-e2e-case-a-123")
+        another-matching-root (fs/path tmp-root "logseq-cli-e2e-case-b-456")
+        non-matching-root (fs/path tmp-root "other-case")]
+    (try
+      (fs/create-dirs (fs/path matching-root "graphs"))
+      (fs/create-dirs (fs/path matching-root "home" "logseq"))
+      (fs/create-dirs (fs/path another-matching-root "graphs"))
+      (fs/create-dirs (fs/path non-matching-root "graphs"))
+
+      (let [result (cleanup/cleanup-temp-roots! {:tmp-root (str tmp-root)})
+            expected-dirs (sort [(str matching-root)
+                                 (str another-matching-root)])]
+        (is (= expected-dirs
+               (sort (:found-dirs result))))
+        (is (= expected-dirs
+               (sort (:removed-dirs result))))
+        (is (empty? (:failed-dirs result)))
+        (is (false? (fs/exists? matching-root)))
+        (is (false? (fs/exists? another-matching-root)))
+        (is (true? (fs/exists? non-matching-root))))
+      (finally
+        (fs/delete-tree tmp-root)))))
+
+(deftest cleanup-temp-roots-dry-run-does-not-delete
+  (let [deleted (atom [])
+        result (cleanup/cleanup-temp-roots! {:dry-run true
+                                             :list-dirs-fn (fn [] ["/tmp/logseq-cli-e2e-a"
+                                                                    "/tmp/logseq-cli-e2e-b"])
+                                             :delete-dir-fn (fn [dir]
+                                                              (swap! deleted conj dir))})]
+    (is (= ["/tmp/logseq-cli-e2e-a"
+            "/tmp/logseq-cli-e2e-b"]
+           (:found-dirs result)))
+    (is (true? (:dry-run? result)))
+    (is (= ["/tmp/logseq-cli-e2e-a"
+            "/tmp/logseq-cli-e2e-b"]
+           (:would-remove-dirs result)))
+    (is (= [] (:removed-dirs result)))
+    (is (= [] (:failed-dirs result)))
+    (is (= [] @deleted))))

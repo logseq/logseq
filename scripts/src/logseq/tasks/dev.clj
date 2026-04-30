@@ -17,8 +17,8 @@
 (defn test
   "Run tests. Pass args through to cmd 'pnpm cljs:run-test'"
   [& args]
-  (shell "pnpm cljs:test")
-  (apply shell "pnpm cljs:run-test" args))
+  (shell {:shutdown nil} "pnpm cljs:test")
+  (apply shell {:shutdown nil} "pnpm cljs:run-test" args))
 
 (defn test-no-worker
   "Run tests without compiling worker namespaces. Pass args through to cmd 'pnpm cljs:run-test-no-worker'"
@@ -27,8 +27,7 @@
   (apply shell "pnpm cljs:run-test-no-worker" args))
 
 (defn lint-and-test
-  "Run all lint tasks, then run tests(exclude testcases tagged by :long).
-  pass args through to cmd 'pnpm cljs:run-test'"
+  "Run all lint tasks, then run tests excluding testcases tagged by :long and :fix-me."
   []
   (dev-lint/dev)
   (test "-e" "long" "-e" "fix-me"))
@@ -50,11 +49,12 @@
   (let [config-edn ".clj-kondo/metosin/malli-types/config.edn"
         compile-cmd "clojure -M:cljs compile gen-malli-kondo-config"]
     (println compile-cmd)
-    (shell compile-cmd)
+    (shell {:shutdown nil} compile-cmd)
     (println "generate kondo config: " config-edn)
     (io/make-parents config-edn)
     (let [config (with-out-str
-                   (pp/pprint (edn/read-string (:out (shell {:out :string} "node ./static/gen-malli-kondo-config.js")))))]
+                   (pp/pprint (edn/read-string (:out (shell {:out :string :shutdown nil}
+                                                            "node ./static/gen-malli-kondo-config.js")))))]
       (spit config-edn config))))
 
 (defn diff-datoms
@@ -81,19 +81,19 @@
                                                     (fs/glob "." "{src/main,deps/graph-parser/src}/**")))))]
     (do
       (println "Building publishing js asset...")
-      (shell "clojure -M:cljs release publishing db-worker"))
+      (shell {:shutdown nil} "clojure -M:cljs release publishing db-worker"))
     (println "Publishing js asset is up to date")))
 
 (defn publishing-backend
   "Builds publishing backend and copies over supporting frontend assets"
   [& args]
-  (apply shell {:dir "deps/publishing" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+  (apply shell {:dir "deps/publishing" :extra-env {"ORIGINAL_PWD" (fs/cwd)} :shutdown nil}
          "pnpm exec nbb-logseq -cp src:../graph-parser/src script/publishing.cljs"
          (into ["static"] args)))
 
 (defn watch-publishing-frontend
   [& _args]
-  (shell "pnpm exec shadow-cljs watch publishing"))
+  (shell {:shutdown nil} "pnpm exec shadow-cljs watch publishing"))
 
 (defn watch-publishing-backend
   "Builds publishing backend once watch-publishing-frontend has built initial frontend"
@@ -115,4 +115,4 @@
     (doseq [file-graph file-graphs]
       (let [db-graph (fs/path parent-graph-dir (fs/file-name file-graph))]
         (println "Importing" (str db-graph) "...")
-        (apply shell "bb" "dev:import" file-graph db-graph (concat import-options ["--validate"]))))))
+        (apply shell {:shutdown nil} "bb" "dev:db-import" file-graph db-graph (concat import-options ["--validate"]))))))

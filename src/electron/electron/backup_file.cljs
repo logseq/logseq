@@ -4,7 +4,7 @@
             ["path" :as node-path]
             [clojure.string :as string]))
 
-(def backup-dir "logseq/bak")
+(def backup-dir "backups")
 
 (defn- get-backup-dir*
   [repo relative-path bak-dir]
@@ -18,17 +18,6 @@
 (defn get-backup-dir
   [repo relative-path]
   (get-backup-dir* repo relative-path backup-dir))
-
-(defn- truncate-old-versioned-files!
-  "reserve the latest `keep-versions` version files"
-  [dir keep-versions]
-  (let [entries (fs/readdirSync dir (clj->js {:withFileTypes true}))
-        files   (->> entries
-                     (filter #(.-isFile %))
-                     (mapv #(.-name %)))
-        old-versioned-files (drop keep-versions (reverse (sort files)))]
-    (doseq [file old-versioned-files]
-      (fs-extra/removeSync (node-path/join dir file)))))
 
 (defn- parse-backup-ts
   "Backup filenames are like: 2025-12-25T01_23_45.678Z.ext
@@ -140,9 +129,9 @@
 (defn backup-file
   "backup CONTENT under DIR :backup-dir
   :backup-dir = `backup-dir`"
-  [repo dir relative-path ext content & {:keys [truncate-daily?
-                                                keep-versions backups-dir]
-                                         :or {keep-versions 6}}]
+  [repo dir relative-path ext content & {:keys [keep-versions backups-dir force-backup?]
+                                         :or {keep-versions 6
+                                              force-backup? false}}]
   (let [dir* (or backups-dir
                  ;; TODO: Remove when last usage of backupDbFile event is removed from frontend.fs.node
                  (case dir
@@ -151,9 +140,7 @@
         new-path (node-path/join dir*
                                  (str (string/replace (.toISOString (js/Date.)) ":" "_")
                                       ext))]
-    (when-not (and truncate-daily? (too-soon? dir*))
+    (when (or force-backup? (not (too-soon? dir*)))
       (fs/writeFileSync new-path content)
       (fs/statSync new-path)
-      (if truncate-daily?
-        (truncate-daily-versioned-files! dir* keep-versions)
-        (truncate-old-versioned-files! dir* keep-versions)))))
+      (truncate-daily-versioned-files! dir* keep-versions))))

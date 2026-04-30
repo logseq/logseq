@@ -1,11 +1,11 @@
 (ns ^:node-only logseq.db.common.sqlite-cli
   "Primary ns to interact with DB files with node.js based CLIs"
   (:require ["better-sqlite3" :as sqlite3]
-            ["os" :as os]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [datascript.storage :refer [IStorage]]
+            [logseq.common.graph :as common-graph]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]))
@@ -22,6 +22,7 @@
 (defn- upsert-addr-content!
   "Upsert addr+data-seq. Should be functionally equivalent to db-worker/upsert-addr-content!"
   [db data]
+  (assert db ::upsert-addr-content!)
   (let [insert (.prepare db "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses")
         insert-many (.transaction ^object db
                                   (fn [data]
@@ -99,5 +100,4 @@
                              ;; $ORIGINAL_PWD used by bb tasks to correct current dir
                                (node-path/join (or js/process.env.ORIGINAL_PWD ".") %))]
         ((juxt node-path/dirname node-path/basename) (resolve-path' graph-dir-or-path)))
-      ;; TODO: Reuse with get-db-graphs-dir when there is a db ns that is usable by electron i.e. no better-sqlite3
-      [(node-path/join (os/homedir) "logseq" "graphs") graph-dir-or-path])))
+      [(common-graph/expand-home (common-graph/get-default-graphs-dir)) graph-dir-or-path])))

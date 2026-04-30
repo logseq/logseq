@@ -7,12 +7,12 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.malli-schema :as db-sync-schema]
-            [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
 (defn- ws->http-base [ws-url]
@@ -44,6 +44,7 @@
 (declare fetch-json)
 
 (declare coerce-http-response)
+(declare <sync-auth-state-to-db-worker!)
 
 (defn fetch-json
   [url opts {:keys [response-schema error-schema] :or {error-schema :error}}]
@@ -116,6 +117,14 @@
     true
     (true? graph-e2ee?)))
 
+(defn- <ensure-download-runtime-bound!
+  [repo]
+  (if (util/electron?)
+    (p/let [_ (persist-db/<fetch-init-data repo {:sync-download-graph? true})
+            _ (<sync-auth-state-to-db-worker!)]
+      nil)
+    (p/resolved nil)))
+
 (defn- <ensure-user-rsa-keys-on-server!
   [{:keys [server-rsa-keys-exists?]}]
   (if (not= false server-rsa-keys-exists?)
@@ -158,13 +167,32 @@
   (log/info :db-sync/stop true)
   (state/<invoke-db-worker :thread-api/db-sync-stop))
 
+(defn- sync-app-state-payload
+  []
+  (cond-> (select-keys @state/state [:git/current-repo :config
+                                     :auth/id-token :auth/access-token :auth/refresh-token
+                                     :auth/oauth-token-url :auth/oauth-domain :auth/oauth-client-id
+                                     :user/info])
+    (seq config/OAUTH-DOMAIN)
+    (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
+
+    (seq config/COGNITO-CLIENT-ID)
+    (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)))
+
+(defn- <sync-auth-state-to-db-worker!
+  []
+  (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+          payload (sync-app-state-payload)]
+    (state/<invoke-db-worker :thread-api/sync-app-state payload)))
+
 (defn <rtc-start!
   [repo & {:keys [_stop-before-start?] :as _opts}]
   (p/let [_ (<wait-for-db-worker-ready!)]
     (if (should-start-rtc? repo)
       (do
         (log/info :db-sync/start {:repo repo})
-        (state/<invoke-db-worker :thread-api/db-sync-start repo))
+        (p/let [_ (<sync-auth-state-to-db-worker!)]
+          (state/<invoke-db-worker :thread-api/db-sync-start repo)))
       (do
         (log/info :db-sync/skip-start {:repo repo :reason :graph-not-in-remote-list
                                        :remote-graphs-loading? (:rtc/loading-graphs? @state/state)
@@ -209,44 +237,8 @@
   ([repo graph-e2ee?]
    (<rtc-create-graph! repo graph-e2ee? true))
   ([repo graph-e2ee? graph-ready-for-use?]
-   (let [schema-version (some-> (ldb/get-graph-schema-version (db/get-db)) :major str)
-         graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
-         graph-ready-for-use? (not= false graph-ready-for-use?)
-         base (http-base)]
-     (if base
-       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-               _ (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys
-                                          {:ensure-server? true})
-               body (coerce-http-request :graphs/create
-                                         {:graph-name (string/replace repo config/db-version-prefix "")
-                                          :schema-version schema-version
-                                          :graph-e2ee? graph-e2ee?
-                                          :graph-ready-for-use? graph-ready-for-use?})
-               result (if (nil? body)
-                        (p/rejected (ex-info "db-sync invalid create-graph body"
-                                             {:repo repo}))
-                        (fetch-json (str base "/graphs")
-                                    {:method "POST"
-                                     :headers {"content-type" "application/json"}
-                                     :body (js/JSON.stringify (clj->js body))}
-                                    {:response-schema :graphs/create}))
-               graph-id (:graph-id result)
-               graph-e2ee? (normalize-graph-e2ee?
-                            (if (contains? result :graph-e2ee?)
-                              (:graph-e2ee? result)
-                              graph-e2ee?))]
-         (if graph-id
-           (p/do!
-            (ldb/transact! repo [(sqlite-util/kv :logseq.kv/db-type "db")
-                                 (sqlite-util/kv :logseq.kv/graph-uuid (uuid graph-id))
-                                 (sqlite-util/kv :logseq.kv/graph-rtc-e2ee? graph-e2ee?)])
-            graph-id)
-           (p/rejected (ex-info "db-sync missing graph id in create response"
-                                {:type :db-sync/invalid-graph
-                                 :response result}))))
-       (p/rejected (ex-info "db-sync missing graph info"
-                            {:type :db-sync/invalid-graph
-                             :base base}))))))
+   (state/<invoke-db-worker :thread-api/db-sync-create-remote-graph
+                            repo graph-e2ee? graph-ready-for-use?)))
 
 (defn <rtc-delete-graph!
   [graph-uuid _schema-version]
@@ -276,7 +268,8 @@
      (-> (if (and graph-uuid base)
            (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
                    graph (str config/db-version-prefix graph-name)
-                   _ (state/<invoke-db-worker :thread-api/db-sync-download-graph
+                   _ (<ensure-download-runtime-bound! graph)
+                   _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
                                               graph graph-uuid graph-e2ee?)]
              true)
            (p/rejected (ex-info "db-sync missing graph info"
@@ -391,14 +384,11 @@
                           :graph-uuid graph-uuid}))))
 
 (defn <rtc-upload-graph!
-  [repo graph-e2ee?]
-  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee? false)]
-    (when (nil? graph-id)
-      (throw (ex-info "graph id doesn't exist when uploading to server" {:repo repo})))
-    (p/do!
-     (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
-     (<get-remote-graphs)
-     (<rtc-start! repo))))
+  [repo _graph-e2ee?]
+  (p/do!
+   (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
+   (<get-remote-graphs)
+   (<rtc-start! repo)))
 
 (defn <rtc-create-graph-and-start-sync!
   [repo graph-e2ee?]

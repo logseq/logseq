@@ -72,6 +72,10 @@ body {
   letter-spacing: 0.01em;
 }
 
+.inline-flex {
+  display: inline-flex;
+}
+
 .publish-home {
   display: flex;
   align-items: center;
@@ -474,6 +478,7 @@ a:hover {
   display: flex;
   gap: 4px;
   align-items: flex-start;
+  min-height: 26px;
 }
 
 .positioned-properties {
@@ -486,7 +491,10 @@ a:hover {
 .positioned-properties.block-left, .positioned-properties.block-right {
   display: flex;
   align-items: center;
-  margin-top: 2px;
+}
+
+.block-content > .positioned-properties.block-left {
+  align-self: center;
 }
 
 .positioned-properties.block-right {
@@ -520,16 +528,40 @@ a:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1rem;
-  height: 1rem;
+  width: 18px;
+  height: 18px;
   line-height: 1;
-  font-size: 1rem;
+  font-size: 18px;
   color: currentColor;
 }
 
 .property-icon svg {
-  width: 1rem;
-  height: 1rem;
+  width: 18px;
+  height: 18px;
+}
+
+.positioned-properties .ls-icon-Backlog {
+  color: var(--rx-gray-05, #a8a29e);
+}
+
+.positioned-properties .ls-icon-Todo {
+  color: var(--rx-gray-10, #78716c);
+}
+
+.positioned-properties .ls-icon-InProgress50 {
+  color: var(--rx-yellow-08, #ca8a04);
+}
+
+.positioned-properties .ls-icon-InReview {
+  color: var(--rx-blue-09, #1d4ed8);
+}
+
+.positioned-properties .ls-icon-Done {
+  color: var(--rx-green-08, #16a34a);
+}
+
+.positioned-properties .ls-icon-Cancelled {
+  color: var(--rx-red-08, #dc2626);
 }
 
 .property-value-with-icon {
