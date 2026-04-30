@@ -260,12 +260,10 @@ const common = {
 }
 
 exports.electron = () => {
-  if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
-    cp.execSync('pnpm install --frozen-lockfile', {
-      cwd: outputPath,
-      stdio: 'inherit',
-    })
-  }
+  cp.execSync('pnpm install --frozen-lockfile', {
+    cwd: outputPath,
+    stdio: 'inherit',
+  })
 
   cp.execSync('pnpm electron:dev', {
     cwd: outputPath,
