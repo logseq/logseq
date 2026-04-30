@@ -25,6 +25,9 @@
 (defn- ->block-id
   [block-or-id]
   (cond
+    (keyword? block-or-id)
+    (:block/uuid (db-utils/entity block-or-id))
+
     (de/entity? block-or-id)
     (:block/uuid block-or-id)
 

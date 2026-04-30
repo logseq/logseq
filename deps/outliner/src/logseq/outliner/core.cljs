@@ -6,6 +6,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -300,7 +301,10 @@
               (outliner-validate/validate-page-title-characters block-title {:node m*}))
           m (if page-title-changed?
               (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
-                    page-name (common-util/page-name-sanity-lc (:block/title m*))]
+                    page-name (if-let [journal-day (:block/journal-day block-entity)]
+                                (common-util/page-name-sanity-lc
+                                 (date-time-util/int->journal-title journal-day date-time-util/default-journal-title-formatter))
+                                (common-util/page-name-sanity-lc (:block/title m*)))]
                 (assoc m* :block/name page-name))
               m*)
           _ (when (and ;; page or object changed?
@@ -457,6 +461,11 @@
       (throw (ex-info "Block eid doesn't exist"
                       {:block block})))
     (when-let [entity (d/entity db eid)]
+      (when (outliner-validate/built-in-entity? entity)
+        (throw (ex-info "Built-in nodes can't be modified"
+                        {:type :notification
+                         :payload {:message "Built-in nodes can't be modified"
+                                   :type :error}})))
       (let [*txs-state (atom [])
             block' (if (de/entity? block)
                      block
@@ -834,15 +843,15 @@
   (let [top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
         top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
-        top-level-blocks (remove :logseq.property/built-in? top-level-blocks*)
+        top-level-blocks (remove outliner-validate/built-in-entity? top-level-blocks*)
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
         end-block (last top-level-blocks)
         delete-one-block? (or (= 1 (count top-level-blocks)) (= start-block end-block))]
 
-    ;; Validate before `when` since top-level-blocks will be empty when deleting one built-in block
-    (when (seq (filter :logseq.property/built-in? top-level-blocks*))
+    ;; Validate before `when` since top-level-blocks will be empty when deleting one built-in/internal block
+    (when (seq (filter outliner-validate/built-in-entity? top-level-blocks*))
       (throw (ex-info "Built-in nodes can't be deleted"
                       {:type :notification
                        :payload {:message "Built-in nodes can't be deleted."
@@ -930,6 +939,13 @@
                              :as opts}]
   {:pre [(seq blocks)]}
   (when (m/validate block-map-or-entity target-block)
+    (doseq [b blocks]
+      (let [entity (d/entity @conn (:db/id b))]
+        (when (outliner-validate/built-in-entity? entity)
+          (throw (ex-info "Built-in nodes can't be modified"
+                          {:type :notification
+                           :payload {:message "Built-in nodes can't be modified"
+                                     :type :error}})))))
     (let [db @conn
           top-level-blocks (filter-top-level-blocks db blocks)
           [target-block sibling?] (get-target-block db top-level-blocks target-block opts)

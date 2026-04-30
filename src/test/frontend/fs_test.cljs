@@ -1,7 +1,7 @@
 (ns frontend.fs-test
   (:require ["fs" :as fs-node]
             ["path" :as node-path]
-            [clojure.test :refer [is]]
+            [cljs.test :refer [is]]
             [frontend.fs :as fs]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [frontend.test.node-fixtures :as node-fixtures]

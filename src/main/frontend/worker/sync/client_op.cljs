@@ -238,8 +238,8 @@
 
 (defn get-graph-uuid
   [repo]
-  (some-> (sqlite-store-or-throw repo)
-          (sqlite-get-meta :graph-uuid)))
+  (when-let [store (sqlite-store-or-throw repo)]
+    (sqlite-get-meta store :graph-uuid)))
 
 (defn get-local-tx
   [repo]
@@ -263,7 +263,9 @@
 (defn reset-local-tx
   "Should be used only when uploading a graph"
   [repo]
-  (update-local-tx repo 0))
+  (let [store (sqlite-store-or-throw repo)]
+    (assert (some? store) repo)
+    (sqlite-set-meta! store :local-tx 0)))
 
 (defn update-local-checksum
   [repo checksum]

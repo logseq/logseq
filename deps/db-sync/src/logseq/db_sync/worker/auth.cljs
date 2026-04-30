@@ -34,11 +34,27 @@
 (def ^:private recoverable-auth-errors
   #{"invalid" "iss not found" "aud not found" "exp" "kid"})
 
+(def ^:private truthy-env-values
+  #{"1" "true" "yes" "on"})
+
 (defn- recoverable-auth-error?
   [error]
   (when error
     (let [message (or (ex-message error) (some-> error .-message))]
       (contains? recoverable-auth-errors message))))
+
+(defn- env-flag-enabled?
+  [env k]
+  (let [v (some-> env (aget k))]
+    (cond
+      (true? v) true
+      (false? v) false
+      (string? v) (contains? truthy-env-values (string/lower-case v))
+      :else false)))
+
+(defn- allow-unverified-jwt-claims?
+  [env]
+  (env-flag-enabled? env "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS"))
 
 (defn- expired-token?
   [token]
@@ -55,7 +71,13 @@
         (p/resolved nil)
         (-> (authorization/verify-jwt token env)
             (p/catch (fn [error]
-                       (if (recoverable-auth-error? error)
+                       (cond
+                         (recoverable-auth-error? error)
                          nil
+
+                         (allow-unverified-jwt-claims? env)
+                         (unsafe-jwt-claims token)
+
+                         :else
                          (p/rejected error))))))
       (p/resolved nil))))

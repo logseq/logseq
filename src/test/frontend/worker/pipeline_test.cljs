@@ -2,9 +2,12 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.pipeline :as worker-pipeline]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.outliner.page :as outliner-page]))
 
 (deftest test-built-in-page-updates-that-should-be-reverted
   (let [conn (db-test/create-conn-with-blocks
@@ -144,6 +147,21 @@
                                    :block/title "page1-renamed"}])]
         (is (= "page1-renamed"
                (:block/title (d/entity (:db-after result) (:db/id page1)))))))))
+
+(deftest create-journal-page-name-uses-default-formatter-test
+  (let [conn (db-test/create-conn)]
+    (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
+    (let [[_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {})
+          page (d/entity @conn [:block/uuid page-uuid])
+          journal-day (:block/journal-day page)
+          expected-title (date-time-util/int->journal-title journal-day "yyyy-MM-dd EEEE")
+          expected-name (-> journal-day
+                            (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
+                            common-util/page-name-sanity-lc)]
+      (is (= expected-title (:block/title page))
+          "Journal title follows configured title format")
+      (is (= expected-name (:block/name page))
+          "Journal block/name keeps the default formatter for stable identity"))))
 
 (deftest built-in-tag-must-not-convert-page-child-block-to-class-test
   (let [conn (db-test/create-conn-with-blocks

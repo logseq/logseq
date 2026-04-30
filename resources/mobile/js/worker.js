@@ -20,6 +20,11 @@ const createFS = () => new LightningFS(fsName);
 let fs = createFS();
 let pfs = fs.promises;
 
+if (typeof self !== 'undefined') {
+  self.fs = fs;
+  self.pfs = pfs;
+}
+
 if (detect() === 'Worker') {
   const portal = new MagicPortal(self);
   portal.set('fs', fs);

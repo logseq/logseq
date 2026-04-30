@@ -34,7 +34,6 @@
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.persist-db :as persist-db]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -126,10 +125,10 @@
   (let [t1 (util/time-ms)]
     (p/do!
      (idb/start)
+     (get-system-info)
      (plugin-handler/setup!)
      (render))
 
-    (get-system-info)
     (set-global-error-notification!)
 
     (register-components-fns!)
@@ -150,7 +149,7 @@
 
     (p/do!
      (-> (p/let [t2 (util/time-ms)
-                 _ (db-browser/start-db-worker!)
+                 _ (persist-db/<start-runtime!)
                  _ (log/info ::db-worker-spent-time (- (util/time-ms) t2))
                  repos (repo-handler/get-repos)
                  _ (state/set-repos! repos)
@@ -160,9 +159,6 @@
                      (repo-handler/new-db! config/demo-repo)
                      (restore-and-setup! repo))]
            (set-network-watcher!)
-
-           (when (util/electron?)
-             (persist-db/run-export-periodically!))
            (when (mobile-util/native-platform?)
              (state/restore-mobile-theme!)))
          (p/catch (fn [e]

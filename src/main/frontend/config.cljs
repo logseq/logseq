@@ -5,7 +5,9 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.crypt.Md5]
+            [logseq.common.cognito-config :as cognito-config]
             [logseq.common.config :as common-config]
+            [logseq.common.graph-dir :as common-graph-dir]
             [logseq.common.path :as path]
             [logseq.db.sqlite.util :as sqlite-util]
             [shadow.resource :as rc]))
@@ -19,30 +21,19 @@
 (goog-define REVISION "unknown")
 (defonce revision REVISION)
 
-(goog-define ENABLE-FILE-SYNC-PRODUCTION false)
-
 ;; this is a feature flag to enable the account tab
 ;; when it launches (when pro plan launches) it should be removed
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
-(if ENABLE-FILE-SYNC-PRODUCTION
-  (do (def API-DOMAIN "api.logseq.com")
-      (def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/")
-      (def COGNITO-CLIENT-ID "69cs1lgme7p8kbgld8n5kseii6")
-      (def REGION "us-east-1")
-      (def USER-POOL-ID "us-east-1_dtagLnju8")
-      (def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
-      (def OAUTH-DOMAIN "logseq-prod.auth.us-east-1.amazoncognito.com")
-      (def default-publish-api-base "https://logseq.io"))
+(def COGNITO-CLIENT-ID cognito-config/COGNITO-CLIENT-ID)
+(def OAUTH-DOMAIN cognito-config/OAUTH-DOMAIN)
 
-  (do (def API-DOMAIN "api-dev.logseq.com")
-      (def COGNITO-IDP "https://cognito-idp.us-east-2.amazonaws.com/")
-      (def COGNITO-CLIENT-ID "1qi1uijg8b6ra70nejvbptis0q")
-      (def REGION "us-east-2")
-      (def USER-POOL-ID "us-east-2_kAqZcxIeM")
-      (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
-      (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")
-      (def default-publish-api-base "https://logseq-publish-staging.logseq.workers.dev")))
+(def API-DOMAIN "api.logseq.com")
+(def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/")
+(def REGION "us-east-1")
+(def USER-POOL-ID "us-east-1_dtagLnju8")
+(def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
+(def default-publish-api-base "https://logseq.io")
 
 ;; Enable for local development
 ;; (def default-publish-api-base "http://localhost:8787")
@@ -53,15 +44,12 @@
 (defonce default-db-sync-ws-url
   (if db-sync-local?
     "ws://127.0.0.1:8787/sync/%s"
-    ;; "wss://api-staging.logseq.io/sync/%s"
     "wss://api.logseq.io/sync/%s"))
 
 (defonce default-db-sync-http-base
   (if db-sync-local?
     "http://127.0.0.1:8787"
-    ;; "https://api-staging.logseq.io"
-    "https://api.logseq.io"
-    ))
+    "https://api.logseq.io"))
 
 (defn get-custom-sync-server-url
   "Read the user-configured custom sync server URL from localStorage.
@@ -144,8 +132,7 @@
 
 (defn publish-api-base
   "Return the base URL for the single-page publish service. Uses the user-configured
-   URL from localStorage when set, otherwise the default from the ENABLE-FILE-SYNC-PRODUCTION
-   branch above. Read on each call so URL changes take effect without a restart."
+   URL from localStorage when set, otherwise the default url above. Read on each call so URL changes take effect without a restart."
   []
   (if-let [custom (get-custom-publish-server-url)]
     (custom-url->publish-api-base custom)
@@ -325,7 +312,7 @@
 
 (defn db-graph-name
   [repo-with-prefix]
-  (string/replace-first repo-with-prefix db-version-prefix ""))
+  (common-config/strip-leading-db-version-prefix repo-with-prefix))
 
 (defn db-based-graph?
   ([]
@@ -344,7 +331,7 @@
   (path/path-join (get-in @state/state [:system/info :home-dir])
                   "logseq"
                   "graphs"
-                  (string/replace repo db-version-prefix "")))
+                  (common-graph-dir/repo->encoded-graph-dir-name repo)))
 
 (defn get-electron-backup-dir
   [repo]
@@ -356,7 +343,7 @@
     (if (util/electron?)
       (get-local-dir repo-url)
       (str "memory:///"
-           (string/replace-first repo-url db-version-prefix "")))))
+           (db-graph-name repo-url)))))
 
 (defn get-repo-config-path
   []
@@ -378,15 +365,14 @@
    (when-let [repo-dir (get-repo-dir repo)]
      (path/path-join repo-dir app-name  export-css-file))))
 
-(defn get-current-repo-assets-root
-  []
-  (when-let [repo-dir (get-repo-dir (state/get-current-repo))]
-    (path/path-join repo-dir "assets")))
-
 (defn get-repo-assets-root
   [repo]
   (when-let [repo-dir (get-repo-dir repo)]
     (path/path-join repo-dir "assets")))
+
+(defn get-current-repo-assets-root
+  []
+  (get-repo-assets-root (state/get-current-repo)))
 
 (defn get-custom-js-path
   ([]

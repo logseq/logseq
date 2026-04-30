@@ -433,7 +433,7 @@
                     (let [format (util/evalue e)]
                       (when-not (string/blank? format)
                         (p/do!
-                         (property-handler/set-block-property! :logseq.class/Journal
+                         (property-handler/set-block-property! (:block/uuid (db/entity :logseq.class/Journal))
                                                                :logseq.property.journal/title-format
                                                                format)
                          (notification/show! (t :settings.general/refresh-required-feedback)))

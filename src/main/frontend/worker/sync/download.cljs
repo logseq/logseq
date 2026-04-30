@@ -4,6 +4,7 @@
    [datascript.core :as d]
    [frontend.common.thread-api :as thread-api]
    [frontend.worker-common.util :as worker-util]
+   [frontend.worker.platform :as platform]
    [frontend.worker.search :as search]
    [frontend.worker.shared-service :as shared-service]
    [frontend.worker.state :as worker-state]
@@ -12,11 +13,13 @@
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.log-and-state :as rtc-log-and-state]
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
-   [frontend.worker.sync.transport :as sync-transport]
+   [frontend.worker.sync.util :refer [fail-fast] :as sync-util]
+   [lambdaisland.glogi :as log]
    [logseq.db-sync.snapshot :as snapshot]
    [logseq.db.common.sqlite :as common-sqlite]
    [logseq.db.frontend.schema :as db-schema]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   [logseq.db :as ldb]))
 
 (defn- ->uint8 [data]
   (cond
@@ -80,18 +83,28 @@
       (nil? body)
       (p/resolved nil)
 
-      (and (= "gzip" encoding) (exists? js/DecompressionStream))
-      (if (fn? (.-tee body))
-        (let [branches (.tee body)
-              probe (aget branches 0)
-              payload (aget branches 1)]
-          (-> (<stream-starts-with-gzip? probe)
-              (p/then (fn [gzip?]
-                        (if gzip?
-                          (.pipeThrough payload (js/DecompressionStream. "gzip"))
-                          payload)))
-              (p/catch (fn [_] payload))))
-        (p/resolved (.pipeThrough body (js/DecompressionStream. "gzip"))))
+      ;; Never trust `content-encoding` alone.
+      ;; Some runtimes (e.g. Node/undici fetch) may auto-decompress body while
+      ;; still exposing `content-encoding: gzip` in headers.
+      ;; We only stream-decompress when the first bytes are actual gzip magic.
+      (and (= "gzip" encoding)
+           (exists? js/DecompressionStream)
+           (fn? (.-tee body)))
+      (let [branches (.tee body)
+            probe (aget branches 0)
+            payload (aget branches 1)]
+        (-> (<stream-starts-with-gzip? probe)
+            (p/then (fn [gzip?]
+                      (if gzip?
+                        (.pipeThrough payload (js/DecompressionStream. "gzip"))
+                        payload)))
+            ;; If probing fails, keep original payload stream.
+            (p/catch (fn [_] payload))))
+
+      ;; If we cannot safely probe (no tee support), do not guess.
+      ;; Fall back to the arrayBuffer path where we inspect magic bytes first.
+      (= "gzip" encoding)
+      (p/resolved nil)
 
       :else
       (p/resolved body))))
@@ -141,15 +154,7 @@
 
 (defn- fetch-json
   [url opts schema]
-  (sync-transport/fetch-json
-   with-auth-headers
-   url
-   opts
-   {:response-schema schema}))
-
-(defn- fail-fast
-  [tag data]
-  (throw (ex-info (name tag) data)))
+  (sync-util/fetch-json url opts {:response-schema schema}))
 
 (defonce ^:private *import-state (atom nil))
 (def ^:private snapshot-import-datoms-batch-size 10000)
@@ -171,7 +176,7 @@
                                    :graph-uuid graph-id
                                    :message "Graph is ready!"})
        (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
-         (.exec db "PRAGMA wal_checkpoint(2)"))
+         (.exec db "PRAGMA wal_checkpoint(TRUNCATE)"))
        (client-op/update-local-tx repo remote-tx)
        (shared-service/broadcast-to-clients! :add-repo {:repo repo}))
       (p/catch (fn [error]
@@ -191,26 +196,26 @@
             :graph-id graph-id
             :import-id import-id}))
 
-(defn- <remove-import-temp-db-file!
-  [repo path]
-  (-> (p/let [^js root (.getDirectory js/navigator.storage)
-              ^js dir (.getDirectoryHandle root (str "." (worker-util/get-pool-name repo)))]
-        (.removeEntry dir (subs path 1)))
-      (p/catch
-       (fn [error]
-         (if (= "NotFoundError" (.-name error))
-           nil
-           (p/rejected error))))))
+(defn- import-temp-pool-name
+  [repo]
+  (worker-util/get-pool-name (str "download-import-" repo)))
 
 (defn- close-import-state!
-  [{:keys [repo rows-db rows-path]}]
+  [{:keys [rows-db rows-pool]}]
   (when rows-db
     (try
       (.close rows-db)
       (catch :default _)))
-  (when (and repo rows-path)
-    (-> (<remove-import-temp-db-file! repo rows-path)
+  (when rows-pool
+    (-> (platform/remove-storage-pool! (platform/current) rows-pool)
         (p/catch (fn [_] nil)))))
+
+(defn close-import-state-for-repo!
+  [repo]
+  (when-let [state @*import-state]
+    (when (= repo (:repo state))
+      (close-import-state! state)
+      (reset! *import-state nil))))
 
 (defn- clear-import-state!
   [import-id]
@@ -218,14 +223,6 @@
     (when (= import-id (:import-id state))
       (close-import-state! state)
       (reset! *import-state nil))))
-
-(defn close-import-state-for-repo!
-  [repo]
-  (when-let [state @*import-state]
-    (when (= repo (:repo state))
-      (close-import-state! state)
-      (reset! *import-state nil)))
-  nil)
 
 (defn- require-import-state!
   [repo graph-id import-id]
@@ -262,29 +259,39 @@
 
 (defn- <create-import-temp-db!
   [repo]
-  (if-let [^js pool (worker-state/get-opfs-pool repo)]
-    (p/let [path (str "/download-import-" (random-uuid) ".sqlite")
-            ^js db (new (.-OpfsSAHPoolDb pool) path)]
-      (common-sqlite/create-kvs-table! db)
-      {:rows-db db
-       :rows-path path})
-    (fail-fast :db-sync/missing-field {:repo repo :field :opfs-pool})))
+  (if-let [sqlite @worker-state/*sqlite]
+    (let [current-platform (platform/current)
+          pool-name (import-temp-pool-name repo)]
+      (p/let [pool (platform/install-storage-pool current-platform sqlite pool-name)
+              path (platform/resolve-db-path current-platform pool-name pool "/download-import.sqlite")
+              db (platform/sqlite-open current-platform
+                                       {:sqlite sqlite
+                                        :pool pool
+                                        :path path
+                                        :mode "c"})]
+        (common-sqlite/create-kvs-table! db)
+        {:rows-db db
+         :rows-path path
+         :rows-pool pool}))
+    (fail-fast :db-sync/missing-field {:repo repo :field :sqlite})))
 
 (defn- <ensure-import-rows-db!
   [{:keys [import-id repo rows-db] :as state}]
   (if rows-db
     (p/resolved state)
-    (p/let [{:keys [rows-db rows-path]} (<create-import-temp-db! repo)]
+    (p/let [{:keys [rows-db rows-path rows-pool]} (<create-import-temp-db! repo)]
       (swap! *import-state
              (fn [current]
                (if (= import-id (:import-id current))
                  (assoc current
                         :rows-db rows-db
-                        :rows-path rows-path)
+                        :rows-path rows-path
+                        :rows-pool rows-pool)
                  current)))
       (assoc state
              :rows-db rows-db
-             :rows-path rows-path))))
+             :rows-path rows-path
+             :rows-pool rows-pool))))
 
 (defn- datom->tx
   [{:keys [e a v]}]
@@ -380,6 +387,7 @@
   (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
     (-> (p/let [close-db-f (require-thread-api-f! :thread-api/db-sync-close-db)
                 unlink-db-f (require-thread-api-f! :thread-api/unsafe-unlink-db)
+                recreate-lock-f (require-thread-api-f! :thread-api/db-sync-recreate-lock)
                 invalidate-search-db-f (require-thread-api-f! :thread-api/db-sync-invalidate-search-db)
                 create-or-open-db-f (require-thread-api-f! :thread-api/create-or-open-db)
                 _ (when-let [state @*import-state]
@@ -388,6 +396,7 @@
                 _ (reset! *import-state nil)
                 _ (when reset? (close-db-f repo))
                 _ (when reset? (unlink-db-f repo))
+                _ (when reset? (recreate-lock-f repo))
                 _ (when reset? (invalidate-search-db-f repo))
                 import-id (str (random-uuid))
                 aes-key (when graph-e2ee?
@@ -408,6 +417,7 @@
                                  :rows-db nil
                                  :rows-imported? false
                                  :rows-path nil
+                                 :rows-pool nil
                                  :repo repo
                                  :total-datoms total-datoms})
           {:import-id import-id})
@@ -437,61 +447,102 @@
               _ (when (:rows-imported? state)
                   (<replay-imported-rows! state))
               result (complete-datoms-import! repo graph-id remote-tx)
-              _ (reset! *import-state nil)]
+              _ (clear-import-state! import-id)]
         result)
       (p/catch (fn [error]
                  (when-not (= :db-sync/stale-import (:type (ex-data error)))
                    (clear-import-state! import-id))
                  (throw error)))))
 
+(defn- set-graph-sync-metadata!
+  [conn graph-id graph-e2ee?]
+  (assert (uuid? graph-id))
+  (ldb/transact! conn [(ldb/kv :logseq.kv/graph-uuid graph-id)
+                       (ldb/kv :logseq.kv/graph-remote? true)
+                       (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))]
+    {:persist-op? false}))
+
 (defn download-graph-by-id!
   [repo graph-id graph-e2ee?]
   (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
     (if (and (seq repo) (seq graph-id) (seq base))
-      (p/let [log-f (fn [payload]
-                      (rtc-log-and-state/rtc-log :rtc.log/download payload))
-              _ (log-f {:sub-type :download-progress
-                        :graph-uuid graph-id
-                        :message "Preparing graph snapshot download"})
-              pull-resp (fetch-json (str base "/sync/" graph-id "/pull")
-                                    {:method "GET"}
-                                    :sync/pull)
-              remote-tx (:t pull-resp)
-              _ (when-not (integer? remote-tx)
-                  (throw (ex-info "non-integer remote-tx when downloading graph"
+      (let [stage* (atom :init)
+            import-id* (atom nil)]
+        (-> (p/let [log-f (fn [payload]
+                            (rtc-log-and-state/rtc-log :rtc.log/download payload))
+                    _ (log-f {:sub-type :download-progress
+                              :graph-uuid graph-id
+                              :message "Preparing graph snapshot download"})
+                    _ (reset! stage* :fetch-pull)
+                    pull-resp (fetch-json (str base "/sync/" graph-id "/pull")
+                                          {:method "GET"}
+                                          :sync/pull)
+                    remote-tx (:t pull-resp)
+                    _ (when-not (integer? remote-tx)
+                        (throw (ex-info "non-integer remote-tx when downloading graph"
+                                        {:repo repo
+                                         :remote-tx remote-tx})))
+                    _ (reset! stage* :fetch-snapshot-download)
+                    snapshot-resp (fetch-json (str base "/sync/" graph-id "/snapshot/download")
+                                              {:method "GET"}
+                                              :sync/snapshot-download)
+                    _ (reset! stage* :fetch-snapshot-stream)
+                    resp (js/fetch (:url snapshot-resp)
+                                   (clj->js (with-auth-headers {:method "GET"})))
+                    _ (log-f {:sub-type :download-progress
+                              :graph-uuid graph-id
+                              :message "Start downloading graph snapshot"})]
+              (when-not (.-ok resp)
+                (throw (ex-info "snapshot download failed"
+                                {:repo repo
+                                 :status (.-status resp)})))
+              (let [ensure-import! (fn []
+                                     (if-let [import-id @import-id*]
+                                       (p/resolved import-id)
+                                       (p/let [_ (reset! stage* :prepare-import)
+                                               {:keys [import-id]} (prepare-import! repo true graph-id graph-e2ee?)]
+                                         (reset! import-id* import-id)
+                                         import-id)))]
+                (p/let [_ (do
+                            (reset! stage* :stream-snapshot)
+                            (<stream-snapshot-row-batches!
+                             resp
+                             25000
+                             (fn [rows]
+                               (p/let [import-id (ensure-import!)]
+                                 (import-rows-chunk! rows graph-id import-id)))))
+                        _ (log-f {:sub-type :download-completed
+                                  :graph-uuid graph-id
+                                  :message "Graph snapshot downloaded"})
+                        _ (when-let [import-id @import-id*]
+                            (reset! stage* :finalize-import)
+                            (finalize-import! repo graph-id remote-tx import-id))]
+                  (when-let [conn (worker-state/get-datascript-conn repo)]
+                    (set-graph-sync-metadata! conn (uuid graph-id) graph-e2ee?))
+                  {:repo repo
+                   :graph-id graph-id
+                   :remote-tx remote-tx
+                   :graph-e2ee? graph-e2ee?})))
+            (p/catch (fn [error]
+                       (when-let [import-id @import-id*]
+                         (clear-import-state! import-id))
+                       (log/error :db-sync/download-graph-by-id-failed
                                   {:repo repo
-                                   :remote-tx remote-tx})))
-              snapshot-resp (fetch-json (str base "/sync/" graph-id "/snapshot/download")
-                                        {:method "GET"}
-                                        :sync/snapshot-download)
-              resp (js/fetch (:url snapshot-resp)
-                             (clj->js (with-auth-headers {:method "GET"})))
-              _ (log-f {:sub-type :download-progress
-                        :graph-uuid graph-id
-                        :message "Start downloading graph snapshot"})]
-        (when-not (.-ok resp)
-          (throw (ex-info "snapshot download failed"
-                          {:repo repo
-                           :status (.-status resp)})))
-        (let [import-id* (atom nil)
-              ensure-import! (fn []
-                               (if-let [import-id @import-id*]
-                                 (p/resolved import-id)
-                                 (p/let [{:keys [import-id]} (prepare-import! repo true graph-id graph-e2ee?)]
-                                   (reset! import-id* import-id)
-                                   import-id)))]
-          (p/let [_ (<stream-snapshot-row-batches!
-                     resp
-                     25000
-                     (fn [rows]
-                       (p/let [import-id (ensure-import!)]
-                         (import-rows-chunk! rows graph-id import-id))))
-                  _ (log-f {:sub-type :download-completed
-                            :graph-uuid graph-id
-                            :message "Graph snapshot downloaded"})
-                  _ (when-let [import-id @import-id*]
-                      (finalize-import! repo graph-id remote-tx import-id))]
-            true)))
+                                   :graph-id graph-id
+                                   :graph-e2ee? graph-e2ee?
+                                   :stage @stage*
+                                   :error error
+                                   :error-stack (when (instance? js/Error error)
+                                                  (.-stack error))})
+                       (throw (ex-info "db-sync download failed"
+                                      {:repo repo
+                                       :graph-id graph-id
+                                       :graph-e2ee? graph-e2ee?
+                                       :stage @stage*
+                                       :error-message (or (ex-message error)
+                                                           (when (instance? js/Error error)
+                                                             (.-message error)))}
+                                       error))))))
       (p/rejected (ex-info "db-sync missing graph download info"
                            {:repo repo
                             :graph-id graph-id
