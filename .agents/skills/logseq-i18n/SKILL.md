@@ -74,7 +74,10 @@ If the English text matches but the meaning differs, create a new key and follow
 ### Rule 3: English source lives in `en.edn`
 
 - Add new English source text to `src/resources/dicts/en.edn`.
-- Add non-English entries only when you are also providing actual translations.
+- **When introducing a new key for the first time, you must also add the
+  Simplified Chinese (`zh-CN`) translation in the same change.** English and
+  `zh-CN` are the two required locales for any new key.
+- Add other non-English entries only when you are also providing actual translations.
 - When renaming or removing keys, update affected locale files so stale keys do
   not remain behind.
 - Do not copy English into non-English locale files just to fill gaps. Tongue

@@ -121,6 +121,9 @@
 
 (defn stop-db-worker!
   []
+  (when @state/*db-worker
+    (-> (state/<invoke-db-worker :thread-api/cancel-ui-requests {:reason :stop-db-worker})
+        (p/catch (constantly nil))))
   (when-let [^js worker @state/*db-worker-thread]
     (set! (.-onmessage worker) nil)
     (.terminate worker))
@@ -180,9 +183,9 @@
                       (log/error :init-sqlite-wasm-error ["Can't init SQLite wasm" error]))))))))
 
 (defn <export-db!
-  [repo data]
+  [repo]
   (when (util/electron?)
-    (ipc/ipc :db-export repo data)))
+    (ipc/ipc :db-export repo false)))
 
 (defn- sqlite-error-handler
   [error]
@@ -211,11 +214,7 @@
     (state/<invoke-db-worker :thread-api/release-access-handles repo))
 
   (<fetch-initial-data [_this repo opts]
-    (-> (p/let [db-exists? (state/<invoke-db-worker :thread-api/db-exists repo)
-                disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
-                _ (when disk-db-data
-                    (state/<invoke-db-worker-direct-pass :thread-api/import-db repo disk-db-data))
-                _ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
+    (-> (p/let [_ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
           (state/<invoke-db-worker :thread-api/get-initial-data repo opts))
         (p/catch sqlite-error-handler)))
 
@@ -224,13 +223,15 @@
           (when data
             (if (:return-data? opts)
               data
-              (<export-db! repo data))))
+              (<export-db! repo))))
         (p/catch (fn [error]
                    (log/error :export-db-error repo error "SQLiteDB save error")
                    (notification/show! (t :storage/sqlitedb-save-error error) :error) {}))))
 
   (<import-db [_this repo data]
-    (-> (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)
-        (p/catch (fn [error]
-                   (log/error :import-db-error repo error "SQLiteDB import error")
-                   (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))
+    (->
+     (p/let [result-str (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)]
+       (ldb/read-transit-str result-str))
+     (p/catch (fn [error]
+                (log/error :import-db-error repo error "SQLiteDB import error")
+                (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))

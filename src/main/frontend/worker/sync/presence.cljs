@@ -1,6 +1,7 @@
 (ns frontend.worker.sync.presence
   "Presence and rtc state helpers for db sync."
-  (:require [logseq.common.util :as common-util]))
+  (:require [logseq.common.util :as common-util]
+            [frontend.worker.state :as worker-state]))
 
 (defn current-client
   [db-sync-client repo]
@@ -34,15 +35,23 @@
           remote-checksum (get latest-remote-checksum repo)
           pending-server (when (and (number? local-tx) (number? remote-tx))
                            (max 0 (- remote-tx local-tx)))
-          graph-uuid (get-graph-uuid repo)]
-      {:pending-local pending-local
+          graph-uuid (get-graph-uuid repo)
+          client (current-client worker-state/*db-sync-client repo)
+          ws-url (:ws-url @worker-state/*db-sync-config)
+          ws-state (or (some-> client :ws-state deref)
+                       (if (seq ws-url) :stopped :inactive))
+          last-error (some-> client :last-sync-error deref)]
+      {:repo repo
+       :graph-id graph-uuid
+       :pending-local pending-local
        :pending-asset pending-asset
        :pending-server pending-server
        :local-tx local-tx
        :remote-tx remote-tx
        :local-checksum local-checksum
        :remote-checksum remote-checksum
-       :graph-uuid graph-uuid})))
+       :ws-state ws-state
+       :last-error last-error})))
 
 (defn normalize-online-users
   [users]
