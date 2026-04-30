@@ -87,9 +87,11 @@
   (if (w/visible? ".cp__cmdk-search-input")
     (w/fill ".cp__cmdk-search-input" text)
     (do
-      (double-esc)
-      (assert/assert-in-normal-mode?)
-      (w/click :#search-button)
+      (k/press "ControlOrMeta+k")
+      (when-not (w/visible? ".cp__cmdk-search-input")
+        (double-esc)
+        (assert/assert-in-normal-mode?)
+        (w/click :#search-button))
       (w/wait-for ".cp__cmdk-search-input")
       (w/fill ".cp__cmdk-search-input" text))))
 
