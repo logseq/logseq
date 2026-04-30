@@ -47,14 +47,6 @@
   (p/let [exported (.exportKey subtle "pkcs8" private-key)]
     (js/Uint8Array. exported)))
 
-(defn <import-private-key
-  [exported-private-key]
-  (assert (instance? js/Uint8Array exported-private-key))
-  (.importKey subtle "pkcs8" exported-private-key
-              #js {:name "RSA-OAEP" :hash "SHA-256"}
-              true
-              #js ["decrypt"]))
-
 (comment
   (->
    (p/let [kp (<generate-rsa-key-pair)
@@ -181,19 +173,15 @@
   "Decrypts an AES key with a private key."
   [private-key encrypted-aes-key-data]
   (assert (and (instance? js/CryptoKey private-key)
-               (instance? js/Uint8Array encrypted-aes-key-data)))
+               (instance? js/Uint8Array encrypted-aes-key-data))
+          [private-key encrypted-aes-key-data])
   (->
    (p/let [encrypted-aes-key (js/Uint8Array. encrypted-aes-key-data)
            decrypted-key-data (.decrypt subtle
                                         #js {:name "RSA-OAEP"}
                                         private-key
                                         encrypted-aes-key)]
-     (.importKey subtle
-                 "raw"
-                 decrypted-key-data
-                 "AES-GCM"
-                 true
-                 #js ["encrypt" "decrypt"]))
+     (<import-aes-key (js/Uint8Array. decrypted-key-data)))
    (p/catch (fn [e]
               (when-not (expected-crypto-operation-error? e)
                 (log/error "decrypt-aes-key failed" e))

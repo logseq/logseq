@@ -195,11 +195,9 @@
 ;; TODO: Revisit title cleanup as this was copied from file implementation
 (defn ^:api sanitize-title
   [title]
-  (let [title      (-> (string/trim title)
-                       (text/page-ref-un-brackets!)
-                        ;; remove `#` from tags
-                       (string/replace #"^#+" ""))
-        title      (common-util/remove-boundary-slashes title)]
+  (let [title (-> (string/trim title)
+                  (text/page-ref-un-brackets!))
+        title (common-util/remove-boundary-slashes title)]
     title))
 
 (defn- get-page-by-parent-name
@@ -310,6 +308,7 @@
         class? (or class? (some (fn [t] (= :logseq.class/Tag (:db/ident t))) tags))
         class-ident-namespace? (and class? class-ident-namespace (string? class-ident-namespace))
         title (sanitize-title title*)
+        _ (outliner-validate/validate-page-title-no-hashtag title {:node {:block/title title}})
         types (cond class?
                     #{:logseq.class/Tag}
                     today-journal?

@@ -41,10 +41,6 @@
                           frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
                           frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
-                          ;; Set to switch file sync server to dev, set this to false in `pnpm watch`
-                          frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
-                          frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]
-
                           frontend.config/ENABLE-DB-SYNC-LOCAL #shadow/env ["ENABLE_DB_SYNC_LOCAL" :as :bool :default false]
                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
 
@@ -87,6 +83,32 @@
                                     shadow.remote.runtime.cljs.browser]
                          :loader-mode :eval}}
 
+  :db-worker-node {:target :node-script
+                   :output-to "static/db-worker-node.js"
+                   :main frontend.worker.db-worker-node/main
+                   :build-hooks [(shadow.hooks/db-worker-node-metadata-hook "--long --always --dirty")]
+                   :compiler-options {:infer-externs :auto
+                                      :source-map true
+                                      :externs ["datascript/externs.js"
+                                                "externs.js"]
+                                      :warnings {:fn-deprecated false
+                                                 :redef false}}
+                   :closure-defines {goog.debug.LOGGING_ENABLED true}}
+
+  :logseq-cli {:target :node-script
+               :output-to "static/logseq-cli.js"
+               :main logseq.cli.main/main
+               :devtools {:enabled false}
+               :build-hooks [(shadow.hooks/logseq-cli-metadata-hook "--long --always --dirty")]
+               :closure-defines {goog.debug.LOGGING_ENABLED true
+                                 lambdaisland.glogi.console/colorize "false"
+                                 lambdaisland.glogi.console/timestamp "true"}
+               :compiler-options {:infer-externs :auto
+                                  :source-map true
+                                  :externs ["datascript/externs.js"
+                                            "externs.js"]
+                                  :warnings {:fn-deprecated false
+                                             :redef false}}}
   :mobile {:target        :browser
            :module-loader true
            :js-options    {:ignore-asset-requires true
@@ -119,10 +141,6 @@
             frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
             frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
             ;; frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
-            ;; Set to switch file sync server to dev, set this to false in `pnpm watch`
-            frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
-            frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]
-
             frontend.config/ENABLE-DB-SYNC-LOCAL #shadow/env ["ENABLE_DB_SYNC_LOCAL" :as :bool :default false]
             frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]}
 
@@ -145,13 +163,18 @@
                                 :externs ["datascript/externs.js"
                                           "externs.js"]
                                 :warnings {:fn-deprecated false
-                                           :redef false}}}
+                                           :redef false}}
+             :closure-defines {goog.debug.LOGGING_ENABLED true}}
 
   :test {:target :node-test
          :output-to "static/tests.js"
          :closure-defines {frontend.util/NODETEST true
                            frontend.worker-common.util/NODETEST true
-                           logseq.shui.util/NODETEST true}
+                           logseq.shui.util/NODETEST true
+                           frontend.worker.version/BUILD_TIME "test-worker-build-time"
+                           frontend.worker.version/REVISION "test-worker-revision"
+                           logseq.cli.version/BUILD_TIME "test-build-time"
+                           logseq.cli.version/REVISION "test-revision"}
          :devtools {:enabled false}
          ;; disable :static-fns to allow for with-redefs and repl development
          :compiler-options {:static-fns false}

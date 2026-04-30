@@ -7,7 +7,7 @@
 (defn watch
   "Watches environment to reload cljs, css and other assets"
   []
-  (shell "pnpm electron-watch"))
+  (shell {:shutdown nil} "pnpm electron-watch"))
 
 (defn open-dev-electron-app
   "Opens dev-electron-app when watch process has built main.js"
@@ -16,6 +16,6 @@
     (dotimes [_n 1000]
              (if (and (fs/exists? "static/js/main.js")
                       (task-util/file-modified-later-than? "static/js/main.js" start-time))
-               (shell "pnpm dev-electron-app")
+               (shell {:shutdown nil} "pnpm dev-electron-app")
                (println "Waiting for app to build..."))
              (Thread/sleep 1000))))

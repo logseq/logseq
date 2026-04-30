@@ -1,0 +1,296 @@
+(ns logseq.cli.command.core
+  "Shared CLI parsing utilities."
+  (:require [babashka.cli :as cli]
+            [clojure.string :as string]
+            [logseq.cli.output-mode :as output-mode]
+            [logseq.cli.style :as style]
+            [logseq.common.config :as common-config]))
+
+(def ^:private global-spec*
+  {:help {:alias :h
+          :desc "Show help"
+          :coerce :boolean}
+   :version {:desc "Show version"
+             :coerce :boolean}
+   :config {:desc "Path to cli.edn (default <root-dir>/cli.edn)"
+            :complete :file}
+   :graph {:desc "Graph name"
+           :alias :g
+           :complete :graphs}
+   :root-dir {:desc "Path to CLI root dir (default ~/logseq)"
+              :complete :dir}
+   :timeout-ms {:desc "Request timeout in ms (default 10000)"
+                :coerce :long}
+   :output {:desc "Output format. Default: human"
+            :alias :o
+            :validate output-mode/allowed-values}
+   :verbose {:desc "Enable verbose debug logging to stderr"
+             :alias :v
+             :coerce :boolean}
+   :profile {:desc "Enable stage timing profile output to stderr"
+             :coerce :boolean}})
+
+(defn global-spec
+  []
+  global-spec*)
+
+(defn- merge-spec
+  [spec]
+  (merge global-spec* (or spec {})))
+
+(defn command-entry
+  ([cmds command desc spec]
+   (command-entry cmds command desc spec nil))
+  ([cmds command desc spec {:keys [long-desc examples]}]
+   (let [spec* (merge-spec spec)]
+     {:cmds cmds
+      :command command
+      :desc desc
+      :long-desc long-desc
+      :examples examples
+      :spec spec*
+      :restrict true
+      :fn (fn [{:keys [opts args]}]
+            {:command command
+             :cmds cmds
+             :spec spec*
+             :long-desc long-desc
+             :examples examples
+             :opts opts
+             :args args})})))
+
+(defn- command-usage
+  [cmds spec]
+  (let [base (string/join " " cmds)
+        has-options? (seq spec)]
+    (cond-> base
+      has-options? (str " [options]"))))
+
+(defn- command-label
+  [cmds]
+  (string/join " " cmds))
+
+(defn- format-commands
+  [table]
+  (let [rows (->> table
+                  (filter (comp seq :cmds))
+                  (map (fn [{:keys [cmds desc]}]
+                         (let [command (command-label cmds)]
+                           {:command command
+                            :command-styled (style/bold command)
+                            :desc desc}))))
+        width (apply max 0 (map (comp count :command) rows))]
+    (->> rows
+         (map (fn [{:keys [command command-styled desc]}]
+                (let [padding (apply str (repeat (- width (count command)) " "))]
+                  (cond-> (str "  " command-styled padding)
+                    (seq desc) (str "  " desc)))))
+         (string/join "\n"))))
+
+(defn- format-opts
+  [spec]
+  (style/bold-options (cli/format-opts {:spec (into (sorted-map) spec)})))
+
+(defn- cmds-prefix?
+  [prefix cmds]
+  (and (<= (count prefix) (count cmds))
+       (= prefix (subvec cmds 0 (count prefix)))))
+
+(defn group-summary
+  [group table]
+  (let [group-cmds (if (string? group) [group] (vec group))
+        group-label (string/join " " group-cmds)
+        group-table (filter #(cmds-prefix? group-cmds (:cmds %)) table)]
+    (string/join "\n"
+                 [(str "Usage: logseq " group-label " <subcommand> [options]")
+                  ""
+                  (str (style/bold "Subcommands") ":")
+                  (format-commands group-table)
+                  ""
+                  (str "Global " (style/bold "options") ":")
+                  (format-opts global-spec*)
+                  ""
+                  (str "Command " (style/bold "options") ":")
+                  (str "  See `logseq " group-label " <subcommand> --help`")])))
+
+(defn top-level-summary
+  [table]
+  (let [groups [{:title "Graph Inspect and Edit"
+                 :commands #{"list" "upsert" "remove" "query" "search" "show"}}
+                {:title "Graph Management"
+                 :commands #{"graph" "server" "doctor" "sync"}}
+                {:title "Authentication"
+                 :commands #{"login" "logout"}}
+                {:title "Utilities"
+                 :commands #{"completion" "debug" "example" "skill"}
+                 :top-level-only? true
+                 :desc-overrides {"debug" "Pull raw entity data for debugging"
+                                  "example" "Show command examples"
+                                  "skill" "Show/install built-in logseq-cli skill"}}]
+        to-top-level-entries (fn [entries commands desc-overrides]
+                               (->> commands
+                                    sort
+                                    (keep (fn [command]
+                                            (let [command-entries (filter #(= command (first (:cmds %))) entries)
+                                                  leaf-entry (first (filter #(= 1 (count (:cmds %)))
+                                                                            command-entries))
+                                                  desc (or (get desc-overrides command)
+                                                           (:desc leaf-entry)
+                                                           (:desc (first command-entries)))]
+                                              (when (seq command-entries)
+                                                {:cmds [command]
+                                                 :desc desc}))))))
+        render-group (fn [{:keys [title commands top-level-only? desc-overrides]}]
+                       (let [entries (filter #(contains? commands (first (:cmds %))) table)
+                             entries* (if top-level-only?
+                                        (to-top-level-entries entries commands (or desc-overrides {}))
+                                        entries)]
+                         (string/join "\n" [title (format-commands entries*)])))]
+    (string/join "\n"
+                 ["Usage: logseq <command> [options]"
+                  ""
+                  (str (style/bold "Commands") ":")
+                  (string/join "\n\n" (map render-group groups))
+                  ""
+                  (str "Global " (style/bold "options") ":")
+                  (format-opts global-spec*)
+                  ""
+                  (str "Command " (style/bold "options") ":")
+                  "  See `logseq <command> --help`"])))
+
+(defn- format-examples
+  [examples]
+  (->> examples
+       (keep (fn [example]
+               (let [line (some-> example str string/trim)]
+                 (when (seq line)
+                   line))))
+       (take 5)
+       (map #(str "  " %))
+       (string/join "\n")))
+
+(defn command-summary
+  [{:keys [cmds spec long-desc examples]}]
+  (let [command-spec (apply dissoc spec (keys global-spec*))
+        formatted-examples (format-examples examples)]
+    (string/join "\n"
+                 (cond-> [(str "Usage: logseq " (command-usage cmds spec))]
+                   (seq long-desc) (conj "" long-desc)
+                   true (conj ""
+                              (str "Global " (style/bold "options") ":")
+                              (format-opts global-spec*)
+                              ""
+                              (str "Command " (style/bold "options") ":")
+                              (format-opts command-spec))
+                   (seq formatted-examples) (conj ""
+                                                  (str (style/bold "Examples") ":")
+                                                  formatted-examples)))))
+
+(defn normalize-opts
+  [opts]
+  (cond-> opts
+    (:config opts) (-> (assoc :config-path (:config opts))
+                       (dissoc :config))))
+
+(defn ok-result
+  [command opts args summary]
+  {:ok? true
+   :command command
+   :options (normalize-opts opts)
+   :args (vec args)
+   :summary summary})
+
+(defn help-result
+  [summary]
+  {:ok? false
+   :help? true
+   :summary summary})
+
+(defn invalid-options-result
+  [summary message]
+  {:ok? false
+   :error {:code :invalid-options
+           :message (style/bold-options message)}
+   :summary summary})
+
+(defn unknown-command-result
+  [summary message]
+  {:ok? false
+   :error {:code :unknown-command
+           :message message}
+   :summary summary})
+
+(def ^:private global-aliases
+  (->> global-spec*
+       (keep (fn [[k {:keys [alias]}]]
+               (when alias
+                 [alias k])))
+       (into {})))
+
+(def ^:private global-flag-options
+  (->> global-spec*
+       (keep (fn [[k {:keys [coerce]}]]
+               (when (= coerce :boolean) k)))
+       (set)))
+
+(defn- global-opt-key
+  [token]
+  (cond
+    (string/starts-with? token "--")
+    (keyword (subs token 2))
+
+    (and (string/starts-with? token "-")
+         (= 2 (count token)))
+    (get global-aliases (keyword (subs token 1)))
+
+    :else nil))
+
+(defn- valid-leading-global-value?
+  [opt-key value]
+  (case opt-key
+    :output (contains? output-mode/allowed-values value)
+    true))
+
+(defn parse-leading-global-opts
+  [args]
+  (loop [remaining args
+         opts {}]
+    (if (empty? remaining)
+      {:opts opts :args []}
+      (let [token (first remaining)]
+        (if-let [opt-key (global-opt-key token)]
+          (if (contains? global-flag-options opt-key)
+            (recur (rest remaining) (assoc opts opt-key true))
+            (if-let [value (second remaining)]
+              (if (valid-leading-global-value? opt-key value)
+                (recur (drop 2 remaining) (assoc opts opt-key value))
+                {:opts opts :args remaining})
+              {:opts opts :args (rest remaining)}))
+          {:opts opts :args remaining})))))
+
+(defn cli-error->result
+  [summary {:keys [msg]}]
+  (invalid-options-result summary (or msg "invalid options")))
+
+(defn graph->repo
+  [graph]
+  (some-> graph
+          string/trim
+          common-config/canonicalize-db-version-repo))
+
+(defn repo->graph
+  [repo]
+  (when (seq repo)
+    (common-config/strip-leading-db-version-prefix repo)))
+
+(defn resolve-repo
+  [graph]
+  (let [graph (some-> graph string/trim)]
+    (when (seq graph)
+      (graph->repo graph))))
+
+(defn pick-graph
+  [options _command-args config]
+  (or (:graph options)
+      (:graph config)
+      (repo->graph (:repo config))))

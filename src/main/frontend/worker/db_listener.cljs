@@ -81,5 +81,6 @@
                                         (sync-db-to-main-thread repo conn tx-report)
                                         tx-report)
                            opt {:repo repo}]
-                       (doseq [[k handler-fn] handlers]
-                         (handler-fn k opt tx-report')))))))))
+                       (when tx-report'
+                         (doseq [[k handler-fn] handlers]
+                           (handler-fn k opt tx-report'))))))))))

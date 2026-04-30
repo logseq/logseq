@@ -49,7 +49,8 @@
             [logseq.api.plugin :as plugin-api]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [cljs-time.core :as t]))
 
 ;; TODO: should we move all events here?
 
@@ -122,16 +123,15 @@
             (search-plugin/call-service! service "search:rebuildBlocksIndice" {}))))))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (let [switch-promise
-        (p/do!
-         (export/cancel-db-backup!)
-         (persist-db/export-current-graph!)
-         (state/set-state! :db/async-queries {})
-         (st/refresh!)
-         (graph-switch-on-persisted graph opts))]
-    (p/then switch-promise
-            (fn [_]
-              (export/backup-db-graph (state/get-current-repo))))))
+  (let [t1 (t/now)]
+    (p/do!
+    (export/cancel-db-backup!)
+    (state/set-state! :db/async-queries {})
+    (st/refresh!)
+    (graph-switch-on-persisted graph opts)
+    (export/backup-db-graph (state/get-current-repo))
+    (let [t2 (t/now)]
+      (log/info ::graph-switch-spent (- t2 t1))))))
 
 (defmethod handle :graph/open-new-window [[_ev target-repo]]
   (ui-handler/open-new-window-or-tab! target-repo))
@@ -171,7 +171,9 @@
 
 (defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
   (when-not (empty? (dissoc opts :type :payload))
-    (js/console.error "instrument data-map should only contains [:type :payload]"))
+    (log/error :event :invalid-instrument-payload-keys
+               :message "instrument data-map should only contain [:type :payload]"
+               :payload opts))
   (posthog/capture type payload))
 
 (defmethod handle :capture-error [[_ {:keys [error payload extra]}]]
@@ -248,7 +250,10 @@
     (state/pub-event! [:graph/ready graph])))
 
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
-  (persist-db/export-current-graph! {:succ-notification? true :force-save? true}))
+  (persist-db/export-current-graph! :succ-notification? true))
+
+(defmethod handle :graph/db-save-shortcut [[_]]
+  (handle [:graph/save-db-to-disk {:source :shortcut}]))
 
 (defmethod handle :ui/re-render-root [[_]]
   (ui-handler/re-render-root!))

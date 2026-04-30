@@ -1,0 +1,165 @@
+{:excluded-command-prefixes ["sync" "login" "logout"]
+ :scopes
+ {:global
+  {:options ["--help"
+             "--version"
+             "--config"
+             "--graph"
+             "--root-dir"
+             "--output"
+             "--verbose"]}
+
+  :graph
+  {:commands ["graph list"
+              "graph create"
+              "graph switch"
+              "graph remove"
+              "graph validate"
+              "graph info"
+              "graph export"
+              "graph import"
+              "graph backup list"
+              "graph backup create"
+              "graph backup restore"
+              "graph backup remove"]
+   :options ["--fix"
+             "--type"
+             "--file"
+             "--input"
+             "--name"
+             "--src"
+             "--dst"]}
+
+  :list
+  {:commands ["list page"
+              "list tag"
+              "list property"
+              "list task"
+              "list node"
+              "list asset"]
+   :options ["--expand"
+             "--fields"
+             "--limit"
+             "--offset"
+             "--sort"
+             "--order"
+             "--status"
+             "--priority"
+             "--content"
+             "--tags"
+             "--properties"
+             "--journal-only"
+             "--with-properties"
+             "--with-extends"
+             "--with-classes"
+             "--with-type"]}
+
+  :upsert
+  {:commands ["upsert block"
+              "upsert page"
+              "upsert task"
+              "upsert asset"
+              "upsert tag"
+              "upsert property"]
+   :options ["--id"
+             "--uuid"
+             "--target-id"
+             "--target-uuid"
+             "--target-page"
+             "--pos"
+             "--content"
+             "--path"
+             "--blocks-file"
+             "--status"
+             "--priority"
+             "--scheduled"
+             "--deadline"
+             "--no-status"
+             "--no-priority"
+             "--no-scheduled"
+             "--no-deadline"
+             "--update-tags"
+             "--update-properties"
+             "--remove-tags"
+             "--remove-properties"
+             "--page"
+             "--name"
+             "--type"
+             "--cardinality"
+             "--hide"
+             "--public"]}
+
+  :remove
+  {:commands ["remove block"
+              "remove page"
+              "remove tag"
+              "remove property"]
+   :options ["--id"
+             "--uuid"
+             "--name"]}
+
+  :query
+  {:commands ["query"
+              "query list"]
+   :options ["--query"
+             "--name"
+             "--inputs"]}
+
+  :search
+  {:commands ["search block"
+              "search page"
+              "search property"
+              "search tag"]
+   :options ["--content"]}
+
+  :show
+  {:commands ["show"]
+   :options ["--id"
+             "--uuid"
+             "--page"
+             "--linked-references"
+             "--level"
+             "stdin:--id"]}
+
+  :debug
+  {:commands ["debug pull"]
+   :options ["--id"
+             "--uuid"
+             "--ident"]}
+
+  :example
+  {:commands ["example list"
+              "example list page"
+              "example upsert"
+              "example upsert page"
+              "example remove"
+              "example remove page"
+              "example query"
+              "example query list"
+              "example search"
+              "example search block"
+              "example show"]
+   :options []}
+
+  :server
+  {:commands ["server list"
+              "server cleanup"
+              "server start"
+              "server stop"
+              "server restart"]
+   :options ["--graph"]}
+
+  :doctor
+  {:commands ["doctor"]
+   :options ["--dev-script"]}
+
+  :completion
+  {:commands ["completion"]
+   :options ["bash"
+             "zsh"
+             "--shell"]}
+
+  :skill
+  {:commands ["skill show"
+              "skill install"]
+   :options ["--global"]}}}

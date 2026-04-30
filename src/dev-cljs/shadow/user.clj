@@ -26,6 +26,15 @@
   ([runtime-id]
    (api/repl :db-worker {:runtime-id runtime-id})))
 
+(defn worker-node-repl
+  ([]
+   (let [runtime-id (->> (api/repl-runtimes :db-worker-node)
+                         (map :client-id)
+                         first)]
+     (api/repl :db-worker-node {:runtime-id runtime-id})))
+  ([runtime-id]
+   (api/repl :db-worker-node {:runtime-id runtime-id})))
+
 (defn runtime-id-list
   [app]
   (->> (api/repl-runtimes app)
