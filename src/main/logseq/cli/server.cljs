@@ -60,31 +60,15 @@
   []
   (node-path/join js/__dirname "../static/db-worker-node.js"))
 
-(defn- db-worker-packaged-script-path
+(defn- db-worker-release-script-path
   []
-  (node-path/join js/__dirname "db-worker-node.js"))
-
-(defn- db-worker-bundled-script-path
-  []
-  (node-path/join js/__dirname "../dist/db-worker-node.js"))
-
-(defn- first-existing-path
-  [paths]
-  (some #(when (and (string? %) (fs/existsSync %)) %) paths))
+  (node-path/join js/__dirname "js" "db-worker-node.js"))
 
 (defn db-worker-script-path
   []
-  (or (first-existing-path
-       (if goog.DEBUG
-         [(db-worker-dev-script-path)
-          (db-worker-packaged-script-path)
-          (db-worker-bundled-script-path)]
-         [(db-worker-packaged-script-path)
-          (db-worker-bundled-script-path)
-          (db-worker-dev-script-path)]))
-      (if goog.DEBUG
-        (db-worker-dev-script-path)
-        (db-worker-packaged-script-path))))
+  (if goog.DEBUG
+    (db-worker-dev-script-path)
+    (db-worker-release-script-path)))
 
 (defn db-worker-runtime-script-path
   []

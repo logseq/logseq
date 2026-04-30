@@ -273,6 +273,9 @@ exports.electronMaker = async () => {
   cp.execSync('pnpm cljs:release-electron', {
     stdio: 'inherit',
   })
+  cp.execSync('pnpm desktop:prepare-runtime-js', {
+    stdio: 'inherit',
+  })
 
   const pkgPath = path.join(outputPath, 'package.json')
   const pkg = require(pkgPath)

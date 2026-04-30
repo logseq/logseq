@@ -324,7 +324,7 @@
 (defn- cli-script-path
   []
   (if (.-isPackaged ^js app)
-    (node-path/join js/process.resourcesPath "app.asar" "logseq-cli.js")
+    (node-path/join js/process.resourcesPath "app.asar" "js" "logseq-cli.js")
     (node-path/join js/__dirname "logseq-cli.js")))
 
 (defn- render-unix-cli-launcher

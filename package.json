@@ -104,6 +104,7 @@
         "db-worker-node:bundle": "node ./scripts/build-db-worker-node-bundle.mjs",
         "db-worker-node:release:bundle": "run-s db-worker-node:release db-worker-node:bundle",
         "db-worker-node:compile:bundle": "run-s db-worker-node:compile db-worker-node:bundle",
+        "desktop:prepare-runtime-js": "node ./scripts/prepare-desktop-runtime-js.mjs",
         "cli:e2e": "bb dev:cli-e2e",
         "cli:e2e:skip-build": "bb dev:cli-e2e --skip-build",
         "cljs:dev-release-app": "clojure -M:cljs release app db-worker db-worker-node --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\"",
