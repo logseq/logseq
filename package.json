@@ -176,6 +176,7 @@
         "path-complete-extname": "1.0.0",
         "pdfjs-dist": "4.2.67",
         "photoswipe": "^5.4.4",
+        "picocolors": "1.1.1",
         "pixi-graph-fork": "0.2.0",
         "pixi.js": "6.2.0",
         "posthog-js": "1.10.0",

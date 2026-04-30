@@ -201,6 +201,9 @@ importers:
       photoswipe:
         specifier: ^5.4.4
         version: 5.4.4
+      picocolors:
+        specifier: 1.1.1
+        version: 1.1.1
       pixi-graph-fork:
         specifier: 0.2.0
         version: 0.2.0(@pixi/mesh@6.2.0(@pixi/constants@6.2.0)(@pixi/core@6.2.0(@pixi/constants@6.2.0)(@pixi/math@6.2.0)(@pixi/runner@6.2.0)(@pixi/settings@6.2.0)(@pixi/ticker@6.2.0(@pixi/settings@6.2.0))(@pixi/utils@6.2.0(@pixi/constants@6.2.0)(@pixi/settings@6.2.0)))(@pixi/display@6.2.0(@pixi/math@6.2.0)(@pixi/settings@6.2.0)(@pixi/utils@6.2.0(@pixi/constants@6.2.0)(@pixi/settings@6.2.0)))(@pixi/math@6.2.0)(@pixi/settings@6.2.0)(@pixi/utils@6.2.0(@pixi/constants@6.2.0)(@pixi/settings@6.2.0)))(@pixi/runner@6.2.0)(@pixi/settings@6.2.0)(graphology-types@0.19.5)
