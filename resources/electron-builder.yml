@@ -15,6 +15,10 @@ publish:
     owner: logseq
     repo: logseq
 
+extraResources:
+  - from: .agents/skills/logseq-cli/SKILL.md
+    to: .agents/skills/logseq-cli/SKILL.md
+
 mac:
   artifactName: ${productName}-darwin-${arch}-${version}.${ext}
   icon: icons/logseq_big_sur.icns
