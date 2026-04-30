@@ -231,7 +231,7 @@
     (ldb/transact! conn [(ldb/kv :logseq.kv/graph-uuid (graph-id->uuid repo graph-id))
                          (ldb/kv :logseq.kv/graph-remote? true)
                          (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))]
-                   {:persist-op? false})))
+      {:outliner-op :set-kvs})))
 
 (defn- persist-upload-graph-identity!
   [repo graph-id graph-e2ee?]
