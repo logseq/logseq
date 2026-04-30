@@ -367,7 +367,7 @@
                                              :inactive config/publishing?
                                              :binding false}
 
-   :graph/db-save                           {:fn #(state/pub-event! [:graph/save-db-to-disk])
+   :graph/db-save                           {:fn #(state/pub-event! [:graph/db-save-shortcut])
                                              :inactive (not (util/electron?))
                                              :binding "mod+s"}
 

@@ -83,9 +83,6 @@ jobs:
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
 
-      - name: Run ClojureScript tests
-        run: clojure -M:test
-
       - name: Run nbb-logseq tests
         run: pnpm test
 

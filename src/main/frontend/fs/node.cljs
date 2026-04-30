@@ -4,52 +4,23 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
-            [frontend.db :as db]
             [frontend.fs.protocol :as protocol]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
             [promesa.core :as p]))
 
-(defn- <contents-matched?
-  [disk-content db-content]
-  (when (and (string? disk-content) (string? db-content))
-    (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
-
 (defn- write-file-impl!
-  [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
+  [repo dir rpath content {:keys [ok-handler error-handler]} _stat]
   (let [file-fpath (path/path-join dir rpath)]
-    (if skip-compare?
-      (p/catch
-       (p/let [result (ipc/ipc "writeFile" repo file-fpath content)]
-         (when ok-handler
-           (ok-handler repo rpath result)))
-       (fn [error]
-         (if error-handler
-           (error-handler error)
-           (log/error :write-file-failed error))))
-
-      ;; TODO: Remove backupDbFile which is a file graph concept
-      (p/let [disk-content (when (not= stat :not-found)
-                             (-> (ipc/ipc "readFile" file-fpath)
-                                 (p/then bean/->clj)
-                                 (p/catch (fn [error]
-                                            (js/console.error error)
-                                            nil))))
-              disk-content (or disk-content "")
-              db-content (or old-content (db/get-file repo rpath) "")
-              contents-matched? (<contents-matched? disk-content db-content)]
-        (->
-         (p/let [result (ipc/ipc "writeFile" repo file-fpath content)]
-           (when-not contents-matched?
-             (ipc/ipc "backupDbFile" (config/get-local-dir repo) rpath disk-content content))
-           (when ok-handler
-             (ok-handler repo rpath result))
-           result)
-         (p/catch (fn [error]
-                    (if error-handler
-                      (error-handler error)
-                      (log/error :write-file-failed error)))))))))
+    (p/catch
+        (p/let [result (ipc/ipc "writeFile" repo file-fpath content)]
+          (when ok-handler
+            (ok-handler repo rpath result)))
+        (fn [error]
+          (if error-handler
+            (error-handler error)
+            (log/error :write-file-failed error))))))
 
 (defn- open-dir
   "Open a new directory"

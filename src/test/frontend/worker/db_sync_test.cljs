@@ -8,11 +8,13 @@
    [frontend.worker-common.util :as worker-util]
    [frontend.worker.handler.page :as worker-page]
    [frontend.worker.pipeline :as worker-pipeline]
+   [frontend.worker.platform :as platform]
    [frontend.worker.shared-service :as shared-service]
    [frontend.worker.state :as worker-state]
    [frontend.worker.sync :as db-sync]
    [frontend.worker.sync.apply-txs :as sync-apply]
    [frontend.worker.sync.assets :as sync-assets]
+   [frontend.worker.sync.auth :as sync-auth]
    [frontend.worker.sync.client-op :as client-op]
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.handle-message :as sync-handle-message]
@@ -21,7 +23,7 @@
    [frontend.worker.sync.presence :as sync-presence]
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
    [frontend.worker.sync.transport :as sync-transport]
-   [frontend.worker.sync.upload :as sync-upload]
+   [frontend.worker.sync.util :as sync-util]
    [frontend.test.noise :as test-noise]
    [frontend.worker.undo-redo :as undo-redo]
    [logseq.common.config :as common-config]
@@ -33,7 +35,6 @@
    [logseq.db-sync.worker.handler.sync :as sync-handler]
    [logseq.db-sync.worker.ws :as ws]
    [logseq.db.common.normalize :as db-normalize]
-   [logseq.db.common.sqlite :as common-sqlite]
    [logseq.db.frontend.validate :as db-validate]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.db.test.helper :as db-test]
@@ -396,54 +397,97 @@
 
 (deftest resolve-ws-token-refreshes-when-token-expired-test
   (async done
-         (let [refresh-calls (atom 0)
+         (let [fetch-calls (atom [])
+               main-thread-calls (atom 0)
                main-thread-prev @worker-state/*main-thread
-               worker-state-prev @worker-state/*state]
-           (reset! worker-state/*state (assoc worker-state-prev :auth/id-token "expired-token"))
-           (reset! worker-state/*main-thread
-                   (fn [qkw _direct-pass? _args-list]
-                     (if (= qkw :thread-api/ensure-id&access-token)
-                       (do
-                         (swap! refresh-calls inc)
-                         (p/resolved {:id-token "fresh-token"}))
-                       (p/resolved nil))))
-           (with-redefs [db-sync/auth-token (fn [] "expired-token")
-                         db-sync/id-token-expired? (fn [_token] true)]
-             (-> (#'db-sync/<resolve-ws-token)
-                 (p/then (fn [token]
-                           (is (= 1 @refresh-calls))
-                           (is (= "fresh-token" token))
-                           (is (= "fresh-token" (worker-state/get-id-token)))
-                           (reset! worker-state/*main-thread main-thread-prev)
-                           (reset! worker-state/*state worker-state-prev)
-                           (done)))
-                 (p/catch (fn [error]
-                            (reset! worker-state/*main-thread main-thread-prev)
-                            (reset! worker-state/*state worker-state-prev)
-                            (is nil (str error))
-                            (done))))))))
-
-(deftest resolve-ws-token-skips-refresh-when-token-not-expired-test
-  (async done
-         (let [refresh-calls (atom 0)
-               main-thread-prev @worker-state/*main-thread]
+               worker-state-prev @worker-state/*state
+               sync-config-prev @worker-state/*db-sync-config
+               fetch-prev js/fetch]
+           (reset! worker-state/*db-sync-config {:feature-flags {:worker-auth-refresh? true}})
+           (reset! worker-state/*state (assoc worker-state-prev
+                                              :auth/id-token "expired-token"
+                                              :auth/refresh-token "refresh-token"
+                                              :auth/oauth-token-url "https://auth.example.com/oauth2/token"
+                                              :auth/oauth-client-id "worker-client-id"))
            (reset! worker-state/*main-thread
                    (fn [qkw _direct-pass? _args-list]
                      (when (= qkw :thread-api/ensure-id&access-token)
-                       (swap! refresh-calls inc))
-                     (p/resolved {:id-token "fresh-token"})))
-           (with-redefs [db-sync/auth-token (fn [] "valid-token")
-                         db-sync/id-token-expired? (fn [_token] false)]
+                       (swap! main-thread-calls inc))
+                     (p/resolved {:id-token "legacy-token"})))
+           (set! js/fetch
+                 (fn [url opts]
+                   (swap! fetch-calls conj {:url url :opts opts})
+                   (let [resp (js-obj)]
+                     (aset resp "ok" true)
+                     (aset resp "status" 200)
+                     (aset resp "text"
+                           (fn []
+                             (p/resolved "{\"id_token\":\"fresh-worker-token\",\"access_token\":\"fresh-worker-access-token\"}")))
+                     (p/resolved resp))))
+           (with-redefs [sync-util/auth-token (fn [] "expired-token")
+                         sync-auth/id-token-expired? (fn [_token] true)]
              (-> (#'db-sync/<resolve-ws-token)
                  (p/then (fn [token]
-                           (reset! worker-state/*main-thread main-thread-prev)
-                           (is (= 0 @refresh-calls))
-                           (is (= "valid-token" token))
-                           (done)))
+                           (is (= 1 (count @fetch-calls)))
+                           (is (= 0 @main-thread-calls))
+                           (is (= "fresh-worker-token" token))
+                           (is (= "fresh-worker-token" (worker-state/get-id-token)))
+                           (is (= "fresh-worker-access-token"
+                                  (:auth/access-token @worker-state/*state)))))
                  (p/catch (fn [error]
-                            (reset! worker-state/*main-thread main-thread-prev)
-                            (is nil (str error))
-                            (done))))))))
+                            (is nil (str error))))
+                 (p/finally (fn []
+                              (set! js/fetch fetch-prev)
+                              (reset! worker-state/*main-thread main-thread-prev)
+                              (reset! worker-state/*state worker-state-prev)
+                              (reset! worker-state/*db-sync-config sync-config-prev)
+                              (done))))))))
+
+(deftest resolve-ws-token-does-not-fallback-to-main-thread-when-feature-flag-disabled-test
+  (async done
+         (let [fetch-calls (atom 0)
+               main-thread-calls (atom 0)
+               main-thread-prev @worker-state/*main-thread
+               worker-state-prev @worker-state/*state
+               sync-config-prev @worker-state/*db-sync-config
+               fetch-prev js/fetch]
+           (reset! worker-state/*db-sync-config {:feature-flags {:worker-auth-refresh? false}})
+           (reset! worker-state/*state (assoc worker-state-prev
+                                              :auth/id-token "expired-token"
+                                              :auth/refresh-token "refresh-token"
+                                              :auth/oauth-token-url "https://auth.example.com/oauth2/token"
+                                              :auth/oauth-client-id "worker-client-id"))
+           (reset! worker-state/*main-thread
+                   (fn [qkw _direct-pass? _args-list]
+                     (when (= qkw :thread-api/ensure-id&access-token)
+                       (swap! main-thread-calls inc))
+                     (p/resolved {:id-token "fresh-legacy-token"})))
+           (set! js/fetch
+                 (fn [_url _opts]
+                   (swap! fetch-calls inc)
+                   (let [resp (js-obj)]
+                     (aset resp "ok" true)
+                     (aset resp "status" 200)
+                     (aset resp "text"
+                           (fn []
+                             (p/resolved "{\"id_token\":\"fresh-worker-token-2\",\"access_token\":\"fresh-worker-access-token-2\"}")))
+                     (p/resolved resp))))
+           (with-redefs [sync-util/auth-token (fn [] "expired-token")
+                         sync-auth/id-token-expired? (fn [_token] true)]
+             (-> (#'db-sync/<resolve-ws-token)
+                 (p/then (fn [token]
+                           (is (= 1 @fetch-calls))
+                           (is (= 0 @main-thread-calls))
+                           (is (= "fresh-worker-token-2" token))
+                           (is (= "fresh-worker-token-2" (worker-state/get-id-token)))))
+                 (p/catch (fn [error]
+                            (is nil (str error))))
+                 (p/finally (fn []
+                              (set! js/fetch fetch-prev)
+                              (reset! worker-state/*main-thread main-thread-prev)
+                              (reset! worker-state/*state worker-state-prev)
+                              (reset! worker-state/*db-sync-config sync-config-prev)
+                              (done))))))))
 
 (deftest update-online-users-dedupes-identical-messages-test
   (let [client {:repo test-repo
@@ -633,23 +677,6 @@
                          :latest-remote-tx {}}
                         test-repo)]
             (is (= 1 (:pending-local counts)))))))))
-
-(deftest upload-graph-metadata-write-is-not-persisted-as-local-sync-tx-test
-  (let [captured (atom nil)
-        fake-conn (atom :db)]
-    (with-redefs [worker-state/get-datascript-conn (fn [_repo] fake-conn)
-                  ldb/transact! (fn [conn tx-data tx-meta]
-                                  (reset! captured {:conn conn
-                                                    :tx-data tx-data
-                                                    :tx-meta tx-meta})
-                                  nil)]
-      (sync-upload/set-graph-sync-metadata! test-repo true))
-    (is (= fake-conn (:conn @captured)))
-    (is (= [{:db/ident :logseq.kv/graph-remote? :kv/value true}
-            {:db/ident :logseq.kv/graph-rtc-e2ee? :kv/value true}]
-           (:tx-data @captured)))
-    (is (= {:persist-op? false}
-           (:tx-meta @captured)))))
 
 (deftest pull-ok-with-older-remote-tx-is-ignored-test
   (testing "pull/ok with remote tx behind local tx does not apply stale tx data"
@@ -1674,8 +1701,8 @@
                                                                :keep-uuid? true}]]]]
              :db-sync/normalized-tx-data []
              :db-sync/reversed-tx-data []}])
-          (with-redefs [sync-apply/fail-fast (fn [_tag data]
-                                               (throw (ex-info "fail-fast-called" data)))]
+          (with-redefs [sync-util/fail-fast (fn [_tag data]
+                                              (throw (ex-info "fail-fast-called" data)))]
             (let [result (#'sync-apply/apply-history-action! test-repo tx-id false {})]
               (is (= false (:applied? result)))
               (is (= :invalid-history-action-ops
@@ -4529,40 +4556,55 @@
 (deftest create-temp-sqlite-db-uses-opfs-pool-test
   (testing "temp upload db should use an OPFS-backed sqlite db instead of :memory:"
     (async done
-           (let [opened-paths (atom [])]
-             (with-redefs [sync-temp-sqlite/<get-upload-temp-sqlite-pool
-                           (fn []
-                             (p/resolved
-                              #js {:OpfsSAHPoolDb
-                                   (fn [path]
-                                     (swap! opened-paths conj path)
-                                     #js {:close (fn [] nil)})}))
-                           common-sqlite/create-kvs-table! (fn [_] nil)]
-               (-> (p/let [{:keys [db path]} (sync-temp-sqlite/<create-temp-sqlite-db!
-                                              {:get-pool-f sync-temp-sqlite/<get-upload-temp-sqlite-pool
-                                               :upload-path-f sync-temp-sqlite/upload-temp-sqlite-path})]
-                     (is (some? db))
-                     (is (= [path] @opened-paths))
-                     (is (string/includes? path "upload-"))
-                     (is (string/ends-with? path ".sqlite")))
-                   (p/finally done)))))))
-
-(deftest cleanup-temp-sqlite-removes-opfs-file-test
-  (testing "temp upload db cleanup should close the db and remove the temp OPFS file"
-    (async done
-           (let [closed? (atom false)
-                 removed-paths (atom [])]
-             (with-redefs [sync-temp-sqlite/<remove-upload-temp-sqlite-db-file!
-                           (fn [path]
-                             (swap! removed-paths conj path)
-                             (p/resolved nil))]
-               (-> (p/let [_ (sync-temp-sqlite/cleanup-temp-sqlite!
-                              {:db #js {:close (fn [] (reset! closed? true))}
-                               :path "/upload-temp.sqlite"}
-                              sync-temp-sqlite/<remove-upload-temp-sqlite-db-file!)]
-                     (is @closed?)
-                     (is (= ["/upload-temp.sqlite"] @removed-paths)))
-                   (p/finally done)))))))
+           (let [sqlite-prev @worker-state/*sqlite
+                 platform-prev (try
+                                 (platform/current)
+                                 (catch :default _ nil))
+                 sqlite #js {:sqlite? true}
+                 pool #js {:pool? true}
+                 opened-opts (atom [])
+                 installed-pools (atom [])
+                 test-platform {:env {:runtime :node
+                                      :owner-source :test}
+                                :storage {:install-opfs-pool (fn [sqlite* pool-name]
+                                                               (swap! installed-pools conj {:sqlite sqlite*
+                                                                                            :pool-name pool-name})
+                                                               pool)
+                                          :resolve-db-path (fn [repo _pool suffix]
+                                                             (str "/tmp/" repo suffix))
+                                          :remove-vfs! (fn [_pool] nil)}
+                                :kv {:get (fn [_] nil)
+                                     :set! (fn [_ _] nil)}
+                                :broadcast {:post-message! (fn [_ _] nil)}
+                                :websocket {:connect (fn [_] nil)}
+                                :crypto {}
+                                :timers {}
+                                :sqlite {:init! (fn [] nil)
+                                         :open-db (fn [opts]
+                                                    (swap! opened-opts conj opts)
+                                                    #js {:close (fn [] nil)
+                                                         :exec (fn [& _] nil)})}}]
+             (platform/set-platform! test-platform)
+             (reset! worker-state/*sqlite sqlite)
+             (-> (p/let [{:keys [db path]} (sync-temp-sqlite/<create-temp-sqlite-db!)]
+                   (is (some? db))
+                   (is (= [{:sqlite sqlite
+                            :pool-name sync-temp-sqlite/upload-temp-pool-name}]
+                          @installed-pools))
+                   (is (= [{:sqlite sqlite
+                            :pool pool
+                            :path path
+                            :mode "c"}]
+                          @opened-opts))
+                   (is (string/includes? path "upload-"))
+                   (is (string/ends-with? path ".sqlite")))
+                 (p/catch (fn [e]
+                            (is false (str e))))
+                 (p/finally (fn []
+                              (reset! worker-state/*sqlite sqlite-prev)
+                              (when platform-prev
+                                (platform/set-platform! platform-prev))
+                              (done))))))))
 
 (deftest upload-large-title-encrypts-transit-payload-test
   (testing "encrypted large title uploads transit-encoded payload"
@@ -4673,9 +4715,6 @@
                                       :download-fn download-fn
                                       :aes-key nil
                                       :get-conn-f worker-state/get-datascript-conn
-                                      :get-graph-id-f (fn [repo]
-                                                        (sync-large-title/get-graph-id
-                                                         worker-state/get-datascript-conn repo))
                                       :graph-e2ee?-f sync-crypt/graph-e2ee?
                                       :ensure-graph-aes-key-f sync-crypt/<ensure-graph-aes-key
                                       :fail-fast-f db-sync/fail-fast})

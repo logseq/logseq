@@ -87,6 +87,11 @@
    (settings/sync-server-url-settings-container)
    {:id :sync-server-panel :center? true :class "lg:max-w-2xl"}))
 
+(defmethod events/handle :go/publish-server-settings [[_]]
+  (shui/dialog-open!
+   (settings/publish-server-url-settings-container)
+   {:id :publish-server-panel :center? true :class "lg:max-w-2xl"}))
+
 (defmethod events/handle :redirect-to-home [_]
   (page-handler/create-today-journal!)
   (when (util/capacitor?)

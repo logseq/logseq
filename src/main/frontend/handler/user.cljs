@@ -7,6 +7,7 @@
             [cljs.core.async :as async :refer [<! go timeout]]
             [clojure.set :as set]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.config :as config]
@@ -15,6 +16,8 @@
             [frontend.flows :as flows]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
+            [frontend.util :as util]
+            [logseq.common.path :as path]
             [goog.crypt :as crypt]
             [goog.crypt.Hmac]
             [goog.crypt.Sha256]
@@ -100,6 +103,30 @@
    (js/localStorage.setItem "access-token" access-token)
    (js/localStorage.setItem "refresh-token" refresh-token)))
 
+(defn- auth-file-path
+  []
+  (when-let [home-dir (get-in @state/state [:system/info :home-dir])]
+    (path/path-join home-dir "logseq" "auth.json")))
+
+(defn- auth-file-payload
+  []
+  {:id-token (state/get-auth-id-token)
+   :access-token (:auth/access-token @state/state)
+   :refresh-token (state/get-auth-refresh-token)
+   :updated-at (.now js/Date)})
+
+(defn- persist-auth-file!
+  []
+  (when (util/electron?)
+    (when-let [auth-path (auth-file-path)]
+      (-> (ipc/ipc "writeFile"
+                   nil
+                   auth-path
+                   (js/JSON.stringify (clj->js (auth-file-payload)) nil 2))
+          (p/catch (fn [error]
+                     (js/console.warn :persist-auth-file-failed error)
+                     nil))))))
+
 (defn- clear-cognito-tokens!
   "Clear tokens for cognito's localstorage, prefix is 'CognitoIdentityServiceProvider'"
   []
@@ -119,7 +146,8 @@
       (let [refresh-token (js/localStorage.getItem refresh-token-key)]
         (when (and refresh-token (not= refresh-token "undefined"))
           (state/set-auth-refresh-token refresh-token)
-          (js/localStorage.setItem "refresh-token" refresh-token))))))
+          (js/localStorage.setItem "refresh-token" refresh-token)
+          (persist-auth-file!))))))
 
 (defn- clear-tokens
   ([]
@@ -127,7 +155,8 @@
    (state/set-auth-access-token nil)
    (state/set-auth-refresh-token nil)
    (set-token-to-localstorage! "" "" "")
-   (clear-cognito-tokens!))
+   (clear-cognito-tokens!)
+   (persist-auth-file!))
   ([except-refresh-token?]
    (state/set-auth-id-token nil)
    (state/set-auth-access-token nil)
@@ -135,13 +164,15 @@
      (state/set-auth-refresh-token nil))
    (if except-refresh-token?
      (set-token-to-localstorage! "" "")
-     (set-token-to-localstorage! "" "" ""))))
+     (set-token-to-localstorage! "" "" ""))
+   (persist-auth-file!)))
 
 (defn- set-tokens!
   ([id-token access-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
    (set-token-to-localstorage! id-token access-token)
+   (persist-auth-file!)
    (some->> (parse-jwt (state/get-auth-id-token))
             (reset! flows/*current-login-user)))
   ([id-token access-token refresh-token]
@@ -149,6 +180,7 @@
    (state/set-auth-access-token access-token)
    (state/set-auth-refresh-token refresh-token)
    (set-token-to-localstorage! id-token access-token refresh-token)
+   (persist-auth-file!)
    (some->> (parse-jwt (state/get-auth-id-token))
             (reset! flows/*current-login-user))))
 

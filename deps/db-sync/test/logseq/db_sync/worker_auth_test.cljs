@@ -57,6 +57,22 @@
                           (is (= "jwks" (ex-message error)))
                           (done)))))))
 
+(deftest auth-claims-jwks-error-falls-back-to-unsafe-claims-when-enabled-test
+  (async done
+         (let [token "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1MSJ9.signature"
+               request (js/Request. "http://localhost/graphs"
+                                   #js {:headers #js {"authorization" (str "Bearer " token)}})
+               env #js {"DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS" "true"}]
+           (-> (p/with-redefs [authorization/verify-jwt
+                               (fn [_token _env]
+                                 (p/rejected (ex-info "jwks" {})))]
+                 (p/let [claims (auth/auth-claims request env)]
+                   (is (= "u1" (aget claims "sub")))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest auth-claims-expired-jwt-short-circuits-verification-test
   (async done
          (let [expired-token "eyJhbGciOiJSUzI1NiJ9.eyJleHAiOjEsInN1YiI6InUxIn0.signature"

@@ -26,7 +26,7 @@
               (if expand
                 (cond-> (into {} e)
                   true
-                  (dissoc e :block/tags :block/order :block/refs :block/name :db/index
+                  (dissoc :block/tags :block/order :block/refs :block/name :db/index
                           :logseq.property/default-value)
                   true
                   (update :block/uuid str)
@@ -46,7 +46,7 @@
               (if expand
                 (cond-> (into {} e)
                   true
-                  (dissoc e :block/tags :block/order :block/refs :block/name)
+                  (dissoc :block/tags :block/order :block/refs :block/name)
                   true
                   (update :block/uuid str)
                   (:logseq.property.class/extends e)
