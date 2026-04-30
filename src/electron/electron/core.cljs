@@ -284,7 +284,7 @@
     (when (and (string? dir)
                (fs/existsSync dir)
                (.isDirectory (fs/statSync dir)))
-      (fs/accessSync dir (aget fs "W_OK"))
+      (fs/accessSync dir (aget fs "constants" "W_OK"))
       true)
     (catch :default _
       false)))
