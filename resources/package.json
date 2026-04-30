@@ -9,8 +9,8 @@
   "description": "A privacy-first, open-source platform for knowledge management and collaboration.",
   "repository": "https://github.com/logseq/logseq",
   "scripts": {
-    "electron:dev": "electron .",
-    "electron:debug": "electron --inspect=9229 .",
+    "electron:dev": "node node_modules/electron/cli.js .",
+    "electron:debug": "node node_modules/electron/cli.js --inspect=9229 .",
     "electron:make": "electron-builder --config electron-builder.yml --publish never",
     "electron:make-linux-arm64": "electron-builder --config electron-builder.yml --linux AppImage zip --arm64 --publish never",
     "electron:make-macos-arm64": "electron-builder --config electron-builder.yml --mac dmg zip --arm64 --publish never",
