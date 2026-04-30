@@ -2,6 +2,7 @@
   "Add-related CLI commands. Used by upsert to provide create mode"
   (:require ["fs" :as fs]
             [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
             [cljs.reader :as reader]
             [clojure.string :as string]
             [logseq.cli.command.core :as core]
@@ -22,7 +23,9 @@
   (p/let [journal (transport/invoke config :thread-api/pull false
                                     [repo [:logseq.property.journal/title-format] :logseq.class/Journal])
           formatter (or (:logseq.property.journal/title-format journal) "MMM do, yyyy")
-          now (tc/from-date (js/Date.))]
+          now (-> (js/Date.)
+                  tc/from-date
+                  t/to-default-time-zone)]
     (date-time-util/format now formatter)))
 
 (defn find-pages-by-name
