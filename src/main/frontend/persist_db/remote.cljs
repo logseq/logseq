@@ -178,11 +178,8 @@
     (p/let [_ (invoke! client "thread-api/create-or-open-db" false [repo opts])]
       (invoke! client "thread-api/get-initial-data" false [repo opts])))
 
-  (<export-db [_this repo opts]
-    (p/let [data (invoke! client "thread-api/export-db" true [repo])]
-      (if (:return-data? opts)
-        data
-        data)))
+  (<export-db [_this repo _opts]
+    (invoke! client "thread-api/export-db" true [repo]))
 
   (<import-db [_this repo data]
     (->
