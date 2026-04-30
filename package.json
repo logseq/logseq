@@ -91,7 +91,7 @@
         "cljs:app-watch": "clojure -M:cljs watch app db-worker db-worker-node logseq-cli",
         "cljs:electron-watch": "clojure -M:cljs watch app db-worker db-worker-node electron logseq-cli test --config-merge \"{:asset-path \\\"./js\\\"}\"",
         "cljs:release": "clojure -M:cljs release app db-worker db-worker-node publishing electron",
-        "cljs:release-electron": "clojure -M:cljs release app db-worker db-worker-node electron --debug && clojure -M:cljs release publishing",
+        "cljs:release-electron": "clojure -M:cljs release app db-worker db-worker-node electron logseq-cli publishing",
         "cljs:release-app": "clojure -M:cljs release app db-worker db-worker-node",
         "cljs:release-publishing": "clojure -M:cljs release app publishing",
         "cljs:test": "clojure -M:test compile test",
@@ -104,13 +104,14 @@
         "db-worker-node:bundle": "node ./scripts/build-db-worker-node-bundle.mjs",
         "db-worker-node:release:bundle": "run-s db-worker-node:release db-worker-node:bundle",
         "db-worker-node:compile:bundle": "run-s db-worker-node:compile db-worker-node:bundle",
+        "desktop:prepare-runtime-js": "node ./scripts/prepare-desktop-runtime-js.mjs",
         "cli:e2e": "bb dev:cli-e2e",
         "cli:e2e:skip-build": "bb dev:cli-e2e --skip-build",
         "cljs:dev-release-app": "clojure -M:cljs release app db-worker db-worker-node --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\"",
-        "cljs:dev-release-electron": "clojure -M:cljs release app db-worker db-worker-node electron --debug --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\" && clojure -M:cljs release publishing",
+        "cljs:dev-release-electron": "clojure -M:cljs release app db-worker db-worker-node electron logseq-cli --debug --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\" && clojure -M:cljs release publishing",
         "cljs:debug": "clojure -M:cljs release app db-worker db-worker-node --debug",
         "cljs:report": "clojure -M:cljs run shadow.cljs.build-report app db-worker db-worker-node report.html",
-        "cljs:build-electron": "clojure -A:cljs compile app db-worker db-worker-node electron",
+        "cljs:build-electron": "clojure -A:cljs compile app db-worker db-worker-node electron logseq-cli",
         "cljs:lint": "clojure -M:clj-kondo --parallel --lint src --cache false",
         "ios:dev": "cross-env PLATFORM=ios gulp cap",
         "android:dev": "cross-env PLATFORM=android gulp cap",
@@ -192,7 +193,7 @@
         "string-width": "8.2.0",
         "url": "^0.11.4",
         "util": "^0.12.5",
-	"keytar": "^7.9.0"
+        "keytar": "^7.9.0"
     },
     "pnpm": {
         "overrides": {

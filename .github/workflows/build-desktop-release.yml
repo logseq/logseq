@@ -135,10 +135,26 @@ jobs:
           echo "ENABLE_FILE_SYNC_PRODUCTION=${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS
-        run: pnpm install --frozen-lockfile && gulp build && pnpm cljs:release-electron && pnpm webpack-app-build
+        run: pnpm install --frozen-lockfile && gulp build && pnpm cljs:release-electron && pnpm db-worker-node:bundle && pnpm webpack-app-build && pnpm desktop:prepare-runtime-js
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
+
+      - name: Verify bundled db-worker-node runtime
+        run: |
+          test -f ./dist/db-worker-node.js
+          test -f ./dist/db-worker-node-assets.json
+
+      - name: Verify bundled CLI
+        run: |
+          test -f ./static/js/logseq-cli.js
+          node ./static/js/logseq-cli.js --help >/tmp/logseq-cli-help.txt
+          grep -E "USAGE|Usage|COMMANDS|Commands" /tmp/logseq-cli-help.txt >/dev/null
+
+      - name: Verify desktop runtime script locations
+        run: |
+          test -f ./static/js/db-worker-node.js
+          test -f ./static/js/logseq-cli.js
 
       - name: Update APP Version
         run: |

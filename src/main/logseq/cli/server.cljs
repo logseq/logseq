@@ -60,11 +60,15 @@
   []
   (node-path/join js/__dirname "../static/db-worker-node.js"))
 
+(defn- db-worker-release-script-path
+  []
+  (node-path/join js/__dirname "js" "db-worker-node.js"))
+
 (defn db-worker-script-path
   []
   (if goog.DEBUG
     (db-worker-dev-script-path)
-    (node-path/join js/__dirname "../dist/db-worker-node.js")))
+    (db-worker-release-script-path)))
 
 (defn db-worker-runtime-script-path
   []
