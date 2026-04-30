@@ -611,6 +611,35 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest snapshot-upload-returns-413-when-sqlite-row-is-too-large-test
+  (async done
+         (let [sql (test-sql/make-sql)
+               conn (d/create-conn db-schema/schema)
+               self #js {:sql sql
+                         :conn conn
+                         :schema-ready true
+                         :env #js {"DB" nil}}
+               request (js/Request. "http://localhost/sync/graph-1/snapshot/upload?graph-id=graph-1&finished=true"
+                                    #js {:method "POST"
+                                         :body (js/Uint8Array. 0)})]
+           (-> (p/with-redefs [sync-handler/import-snapshot-stream! (fn [_self _stream _reset?]
+                                                                      (p/rejected (js/Error. "string or blob too big: SQLITE_TOOBIG")))
+                               sync-handler/<set-graph-ready-for-use! (fn [_self _graph-id _graph-ready-for-use?]
+                                                                        (p/resolved true))]
+                 (p/let [resp (sync-handler/handle {:self self
+                                                    :request request
+                                                    :url (js/URL. (.-url request))
+                                                    :route {:handler :sync/snapshot-upload}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+                   (is (= 413 (.-status resp)))
+                   (is (= {:error "snapshot row too large"} body))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest tx-batch-rejects-when-a-tx-entry-fails-test
   (testing "db transact failure rejects the batch"
     (let [sql (test-sql/make-sql)

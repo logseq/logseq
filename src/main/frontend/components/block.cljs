@@ -754,7 +754,9 @@
             (last child)
             (let [{:keys [content children]} (last child)
                   page-name (subs content 2 (- (count content) 2))]
-              (rum/with-key (page-reference (assoc config :children children) page-name nil) page-name))))
+              (rum/with-key (page-reference (assoc config :children children)
+                                            (or (:block/uuid page-entity) page-name)
+                                            nil) page-name))))
         (cond
           (and label
                (string? label)
@@ -3018,7 +3020,7 @@
                       :disable-preview? true)]
     (when (seq parents)
       (let [parents-props (doall
-                           (for [{:block/keys [uuid name title] :as block} parents]
+                           (for [{:block/keys [uuid name] :as block} parents]
                              (if name
                                [block (page-cp (cond-> {:disable-preview? true}
                                                  disabled?
@@ -3027,7 +3029,7 @@
                                (let [result (block/parse-title-and-body
                                              uuid
                                              (get block :block/format :markdown)
-                                             title)
+                                             (:block/raw-title block))
                                      ast-body (:block.temp/ast-body result)
                                      ast-title (:block.temp/ast-title result)
                                      config (assoc config :block/uuid uuid)]
