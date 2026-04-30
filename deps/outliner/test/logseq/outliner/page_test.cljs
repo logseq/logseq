@@ -2,6 +2,8 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
@@ -171,3 +173,16 @@
                 :block/tags
                 (map #(:db/ident (d/entity @conn (:db/id %))))))
         "New journal only has Journal tag")))
+
+(deftest create-journal-keeps-default-block-name-with-custom-title-format
+  (let [conn (db-test/create-conn)
+        _ (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
+        [_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {})
+        page (d/entity @conn [:block/uuid page-uuid])
+        default-name (-> (:block/journal-day page)
+                         (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
+                         common-util/page-name-sanity-lc)]
+    (is (= "2024-12-16 Monday" (:block/title page))
+        "Journal title follows configured formatter")
+    (is (= default-name (:block/name page))
+        "Journal block/name remains the default formatter, independent of title format")))
