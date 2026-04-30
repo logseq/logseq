@@ -1,9 +1,34 @@
 (ns logseq.cli.command.add-test
-  (:require [cljs.test :refer [async deftest is testing]]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.cli.transport :as transport]
             [promesa.core :as p]))
+
+(deftest test-today-page-title-uses-default-time-zone
+  (async done
+    (let [formatted-args* (atom nil)]
+      (-> (p/with-redefs [transport/invoke (fn [_ method _ _args]
+                                             (if (= method :thread-api/pull)
+                                               (p/resolved {:logseq.property.journal/title-format "yyyy-MM-dd"})
+                                               (p/rejected (ex-info "unexpected method" {:method method}))))
+                          tc/from-date (fn [_] :utc-now)
+                          t/to-default-time-zone (fn [date-time]
+                                                   (if (= date-time :utc-now)
+                                                     :local-now
+                                                     :unexpected-time))
+                          date-time-util/format (fn [date-time formatter]
+                                                  (reset! formatted-args* [date-time formatter])
+                                                  "2026-05-01")]
+            (p/let [title (#'add-command/today-page-title {} "demo")]
+              (is (= "2026-05-01" title))
+              (is (= [:local-now "yyyy-MM-dd"] @formatted-args*))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
 
 (deftest test-collect-created-block-uuids
   (testing "collects uuids depth-first and removes duplicates"
