@@ -26,13 +26,3 @@
           file        (.getFile file-handle)]
     (.text file)))
 
-(defn <delete-file!
-  "Delete `filename` from Origin Private File System.
-   Returns nil when file is missing."
-  [filename]
-  (-> (p/let [root (.. js/navigator -storage (getDirectory))]
-        (.removeEntry root filename))
-      (p/catch (fn [err]
-                 (if (= (.-name err) "NotFoundError")
-                   nil
-                   (throw err))))))

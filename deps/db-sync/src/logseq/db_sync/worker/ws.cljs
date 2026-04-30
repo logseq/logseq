@@ -28,7 +28,9 @@
         (.send ws (protocol/encode-message {:type "error" :message "server error"}))))))
 
 (defn broadcast! [^js self sender msg]
-  (let [clients (.getWebSockets (.-state self))]
-    (doseq [ws clients]
-      (when (and (not= ws sender) (ws-open? ws))
-        (send! ws msg)))))
+  (when-let [state (some-> self .-state)]
+    (when (fn? (.-getWebSockets state))
+      (let [clients (.getWebSockets state)]
+        (doseq [ws clients]
+          (when (and (not= ws sender) (ws-open? ws))
+            (send! ws msg)))))))

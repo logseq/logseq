@@ -10,6 +10,7 @@
             [frontend.worker.sync.log-and-state :as sync-log-state]
             [frontend.worker.sync.presence :as sync-presence]
             [frontend.worker.sync.transport :as sync-transport]
+            [frontend.worker.sync.util :as sync-util]
             [lambdaisland.glogi :as log]
             [logseq.db-sync.checksum :as sync-checksum]
             [promesa.core :as p]
@@ -259,6 +260,7 @@
   (let [current-local-tx (client-op/get-local-tx repo)
         next-local-tx (max current-local-tx remote-tx)]
     (client-op/update-local-tx repo next-local-tx)
+    (sync-util/clear-last-sync-error! client)
     (broadcast-rtc-state! client)
     (sync-apply/mark-pending-txs-false! repo @(:inflight client))
     (reset! (:inflight client) [])
@@ -267,20 +269,25 @@
 
 (defn- update-latest-remote-state!
   [repo message]
-  (let [remote-tx (:t message)
+  (let [message-type (:type message)
+        remote-tx (:t message)
         remote-checksum (:checksum message)
         has-checksum? (contains? message :checksum)
         latest-remote-tx (get @sync-apply/*repo->latest-remote-tx repo)
+        authoritative? (contains? #{"hello" "changed"} message-type)
         stale-remote-tx? (and (number? remote-tx)
                               (number? latest-remote-tx)
-                              (< remote-tx latest-remote-tx))]
+                              (< remote-tx latest-remote-tx)
+                              (not authoritative?))]
     (when (number? remote-tx)
-      (swap! sync-apply/*repo->latest-remote-tx
-             update repo
-             (fn [prev]
-               (if (number? prev)
-                 (max prev remote-tx)
-                 remote-tx))))
+      (if authoritative?
+        (swap! sync-apply/*repo->latest-remote-tx assoc repo remote-tx)
+        (swap! sync-apply/*repo->latest-remote-tx
+               update repo
+               (fn [prev]
+                 (if (number? prev)
+                   (max prev remote-tx)
+                   remote-tx)))))
     (when (and has-checksum? (not stale-remote-tx?))
       (swap! sync-apply/*repo->latest-remote-checksum assoc repo remote-checksum))
     {:stale-remote-tx? stale-remote-tx?
@@ -334,26 +341,31 @@
                                 :tx-data (parse-transit (:tx data) {:repo repo :type "pull/ok"})})
                              txs)]
         (when (seq remote-txs)
-          (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
-                  aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
-                  _ (when (and graph-e2ee? (nil? aes-key))
-                      (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-                  remote-txs* (if aes-key
-                                (p/all (mapv (fn [{:keys [t tx-data]}]
-                                               (p/let [tx-data* (sync-crypt/<decrypt-tx-data aes-key tx-data)]
-                                                 {:t t
-                                                  :tx-data tx-data*}))
-                                             remote-txs))
-                                (p/resolved remote-txs))]
-            (try
-              (sync-apply/apply-remote-txs! repo client remote-txs*)
-              (catch :default e
-                (log/error ::apply-remote-tx e)
-                (throw e)))
-            (client-op/update-local-tx repo remote-tx)
-            (broadcast-rtc-state! client)
-            (verify-sync-checksum! repo client remote-tx remote-tx remote-checksum {:type "pull/ok"})
-            (sync-apply/enqueue-flush-pending! repo client)))))))
+          (->
+           (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
+                   aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
+                   _ (when (and graph-e2ee? (nil? aes-key))
+                       (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+                   remote-txs* (if aes-key
+                                 (p/all (mapv (fn [{:keys [t tx-data]}]
+                                                (p/let [tx-data* (sync-crypt/<decrypt-tx-data aes-key tx-data)]
+                                                  {:t t
+                                                   :tx-data tx-data*}))
+                                              remote-txs))
+                                 (p/resolved remote-txs))]
+             (try
+               (sync-apply/apply-remote-txs! repo client remote-txs*)
+               (catch :default e
+                 (log/error ::apply-remote-tx e)
+                 (throw e)))
+             (client-op/update-local-tx repo remote-tx)
+             (broadcast-rtc-state! client)
+             (verify-sync-checksum! repo client remote-tx remote-tx remote-checksum {:type "pull/ok"})
+             (sync-apply/enqueue-flush-pending! repo client))
+           (p/then (fn [_]
+                     (sync-util/clear-last-sync-error! client)))
+           (p/catch (fn [error]
+                      (sync-util/set-last-sync-error! client error)))))))))
 
 (defn- handle-changed!
   [repo client local-tx remote-tx]

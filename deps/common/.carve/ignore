@@ -3,6 +3,10 @@ logseq.common.graph/get-files
 ;; API fn
 logseq.common.graph/read-directories
 ;; API fn
+logseq.common.graph/get-default-graphs-dir
+;; API fn
+logseq.common.graph/expand-home
+;; API fn
 logseq.common.authorization/verify-jwt
 
 ;; Profile utils

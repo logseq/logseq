@@ -274,9 +274,9 @@
              (let [value (.-value chunk)
                    {:keys [rows buffer]} (snapshot/parse-framed-chunk buffer value)
                    rows-count (count rows)
-                   reset? (and @reset-pending? (seq rows))]
+                   reset? (boolean (and @reset-pending? (seq rows)))]
                (when (seq rows)
-                 (import-snapshot! self rows (true? reset?))
+                 (import-snapshot! self rows reset?)
                  (vreset! reset-pending? false))
                (vswap! total-count + rows-count)
                (p/recur buffer)))))
@@ -534,6 +534,16 @@
   [value]
   (contains? #{"true" "1"} value))
 
+(defn- sqlite-too-big-error?
+  [error]
+  (let [message (-> (or (ex-message error)
+                        (some-> error .-message)
+                        (str error))
+                    string/lower-case)]
+    (or (string/includes? message "sqlite_toobig")
+        (string/includes? message "string or blob too big")
+        (string/includes? message "statement too long"))))
+
 (defn- handle-sync-snapshot-upload
   [^js self request url]
   (let [graph-id (graph-id-from-request request)
@@ -556,22 +566,27 @@
         (if (and (= encoding snapshot-content-encoding)
                  (not (exists? js/DecompressionStream)))
           (http/error-response "gzip not supported" 500)
-          (p/let [_ (ensure-schema! self)
-                  _ (when reset?
-                      (storage/set-meta! (.-sql self) snapshot-uploading-meta-key true))
-                  _ (when reset?
-                      (<set-graph-ready-for-use! self graph-id false))
-                  stream (maybe-decompress-stream stream encoding)
-                  count (import-snapshot-stream! self stream reset?)
-                  _ (when finished?
-                      (storage/set-meta! (.-sql self) snapshot-uploading-meta-key false))
-                  _ (when finished?
-                      (when (seq checksum-param)
-                        (storage/set-checksum! (.-sql self) checksum-param)))
-                  _ (when finished?
-                      (<set-graph-ready-for-use! self graph-id true))]
-            (http/json-response :sync/snapshot-upload {:ok true
-                                                       :count count})))))))
+          (p/catch
+           (p/let [_ (ensure-schema! self)
+                   _ (when reset?
+                       (storage/set-meta! (.-sql self) snapshot-uploading-meta-key true))
+                   _ (when reset?
+                       (<set-graph-ready-for-use! self graph-id false))
+                   stream (maybe-decompress-stream stream encoding)
+                   count (import-snapshot-stream! self stream reset?)
+                   _ (when finished?
+                       (storage/set-meta! (.-sql self) snapshot-uploading-meta-key false))
+                   _ (when finished?
+                       (when (seq checksum-param)
+                         (storage/set-checksum! (.-sql self) checksum-param)))
+                   _ (when finished?
+                       (<set-graph-ready-for-use! self graph-id true))]
+             (http/json-response :sync/snapshot-upload {:ok true
+                                                        :count count}))
+           (fn [error]
+             (if (sqlite-too-big-error? error)
+               (http/error-response "snapshot row too large" 413)
+               (throw error)))))))))
 
 (defn handle [{:keys [^js self request url route]}]
   (case (:handler route)

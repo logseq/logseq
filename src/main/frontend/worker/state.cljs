@@ -1,29 +1,18 @@
 (ns frontend.worker.state
   "State hub for worker"
-  (:require [logseq.common.util :as common-util]))
+  (:require [frontend.worker.platform :as platform]
+            [logseq.common.util :as common-util]
+            [promesa.core :as p]))
 
 (defonce *main-thread (atom nil))
 (defonce *deleted-block-uuid->db-id (atom {}))
 
-(defn- <invoke-main-thread*
-  [qkw direct-pass? args-list]
-  (let [main-thread @*main-thread]
-    (when (nil? main-thread)
-      (prn :<invoke-main-thread-error qkw)
-      (throw (ex-info "main-thread has not been initialized" {})))
-    (apply main-thread qkw direct-pass? args-list)))
-
 (defn <invoke-main-thread
-  "invoke main thread api"
   [qkw & args]
-  (<invoke-main-thread* qkw false args))
-
-(comment
-  (defn <invoke-main-thread-direct-pass
-    "invoke main thread api.
-  But directly pass args to main-thread and result from main-thread as well."
-    [qkw & args]
-    (<invoke-main-thread* qkw true args)))
+  (if-let [main-thread @*main-thread]
+    (apply main-thread qkw false args)
+    (p/rejected (ex-info "main thread is not available in db-worker"
+                         {:method qkw}))))
 
 (defonce *state (atom {:db/latest-transact-time {}
                        :worker/context {}
@@ -35,10 +24,21 @@
                        :auth/id-token nil
                        :auth/access-token nil
                        :auth/refresh-token nil
+                       :auth/oauth-token-url nil
+                       :auth/oauth-domain nil
+                       :auth/oauth-client-id nil
 
                        :user/info nil
                        ;; thread atoms, these atoms' value are syncing from ui-thread
-                       :thread-atom/online-event (atom nil)}))
+                       :thread-atom/online-event (atom nil)
+                       :thread-atom/search-input-idle-status (atom {})}))
+
+(def ^:private db-sync-config-auth-keys
+  #{:auth-token :oauth-token-url :oauth-domain :oauth-client-id})
+
+(defn non-auth-db-sync-config
+  [config]
+  (apply dissoc (or config {}) db-sync-config-auth-keys))
 
 (defonce *db-sync-config (atom {:ws-url nil}))
 (defonce *db-sync-client (atom nil))
@@ -105,9 +105,28 @@
   []
   (:auth/id-token @*state))
 
+(defn- node-runtime?
+  []
+  (try
+    (= :node (get-in (platform/current) [:env :runtime]))
+    (catch :default _
+      false)))
+
+(defn- node-online?
+  []
+  (try
+    (let [online? (some-> js/globalThis .-navigator .-onLine)]
+      (if (boolean? online?)
+        online?
+        true))
+    (catch :default _
+      true)))
+
 (defn online?
   []
-  @(:thread-atom/online-event @*state))
+  (if (node-runtime?)
+    (node-online?)
+    @(:thread-atom/online-event @*state)))
 
 (comment
   (defn mobile?

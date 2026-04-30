@@ -38,6 +38,6 @@
 (defn list-graphs
   []
   (let [db-graphs (->> (cli-common-graph/get-db-based-graphs)
-                       (map #(string/replace-first % common-config/db-version-prefix ""))
+                       (map common-config/strip-leading-db-version-prefix)
                        sort)]
     (println (string/join "\n" db-graphs))))
