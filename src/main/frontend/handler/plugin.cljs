@@ -1111,11 +1111,11 @@
 (defn call-plugin
   [^js pl type payload]
   (when pl
-    (.call (.-caller pl) (name type) (bean/->js payload))))
+    (.call (.-caller pl) (name type) payload)))
 
 (defn request-callback
-  [^js pl req-id payload]
-  (call-plugin pl :#lsp#request#callback {:requestId req-id :payload payload}))
+  [^js pl req-id ^js payload]
+  (call-plugin pl :#lsp#request#callback #js {:requestId req-id :payload payload}))
 
 (defn op-pinned-toolbar-item!
   [key op]

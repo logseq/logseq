@@ -520,12 +520,13 @@
     (.handle ipcMain main-channel
              (fn [^js event args-js]
                (try
-                 (let [message (bean/->clj args-js)]
+                 (p/let [message (bean/->clj args-js)
+                         result (handle (or (utils/get-win-from-sender event) window) message)]
                    ;; Be careful with the return values of `handle` defmethods.
                    ;; Values that are not non-JS objects will cause this
                    ;; exception -
                    ;; https://www.electronjs.org/docs/latest/breaking-changes#behavior-changed-sending-non-js-objects-over-ipc-now-throws-an-exception
-                   (bean/->js (handle (or (utils/get-win-from-sender event) window) message)))
+                   (bean/->js result))
                  (catch :default e
                    (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
                      (logger/error "IPC error: " {:event event
