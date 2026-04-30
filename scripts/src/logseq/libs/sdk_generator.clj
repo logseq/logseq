@@ -8,6 +8,7 @@
 (def default-output-dir "libs/cljs-sdk/src")
 (def default-ns-prefix "com.logseq")
 (def core-namespace "core")
+(def clojure-core-conflict-fns #{"get"})
 
 (defn parse-args
   [args]
@@ -164,8 +165,14 @@
   [ns-prefix getter-name api]
   (let [ns (getter->namespace ns-prefix getter-name)
         owner-expr (format "(aget js/logseq \"%s\")" getter-name)
+        excluded-core-fns (->> (:methods api)
+                               (map (comp camel->kebab :name))
+                               (filter clojure-core-conflict-fns)
+                               distinct)
         header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
                     "(ns " ns "\n"
+                    (when (seq excluded-core-fns)
+                      (str "  (:refer-clojure :exclude [" (string/join " " excluded-core-fns) "])\n"))
                     "  (:require [com.logseq.core :as core]))\n")
         helpers {:call "core/call-method"}
         owner (format "\n(def api-proxy %s)\n" owner-expr)

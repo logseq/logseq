@@ -40,6 +40,13 @@ export type NetRequestOptions<TBody = any> = {
   abortable?: boolean
 }
 
+export type NetRequestConfig<TBody = any> = Omit<
+  NetRequestOptions<TBody>,
+  'url' | 'method'
+>
+
+export type NetRequestBody<TBody = any> = TBody | string | ArrayBuffer
+
 export type NetResponsePayload<T = any> = {
   status: number
   statusText: string
@@ -230,6 +237,43 @@ export class LSPluginNetResponse<T = any> {
   }
 }
 
+export class LSPluginNetError<T = any> extends Error {
+  constructor(public response: LSPluginNetResponse<T>) {
+    super(
+      `HTTP request failed with status ${response.status} ${response.statusText}`.trim()
+    )
+    this.name = 'LSPluginNetError'
+  }
+
+  get status() {
+    return this.response.status
+  }
+
+  get statusText() {
+    return this.response.statusText
+  }
+
+  get url() {
+    return this.response.url
+  }
+
+  get headers() {
+    return this.response.headers
+  }
+
+  get body() {
+    return this.response.body
+  }
+}
+
+function responseBodyOrThrow<T>(response: LSPluginNetResponse<T>) {
+  if (response.status >= 200 && response.status < 300) {
+    return response.body
+  }
+
+  throw new LSPluginNetError(response)
+}
+
 /**
  * HTTP client for plugins. Desktop requests are proxied by the host process so
  * iframe plugins can avoid browser CORS limitations. Web requests fall back to
@@ -306,6 +350,79 @@ export class LSPluginNet {
         await wait(retry.delay * Math.pow(retry.factor, attempt++))
       }
     }
+  }
+
+  get<T = any>(
+    url: string,
+    options?: NetRequestConfig
+  ): Promise<T> {
+    return this.requestWithMethod<T>('GET', url, options)
+  }
+
+  head<T = any>(
+    url: string,
+    options?: NetRequestConfig
+  ): Promise<T> {
+    return this.requestWithMethod<T>('HEAD', url, options)
+  }
+
+  post<T = any, TBody = any>(
+    url: string,
+    body?: NetRequestBody<TBody>,
+    options?: NetRequestConfig<TBody>
+  ): Promise<T> {
+    return this.requestWithBody<T, TBody>('POST', url, body, options)
+  }
+
+  put<T = any, TBody = any>(
+    url: string,
+    body?: NetRequestBody<TBody>,
+    options?: NetRequestConfig<TBody>
+  ): Promise<T> {
+    return this.requestWithBody<T, TBody>('PUT', url, body, options)
+  }
+
+  patch<T = any, TBody = any>(
+    url: string,
+    body?: NetRequestBody<TBody>,
+    options?: NetRequestConfig<TBody>
+  ): Promise<T> {
+    return this.requestWithBody<T, TBody>('PATCH', url, body, options)
+  }
+
+  delete<T = any, TBody = any>(
+    url: string,
+    options?: NetRequestConfig<TBody>
+  ): Promise<T> {
+    return this.requestWithMethod<T, TBody>('DELETE', url, options)
+  }
+
+  private requestWithMethod<T = any, TBody = any>(
+    method: NetMethod,
+    url: string,
+    options: NetRequestConfig<TBody> = {}
+  ) {
+    return this.request<T>({
+      ...options,
+      url,
+      method,
+    }).then(responseBodyOrThrow)
+  }
+
+  private requestWithBody<T = any, TBody = any>(
+    method: Extract<NetMethod, 'POST' | 'PUT' | 'PATCH'>,
+    url: string,
+    body?: NetRequestBody<TBody>,
+    options: NetRequestConfig<TBody> = {}
+  ) {
+    const requestBody = typeof body === 'undefined' ? options.body : body
+
+    return this.request<T>({
+      ...options,
+      url,
+      method,
+      body: requestBody,
+    }).then(responseBodyOrThrow)
   }
 
   private async performRequest<T>(
