@@ -1066,7 +1066,7 @@ html.is-mac {
   .bottom-properties-row:focus {
     outline: none;
     box-shadow: inset 0 0 0 1px var(--ls-link-text-color);
-    border-radius: 9999px;
+    border-radius: 6px;
   }
 
   .bottom-property-pill {
