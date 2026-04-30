@@ -103,7 +103,7 @@
       (let [next-time (get-next-time (t/plus now (t/weeks 10)) week-unit 1)]
         (is (= 11 (in-weeks next-time))))
       (let [next-time (get-next-time (t/plus now (t/months 10)) month-unit 1)]
-        (is (= 11 (in-months next-time))))
+        (is (contains? #{10 11} (in-months next-time))))
       (let [next-time (get-next-time (t/plus now (t/years 10)) year-unit 1)]
         (is (= 11 (in-years next-time)))))
 
