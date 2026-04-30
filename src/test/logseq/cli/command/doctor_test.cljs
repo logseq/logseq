@@ -165,13 +165,13 @@
                                {:ok? true
                                 :check {:id :db-worker-script
                                         :status :ok
-                                        :path "/dist/db-worker-node.js"
-                                        :message (str "Found readable file: " "/dist/db-worker-node.js")}})]
+                                        :path "/js/db-worker-node.js"
+                                        :message (str "Found readable file: " "/js/db-worker-node.js")}})]
                (p/let [result (commands/execute {:type :doctor}
                                                 {:root-dir "/tmp/logseq-doctor"})
                        checked-path (get-in result [:data :checks 0 :path])]
                  (is (= :ok (:status result)))
-                 (is (string/ends-with? checked-path "/dist/db-worker-node.js"))))
+                 (is (string/ends-with? checked-path "/js/db-worker-node.js"))))
              (p/catch (fn [e]
                         (is false (str "unexpected error: " e))))
              (p/finally done))))
