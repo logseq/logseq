@@ -10,7 +10,8 @@
             [frontend.worker.sync.download :as sync-download]
             [goog.object :as gobj]
             [logseq.db.frontend.schema :as db-schema]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [shadow.resource :as rc]))
 
 (def ^:private test-repo "db-core-test-repo")
 
@@ -113,6 +114,13 @@
     (is (contains? api-map :thread-api/db-sync-grant-graph-access))
     (is (contains? api-map :thread-api/db-sync-ensure-user-rsa-keys))
     (is (contains? api-map :thread-api/db-sync-upload-graph))))
+
+(deftest resolve-initial-config-falls-back-to-template-config-test
+  (let [resolve-initial-config #'db-core/resolve-initial-config
+        template-config (rc/inline "templates/config.edn")]
+    (is (= template-config (resolve-initial-config nil)))
+    (is (= "" (resolve-initial-config "")))
+    (is (= "{:foo true}" (resolve-initial-config "{:foo true}")))))
 
 (deftest import-db-rejects-non-sqlite-payload
   (async done
