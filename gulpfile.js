@@ -14,6 +14,10 @@ const mobilePath = path.join(outputPath, 'mobile')
 const mobileJsPath = path.join(mobilePath, 'js')
 const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
+const resourceSyncGlobs = [
+  resourceFilePath,
+  '!' + path.join(resourcesPath, 'node_modules/**'),
+]
 const outputFilePath = path.join(outputPath, '**')
 const rawCopySrc = (globs, options = {}) =>
   gulp.src(globs, { encoding: false, ...options })
@@ -77,7 +81,7 @@ const common = {
   },
 
   syncResourceFile () {
-    return rawCopySrc(resourceFilePath).pipe(gulp.dest(outputPath))
+    return rawCopySrc(resourceSyncGlobs).pipe(gulp.dest(outputPath))
   },
 
   // NOTE: All assets from node_modules are copied to the output directory
@@ -156,7 +160,7 @@ const common = {
   },
 
   keepSyncResourceFile () {
-    return gulp.watch(resourceFilePath, { ignoreInitial: true },
+    return gulp.watch(resourceSyncGlobs, { ignoreInitial: true },
       common.syncResourceFile)
   },
 
