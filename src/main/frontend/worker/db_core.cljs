@@ -52,7 +52,8 @@
    [logseq.outliner.recycle :as outliner-recycle]
    [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
    [missionary.core :as m]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   [shadow.resource :as rc]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -76,6 +77,13 @@
 (defonce ^:private *client-ops-cleanup-timers (atom {}))
 (def ^:private client-ops-cleanup-interval-ms (* 3 60 60 1000))
 (def ^:private wal-checkpoint-sql "PRAGMA wal_checkpoint(TRUNCATE)")
+(def ^:private default-graph-config-content (rc/inline "templates/config.edn"))
+
+(defn- resolve-initial-config
+  [config]
+  (if (some? config)
+    config
+    default-graph-config-content))
 
 
 (defn- node-runtime?
@@ -465,7 +473,7 @@
         (let [initial-tx-report (when-not (or initial-data-exists?
                                               (seq datoms)
                                               sync-download-graph?)
-                                  (let [config (or config "")
+                                  (let [config (resolve-initial-config config)
                                         initial-data (sqlite-create-graph/build-db-initial-data
                                                       config (select-keys opts [:import-type :graph-git-sha :remote-graph?]))]
                                     (ldb/transact! conn initial-data
