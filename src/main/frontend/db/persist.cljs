@@ -3,22 +3,21 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
-            [frontend.config :as config]
             [frontend.persist-db :as persist-db]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
             [promesa.core :as p]))
 
-(defn local-file-based-graph?
+(defn- local-file-based-graph?
   [s]
   (and (string? s)
-       (string/starts-with? s common-config/file-version-prefix)))
+       (string/starts-with? s (str common-config/db-version-prefix common-config/file-version-prefix))))
 
 (defn- upload-temp-graph?
   [graph-name]
   (let [graph-name (some-> graph-name str string/lower-case)]
     (or (= "upload-temp" graph-name)
-        (= (str (string/lower-case config/db-version-prefix) "upload-temp") graph-name))))
+        (= (str (string/lower-case common-config/db-version-prefix) "upload-temp") graph-name))))
 
 (defn get-all-graphs
   []
@@ -30,17 +29,20 @@
                       (map
                        (fn [{:keys [name] :as repo}]
                          (assoc repo :name
-                                (str config/db-version-prefix name)))))
+                                (common-config/canonicalize-db-version-repo name)))))
           electron-disk-graphs (when (util/electron?) (ipc/ipc "getGraphs"))]
     (distinct
      (concat
       repos'
-      (map (fn [repo-name] {:name repo-name})
-           (remove upload-temp-graph?
-                   (some-> electron-disk-graphs bean/->clj)))))))
+      (->> (some-> electron-disk-graphs bean/->clj)
+           (remove upload-temp-graph?)
+           (map (fn [repo-name]
+                  {:name (common-config/canonicalize-db-version-repo repo-name)})))))))
 
 (defn delete-graph!
   [graph]
-  (p/let [_ (persist-db/<unsafe-delete graph)]
-    (when (util/electron?)
-      (ipc/ipc "deleteGraph" graph))))
+  (if (util/electron?)
+    (p/do
+      (persist-db/<close-db graph)
+      (ipc/ipc "deleteGraph" graph))
+    (persist-db/<unsafe-delete graph)))

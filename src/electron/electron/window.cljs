@@ -7,6 +7,7 @@
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.context-menu :as context-menu]
+            [electron.db-worker :as db-worker]
             [electron.i18n :refer [t]]
             [electron.logger :as logger]
             [electron.spell-check :as spell-check]
@@ -87,6 +88,7 @@
 (defn close-handler
   [^js win e]
   (.preventDefault e)
+  (db-worker/release-window! (.-id win))
   (state/close-window! win)
   (let [web-contents (. win -webContents)]
     (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
