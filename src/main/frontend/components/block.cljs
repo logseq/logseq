@@ -2616,8 +2616,9 @@
   [^js pill]
   (when-let [trigger (some-> pill
                              (.querySelector ".bottom-property-content .jtrigger"))]
-    (.click trigger)
-    (some-> trigger .focus)
+    (if (some-> pill (.querySelector ".bottom-property-content [data-popup-active]"))
+      (shui/popup-hide!)
+      (.click trigger))
     true))
 
 (defn- current-bottom-pill
@@ -2722,12 +2723,9 @@
        {:type "button"
         :on-click (fn [e]
                     (util/stop e)
-                    (when-let [trigger
-                               (some-> (.-currentTarget e)
-                                       (.closest ".bottom-property-content")
-                                       (.querySelector ".jtrigger"))]
-                      (.click trigger)
-                      (some-> trigger .focus)))}
+                    (some-> (.-currentTarget e)
+                            (.closest ".bottom-property-pill")
+                            trigger-bottom-pill-edit!))}
        (ui/icon "edit" {:size 15})])]]))
 
 (defn- block-below-positioned-properties-cp

@@ -463,6 +463,12 @@
   (property-handler/remove-block-property! (:db/id block)
                                            (:db/ident property)))
 
+(defn- prevent-bottom-property-edit-pointer-dismiss
+  [^js e]
+  (when (some-> (.-target e) (.closest ".bottom-property-edit-icon"))
+    (.preventDefault e)
+    false))
+
 (rum/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?
                  suppress-inline-edit-icon? property-position]}]
@@ -481,7 +487,9 @@
                         (editor-handler/save-current-block!)
                         (when-not config/publishing?
                           (shui/popup-show! (.-target e) content-fn
-                                            {:align "start" :auto-focus? true}))))
+                                            {:align "start"
+                                             :auto-focus? true
+                                             :content-props {:onPointerDownOutside prevent-bottom-property-edit-pointer-dismiss}}))))
         repeated-task? (:logseq.property.repeat/repeated? block)]
     (if editing?
       (content-fn {:id :date-picker})
