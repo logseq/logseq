@@ -7,10 +7,10 @@
   "typings": "index.d.ts",
   "private": false,
   "scripts": {
-    "build:user": "webpack --mode production",
-    "dev:user": "pnpm build:user -- --mode development --watch",
-    "build:core": "webpack --config webpack.config.core.js --mode production",
-    "dev:core": "pnpm build:core -- --mode development --watch",
+    "build:user": "cross-env NODE_ENV=production LOGSEQ_LIBS_TARGET=user vite build",
+    "dev:user": "cross-env LOGSEQ_LIBS_TARGET=user vite build --mode development --watch",
+    "build:core": "cross-env NODE_ENV=production LOGSEQ_LIBS_TARGET=core vite build",
+    "dev:core": "cross-env LOGSEQ_LIBS_TARGET=core vite build --mode development --watch",
     "generate:schema": "node scripts/extract-sdk-schema.js",
     "build": "tsc && rm dist/*.js && pnpm build:user",
     "lint": "prettier --check \"src/**/*.{ts, js}\"",
@@ -30,20 +30,14 @@
     "path": "0.12.7"
   },
   "devDependencies": {
-    "ts-morph": "^27.0.2",
-    "@babel/core": "^7.29.0",
-    "@babel/preset-env": "^7.29.2",
     "@types/debug": "^4.1.13",
     "@types/lodash-es": "4.17.12",
-    "babel-loader": "^10.1.1",
+    "cross-env": "^10.1.0",
     "prettier": "^3.8.1",
     "prettier-config-standard": "^7.0.0",
-    "terser-webpack-plugin": "^5.4.0",
-    "ts-loader": "9.5.4",
+    "ts-morph": "^27.0.2",
     "typedoc": "0.28.17",
     "typescript": "5.9.3",
-    "webpack": "5.105.4",
-    "webpack-bundle-analyzer": "5.2.0",
-    "webpack-cli": "^7.0.2"
+    "vite": "8.0.9"
   }
 }

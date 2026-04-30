@@ -15,17 +15,16 @@
  {:app {:target        :browser
         :module-loader true
         :js-options    {:ignore-asset-requires true
-                        :resolve {"react" {:target :global
-                                           :global "React"}
-                                  "react-dom" {:target :global
-                                               :global "ReactDOM"}}}
+                        :js-provider :external
+                        :external-index "target/app-externals.js"
+                        :external-index-format :esm}
         :modules       {:main
                         {:init-fn frontend.core/init}
                         :code-editor
                         {:entries [frontend.extensions.code]
                          :depends-on #{:main}}}
 
-        :output-dir       "./static/js"
+        :output-dir       "./target/app"
         :asset-path       "/static/js"
         :compiler-options {:infer-externs      :auto
                            :output-feature-set :es-next-in
@@ -112,10 +111,9 @@
   :mobile {:target        :browser
            :module-loader true
            :js-options    {:ignore-asset-requires true
-                           :resolve {"react" {:target :global
-                                              :global "React"}
-                                     "react-dom" {:target :global
-                                                  :global "ReactDOM"}}}
+                           :js-provider :external
+                           :external-index "target/mobile-externals.js"
+                           :external-index-format :esm}
            ;; handle `require(xxx.css)`
            :modules       {:main
                            {:init-fn mobile.core/init}
@@ -123,7 +121,7 @@
                            {:entries [frontend.extensions.code]
                             :depends-on #{:main}}}
 
-           :output-dir       "./static/mobile/js"
+           :output-dir       "./target/mobile"
            :asset-path       "./js"
            :release          {:asset-path "http://localhost"}
            :compiler-options {:infer-externs      :auto
@@ -201,17 +199,16 @@
   :publishing {:target :browser
                :module-loader true
                :js-options {:ignore-asset-requires true
-                            :resolve {"react" {:target :global
-                                               :global "React"}
-                                      "react-dom" {:target :global
-                                                   :global "ReactDOM"}}}
+                            :js-provider :external
+                            :external-index "target/publishing-externals.js"
+                            :external-index-format :esm}
                :modules {:main
                          {:init-fn frontend.publishing/init}
                          :code-editor
                          {:entries [frontend.extensions.code]
                           :depends-on #{:main}}}
 
-               :output-dir "./static/js/publishing"
+               :output-dir "./target/publishing"
                :asset-path "static/js"
                :closure-defines {logseq.common.config/PUBLISHING true
                                  goog.debug.LOGGING_ENABLED true}

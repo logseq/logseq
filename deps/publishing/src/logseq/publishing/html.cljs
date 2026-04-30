@@ -124,6 +124,7 @@ necessary db filtering"
             [:script {:src "static/js/react.production.min.js"}]
             [:script {:src "static/js/react-dom.production.min.js"}]
             [:script {:src "static/js/ui.js"}]
+            [:script {:src "static/js/publishing-externals.js"}]
             [:script {:src "static/js/main.js"}]
             ;; Deferring scripts above results in errors
             [:script {:defer true :src "static/js/interact.min.js"}]
@@ -132,7 +133,6 @@ necessary db filtering"
             [:script {:defer true :type "module" :src "static/js/pdfjs/pdf.mjs"}]
             [:script {:defer true :type "module" :src "static/js/pdf_viewer3.mjs"}]
             [:script {:defer true :src "static/js/html2canvas.min.js"}]
-            [:script {:defer true :src "static/js/code-editor.js"}]
             [:script {:defer true :src "static/js/custom.js"}]])))))
 
 (defn build-html

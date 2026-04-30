@@ -55,10 +55,11 @@ jobs:
 
       - name: Build web + workers
         run: |
-          pnpm gulp:build
+          pnpm static:build
           clojure -M:cljs release app db-worker \
             --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}'
-          pnpm webpack-app-build
+          pnpm vite:app-build
+          pnpm vite:workers-build
 
           rsync -avz \
             --exclude node_modules \

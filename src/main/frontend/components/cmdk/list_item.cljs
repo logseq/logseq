@@ -1,12 +1,14 @@
 (ns frontend.components.cmdk.list-item
   (:require
-   ["remove-accents" :as remove-accents]
+   ["remove-accents" :refer [remove]]
    [clojure.string :as string]
    [frontend.components.icon :as icon-component]
    [frontend.handler.block :as block-handler]
    [goog.string :as gstring]
    [logseq.shui.ui :as shui]
    [rum.core :as rum]))
+
+(def strip-accents remove)
 
 (defn- to-string [input]
   (cond
@@ -22,7 +24,7 @@
   (cond-> (to-string text)
     ;; :lower-case (string/lower-case)
     :normalize (.normalize "NFKC")
-    (:feature/enable-search-remove-accents? app-config) (remove-accents)))
+    (:feature/enable-search-remove-accents? app-config) (strip-accents)))
 
 (defn highlight-query* [app-config query text]
   (cond

@@ -5,10 +5,10 @@
   "description": "UI components for Logseq.",
   "author": "Logseq",
   "scripts": {
-    "watch:ui:examples": "parcel serve ./examples/index.html",
-    "build:ui:only": "parcel build --target ui",
-    "build:ui": "rm -rf .parcel-cache && pnpm build:ui:only",
-    "postinstall": "pnpm build:ui",
+    "watch:ui:examples": "vite --host 0.0.0.0 examples",
+    "build:ui:only": "vite build",
+    "build:ui:watch": "vite build --watch",
+    "build:ui": "pnpm build:ui:only",
     "test": "node --experimental-strip-types --test src/i18n.test.mts"
   },
   "dependencies": {
@@ -51,52 +51,10 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.0",
-    "@babel/preset-env": "^7.29.2",
-    "@babel/preset-react": "^7.28.5",
-    "@babel/preset-typescript": "^7.28.5",
-    "@types/babel__core": "^7.20.5",
-    "@types/babel__preset-env": "^7.10.0",
     "@types/prop-types": "^15.7.15",
     "@types/react": "18.3.1",
     "@types/react-dom": "18.3.1",
-    "buffer": "^5.5.0",
-    "parcel": "2.8.3",
-    "postcss": "^8.5.8",
-    "postcss-loader": "^8.2.1",
-    "postcss-nesting": "^14.0.0",
-    "string-width": "8.2.0",
-    "strip-ansi": "^7.2.0",
-    "style-loader": "4.0.0"
-  },
-  "alias": {
-    "react": {
-      "global": "React"
-    },
-    "react-dom": {
-      "global": "ReactDOM"
-    },
-    "react/jsx-dev-runtime": "./node_modules/react/jsx-dev-runtime.js",
-    "react/jsx-runtime": "./node_modules/react/jsx-runtime.js",
-    "@/*": "./@/$1"
-  },
-  "targets": {
-    "main": false,
-    "ui": {
-      "source": "src/ui.ts",
-      "outputFormat": "global",
-      "includeNodeModules": {
-        "react": false,
-        "react-dom": false
-      }
-    }
-  },
-  "pnpm": {
-    "overrides": {
-      "jackspeak": "^2",
-      "string-width": "^8",
-      "strip-ansi": "^7"
-    }
+    "vite": "^8.0.9"
   },
   "license": "MIT"
 }

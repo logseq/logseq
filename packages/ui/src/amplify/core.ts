@@ -1,6 +1,7 @@
 import { Amplify } from 'aws-amplify'
 import { createContext, useContext } from 'react'
 import { translate, setNSDicts, setLocale } from '../i18n'
+import defaultLang from './lang'
 
 export const AuthFormRootContext = createContext<any>(null)
 export const useAuthFormState = () => {
@@ -13,7 +14,7 @@ export function t(key: string, ...args: any) {
 
 export function init({ lang, authCognito }: any) {
   // Load default language
-  setNSDicts('amplify', require('./lang').default)
+  setNSDicts('amplify', defaultLang)
   if (lang) setLocale(lang)
   Amplify.configure({
     Auth: {

@@ -103,6 +103,8 @@
       (let [next-time (get-next-time (t/plus now (t/weeks 10)) week-unit 1)]
         (is (= 11 (in-weeks next-time))))
       (let [next-time (get-next-time (t/plus now (t/months 10)) month-unit 1)]
+        ;; month arithmetic clips end-of-month dates (e.g. Apr 29 -> Feb 28 -> Mar 28),
+        ;; so the resulting interval may be 10 or 11 full months depending on run date
         (is (contains? #{10 11} (in-months next-time))))
       (let [next-time (get-next-time (t/plus now (t/years 10)) year-unit 1)]
         (is (= 11 (in-years next-time)))))

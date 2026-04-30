@@ -51,7 +51,7 @@ function scopeConfig(scope) {
       //  - deps/graph-parser/src+test+script  ← Parser CLI + tests
       //  - deps/publishing/script+test        ← Publishing scripts
       //
-      // Browser/Worker builds (app, db-worker, inference-worker, mobile) are
+      // Browser/Worker builds (app, db-worker, mobile) are
       // intentionally excluded because their npm deps are resolved at bundle
       // time via webpack/shadow-cljs and never require()-called directly.
       return {

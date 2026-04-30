@@ -114,7 +114,7 @@
       (let [heading (str "h" (inc i))
             text (str heading " test ")]
         (b/new-block text)
-        (util/input-command heading)
+        (util/input-command heading {:chosen-text (str "Heading " (inc i))})
         (is (= text (util/get-edit-content)))
         (util/exit-edit)
         (w/wait-for heading)))))
@@ -152,6 +152,7 @@
       (let [text (str command " test ")]
         (b/new-block text)
         (util/input-command command)
+        (w/wait-for ".ls-property-dialog [aria-selected=true]")
         (k/enter)
         (assert/assert-editor-mode)
         ;; FIXME: cannot exit edit by k/esc???
@@ -287,7 +288,7 @@
 (deftest embed-tweet-test
   (testing "embed tweet"
     (b/new-block "")
-    (util/input-command "embed tweet")
+    (util/input-command "embed tweet" {:chosen-text "Twitter tweet"})
     (util/press-seq "https://x.com/logseq/status/1784914564083314839")
     (util/exit-edit)
     (w/wait-for "iframe")))

@@ -27,6 +27,7 @@
             [frontend.storage :as storage]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.util.js-module :as js-module]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -43,11 +44,12 @@
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
-(defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
+(defonce textarea (r/adapt-class (js-module/default-export TextareaAutosize)))
 (defonce virtualized-list (r/adapt-class Virtuoso))
 (defonce virtualized-grid (r/adapt-class VirtuosoGrid))
 
-(def ReactTweetEmbed (r/adapt-class react-tweet-embed))
+(def ReactTweetEmbed
+  (r/adapt-class (js-module/default-export react-tweet-embed)))
 (def useInView (gobj/get react-intersection-observer "useInView"))
 (defonce _emoji-init-data ((gobj/get emoji-mart "init") #js {:data emoji-data}))
 ;; (def EmojiPicker (r/adapt-class (gobj/get Picker "default")))
