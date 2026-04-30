@@ -323,7 +323,7 @@
 
 (defn- cli-script-path
   []
-  (if (.isPackaged app)
+  (if (.-isPackaged ^js app)
     (node-path/join js/process.resourcesPath "app.asar" "logseq-cli.js")
     (node-path/join js/__dirname "logseq-cli.js")))
 
