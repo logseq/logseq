@@ -1295,6 +1295,8 @@
  :property/nodes-with-property "Nodes with property"
  :property/overdue "Overdue"
  :property/private-built-in-not-usable "This is a private built-in property that can't be used."
+ :property/remove-scope-for-tag "Remove scope for #{1}"
+ :property/scope-choice-to-tag "Only for #{1}"
  :property/select-choice "Select a choice"
  :property/select-property-placeholder "Select a property"
  :property/select-type-placeholder "Select a property type"
@@ -1329,6 +1331,7 @@
  :property/ui-position-properties "Block properties"
  :property/unset-property "Unset property"
  :property/update-success "Property updated!"
+ :property/use-choice-in-tag "Use in #{1}"
 
  :property.built-in/alias "Alias"
  :property.built-in/asset "Asset"
@@ -1663,12 +1666,13 @@
  :settings.sync-server/url "Sync Server URL"
  :settings.sync-server/url-desc "Set a custom HTTPS sync server URL for self-hosted sync. Your Logseq authentication tokens will be sent to this server, so only use a trusted URL. Leave empty to use the official Logseq Sync."
  :settings.sync-server/url-invalid-error "URL must start with https:// or http://"
+
  :settings-page/publish-server-url "Publish Server URL"
- :settings-page/publish-server-url-desc "Set a custom HTTPS publish server URL for self-hosted single-page publishing. Your Logseq authentication tokens will be sent to this server, so only use a trusted URL. Leave empty to use the official Logseq Publish service."
- :settings-page/publish-server-url-saved "Publish server URL saved."
  :settings-page/publish-server-url-cleared "Publish server URL cleared. Using official Logseq Publish."
  :settings-page/publish-server-url-default "Logseq Publish"
+ :settings-page/publish-server-url-desc "Set a custom HTTPS publish server URL for self-hosted single-page publishing. Your Logseq authentication tokens will be sent to this server, so only use a trusted URL. Leave empty to use the official Logseq Publish service."
  :settings-page/publish-server-url-reset "Reset to default"
+ :settings-page/publish-server-url-saved "Publish server URL saved."
 
  :shell/input-command-title "Input command"
 

@@ -1285,6 +1285,8 @@
  :property/nodes-with-property "具有该属性的节点"
  :property/overdue "已逾期"
  :property/private-built-in-not-usable "这是一个私有内置属性，不能使用。"
+ :property/remove-scope-for-tag "移除对 #{1} 的作用域"
+ :property/scope-choice-to-tag "仅用于 #{1}"
  :property/select-choice "选择一个选项"
  :property/select-property-placeholder "选择一个属性"
  :property/select-type-placeholder "选择属性类型"
@@ -1319,6 +1321,7 @@
  :property/ui-position-properties "块属性"
  :property/unset-property "移除属性"
  :property/update-success "属性已更新！"
+ :property/use-choice-in-tag "用于 #{1}"
 
  :property.built-in/alias "别名"
  :property.built-in/asset "附件"
