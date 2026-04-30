@@ -13,6 +13,7 @@
    [frontend.worker.sync.large-title :as sync-large-title]
    [frontend.worker.sync.presence :as sync-presence]
    [frontend.worker.sync.transport :as sync-transport]
+   [frontend.worker.sync.util :refer [fail-fast]]
    [frontend.worker.undo-redo :as worker-undo-redo]
    [lambdaisland.glogi :as log]
    [logseq.db :as ldb]
@@ -31,14 +32,9 @@
 
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *repo->latest-remote-checksum (atom {}))
-(defonce *upload-temp-opfs-pool (atom nil))
 ;; Debug-only gate to reproduce one-way sync:
 ;; still pull/rebase remote txs, but skip local tx batch uploads.
 (defonce *repo->upload-stopped? (atom {}))
-
-(defn fail-fast [tag data]
-  (log/error tag data)
-  (throw (ex-info (name tag) data)))
 
 (defn set-upload-stopped!
   [repo stopped?]
@@ -113,9 +109,6 @@
   {:normalized-tx-data (normalize-tx-data db-after db-before tx-data)
    :reversed-datoms (reverse-tx-data db-before db-after tx-data)})
 
-(defn- get-graph-id [repo]
-  (sync-large-title/get-graph-id worker-state/get-datascript-conn repo))
-
 (defn- auth-headers []
   (sync-auth/auth-headers (worker-state/get-id-token)))
 
@@ -155,7 +148,6 @@
                                :fail-fast-f fail-fast
                                :decrypt-text-value-f sync-crypt/<decrypt-text-value})))
           :get-conn-f worker-state/get-datascript-conn
-          :get-graph-id-f get-graph-id
           :graph-e2ee?-f sync-crypt/graph-e2ee?
           :ensure-graph-aes-key-f sync-crypt/<ensure-graph-aes-key
           :fail-fast-f fail-fast)))

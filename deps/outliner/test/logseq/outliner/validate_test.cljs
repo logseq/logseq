@@ -248,6 +248,27 @@
          (outliner-validate/validate-tags-property-deletion @conn [(:db/id page)] :logseq.class/Page))
         "Page without parent can't remove #Page")))
 
+(deftest validate-editing-built-in-property
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:myprop {:logseq.property/type :default}}})
+        user-prop (d/entity @conn :user.property/myprop)
+        built-in-prop (d/entity @conn :block/tags)]
+
+    (testing "user property can edit any attribute"
+      (is (nil? (outliner-validate/validate-editing-built-in-property
+                 user-prop {:db/cardinality :db.cardinality/many}))))
+
+    (testing "built-in property cannot edit disallowed attribute"
+      (is (thrown-with-msg?
+           js/Error
+           #"not editable"
+           (outliner-validate/validate-editing-built-in-property
+            built-in-prop {:block/title "renamed"}))))
+
+    (testing "built-in property can edit allowed attribute"
+      (is (nil? (outliner-validate/validate-editing-built-in-property
+                 built-in-prop {:logseq.property/hide-empty-value true}))))))
+
 ;; Try as many of the validations against a new graph to confirm
 ;; that validations make sense and are valid for a new graph
 (deftest new-graph-should-be-valid

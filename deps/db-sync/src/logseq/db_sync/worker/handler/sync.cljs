@@ -274,9 +274,9 @@
              (let [value (.-value chunk)
                    {:keys [rows buffer]} (snapshot/parse-framed-chunk buffer value)
                    rows-count (count rows)
-                   reset? (and @reset-pending? (seq rows))]
+                   reset? (boolean (and @reset-pending? (seq rows)))]
                (when (seq rows)
-                 (import-snapshot! self rows (true? reset?))
+                 (import-snapshot! self rows reset?)
                  (vreset! reset-pending? false))
                (vswap! total-count + rows-count)
                (p/recur buffer)))))

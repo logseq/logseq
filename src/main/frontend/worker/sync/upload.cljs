@@ -1,21 +1,22 @@
 (ns frontend.worker.sync.upload
   "Snapshot upload helpers for db sync."
-  (:require [cljs-bean.core :as bean]
-            [datascript.core :as d]
-            [frontend.worker-common.util :as worker-util]
-            [frontend.worker.state :as worker-state]
-            [frontend.worker.sync.apply-txs :as sync-apply]
-            [frontend.worker.sync.auth :as sync-auth]
-            [frontend.worker.sync.client-op :as client-op]
-            [frontend.worker.sync.crypt :as sync-crypt]
-            [frontend.worker.sync.large-title :as sync-large-title]
-            [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
-            [frontend.worker.sync.transport :as sync-transport]
-            [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
-            [logseq.db-sync.checksum :as sync-checksum]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [promesa.core :as p]))
+  (:require
+   [cljs-bean.core :as bean]
+   [datascript.core :as d]
+   [frontend.worker-common.util :as worker-util]
+   [frontend.worker.state :as worker-state]
+   [frontend.worker.sync.apply-txs :as sync-apply]
+   [frontend.worker.sync.auth :as sync-auth]
+   [frontend.worker.sync.client-op :as client-op]
+   [frontend.worker.sync.crypt :as sync-crypt]
+   [frontend.worker.sync.large-title :as sync-large-title]
+   [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
+   [frontend.worker.sync.util :refer [coerce-http-request fail-fast fetch-json] :as sync-util]
+   [logseq.common.config :as common-config]
+   [logseq.db :as ldb]
+   [logseq.db-sync.checksum :as sync-checksum]
+   [logseq.db.sqlite.util :as sqlite-util]
+   [promesa.core :as p]))
 
 (def upload-kvs-batch-size 500)
 (def upload-prepare-datoms-batch-size 100000)
@@ -25,20 +26,10 @@
 (def snapshot-content-type "application/transit+json")
 (def snapshot-content-encoding "gzip")
 (def snapshot-text-encoder (js/TextEncoder.))
-(def upload-temp-pool-name (worker-util/get-pool-name "upload-temp"))
-
-(defn- fail-fast
-  [tag data]
-  (log/error tag data)
-  (throw (ex-info (name tag) data)))
 
 (defn- http-base-url
   []
   (sync-auth/http-base-url @worker-state/*db-sync-config))
-
-(defn- get-graph-id
-  [repo]
-  (sync-large-title/get-graph-id worker-state/get-datascript-conn repo))
 
 (defn- ensure-client-graph-uuid!
   [repo graph-id]
@@ -184,27 +175,9 @@
                 _ (auth-fetch-f upload-url headers body)]
           (p/recur (next remaining) false)))
       nil)))
-
-(defn set-graph-sync-metadata!
-  [repo graph-e2ee?]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)
-                         (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))]
-                   {:persist-op? false})))
-
 (defn <prepare-upload-temp-sqlite!
   [repo graph-id source-conn aes-key update-progress]
-  (p/let [temp (sync-temp-sqlite/<create-temp-sqlite-conn
-                (d/schema @source-conn)
-                []
-                #(sync-temp-sqlite/<create-temp-sqlite-db!
-                  {:get-pool-f (fn []
-                                 (sync-temp-sqlite/<get-upload-temp-sqlite-pool
-                                  {:*pool sync-apply/*upload-temp-opfs-pool
-                                   :sqlite @worker-state/*sqlite
-                                   :pool-name upload-temp-pool-name
-                                   :fail-fast-f fail-fast}))
-                   :upload-path-f sync-temp-sqlite/upload-temp-sqlite-path}))
+  (p/let [temp (sync-temp-sqlite/<create-temp-sqlite-conn (d/schema @source-conn) [])
           datoms (d/datoms @source-conn :eavt)
           _ (sync-large-title/process-upload-datoms-in-batches!
              datoms
@@ -234,29 +207,157 @@
                                              (str "Preparing " processed "/" total))}))})]
     temp))
 
+(defn- normalize-graph-e2ee?
+  [graph-e2ee?]
+  (if (nil? graph-e2ee?)
+    true
+    (true? graph-e2ee?)))
+
+(defn- graph-id->uuid
+  [repo graph-id]
+  (when-not (seq graph-id)
+    (fail-fast :db-sync/missing-field {:repo repo :field :graph-id}))
+  (try
+    (uuid graph-id)
+    (catch :default e
+      (fail-fast :db-sync/invalid-field {:repo repo
+                                         :field :graph-id
+                                         :value graph-id
+                                         :error e}))))
+
+(defn- set-graph-sync-metadata!
+  [repo graph-id graph-e2ee?]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (ldb/transact! conn [(ldb/kv :logseq.kv/graph-uuid (graph-id->uuid repo graph-id))
+                         (ldb/kv :logseq.kv/graph-remote? true)
+                         (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))]
+      {:outliner-op :set-kvs})))
+
+(defn- persist-upload-graph-identity!
+  [repo graph-id graph-e2ee?]
+  (let [graph-id (some-> graph-id str)
+        graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)]
+    (when-not (seq graph-id)
+      (fail-fast :db-sync/missing-field {:repo repo :field :graph-id}))
+    (set-graph-sync-metadata! repo graph-id graph-e2ee?)
+    (ensure-client-graph-uuid! repo graph-id)
+    {:graph-id graph-id
+     :graph-e2ee? graph-e2ee?}))
+
+(defn- <create-remote-graph-aux!
+  [repo {:keys [graph-e2ee? graph-ready-for-use?]}]
+  (let [base (http-base-url)
+        graph-name (some-> repo common-config/strip-leading-db-version-prefix)
+        schema-version (some-> (worker-state/get-datascript-conn repo)
+                               deref
+                               ldb/get-graph-schema-version
+                               :major
+                               str)
+        graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)]
+    (cond
+      (not (seq base))
+      (fail-fast :db-sync/missing-field {:repo repo :field :http-base})
+
+      (not (seq graph-name))
+      (fail-fast :db-sync/missing-field {:repo repo :field :graph-name})
+
+      :else
+      (do
+        (sync-util/require-auth-token! {:repo repo :field :auth-token})
+        (p/let [_ (sync-crypt/ensure-user-rsa-keys! {:ensure-server? true})
+                body (coerce-http-request :graphs/create
+                                          {:graph-name graph-name
+                                           :schema-version schema-version
+                                           :graph-e2ee? graph-e2ee?
+                                           :graph-ready-for-use? (not= false graph-ready-for-use?)})
+                _ (when (nil? body)
+                    (fail-fast :db-sync/invalid-field {:repo repo
+                                                       :field :create-graph-body}))
+                result (fetch-json (str base "/graphs")
+                                   {:method "POST"
+                                    :headers {"content-type" "application/json"}
+                                    :body (js/JSON.stringify (clj->js body))}
+                                   {:response-schema :graphs/create})
+                graph-id (:graph-id result)
+                graph-e2ee? (normalize-graph-e2ee? (if (contains? result :graph-e2ee?)
+                                                     (:graph-e2ee? result)
+                                                     graph-e2ee?))]
+          (when-not (seq graph-id)
+            (fail-fast :db-sync/missing-field {:repo repo
+                                               :field :graph-id
+                                               :op :create-graph}))
+          (persist-upload-graph-identity! repo graph-id graph-e2ee?)
+          {:graph-id graph-id
+           :graph-e2ee? graph-e2ee?})))))
+
+(defn list-remote-graphs!
+  []
+  (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
+    (if-not (seq base)
+      (p/resolved [])
+      (do
+        (sync-util/require-auth-token! {:op :list-remote-graphs})
+        (p/let [resp (fetch-json (str base "/graphs")
+                                           {:method "GET"}
+                                           {:response-schema :graphs/list})]
+          (vec (or (:graphs resp) [])))))))
+
+(defn- fail-upload-graph-already-exists!
+  [repo {:keys [graph-id graph-name]}]
+  (throw (ex-info "remote graph already exists; delete it before uploading again"
+                  {:code :db-sync/graph-already-exists
+                   :repo repo
+                   :graph-id graph-id
+                   :graph-name graph-name})))
+
+(defn- remote-graph-matches-upload-target?
+  [target-graph-name {:keys [graph-name]}]
+  (= target-graph-name graph-name))
+
+(defn create-remote-graph!
+  [repo {:keys [graph-e2ee? graph-ready-for-use?]}]
+  (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)]
+    (cond
+      (not (seq target-graph-name))
+      (fail-fast :db-sync/missing-field {:repo repo :field :graph-name})
+
+      :else
+      (p/let [remote-graphs (list-remote-graphs!)
+              matching-graphs (filterv (partial remote-graph-matches-upload-target?
+                                                target-graph-name)
+                                       remote-graphs)]
+        (cond
+          (> (count matching-graphs) 1)
+          (fail-fast :db-sync/ambiguous-graph-match {:repo repo
+                                                     :graph-name target-graph-name
+                                                     :match-count (count matching-graphs)})
+
+          (= 1 (count matching-graphs))
+          (fail-upload-graph-already-exists! repo {:graph-name target-graph-name})
+
+          :else
+          (p/let [_ (sync-crypt/<preflight-upload-e2ee! repo graph-e2ee?)]
+            (<create-remote-graph-aux! repo {:graph-e2ee? graph-e2ee?
+                                             :graph-ready-for-use? graph-ready-for-use?})))))))
+
 (defn upload-graph!
   [repo]
   (let [base (http-base-url)
-        graph-id (get-graph-id repo)
         update-progress (fn [payload]
                           (worker-util/post-message :rtc-log
-                                                    (merge {:type :rtc.log/upload
-                                                            :graph-uuid graph-id}
+                                                    (merge {:type :rtc.log/upload}
                                                            payload)))]
-    (cond
-      (not (and (seq base) (seq graph-id)))
-      (p/rejected (ex-info "db-sync missing upload info"
-                           {:repo repo :base base :graph-id graph-id}))
-
-      :else
+    (if-not (seq base)
+      (p/rejected (ex-info "db-sync missing base"
+                           {:repo repo :base base}))
       (if-let [source-conn (worker-state/get-datascript-conn repo)]
-        (let [graph-e2ee? (true? (sync-crypt/graph-e2ee? repo))]
+        (p/let [graph-e2ee? (normalize-graph-e2ee? (sync-crypt/graph-e2ee? repo))
+                {:keys [graph-id]} (create-remote-graph! repo {:graph-e2ee? graph-e2ee?
+                                                               :graph-ready-for-use? false})]
           (p/let [aes-key (when graph-e2ee?
                             (sync-crypt/<ensure-graph-aes-key repo graph-id))
                   _ (when (and graph-e2ee? (nil? aes-key))
                       (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
-            (set-graph-sync-metadata! repo graph-e2ee?)
-            (ensure-client-graph-uuid! repo graph-id)
             (let [snapshot-checksum (sync-checksum/recompute-checksum @source-conn)]
               (client-op/update-local-checksum repo snapshot-checksum)
               (p/let [_ (update-progress {:sub-type :upload-progress
@@ -302,11 +403,7 @@
                                         :checksum snapshot-checksum
                                         :auth-fetch-f
                                         (fn [upload-url headers body]
-                                          (sync-transport/fetch-json
-                                           (fn [opts]
-                                             (sync-auth/with-auth-headers
-                                               #(sync-auth/auth-headers (worker-state/get-id-token))
-                                               opts))
+                                          (fetch-json
                                            upload-url
                                            {:method "POST"
                                             :headers headers
@@ -317,9 +414,6 @@
                               (p/recur max-addr false loaded'))))))
                     (p/finally
                       (fn []
-                        (sync-temp-sqlite/cleanup-temp-sqlite!
-                         temp
-                         (partial sync-temp-sqlite/<remove-upload-temp-sqlite-db-file!
-                                  upload-temp-pool-name)))))))))
+                        (sync-temp-sqlite/cleanup-temp-sqlite! temp))))))))
         (p/rejected (ex-info "db-sync missing datascript conn"
-                             {:repo repo :graph-id graph-id}))))))
+                             {:repo repo}))))))

@@ -62,6 +62,7 @@ jobs:
         uses: DeLaGuardo/setup-clojure@13.5
         with:
           cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Clojure cache
         uses: actions/cache@v4
@@ -84,10 +85,20 @@ jobs:
         run: clojure -M:test compile test
 
       - name: Run ClojureScript query tests against basic query type
-        run: DB_QUERY_TYPE=basic node static/tests.js -r frontend.db.query-dsl-test
+        run: DB_QUERY_TYPE=basic pnpm cljs:run-test -r frontend.db.query-dsl-test
 
       - name: Run ClojureScript tests
         run: pnpm cljs:run-test
+
+      - name: Setup CLI integration test
+        # logseq-cli.js needed just for test-cli-query-human-output-pipes-to-show
+        run: clojure -M:cljs compile logseq-cli && pnpm db-worker-node:release:bundle
+
+      - name: Run ClojureScript integration tests
+        run: pnpm cljs:run-integration-test
+
+      - name: Run CLI E2E tests
+        run: bb dev:cli-e2e --verbose --skip-build
 
   lint:
     runs-on: ubuntu-22.04

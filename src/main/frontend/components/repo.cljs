@@ -460,6 +460,7 @@
   [{:keys [cloud? graph-e2ee? refresh-token token user-uuid e2ee-rsa-key-ensured?]} set-e2ee-rsa-key-ensured?]
   (if (and cloud? graph-e2ee? refresh-token token user-uuid (not e2ee-rsa-key-ensured?))
     (-> (p/do!
+         (state/pub-event! [:rtc/sync-app-state])
          (state/<invoke-db-worker :thread-api/set-db-sync-config
                                   {:enabled? true
                                    :ws-url (config/db-sync-ws-url)

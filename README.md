@@ -169,6 +169,10 @@ If you want to set up a development environment for the Logseq web or desktop ap
 
 In addition to these guides, you can also find other helpful resources in the [docs/](docs/) folder, such as the [Guide for Contributing to Translations](docs/contributing-to-translations.md), the [Docker Web App Guide](docs/docker-web-app-guide.md) and the [mobile development guide](docs/develop-logseq-on-mobile.md)
 
+### 🧰 Logseq CLI (Node)
+
+Logseq CLI documentation is maintained in `docs/cli/logseq-cli.md`.
+
 ## ✨ Inspiration
 
 Logseq is inspired by several unique tools and projects, including [Roam Research](https://roamresearch.com/), [Org Mode](https://orgmode.org/), [TiddlyWiki](https://tiddlywiki.com/), [Workflowy](https://workflowy.com/), and [Cuekeeper](https://github.com/talex5/cuekeeper).

@@ -561,6 +561,56 @@
         (is (= "pull/ok" (:type pull-response)))
         (is (empty? (:txs pull-response)))))))
 
+(deftest tx-batch-keeps-created-by-ref-lookup-payload-test
+  (testing "created-by lookup payload is preserved for save-block tx"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          page-uuid (random-uuid)
+          missing-user-uuid (random-uuid)
+          missing-user-ref [:block/uuid missing-user-uuid]
+          tx-entry {:tx (protocol/tx->transit [[:db/add -1 :block/uuid page-uuid]
+                                               [:db/add -1 :block/name "created-by-sanitize-page"]
+                                               [:db/add -1 :block/title "created-by-sanitize-page"]
+                                               [:db/add -1 :logseq.property/created-by-ref missing-user-ref]])
+                    :outliner-op :save-block}
+          response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] 0))
+          page (d/entity @conn [:block/uuid page-uuid])]
+      (is (= "tx/batch/ok" (:type response)))
+      (is (= 1 (:t response)))
+      (is (some? page))
+      (is (= "created-by-sanitize-page" (:block/title page)))
+      (is (= missing-user-ref (:logseq.property/created-by-ref page))))))
+
+(deftest tx-batch-rejects-missing-page-ref-lookups-test
+  (testing "missing page refs/tags lookup refs reject create-page tx"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          page-uuid (random-uuid)
+          missing-ref-uuid (random-uuid)
+          missing-tag-uuid (random-uuid)
+          missing-user-uuid (random-uuid)
+          tx-entry {:tx (protocol/tx->transit [[:db/add -1 :block/uuid page-uuid]
+                                               [:db/add -1 :block/name "optional-ref-sanitize-page"]
+                                               [:db/add -1 :block/title "optional-ref-sanitize-page"]
+                                               [:db/add -1 :block/refs [:block/uuid missing-ref-uuid]]
+                                               [:db/add -1 :block/tags [:block/uuid missing-tag-uuid]]
+                                               [:db/add -1 :logseq.property/created-by-ref [:block/uuid missing-user-uuid]]])
+                    :outliner-op :create-page}
+          response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] 0))
+          page (d/entity @conn [:block/uuid page-uuid])]
+      (is (= "tx/reject" (:type response)))
+      (is (= "db transact failed" (:reason response)))
+      (is (= 0 (:t response)))
+      (is (nil? page)))))
+
 (deftest tx-batch-rejects-while-snapshot-upload-is-in-progress-test
   (let [sql (test-sql/make-sql)
         conn (d/create-conn db-schema/schema)
@@ -634,6 +684,33 @@
                          body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                    (is (= 413 (.-status resp)))
                    (is (= {:error "snapshot row too large"} body))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest import-snapshot-stream-first-non-empty-chunk-applies-reset-test
+  (async done
+         (let [rows [[42 "payload" nil]]
+               frame (#'sync-handler/frame-bytes (snapshot/encode-rows rows))
+               stream (js/ReadableStream.
+                       #js {:start (fn [controller]
+                                     (.enqueue controller frame)
+                                     (.close controller))})
+               applied (atom [])
+               self #js {:sql (test-sql/make-sql)
+                         :conn (d/create-conn db-schema/schema)
+                         :schema-ready true}]
+           (-> (p/with-redefs [sync-handler/import-snapshot!
+                               (fn [_self rows* reset?]
+                                 (swap! applied conj {:rows rows*
+                                                      :reset? reset?}))]
+                 (p/let [count (#'sync-handler/import-snapshot-stream! self stream true)]
+                   (is (= 1 count))
+                   (is (= [{:rows rows
+                            :reset? true}]
+                          @applied))))
                (p/then (fn []
                          (done)))
                (p/catch (fn [error]
