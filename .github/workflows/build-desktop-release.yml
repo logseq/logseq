@@ -140,6 +140,12 @@ jobs:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
+      - name: Verify bundled CLI
+        run: |
+          test -f ./static/logseq-cli.js
+          node ./static/logseq-cli.js --help >/tmp/logseq-cli-help.txt
+          grep -E "USAGE|Usage|COMMANDS|Commands" /tmp/logseq-cli-help.txt >/dev/null
+
       - name: Update APP Version
         run: |
           sed -i 's/"version": "0.0.1"/"version": "${{ steps.ref.outputs.version }}"/g' ./package.json
