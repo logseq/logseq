@@ -51,7 +51,7 @@ import * as CSS from 'csstype'
 import EventEmitter from 'eventemitter3'
 import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
-import { LSPluginRequest } from './modules/LSPlugin.Request'
+import { LSPluginNet } from './modules/LSPlugin.Net'
 import { LSPluginSearchService } from './modules/LSPlugin.Search'
 
 declare global {
@@ -747,7 +747,7 @@ export class LSPluginUser
   private _ui = new Map<number, uiState>()
 
   private _mFileStorage: LSPluginFileStorage
-  private _mRequest: LSPluginRequest
+  private _mNet: LSPluginNet
   private _mExperiments: LSPluginExperiments
 
   /**
@@ -1146,9 +1146,9 @@ export class LSPluginUser
     return m
   }
 
-  get Request(): LSPluginRequest {
-    let m = this._mRequest
-    if (!m) m = this._mRequest = new LSPluginRequest(this)
+  get Net(): LSPluginNet {
+    let m = this._mNet
+    if (!m) m = this._mNet = new LSPluginNet(this)
     return m
   }
 

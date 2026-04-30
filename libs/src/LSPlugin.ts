@@ -4,7 +4,7 @@ import EventEmitter from 'eventemitter3'
 import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
-import { LSPluginRequest } from './modules/LSPlugin.Request'
+import { LSPluginNet } from './modules/LSPlugin.Net'
 
 export type WithOptional<T, K extends keyof T> = Omit<T, K> &
   Partial<Pick<T, K>>
@@ -1245,7 +1245,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   UI: IUIProxy
   Assets: IAssetsProxy
 
-  Request: LSPluginRequest
+  Net: LSPluginNet
   FileStorage: LSPluginFileStorage
   Experiments: LSPluginExperiments
 }
