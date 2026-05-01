@@ -523,7 +523,9 @@
                   (p/let [message (decode-main-ipc-message args-js)
                           _ (vreset! message* message)
                           result (handle (or (utils/get-win-from-sender event) window) message)]
-                    (sqlite-util/write-transit-str result))
+                    (if (= (last message) "js-obj")
+                      (bean/->js result)
+                      (sqlite-util/write-transit-str result)))
                   (p/catch (fn [e]
                              (let [command (command-name @message*)]
                                (when-not (contains? #{"mkdir" "stat"} command)
