@@ -1,6 +1,6 @@
 ---
 name: logseq-cli
-description: Operate the current Logseq command-line interface to inspect or modify graphs, pages, blocks, tags, and properties; run Datascript queries; show page/block trees; manage graphs; and manage db-worker-node servers. Use when a request involves running `logseq` commands or interpreting CLI output.
+description: Operate the current Logseq command-line interface to inspect or modify graphs, pages, blocks, tasks, tags, and properties; run Datascript queries; show page/block trees; manage graphs; and manage db-worker-node servers. Use when a request involves running `logseq` commands or interpreting CLI output.
 ---
 
 # Logseq CLI
@@ -47,6 +47,12 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - Before running any command, always check live options with:
 - `logseq <command> --help`
 - `logseq <command> <subcommand> --help`
+
+## Task command preference
+
+- If a user request is task-related, prefer task-scoped commands first.
+- Use `list task`, `upsert task`, and other `... task` commands before block/page-level alternatives.
+- Only fall back to `upsert block`/`list page` style workflows when task commands cannot satisfy the requested operation.
 
 ## Examples policy
 
