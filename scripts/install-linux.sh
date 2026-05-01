@@ -203,18 +203,35 @@ fi
 
 cd "$TEMP_DIR"
 
+# Determine architecture
+ARCH=$(uname -m)
+case $ARCH in
+    x86_64)  ARCH_PATTERN="\(x64\|x86_64\)" ;;
+    aarch64) ARCH_PATTERN="arm64" ;;
+    *)       ARCH_PATTERN="x64" ;;
+esac
+
 # Determine download URL
-if [[ "$VERSION" == "latest" ]]; then
-    log_info "Fetching latest release information..."
-    LATEST_RELEASE=$(curl -s https://api.github.com/repos/logseq/logseq/releases/latest)
-    DOWNLOAD_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*Logseq-linux-x64-[^"]*\.zip"' | cut -d'"' -f4)
+if [[ "$VERSION" == "latest" || "$VERSION" == "nightly" ]]; then
+    log_info "Fetching $VERSION release information..."
+    API_URL="https://api.github.com/repos/logseq/logseq/releases/latest"
+    [[ "$VERSION" == "nightly" ]] && API_URL="https://api.github.com/repos/logseq/logseq/releases/tags/nightly"
+    
+    RELEASE_INFO=$(curl -s "$API_URL")
+    DOWNLOAD_URL=$(echo "$RELEASE_INFO" | grep -o "\"browser_download_url\": \"[^\"]*Logseq-linux-$ARCH_PATTERN-[^\"]*\.zip\"" | head -1 | cut -d'"' -f4)
     
     if [[ -z "$DOWNLOAD_URL" ]]; then
-        log_error "Could not find download URL for latest version"
+        log_error "Could not find download URL for $VERSION version ($ARCH)"
         exit 1
     fi
 else
-    DOWNLOAD_URL="https://github.com/logseq/logseq/releases/download/${VERSION}/Logseq-linux-x64-${VERSION}.zip"
+    # Try to fetch info for specific version to handle different naming conventions
+    RELEASE_INFO=$(curl -s "https://api.github.com/repos/logseq/logseq/releases/tags/${VERSION}")
+    DOWNLOAD_URL=$(echo "$RELEASE_INFO" | grep -o "\"browser_download_url\": \"[^\"]*Logseq-linux-$ARCH_PATTERN-[^\"]*\.zip\"" | head -1 | cut -d'"' -f4)
+    
+    if [[ -z "$DOWNLOAD_URL" ]]; then
+        DOWNLOAD_URL="https://github.com/logseq/logseq/releases/download/${VERSION}/Logseq-linux-x64-${VERSION}.zip"
+    fi
 fi
 
 log_info "Download URL: $DOWNLOAD_URL"
@@ -233,27 +250,39 @@ log_info "Extracting archive..."
 unzip -q logseq.zip
 
 # Find the extracted directory
-EXTRACTED_DIR=$(find . -maxdepth 2 -type d -name "Logseq-linux-x64*" | head -1)
+EXTRACTED_DIR=$(find . -maxdepth 2 -type d -name "Logseq-linux-*" | head -1)
 
 if [[ -z "$EXTRACTED_DIR" ]]; then
-    log_error "Could not find extracted Logseq directory"
-    rm -rf "$TEMP_DIR"
-    exit 1
+    if [[ -f "Logseq" || -f "logseq" ]]; then
+        EXTRACTED_DIR="."
+    else
+        log_error "Could not find extracted Logseq directory"
+        rm -rf "$TEMP_DIR"
+        exit 1
+    fi
+fi
+
+# Determine binary name
+if [[ -f "$EXTRACTED_DIR/Logseq" ]]; then
+    BINARY_NAME="Logseq"
+elif [[ -f "$EXTRACTED_DIR/logseq" ]]; then
+    BINARY_NAME="logseq"
+else
+    BINARY_NAME="Logseq"
 fi
 
 # Install files
 log_info "Installing files..."
-if [[ "$USER_INSTALL" == false ]]; then
-    mkdir -p "$INSTALL_DIR"
-    cp -r "$EXTRACTED_DIR"/* "$INSTALL_DIR/"
-    chmod +x "$INSTALL_DIR/Logseq"
-    ln -sf "$INSTALL_DIR/Logseq" "$BIN_DIR/logseq"
+mkdir -p "$INSTALL_DIR"
+if [[ "$EXTRACTED_DIR" == "." ]]; then
+    # Copy everything except the zip file itself
+    find . -maxdepth 1 ! -name "logseq.zip" ! -name "." -exec cp -r {} "$INSTALL_DIR/" \;
 else
-    mkdir -p "$INSTALL_DIR"
     cp -r "$EXTRACTED_DIR"/* "$INSTALL_DIR/"
-    chmod +x "$INSTALL_DIR/Logseq"
-    ln -sf "$INSTALL_DIR/Logseq" "$BIN_DIR/logseq"
 fi
+
+chmod +x "$INSTALL_DIR/$BINARY_NAME"
+ln -sf "$INSTALL_DIR/$BINARY_NAME" "$BIN_DIR/logseq"
 
 # Fix sandbox permissions
 if [[ "$USER_INSTALL" == false && -f "$INSTALL_DIR/chrome-sandbox" ]]; then
@@ -282,14 +311,30 @@ if [[ "$SKIP_DESKTOP" == false ]]; then
     # Ensure the directory exists regardless of install type
     mkdir -p "$ICON_DIR"
     
+    # 1. Find and copy the icon (try various known paths)
+    ICON_SOURCE=""
+    if [[ -f "$INSTALL_DIR/resources/app/icons/logseq.png" ]]; then
+        ICON_SOURCE="$INSTALL_DIR/resources/app/icons/logseq.png"
+    elif [[ -f "$INSTALL_DIR/resources/app.asar.unpacked/dist/icon.png" ]]; then
+        ICON_SOURCE="$INSTALL_DIR/resources/app.asar.unpacked/dist/icon.png"
+    elif [[ -f "$INSTALL_DIR/resources/app/icon.png" ]]; then
+        ICON_SOURCE="$INSTALL_DIR/resources/app/icon.png"
+    elif [[ -f "$INSTALL_DIR/logseq.png" ]]; then
+        ICON_SOURCE="$INSTALL_DIR/logseq.png"
+    fi
+
+    if [[ -n "$ICON_SOURCE" ]]; then
+        cp "$ICON_SOURCE" "$ICON_DIR/logseq.png"
+    fi
+    
     # Create desktop file
     cat > "$DESKTOP_FILE" << DESKTOP_EOF
 [Desktop Entry]
 Version=1.0
 Name=Logseq
 Comment=Logseq - A privacy-first, open-source platform for knowledge management and collaboration
-Exec=$INSTALL_DIR/Logseq $([ "$USER_INSTALL" = true ] && echo "--no-sandbox") %U
-Icon=$ICON_DIR/logseq.png
+Exec=$INSTALL_DIR/$BINARY_NAME $([ "$USER_INSTALL" = true ] && echo "--no-sandbox") %U
+Icon=$([ "$USER_INSTALL" = true ] && echo "$ICON_DIR/logseq.png" || echo "logseq")
 Terminal=false
 Type=Application
 Categories=Office;Productivity;Utility;TextEditor;
@@ -299,20 +344,6 @@ DESKTOP_EOF
     
     # Make desktop file executable
     chmod +x "$DESKTOP_FILE"
-    
-    # 1. Find and copy the icon (try current paths first, then fallbacks)
-    if [[ -f "$INSTALL_DIR/resources/app/icons/logseq.png" ]]; then
-        cp "$INSTALL_DIR/resources/app/icons/logseq.png" "$ICON_DIR/logseq.png"
-    elif [[ -f "$INSTALL_DIR/resources/app.asar.unpacked/dist/icon.png" ]]; then
-        cp "$INSTALL_DIR/resources/app.asar.unpacked/dist/icon.png" "$ICON_DIR/logseq.png"
-    elif [[ -f "$INSTALL_DIR/resources/app/icon.png" ]]; then
-        cp "$INSTALL_DIR/resources/app/icon.png" "$ICON_DIR/logseq.png"
-    fi
-    
-    # 2. Update desktop file to use purely the icon name for system-wide installs
-    if [[ "$USER_INSTALL" == false ]]; then
-        sed -i "s|Icon=$ICON_DIR/logseq.png|Icon=logseq|" "$DESKTOP_FILE"
-    fi
     
     # Update desktop database
     if [[ "$USER_INSTALL" == false ]]; then
@@ -332,7 +363,7 @@ if command -v logseq >/dev/null 2>&1; then
         INSTALLED_VERSION=$(grep -m 1 '"version"' "$INSTALL_DIR/resources/app/package.json" | cut -d'"' -f4 || echo "unknown")
     else
         # Fallback Plan: Add a 2-second timeout to forcibly terminate the process, preventing the application from hanging.
-        INSTALLED_VERSION=$(timeout 2 logseq --version 2>/dev/null | head -1 || echo "unknown")
+        INSTALLED_VERSION=$(timeout 2 logseq --no-sandbox --version 2>/dev/null | grep -o "Logseq App([^)]*)" | cut -d'(' -f2 | cut -d')' -f1 || echo "unknown")
     fi
     
     log_info "Logseq installed successfully!"
