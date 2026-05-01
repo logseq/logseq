@@ -194,6 +194,21 @@
                        "from client_ops where kind = 'tx' and tx_id = ? limit 1")
                   (str tx-id)))
 
+(defn- sync-conflict-rows
+  [db block-uuid]
+  (try
+    (let [^js db db
+          ^js stmt (.prepare db (str "select block_uuid, attr, value "
+                                     "from sync_conflicts where block_uuid = ? "
+                                     "order by id asc"))]
+      (->> (.all stmt (str block-uuid))
+           (mapv (fn [row]
+                   {:block-uuid (aget row "block_uuid")
+                    :attr (aget row "attr")
+                    :value (aget row "value")}))))
+    (catch :default _
+      [])))
+
 (defn- seed-client-op-txs!
   [repo txs]
   (doseq [tx txs]
@@ -4209,6 +4224,92 @@
              [[:db/add (:db/id block) :block/updated-at 1710000000000]])
             (let [block' (d/entity @conn (:db/id block))]
               (is (= "test" (:block/title block'))))))))))
+
+(deftest sync-conflict-store-roundtrip-test
+  (testing "sync title conflicts are stored outside graph data and returned by block uuid"
+    (let [client-ops-conn (new-client-ops-db)
+          block-uuid (random-uuid)]
+      (with-datascript-conns (db-test/create-conn-with-blocks
+                              {:pages-and-blocks
+                               [{:page {:block/title "page 1"}
+                                 :blocks [{:block/title "target"}]}]})
+                             client-ops-conn
+        (fn []
+          (client-op/add-sync-conflicts!
+           test-repo
+           [{:block-uuid block-uuid
+             :attr :block/title
+             :value "remote title"
+             :remote-t 42}])
+          (is (= [{:block-uuid block-uuid
+                   :attr :block/title
+                   :value "remote title"
+                   :remote-t 42}]
+                 (mapv #(select-keys % [:block-uuid :attr :value :remote-t])
+                       (client-op/get-sync-conflicts test-repo block-uuid)))))))))
+
+(deftest sync-conflict-clear-test
+  (testing "resolved sync conflicts are removed for the block"
+    (let [client-ops-conn (new-client-ops-db)
+          block-uuid (random-uuid)
+          other-block-uuid (random-uuid)]
+      (with-datascript-conns (db-test/create-conn-with-blocks
+                              {:pages-and-blocks
+                               [{:page {:block/title "page 1"}
+                                 :blocks [{:block/title "target"}]}]})
+                             client-ops-conn
+        (fn []
+          (client-op/add-sync-conflicts!
+           test-repo
+           [{:block-uuid block-uuid
+             :attr :block/title
+             :value "remote title"
+             :remote-t 42}
+            {:block-uuid other-block-uuid
+             :attr :block/title
+             :value "other remote title"
+             :remote-t 43}])
+          (client-op/clear-sync-conflicts! test-repo block-uuid)
+          (is (empty? (client-op/get-sync-conflicts test-repo block-uuid)))
+          (is (= ["other remote title"]
+                 (mapv :value (client-op/get-sync-conflicts test-repo other-block-uuid)))))))))
+
+(deftest rebase-saves-remote-title-and-name-conflicts-test
+  (testing "remote title/name changes that conflict with pending local edits are saved for manual resolution"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "old page"}
+                   :blocks [{:block/title "old block"}]}]})
+          client-ops-conn (new-client-ops-db)
+          page (db-test/find-page-by-title @conn "old page")
+          block (db-test/find-block-by-content @conn "old block")
+          page-uuid (:block/uuid page)
+          block-uuid (:block/uuid block)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (apply-ops! conn
+                      [[:save-block [{:block/uuid block-uuid
+                                      :block/title "local block"} nil]]
+                       [:save-block [{:block/uuid page-uuid
+                                      :block/title "local page"} nil]]]
+                      local-tx-meta)
+          (is (seq (#'sync-apply/pending-txs test-repo)))
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:t 10
+             :tx-data [[:db/add [:block/uuid block-uuid] :block/title "remote block"]
+                       [:db/add [:block/uuid page-uuid] :block/title "remote page"]]}])
+          (is (= "local block" (:block/title (d/entity @conn [:block/uuid block-uuid]))))
+          (is (= "local page" (:block/title (d/entity @conn [:block/uuid page-uuid]))))
+          (is (= #{{:block-uuid (str block-uuid)
+                    :attr "block/title"
+                    :value "remote block"}
+                   {:block-uuid (str page-uuid)
+                    :attr "block/title"
+                    :value "remote page"}}
+                 (set (concat (sync-conflict-rows client-ops-conn block-uuid)
+                              (sync-conflict-rows client-ops-conn page-uuid))))))))))
 
 (deftest rebase-does-not-leave-anonymous-created-by-entities-test
   (testing "rebase should not leave entities with timestamps/created-by but without identity attrs"

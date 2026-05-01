@@ -1124,6 +1124,16 @@ html.is-mac {
   color: var(--rx-gray-09);
 }
 
+.ls-sync-conflict-warning {
+  @apply bg-yellow-rx-05-alpha text-yellow-rx-08 dark:bg-yellow-rx-07-alpha
+  dark:text-yellow-rx-10 border;
+}
+
+.ls-sync-conflict-warning svg {
+  width: 14px;
+  height: 14px;
+}
+
 .ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
   width: 38px;
   height: 38px;
