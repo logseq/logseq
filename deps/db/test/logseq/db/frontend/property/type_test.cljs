@@ -1,6 +1,5 @@
 (ns logseq.db.frontend.property.type-test
   (:require [cljs.test :refer [deftest is testing]]
-            [datascript.core :as d]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.test.helper :as db-test]))
 

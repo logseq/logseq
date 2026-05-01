@@ -1487,10 +1487,10 @@
      {:style {:width 640 :max-height 480 :overflow "auto"}}
      (cond
        (nil? assets)
-       [:div.p-4.opacity-60 "Loading…"]
+       [:div.p-4.opacity-60 (t :ui/loading)]
 
        (empty? assets)
-       [:div.p-4.opacity-60 "No assets found"]
+       [:div.p-4.opacity-60 (t :asset/picker-empty)]
 
        :else
        [:div.grid.gap-2
@@ -1512,7 +1512,7 @@
                                (fn [err]
                                  (log/error :msg "Failed to set asset property" :error err)
                                  (notification/show!
-                                  "Failed to set asset property"
+                                  (t :asset/picker-set-failed)
                                   :error)))))}
              [:div.asset-picker-title.w-full.px-1.py-0.5.text-xs.truncate.text-left.border-b.opacity-80
               (:block/title asset)]
@@ -1525,7 +1525,7 @@
                    (asset-cp {:disable-resize? true} asset)])
                 [:div.flex.flex-col.items-center.justify-center.gap-1.opacity-70
                  (ui/icon (asset-icon-for-type asset-type) {:size 40})
-                 [:span.text-xs.uppercase (or asset-type "file")]])]]))])]))
+                 [:span.text-xs.uppercase (or asset-type (t :asset/picker-fallback-type))]])]]))])]))
 
 (rum/defc asset-value-picker
   [block property value opts]
