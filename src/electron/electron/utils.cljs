@@ -1,7 +1,7 @@
 (ns electron.utils
   (:require ["electron" :refer [app BrowserWindow]]
             ["node-fetch" :default node-fetch]
-            ["open" :default open-external]
+            ["open" :as open-external]
             ["fs-extra" :as fs]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
