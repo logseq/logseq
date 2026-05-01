@@ -615,6 +615,19 @@
   [repo]
   (db-sync/upload-stopped? repo))
 
+(def-thread-api :thread-api/db-sync-get-block-conflicts
+  [repo block-uuid]
+  (client-op/get-sync-conflicts repo block-uuid))
+
+(def-thread-api :thread-api/db-sync-clear-block-conflicts
+  [repo block-uuid]
+  (client-op/clear-sync-conflicts! repo block-uuid)
+  (shared-service/broadcast-to-clients!
+   :sync-conflicts-updated
+   {:repo repo
+    :block-uuid block-uuid
+    :conflicts []}))
+
 (def-thread-api :thread-api/db-sync-download-graph-by-id
   [repo graph-id graph-e2ee?]
   (sync-download/download-graph-by-id! repo graph-id graph-e2ee?))
@@ -1309,6 +1322,7 @@
   (set (map
         common-util/keyword->string
         [:sync-db-changes
+         :sync-conflicts-updated
          :notification
          :log
          :add-repo
