@@ -6,6 +6,7 @@
             [logseq.cli.command.task-status :as task-status-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
+            [logseq.cli.uuid-refs :as uuid-refs]
             [logseq.common.util :as common-util]
             [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
@@ -309,6 +310,12 @@
     (some? offset) (->> (drop offset) vec)
     (some? limit) (->> (take limit) vec)))
 
+(defn- normalize-visible-title-fields
+  [config repo items fields]
+  (let [uuid-strings (uuid-refs/collect-uuid-refs-from-items items fields)]
+    (p/let [uuid->label (uuid-refs/fetch-uuid-labels config repo uuid-strings)]
+      (uuid-refs/normalize-item-string-fields items fields uuid->label))))
+
 (defn- prepare-tag-item
   [item {:keys [with-properties with-extends fields]}]
   (cond-> item
@@ -334,7 +341,8 @@
               fields (parse-field-list (:fields options))
               sorted (apply-sort items sort-field order list-page-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (apply-fields limited fields list-page-field-map)]
+              final (apply-fields limited fields list-page-field-map)
+              final (normalize-visible-title-fields cfg (:repo action) final [:block/title])]
         {:status :ok
          :data {:items final}})))
 
@@ -352,7 +360,8 @@
               prepared (mapv #(prepare-tag-item % options) items)
               sorted (apply-sort prepared sort-field order list-tag-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (apply-fields limited fields list-tag-field-map)]
+              final (apply-fields limited fields list-tag-field-map)
+              final (normalize-visible-title-fields cfg (:repo action) final [:block/title])]
         {:status :ok
          :data {:items final}})))
 
@@ -369,7 +378,8 @@
               prepared (mapv #(prepare-property-item % options) items)
               sorted (apply-sort prepared sort-field order list-property-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (apply-fields limited fields list-property-field-map)]
+              final (apply-fields limited fields list-property-field-map)
+              final (normalize-visible-title-fields cfg (:repo action) final [:block/title])]
         {:status :ok
          :data {:items final}})))
 
@@ -423,7 +433,8 @@
               fields (parse-field-list (:fields options))
               sorted (apply-sort items sort-field order list-node-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (apply-fields limited fields list-node-field-map)]
+              final (apply-fields limited fields list-node-field-map)
+              final (normalize-visible-title-fields cfg (:repo action) final [:block/title :block/page-title])]
         {:status :ok
          :data {:items final}})))
 
@@ -452,7 +463,8 @@
               fields (parse-field-list (:fields options))
               sorted (apply-sort items sort-field order list-asset-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (apply-fields limited fields list-asset-field-map)]
+              final (apply-fields limited fields list-asset-field-map)
+              final (normalize-visible-title-fields cfg (:repo action) final [:block/title])]
         {:status :ok
          :data {:items final}})))
 
@@ -489,6 +501,7 @@
                     fields (parse-field-list (:fields normalized-options))
                     sorted (apply-sort items sort-field order list-task-field-map)
                     limited (apply-offset-limit sorted (:offset normalized-options) (:limit normalized-options))
-                    final (apply-fields limited fields list-task-field-map)]
+                    final (apply-fields limited fields list-task-field-map)
+                    final (normalize-visible-title-fields cfg (:repo action) final [:block/title])]
               {:status :ok
                :data {:items final}}))))))
