@@ -16,9 +16,10 @@
    [frontend.worker.sync.util :refer [fail-fast]]
    [frontend.worker.undo-redo :as worker-undo-redo]
    [lambdaisland.glogi :as log]
+   [logseq.common.util :as common-util]
    [logseq.db :as ldb]
-   [logseq.db-sync.tx-sanitize :as tx-sanitize]
    [logseq.db-sync.order :as sync-order]
+   [logseq.db-sync.tx-sanitize :as tx-sanitize]
    [logseq.db.common.normalize :as db-normalize]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.outliner.core :as outliner-core]
@@ -27,8 +28,7 @@
    [logseq.outliner.page :as outliner-page]
    [logseq.outliner.property :as outliner-property]
    [logseq.outliner.recycle :as outliner-recycle]
-   [promesa.core :as p]
-   [logseq.common.util :as common-util]))
+   [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *repo->latest-remote-checksum (atom {}))
@@ -100,7 +100,7 @@
        (keep (fn [[e a v t added]]
                (let [reversed-datom (d/datom e a v t (not added))]
                  ;; trick: reverse the order of `db-before` and `db-after`
-                (db-normalize/normalize-datom db-before db-after reversed-datom))))
+                 (db-normalize/normalize-datom db-before db-after reversed-datom))))
        (db-normalize/replace-attr-retract-with-retract-entity-v2 db-after)
        db-normalize/reorder-retract-entity))
 
@@ -449,6 +449,87 @@
       [op e' a v' t])
     datom-v))
 
+(def sync-conflict-attrs
+  #{:block/title})
+
+(defn- tx-item-components
+  [item]
+  (when (and (vector? item) (>= (count item) 4))
+    (let [[op e a v] item]
+      (when (and (contains? #{:db/add :db/retract} op)
+                 (contains? sync-conflict-attrs a))
+        {:op op
+         :e e
+         :a a
+         :v v}))))
+
+(defn- tx-entity-uuid
+  [db temp-id->uuid e]
+  (cond
+    (uuid? e) e
+
+    (and (string? e) (common-util/uuid-string? e)) (uuid e)
+
+    (and (vector? e)
+         (= :block/uuid (first e))
+         (uuid? (second e))) (second e)
+
+    (and (number? e) (contains? temp-id->uuid e)) (get temp-id->uuid e)
+
+    :else (some-> (d/entity db e) :block/uuid)))
+
+(defn- tx-temp-id->uuid
+  [tx-data]
+  (->> tx-data
+       (keep (fn [item]
+               (when (and (vector? item)
+                          (= :db/add (first item))
+                          (= :block/uuid (nth item 2 nil))
+                          (number? (second item))
+                          (uuid? (nth item 3 nil)))
+                 [(second item) (nth item 3)])))
+       (into {})))
+
+(defn- local-conflict-block-uuids
+  [db local-txs]
+  (->> local-txs
+       (mapcat :tx)
+       (keep tx-item-components)
+       (keep (fn [{:keys [e]}]
+               (tx-entity-uuid db {} e)))
+       set))
+
+(defn- remote-sync-conflicts
+  [db local-txs remote-txs]
+  (let [local-block-uuids (local-conflict-block-uuids db local-txs)]
+    (when (seq local-block-uuids)
+      (->> remote-txs
+           (mapcat (fn [{:keys [tx-data t]}]
+                     (let [temp-id->uuid (tx-temp-id->uuid tx-data)]
+                       (keep (fn [item]
+                               (when-let [{:keys [op e a v]} (tx-item-components item)]
+                                 (when (and (= :db/add op) (string? v))
+                                   (when-let [block-uuid (tx-entity-uuid db temp-id->uuid e)]
+                                     (let [current-value (some-> (d/entity db [:block/uuid block-uuid]) a)]
+                                       (when (and (contains? local-block-uuids block-uuid)
+                                                  (not= current-value v))
+                                         {:block-uuid block-uuid
+                                          :attr a
+                                          :value v
+                                          :remote-t t}))))))
+                             tx-data))))
+           distinct
+           vec))))
+
+(defn- broadcast-sync-conflicts!
+  [repo conflicts]
+  (doseq [block-uuid (distinct (map :block-uuid conflicts))]
+    (shared-service/broadcast-to-clients!
+     :sync-conflicts-updated
+     {:repo repo
+      :block-uuid block-uuid
+      :conflicts (client-op/get-sync-conflicts repo block-uuid)})))
+
 (defn- transact-remote-txs!
   [conn remote-txs]
   (loop [remaining remote-txs
@@ -639,35 +720,35 @@
         (when-not (and (uuid? template-uuid) (uuid? target-uuid))
           (invalid-rebase-op! op {:args args
                                   :reason :missing-template-or-target-uuid}))
-      (let [replace-empty-target? (:replace-empty-target? opts)
-            template-blocks' (some->> (:template-blocks opts)
-                                      (map-indexed
-                                       (fn [idx block]
-                                         (let [block' (sanitize-template-block @conn rebase-db-before block)
-                                               block'' (if (and replace-empty-target?
-                                                                (zero? idx)
-                                                                (nil? (:block/uuid block')))
-                                                         ;; Keep replace-empty-target replay consistent with
-                                                         ;; initial apply-template payload where the first
-                                                         ;; block uuid is the target uuid.
-                                                         (assoc block' :block/uuid target-uuid)
-                                                         block')]
-                                           (when (:block/uuid block'')
-                                             block''))))
-                                      (remove nil?)
-                                      seq
-                                      vec)
-            opts' (cond-> (-> opts
-                              (assoc :sibling? sibling?)
-                              (dissoc :template-blocks))
-                    template-blocks'
-                    (assoc :template-blocks template-blocks'))]
-        (outliner-op/apply-ops!
-         conn
-         [[:apply-template [template-uuid
-                            target-uuid
-                            opts']]]
-         {:gen-undo-ops? false}))))
+        (let [replace-empty-target? (:replace-empty-target? opts)
+              template-blocks' (some->> (:template-blocks opts)
+                                        (map-indexed
+                                         (fn [idx block]
+                                           (let [block' (sanitize-template-block @conn rebase-db-before block)
+                                                 block'' (if (and replace-empty-target?
+                                                                  (zero? idx)
+                                                                  (nil? (:block/uuid block')))
+                                                           ;; Keep replace-empty-target replay consistent with
+                                                           ;; initial apply-template payload where the first
+                                                           ;; block uuid is the target uuid.
+                                                           (assoc block' :block/uuid target-uuid)
+                                                           block')]
+                                             (when (:block/uuid block'')
+                                               block''))))
+                                        (remove nil?)
+                                        seq
+                                        vec)
+              opts' (cond-> (-> opts
+                                (assoc :sibling? sibling?)
+                                (dissoc :template-blocks))
+                      template-blocks'
+                      (assoc :template-blocks template-blocks'))]
+          (outliner-op/apply-ops!
+           conn
+           [[:apply-template [template-uuid
+                              target-uuid
+                              opts']]]
+           {:gen-undo-ops? false}))))
 
     :move-blocks
     (let [[ids target-id opts] args
@@ -820,8 +901,12 @@
                  :with-local-changes? true}
         *rebase-tx-reports (atom [])
         *rebase-results (atom [])
-        rebase-db-before @conn]
+        rebase-db-before @conn
+        conflicts (remote-sync-conflicts rebase-db-before local-txs remote-txs)]
     (try
+      (when (seq conflicts)
+        (client-op/add-sync-conflicts! repo conflicts)
+        (broadcast-sync-conflicts! repo conflicts))
       (let [tx-report (ldb/batch-transact!
                        conn
                        tx-meta

@@ -1,6 +1,6 @@
 ---
 name: logseq-cli
-description: Operate the current Logseq command-line interface to inspect or modify graphs, pages, blocks, tags, and properties; run Datascript queries; show page/block trees; manage graphs; and manage db-worker-node servers. Use when a request involves running `logseq` commands or interpreting CLI output.
+description: Operate the current Logseq command-line interface to inspect or modify graphs, pages, blocks, tasks, tags, and properties; run Datascript queries; show page/block trees; manage graphs; and manage db-worker-node servers. Use when a request involves running `logseq` commands or interpreting CLI output.
 ---
 
 # Logseq CLI
@@ -18,22 +18,27 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 
 ## Command groups (from `logseq --help`)
 
-- Graph inspect/edit:
+- Graph Inspect and Edit:
 - `list node`, `list page`, `list tag`, `list property`, `list task`, `list asset`
-- `upsert block`, `upsert page`, `upsert tag`, `upsert property`, `upsert task`, `upsert assert`
+- `upsert block`, `upsert page`, `upsert tag`, `upsert property`, `upsert task`, `upsert asset`
 - `remove block`, `remove page`, `remove tag`, `remove property`
-- `query`, `query list`, `show`, `search`
-- Graph management: `graph list|create|switch|remove|validate|info|export|import|backup`
-- Server management: `server list|cleanup|start|stop|restart`
-- Diagnostics: `doctor`, `debug`
+- `query`, `query list`, `show`, `search block|page|property|tag`
+- Graph Management:
+- `graph list|create|switch|remove|validate|info|export|import|backup list|backup create|backup restore|backup remove`
+- `server list|cleanup|start|stop|restart`
+- `doctor`
+- `sync status|start|stop|upload|download|remote-graphs|ensure-keys|grant-access|config set|get|unset`
+- Authentication: `login|logout`
+- Utilities: `completion`, `debug`, `example`, `skill`
 
 ## Global options
 
-- `--config` Path to `cli.edn` (default `~/logseq/cli.edn`)
+- `--config` Path to `cli.edn` (default `<root-dir>/cli.edn`)
 - `--graph` Graph name
-- `--data-dir` Path to db-worker data dir (default `~/logseq/graphs`)
+- `--root-dir` Path to CLI root dir (default `~/logseq`)
 - `--timeout-ms` Request timeout in ms (default `10000`)
 - `--output` Output format (`human`, `json`, `edn`)
+- `--profile` Enable stage timing profile output to stderr
 - `--verbose` Enable verbose debug logging to stderr
 
 ## Command option policy
@@ -42,6 +47,12 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - Before running any command, always check live options with:
 - `logseq <command> --help`
 - `logseq <command> <subcommand> --help`
+
+## Task command preference
+
+- If a user request is task-related, prefer task-scoped commands first.
+- Use `list task`, `upsert task`, and other `... task` commands before block/page-level alternatives.
+- Only fall back to `upsert block`/`list page` style workflows when task commands cannot satisfy the requested operation.
 
 ## Examples policy
 
@@ -83,5 +94,5 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - `remove block --id` also accepts one db/id or an EDN vector.
 - `upsert block` enters update mode when `--id` or `--uuid` is provided.
 - Always verify command flags with `logseq --help` and `logseq <...> --help` before execution.
-- If `logseq` reports that it doesn’t have read/write permission for data-dir, then add read/write permission for data-dir in the agent’s config.
+- If `logseq` reports that it doesn’t have read/write permission for `root-dir`, then check filesystem permissions or set `LOGSEQ_CLI_ROOT_DIR`.
 - In sandboxed environments, `graph create` may print a process-scan warning to stderr; if command status is `ok`, the graph is still created.

@@ -13,7 +13,7 @@
   [(core/command-entry ["doctor"]
                        :doctor
                        "Run runtime diagnostics"
-                       {:dev-script {:desc "Check static/db-worker-node.js instead of bundled dist runtime"
+                       {:dev-script {:desc "Check static/db-worker-node.js instead of packaged js runtime"
                                      :coerce :boolean}}
                        {:examples ["logseq doctor --dev-script"]})])
 

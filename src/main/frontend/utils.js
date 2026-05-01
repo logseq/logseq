@@ -260,57 +260,71 @@ export const getClipText = (cb, errorHandler) => {
   })
 }
 
-export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
-    const navigator = (ownerWindow || window).navigator
+const copiedBlocksMemoryCache = {
+  text: null,
+  blocks: null
+}
 
-    navigator.permissions.query({
-        name: "clipboard-write"
-    }).then((result) => {
-        if (result.state != "granted" && result.state != "prompt"){
-            console.debug("Copy without `clipboard-write` permission:", text)
-            return
-        }
-        let promise_written = null
-        if (typeof ClipboardItem !== 'undefined') {
-            let blob = new Blob([text], {
-              type: ["text/plain"]
-            });
-            let data = [new ClipboardItem({
-                ["text/plain"]: blob
-            })];
-            if (html) {
-                let richBlob = new Blob([html], {
-                    type: ["text/html"]
-                })
-                data = [new ClipboardItem({
-                    ["text/plain"]: blob,
-                    ["text/html"]: richBlob
-                })];
-            }
-          if (blocks) {
-            let blocksBlob = new Blob([blocks], {
-              type: ["web application/logseq"]
-            })
-            let richBlob = new Blob([html], {
-              type: ["text/html"]
-            })
-            data = [new ClipboardItem({
-              ["text/plain"]: blob,
-              ["text/html"]: richBlob,
-              ["web application/logseq"]: blocksBlob
-            })];
-          }
-            promise_written = navigator.clipboard.write(data)
-        } else {
-            console.debug("Degraded copy without `ClipboardItem` support:", text)
-            promise_written = navigator.clipboard.writeText(text)
-        }
-        promise_written.then(() => {
-            /* success */
-        }).catch(e => {
-            console.log(e, "fail")
+export const getCopiedBlocksFromMemory = (text) => {
+  if (!text || copiedBlocksMemoryCache.text !== text) return null
+  return copiedBlocksMemoryCache.blocks
+}
+
+export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
+  const navigator = (ownerWindow || window).navigator
+  const textBlob = new Blob([text], {
+    type: "text/plain"
+  })
+  copiedBlocksMemoryCache.text = text
+  copiedBlocksMemoryCache.blocks = blocks || null
+
+  navigator.permissions.query({
+    name: "clipboard-write"
+  }).then((result) => {
+    if (result.state != "granted" && result.state != "prompt"){
+      console.debug("Copy without `clipboard-write` permission:", text)
+      return
+    }
+    let promise_written = null
+    if (typeof ClipboardItem !== "undefined") {
+      let data = [new ClipboardItem({
+        ["text/plain"]: textBlob
+      })]
+      if (html) {
+        const richBlob = new Blob([html], {
+          type: "text/html"
         })
+        data = [new ClipboardItem({
+          ["text/plain"]: textBlob,
+          ["text/html"]: richBlob
+        })]
+      }
+      if (blocks) {
+        const blocksBlob = new Blob([blocks], {
+          type: "application/logseq"
+        })
+        const clipboardItemData = {
+          ["text/plain"]: textBlob,
+          ["web application/logseq"]: blocksBlob
+        }
+        if (html) {
+          clipboardItemData["text/html"] = new Blob([html], {
+            type: "text/html"
+          })
+        }
+        data = [new ClipboardItem(clipboardItemData)]
+      }
+      promise_written = navigator.clipboard.write(data)
+    } else {
+      console.debug("Degraded copy without `ClipboardItem` support:", text)
+      promise_written = navigator.clipboard.writeText(text)
+    }
+    promise_written.then(() => {
+      /* success */
+    }).catch(e => {
+      console.log(e, "fail")
     })
+  })
 }
 
 export const toPosixPath = (input) => {
