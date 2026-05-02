@@ -18,6 +18,7 @@
 (rum/defc references-aux
   [page-entity config]
   (let [filters (db-reference/get-filters page-entity)
+        open-blocks-level (state/get-ref-open-blocks-level)
         reference-filter (fn [{:keys [ref-pages-count]}]
                            (shui/button
                             {:title (t :reference/page-filter)
@@ -48,7 +49,10 @@
       :show-items-count? true
       :additional-actions [reference-filter]
       :columns (views/build-columns config [] {})
-      :config config})))
+      :config config
+      :foldable-options (when (and (:linked-refs-section? config)
+                                   (zero? open-blocks-level))
+                          {:default-collapsed? true})})))
 
 (rum/defc references-cp < rum/reactive db-mixins/query
   [entity config]
