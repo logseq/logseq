@@ -3559,7 +3559,9 @@
         page-embed? (:page-embed? config)
         reference? (:reference? config)
         block-id (str "ls-block-" uuid)
-        has-child? (first (:block/_parent (db/entity (:db/id block))))
+        has-child? (let [e (db/entity (:db/id block))]
+                     (or (:block.temp/has-children? e)
+                         (first (:block/_parent e))))
         top? (:top? config)
         original-block (:original-block config)
         attrs (on-drag-and-mouse-attrs block original-block uuid top? block-id *move-to)

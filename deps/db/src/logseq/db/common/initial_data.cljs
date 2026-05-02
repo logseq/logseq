@@ -262,7 +262,8 @@
                                                       (and children? (empty? properties))
                                                       :children
                                                       :else
-                                                      :self)))]
+                                                      :self)
+                            :block.temp/has-children? (some? (first (d/datoms db :avet :block/parent (:db/id block))))))]
         (cond->
          {:block block'}
           children?
