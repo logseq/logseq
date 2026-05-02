@@ -543,7 +543,8 @@
                  (rum/with-key
                    (reference/references page {:sidebar? sidebar?
                                                :journals? journals?
-                                               :refs-count (:refs-count option)})
+                                               :refs-count (:refs-count option)
+                                               :linked-refs-section? true})
                    (str title "-refs"))])
 
               (when-not (or unlinked-refs?
