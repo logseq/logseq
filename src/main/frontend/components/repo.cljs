@@ -236,22 +236,21 @@
          (repos-inner local-graphs))]
 
       (when (and (user-handler/rtc-group?)
-                 (seq remote-graphs)
                  login?)
         [:<>
-         (when (seq own-graphs)
+         [:div
+          [:hr.mt-8]
+          [:div.flex.align-items.justify-between
+           [:h2.text-lg.font-medium.mb-4 (t :graph/remote-graphs)]
            [:div
-            [:hr.mt-8]
-            [:div.flex.align-items.justify-between
-             [:h2.text-lg.font-medium.mb-4 (t :graph/remote-graphs)]
-             [:div
-              (ui/button
-               [:span.flex.items-center (t :ui/refresh)
-                (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
-               :background "gray"
-               :disabled remotes-loading?
-               :on-click (fn [] (rtc-handler/<get-remote-graphs)))]]
-            (repos-inner own-graphs)])
+            (ui/button
+             [:span.flex.items-center (t :ui/refresh)
+              (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
+             :background "gray"
+             :disabled remotes-loading?
+             :on-click (fn [] (rtc-handler/<get-remote-graphs)))]]
+          (when (seq own-graphs)
+            (repos-inner own-graphs))]
 
          (when (seq shared-graphs)
            [:div
