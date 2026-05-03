@@ -11,13 +11,13 @@ const {
 } = require("./graph_user_lib");
 
 function printHelp() {
-  console.log(`Show db-sync usage stats from a remote D1 environment.
+  console.log(`Show db-sync usage stats from a D1 environment.
 
 Usage:
-  node worker/scripts/show_usage_stats.js [--env prod] [--days 7] [--json]
+  node worker/scripts/show_usage_stats.js [--env prod|local] [--days 7] [--json]
 
 Options:
-  --env <env>            Wrangler environment to use. Defaults to "prod".
+  --env <env>            Wrangler environment to use. Defaults to "prod"; use "local" to query the local D1 database.
   --days <n>             Active window size in days. Defaults to 1.
   --database <name>      D1 binding or database name. Defaults to "DB".
   --config <path>        Wrangler config path. Defaults to worker/wrangler.toml.
