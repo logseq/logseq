@@ -3163,11 +3163,11 @@
       (set-blocks-collapsed! [block-id] true))
     (state/set-collapsed-block! block-id true)))
 
-(defn expand-block! [block-id & {:keys [skip-db-collpsing?]}]
+(defn expand-block! [block-id & {:keys [skip-db-collapsing?]}]
   (let [repo (state/get-current-repo)]
     (p/do!
      (db-async/<get-block repo block-id {:include-collapsed-children? true})
-     (when-not (or skip-db-collpsing? (skip-collapsing-in-db?))
+     (when-not (or skip-db-collapsing? (skip-collapsing-in-db?))
        (set-blocks-collapsed! [block-id] false))
      (state/set-collapsed-block! block-id false))))
 
