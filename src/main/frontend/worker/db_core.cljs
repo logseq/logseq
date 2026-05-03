@@ -918,9 +918,9 @@
 (def-thread-api :thread-api/import-db-base64
   [repo base64]
   (when-not (string/blank? repo)
-    (p/let [pool (<get-opfs-pool repo)
-            data (worker-util/base64string-to-unit8array base64)
+    (p/let [data (worker-util/base64string-to-unit8array base64)
             _ (close-db! repo)
+            pool (<get-opfs-pool repo)
             _ (<import-db pool data)
             _ (start-db! repo {:import-type :sqlite-db})]
       nil)))
