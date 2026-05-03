@@ -886,10 +886,14 @@
   (let [^js client-ops-db (worker-state/get-sqlite-conn repo :client-ops)
         ^js pool (get-storage-pool repo)
         db-filename (some-> client-ops-db .-filename)
+        db-file-name (subs repo-path 1)
+        flat-client-ops-path (str "client-ops-" db-file-name)
         resolved-client-ops-path (when pool
                                    (resolve-db-path repo pool (str "client-ops-" repo-path)))
         export-paths [db-filename
                       resolved-client-ops-path
+                      flat-client-ops-path
+                      (str "/" flat-client-ops-path)
                       client-ops-repo-path
                       (str "/" client-ops-repo-path)
                       (str "client-ops" repo-path)
