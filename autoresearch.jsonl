@@ -1,1 +1,0 @@
-{"run":1,"commit":"29f0cb1","metric":0,"metrics":{},"status":"keep","description":"Reverted fix 0ca9fe5e64 and reproduced GC crash on client-ops db. gc-kvs-table! crashes with 'Expected first argument to be a string' because client-ops kvs table is empty (no Datascript schema at addr 0).","timestamp":1777811253591,"segment":0,"confidence":null}
