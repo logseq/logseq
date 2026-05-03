@@ -397,3 +397,25 @@
            (fn []
              (set! state/<invoke-db-worker original-invoke)
              (done)))))))
+
+(deftest browser-import-db-accepts-arraybuffer-payload
+  (async done
+    (let [worker-import-calls (atom [])
+          original-invoke state/<invoke-db-worker
+          payload (.-buffer (.encode (js/TextEncoder.) "sqlite-bytes"))]
+      (set! state/<invoke-db-worker
+            (fn [qkw & args]
+              (swap! worker-import-calls conj [qkw args])
+              (case qkw
+                :thread-api/import-db-base64 (p/resolved nil)
+                (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
+      (-> (protocol/<import-db (browser/->InBrowser) "logseq_db_graph_a" payload)
+          (p/then (fn [_]
+                    (is (= [[:thread-api/import-db-base64 ["logseq_db_graph_a" "c3FsaXRlLWJ5dGVz"]]]
+                           @worker-import-calls))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally
+           (fn []
+             (set! state/<invoke-db-worker original-invoke)
+             (done)))))))
