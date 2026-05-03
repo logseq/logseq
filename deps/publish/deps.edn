@@ -5,7 +5,7 @@
                                          :sha     "5d672bf84ed944414b9f61eeb83808ead7be9127"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
-                                         :sha     "f91fec561ee2c11d6bf323feae365e9033585411"}
+                                         :sha     "3f141af97b70e1f14c65eaa119acd822ebece37e"}
   datascript-transit/datascript-transit {:mvn/version "0.3.0"
                                          :exclusions [datascript/datascript]}
   funcool/promesa                       {:mvn/version "11.0.678"}
