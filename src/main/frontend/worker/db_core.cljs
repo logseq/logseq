@@ -378,15 +378,16 @@
 
 (defn- gc-sqlite-dbs!
   "Gc main db weekly and rtc ops db each time when opening it"
-  [sqlite-db datascript-conn {:keys [full-gc?]}]
+  [sqlite-db client-ops-db datascript-conn {:keys [full-gc?]}]
   (let [last-gc-at (:kv/value (d/entity @datascript-conn :logseq.kv/graph-last-gc-at))]
     (when (or full-gc?
               (nil? last-gc-at)
               (not (number? last-gc-at))
               (> (- (common-util/time-ms) last-gc-at) (* 30 24 3600 1000))) ; 1 month ago
       (log/info :gc-sqlite-dbs "gc current graph")
-      (sqlite-gc/gc-kvs-table! sqlite-db {:full-gc? full-gc?})
-      (.exec sqlite-db "VACUUM")
+      (doseq [db (if @*publishing? [sqlite-db] [sqlite-db client-ops-db])]
+        (sqlite-gc/gc-kvs-table! db {:full-gc? full-gc?})
+        (.exec db "VACUUM"))
       (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
                                        :kv/value (common-util/time-ms)}]
         {:skip-validate-db? true
@@ -479,7 +480,7 @@
                                                    {:initial-db? true})))]
           (when-not sync-download-graph?
             (db-migrate/migrate conn)
-            (gc-sqlite-dbs! db conn {})
+            (gc-sqlite-dbs! db client-ops-db conn {})
             (maybe-run-recycle-gc! conn))
 
           (when initial-tx-report
@@ -1219,10 +1220,10 @@
 
 (def-thread-api :thread-api/gc-graph
   [repo]
-  (let [{:keys [db]} (get @*sqlite-conns repo)
+  (let [{:keys [db client-ops]} (get @*sqlite-conns repo)
         conn (get @*datascript-conns repo)]
     (when (and db conn)
-      (gc-sqlite-dbs! db conn {:full-gc? true})
+      (gc-sqlite-dbs! db client-ops conn {:full-gc? true})
       nil)))
 
 (def-thread-api :thread-api/mobile-logs
