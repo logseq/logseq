@@ -91,6 +91,7 @@
 
    ;; page's original name
    :block/title {:db/index true}
+   :logseq.property.sync/large-title-object {:db/index true}
 
    ;; page's journal day
    :block/journal-day {:db/index true}
