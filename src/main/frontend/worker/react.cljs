@@ -19,6 +19,8 @@
 (s/def ::objects (s/tuple #(= ::objects %) int?))
 ;; get block reactions
 (s/def ::block-reactions (s/tuple #(= ::block-reactions %) int?))
+;; recycle roots list
+(s/def ::recycle-roots (s/tuple #(= ::recycle-roots %)))
 ;; custom react-query
 (s/def ::custom any?)
 
@@ -27,13 +29,21 @@
                                 :refs ::refs
                                 :objects ::objects
                                 :block-reactions ::block-reactions
+                                :recycle-roots ::recycle-roots
                                 :custom ::custom))
 
 (s/def ::affected-keys (s/coll-of ::react-query-keys))
 
+(defn- journal-page?
+  [db eid journal-tag-id]
+  (when (and db eid journal-tag-id)
+    (some (fn [tag]
+            (= journal-tag-id (:db/id tag)))
+          (:block/tags (d/entity db eid)))))
+
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
-  [{:keys [tx-data db-after]}]
+  [{:keys [tx-data db-before db-after]}]
   {:post [(s/valid? ::affected-keys %)]}
   (let [blocks (->> (filter (fn [datom] (contains? #{:block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
@@ -47,16 +57,26 @@
         tags (->> (filter (fn [datom] (= :block/tags (:a datom))) tx-data)
                   (map :v)
                   (distinct))
-        journals? (some (fn [datom]
-                          (and
-                           (= :block/tags (:a datom))
-                           (= (:db/id (d/entity db-after :logseq.class/Journal))
-                              (:v datom))))
-                        tx-data)
+        journal-tag-id (:db/id (d/entity db-after :logseq.class/Journal))
+        touched-eids (->> tx-data (map :e) distinct)
+        journals? (or (some (fn [datom]
+                              (and (= :block/tags (:a datom))
+                                   (= journal-tag-id (:v datom))))
+                            tx-data)
+                      (some (fn [datom]
+                              (= :block/journal-day (:a datom)))
+                            tx-data)
+                      (some (fn [eid]
+                              (or (journal-page? db-before eid journal-tag-id)
+                                  (journal-page? db-after eid journal-tag-id)))
+                            touched-eids))
         reaction-targets (->> (filter (fn [datom]
                                         (= :logseq.property.reaction/target (:a datom))) tx-data)
                               (map :v)
                               (distinct))
+        recycle-roots? (some (fn [datom]
+                               (= :logseq.property/deleted-at (:a datom)))
+                             tx-data)
         other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
                           (map :e))
         blocks (-> (concat blocks other-blocks) distinct)
@@ -99,6 +119,9 @@
                         (fn [tag]
                           (when tag [::objects tag]))
                         tags)
+
+                       (when recycle-roots?
+                         [[::recycle-roots]])
 
                        (when journals?
                          [[::journals]]))]

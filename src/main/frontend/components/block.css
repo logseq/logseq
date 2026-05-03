@@ -158,6 +158,9 @@
 .block-children-container {
   position: relative;
   margin-left: 29px;
+  /* Keep vertical rhythm stable when a sibling becomes a nested child. */
+  padding-top: 0.125rem;
+  margin-bottom: -0.125rem;
 }
 
 .block-children-left-border {
@@ -247,8 +250,13 @@
   }
 }
 
-.ls-page-title .block-control-wrap {
-  height: initial;
+.block-main-container.is-page-title-row > .block-control-wrap {
+  /* Center the page-title control against the page title's line box.
+     Mobile overrides --ls-page-title-size, so this stays aligned cross-platform. */
+  --ls-page-title-line-height: 1.38;
+  --ls-block-control-size: 24px;
+  @apply relative;
+  top: calc((var(--ls-page-title-size, 32px) * var(--ls-page-title-line-height) - var(--ls-block-control-size)) / 2);
 }
 
 .block-title-wrap {
@@ -1116,6 +1124,16 @@ html.is-mac {
   color: var(--rx-gray-09);
 }
 
+.ls-sync-conflict-warning {
+  @apply bg-yellow-rx-05-alpha text-yellow-rx-08 dark:bg-yellow-rx-07-alpha
+  dark:text-yellow-rx-10 border;
+}
+
+.ls-sync-conflict-warning svg {
+  width: 14px;
+  height: 14px;
+}
+
 .ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
   width: 38px;
   height: 38px;
@@ -1224,8 +1242,20 @@ html.is-mac {
   }
 }
 
-.property-value .ls-resize-image {
-  max-width: 35%;
+.property-value {
+  .ls-resize-image {
+    max-width: 35%;
+  }
+
+  .as-plain-image-link {
+    .ls-resize-image {
+      max-width: 80px;
+    }
+
+    .image-resize {
+      display: none;
+    }
+  }
 }
 
 .recent-block {
@@ -1277,6 +1307,24 @@ html.is-mac {
 
 .asset-transfer-shell {
   @apply relative inline-block w-full;
+}
+
+.block-renderer-container {
+    @apply relative;
+
+    .block-renderer-action-bar {
+        @apply top-1 right-1 absolute z-10 flex items-center opacity-0 transition-opacity;
+    }
+
+    .block-renderer-action-btn {
+        @apply m-1 p-0.5 opacity-70 select-none hover:opacity-90 active:opacity-60;
+    }
+
+    &:hover, &:active, &:focus-within {
+        .block-renderer-action-bar {
+            @apply opacity-100;
+        }
+    }
 }
 
 .asset-transfer-placeholder {

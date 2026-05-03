@@ -2,6 +2,7 @@
   "Main ns for Logseq CLI"
   (:require ["fs" :as fs]
             ["path" :as node-path]
+            ["child_process" :as child-process]
             [babashka.cli :as cli]
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]
@@ -58,6 +59,29 @@
       (print-command-help "help" cmd-map)
       (println "Command" (pr-str command) "does not exist"))))
 
+(defn- extract-graph-names
+  "Extract graph names from parsed opts for unlock-graph."
+  [{:keys [graph graphs]}]
+  (cond-> []
+    (string? graph) (conj graph)
+    (sequential? graphs) (into graphs)))
+
+(defn- unlock-graphs!
+  "Stop the db-worker-node server(s) for graph-names so this CLI can open the
+  SQLite database directly"
+  [graph-names]
+  (doseq [graph graph-names]
+    (let [result (.spawnSync child-process
+                             "logseq"
+                             #js ["server" "stop" "-g" graph]
+                             #js {:timeout 5000
+                                  :stdio "pipe"})]
+      (if (= 0 (.-status result))
+        (println "Unlocked graph:" graph)
+        ;; Ignore server not started
+        (when-not (string/includes? (str (.-stdout result)) "server-not-found")
+          (println "Failed to unlock graph:" (pr-str result)))))))
+
 (defn- lazy-load-fn
   "Lazy load fn to speed up start time. After nbb requires ~30 namespaces, start time gets close to 1s.
    Also handles --help on all commands"
@@ -65,13 +89,17 @@
   (fn [& args]
     (if (get-in (first args) [:opts :help])
       (help-command {:opts {:command (-> args first :dispatch first)}})
-      (-> (p/let [_ (require (symbol (namespace fn-sym)))]
-            (apply (resolve fn-sym) args))
-          (p/catch (fn [err]
-                     (if (= :sci/error (:type (ex-data err)))
-                       (nbb.error/print-error-report err)
-                       (js/console.error "Error:" err))
-                     (js/process.exit 1)))))))
+      (do
+        (when (get-in (first args) [:opts :unlock-graph])
+          (let [graphs (extract-graph-names (get (first args) :opts))]
+            (unlock-graphs! graphs)))
+        (-> (p/let [_ (require (symbol (namespace fn-sym)))]
+              (apply (resolve fn-sym) args))
+            (p/catch (fn [err]
+                       (if (= :sci/error (:type (ex-data err)))
+                         (nbb.error/print-error-report err)
+                         (js/console.error "Error:" err))
+                       (js/process.exit 1))))))))
 
 (def ^:private table*
   [{:cmds ["list"] :desc "List local graphs"
@@ -122,10 +150,14 @@
     :spec default-spec
     :fn default-command}])
 
+
 ;; Spec shared with all commands
 (def ^:private shared-spec
   {:help {:alias :h
-          :desc "Print help"}})
+          :desc "Print help"}
+   :unlock-graph {:alias :u
+                  :coerce :boolean
+                  :desc "Unlock graph(s) before running command"}})
 
 (def ^:private table
   (mapv (fn [m] (update m :spec #(merge % shared-spec))) table*))

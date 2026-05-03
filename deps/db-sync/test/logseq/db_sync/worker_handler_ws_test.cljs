@@ -66,6 +66,22 @@
     (is (= "hello" (:type @sent)))
     (is (false? (contains? @sent :checksum)))))
 
+(deftest ws-send-serializes-tx-reject-uuids-as-strings-test
+  (let [raw* (atom nil)
+        ws #js {:readyState 1
+                :send (fn [raw] (reset! raw* raw))}
+        success-tx-id (random-uuid)
+        failed-tx-id (random-uuid)]
+    (ws/send! ws {:type "tx/reject"
+                  :reason "db transact failed"
+                  :t 3
+                  :success-tx-ids [success-tx-id]
+                  :failed-tx-id failed-tx-id})
+    (let [message (-> @raw* js/JSON.parse (js->clj :keywordize-keys true))]
+      (is (= "tx/reject" (:type message)))
+      (is (= [(str success-tx-id)] (:success-tx-ids message)))
+      (is (= (str failed-tx-id) (:failed-tx-id message))))))
+
 (deftest websocket-connection-is-rejected-while-snapshot-upload-is-in-progress-test
   (async done
          (let [accepted (atom [])

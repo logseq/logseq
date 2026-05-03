@@ -173,8 +173,9 @@
 
 (rum/defc alert-inner
   [config]
-  (let [{:keys [id title description content footer deferred open?]} config
-        props (dissoc config :id :title :description :content :footer :deferred :open? :alert?)]
+  (let [{:keys [id title description content footer deferred open? ok-label]} config
+        props (dissoc config :id :title :description :content :footer :deferred :open? :alert? :ok-label)
+        ok-label (or ok-label "OK")]
 
     (hooks/use-effect!
      (fn []
@@ -205,15 +206,18 @@
                                (base/button
                                 {:key "ok"
                                  :on-click #(do (close!) (p/resolve! deferred true))
-                                 :size :sm} "OK")]))))))
+                                 :size :sm} ok-label)]))))))
 
 (rum/defc confirm-inner
   [config]
-  (let [{:keys [id deferred outside-cancel? data-reminder]} config
+  (let [{:keys [id deferred outside-cancel? data-reminder data-reminder-label
+                cancel-label ok-label]} config
         reminder? (boolean (and id data-reminder))
         [ready?, set-ready!] (rum/use-state (not reminder?))
         *ok-ref (rum/use-ref nil)
-        *reminder-ref (rum/use-ref nil)]
+        *reminder-ref (rum/use-ref nil)
+        cancel-label (or cancel-label "Cancel")
+        ok-label (or ok-label "OK")]
 
     (hooks/use-effect!
      (fn []
@@ -245,17 +249,16 @@
               :footer
               [:<>
                [:span.flex.items-center.pt-1
-                (when (and id data-reminder)
+                (when (and id data-reminder data-reminder-label)
                   [:label.flex.items-center.gap-1.text-sm
                    (form/checkbox {:ref *reminder-ref})
-                   [:span.opacity-50 "Don't remind me again"]])]
+                   [:span.opacity-50 data-reminder-label]])]
                [:span.flex.gap-2
                 (base/button
                  {:key "cancel"
                   :on-click #(do (close!) (p/reject! deferred false))
                   :variant :outline
-                  :size :sm}
-                 "Cancel")
+                  :size :sm} cancel-label)
                 (base/button
                  {:key "ok"
                   :ref *ok-ref
@@ -265,7 +268,7 @@
                                   (js/localStorage.setItem (str id) (js/Date.now))))
                               (close!)
                               (p/resolve! deferred true))
-                  :size :sm} "OK")]])))))
+                  :size :sm} ok-label)]])))))
 
 (rum/defc install-modals
   < rum/static

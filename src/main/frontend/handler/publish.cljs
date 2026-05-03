@@ -3,6 +3,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.fs :as fs]
@@ -29,15 +30,15 @@
 
 (defn- publish-endpoint
   []
-  (str config/PUBLISH-API-BASE "/pages"))
+  (str (config/publish-api-base) "/pages"))
 
 (defn- publish-page-endpoint
   [graph-uuid page-uuid]
-  (str config/PUBLISH-API-BASE "/pages/" graph-uuid "/" page-uuid))
+  (str (config/publish-api-base) "/pages/" graph-uuid "/" page-uuid))
 
 (defn- asset-upload-endpoint
   []
-  (str config/PUBLISH-API-BASE "/assets"))
+  (str (config/publish-api-base) "/assets"))
 
 (defn- asset-content-type
   [ext]
@@ -381,10 +382,11 @@
                                   data (bean/->clj json)]
                             (let [short-url (:short_url data)
                                   page-id (str (:block/uuid page))
+                                  api-base (config/publish-api-base)
                                   fallback-url (when (and graph-id page-id)
-                                                 (str config/PUBLISH-API-BASE "/page/" graph-id "/" page-id))
+                                                 (str api-base "/page/" graph-id "/" page-id))
                                   url (or (when short-url
-                                            (str config/PUBLISH-API-BASE short-url))
+                                            (str api-base short-url))
                                           fallback-url)]
                               (when (and url (:db/id page))
                                 (property-handler/set-block-property! (:db/id page)
@@ -393,17 +395,19 @@
                               (when url
                                 (notification/show!
                                  [:div.inline
-                                  [:span "Published to: "]
-                                  [:a {:target "_blank"
-                                       :href url}
-                                   url]]
+                                  (into [:span]
+                                        (i18n/interpolate-rich-text
+                                         (t :publish/published-to)
+                                         [[:a {:target "_blank"
+                                               :href url}
+                                           url]]))]
                                  :success
                                  false))))))
                 (p/catch (fn [error]
                            (js/console.error error)
-                           (notification/show! "Publish failed." :error))))
-            (notification/show! "Publish failed." :error)))
-        (notification/show! "Publish failed: invalid page." :error)))))
+                           (notification/show! (t :publish/publish-error) :error))))
+            (notification/show! (t :publish/publish-error) :error)))
+        (notification/show! (t :publish/invalid-page-error) :error)))))
 
 (defn unpublish-page!
   [page]
@@ -424,12 +428,12 @@
                 (do
                   (property-handler/remove-block-property! (:db/id page)
                                                            :logseq.property.publish/published-url)
-                  (notification/show! "Unpublished." :success false))
+                  (notification/show! (t :publish/unpublished) :success false))
                 (p/let [body (.text resp)]
                   (throw (ex-info "Unpublish failed"
                                   {:status (.-status resp)
                                    :body body})))))
             (p/catch (fn [error]
                        (js/console.error error)
-                       (notification/show! "Unpublish failed." :error))))
-        (notification/show! "Unpublish failed: missing page id." :error)))))
+                       (notification/show! (t :publish/unpublish-error) :error))))
+        (notification/show! (t :publish/unpublish-missing-page-id) :error)))))

@@ -1,26 +1,28 @@
 (ns frontend.date
   "Journal date related utility fns"
   (:require ["chrono-node" :as chrono]
-            [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [cljs-time.local :as tl]
+            [clojure.string :as string]
+            [frontend.context.i18n :as i18n]
             [frontend.state :as state]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.date :as common-date]
             [logseq.common.util.date-time :as date-time-util]))
 
+(def ^:private custom-formatter (tf/formatter "yyyy-MM-dd'T'HH:mm:ssZZ"))
+(def ^:private custom-formatter-2 (tf/formatter "yyyy-MM-dd-HH-mm-ss"))
+(def ^:private mmm-do-yyyy-formatter (tf/formatter "MMM do, yyyy"))
+(def ^:private yyyy-MM-dd-HH-mm-formatter (tf/formatter "yyyy-MM-dd HH:mm"))
+(def ^:private iso-parser (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSS'Z'"))
+
 (defn nld-parse
   [s]
   (when (string? s)
     ((gobj/get chrono "parseDate") s)))
-
-(def custom-formatter (tf/formatter "yyyy-MM-dd'T'HH:mm:ssZZ"))
-
-(def ^:private mmm-do-yyyy-formatter (tf/formatter "MMM do, yyyy"))
-(def ^:private yyyy-MM-dd-HH-mm-formatter (tf/formatter "yyyy-MM-dd HH:mm"))
 
 (defn journal-title-formatters
   []
@@ -34,20 +36,11 @@
                  (tf/formatter formatter-str)
                  custom-formatter) date-time)))
 
-(defn get-locale-string
-  "Accepts a :date-time-no-ms string representation, or a cljs-time date object"
-  [input]
-  (try
-    (->> (cond->> input
-           (string? input) (tf/parse (tf/formatters :date-time-no-ms)))
-         (t/to-default-time-zone)
-         (tf/unparse mmm-do-yyyy-formatter))
-    (catch :default _e
-      nil)))
-
-(def custom-formatter-2 (tf/formatter "yyyy-MM-dd-HH-mm-ss"))
-(defn get-date-time-string-2 []
-  (tf/unparse custom-formatter-2 (tl/local-now)))
+(defn get-date-time-string-2
+  ([]
+   (get-date-time-string-2 (tl/local-now)))
+  ([date-time]
+   (tf/unparse custom-formatter-2 date-time)))
 
 (defn journal-name
   ([]
@@ -69,6 +62,10 @@
   []
   (journal-name))
 
+(defn today-journal-day
+  []
+  (date-time-util/date->int (js/Date.)))
+
 (defn today-name
   []
   (tf/unparse mmm-do-yyyy-formatter (t/today)))
@@ -83,13 +80,7 @@
 
 (defn get-current-time
   []
-  (let [d (js/Date.)]
-    (.toLocaleTimeString
-     d
-     (gobj/get js/window.navigator "language")
-     (bean/->js {:hour "2-digit"
-                 :minute "2-digit"
-                 :hourCycle "h23"}))))
+  (i18n/locale-format-time (js/Date.)))
 
 (defn valid-journal-title?
   [title]
@@ -119,7 +110,6 @@
    yyyy-MM-dd-HH-mm-formatter
    (t/to-default-time-zone (tc/from-long n))))
 
-(def iso-parser (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSS'Z'"))
 (defn parse-iso [string]
   (tf/parse iso-parser string))
 
@@ -168,6 +158,32 @@
    "Next Friday"
    "Next Saturday"
    "Next Sunday"])
+
+(defn- nlp-page->i18n-key
+  "Derives a :date.nlp/* i18n key from an English NLP page string.
+  Example: \"Last Monday\" -> :date.nlp/last-monday"
+  [s]
+  (keyword "date.nlp" (-> s string/lower-case (string/replace " " "-"))))
+
+(defn- with-i18n-titles
+  "Wraps a collection of English display strings, returning a seq of maps with
+  {:block/title <translated-label> :nlp-original-title <english-string>
+   ...extra}.
+  key-fn derives an i18n keyword from each English string.
+  t-fn is the translation function (frontend.context.i18n/t)."
+  [items key-fn t-fn extra]
+  (map (fn [en]
+         (merge extra
+                {:block/title (t-fn (key-fn en))
+                 :nlp-original-title en}))
+       items))
+
+(defn nlp-pages-i18n
+  "Returns nlp-pages as a seq of maps with translated :block/title labels.
+  :nlp-original-title preserves the English string for chrono-node NLP parsing.
+  Accepts optional keyword args merged into every output map."
+  [& {:as extra}]
+  (with-i18n-titles nlp-pages nlp-page->i18n-key i18n/t extra))
 
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))

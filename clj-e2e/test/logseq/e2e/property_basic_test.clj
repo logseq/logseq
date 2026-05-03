@@ -14,7 +14,7 @@
   fixtures/new-logseq-page
   fixtures/validate-graph)
 
-(def ^:private property-types ["Text" "Number" "Date" "DateTime" "Checkbox" "Url" "Node"])
+(def ^:private property-types ["Text" "Number" "Date" "DateTime" "Checkbox" "URL" "Node"])
 
 (defn add-new-properties
   [title-prefix]
@@ -23,7 +23,7 @@
     (let [property-name (str "p-" title-prefix "-" property-type)]
       (w/click (util/get-by-text (str title-prefix "-" property-type) true))
       (k/press "Control+e")
-      (util/input-command "Add new property")
+      (util/input-command "Add property")
       (w/click "input[placeholder]")
       (util/input property-name)
       (w/click (util/get-by-text "New option:" false))
@@ -41,7 +41,7 @@
                               (k/enter)
                               (k/esc))
         "Checkbox" nil
-        "Url" nil
+        "URL" nil
         "Node" (do
                  (w/click (w/get-by-text "Skip choosing tag"))
                  (util/input (str title-prefix "-Node-value"))

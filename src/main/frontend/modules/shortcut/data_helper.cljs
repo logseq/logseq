@@ -386,6 +386,10 @@
      :binding
      (binding-for-display id binding))))
 
+(defn shortcut-desc-by-id
+  [id]
+  (get-shortcut-desc (assoc (shortcut-data-by-id id) :id id)))
+
 (defn shortcuts->commands [handler-id]
   (let [m (get @shortcut-config/*config handler-id)]
     (->> m

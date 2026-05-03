@@ -1,5 +1,6 @@
 (ns frontend.mobile.audio-recorder
   (:require [clojure.string :as string]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
             [lambdaisland.glogi :as log]
             [logseq.shui.ui :as shui]
@@ -20,7 +21,7 @@
                  (log/error :audio/record-start-failed {:error error})
                  (when (microphone-permission-denied-error? error)
                    (notification/show!
-                    "Microphone access is denied. Enable it in Settings > Logseq."
+                    (t :mobile/microphone-access-denied)
                     :warning)
                    (shui/popup-hide!))
                  nil))))

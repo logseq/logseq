@@ -19,7 +19,7 @@
                  (run "rm -rf coverage"))}
 
   install {:doc "Install dependencies"
-           :task (run "yarn install")}
+           :task (run "pnpm install")}
 
   build-jar {:doc "Build jar file"
              :task (shell "clojure -T:build jar")}

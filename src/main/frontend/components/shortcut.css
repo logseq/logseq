@@ -436,6 +436,13 @@ button.shortcut-feedback-action {
   }
 }
 
+.shortcut-feedback-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .shortcut-feedback-action {
   @apply cursor-pointer font-medium whitespace-nowrap;
   color: var(--rx-red-11, #dc2626);
@@ -503,7 +510,8 @@ button.shortcut-feedback-action {
 }
 
 .shortcut-toolbar-hint {
-  @apply ml-3;
+  @apply ml-3 inline-flex items-center;
+  gap: 6px;
   color: var(--lx-gray-11, var(--rx-gray-11));
 }
 

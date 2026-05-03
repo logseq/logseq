@@ -7,6 +7,7 @@
             [frontend.db :as db]
             [frontend.flows :as flows]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.context.i18n :refer [locale-format-date t]]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -102,7 +103,7 @@
      (when (seq downloading)
        [:details
         [:summary
-         (util/format "Downloading assets (%s)" (count downloading))]
+         (t :sync/assets-downloading-count (count downloading))]
         [:div.flex.flex-col.gap-1.text-sm
          (for [{:keys [block percent]} downloading]
            [:div.flex.flex-row.gap-1.items-center
@@ -111,7 +112,7 @@
      (when (seq uploading)
        [:details
         [:summary
-         (util/format "Uploading assets (%s)" (count uploading))]
+         (t :sync/assets-uploading-count (count uploading))]
         [:div.flex.flex-col.gap-1.text-sm
          (for [{:keys [block percent]} uploading]
            [:div.flex.flex-row.gap-1.items-center
@@ -122,22 +123,22 @@
   []
   (let [online? (hooks/use-flow-state flows/network-online-event-flow)
         [expand-debug? set-expand-debug!] (hooks/use-state false)
+        show-checksums? (or config/dev? util/node-test?)
         {:keys [graph-uuid local-tx remote-tx local-checksum remote-checksum rtc-state
                 download-logs upload-logs misc-logs pending-local-ops pending-server-ops]}
         (hooks/use-flow-state (m/watch *detail-info))]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
-     [:div.font-medium.mb-2 (if online? "Online" "Offline")]
-     [:div [:span.font-medium.mr-1 (or pending-local-ops 0)] "pending local changes"]
+     [:div.font-medium.mb-2 (t (if online? :sync/online :sync/offline))]
+     [:div [:span.font-medium.mr-1 (or pending-local-ops 0)] (t :sync/pending-local-changes)]
      ;; FIXME: pending-server-ops
-     [:div [:span.font-medium.mr-1 (or pending-server-ops 0)] "pending server changes"]
+     [:div [:span.font-medium.mr-1 (or pending-server-ops 0)] (t :sync/pending-server-changes)]
      (assets-progressing)
      ;; FIXME: What's the type for downloaded log?
      (when-let [latest-log (some (fn [l] (when (contains? #{:rtc.log/push-local-update} (:type l)) l)) misc-logs)]
        (when-let [time (:created-at latest-log)]
-         [:div.text-sm "Last synced time: "
-          (.toLocaleString time)]))
+         [:div.text-sm (t :sync/last-synced-time-label (locale-format-date time))]))
      [:a.fade-link.text-sm {:on-click #(set-expand-debug! (not expand-debug?))}
-      "More debug info"]
+      (t :sync/more-debug-info)]
      (when expand-debug?
        [:div.rtc-info-debug
         [:pre.select-text
@@ -148,8 +149,8 @@
                graph-uuid (assoc :graph-uuid graph-uuid)
                local-tx (assoc :local-tx local-tx)
                remote-tx (assoc :remote-tx remote-tx)
-               local-checksum (assoc :local-checksum local-checksum)
-               remote-checksum (assoc :remote-checksum remote-checksum)
+               (and show-checksums? local-checksum) (assoc :local-checksum local-checksum)
+               (and show-checksums? remote-checksum) (assoc :remote-checksum remote-checksum)
                rtc-state (assoc :rtc-state rtc-state))
              pprint/pprint
              with-out-str)]])
@@ -160,7 +161,7 @@
                       :on-click (fn []
                                   (rtc-handler/<rtc-start! (state/get-current-repo)
                                                            {:stop-before-start? true}))}
-                     "Start sync")])]))
+                     (t :sync/start-sync))])]))
 
 (rum/defc indicator
   []
@@ -259,7 +260,7 @@
       :on-click #(shui/popup-show! (.-target %)
                                    (downloading-logs)
                                    {:align "end"})}
-     "Downloading...")))
+     (t :sync/downloading))))
 
 (def ^:private upload?-flow
   (->> rtc-flows/rtc-upload-log-flow
@@ -284,4 +285,4 @@
       :on-click #(shui/popup-show! (.-target %)
                                    (uploading-logs)
                                    {:align "end"})}
-     "Uploading...")))
+     (t :sync/uploading))))

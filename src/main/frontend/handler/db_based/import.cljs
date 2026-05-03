@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.fs :as fs]
             [frontend.handler.notification :as notification]
@@ -130,7 +131,7 @@
                                                             :current-idx 0
                                                             :current-page "Assets"}))]
         (if-not entry
-          (notification/show! "Zip missing db.sqlite. Please check the archive structure." :error)
+          (notification/show! (t :import/zip-missing-db-sqlite) :error)
           (do
             (shui/dialog-close!)
             (p/let [sqlite-buffer (.async ^js (:entry entry) "arraybuffer")]
@@ -150,16 +151,16 @@
                                                                                       :current-idx current
                                                                                       :current-page "Assets"})))})]
                    (when (pos? copied)
-                     (notification/show! (str "Imported " copied " assets.") :success))
+                     (notification/show! (t :import/assets-imported copied) :success))
                    (when (seq failed)
                      (notification/show!
-                      (str "Skipped " (count failed) " assets. See console for details.")
+                      (t :import/assets-skipped (count failed))
                       :warning false)
                      (js/console.warn "Zip import skipped assets:" (clj->js failed)))
                    (when (and (pos? asset-total)
                               (not= asset-total (+ copied (count failed))))
                      (notification/show!
-                      (str "Imported " copied " of " asset-total " assets. See console for details.")
+                      (t :import/assets-import-partial copied asset-total)
                       :warning false))
                    (state/set-state! :graph/importing nil)
                    (state/set-state! :graph/importing-state nil)
@@ -169,7 +170,7 @@
          (js/console.error e)
          (state/set-state! :graph/importing nil)
          (state/set-state! :graph/importing-state nil)
-         (notification/show! (str "Zip import failed: " (.-message e)) :error)))))
+         (notification/show! (t :import/zip-import-error (.-message e)) :error)))))
 
 (defn import-from-debug-transit!
   [bare-graph-name raw finished-ok-handler]
@@ -197,7 +198,7 @@
                    (edn/read-string file-body)
                    (catch :default e
                      (js/console.error e)
-                     (notification/show! "The given EDN file is not valid EDN. Please fix and try again."
+                     (notification/show! (t :import/invalid-edn-file)
                                          :error)
                      (finished-error-handler)
                      nil))]
@@ -218,7 +219,7 @@
           (p/catch
            (fn [e]
              (js/console.error e)
-             (notification/show! (str "Unexpected error: " (.-message e))
+             (notification/show! (t :import/unexpected-error (.-message e))
                                  :error)
              (finished-error-handler)))))))
 
@@ -229,12 +230,12 @@
                 (if-let [eid (:block-id (first (state/get-editor-args)))]
                   (let [ent (db/entity [:block/uuid eid])]
                     (if-not (:block/page ent)
-                      {:error "Can't import block into a non-block entity. Please import block elsewhere."}
+                      {:error (t :import/cannot-import-block-into-non-block-entity)}
                       (merge (select-keys ent [:block/uuid])
                              {:block/page (select-keys (:block/page ent) [:block/uuid])})))
-                  (notification/show! "No block found" :warning)))]
+                  (notification/show! (t :block/not-found-warning) :warning)))]
     (cond (or (= ::invalid-import export-map) (not (map? export-map)))
-          (notification/show! "The submitted EDN data is invalid! Please fix and try again." :warning)
+          (notification/show! (t :import/submitted-edn-invalid) :warning)
           (:error block)
           (do
             (notification/show! (:error block) :error)
@@ -249,7 +250,7 @@
             (ui-handler/re-render-root!)
             (if error
               (notification/show! error :error)
-              (notification/show! "Import successful!" :success))))))
+              (notification/show! (t :import/successful) :success))))))
 
 (defn ^:export import-edn-data-dialog
   "Displays dialog which allows users to paste and import sqlite.build EDN Data"
@@ -257,7 +258,7 @@
   (let [import-inputs (atom {:import-data "" :import-block? false})]
     (shui/dialog-open!
      [:div
-      [:label.flex.my-2.text-lg "Import EDN Data"]
+      [:label.flex.my-2.text-lg (t :command.misc/import-edn-data)]
       #_[:label.block.flex.items-center.py-3
          (shui/checkbox {:on-checked-change #(swap! import-inputs update :import-block? not)})
          [:small.pl-2 (str "Import into current block")]]
@@ -268,4 +269,4 @@
                       :on-change (fn [^js e] (swap! import-inputs assoc :import-data (util/evalue e)))})
       (shui/button {:class "mt-3"
                     :on-click (partial import-edn-data-from-form import-inputs)}
-                   "Import")])))
+                   (t :import/title))])))

@@ -20,11 +20,7 @@
   [model callback]
   (let [method (aget api-proxy "ready")
         args [model callback]]
-    (-> (call-method api-proxy method args)
-        (.then (fn []
-                 (js/logseq._execCallableAPIAsync
-                  "setSDKMetadata"
-                  #js {:runtime "cljs"}))))))
+    (call-method api-proxy method args)))
 
 (defn ready
   ([]

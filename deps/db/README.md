@@ -32,9 +32,9 @@ file](/.github/workflows/deps-db.yml) for linting examples.
 
 ### Setup
 
-To run linters and tests, you'll want to install yarn dependencies once:
+To run linters and tests, you'll want to install pnpm dependencies once:
 ```
-yarn install
+pnpm install
 ```
 
 This step is not needed if you're just running the application.
@@ -47,11 +47,11 @@ usage:
 
 ```
 # Run all tests
-$ yarn test
+$ pnpm test
 # List available options
-$ yarn test -H
+$ pnpm test -H
 # Run tests with :focus metadata flag
-$ yarn test -i focus
+$ pnpm test -i focus
 ```
 ### Datalog linting
 

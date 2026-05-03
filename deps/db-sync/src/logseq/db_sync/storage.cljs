@@ -1,13 +1,14 @@
 (ns logseq.db-sync.storage
-  (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
-            [datascript.core :as d]
-            [datascript.storage :refer [IStorage]]
-            [logseq.db-sync.checksum :as sync-checksum]
-            [logseq.db-sync.common :as common]
-            [logseq.db.common.normalize :as db-normalize]
-            [logseq.db.common.sqlite :as common-sqlite]
-            [logseq.db.frontend.schema :as db-schema]))
+  (:require
+   [cljs-bean.core :as bean]
+   [clojure.string :as string]
+   [datascript.core :as d]
+   [datascript.storage :refer [IStorage]]
+   [logseq.db-sync.checksum :as sync-checksum]
+   [logseq.db-sync.common :as common]
+   [logseq.db.common.normalize :as db-normalize]
+   [logseq.db.common.sqlite :as common-sqlite]
+   [logseq.db.frontend.schema :as db-schema]))
 
 (def ^:private tx-log-outliner-op-migration-sql
   "alter table tx_log add column outliner_op TEXT")
@@ -145,17 +146,40 @@
 
 (defn- append-tx-for-tx-report
   [sql {:keys [db-after db-before tx-data tx-meta] :as tx-report}]
-  (let [created-at (common/now-ms)
-        normalized-data (->> tx-data
-                             (db-normalize/normalize-tx-data db-after db-before))
-        ;; _ (prn :debug :tx-data tx-data)
-        ;; _ (prn :debug :normalized-data normalized-data)
-        tx-str (common/write-transit normalized-data)
-        new-t (next-t! sql)
-        prev-checksum (get-checksum sql)
+  (let [prev-checksum (get-checksum sql)
         checksum (sync-checksum/update-checksum prev-checksum tx-report)]
+    ;; (let [full-checksum (sync-checksum/recompute-checksum db-after)
+    ;;       prev-full-checksum (sync-checksum/recompute-checksum db-before)]
+    ;;   (when (and prev-checksum
+    ;;              (not= checksum full-checksum))
+    ;;     (prn :debug :before-checksum-error {:prev-tx (get-t sql)
+    ;;                                         :prev-checksum prev-checksum
+    ;;                                         :prev-full-checksum prev-full-checksum
+    ;;                                         :new-checksum checksum
+    ;;                                         :recomputed-after-checksum full-checksum
+    ;;                                         :tx-meta tx-meta
+    ;;                                         :db-before (ldb/write-transit-str db-before)
+    ;;                                         :tx-data (ldb/write-transit-str tx-data)})
+    ;;     (when (not= prev-checksum prev-full-checksum)
+    ;;       (prn :debug :prev-checksum-not-match {:prev-checksum prev-checksum
+    ;;                                             :prev-full-checksum prev-full-checksum}))
+    ;;     (throw (ex-info "server checksum doesn't match"
+    ;;                     {:prev-checksum prev-checksum
+    ;;                      :recomputed-after-checksum full-checksum
+    ;;                      :tx-meta tx-meta
+    ;;                      :tx-data tx-data
+    ;;                      :prev-tx (get-t sql)}))))
+
     (set-checksum! sql checksum)
-    (append-tx! sql new-t tx-str created-at (:outliner-op tx-meta))))
+    (when-not (empty? tx-data)
+      (let [created-at (common/now-ms)
+            normalized-data (->> tx-data
+                                 (db-normalize/normalize-tx-data db-after db-before))
+            ;; _ (prn :debug :tx-data tx-data)
+            ;; _ (prn :debug :normalized-data normalized-data)
+            tx-str (common/write-transit normalized-data)
+            new-t (next-t! sql)]
+        (append-tx! sql new-t tx-str created-at (:outliner-op tx-meta))))))
 
 (defn- listen-db-updates!
   [sql conn]

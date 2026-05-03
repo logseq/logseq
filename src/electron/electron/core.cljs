@@ -1,6 +1,7 @@
 (ns electron.core
   (:require ["/electron/utils" :as js-utils]
             ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
+            ["fs-extra" :as fs]
 
             ["os" :as os]
             ["path" :as node-path]
@@ -9,11 +10,13 @@
             [electron.db :as db]
             [electron.exceptions :as exceptions]
             [electron.handler :as handler]
+            [electron.i18n :as i18n :refer [t]]
             [electron.logger :as logger]
+            [electron.release-warning :as release-warning]
             [electron.server :as server]
             [electron.updater :refer [init-updater] :as updater]
             [electron.url :refer [logseq-url-handler]]
-            [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
+            [electron.utils :refer [*win mac? dev? get-win-from-sender
                                     decode-protected-assets-schema-path send-to-renderer]
              :as utils]
             [electron.window :as win]
@@ -32,15 +35,12 @@
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
 (defonce *quit-dirty? (volatile! true))
-
-;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
-(when (js/require "electron-squirrel-startup") (.quit app))
+(defonce CLI_LAUNCHER_MARKER "logseq-cli-managed")
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
-  (when-not linux?
-    (init-updater {:repo   "logseq/logseq"
-                   :win    win})))
+  (init-updater {:repo   "logseq/logseq"
+                 :win    win}))
 
 (defn open-url-handler
   "win - the main window instance (first renderer process)
@@ -177,7 +177,7 @@
   (let [about-fn (fn []
                    (.showMessageBox dialog (clj->js {:title "Logseq"
                                                      :icon (node-path/join js/__dirname "icons/logseq.png")
-                                                     :message (str "Version " updater/electron-version)})))
+                                                     :message (t :electron/version updater/electron-version)})))
         template (if mac?
                    [{:label (.-name app)
                      :submenu [{:role "about"}
@@ -192,7 +192,7 @@
                    [])
         template (conj template
                        {:role "fileMenu"
-                        :submenu [{:label "New Window"
+                        :submenu [{:label (t :electron/new-window)
                                    :click (fn [] (handler/open-new-window! nil))
                                    :accelerator (if mac?
                                                   "CommandOrControl+N"
@@ -215,13 +215,13 @@
         template (conj template
                        (if mac?
                          {:role "help"
-                          :submenu [{:label "Official Documentation"
+                          :submenu [{:label (t :electron/official-docs)
                                      :click #(.openExternal shell "https://docs.logseq.com/")}]}
                          {:role "help"
-                          :submenu [{:label "Official Documentation"
+                          :submenu [{:label (t :electron/official-docs)
                                      :click #(.openExternal shell "https://docs.logseq.com/")}
                                     {:role "about"
-                                     :label "About Logseq"
+                                     :label (t :electron/about)
                                      :click about-fn}]}))
         ;; Enable Cmd/Ctrl+= Zoom In
         template (conj template
@@ -251,6 +251,136 @@
     (when-let [url (find-deeplink-url (rest (js->clj (.-argv js/process))))]
       (open-url-handler win url))))
 
+(defn- maybe-warn-wrong-release!
+  []
+  (when (release-warning/x64-on-apple-silicon?
+         {:platform (.-platform js/process)
+          :arch (.-arch js/process)
+          :running-under-arm64-translation? (boolean (.-runningUnderARM64Translation app))})
+    (-> (.showMessageBox
+         dialog
+         (clj->js (assoc (release-warning/warning-dialog-options t) :title "Logseq")))
+        (.then
+         (fn [result]
+           (when-let [url (release-warning/selected-release-url (.-response result))]
+             (.openExternal shell url))))
+        (.catch
+         (fn [error]
+           (logger/warn :electron/wrong-release-warning-failed error))))))
+
+(defn- path-separator
+  []
+  (if utils/win32? ";" ":"))
+
+(defn- split-path-env
+  [path-env]
+  (->> (string/split (or path-env "") (re-pattern (path-separator)))
+       (remove string/blank?)
+       distinct))
+
+(defn- writable-dir?
+  [dir]
+  (try
+    (when (and (string? dir)
+               (fs/existsSync dir)
+               (.isDirectory (fs/statSync dir)))
+      (fs/accessSync dir (aget fs "constants" "W_OK"))
+      true)
+    (catch :default _
+      false)))
+
+(defn- find-first-writable-dir
+  [dirs]
+  (some #(when (writable-dir? %) %) dirs))
+
+(defn- ensure-dir!
+  [dir]
+  (when (and (string? dir) (not (fs/existsSync dir)))
+    (fs/mkdirSync dir #js {:recursive true})))
+
+(defn- preferred-unix-cli-dir
+  []
+  (let [path-dirs (split-path-env (.-PATH js/process.env))
+        user-bin (node-path/join (.homedir os) ".local" "bin")]
+    (or (find-first-writable-dir path-dirs)
+        (do
+          (ensure-dir! user-bin)
+          (when (writable-dir? user-bin)
+            user-bin)))))
+
+(defn- preferred-win-cli-dir
+  []
+  (let [path-env (or (.-PATH js/process.env) (.-Path js/process.env))
+        path-dirs (split-path-env path-env)
+        local-appdata (.-LOCALAPPDATA js/process.env)
+        windows-apps-dir (when local-appdata
+                           (node-path/join local-appdata "Microsoft" "WindowsApps"))]
+    (or (when windows-apps-dir
+          (ensure-dir! windows-apps-dir)
+          (when (writable-dir? windows-apps-dir)
+            windows-apps-dir))
+        (find-first-writable-dir path-dirs))))
+
+(defn- cli-script-path
+  []
+  (if (.-isPackaged ^js app)
+    (node-path/join js/process.resourcesPath "app.asar" "js" "logseq-cli.js")
+    (node-path/join js/__dirname "logseq-cli.js")))
+
+(defn- render-unix-cli-launcher
+  [exe-path cli-path]
+  (str "#!/usr/bin/env sh\n"
+       "# " CLI_LAUNCHER_MARKER "\n"
+       "set -eu\n"
+       "ELECTRON_RUN_AS_NODE=1 exec \"" exe-path "\" \"" cli-path "\" \"$@\"\n"))
+
+(defn- render-win-cli-launcher
+  [exe-path cli-path]
+  (str "@echo off\r\n"
+       "REM " CLI_LAUNCHER_MARKER "\r\n"
+       "set ELECTRON_RUN_AS_NODE=1\r\n"
+       "\"" exe-path "\" \"" cli-path "\" %*\r\n"))
+
+(defn- write-cli-launcher!
+  [path content windows?]
+  (let [should-write? (if (fs/existsSync path)
+                        (let [existing (.readFileSync fs path "utf8")]
+                          (and (string/includes? existing CLI_LAUNCHER_MARKER)
+                               (not= existing content)))
+                        true)]
+    (when should-write?
+      (.writeFileSync fs path content "utf8")
+      (when-not windows?
+        (fs/chmodSync path "755"))
+      true)))
+
+(defn- install-cli-launcher!
+  []
+  (try
+    (let [cli-path (cli-script-path)
+          cli-dir (if utils/win32?
+                    (preferred-win-cli-dir)
+                    (preferred-unix-cli-dir))]
+      (cond
+        (not (fs/existsSync cli-path))
+        (logger/warn :cli/install (str "Missing CLI script at " cli-path ", skip installing launcher"))
+
+        (nil? cli-dir)
+        (logger/warn :cli/install "No writable PATH directory found; skip installing logseq launcher")
+
+        :else
+        (let [target-path (if utils/win32?
+                            (node-path/join cli-dir "logseq.cmd")
+                            (node-path/join cli-dir "logseq"))
+              exe-path (.getPath app "exe")
+              content (if utils/win32?
+                        (render-win-cli-launcher exe-path cli-path)
+                        (render-unix-cli-launcher exe-path cli-path))]
+          (when (write-cli-launcher! target-path content utils/win32?)
+            (logger/info :cli/install (str "Installed launcher at " target-path))))))
+    (catch :default e
+      (logger/warn :cli/install "Failed to install logseq launcher" e))))
+
 (defn- on-app-ready!
   [^js app']
   (.on app' "ready"
@@ -271,9 +401,11 @@
            (js-utils/disableXFrameOptions win)
 
            (db/ensure-graphs-dir!)
+           (install-cli-launcher!)
 
            ;; Windows/Linux: handle deeplink URL passed on first launch via argv
            (handle-initial-deeplink! win)
+           (maybe-warn-wrong-release!)
 
            (vreset! *setup-fn
                     (fn []
@@ -314,7 +446,8 @@
                                     :else
                                     nil)))))
            (.on app' "before-quit" (fn [_e]
-                                     (reset! win/*quitting? true)))
+                                     (reset! win/*quitting? true)
+                                     (handler/stop-all-db-workers!)))
 
            (.on app' "activate" #(when @*win (.show win)))))))
 
@@ -338,6 +471,7 @@
 
       (register-default-protocol-client! app)
       (set-app-menu!)
+      (i18n/on-locale-change! set-app-menu!)
       (setup-deeplink!)
 
       (.on app "second-instance"
@@ -350,6 +484,7 @@
 
       (.on app "window-all-closed" (fn []
                                      (logger/debug "window-all-closed" "Quitting...")
+                                     (handler/stop-all-db-workers!)
                                      (.quit app)))
       (on-app-ready! app))))
 

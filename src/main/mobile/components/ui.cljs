@@ -1,6 +1,7 @@
 (ns mobile.components.ui
   "Mobile ui"
-  (:require [frontend.handler.notification :as notification]
+  (:require [frontend.context.i18n :refer [t]]
+            [frontend.handler.notification :as notification]
             [frontend.rum :as r]
             [frontend.state :as state]
             [logseq.shui.ui :as shui]
@@ -19,7 +20,7 @@
      {:size :sm
       :on-click (fn []
                   (notification/clear-all!))}
-     "clear all")]])
+      (t :notification/clear-all))]])
 
 (rum/defc notification-content
   [state content status uid]

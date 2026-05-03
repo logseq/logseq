@@ -1,0 +1,1197 @@
+(ns logseq.cli.completion-generator
+  "Pure function: (generate-completions shell table) → string.
+   Walks the CLI command table and emits zsh or bash completion scripts."
+  (:require [clojure.string :as string]))
+
+;; ---------------------------------------------------------------------------
+;; Table introspection utilities
+;; ---------------------------------------------------------------------------
+
+(defn extract-groups
+  "Given a table of entries, group by the first element of :cmds.
+   Returns a map of {group-name [entries...]}."
+  [table]
+  (reduce (fn [acc entry]
+            (let [cmds (:cmds entry)
+                  group (first cmds)]
+              (update acc group (fnil conj []) entry)))
+          {}
+          table))
+
+(defn leaf-commands
+  "Return entries that are leaf commands (single-element :cmds)."
+  [table]
+  (let [groups (extract-groups table)]
+    (->> groups
+         (filter (fn [[_ entries]]
+                   (and (= 1 (count entries))
+                        (= 1 (count (:cmds (first entries)))))))
+         (mapv (fn [[_ entries]] (first entries))))))
+
+(defn group-commands
+  "Return group names that have subcommands (multi-element :cmds entries)."
+  [table]
+  (let [groups (extract-groups table)]
+    (->> groups
+         (filter (fn [[_ entries]]
+                   (or (> (count entries) 1)
+                       (> (count (:cmds (first entries))) 1))))
+         (mapv first))))
+
+(defn spec->token
+  "Convert a single spec entry [key spec-map] to a token descriptor.
+   Returns {:key k :type t ...} with type being one of:
+   :flag, :enum, :multi, :dynamic, :file, :dir, :free"
+  [[k spec-map]]
+  (let [alias (:alias spec-map)
+        desc (or (:desc spec-map) "")
+        coerce (:coerce spec-map)
+        validate (:validate spec-map)
+        values (if (set? validate) validate (:values spec-map))
+        multiple-values (:multiple-values spec-map)
+        complete (:complete spec-map)]
+    (cond-> {:key k
+             :desc desc}
+      alias (assoc :alias alias)
+      (= coerce :boolean) (assoc :type :flag)
+      (and (not= coerce :boolean) (seq multiple-values)) (assoc :type :multi :values (sort multiple-values))
+      (and (not= coerce :boolean) (nil? multiple-values) (seq values)) (assoc :type :enum :values (sort values))
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :graphs)) (assoc :type :dynamic :complete :graphs)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :pages)) (assoc :type :dynamic :complete :pages)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :tags)) (assoc :type :dynamic :complete :tags)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :properties)) (assoc :type :dynamic :complete :properties)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :queries)) (assoc :type :dynamic :complete :queries)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :file)) (assoc :type :file)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :dir)) (assoc :type :dir)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (nil? complete)) (assoc :type :free))))
+
+(defn spec->tokens
+  "Convert a full spec map to a vector of token descriptors."
+  [spec]
+  (mapv spec->token spec))
+
+;; ---------------------------------------------------------------------------
+;; Value-quoting helpers (handle whitespace in :values entries)
+;; ---------------------------------------------------------------------------
+
+(defn- contains-whitespace?
+  "Return true if any value in `values` contains whitespace."
+  [values]
+  (boolean (some #(re-find #"\s" %) values)))
+
+(defn- zsh-paren-value
+  "Backslash-escape whitespace in `v` so it stays a single token inside a zsh
+   `_arguments` parenthesized action like `(item1 item2 ...)`. Values without
+   whitespace are returned unchanged."
+  [v]
+  (string/replace v #"\s" #(str "\\" %)))
+
+(defn- zsh-shell-value
+  "Wrap `v` in double quotes if it contains whitespace, so the value survives
+   shell word-splitting inside a zsh `{shell-cmd}` action. Values without
+   whitespace are returned unchanged."
+  [v]
+  (if (re-find #"\s" v)
+    (str "\"" v "\"")
+    v))
+
+(defn- bash-quote-value
+  "Single-quote `v` for bash if it contains whitespace, escaping any embedded
+   single quotes via the standard `'\\''` idiom. Values without whitespace are
+   returned unchanged."
+  [v]
+  (if (re-find #"\s" v)
+    (str "'" (string/replace v "'" "'\\''") "'")
+    v))
+
+;; ---------------------------------------------------------------------------
+;; Zsh dynamic helpers (verbatim preamble)
+;; ---------------------------------------------------------------------------
+
+(def ^:private ^:large-vars/cleanup-todo zsh-preamble
+  "#compdef logseq
+# Auto-generated by `logseq completion zsh` — do not edit manually.
+
+# --- dynamic helpers ---
+
+_logseq_json_names() {
+  # Navigate a JSON path and print leaf strings.
+  # Usage: _logseq_json_names key1 key2 ... keyN
+  # Each key navigates into the JSON object. The final array is printed:
+  #   - strings are printed directly
+  #   - objects have the last key extracted as a field
+  python3 -c \"
+import sys, json
+keys = sys.argv[1:]
+try:
+    data = json.load(sys.stdin)
+    for key in keys:
+        if isinstance(data, dict):
+            data = data.get(key, [])
+        elif isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    v = item.get(key)
+                    if isinstance(v, str) and v:
+                        print(v)
+            sys.exit(0)
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, str) and item:
+                print(item)
+except Exception:
+    pass
+\" \"$@\" 2>/dev/null
+}
+
+_logseq_current_graph() {
+  local i w
+  for (( i = 1; i < ${#words[@]}; i++ )); do
+    w=\"${words[i]}\"
+    if [[ \"$w\" == '--graph' || \"$w\" == '-g' ]] && [[ -n \"${words[i+1]}\" ]]; then
+      print -r -- \"${words[i+1]}\"
+      return
+    elif [[ \"$w\" == --graph=* ]]; then
+      print -r -- \"${w#--graph=}\"
+      return
+    fi
+  done
+  # Fall back to the current graph from 'logseq graph list' (marked with '* ')
+  logseq graph list 2>/dev/null | sed -n 's/^[*] //p'
+}
+
+_logseq_graphs() {
+  local -a graphs
+  graphs=( ${(f)\"$(logseq graph list --output json 2>/dev/null | _logseq_json_names data graphs)\"} )
+  compadd -a graphs
+}
+
+_logseq_pages() {
+  local graph
+  graph=$(_logseq_current_graph)
+  if [[ -n \"$graph\" ]]; then
+    local -a pages
+    pages=( ${(f)\"$(logseq list page --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names data items block/title)\"} )
+    compadd -a pages
+  fi
+}
+
+_logseq_tags() {
+  local graph
+  graph=$(_logseq_current_graph)
+  if [[ -n \"$graph\" ]]; then
+    local -a tags
+    tags=( ${(f)\"$(logseq list tag --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names data items block/title)\"} )
+    compadd -a tags
+  fi
+}
+
+_logseq_properties() {
+  local graph
+  graph=$(_logseq_current_graph)
+  if [[ -n \"$graph\" ]]; then
+    local -a properties
+    properties=( ${(f)\"$(logseq list property --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names data items block/title)\"} )
+    compadd -a properties
+  fi
+}
+
+_logseq_queries() {
+  local graph
+  graph=$(_logseq_current_graph)
+  if [[ -n \"$graph\" ]]; then
+    local -a queries
+    queries=( ${(f)\"$(logseq query list --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names data queries name)\"} )
+    compadd -a queries
+  fi
+}
+
+_logseq_multi_values() {
+  # Complete comma-delimited lists. Usage: _logseq_multi_values val1 val2 ...
+  local -a all_values=(\"$@\")
+  local cur=\"${PREFIX}${SUFFIX}\"
+  local prefix='' remaining=\"$cur\"
+
+  # Split on last comma to get prefix and partial token
+  if [[ \"$cur\" == *,* ]]; then
+    prefix=\"${cur%,*},\"
+    remaining=\"${cur##*,}\"
+  fi
+
+  # Filter out already-selected values
+  local -a already=(${(s:,:)cur})
+  local -a candidates=()
+  for v in \"${all_values[@]}\"; do
+    if [[ ! \" ${already[*]} \" == *\" $v \"* ]]; then
+      candidates+=(\"$v\")
+    fi
+  done
+
+  compadd -p \"$prefix\" -S ',' -- \"${candidates[@]}\"
+}
+")
+
+;; ---------------------------------------------------------------------------
+;; Zsh generation
+;; ---------------------------------------------------------------------------
+
+(defn- zsh-option-name
+  [k]
+  (str "--" (name k)))
+
+(defn- zsh-escape-desc
+  [desc]
+  (-> desc
+      (string/replace "[" "\\[")
+      (string/replace "]" "\\]")
+      (string/replace "'" "'\\''")))
+
+(defn zsh-token-for
+  "Generate zsh _arguments token strings for a spec token descriptor.
+   Returns a vector of one or two strings. Aliased value-taking options produce
+   separate long (--opt=) and short (-o+) specs so that -o=val is not suggested
+   (babashka.cli does not support = with short aliases).
+   no-prefix-keys: set of keys that get --no-<option> completions."
+  [{:keys [key type alias desc values complete]} no-prefix-keys]
+  (let [long-opt (zsh-option-name key)
+        desc* (zsh-escape-desc desc)
+        alias-short (when alias (str "-" (name alias)))
+        ;; Exclusion list shared by aliased value-option pairs
+        excl (when alias (str "(" alias-short " " long-opt ")"))]
+    (case type
+      :flag
+      (let [no-prefix? (contains? no-prefix-keys key)
+            no-opt (str "--no-" (name key))]
+        (if alias
+          [(str "'" "(" alias-short " " long-opt (when no-prefix? (str " " no-opt)) ")" "'"
+                "{" alias-short "," long-opt "}"
+                "'[" desc* "]'")]
+          [(if no-prefix?
+             (str "'(" long-opt " " no-opt ")" long-opt "[" desc* "]'")
+             (str "'" long-opt "[" desc* "]'"))]))
+
+      :enum
+      (let [vals-str (->> values (map zsh-paren-value) (string/join " "))]
+        (if alias
+          [(str "'" excl long-opt "=[" desc* "]:value:(" vals-str ")'")
+           (str "'" excl alias-short "[" desc* "]:value:(" vals-str ")'")]
+          [(str "'" long-opt "=[" desc* "]:value:(" vals-str ")'")]))
+
+      :multi
+      (let [vals-str (->> values (map zsh-shell-value) (string/join " "))]
+        (if alias
+          [(str "'" excl long-opt "=[" desc* "]:value:{_logseq_multi_values " vals-str "}'")
+           (str "'" excl alias-short "[" desc* "]:value:{_logseq_multi_values " vals-str "}'")]
+          [(str "'" long-opt "=[" desc* "]:value:{_logseq_multi_values " vals-str "}'")]))
+
+      :dynamic
+      (let [action (case complete
+                     :graphs "{_logseq_graphs}"
+                     :pages "{_logseq_pages}"
+                     :tags "{_logseq_tags}"
+                     :properties "{_logseq_properties}"
+                     :queries "{_logseq_queries}")]
+        (if alias
+          [(str "'" excl long-opt "=[" desc* "]:value:" action "'")
+           (str "'" excl alias-short "[" desc* "]:value:" action "'")]
+          [(str "'" long-opt "=[" desc* "]:value:" action "'")]))
+
+      :file
+      (if alias
+        [(str "'" excl long-opt "=[" desc* "]:file:_files'")
+         (str "'" excl alias-short "[" desc* "]:file:_files'")]
+        [(str "'" long-opt "=[" desc* "]:file:_files'")])
+
+      :dir
+      (if alias
+        [(str "'" excl long-opt "=[" desc* "]:dir:_files -/'")
+         (str "'" excl alias-short "[" desc* "]:dir:_files -/'")]
+        [(str "'" long-opt "=[" desc* "]:dir:_files -/'")])
+
+      :free
+      (if alias
+        [(str "'" excl long-opt "=[" desc* "]:value:'")
+         (str "'" excl alias-short "[" desc* "]:value:'")]
+        [(str "'" long-opt "=[" desc* "]:value:'")])
+
+      ;; default
+      [(str "'" long-opt "=[" desc* "]:value:'")])))
+
+(defn- zsh-no-token-for
+  "Generate a zsh _arguments token for the --no-<option> negation of a flag.
+   Only emits for keys in no-prefix-keys."
+  [{:keys [key type alias]} no-prefix-keys]
+  (when (and (= type :flag) (contains? no-prefix-keys key))
+    (let [long-opt (zsh-option-name key)
+          no-opt (str "--no-" (name key))
+          excl (if alias
+                 (str "(" "-" (name alias) " " long-opt " " no-opt ")")
+                 (str "(" long-opt " " no-opt ")"))]
+      (str "'" excl no-opt "[Negate " long-opt "]'"))))
+
+(defn- zsh-arguments-tokens
+  "Generate _arguments tokens for a spec map.
+   global-keys: set of keys that should NOT get --no- prefix completions."
+  [spec global-keys]
+  (let [tokens (spec->tokens spec)
+        no-prefix-keys (->> tokens
+                            (keep #(when (and (= :flag (:type %))
+                                              (not (contains? global-keys (:key %)))
+                                              (not (string/starts-with? (name (:key %)) "no-")))
+                                     (:key %)))
+                            set)]
+    (into (vec (mapcat #(zsh-token-for % no-prefix-keys) tokens))
+          (keep #(zsh-no-token-for % no-prefix-keys) tokens))))
+
+(defn- zsh-leaf-function
+  "Generate a _logseq_<command>() function for a leaf command."
+  [func-name spec global-keys]
+  (let [tokens (zsh-arguments-tokens spec global-keys)
+        token-lines (string/join " \\\n    " tokens)]
+    (str func-name "() {\n"
+         "  _arguments -s \\\n"
+         "    " token-lines "\n"
+         "}\n")))
+
+(defn- cmd->func-name
+  "Convert a cmds vector like [\"graph\" \"export\"] to \"_logseq_graph_export\"."
+  [cmds]
+  (str "_logseq_" (string/join "_" cmds)))
+
+(defn- zsh-subgroup-function
+  "Generate a dispatcher for a 3-level subgroup (e.g. graph backup)."
+  [parent-name subgroup-name sub-entries global-spec]
+  (let [func-name (str "_logseq_" parent-name "_" subgroup-name)
+        global-keys (set (keys global-spec))
+        tokens (zsh-arguments-tokens global-spec global-keys)
+        options-lines (string/join " \\\n    " tokens)
+        subcmds (->> sub-entries
+                     (mapv (fn [entry]
+                             (let [sub-subcmd (nth (:cmds entry) 2)
+                                   desc (or (:desc entry) "")]
+                               (str "        '" sub-subcmd ":" desc "'")))))
+        subcmd-lines (string/join "\n" subcmds)
+        dispatches (->> sub-entries
+                        (mapv (fn [entry]
+                                (let [sub-subcmd (nth (:cmds entry) 2)
+                                      leaf-func (cmd->func-name (:cmds entry))]
+                                  (str "        " sub-subcmd ") " leaf-func " ;;")))))]
+    (str func-name "() {\n"
+         "  local curcontext=\"$curcontext\" state line\n"
+         "  typeset -A opt_args\n"
+         "\n"
+         "  _arguments -C -s \\\n"
+         "    " options-lines " \\\n"
+         "    '1:subcommand:->subcmd' \\\n"
+         "    '*::args:->args'\n"
+         "\n"
+         "  case $state in\n"
+         "    subcmd)\n"
+         "      local -a subcmds\n"
+         "      subcmds=(\n"
+         subcmd-lines "\n"
+         "      )\n"
+         "      _describe 'subcommand' subcmds\n"
+         "      ;;\n"
+         "    args)\n"
+         "      case $line[1] in\n"
+         (string/join "\n" dispatches) "\n"
+         "      esac\n"
+         "      ;;\n"
+         "  esac\n"
+         "}\n")))
+
+(defn- zsh-group-function
+  "Generate a group dispatcher function.
+   Handles groups that have both a root command (e.g. [\"query\"]) and
+   subcommands (e.g. [\"query\" \"list\"]).
+   Also handles nested subgroups (e.g. [\"graph\" \"backup\" \"list\"])."
+  [group-name subentries global-spec]
+  (let [func-name (str "_logseq_" group-name)
+        ;; Separate root entry from subcommand entries
+        root-entry (first (filter #(= 1 (count (:cmds %))) subentries))
+        sub-entries (filter #(> (count (:cmds %)) 1) subentries)
+        ;; Partition into leaf subcmds (2 elements) and nested (3+ elements)
+        leaf-entries (filter #(= 2 (count (:cmds %))) sub-entries)
+        nested-entries (filter #(> (count (:cmds %)) 2) sub-entries)
+        ;; Group nested entries by their 2nd element to find subgroups
+        nested-groups (group-by #(second (:cmds %)) nested-entries)
+        ;; Generate subgroup dispatcher functions
+        subgroup-fns (when (seq nested-groups)
+                       (->> nested-groups
+                            (mapv (fn [[sg-name sg-entries]]
+                                    (zsh-subgroup-function group-name sg-name sg-entries global-spec)))
+                            (string/join "\n")))
+        ;; Root-level options (global + root command's own spec if present)
+        root-spec (if root-entry
+                    (:spec root-entry)
+                    global-spec)
+        global-keys (set (keys global-spec))
+        root-tokens (zsh-arguments-tokens root-spec global-keys)
+        root-lines (string/join " \\\n    " root-tokens)
+        ;; Build subcmd descriptions: leaf entries + subgroup names
+        leaf-subcmds (->> leaf-entries
+                          (mapv (fn [entry]
+                                  (let [subcmd (second (:cmds entry))
+                                        desc (or (:desc entry) "")]
+                                    (str "        '" subcmd ":" desc "'")))))
+        subgroup-subcmds (->> (keys nested-groups)
+                              sort
+                              (mapv (fn [sg-name]
+                                      (str "        '" sg-name ":" sg-name " commands'"))))
+        subcmd-lines (string/join "\n" (concat leaf-subcmds subgroup-subcmds))
+        ;; Build dispatch: leaf entries dispatch to leaf fns, subgroups to subgroup fns
+        leaf-dispatches (->> leaf-entries
+                             (mapv (fn [entry]
+                                     (let [subcmd (second (:cmds entry))
+                                           sub-func (cmd->func-name (:cmds entry))]
+                                       (str "        " subcmd ") " sub-func " ;;")))))
+        subgroup-dispatches (->> (keys nested-groups)
+                                 sort
+                                 (mapv (fn [sg-name]
+                                         (str "        " sg-name ") _logseq_" group-name "_" sg-name " ;;"))))
+        dispatch-lines (string/join "\n" (concat leaf-dispatches subgroup-dispatches))
+        group-fn (str func-name "() {\n"
+                      "  local curcontext=\"$curcontext\" state line\n"
+                      "  typeset -A opt_args\n"
+                      "\n"
+                      "  _arguments -C -s \\\n"
+                      "    " root-lines " \\\n"
+                      "    '1:subcommand:->subcmd' \\\n"
+                      "    '*::args:->args'\n"
+                      "\n"
+                      "  case $state in\n"
+                      "    subcmd)\n"
+                      "      local -a subcmds\n"
+                      "      subcmds=(\n"
+                      subcmd-lines "\n"
+                      "      )\n"
+                      "      _describe 'subcommand' subcmds\n"
+                      "      ;;\n"
+                      "    args)\n"
+                      "      case $line[1] in\n"
+                      dispatch-lines "\n"
+                      "      esac\n"
+                      "      ;;\n"
+                      "  esac\n"
+                      "}\n")]
+    (if subgroup-fns
+      (str subgroup-fns "\n" group-fn)
+      group-fn)))
+
+(defn- zsh-toplevel-function
+  "Generate the _logseq() root dispatcher."
+  [table global-spec]
+  (let [groups (extract-groups table)
+        group-names (sort (keys groups))
+        ;; Build command descriptions for top level
+        cmd-descs (->> group-names
+                       (mapv (fn [g]
+                               (let [entries (get groups g)
+                                     desc (if (and (= 1 (count entries))
+                                                   (= 1 (count (:cmds (first entries)))))
+                                            (or (:desc (first entries)) "")
+                                            (str g " commands"))]
+                                 (str "        '" g ":" desc "'")))))
+        cmd-desc-lines (string/join "\n" cmd-descs)
+        dispatches (->> group-names
+                        (mapv (fn [g]
+                                (let [entries (get groups g)
+                                      func (if (and (= 1 (count entries))
+                                                    (= 1 (count (:cmds (first entries)))))
+                                             (cmd->func-name (:cmds (first entries)))
+                                             (str "_logseq_" g))]
+                                  (str "        " g ") " func " ;;")))))
+        dispatch-lines (string/join "\n" dispatches)
+        global-keys (set (keys global-spec))
+        global-tokens (zsh-arguments-tokens global-spec global-keys)
+        global-lines (string/join " \\\n    " global-tokens)]
+    (str "_logseq() {\n"
+         "  local curcontext=\"$curcontext\" state line\n"
+         "  typeset -A opt_args\n"
+         "\n"
+         "  _arguments -C -s \\\n"
+         "    " global-lines " \\\n"
+         "    '1:command:->cmds' \\\n"
+         "    '*::args:->args'\n"
+         "\n"
+         "  case $state in\n"
+         "    cmds)\n"
+         "      local -a cmds\n"
+         "      cmds=(\n"
+         cmd-desc-lines "\n"
+         "      )\n"
+         "      _describe 'command' cmds\n"
+         "      ;;\n"
+         "    args)\n"
+         "      case $line[1] in\n"
+         dispatch-lines "\n"
+         "      esac\n"
+         "      ;;\n"
+         "  esac\n"
+         "}\n")))
+
+(defn generate-zsh
+  "Generate complete zsh completion script from the command table."
+  [table]
+  (let [groups (extract-groups table)
+        global-spec (-> table first :spec
+                        (select-keys [:help :version :config :graph :root-dir
+                                      :timeout-ms :output :verbose :profile]))
+        global-keys (set (keys global-spec))
+        ;; Collect group names that have subcommands (dispatchers own these)
+        group-set (set (group-commands table))
+        ;; Generate leaf command functions (skip group roots — dispatchers own those)
+        leaf-fns (->> groups
+                      (mapcat (fn [[group-name entries]]
+                                (->> entries
+                                     (remove (fn [entry]
+                                               (and (= 1 (count (:cmds entry)))
+                                                    (contains? group-set group-name))))
+                                     (mapv (fn [entry]
+                                             (zsh-leaf-function
+                                              (cmd->func-name (:cmds entry))
+                                              (:spec entry)
+                                              global-keys))))))
+                      (string/join "\n"))
+        ;; Generate group dispatchers
+        group-fns (->> groups
+                       (filter (fn [[_ entries]]
+                                 (or (> (count entries) 1)
+                                     (> (count (:cmds (first entries))) 1))))
+                       (mapv (fn [[group-name entries]]
+                               (zsh-group-function group-name entries global-spec)))
+                       (string/join "\n"))
+        ;; Generate top-level dispatcher
+        toplevel (zsh-toplevel-function table global-spec)]
+    (str zsh-preamble "\n"
+         "# --- per-command functions ---\n\n"
+         leaf-fns "\n"
+         "# --- group dispatchers ---\n\n"
+         group-fns "\n"
+         "# --- top-level dispatcher ---\n\n"
+         toplevel "\n"
+         "compdef _logseq logseq\n")))
+
+;; ---------------------------------------------------------------------------
+;; Bash dynamic helpers (verbatim preamble)
+;; ---------------------------------------------------------------------------
+
+(def ^:private ^:large-vars/cleanup-todo bash-preamble
+  "# Auto-generated by `logseq completion bash` — do not edit manually.
+
+# --- dynamic helpers ---
+
+_logseq_json_names_bash() {
+  # Navigate a JSON path and print leaf strings.
+  # Usage: _logseq_json_names_bash key1 key2 ... keyN
+  python3 -c \"
+import sys, json
+keys = sys.argv[1:]
+try:
+    data = json.load(sys.stdin)
+    for key in keys:
+        if isinstance(data, dict):
+            data = data.get(key, [])
+        elif isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    v = item.get(key)
+                    if isinstance(v, str) and v:
+                        print(v)
+            sys.exit(0)
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, str) and item:
+                print(item)
+except Exception:
+    pass
+\" \"$@\" 2>/dev/null
+}
+
+_logseq_current_graph_bash() {
+  local i w
+  for (( i = 1; i < ${#COMP_WORDS[@]}; i++ )); do
+    w=\"${COMP_WORDS[i]}\"
+    if [[ \"$w\" == '--graph' || \"$w\" == '-g' ]] && [[ -n \"${COMP_WORDS[i+1]}\" ]]; then
+      printf '%s' \"${COMP_WORDS[i+1]}\"
+      return
+    elif [[ \"$w\" == --graph=* ]]; then
+      printf '%s' \"${w#--graph=}\"
+      return
+    fi
+  done
+  # Fall back to the current graph from 'logseq graph list' (marked with '* ')
+  logseq graph list 2>/dev/null | sed -n 's/^[*] //p'
+}
+
+_logseq_graphs_bash() {
+  logseq graph list --output json 2>/dev/null | _logseq_json_names_bash data graphs
+}
+
+_logseq_pages_bash() {
+  logseq list page --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash data items block/title
+}
+
+_logseq_tags_bash() {
+  logseq list tag --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash data items block/title
+}
+
+_logseq_properties_bash() {
+  logseq list property --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash data items block/title
+}
+
+_logseq_queries_bash() {
+  logseq query list --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash data queries name
+}
+
+_logseq_compadd_lines() {
+  local cur=\"$1\" source_fn=\"$2\"; shift 2
+  while IFS= read -r item; do
+    [[ \"$item\" == \"$cur\"* ]] && COMPREPLY+=( \"$item\" )
+  done < <(\"$source_fn\" \"$@\")
+}
+
+_logseq_enum_values_bash() {
+  # Complete a fixed value list, preserving values that contain whitespace.
+  # Usage: _logseq_enum_values_bash \"$cur\" val1 val2 ...
+  local cur=\"$1\"; shift
+  COMPREPLY=()
+  local v
+  for v in \"$@\"; do
+    if [[ \"$v\" == \"$cur\"* ]]; then
+      COMPREPLY+=( \"$v\" )
+    fi
+  done
+}
+
+_logseq_multi_values_bash() {
+  # Complete comma-delimited lists. Usage: _logseq_multi_values_bash \"$cur\" val1 val2 ...
+  local cur=\"$1\"; shift
+  local -a all_values=(\"$@\")
+  local prefix='' remaining=\"$cur\"
+
+  if [[ \"$cur\" == *,* ]]; then
+    prefix=\"${cur%,*},\"
+    remaining=\"${cur##*,}\"
+  fi
+
+  # Collect already-selected values
+  local IFS=','
+  local -a already=($cur)
+  unset IFS
+
+  local v
+  for v in \"${all_values[@]}\"; do
+    local found=0
+    local a
+    for a in \"${already[@]}\"; do
+      [[ \"$a\" == \"$v\" ]] && found=1 && break
+    done
+    if (( ! found )) && [[ \"$v\" == \"$remaining\"* ]]; then
+      COMPREPLY+=( \"${prefix}${v}\" )
+    fi
+  done
+  [[ ${#COMPREPLY[@]} -eq 1 ]] && COMPREPLY=( \"${COMPREPLY[0]},\" )
+  compopt -o nospace 2>/dev/null
+}
+")
+
+;; ---------------------------------------------------------------------------
+;; Bash generation
+;; ---------------------------------------------------------------------------
+
+(defn- bash-option-name
+  [k]
+  (str "--" (name k)))
+
+(defn- bash-option-names
+  "Return all completion option name strings for a spec entry key and spec-map.
+   Includes --no-<key> for boolean flags."
+  [k spec-map]
+  (let [long-opt (bash-option-name k)
+        base (if (:alias spec-map)
+               [long-opt (str "-" (name (:alias spec-map)))]
+               [long-opt])]
+    (if (and (= :boolean (:coerce spec-map))
+             (not (string/starts-with? (name k) "no-")))
+      (conj base (str "--no-" (name k)))
+      base)))
+
+(defn- bash-all-value-opts
+  "Collect all non-boolean option names (options that consume a value argument).
+   Includes both long (--opt) and short (-x) forms."
+  [table]
+  (let [all-specs (->> table (mapcat (fn [entry] (seq (:spec entry)))))
+        value-opts (->> all-specs
+                        (remove (fn [[_ spec-map]]
+                                  (= :boolean (:coerce spec-map))))
+                        (mapcat (fn [[k spec-map]]
+                                  (cond-> [(bash-option-name k)]
+                                    (:alias spec-map)
+                                    (conj (str "-" (name (:alias spec-map))))))))]
+    (-> (set value-opts)
+        sort
+        vec)))
+
+(defn- bash-is-value-opt
+  "Generate _logseq_is_value_opt function."
+  [table]
+  (let [opts (bash-all-value-opts table)
+        cases (string/join "|" opts)]
+    (str "_logseq_is_value_opt() {\n"
+         "  case \"$1\" in\n"
+         "    " cases ")\n"
+         "      return 0 ;;\n"
+         "    *) return 1 ;;\n"
+         "  esac\n"
+         "}\n")))
+
+(defn- bash-cmd-and-subcmd
+  "Generate _logseq_cmd_and_subcmd function."
+  []
+  "_logseq_cmd_and_subcmd() {
+  local i skip=0
+  __cmd='' __subcmd='' __subsubcmd=''
+  for (( i = 1; i < COMP_CWORD; i++ )); do
+    local w=\"${COMP_WORDS[i]}\"
+    if (( skip )); then skip=0; continue; fi
+    if [[ \"$w\" == -* ]]; then
+      _logseq_is_value_opt \"$w\" && skip=1
+      continue
+    fi
+    if [[ -z \"$__cmd\" ]]; then
+      __cmd=\"$w\"
+    elif [[ -z \"$__subcmd\" ]]; then
+      __subcmd=\"$w\"
+    elif [[ -z \"$__subsubcmd\" ]]; then
+      __subsubcmd=\"$w\"
+    fi
+  done
+}\n")
+
+(defn- bash-global-opts-string
+  "Generate the global opts wordlist string."
+  [global-spec]
+  (->> (keys global-spec)
+       (mapcat (fn [k]
+                 (let [long-opt (bash-option-name k)
+                       alias (:alias (get global-spec k))]
+                   (if alias
+                     [long-opt (str "-" (name alias))]
+                     [long-opt]))))
+       (string/join " ")))
+
+(defn- bash-opts-for
+  "Generate _logseq_opts_for function."
+  [table]
+  (let [groups (extract-groups table)
+        global-spec (-> table first :spec
+                        (select-keys [:help :version :config :graph :root-dir
+                                      :timeout-ms :output :verbose :profile]))
+        global-str (bash-global-opts-string global-spec)
+        ;; Build case branches
+        branches
+        (->> (sort-by first groups)
+             (mapv (fn [[group-name entries]]
+                     (if (and (= 1 (count entries))
+                              (= 1 (count (:cmds (first entries)))))
+                       ;; Leaf command
+                       (let [entry (first entries)
+                             cmd-spec (apply dissoc (:spec entry) (keys global-spec))
+                             cmd-opts (->> (keys cmd-spec)
+                                           (mapcat (fn [k] (bash-option-names k (get cmd-spec k))))
+                                           (string/join " "))]
+                         (str "    " group-name ") opts+=' " cmd-opts "' ;;"))
+                       ;; Group with subcommands
+                       (let [;; Root entry opts go at group level, sub-entries get case branches
+                             root-entry (first (filter #(= 1 (count (:cmds %))) entries))
+                             sub-entries (filter #(> (count (:cmds %)) 1) entries)
+                             leaf-subs (filter #(= 2 (count (:cmds %))) sub-entries)
+                             nested-subs (filter #(> (count (:cmds %)) 2) sub-entries)
+                             nested-groups (group-by #(second (:cmds %)) nested-subs)
+                             root-opts (when root-entry
+                                         (let [cmd-spec (apply dissoc (:spec root-entry) (keys global-spec))]
+                                           (->> (keys cmd-spec)
+                                                (mapcat (fn [k] (bash-option-names k (get cmd-spec k))))
+                                                (string/join " "))))
+                             leaf-branches
+                             (->> leaf-subs
+                                  (mapv (fn [entry]
+                                          (let [subcmd (second (:cmds entry))
+                                                cmd-spec (apply dissoc (:spec entry) (keys global-spec))
+                                                cmd-opts (->> (keys cmd-spec)
+                                                              (mapcat (fn [k] (bash-option-names k (get cmd-spec k))))
+                                                              (string/join " "))]
+                                            (str "        " subcmd ") opts+=' " cmd-opts "' ;;")))))
+                             ;; For nested subgroups, dispatch on subsubcmd
+                             nested-branches
+                             (->> (sort-by first nested-groups)
+                                  (mapv (fn [[sg-name sg-entries]]
+                                          (let [inner (->> sg-entries
+                                                           (mapv (fn [entry]
+                                                                   (let [sub-subcmd (nth (:cmds entry) 2)
+                                                                         cmd-spec (apply dissoc (:spec entry) (keys global-spec))
+                                                                         cmd-opts (->> (keys cmd-spec)
+                                                                                       (mapcat (fn [k] (bash-option-names k (get cmd-spec k))))
+                                                                                       (string/join " "))]
+                                                                     (str "            " sub-subcmd ") opts+=' " cmd-opts "' ;;"))))
+                                                           (string/join "\n"))]
+                                            (str "        " sg-name ")\n"
+                                                 "          case \"$subsubcmd\" in\n"
+                                                 inner "\n"
+                                                 "          esac\n"
+                                                 "          ;;")))))
+                             all-branches (concat leaf-branches nested-branches)
+                             sub-branches (string/join "\n" all-branches)]
+                         (str "    " group-name ")\n"
+                              (when (seq root-opts)
+                                (str "      opts+=' " root-opts "'\n"))
+                              "      case \"$subcmd\" in\n"
+                              sub-branches "\n"
+                              "      esac\n"
+                              "      ;;"))))))]
+    (str "_logseq_opts_for() {\n"
+         "  local cmd=\"$1\" subcmd=\"$2\" subsubcmd=\"$3\"\n"
+         "  local opts=\"" global-str "\"\n"
+         "\n"
+         "  case \"$cmd\" in\n"
+         (string/join "\n" branches) "\n"
+         "  esac\n"
+         "\n"
+         "  printf '%s' \"$opts\"\n"
+         "}\n")))
+
+(defn bash-prev-completion-case
+  "Generate a case branch for prev-word value completion."
+  [{:keys [key type alias values complete]}]
+  (let [long-opt (bash-option-name key)
+        pattern (if alias
+                  (str long-opt "|-" (name alias))
+                  long-opt)]
+    (case type
+      :enum
+      (if (contains-whitespace? values)
+        (str "    " pattern ")\n"
+             "      _logseq_enum_values_bash \"$cur\" "
+             (->> values (map bash-quote-value) (string/join " ")) "\n"
+             "      return ;;")
+        (str "    " pattern ")\n"
+             "      COMPREPLY=( $(compgen -W '" (string/join " " values) "' -- \"$cur\") )\n"
+             "      return ;;"))
+
+      :multi
+      (str "    " pattern ")\n"
+           "      _logseq_multi_values_bash \"$cur\" "
+           (->> values (map bash-quote-value) (string/join " ")) "\n"
+           "      return ;;")
+
+      :dynamic
+      (case complete
+        :graphs
+        (str "    " pattern ")\n"
+             "      _logseq_compadd_lines \"$cur\" _logseq_graphs_bash\n"
+             "      return ;;")
+        :pages
+        (str "    " pattern ")\n"
+             "      local graph\n"
+             "      graph=\"$(_logseq_current_graph_bash)\"\n"
+             "      [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_pages_bash \"$graph\"\n"
+             "      return ;;")
+        :tags
+        (str "    " pattern ")\n"
+             "      local graph\n"
+             "      graph=\"$(_logseq_current_graph_bash)\"\n"
+             "      [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_tags_bash \"$graph\"\n"
+             "      return ;;")
+        :properties
+        (str "    " pattern ")\n"
+             "      local graph\n"
+             "      graph=\"$(_logseq_current_graph_bash)\"\n"
+             "      [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_properties_bash \"$graph\"\n"
+             "      return ;;")
+        :queries
+        (str "    " pattern ")\n"
+             "      local graph\n"
+             "      graph=\"$(_logseq_current_graph_bash)\"\n"
+             "      [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_queries_bash \"$graph\"\n"
+             "      return ;;"))
+
+      :file
+      (str "    " pattern ")\n"
+           "      COMPREPLY=( $(compgen -f -- \"$cur\") )\n"
+           "      return ;;")
+
+      :dir
+      (str "    " pattern ")\n"
+           "      COMPREPLY=( $(compgen -d -- \"$cur\") )\n"
+           "      return ;;")
+
+      nil)))
+
+(defn- bash-subcommand-cases
+  "Generate subcommand completion for each group.
+   Deduplicates subcmd names so that 3-level commands like
+   [\"graph\" \"backup\" \"list\"] produce a single \"backup\" entry."
+  [table]
+  (let [groups (extract-groups table)
+        cases (->> (sort-by first groups)
+                   (keep (fn [[group-name entries]]
+                           (when (or (> (count entries) 1)
+                                     (> (count (:cmds (first entries))) 1))
+                             (let [subcmds (->> entries
+                                                (keep #(second (:cmds %)))
+                                                distinct
+                                                (string/join " "))]
+                               (when (seq subcmds)
+                                 (str "      " group-name ") COMPREPLY=( $(compgen -W '"
+                                      subcmds "' -- \"$cur\") ) ;;")))))))]
+    (string/join "\n" cases)))
+
+(defn- bash-sub-subcommand-cases
+  "Generate sub-subcommand completion for 3-level command groups.
+   Produces cases like: graph:backup) COMPREPLY=( $(compgen -W 'list create ...' ...) ) ;;"
+  [table]
+  (let [groups (extract-groups table)
+        cases (->> (sort-by first groups)
+                   (mapcat (fn [[group-name entries]]
+                             (let [nested (filter #(> (count (:cmds %)) 2) entries)
+                                   nested-groups (group-by #(second (:cmds %)) nested)]
+                               (->> (sort-by first nested-groups)
+                                    (mapv (fn [[sg-name sg-entries]]
+                                            (let [sub-subcmds (->> sg-entries
+                                                                   (map #(nth (:cmds %) 2))
+                                                                   distinct
+                                                                   (string/join " "))]
+                                              (str "      " group-name ":" sg-name
+                                                   ") COMPREPLY=( $(compgen -W '"
+                                                   sub-subcmds "' -- \"$cur\") ) ;;")))))))))
+        cases (remove nil? cases)]
+    (when (seq cases)
+      (string/join "\n" cases))))
+
+(defn- bash-toplevel-commands
+  "Get all top-level command names."
+  [table]
+  (let [groups (extract-groups table)]
+    (->> (keys groups) sort (string/join " "))))
+
+(defn- option-completion-sig
+  "Extract completion-relevant signature from a spec-map entry."
+  [{:keys [coerce validate values multiple-values complete]}]
+  {:flag? (= coerce :boolean)
+   :values (if (set? validate) validate values)
+   :multiple-values multiple-values
+   :complete complete})
+
+(defn find-varied-option-keys
+  "Find option keys that have different completion behaviors across commands.
+   Returns a set of keyword keys."
+  [table global-keys]
+  (->> table
+       (mapcat (fn [entry]
+                 (for [[k spec-map] (apply dissoc (:spec entry) global-keys)]
+                   [k (option-completion-sig spec-map)])))
+       (group-by first)
+       (keep (fn [[k entries]]
+               (let [sigs (map second entries)]
+                 (when (not (apply = sigs))
+                   k))))
+       set))
+
+(defn- bash-varied-context-branch
+  "Generate an if-branch for a single command context of a varied option."
+  [{:keys [cmds spec-map]}]
+  (let [token (spec->token [:_ spec-map])
+        cmd (first cmds)
+        subcmd (second cmds)
+        condition (if subcmd
+                    (str "[[ \"$__cmd\" == '" cmd "' && \"$__subcmd\" == '" subcmd "' ]]")
+                    (str "[[ \"$__cmd\" == '" cmd "' ]]"))]
+    (case (:type token)
+      :enum
+      (if (contains-whitespace? (:values token))
+        (str "      if " condition "; then\n"
+             "        _logseq_enum_values_bash \"$cur\" "
+             (->> (:values token) (map bash-quote-value) (string/join " ")) "\n"
+             "        return\n"
+             "      fi")
+        (str "      if " condition "; then\n"
+             "        COMPREPLY=( $(compgen -W '" (string/join " " (:values token)) "' -- \"$cur\") )\n"
+             "        return\n"
+             "      fi"))
+
+      :dynamic
+      (case (:complete token)
+        :graphs
+        (str "      if " condition "; then\n"
+             "        _logseq_compadd_lines \"$cur\" _logseq_graphs_bash\n"
+             "      fi")
+        :pages
+        (str "      if " condition "; then\n"
+             "        local graph\n"
+             "        graph=\"$(_logseq_current_graph_bash)\"\n"
+             "        [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_pages_bash \"$graph\"\n"
+             "      fi")
+        :tags
+        (str "      if " condition "; then\n"
+             "        local graph\n"
+             "        graph=\"$(_logseq_current_graph_bash)\"\n"
+             "        [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_tags_bash \"$graph\"\n"
+             "      fi")
+        :properties
+        (str "      if " condition "; then\n"
+             "        local graph\n"
+             "        graph=\"$(_logseq_current_graph_bash)\"\n"
+             "        [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_properties_bash \"$graph\"\n"
+             "      fi")
+        :queries
+        (str "      if " condition "; then\n"
+             "        local graph\n"
+             "        graph=\"$(_logseq_current_graph_bash)\"\n"
+             "        [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_queries_bash \"$graph\"\n"
+             "      fi")
+        nil)
+
+      :file
+      (str "      if " condition "; then\n"
+           "        COMPREPLY=( $(compgen -f -- \"$cur\") )\n"
+           "        return\n"
+           "      fi")
+
+      :dir
+      (str "      if " condition "; then\n"
+           "        COMPREPLY=( $(compgen -d -- \"$cur\") )\n"
+           "        return\n"
+           "      fi")
+
+      :multi
+      (str "      if " condition "; then\n"
+           "        _logseq_multi_values_bash \"$cur\" "
+           (->> (:values token) (map bash-quote-value) (string/join " ")) "\n"
+           "        return\n"
+           "      fi")
+
+      ;; :free and :flag don't need prev-word completion
+      nil)))
+
+(defn- bash-varied-prev-cases
+  "Generate context-dependent case branches for all varied options."
+  [table varied-keys global-keys]
+  (let [contexts
+        (->> table
+             (mapcat (fn [entry]
+                       (for [[k spec-map] (apply dissoc (:spec entry) global-keys)
+                             :when (contains? varied-keys k)]
+                         {:key k :cmds (:cmds entry) :spec-map spec-map})))
+             (group-by :key))]
+    (->> (sort-by first contexts)
+         (keep (fn [[k entries]]
+                 (let [long-opt (bash-option-name k)
+                       branches (->> entries
+                                     (keep bash-varied-context-branch))]
+                   (when (seq branches)
+                     (str "    " long-opt ")\n"
+                          (string/join "\n" branches) "\n"
+                          "      return ;;")))))
+         (string/join "\n\n"))))
+
+(defn- bash-main-function
+  "Generate the _logseq() main completion function."
+  [table]
+  (let [global-spec (-> table first :spec
+                        (select-keys [:help :version :config :graph :root-dir
+                                      :timeout-ms :output :verbose :profile]))
+        global-keys (set (keys global-spec))
+        ;; Find options with conflicting completions across commands
+        varied-keys (find-varied-option-keys table global-keys)
+        ;; Collect unique non-context-dependent prev-word cases
+        all-specs (->> table (mapcat (fn [entry] (seq (:spec entry)))))
+        unique-specs (into {} all-specs)
+        tokens (spec->tokens unique-specs)
+        context-free-tokens (remove #(contains? varied-keys (:key %)) tokens)
+        prev-cases (->> context-free-tokens
+                        (keep bash-prev-completion-case)
+                        (string/join "\n\n"))
+        ;; Context-dependent cases for varied options
+        varied-cases (bash-varied-prev-cases table varied-keys global-keys)
+        ;; Subcommand completion
+        subcmd-cases (bash-subcommand-cases table)
+        ;; Sub-subcommand completion for 3-level commands
+        sub-subcmd-cases (bash-sub-subcommand-cases table)
+        ;; Top-level commands
+        top-cmds (bash-toplevel-commands table)]
+    (str "_logseq() {\n"
+         "  local cur prev\n"
+         "  cur=\"${COMP_WORDS[COMP_CWORD]}\"\n"
+         "  prev=\"${COMP_WORDS[COMP_CWORD-1]}\"\n"
+         "  COMPREPLY=()\n"
+         "\n"
+         "  local __cmd __subcmd __subsubcmd\n"
+         "  _logseq_cmd_and_subcmd\n"
+         "\n"
+         "  # --- Option value completion ---\n"
+         "  case \"$prev\" in\n"
+         prev-cases "\n"
+         (when (seq varied-cases)
+           (str "\n" varied-cases "\n"))
+         "  esac\n"
+         "\n"
+         "  # --- Flag / positional completion ---\n"
+         "  if [[ \"$cur\" == -* ]]; then\n"
+         "    # shellcheck disable=SC2046\n"
+         "    COMPREPLY=( $(compgen -W \"$(_logseq_opts_for \"$__cmd\" \"$__subcmd\" \"$__subsubcmd\")\" -- \"$cur\") )\n"
+         "    return\n"
+         "  fi\n"
+         "\n"
+         "  if [[ -z \"$__cmd\" ]]; then\n"
+         "    COMPREPLY=( $(compgen -W '" top-cmds "' -- \"$cur\") )\n"
+         "    return\n"
+         "  fi\n"
+         "\n"
+         "  if [[ -z \"$__subcmd\" ]]; then\n"
+         "    case \"$__cmd\" in\n"
+         subcmd-cases "\n"
+         "    esac\n"
+         "    return\n"
+         "  fi\n"
+         "\n"
+         (when (seq sub-subcmd-cases)
+           (str "  if [[ -z \"$__subsubcmd\" ]]; then\n"
+                "    case \"$__cmd:$__subcmd\" in\n"
+                sub-subcmd-cases "\n"
+                "    esac\n"
+                "    return\n"
+                "  fi\n"))
+         "}\n")))
+
+(defn generate-bash
+  "Generate complete bash completion script from the command table."
+  [table]
+  (let [is-value-opt (bash-is-value-opt table)
+        cmd-and-subcmd (bash-cmd-and-subcmd)
+        opts-for (bash-opts-for table)
+        main-fn (bash-main-function table)]
+    (str bash-preamble "\n"
+         "# --- generated helpers ---\n\n"
+         is-value-opt "\n"
+         cmd-and-subcmd "\n"
+         "# --- option wordlists ---\n\n"
+         opts-for "\n"
+         "# --- main function ---\n\n"
+         main-fn "\n"
+         "complete -F _logseq logseq\n")))
+
+;; ---------------------------------------------------------------------------
+;; Public API
+;; ---------------------------------------------------------------------------
+
+(defn generate-completions
+  "Generate shell completions from the CLI command table.
+   shell: \"zsh\" or \"bash\"
+   table: vector of command entries"
+  [shell table]
+  (case shell
+    "zsh" (generate-zsh table)
+    "bash" (generate-bash table)
+    (throw (ex-info (str "unsupported shell: " shell) {:shell shell}))))

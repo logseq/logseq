@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [datascript.impl.entity :as de]
             [frontend.db :as db]
+            [frontend.context.i18n :refer [t]]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.notification :as notification]
@@ -47,7 +48,7 @@
       [:pre.code (str "ID: " (:db/id result) "\n"
                       pull-data)]
       [:br]
-      (ui/button "Copy to clipboard"
+      (ui/button (t :ui/copy-to-clipboard)
                  :on-click #(.writeText js/navigator.clipboard pull-data))]
      :success
      false)))
@@ -61,7 +62,7 @@
     (notification/show!
      [:div.ls-wrap-widen
       ;; Show clipboard at top since content is really long for pages
-      (ui/button "Copy to clipboard"
+      (ui/button (t :ui/copy-to-clipboard)
                  :on-click #(.writeText js/navigator.clipboard ast-data))
       [:br]
       [:pre.code ast-data]]
@@ -73,17 +74,17 @@
   ;; Use editor state to locate most recent block
   (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
     (show-entity-data [:block/uuid block-uuid])
-    (notification/show! "No block found" :warning)))
+    (notification/show! (t :block/not-found-warning) :warning)))
 
 (defn ^:export show-block-ast []
   (if-let [{:block/keys [title format]} (:block (first (state/get-editor-args)))]
     (show-content-ast title (or format :markdown))
-    (notification/show! "No block found" :warning)))
+    (notification/show! (t :block/not-found-warning) :warning)))
 
 (defn ^:export show-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
     (show-entity-data page-id)
-    (notification/show! "No page found" :warning)))
+    (notification/show! (t :page/not-found-warning) :warning)))
 
 (defn ^:export validate-db []
   (state/<invoke-db-worker :thread-api/validate-db (state/get-current-repo)))
@@ -95,11 +96,30 @@
       (string/replace #"[\\/]+" "_")
       (str "_checksum_" (quot (util/time-ms) 1000))))
 
-(defn- client-server-checksum-mismatch?
-  [local-checksum remote-checksum]
-  (and (string? local-checksum)
-       (string? remote-checksum)
-       (not= local-checksum remote-checksum)))
+(defn- client-ops-export-file-name
+  [repo]
+  (-> (or repo "graph")
+      (string/replace #"^/+" "")
+      (string/replace #"[\\/]+" "_")
+      (str "_client_ops_" (quot (util/time-ms) 1000))))
+
+(defn- ->uint8array
+  [data]
+  (cond
+    (instance? js/Uint8Array data)
+    data
+
+    (js/ArrayBuffer.isView data)
+    (js/Uint8Array. (.-buffer data) (.-byteOffset data) (.-byteLength data))
+
+    (instance? js/ArrayBuffer data)
+    (js/Uint8Array. data)
+
+    (array? data)
+    (js/Uint8Array. data)
+
+    :else
+    nil))
 
 (defn- <fetch-server-checksum-diagnostics
   [repo]
@@ -164,7 +184,9 @@
                      :server-checksum (:checksum server-diagnostics)
                      :different-blocks diff-blocks}]
     (pprint/pprint diff-data)
-    (js/console.warn "Checksum mismatch between client and server. Diff data:" diff-data)))
+    (when (seq diff-blocks)
+      (js/console.warn "Checksum mismatch between client and server. Diff data:" diff-data))))
+
 
 (defn ^:export recompute-checksum-diagnostics
   []
@@ -184,30 +206,53 @@
                           content (with-out-str (pprint/pprint export-edn))
                           blob (js/Blob. #js [content] (clj->js {:type "text/edn;charset=utf-8"}))
                           filename (checksum-export-file-name repo)]
-                      (p/let [_ (when (client-server-checksum-mismatch? local-checksum remote-checksum)
-                                  (-> (<log-checksum-mismatch-diff! repo export-edn)
-                                      (p/catch (fn [error]
-                                                 (js/console.error "checksum mismatch diff fetch failed:" error)
-                                                 nil))))]
+                      (p/let [_ (-> (<log-checksum-mismatch-diff! repo export-edn)
+                                    (p/catch (fn [error]
+                                               (js/console.error "checksum mismatch diff fetch failed:" error)
+                                               nil)))]
                         (utils/saveToFile blob filename "edn")
                         (notification/show!
-                         (str "Checksum recomputed. Recomputed: " recomputed-checksum
-                              ", local: " (or local-checksum "<nil>")
-                              ", remote: " (or remote-checksum "<nil>")
-                              ". Downloaded " filename ".edn with " (count blocks)
-                              " blocks and checksum attrs " (pr-str checksum-attrs) ".")
+                         (t :graph.diagnostics/checksum-recomputed-success
+                            recomputed-checksum
+                            (or local-checksum "<nil>")
+                            (or remote-checksum "<nil>")
+                            filename
+                            (count blocks)
+                            (pr-str checksum-attrs))
                          :success
                          false)))
-                    (notification/show! "Unable to compute checksum diagnostics for current graph." :warning))))
+                    (notification/show! (t :graph.diagnostics/checksum-unavailable-warning) :warning))))
         (p/catch (fn [error]
                    (js/console.error "recompute-checksum-diagnostics failed:" error)
-                   (notification/show! "Failed to compute graph checksum diagnostics." :error))))
-    (notification/show! "No graph found" :warning)))
+                   (notification/show! (t :graph.diagnostics/checksum-failed-error) :error))))
+    (notification/show! (t :graph.diagnostics/no-graph-warning) :warning)))
+
+(defn ^:export export-client-ops-sqlite
+  []
+  (if-let [repo (state/get-current-repo)]
+    (-> (state/<invoke-db-worker-direct-pass :thread-api/export-client-ops-db repo)
+        (p/then (fn [data]
+                  (if-let [payload (->uint8array data)]
+                    (let [filename (client-ops-export-file-name repo)
+                          blob (js/Blob. #js [payload] (clj->js {:type "application/octet-stream"}))]
+                      (utils/saveToFile blob filename "sqlite")
+                      (notification/show!
+                       (t :graph.diagnostics/client-ops-export-success filename)
+                       :success
+                       false))
+                    (notification/show!
+                     (t :graph.diagnostics/client-ops-export-invalid-payload-warning
+                        (pr-str (type data)))
+                     :warning))))
+        (p/catch (fn [error]
+                   (js/console.error "export-client-ops-sqlite failed:" error)
+                   (notification/show! (t :graph.diagnostics/client-ops-export-failed-error) :error))))
+    (notification/show! (t :graph.diagnostics/no-graph-warning) :warning)))
 
 (defn import-chosen-graph
   [repo]
   (p/let [_ (persist-db/<unsafe-delete repo)]
-    (notification/show! "Graph updated! Switching to graph ..." :success)
+    (notification/show! (t :graph/updated-switching) :success)
     (state/pub-event! [:graph/switch repo])))
 
 (defn ^:export replace-graph-with-db-file []

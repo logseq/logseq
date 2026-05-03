@@ -1,6 +1,7 @@
 (ns frontend.components.db-based.page
   "Page components only for DB graphs"
   (:require [frontend.components.property.config :as property-config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.util :as util]
@@ -23,4 +24,4 @@
                                      :align "start"
                                      :as-dropdown? true
                                      :dropdown-menu? true}))}
-     "Configure property")))
+     (t :property/configure))))

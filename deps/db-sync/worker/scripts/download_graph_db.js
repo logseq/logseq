@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
 const { parseArgs } = require("node:util");
+const transit = require("transit-js");
 const { fail } = require("./graph_user_lib");
 
 const defaultBaseUrl = "https://api.logseq.com";
@@ -134,16 +135,45 @@ function maybeDecompressBuffer(buffer, contentEncoding) {
   return buffer;
 }
 
-function snapshotBufferToLines(buffer) {
-  const text = buffer.toString("utf8");
-  return text
-    .split(/\r?\n/)
-    .filter((line) => line.length > 0);
+function parseFramedRows(buffer) {
+  const rows = [];
+  const reader = transit.reader("json");
+  let offset = 0;
+
+  while (offset < buffer.length) {
+    if (buffer.length - offset < 4) {
+      throw new Error("Invalid snapshot payload: incomplete frame header");
+    }
+
+    const frameLength = buffer.readUInt32BE(offset);
+    offset += 4;
+
+    if (buffer.length - offset < frameLength) {
+      throw new Error("Invalid snapshot payload: incomplete frame payload");
+    }
+
+    const payload = buffer.subarray(offset, offset + frameLength);
+    offset += frameLength;
+
+    const batch = reader.read(payload.toString("utf8"));
+    if (!Array.isArray(batch)) {
+      throw new Error("Invalid snapshot payload: decoded frame is not an array");
+    }
+
+    for (const row of batch) {
+      if (!Array.isArray(row) || row.length < 2) {
+        throw new Error("Invalid snapshot payload: row must be [addr, content, addresses?]");
+      }
+      rows.push(row);
+    }
+  }
+
+  return rows;
 }
 
 function writeSnapshotSqlite({
   outputPath,
-  lines,
+  rows,
 }) {
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   if (fs.existsSync(outputPath)) {
@@ -165,8 +195,9 @@ function writeSnapshotSqlite({
     );
 
     const writeAll = db.transaction(() => {
-      for (let index = 0; index < lines.length; index += 1) {
-        upsertKvs.run(index + 1, lines[index], null);
+      for (const row of rows) {
+        const [addr, content, addresses] = row;
+        upsertKvs.run(addr, content, addresses ?? null);
       }
     });
 
@@ -186,16 +217,16 @@ async function main() {
   const snapshot = await fetchSnapshotBytes(descriptor.url, options.adminToken);
   const effectiveEncoding = descriptor["content-encoding"] || snapshot.contentEncoding || "";
   const decompressed = maybeDecompressBuffer(snapshot.buffer, effectiveEncoding);
-  const lines = snapshotBufferToLines(decompressed);
+  const rows = parseFramedRows(decompressed);
 
   writeSnapshotSqlite({
     outputPath: options.output,
-    lines,
+    rows,
   });
 
   console.log(`Saved graph snapshot sqlite to ${options.output}`);
   console.log(`Graph: ${options.graphId}`);
-  console.log(`Rows: ${lines.length}`);
+  console.log(`Rows: ${rows.length}`);
   if (descriptor.key) {
     console.log(`Snapshot key: ${descriptor.key}`);
   }
@@ -209,7 +240,7 @@ if (require.main === module) {
 
 module.exports = {
   parseCliArgs,
+  parseFramedRows,
   sanitizeGraphIdForFilename,
-  snapshotBufferToLines,
   writeSnapshotSqlite,
 };

@@ -2,6 +2,7 @@
   "App top header"
   (:require ["@capacitor/dialog" :refer [Dialog]]
             [clojure.string :as string]
+            [frontend.context.i18n :refer [t]]
             [frontend.components.repo :as repo]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.date :as date]
@@ -62,7 +63,7 @@
        {:on-click (fn [] (route-handler/redirect! {:to :import}))}
        [:span.text-lg.flex.gap-2.items-center
         (shui/tabler-icon "file-upload" {:class "opacity-80" :size 22})
-        "Import"])])
+        (t :import/title)])])
    {:default-height false}))
 
 (defn open-page-settings
@@ -77,10 +78,10 @@
           (p/do!
            (shui/popup-hide!)
            (-> (.confirm ^js Dialog
-                         #js {:title "Confirm"
-                              :message (str "Are you sure to delete this "
-                                            (if (entity-util/page? block) "page" "block")
-                                            "?")})
+                         #js {:title (t :ui/confirm)
+                              :message (if (entity-util/page? block)
+                                         (t :mobile.header/delete-page-confirm-desc)
+                                         (t :mobile.header/delete-block-confirm-desc))})
                (p/then
                 (fn [^js result]
                   (let [value (.-value result)]
@@ -95,8 +96,8 @@
                            (notification/show! msg :warning))})))))))))}
        [:span.text-lg.flex.gap-2.items-center.text-red-700
         (shui/tabler-icon "trash" {:class "opacity-80" :size 22})
-        "Delete"])])
-   {:title "Actions"
+        (t :ui/delete)])])
+   {:title (t :mobile.header/actions)
     :default-height false}))
 
 (defn- open-graph-switch!
@@ -109,7 +110,7 @@
        {:on-click #(p/do!
                     (shui/popup-hide!)
                     (state/pub-event! [:graph/new-db-graph]))}
-       "Create new graph")])
+       (t :mobile.header/create-graph))])
    {:default-height false}))
 
 (defn- register-native-top-bar-events! [*configure-top-bar-f]
@@ -200,10 +201,7 @@
 
 (rum/defc header-inner
   [current-repo tab route-match]
-  (let [short-repo-name (if current-repo
-                          (db-conn/get-short-repo-name current-repo)
-                          "Select a Graph")
-        route-name (get-in route-match [:data :name])
+  (let [route-name (get-in route-match [:data :name])
         route-view (get-in route-match [:data :view])
         route-id (get-in route-match [:parameters :path :name])
         page-route? (= route-name :page)
@@ -219,10 +217,12 @@
         pending-asset-ops           (:pending-asset-ops detail-info)
         fallback-title (cond
                          (= tab "home")
-                         short-repo-name
+                         (if current-repo
+                           (db-conn/get-short-repo-name current-repo)
+                           (t :graph.switch/select-prompt))
 
                          (= tab "search")
-                         "Search"
+                         (t :nav/search)
 
                          :else
                          (string/capitalize tab))

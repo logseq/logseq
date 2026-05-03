@@ -6,6 +6,11 @@
 
 (defonce subtle (.. js/crypto -subtle))
 
+(defn- expected-crypto-operation-error?
+  [e]
+  (= "OperationError" (or (some-> e .-name)
+                          (some-> e ex-cause .-name))))
+
 (defn <export-aes-key
   [aes-key]
   (assert (instance? js/CryptoKey aes-key))
@@ -41,14 +46,6 @@
   (assert (instance? js/CryptoKey private-key))
   (p/let [exported (.exportKey subtle "pkcs8" private-key)]
     (js/Uint8Array. exported)))
-
-(defn <import-private-key
-  [exported-private-key]
-  (assert (instance? js/Uint8Array exported-private-key))
-  (.importKey subtle "pkcs8" exported-private-key
-              #js {:name "RSA-OAEP" :hash "SHA-256"}
-              true
-              #js ["decrypt"]))
 
 (comment
   (->
@@ -156,7 +153,8 @@
                                    #js ["decrypt"])]
      private-key)
    (p/catch (fn [e]
-              (log/error "decrypt-private-key" e)
+              (when-not (expected-crypto-operation-error? e)
+                (log/error "decrypt-private-key" e))
               (ex-info "decrypt-private-key" {} e)))))
 
 (defn <encrypt-aes-key
@@ -175,21 +173,18 @@
   "Decrypts an AES key with a private key."
   [private-key encrypted-aes-key-data]
   (assert (and (instance? js/CryptoKey private-key)
-               (instance? js/Uint8Array encrypted-aes-key-data)))
+               (instance? js/Uint8Array encrypted-aes-key-data))
+          [private-key encrypted-aes-key-data])
   (->
    (p/let [encrypted-aes-key (js/Uint8Array. encrypted-aes-key-data)
            decrypted-key-data (.decrypt subtle
                                         #js {:name "RSA-OAEP"}
                                         private-key
                                         encrypted-aes-key)]
-     (.importKey subtle
-                 "raw"
-                 decrypted-key-data
-                 "AES-GCM"
-                 true
-                 #js ["encrypt" "decrypt"]))
+     (<import-aes-key (js/Uint8Array. decrypted-key-data)))
    (p/catch (fn [e]
-              (log/error "decrypt-aes-key failed" e)
+              (when-not (expected-crypto-operation-error? e)
+                (log/error "decrypt-aes-key failed" e))
               (ex-info "decrypt-aes-key" {} e)))))
 
 (defn <encrypt-uint8array

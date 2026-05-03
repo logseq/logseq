@@ -1,7 +1,9 @@
 (ns frontend.handler.user-test
   (:require [cljs.test :refer [deftest is testing]]
+            [electron.ipc :as ipc]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
+            [frontend.util :as util]
             [promesa.core :as p]))
 
 (defn- with-mocked-local-storage
@@ -30,6 +32,56 @@
                                          :configurable true
                                          :writable true})
           (js/Reflect.deleteProperty js/globalThis "localStorage"))))))
+
+(deftest set-tokens-persists-auth-json-with-latest-token-values-test
+  (let [writes* (atom [])
+        old-state @state/state]
+    (reset! state/state (assoc-in old-state [:system/info :home-dir] "/tmp/home"))
+    (try
+      (with-mocked-local-storage
+        (fn []
+          (with-redefs [util/electron? (constantly true)
+                        ipc/ipc (fn [op _repo path content]
+                                  (is (= "writeFile" op))
+                                  (swap! writes* conj {:path path
+                                                       :content content})
+                                  (p/resolved nil))]
+            (#'user-handler/set-tokens! "id-token-v1" "access-token-v1" "refresh-token-v1")
+            (is (= 1 (count @writes*)))
+            (is (= "/tmp/home/logseq/auth.json" (:path (first @writes*))))
+            (is (= {:id-token "id-token-v1"
+                    :access-token "access-token-v1"
+                    :refresh-token "refresh-token-v1"}
+                   (select-keys (js->clj (js/JSON.parse (:content (first @writes*))) :keywordize-keys true)
+                                [:id-token :access-token :refresh-token]))))))
+      (finally
+        (reset! state/state old-state)))))
+
+(deftest set-tokens-without-refresh-token-persists-existing-refresh-token-test
+  (let [writes* (atom [])
+        old-state @state/state]
+    (reset! state/state (-> old-state
+                            (assoc :auth/refresh-token "refresh-token-existing")
+                            (assoc-in [:system/info :home-dir] "/tmp/home")))
+    (try
+      (with-mocked-local-storage
+        (fn []
+          (with-redefs [util/electron? (constantly true)
+                        ipc/ipc (fn [op _repo path content]
+                                  (is (= "writeFile" op))
+                                  (swap! writes* conj {:path path
+                                                       :content content})
+                                  (p/resolved nil))]
+            (#'user-handler/set-tokens! "id-token-v2" "access-token-v2")
+            (is (= 1 (count @writes*)))
+            (is (= "/tmp/home/logseq/auth.json" (:path (first @writes*))))
+            (is (= {:id-token "id-token-v2"
+                    :access-token "access-token-v2"
+                    :refresh-token "refresh-token-existing"}
+                   (select-keys (js->clj (js/JSON.parse (:content (first @writes*))) :keywordize-keys true)
+                                [:id-token :access-token :refresh-token]))))))
+      (finally
+        (reset! state/state old-state)))))
 
 (deftest logout-clears-e2ee-password-when-db-worker-ready-test
   (testing "logout should request db-worker to clear persisted e2ee password"

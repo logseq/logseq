@@ -29,6 +29,9 @@ const staleMonths = Number(args.get('--stale-months') || 36);
 // When true (pass --include-prerelease flag), annotate in Risk column if a newer
 // pre-release exists upstream. Target version is ALWAYS the latest stable release.
 const includePrerelease = args.get('--include-prerelease') === 'true';
+// Maximum number of months between latest and current version publish dates.
+// If the interval is within this threshold, the package is NOT considered outdated.
+const maxUpdateInterval = Number(args.get('--max-update-interval') || 6);
 
 // ---------------------------------------------------------------------------
 // Classification helpers
@@ -211,37 +214,99 @@ function parseBbEntries(bbFiles) {
 }
 
 // ---------------------------------------------------------------------------
-// Lockfile resolution (yarn.lock v1)
+// Lockfile resolution (pnpm-lock.yaml)
 // ---------------------------------------------------------------------------
 
-function parseYarnLock(lockPath) {
+function parseYamlScalar(raw) {
+  return String(raw).trim().replace(/^['"]|['"]$/g, '');
+}
+
+function normalizePnpmVersion(raw) {
+  const value = parseYamlScalar(raw);
+  const peerSuffixIndex = value.indexOf('(');
+  return peerSuffixIndex === -1 ? value : value.slice(0, peerSuffixIndex);
+}
+
+function parsePnpmLock(lockPath) {
   const resolved = new Map();
   if (!existsSync(lockPath)) return resolved;
-  const content = readFileSync(lockPath, 'utf8');
-  let currentSpecs = null;
+  const lines = readFileSync(lockPath, 'utf8').split('\n');
+
+  let inImporters = false;
+  let inRootImporter = false;
+  let currentSection = null;
+  let currentPackage = null;
+  let currentSpecifier = null;
   let currentVersion = null;
-  for (const line of content.split('\n')) {
-    if (line.startsWith('#') || line.trim() === '') continue;
-    if (!line.startsWith(' ') && line.endsWith(':')) {
-      if (currentSpecs && currentVersion) {
-        for (const spec of currentSpecs) resolved.set(spec, currentVersion);
-      }
-      currentSpecs = line.slice(0, -1).split(', ').map(s => s.replace(/^"|"$/g, ''));
-      currentVersion = null;
-    } else if (line.startsWith('  version ')) {
-      currentVersion = line.replace(/^  version "?/, '').replace(/"$/, '');
+
+  const flush = () => {
+    if (currentPackage && currentSpecifier && currentVersion) {
+      resolved.set(`${currentPackage}@${currentSpecifier}`, normalizePnpmVersion(currentVersion));
+    }
+    currentPackage = null;
+    currentSpecifier = null;
+    currentVersion = null;
+  };
+
+  for (const line of lines) {
+    if (!inImporters) {
+      if (line === 'importers:') inImporters = true;
+      continue;
+    }
+
+    if (!inRootImporter) {
+      if (line === 'packages:' || line === 'snapshots:') break;
+      if (line === '  .:') inRootImporter = true;
+      continue;
+    }
+
+    if (line === 'packages:' || line === 'snapshots:') {
+      flush();
+      break;
+    }
+
+    const sectionMatch = line.match(/^    (dependencies|devDependencies|optionalDependencies):$/);
+    if (sectionMatch) {
+      flush();
+      currentSection = sectionMatch[1];
+      continue;
+    }
+
+    if (line.match(/^    [^ ].*:/) && !sectionMatch) {
+      flush();
+      currentSection = null;
+      continue;
+    }
+
+    if (!currentSection) continue;
+
+    const packageMatch = line.match(/^      (.+):$/);
+    if (packageMatch) {
+      flush();
+      currentPackage = parseYamlScalar(packageMatch[1]);
+      continue;
+    }
+
+    const specifierMatch = line.match(/^        specifier:\s+(.+)$/);
+    if (specifierMatch) {
+      currentSpecifier = parseYamlScalar(specifierMatch[1]);
+      continue;
+    }
+
+    const versionMatch = line.match(/^        version:\s+(.+)$/);
+    if (versionMatch) {
+      currentVersion = versionMatch[1];
     }
   }
-  if (currentSpecs && currentVersion) {
-    for (const spec of currentSpecs) resolved.set(spec, currentVersion);
-  }
+
+  flush();
   return resolved;
 }
 
 function findLockFileForPackageJson(packageJsonPath) {
   const dir = dirname(join(root, packageJsonPath));
-  const yarnLock = join(dir, 'yarn.lock');
-  if (existsSync(yarnLock)) return yarnLock;
+  const pnpmLock = join(dir, 'pnpm-lock.yaml');
+  if (existsSync(pnpmLock)) return pnpmLock;
   return null;
 }
 
@@ -249,7 +314,7 @@ const lockCache = new Map();
 function getResolvedVersion(packageJsonPath, pkg, specifier) {
   const lockPath = findLockFileForPackageJson(packageJsonPath);
   if (!lockPath) return null;
-  if (!lockCache.has(lockPath)) lockCache.set(lockPath, parseYarnLock(lockPath));
+  if (!lockCache.has(lockPath)) lockCache.set(lockPath, parsePnpmLock(lockPath));
   const lock = lockCache.get(lockPath);
   return lock.get(`${pkg}@${specifier}`) || null;
 }
@@ -374,6 +439,14 @@ async function fetchCljPackageMeta(pkg) {
       if (entry?.created) publishedAt = entry.created;
     }
     const result = { latest, latestPublishedAt: publishedAt };
+    // Build a version -> date map from recent_versions for looking up current version publish date
+    const versionDates = {};
+    if (clojars.recent_versions && Array.isArray(clojars.recent_versions)) {
+      for (const v of clojars.recent_versions) {
+        if (v.version && v.created) versionDates[v.version] = v.created;
+      }
+    }
+    result.versionDates = versionDates;
     // Only annotate pre-release info when --include-prerelease flag is set
     if (includePrerelease && absoluteLatest && absoluteLatest !== latest && isPrerelease(absoluteLatest)) {
       result.absoluteLatest = absoluteLatest;
@@ -433,6 +506,14 @@ function monthsBetween(iso) {
   const ts = new Date(iso).getTime();
   if (Number.isNaN(ts)) return null;
   return (Date.now() - ts) / (1000 * 60 * 60 * 24 * 30.4375);
+}
+
+function monthsBetweenDates(iso1, iso2) {
+  if (!iso1 || !iso2) return null;
+  const ts1 = new Date(iso1).getTime();
+  const ts2 = new Date(iso2).getTime();
+  if (Number.isNaN(ts1) || Number.isNaN(ts2)) return null;
+  return Math.abs(ts1 - ts2) / (1000 * 60 * 60 * 24 * 30.4375);
 }
 
 function normalizeCurrent(entry) {
@@ -657,6 +738,11 @@ async function main() {
       aliases: aliases.length > 0 ? aliases : undefined,
       currents, currentsNormalized, latest,
       latestPublishedAt: meta.latestPublishedAt || null,
+      currentPublishedAt: (() => {
+        if (ecosystem === 'npm' && meta.raw?.time && currentBase) return meta.raw.time[currentBase] || null;
+        if (ecosystem === 'clj' && meta.versionDates && currentBase) return meta.versionDates[currentBase] || null;
+        return null;
+      })(),
       staleMonths: monthsBetween(meta.latestPublishedAt),
       deprecatedCurrent: currentMeta?.deprecated || null,
       latestDeprecated: meta.latestDeprecated || null,
@@ -668,6 +754,7 @@ async function main() {
 
     if (latest && currents.length > 0) item.target = formatTarget(currents[0], latest);
     item.absoluteLatest = meta.absoluteLatest || null;
+    item.updateIntervalMonths = monthsBetweenDates(item.currentPublishedAt, item.latestPublishedAt);
     // latestStatus is always based on declared version vs upstream stable latest
     // (alreadyResolved only marks zero install-risk, does not count as "up to date")
     item.latestStatus = latestStatus(item.latest, item.currentsNormalized, item.currents);
@@ -677,7 +764,15 @@ async function main() {
   }
 
   // Categorize
-  const outdated = items.filter(i => i.latestStatus === 'outdated').sort((a, b) => a.package.localeCompare(b.package));
+  const withinInterval = [];
+  const outdated = items.filter(i => {
+    if (i.latestStatus !== 'outdated') return false;
+    if (i.updateIntervalMonths !== null && i.updateIntervalMonths <= maxUpdateInterval) {
+      withinInterval.push(i);
+      return false;
+    }
+    return true;
+  }).sort((a, b) => a.package.localeCompare(b.package));
   const latestRisky = items.filter(i => i.latestStatus === 'latest' && i.riskNotesList.length > 0).sort((a, b) => a.package.localeCompare(b.package));
   const manual = items.filter(i => i.manualReview || i.latestStatus === 'manual' || i.latestStatus === 'unknown').sort((a, b) => a.package.localeCompare(b.package));
   const inconsistent = items.filter(i => i.inconsistent).sort((a, b) => a.package.localeCompare(b.package));
@@ -702,6 +797,7 @@ async function main() {
     },
     summary: {
       outdated: outdated.length,
+      withinInterval: withinInterval.length,
       latestRisky: latestRisky.length,
       inconsistent: inconsistent.length,
       manualReview: manual.length,
@@ -747,6 +843,7 @@ async function main() {
   L.push(row(['Manifests scanned', String(packageFiles.length + depsFiles.length + bbFiles.length)]));
   L.push(row(['Unique libraries', String(items.length)]));
   L.push(row(['Outdated', String(outdated.length)]));
+  L.push(row([`Within update interval (≤ ${maxUpdateInterval} months)`, String(withinInterval.length)]));
   L.push(row(['Already resolved via lockfile', String(alreadyResolvedItems.length)]));
   L.push(row(['Latest but risky', String(latestRisky.length)]));
   L.push(row(['Cross-root inconsistent', String(inconsistent.length)]));
@@ -759,7 +856,7 @@ async function main() {
   if (alreadyResolvedItems.length > 0) {
     L.push('## Already Resolved via Lockfile');
     L.push('');
-    L.push('These declare a version range whose lockfile has **already resolved to the latest** version. They appear again in the Upgrade Batches with the `already resolved in lockfile` risk note — only the declared version in the manifest needs updating (`yarn install` is NOT required, making this zero-risk).');
+    L.push('These declare a version range whose lockfile has **already resolved to the latest** version. They appear again in the Upgrade Batches with the `already resolved in lockfile` risk note — only the declared version in the manifest needs updating (`pnpm install` is NOT required, making this zero-risk).');
     L.push('');
     L.push(row(['Package', 'Declared Range', 'Lockfile Resolved (= Latest)', 'File(s)']));
     L.push(row(['---', '---', '---', '---']));

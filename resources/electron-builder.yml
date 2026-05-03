@@ -1,0 +1,56 @@
+appId: com.logseq.logseq
+electronUpdaterCompatibility: ">=2.16"
+
+directories:
+  buildResources: .
+  output: dist
+
+protocols:
+  - name: logseq
+    schemes:
+      - logseq
+
+publish:
+  - provider: github
+    owner: logseq
+    repo: logseq
+
+extraResources:
+  - from: .agents/skills/logseq-cli/SKILL.md
+    to: .agents/skills/logseq-cli/SKILL.md
+
+mac:
+  artifactName: ${productName}-darwin-${arch}-${version}.${ext}
+  icon: icons/logseq_big_sur.icns
+  target:
+    - dmg
+    - zip
+  hardenedRuntime: true
+  entitlements: entitlements.plist
+  entitlementsInherit: entitlements.plist
+
+dmg:
+  format: ULFO
+
+win:
+  icon: icons/logseq.ico
+  target:
+    - nsis
+    - zip
+
+nsis:
+  artifactName: ${productName}-win-${arch}-${version}-nsis.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: icons/logseq.ico
+  uninstallerIcon: icons/logseq.ico
+
+linux:
+  artifactName: ${productName}-linux-${arch}-${version}.${ext}
+  icon: icons/logseq.png
+  category: Office
+  target:
+    - AppImage
+    - zip
+  mimeTypes:
+    - x-scheme-handler/logseq

@@ -2,7 +2,6 @@
   "Custom queries."
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
-            [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.db.react :as react]
@@ -24,7 +23,7 @@
                                                        (or (when-let [name-or-uuid (state/get-current-page)]
                                                              (:block/title (model/get-block-by-uuid name-or-uuid)))
                                                            (:page (state/get-default-home))
-                                                           (date/today)))}
+                                                           (model/get-today-journal-title)))}
                                    opts))))
 
 (defn custom-query-result-transform

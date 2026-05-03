@@ -96,7 +96,11 @@
 (defn search-and-click
   [search-text]
   (search search-text)
-  (w/click (.first (w/get-by-test-id search-text))))
+  (let [result (.first (w/get-by-test-id search-text))]
+    (repeat-until-visible 5 result #(do
+                                      (search search-text)
+                                      (wait-timeout 300)))
+    (w/click result)))
 
 (defn wait-editor-gone
   ([]
@@ -153,12 +157,12 @@
       :or {username "e2etest"
            password "Logseq-e2e"}}]
   (w/eval-js "localStorage.setItem(\"login-enabled\",true);")
-  (w/click "button[title=\"More\"]")
+  (w/click ".toolbar-dots-btn")
   (w/click "div:text(\"Login\")")
   (input username)
   (k/tab)
   (input password)
-  (w/click "button[type=\"submit\"]:text(\"Sign in\")")
+  (w/click ".cp__user-login button[type=\"submit\"]")
   (w/wait-for-not-visible ".cp__user-login"))
 
 (defn goto-journals

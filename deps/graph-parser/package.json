@@ -1,9 +1,10 @@
 {
   "name": "@logseq/graph-parser",
   "version": "1.0.0",
+  "packageManager": "pnpm@10.33.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v34",
+    "@logseq/nbb-logseq": "git+https://github.com/logseq/nbb-logseq.git#feat-db-v34",
     "better-sqlite3": "^12.8.0"
   },
   "dependencies": {
@@ -11,7 +12,7 @@
     "sanitize-filename": "1.6.4"
   },
   "scripts": {
-    "test": "nbb-logseq -cp test -m nextjournal.test-runner",
-    "test-v": "nbb-logseq -cp test -m logseq.graph-parser.test-runner"
+    "test": "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner",
+    "test-v": "pnpm exec nbb-logseq -cp test -m logseq.graph-parser.test-runner"
   }
 }

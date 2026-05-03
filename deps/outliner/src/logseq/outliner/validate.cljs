@@ -9,23 +9,31 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]))
 
-(defn ^:api validate-page-title-characters
-  "Validates characters that must not be in a page title"
+(defn ^:api validate-page-title-no-hashtag
+  "Validates a page title doesn't include hashtag character"
   [page-title meta-m]
   (when (string/includes? page-title "#")
     (throw (ex-info "Page name can't include \"#\"."
                     (merge meta-m
                            {:type :notification
                             :payload {:message "Page name can't include \"#\"."
-                                      :type :warning}}))))
+                                      :i18n-key :page.validation/name-no-hash
+                                      :type :warning}})))))
+
+(defn ^:api validate-page-title-characters
+  "Validates characters that must not be in a page title"
+  [page-title meta-m]
+  (validate-page-title-no-hashtag page-title meta-m)
   (when (and (string/includes? page-title ns-util/parent-char)
              (not (common-date/normalize-date page-title nil)))
     (throw (ex-info "Page name can't include \"/\"."
                     (merge meta-m
                            {:type :notification
                             :payload {:message "Page name can't include \"/\"."
+                                      :i18n-key :page.validation/name-no-slash
                                       :type :warning}})))))
 
 (defn ^:api validate-page-title
@@ -35,6 +43,7 @@
                     (merge meta-m
                            {:type :notification
                             :payload {:message "Page name can't be blank."
+                                      :i18n-key :page.validation/name-blank
                                       :type :warning}})))))
 
 (defn- find-other-ids-with-title-and-tags
@@ -91,11 +100,15 @@
             (throw (ex-info "Duplicate property"
                             {:type :notification
                              :payload {:message (str "Another property named " (pr-str new-title) " already exists.")
+                                       :i18n-key :property.validation/duplicate
+                                       :i18n-args [new-title]
                                        :type :warning}}))
             (ldb/class? entity)
             (throw (ex-info "Duplicate class"
                             {:type :notification
                              :payload {:message (str "Another tag named " (pr-str new-title) " already exists.")
+                                       :i18n-key :class.validation/duplicate
+                                       :i18n-args [new-title]
                                        :type :warning}}))
             :else
             (throw (ex-info "Duplicate page"
@@ -103,6 +116,10 @@
                              :payload {:message (str "Another page named " (pr-str new-title) " already exists for tags: "
                                                      (string/join ", "
                                                                   (map (fn [id] (str "#" (:block/title (d/entity db id)))) common-tag-ids)))
+                                       :i18n-key :page.validation/duplicate
+                                       :i18n-args [new-title
+                                                   (string/join ", "
+                                                                (map (fn [id] (str "#" (:block/title (d/entity db id)))) common-tag-ids))]
                                        :type :warning}}))))))))
 
 (defn ^:api validate-unique-by-name-and-tags
@@ -122,6 +139,7 @@
     (throw (ex-info "Page can't be renamed to a journal"
                     {:type :notification
                      :payload {:message "This page can't be changed to a journal page"
+                               :i18n-key :journal/page-cant-convert-warning
                                :type :warning}}))))
 
 (defn validate-block-title
@@ -139,7 +157,24 @@
                      (merge meta-m
                             {:type :notification
                              :payload {:message "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['."
+                                       :i18n-key :property.validation/invalid-name
                                        :type :error}}))))))
+
+(defn validate-editing-built-in-property
+  "Validates if built-in property entity is editable for the given attributes to be updated"
+  [entity attribute-map-to-update]
+   ;; Update allowed as needed. Keep this as an allowed list to default to safe editing for built-in entities
+  (let [allowed-attributes #{:logseq.property/hide-empty-value :logseq.property/description}]
+    (when-let [disallowed (and (:logseq.property/built-in? entity)
+                               (not-empty (set/difference (set (keys attribute-map-to-update))
+                                                          allowed-attributes)))]
+      (throw (ex-info "Given built-in property's attributes are not editable"
+                      (merge
+                       {:type :notification
+                        :payload {:message "Can't change the given attributes for a built-in property"
+                                  :type :error}}
+                       {:property (:db/ident entity)
+                        :disallowed-attributes disallowed}))))))
 
 (defn- validate-extends-property-have-correct-type
   "Validates whether given parent and children are classes"
@@ -149,6 +184,7 @@
     (throw (ex-info "Can't extend this page since either it is not a tag or is extending from a page that is not a tag"
                     {:type :notification
                      :payload {:message "Can't extend this page since either it is not a tag or is extending from a page that is not a tag"
+                               :i18n-key :class.validation/invalid-extends-type
                                :type :error}
                      :blocks (map #(select-keys % [:db/id :block/title]) (remove ldb/class? child-ents))}))))
 
@@ -158,6 +194,7 @@
     (throw (ex-info "Can't change the extends of a built-in tag"
                     {:type :notification
                      :payload {:message "Can't change the extends of a built-in tag"
+                               :i18n-key :class.validation/built-in-extends-change
                                :type :error}}))))
 
 (defn- disallow-extends-cycle
@@ -169,6 +206,7 @@
         (throw (ex-info "Extends cycle"
                         {:type :notification
                          :payload {:message "Tag extends cycle"
+                                   :i18n-key :class.validation/extends-cycle
                                    :type :error
                                    :blocks (map #(select-keys % [:db/id :block/title]) [child])}}))))))
 
@@ -189,6 +227,8 @@
       (throw (ex-info (str "Can't set tag with built-in page that isn't a tag " (pr-str (:block/title tag-ent)))
                       {:type :notification
                        :payload {:message (str "Can't set tag with built-in page that isn't a tag " (pr-str (:block/title tag-ent)))
+                                 :i18n-key :class.validation/tag-with-non-tag
+                                 :i18n-args [(:block/title tag-ent)]
                                  :type :error}
                        :property-value v})))))
 
@@ -201,24 +241,41 @@
               (and
                (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
                (= :logseq.class/Asset (:db/ident (d/entity db v))))))
-    (throw (ex-info (str (if delete? "Can't remove tag" "Can't set tag")
-                         " with built-in #" (:block/title (d/entity db v)))
-                    {:type :notification
-                     :payload {:message (str (if delete? "Can't remove tag" "Can't set tag")
-                                             " with built-in #" (:block/title (d/entity db v)))
-                               :type :error}
-                     :property-id :block/tags
-                     :property-value v}))))
+    (let [tag-title (:block/title (d/entity db v))]
+      (throw (ex-info (str (if delete? "Can't remove tag" "Can't set tag")
+                           " with built-in #" tag-title)
+                      {:type :notification
+                       :payload {:message (str (if delete? "Can't remove tag" "Can't set tag")
+                                               " with built-in #" tag-title)
+                                 :i18n-key (if delete? :class.validation/cant-remove-tag-built-in :class.validation/cant-set-tag-built-in)
+                                 :i18n-args [tag-title]
+                                 :type :error}
+                       :property-id :block/tags
+                       :property-value v})))))
+
+(defn built-in-entity?
+  "Returns true when the entity is a built-in. Ideally checking
+  :logseq.property/built-in? would be enough but not all built-in nodes have
+  that property. Covers:
+  - entities marked with :logseq.property/built-in?  (built-in pages, classes, properties)
+  - file entities  (logseq/config.edn, custom.css, etc.)
+  - entities whose :db/ident belongs to an internal namespace  (KV entries, empty-placeholder)"
+  [ent]
+  (or (:logseq.property/built-in? ent)
+      (:file/path ent)
+      (some-> (:db/ident ent) db-malli-schema/internal-ident?)))
 
 (defn- disallow-tagging-a-built-in-entity
   [db block-eids & {:keys [delete?]}]
-  (when-let [built-in-ent (some #(when (:logseq.property/built-in? %) %)
+  (when-let [built-in-ent (some #(when (built-in-entity? %) %)
                                 (map #(d/entity db %) block-eids))]
     (throw (ex-info (str (if delete? "Can't remove tag" "Can't add tag")
                          " on built-in " (pr-str (:block/title built-in-ent)))
                     {:type :notification
                      :payload {:message (str (if delete? "Can't remove tag" "Can't add tag")
                                              " on built-in " (pr-str (:block/title built-in-ent)))
+                               :i18n-key (if delete? :class.validation/cant-remove-tag-on-built-in :class.validation/cant-add-tag-on-built-in)
+                               :i18n-args [(:block/title built-in-ent)]
                                :type :error}}))))
 
 (defn- disallow-removing-page-tag
@@ -239,6 +296,8 @@
                                :payload
                                {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block")
                                 :type :error
+                                :i18n-key :page.convert/cant-be-block
+                                :i18n-args [(:block/title entity)]
                                 :entity (into {} entity)
                                 :property :block/tags}}))
               (= (:db/id library-page) (:db/id (:block/parent entity)))
@@ -247,6 +306,8 @@
                                :payload
                                {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block, please move it to another page first")
                                 :type :error
+                                :i18n-key :page.convert/cant-be-block-move-first
+                                :i18n-args [(:block/title entity)]
                                 :entity (into {} entity)
                                 :property :block/tags}}))
               (some entity-util/page? (:block/_parent entity))
@@ -255,6 +316,8 @@
                                :payload
                                {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block because it has page children")
                                 :type :error
+                                :i18n-key :page.convert/cant-be-block-has-children
+                                :i18n-args [(:block/title entity)]
                                 :entity (into {} entity)
                                 :property :block/tags}})))))))))
 
@@ -274,10 +337,14 @@
                     (:logseq.property/created-from-property block))
             (let [message (if (:logseq.property/created-from-property block)
                             "Can't convert property value to page."
-                            "Can't convert this block to page since its parent is not a page.")]
+                            "Can't convert this block to page since its parent is not a page.")
+                  i18n-key (if (:logseq.property/created-from-property block)
+                             :page.convert/property-value-to-page
+                             :page.convert/block-parent-not-page)]
               (throw (ex-info message
                               {:type :notification
                                :payload {:message message
+                                         :i18n-key i18n-key
                                          :type :error
                                          :block (into {} block)}})))))))))
 
@@ -295,3 +362,17 @@
   (disallow-tagging-a-built-in-entity db block-eids {:delete? true})
   (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true})
   (disallow-removing-page-tag db block-eids v))
+
+(defn disallow-editing-private-built-in-nodes
+  "Disallow editing private :built-in nodes. This explicit validation is needed for contexts
+   like CLI and API which allow users to edit any built-in entity whereas the app guards this
+   by not allowing users to navigate to private built-in nodes"
+  [entities]
+  (doseq [entity entities]
+    (when (and (built-in-entity? entity)
+               ;; This also checks private status of non-page ents like ents with :kv/value
+               (ldb/private-built-in-page? entity))
+      (throw (ex-info "Built-in private nodes can't be modified"
+                      {:type :notification
+                       :payload {:message "Built-in private nodes can't be modified"
+                                 :type :error}})))))

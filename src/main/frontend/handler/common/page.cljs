@@ -2,26 +2,26 @@
   "Common fns for file and db based page handlers, including create!, delete!
   and favorite fns. This ns should be agnostic of file or db concerns but there
   is still some file-specific tech debt to remove from create!"
-  (:require
-   [clojure.set :as set]
-   [clojure.string :as string]
-   [datascript.core :as d]
-   [dommy.core :as dom]
-   [frontend.db :as db]
-   [frontend.db.conn :as conn]
-   [frontend.handler.config :as config-handler]
-   [frontend.handler.db-based.editor :as db-editor-handler]
-   [frontend.handler.notification :as notification]
-   [frontend.handler.route :as route-handler]
-   [frontend.handler.ui :as ui-handler]
-   [frontend.modules.outliner.op :as outliner-op]
-   [frontend.modules.outliner.ui :as ui-outliner-tx]
-   [frontend.state :as state]
-   [logseq.common.config :as common-config]
-   [logseq.common.util :as common-util]
-   [logseq.common.util.page-ref :as page-ref]
-   [logseq.db :as ldb]
-   [promesa.core :as p]))
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [dommy.core :as dom]
+            [frontend.context.i18n :as i18n :refer [t]]
+            [frontend.db :as db]
+            [frontend.db.conn :as conn]
+            [frontend.handler.config :as config-handler]
+            [frontend.handler.db-based.editor :as db-editor-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.state :as state]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (defn- wrap-tags
   "Tags might have multiple words"
@@ -35,6 +35,22 @@
                     s))
                 (rest parts)))
      (string/join " #"))))
+
+(defn- find-page-add-button
+  [page-id]
+  (when page-id
+    (->> (dom/sel ".block-add-button")
+      (filter #(= (str page-id) (dom/attr % "parentblockid")))
+      first)))
+
+(defn- click-page-add-button-with-retry!
+  [page-id]
+  (letfn [(poll! [remaining-ms]
+            (if-let [block-add-button (find-page-add-button page-id)]
+              (.click block-add-button)
+              (when (pos? remaining-ms)
+                (js/setTimeout #(poll! (- remaining-ms 100)) 100))))]
+    (poll! 500)))
 
 (defn <create!
   ([title]
@@ -55,18 +71,22 @@
                       title)]
        (cond
          (and has-tags? (nil? title'))
-         (notification/show! "Page name can't include \"#\"." :error)
+         (notification/show! (t :page.validation/name-no-hash) :error)
+
          (and has-tags?
               (seq (set/intersection ldb/private-tags (set (map :db/ident (:block/tags parsed-result))))))
-         (notification/show! (str "New page can't set built-in tags: "
-                                  (string/join ", "
-                                               (keep #(when (ldb/private-tags (:db/ident %)) (pr-str (:block/title %)))
-                                                     (:block/tags parsed-result))))
+         (notification/show! (i18n/interpolate-rich-text-node
+                              (t :page.validation/cant-set-built-in-tags)
+                              [(i18n/locale-join-rich-text-node
+                                (keep #(when (ldb/private-tags (:db/ident %))
+                                         (pr-str (:block/title %)))
+                                      (:block/tags parsed-result)))])
                              :error)
+
          :else
          (when-not (string/blank? title')
            (p/let [existing-page (when-not class? (db/get-page title'))]
-             (if existing-page
+             (if (and existing-page (not (ldb/recycled? existing-page)))
                existing-page
                (p/let [options' (cond-> (update options :tags concat (:block/tags parsed-result))
                                   (nil? (:split-namespace? options))
@@ -78,13 +98,7 @@
                  (when redirect?
                    (route-handler/redirect-to-page! page-uuid)
                    (when-not today-journal?
-                     (js/setTimeout
-                      (fn []
-                        (when-let [block-add-button (->> (dom/sel ".block-add-button")
-                                                         (filter #(= (str (:db/id page)) (dom/attr % "parentblockid")))
-                                                         first)]
-                          (.click block-add-button)))
-                      200)))
+                     (click-page-add-button-with-retry! (:db/id page))))
                  page)))))))))
 
 ;; favorite fns
@@ -144,10 +158,10 @@
              (p/do!
               (config-handler/set-config! :default-home (dissoc default-home :page))
               (config-handler/set-config! :feature/enable-journals? true)
-              (notification/show! "Journals enabled" :success)))
+              (notification/show! (t :settings.features/journals-enable-success) :success)))
            (-> (p/let [res (ui-outliner-tx/transact!
-                            {:outliner-op :delete-page}
-                            (outliner-op/delete-page! page-uuid))]
+                             {:outliner-op :delete-page}
+                             (outliner-op/delete-page! page-uuid))]
                  (if res
                    (when ok-handler (ok-handler))
                    (when error-handler (error-handler))))

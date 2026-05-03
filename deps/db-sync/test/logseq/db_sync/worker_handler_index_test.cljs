@@ -225,3 +225,35 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest graphs-delete-supports-node-delete-hook-without-do-namespace-test
+  (async done
+         (let [request (js/Request. "http://localhost/graphs/graph-1" #js {:method "DELETE"})
+               url (js/URL. (.-url request))
+               hook-calls* (atom [])]
+           (-> (p/with-redefs [index/<user-has-access-to-graph? (fn [_db _graph-id _user-id]
+                                                                  (p/resolved true))
+                               index/<graph-delete-metadata! (fn [_db _graph-id]
+                                                               (p/resolved true))
+                               index/<graph-delete-index-entry! (fn [_db _graph-id]
+                                                                  (p/resolved true))]
+                 (p/let [resp (index-handler/handle {:db :db
+                                                     :env #js {"DB_SYNC_DELETE_GRAPH"
+                                                               (fn [graph-id]
+                                                                 (swap! hook-calls* conj graph-id)
+                                                                 (p/resolved true))}
+                                                     :request request
+                                                     :url url
+                                                     :claims #js {"sub" "user-1"}
+                                                     :route {:handler :graphs/delete
+                                                             :path-params {:graph-id "graph-1"}}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+                   (is (= 200 (.-status resp)))
+                   (is (= {:graph-id "graph-1" :deleted true} body))
+                   (is (= ["graph-1"] @hook-calls*))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))

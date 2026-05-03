@@ -76,7 +76,7 @@
    tree))
 
 (defn ^:api get-blocks-contents
-  [root-block-uuid & {:keys [init-level open-blocks-only?]
+  [root-block-uuid & {:keys [init-level open-blocks-only? include-properties?]
                       :or {init-level 1}}]
   (let [block (d/entity *current-db* [:block/uuid root-block-uuid])
         link (:block/link block)
@@ -88,7 +88,9 @@
                (remove-collapsed-descendants tree)
                tree)]
     (common-file/tree->file-content *current-db* tree
-                                    {:init-level init-level :link link}
+                                    {:init-level init-level
+                                     :include-properties? include-properties?
+                                     :link link}
                                     *content-config*)))
 
 (declare remove-block-ast-pos Properties-block-ast?)
@@ -113,10 +115,11 @@
                      (gp-mldoc/->db-edn content format))))))
 
 (defn ^:api get-page-content
-  [page-uuid & {:keys [open-blocks-only?]}]
+  [page-uuid & {:keys [open-blocks-only? include-properties?]}]
   (common-file/block->content *current-db*
                               page-uuid
-                              {:open-blocks-only? open-blocks-only?}
+                              {:open-blocks-only? open-blocks-only?
+                               :include-properties? include-properties?}
                               *content-config*))
 
 (defn- page-name->ast

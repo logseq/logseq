@@ -1,0 +1,47 @@
+{:paths ["src" "test"]
+ :deps {cheshire/cheshire {:mvn/version "5.12.0"}}
+ :tasks
+ {:requires ([babashka.cli :as cli]
+             [logseq.cli.e2e.main :as main]
+             [logseq.cli.e2e.test-runner :as test-runner])
+  :init (def cli-opts
+          (cli/parse-opts
+           *command-line-args*
+           {:alias {:i :include
+                    :h :help}
+            :spec {:jobs {:default 4}}
+            :coerce {:include []
+                     :help :boolean
+                     :dry-run :boolean
+                     :skip-build :boolean
+                     :verbose :boolean
+                     :timings :boolean
+                     :jobs :long}}))
+
+  unit-test
+  {:doc "Run internal cli-e2e harness unit tests"
+   :task (test-runner/run! cli-opts)}
+
+  build
+  {:doc "Compile required CLI artifacts and verify expected outputs exist"
+   :task (main/build! cli-opts)}
+
+  list-cases
+  {:doc "List declared non-sync cli-e2e case ids"
+   :task (main/list-cases! cli-opts)}
+
+  list-sync-cases
+  {:doc "List declared sync cli-e2e case ids"
+   :task (main/list-sync-cases! cli-opts)}
+
+  test
+  {:doc "Run non-sync cli-e2e cases with build preflight unless --skip-build is provided"
+   :task (main/test! cli-opts)}
+
+  test-sync
+  {:doc "Run sync cli-e2e cases with build preflight unless --skip-build is provided; use --jobs for case-level parallelism"
+   :task (main/test-sync! cli-opts)}
+
+  cleanup
+  {:doc "Terminate cli-e2e db-worker-node processes, terminate stale db-sync listeners, and remove cli-e2e temp roots"
+   :task (main/cleanup! cli-opts)}}}

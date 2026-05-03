@@ -83,6 +83,7 @@
 (def ^:export clear_right_sidebar_blocks api-app/clear_right_sidebar_blocks)
 (def ^:export push_state api-app/push_state)
 (def ^:export replace_state api-app/replace_state)
+(def ^:export get_current_route api-app/get_current_route)
 
 ;; db
 (def ^:export q api-db/q)
@@ -181,7 +182,9 @@
 ;; search
 (defn ^:export search
   [q' & [opts]]
-  (-> (search-handler/search (state/get-current-repo) q' (if opts (js->clj opts :keywordize-keys true) {}))
+  (-> (search-handler/search
+       (state/get-current-repo) q'
+       (if opts (js->clj opts :keywordize-keys true) {}))
       (p/then #(bean/->js (sdk-utils/normalize-keyword-for-json %)))))
 
 ;; helpers

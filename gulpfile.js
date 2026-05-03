@@ -14,27 +14,30 @@ const mobilePath = path.join(outputPath, 'mobile')
 const mobileJsPath = path.join(mobilePath, 'js')
 const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
+const resourceSyncGlobs = [
+  resourceFilePath,
+  '!' + path.join(resourcesPath, 'node_modules/**'),
+]
 const outputFilePath = path.join(outputPath, '**')
 const rawCopySrc = (globs, options = {}) =>
   gulp.src(globs, { encoding: false, ...options })
 const staticCleanKeep = new Set([
   'entitlements.plist',
-  'forge.config.js',
   'node_modules',
   'package.json',
-  'yarn.lock',
+  'pnpm-lock.yaml',
 ])
 
 const css = {
   watchCSS () {
-    return cp.spawn(`yarn css:watch`, {
+    return cp.spawn(`pnpm css:watch`, {
       shell: true,
       stdio: 'inherit',
     })
   },
 
   watchMobileCSS () {
-    return cp.spawn(`yarn css:mobile-watch`, {
+    return cp.spawn(`pnpm css:mobile-watch`, {
       shell: true,
       stdio: 'inherit',
     })
@@ -42,14 +45,14 @@ const css = {
 
   buildCSS (...params) {
     return gulp.series(
-      () => exec(`yarn css:build`, {}),
+      () => exec(`pnpm css:build`, {}),
       css._optimizeCSSForRelease,
     )(...params)
   },
 
   buildMobileCSS (...params) {
     return gulp.series(
-      () => exec(`yarn css:mobile-build`, {}),
+      () => exec(`pnpm css:mobile-build`, {}),
     )(...params)
   },
 
@@ -78,7 +81,7 @@ const common = {
   },
 
   syncResourceFile () {
-    return rawCopySrc(resourceFilePath).pipe(gulp.dest(outputPath))
+    return rawCopySrc(resourceSyncGlobs).pipe(gulp.dest(outputPath))
   },
 
   // NOTE: All assets from node_modules are copied to the output directory
@@ -157,7 +160,7 @@ const common = {
   },
 
   keepSyncResourceFile () {
-    return gulp.watch(resourceFilePath, { ignoreInitial: true },
+    return gulp.watch(resourceSyncGlobs, { ignoreInitial: true },
       common.syncResourceFile)
   },
 
@@ -215,7 +218,7 @@ const common = {
     console.log(`Dev serve at: ${LOGSEQ_APP_SERVER_URL}`)
     console.log(`--------------------------------------`)
 
-    cp.execSync(`npx cap sync ${mode}`, {
+    cp.execSync(`pnpm exec cap sync ${mode}`, {
       stdio: 'inherit',
       env: Object.assign(process.env, {
         LOGSEQ_APP_SERVER_URL,
@@ -226,7 +229,7 @@ const common = {
       stdio: 'inherit',
     })
 
-    cp.execSync(`npx cap run ${mode}`, {
+    cp.execSync(`pnpm exec cap run ${mode}`, {
       stdio: 'inherit',
       env: Object.assign(process.env, {
         LOGSEQ_APP_SERVER_URL,
@@ -257,21 +260,22 @@ const common = {
 }
 
 exports.electron = () => {
-  if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
-    cp.execSync('yarn', {
-      cwd: outputPath,
-      stdio: 'inherit',
-    })
-  }
+  cp.execSync('pnpm install --frozen-lockfile', {
+    cwd: outputPath,
+    stdio: 'inherit',
+  })
 
-  cp.execSync('yarn electron:dev', {
+  cp.execSync('pnpm electron:dev', {
     cwd: outputPath,
     stdio: 'inherit',
   })
 }
 
 exports.electronMaker = async () => {
-  cp.execSync('yarn cljs:release-electron', {
+  cp.execSync('pnpm cljs:release-electron', {
+    stdio: 'inherit',
+  })
+  cp.execSync('pnpm desktop:prepare-runtime-js', {
     stdio: 'inherit',
   })
 
@@ -290,13 +294,13 @@ exports.electronMaker = async () => {
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
 
   if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
-    cp.execSync('yarn', {
+    cp.execSync('pnpm install --frozen-lockfile', {
       cwd: outputPath,
       stdio: 'inherit',
     })
   }
 
-  cp.execSync('yarn electron:make', {
+  cp.execSync('pnpm electron:make', {
     cwd: outputPath,
     stdio: 'inherit',
   })

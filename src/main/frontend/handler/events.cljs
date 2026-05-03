@@ -10,6 +10,7 @@
             [frontend.commands :as commands]
             [frontend.components.rtc.indicator :as indicator]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
@@ -48,7 +49,8 @@
             [logseq.api.plugin :as plugin-api]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [cljs-time.core :as t]))
 
 ;; TODO: should we move all events here?
 
@@ -61,6 +63,12 @@
 (defn- decrypt-aes-key-failed?
   [error]
   (string/includes? (or (ex-message error) (str error)) "decrypt-aes-key"))
+
+(defn- <build-search-index!
+  [repo]
+  (-> (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
+      (p/catch (fn [error]
+                 (js/console.error "Search index build error:" error)))))
 
 (defn- schedule-search-index-build!
   [repo]
@@ -76,9 +84,7 @@
                (state/input-idle? repo :diff 5000)
                (do
                  (reset! *search-index-build-timeout nil)
-                 (-> (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
-                     (p/catch (fn [error]
-                                (js/console.error "Search index build error:" error)))))
+                 (<build-search-index! repo))
 
                :else
                (schedule-search-index-build! repo)))
@@ -110,23 +116,22 @@
      (p/do!
       (p/delay 5000)
       (p/let [repo (state/get-current-repo)
-              _ (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)]
+              _ (<build-search-index! repo)]
         (when state/lsp-enabled?
           (doseq [service (state/get-all-plugin-services-with-type :search)]
             (search-plugin/call-service! service "search:rebuildPagesIndice" {})
             (search-plugin/call-service! service "search:rebuildBlocksIndice" {}))))))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (let [switch-promise
-        (p/do!
-         (export/cancel-db-backup!)
-         (persist-db/export-current-graph!)
-         (state/set-state! :db/async-queries {})
-         (st/refresh!)
-         (graph-switch-on-persisted graph opts))]
-    (p/then switch-promise
-            (fn [_]
-              (export/backup-db-graph (state/get-current-repo))))))
+  (let [t1 (t/now)]
+    (p/do!
+    (export/cancel-db-backup!)
+    (state/set-state! :db/async-queries {})
+    (st/refresh!)
+    (graph-switch-on-persisted graph opts)
+    (export/backup-db-graph (state/get-current-repo))
+    (let [t2 (t/now)]
+      (log/info ::graph-switch-spent (- t2 t1))))))
 
 (defmethod handle :graph/open-new-window [[_ev target-repo]]
   (ui-handler/open-new-window-or-tab! target-repo))
@@ -166,7 +171,9 @@
 
 (defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
   (when-not (empty? (dissoc opts :type :payload))
-    (js/console.error "instrument data-map should only contains [:type :payload]"))
+    (log/error :event :invalid-instrument-payload-keys
+               :message "instrument data-map should only contain [:type :payload]"
+               :payload opts))
   (posthog/capture type payload))
 
 (defmethod handle :capture-error [[_ {:keys [error payload extra]}]]
@@ -243,7 +250,10 @@
     (state/pub-event! [:graph/ready graph])))
 
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
-  (persist-db/export-current-graph! {:succ-notification? true :force-save? true}))
+  (persist-db/export-current-graph! :succ-notification? true))
+
+(defmethod handle :graph/db-save-shortcut [[_]]
+  (handle [:graph/save-db-to-disk {:source :shortcut}]))
 
 (defmethod handle :ui/re-render-root [[_]]
   (ui-handler/re-render-root!))
@@ -353,7 +363,7 @@
 
 (defmethod handle :rtc/remote-graph-gone [_]
   (p/do!
-   (notification/show! "This graph has been removed from Logseq Sync." :warning false)
+   (notification/show! (t :graph/removed-from-sync) :warning false)
    (rtc-handler/<get-remote-graphs)))
 
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version graph-e2ee?]]
@@ -368,7 +378,7 @@
        nil
        (fn []
          [:div.flex.flex-col.items-center.justify-center.mt-8.gap-4
-          [:div (str "Downloading " graph-name " ...")]
+          [:div (t :sync/downloading-graph graph-name)]
           (indicator/downloading-logs)])
        {:id :download-rtc-graph}))
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-e2ee?)

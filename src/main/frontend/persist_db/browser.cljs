@@ -6,6 +6,7 @@
             [electron.ipc :as ipc]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db.transact :as db-transact]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
@@ -20,6 +21,38 @@
 (def-thread-api :thread-api/input-idle?
   [repo diff]
   (state/input-idle? repo :diff diff))
+
+(def-thread-api :thread-api/search-index-build-progress
+  [repo {:keys [status progress processed total]}]
+  (let [prev-state (get @state/state :search/index-build)
+        current-repo (state/get-current-repo)
+        visible-repo? (or (= repo current-repo)
+                          (= repo (:repo prev-state)))]
+    (when visible-repo?
+      (case status
+        :idle
+        (state/set-state! :search/index-build
+                          (assoc (or prev-state {})
+                                 :running? false
+                                 :repo repo))
+
+        :running
+        (state/set-state! :search/index-build
+                          {:running? true
+                           :repo repo
+                           :progress (or progress 0)
+                           :processed (or processed 0)
+                           :total (or total 0)})
+
+        :completed
+        (state/set-state! :search/index-build
+                          {:running? false
+                           :repo repo
+                           :progress (or progress 0)
+                           :processed (or processed 0)
+                           :total (or total 0)})
+        nil))
+    nil))
 
 (defn- ask-persist-permission!
   []
@@ -88,6 +121,9 @@
 
 (defn stop-db-worker!
   []
+  (when @state/*db-worker
+    (-> (state/<invoke-db-worker :thread-api/cancel-ui-requests {:reason :stop-db-worker})
+        (p/catch (constantly nil))))
   (when-let [^js worker @state/*db-worker-thread]
     (set! (.-onmessage worker) nil)
     (.terminate worker))
@@ -129,8 +165,8 @@
        (-> (p/let [_ (state/<invoke-db-worker :thread-api/init)
                    _ (state/<invoke-db-worker :thread-api/set-db-sync-config
                                               {:enabled? true
-                                               :ws-url config/db-sync-ws-url
-                                               :http-base config/db-sync-http-base})
+                                               :ws-url (config/db-sync-ws-url)
+                                               :http-base (config/db-sync-http-base)})
                    _ (state/pub-event! [:rtc/sync-app-state])
                    _ (log/info "init worker spent" (str (- (util/time-ms) t1) "ms"))
                    _ (sync-ui-state!)
@@ -147,9 +183,9 @@
                       (log/error :init-sqlite-wasm-error ["Can't init SQLite wasm" error]))))))))
 
 (defn <export-db!
-  [repo data]
+  [repo]
   (when (util/electron?)
-    (ipc/ipc :db-export repo data)))
+    (ipc/ipc :db-export repo false)))
 
 (defn- sqlite-error-handler
   [error]
@@ -160,7 +196,7 @@
     (js/window.location.reload)
     (do
       (log/error :sqlite-error error)
-      (notification/show! (str "SQLiteDB error: " error) :error))))
+      (notification/show! (t :storage/sqlitedb-error error) :error))))
 
 (defrecord InBrowser []
   protocol/PersistentDB
@@ -178,11 +214,7 @@
     (state/<invoke-db-worker :thread-api/release-access-handles repo))
 
   (<fetch-initial-data [_this repo opts]
-    (-> (p/let [db-exists? (state/<invoke-db-worker :thread-api/db-exists repo)
-                disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
-                _ (when disk-db-data
-                    (state/<invoke-db-worker-direct-pass :thread-api/import-db repo disk-db-data))
-                _ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
+    (-> (p/let [_ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
           (state/<invoke-db-worker :thread-api/get-initial-data repo opts))
         (p/catch sqlite-error-handler)))
 
@@ -191,13 +223,15 @@
           (when data
             (if (:return-data? opts)
               data
-              (<export-db! repo data))))
+              (<export-db! repo))))
         (p/catch (fn [error]
                    (log/error :export-db-error repo error "SQLiteDB save error")
-                   (notification/show! (str "SQLiteDB save error: " error) :error) {}))))
+                   (notification/show! (t :storage/sqlitedb-save-error error) :error) {}))))
 
   (<import-db [_this repo data]
-    (-> (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)
-        (p/catch (fn [error]
-                   (log/error :import-db-error repo error "SQLiteDB import error")
-                   (notification/show! (str "SQLiteDB import error: " error) :error) {})))))
+    (->
+     (p/let [result-str (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)]
+       (ldb/read-transit-str result-str))
+     (p/catch (fn [error]
+                (log/error :import-db-error repo error "SQLiteDB import error")
+                (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))

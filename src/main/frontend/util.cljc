@@ -1315,15 +1315,19 @@
                          (js/console.error "Web clipboard failed" err)))))))))
 
 #?(:cljs
+   (defn copy-image-blob-to-clipboard
+     [blob]
+     (if (= (.-type blob) "image/png")
+       (write-blob-to-clipboard blob)
+       (image-blob->png blob write-blob-to-clipboard))))
+
+#?(:cljs
    (defn copy-image-to-clipboard
      [src]
      (-> (js/fetch src)
          (.then (fn [data]
                   (-> (.blob data)
-                      (.then (fn [blob]
-                               (if (= (.-type blob) "image/png")
-                                 (write-blob-to-clipboard blob)
-                                 (image-blob->png blob write-blob-to-clipboard))))
+                      (.then copy-image-blob-to-clipboard)
                       (.catch js/console.error)))))))
 
 (defn memoize-last
@@ -1381,3 +1385,19 @@
    (defn rtc-test?
      []
      (string/includes? js/window.location.search "?rtc-test=true")))
+
+#?(:cljs
+   (defn sanitize-port-input
+     "Strips all non-digit characters from a port input string."
+     [value]
+     (some-> value
+             trim-safe
+             (string/replace #"\D" ""))))
+
+#?(:cljs
+   (defn normalize-port-input
+     "Normalizes a port input to a valid port number string (1–65535), or nil."
+     [value]
+     (let [digits (sanitize-port-input value)]
+       (when (seq digits)
+         (str (-> digits js/parseInt (max 1) (min 65535)))))))

@@ -121,7 +121,7 @@
                              [:delete-page [page-uuid {:deleted-by-uuid deleted-by-uuid
                                                        :now-ms now-ms}]])
                       rename?
-                      (assoc :real-outliner-op :rename-page))]
+                      (assoc :source-outliner-op :rename-page))]
         ;; TODO: maybe we should add $$$favorites to built-in pages?
         (cond
           (or (ldb/built-in? page) (ldb/hidden? page))
@@ -195,11 +195,9 @@
 ;; TODO: Revisit title cleanup as this was copied from file implementation
 (defn ^:api sanitize-title
   [title]
-  (let [title      (-> (string/trim title)
-                       (text/page-ref-un-brackets!)
-                        ;; remove `#` from tags
-                       (string/replace #"^#+" ""))
-        title      (common-util/remove-boundary-slashes title)]
+  (let [title (-> (string/trim title)
+                  (text/page-ref-un-brackets!))
+        title (common-util/remove-boundary-slashes title)]
     title))
 
 (defn- get-page-by-parent-name
@@ -257,13 +255,15 @@
            (and (not class?) (not (every? ldb/internal-page? pages)))
            (throw (ex-info "Cannot create this page unless all parents are pages"
                            {:type :notification
-                            :payload {:message "Cannot create this page unless all parents are pages"
+                            :payload {:message "Cannot create this page unless all parents are pages."
+                                      :i18n-key :page.validation/parents-must-be-pages
                                       :type :warning}}))
 
            (and class? (not (every? ldb/class? pages)))
            (throw (ex-info "Cannot create this tag unless all parents are tags"
                            {:type :notification
-                            :payload {:message "Cannot create this tag unless all parents are tags"
+                            :payload {:message "Cannot create this tag unless all parents are tags."
+                                      :i18n-key :class.validation/parents-must-be-tags
                                       :type :warning}}))
 
            :else
@@ -308,6 +308,7 @@
         class? (or class? (some (fn [t] (= :logseq.class/Tag (:db/ident t))) tags))
         class-ident-namespace? (and class? class-ident-namespace (string? class-ident-namespace))
         title (sanitize-title title*)
+        _ (outliner-validate/validate-page-title-no-hashtag title {:node {:block/title title}})
         types (cond class?
                     #{:logseq.class/Tag}
                     today-journal?
@@ -408,7 +409,7 @@
 
 (defn create!
   [conn title opts]
-  (let [{:keys [tx-meta tx-data title' page-uuid]} (create @conn title opts)]
+  (let [{:keys [tx-meta tx-data title page-uuid]} (create @conn title opts)]
     (when (seq tx-data)
       (ldb/transact! conn tx-data tx-meta))
-    [title' page-uuid]))
+    [title page-uuid]))

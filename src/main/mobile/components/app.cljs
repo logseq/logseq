@@ -142,16 +142,20 @@
 (rum/defc app
   [current-repo route-match]
   (let [[tab] (mobile-state/use-tab)
+        preferred-language (state/sub :preferred-language)
         [theme] (frum/use-atom-in state/state :ui/theme)]
     (use-screen-size-effects!)
     (use-theme-effects! current-repo theme)
     (hooks/use-effect!
      (fn []
-       (when (mobile-util/native-platform?)
-         (bottom-tabs/configure))
        (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element)))
      [])
+    (hooks/use-effect!
+     (fn []
+       (when (mobile-util/native-platform?)
+         (bottom-tabs/configure)))
+     [preferred-language])
     [:<>
      (mobile-header/header current-repo tab)
      (main-content tab route-match)]))

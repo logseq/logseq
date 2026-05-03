@@ -21,7 +21,7 @@
                   (:db/ident property-entity))))
 
 (defn private-built-in-page?
-  "Private built-in pages should not be navigable or searchable by users. Later it
+  "Private built-in pages should not be navigable, searchable or editable by users. Later it
    could be useful to use this for the All Pages view"
   [page]
   (cond (entity-util/property? page)

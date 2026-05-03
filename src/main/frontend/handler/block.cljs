@@ -3,6 +3,7 @@
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
@@ -153,7 +154,7 @@
       (when-let [block-id (:block/uuid block)]
         (let [block (or (db/entity [:block/uuid block-id]) block)]
           (if (ldb/recycled? block)
-            (notification/show! "Recycle is read-only." :warning)
+            (notification/show! (t :storage.recycle/readonly) :warning)
             (p/do!
              (db-async/<get-block repo (:db/id block) {:children? false})
              (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
@@ -250,7 +251,7 @@
         (p/do!
          (ui-outliner-tx/transact!
           {:outliner-op :move-blocks
-           :real-outliner-op :indent-outdent}
+           :source-outliner-op :indent-outdent}
           (when save-current-block (save-current-block))
           (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks')
                                               indent?

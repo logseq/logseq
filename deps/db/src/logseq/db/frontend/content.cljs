@@ -16,6 +16,16 @@
     ")"
     "\\]\\]")))
 
+(def ^:private id-or-tag-ref-pattern
+  (re-pattern
+   (str
+    "(#?)"
+    "\\[\\["
+    "("
+    common-util/uuid-pattern
+    ")"
+    "\\]\\]")))
+
 (defn content-id-ref->page
   "Convert id ref backs to page name using refs."
   [content refs]
@@ -184,23 +194,48 @@
   ([ent]
    (recur-replace-uuid-in-block-title ent 10))
   ([ent max-depth]
-   (if (some->> (:block/title ent) (re-find id-ref-pattern))
-     (let [ref-set (loop [result-refs (:block/refs ent)
-                          current-refs (:block/refs ent)
-                          depth 0]
-                     (if (or (>= depth max-depth) (empty? current-refs))
-                       result-refs
-                       (let [next-refs (set (mapcat :block/refs current-refs))
-                             result-refs' (apply conj result-refs next-refs)]
-                         (if (= (count result-refs') (count result-refs))
-                           result-refs
-                           (recur (apply conj result-refs next-refs) next-refs (inc depth))))))
-           opts {:replace-block-id? true}]
-       (loop [result (id-ref->title-ref (:block/title ent) ref-set opts)
-              last-result nil
-              depth 0]
-         (if (or (>= depth max-depth)
-                 (= last-result result))
-           result
-           (recur (id-ref->title-ref result ref-set opts) result (inc depth)))))
-     (:block/title ent))))
+   (let [title (:block/title ent)]
+     (if (some->> title (re-find id-ref-pattern))
+       (let [id->title (loop [frontier (set (:block/refs ent))
+                              seen-ids #{}
+                              id->title {}
+                              depth 0]
+                         (if (or (>= depth max-depth)
+                                 (empty? frontier))
+                           id->title
+                           (let [refs (filter map? frontier)
+                                 new-refs (remove (fn [ref]
+                                                    (contains? seen-ids (:block/uuid ref)))
+                                                  refs)
+                                 seen-ids' (into seen-ids
+                                                 (keep :block/uuid)
+                                                 new-refs)
+                                 id->title' (reduce (fn [m {:block/keys [title]
+                                                            block-uuid :block/uuid}]
+                                                      (if (and block-uuid (string? title))
+                                                        (assoc m (str block-uuid) title)
+                                                        m))
+                                                    id->title
+                                                    new-refs)
+                                 next-frontier (->> new-refs
+                                                    (mapcat :block/refs)
+                                                    (filter map?)
+                                                    set)]
+                             (recur next-frontier seen-ids' id->title' (inc depth)))))]
+         (loop [result title depth 0]
+           (if (or (>= depth max-depth)
+                   (not (re-find id-ref-pattern result)))
+             result
+             (let [next-result
+                   (string/replace result id-or-tag-ref-pattern
+                                   (fn [[matched hash-prefix id]]
+                                     (if-let [ref-title (get id->title id)]
+                                       (if (and (= "#" hash-prefix)
+                                                (not (string/includes? ref-title " ")))
+                                         (str "#" ref-title)
+                                         (str hash-prefix (page-ref/->page-ref ref-title)))
+                                       matched)))]
+               (if (= result next-result)
+                 result
+                 (recur next-result (inc depth)))))))
+       title))))

@@ -16,10 +16,12 @@ node .agents/skills/logseq-dependency-upgrade/scripts/audit_logseq_dependencies.
   --output-json <json-output-path> \
   --output-md <markdown-output-path> \
   [--stale-months <months>] \
+  [--max-update-interval <months>] \
   [--include-prerelease]
 ```
 
 - `--stale-months` — number of months since last publish to flag a package as stale (default: `36`).
+- `--max-update-interval` — maximum number of months between the current version's publish date and the latest version's publish date. If the interval is within this threshold, the package is NOT considered outdated and is excluded from upgrade batches (default: `6`).
 - `--include-prerelease` — boolean flag (no value). When present, the Risk column annotates any newer upstream pre-release version (SNAPSHOT / RC / alpha / beta / nightly / canary etc.). The **target version is always the latest stable release** regardless of this flag. When absent (default), pre-release versions are neither fetched nor shown.
 
 2. Read the generated Markdown report — it is the primary planning document, structured for batch-wise execution.
@@ -60,7 +62,7 @@ Target versions preserve the original specifier prefix. If current is `^1.0.0` a
 
 ## Lockfile resolution
 
-For npm packages with a range specifier (e.g. `^`), the script checks `yarn.lock` to see if the resolved version already matches latest. These packages are flagged as **already resolved** — they need only a lockfile refresh, not a manifest change, and carry zero upgrade risk.
+For npm packages with a range specifier (e.g. `^`), the script checks `pnpm-lock.yaml` to see if the resolved version already matches latest. These packages are flagged as **already resolved** — they need only a manifest/range update, not a lockfile refresh/install, and carry zero upgrade risk.
 
 ## Output contract
 

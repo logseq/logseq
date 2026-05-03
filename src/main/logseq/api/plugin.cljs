@@ -9,7 +9,7 @@
             [frontend.handler.command-palette :as palette-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.idb :as idb]
+            [frontend.common.idb :as idb]
             [frontend.modules.layout.core]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as st]

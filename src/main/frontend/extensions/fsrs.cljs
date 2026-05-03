@@ -6,7 +6,6 @@
             [frontend.components.block :as component-block]
             [frontend.components.macro :as component-macro]
             [frontend.context.i18n :refer [t]]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
@@ -29,8 +28,12 @@
             [rum.core :as rum]
             [tick.core :as tick]))
 
-(commands/register-slash-command ["Cloze"
-                                  [[:editor/input "{{cloze }}" {:backward-pos 2}]]])
+(commands/register-slash-command
+ (fn []
+   [(t :editor.slash/cloze)
+    [[:editor/input "{{cloze }}" {:backward-pos 2}]]
+    nil
+    :icon/brackets-contain]))
 
 (def ^:private instant->inst-ms (comp inst-ms tick/inst))
 (defn- inst-ms->instant [ms] (tick/instant (js/Date. ms)))
@@ -114,12 +117,11 @@
 
 (defn- <create-cards-block!
   []
-  (let [cards-tag-id (:db/id (db/entity :logseq.class/Cards))]
-    (editor-handler/api-insert-new-block! ""
-                                          {:page (date/today)
-                                           :properties {:block/tags #{cards-tag-id}}
-                                           :sibling? false
-                                           :end? true})))
+  (editor-handler/api-insert-new-block! ""
+                                        {:page (db-model/get-today-journal-title)
+                                         :properties {:block/tags #{:logseq.class/Cards}}
+                                         :sibling? false
+                                         :end? true}))
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text due on-click class]}]
   (let [bg-class (case id
@@ -131,7 +133,7 @@
     [:div.flex.flex-row.items-center.gap-2
      (shui/button
       {:variant :outline
-       :title (str "Shortcut: " shortcut)
+       :title (t :flashcard/shortcut-tooltip shortcut)
        :auto-focus false
        :size :sm
        :id id
@@ -160,11 +162,26 @@
       :show-answer
       :init)))
 
+(def ^:private ratings
+  [:again :hard :good :easy])
+
 (def ^:private rating->shortcut
   {:again "1"
    :hard  "2"
    :good  "3"
    :easy  "4"})
+
+(defn- rating-key
+  [rating]
+  (keyword "flashcard.rating" (name rating)))
+
+(defn- rating-desc-key
+  [rating]
+  (keyword "flashcard.rating" (str (name rating) "-desc")))
+
+(defn- rating-label
+  [rating]
+  (t (rating-key rating)))
 
 (defn- rating-btns
   [repo block *card-index *phase]
@@ -174,14 +191,14 @@
       (fn [rating]
         (let [card-map (get-card-map block)
               due (:due (fsrs.core/repeat-card! card-map rating))]
-          (btn-with-shortcut {:btn-text (string/capitalize (name rating))
+          (btn-with-shortcut {:btn-text (rating-label rating)
                               :shortcut (rating->shortcut rating)
                               :due due
                               :id (str "card-" (name rating))
                               :on-click #(do (repeat-card! repo block-id rating)
                                              (swap! *card-index inc)
                                              (reset! *phase :init))})))
-      (keys rating->shortcut))
+      ratings)
      (shui/button
       {:variant :ghost
        :size :sm
@@ -190,18 +207,11 @@
                    (shui/popup-show! (.-target e)
                                      (fn []
                                        [:div.p-4.max-w-lg
-                                        [:dl
-                                         [:dt "Again"]
-                                         [:dd "We got the answer wrong. Automatically means that we have forgotten the card. This is a lapse in memory."]]
-                                        [:dl
-                                         [:dt "Hard"]
-                                         [:dd "The answer was correct but we were not confident about it and/or took too long to recall."]]
-                                        [:dl
-                                         [:dt "Good"]
-                                         [:dd "The answer was correct but we took some mental effort to recall it."]]
-                                        [:dl
-                                         [:dt "Easy"]
-                                         [:dd "The answer was correct and we were confident and quick in our recall without mental effort."]]])
+                                        (for [rating ratings]
+                                          ^{:key (name rating)}
+                                          [:dl
+                                           [:dt (t (rating-key rating))]
+                                           [:dd (t (rating-desc-key rating))]])])
                                      {:align "start"}))}
       (ui/icon "info-circle"))]))
 
@@ -227,17 +237,18 @@
                         :show-cloze
                         {:show-cloze? true
                          :hide-children? true}
-                        {:show-cloze? true})]
+                        {:show-cloze? true
+                         :ignore-block-collapsed? true})]
            (component-block/blocks-container option [block-entity]))
          [:div.mt-8.pb-2
           (if (contains? #{:show-cloze :show-answer} next-phase)
             (btn-with-shortcut {:btn-text (case next-phase
                                             :show-answer
-                                            (t :flashcards/modal-btn-show-answers)
+                                            (t :flashcard.review/show-answers)
                                             :show-cloze
-                                            (t :flashcards/modal-btn-show-clozes)
+                                            (t :flashcard.review/show-clozes)
                                             :init
-                                            (t :flashcards/modal-btn-hide-answers))
+                                            (t :flashcard.review/hide-answers))
                                 :shortcut "s"
                                 :id "card-answers"
                                 :on-click #(swap! *phase
@@ -254,7 +265,7 @@
                  *loading? (atom nil)
                  cards-id (last (:rum/args state))
                  *cards-list (atom [{:db/id :global
-                                     :block/title "All cards"}])
+                                     :block/title (t :flashcard/all-cards)}])
                  repo (state/get-current-repo)
                  cards-class-id (:db/id (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards))]
              (reset! *loading? true)
@@ -271,7 +282,7 @@
                                                  (assoc block :block/title (:block/title query-block))))))
                                          cards))]
                  (reset! *cards-list (concat [{:db/id :global
-                                               :block/title "All cards"}]
+                                               :block/title (t :flashcard/all-cards)}]
                                              (remove
                                               (fn [card]
                                                 (string/blank? (:block/title card)))
@@ -291,7 +302,7 @@
         *cards-list (::cards-list state)
         all-cards (or (rum/react *cards-list)
                       [{:db/id :global
-                        :block/title "All cards"}])
+                        :block/title (t :flashcard/all-cards)}])
         *block-ids (::block-ids state)
         block-ids (rum/react *block-ids)
         loading? (rum/react (::loading? state))
@@ -311,7 +322,7 @@
          (shui/select-trigger
           {:class "!px-2 !py-0 !h-8 w-64"}
           (shui/select-value
-           {:placeholder "Select cards"}))
+           {:placeholder (t :flashcard/select-cards)}))
          (shui/select-content
           (shui/select-group
            (for [card-entity all-cards]
@@ -321,7 +332,7 @@
          {:variant :ghost
           :id "ls-cards-add"
           :size :sm
-          :title "Add new query"
+          :title (t :flashcard/add-query)
           :class "!px-1 text-muted-foreground"
           :on-click (fn []
                       (p/let [saved-block (<create-cards-block!)]
@@ -341,13 +352,13 @@
 
            (empty? block-ids)
            [:div.ls-card.content.ml-2
-            [:h2.font-medium (t :flashcards/modal-welcome-title)]
+            [:h2.font-medium (t :flashcard.empty/title)]
 
             [:div
-             [:p (t :flashcards/modal-welcome-desc-1 "#Card")]]]
+             [:p (t :flashcard.empty/desc "#Card")]]]
 
            :else
-           [:p (t :flashcards/modal-finished)]))])))
+           [:p (t :flashcard.review/finished)]))])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
 (def ^:private new-task--update-due-cards-count

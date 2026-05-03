@@ -2,6 +2,7 @@
   (:require ["http" :as http]
             ["path" :as node-path]
             ["ws" :as ws]
+            [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.logging :as logging]
@@ -23,12 +24,19 @@
 (logging/install!)
 
 (defn- make-env [cfg index-db assets-bucket]
-  (doto (js-obj)
-    (aset "DB" index-db)
-    (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
-    (aset "COGNITO_ISSUER" (:cognito-issuer cfg))
-    (aset "COGNITO_CLIENT_ID" (:cognito-client-id cfg))
-    (aset "COGNITO_JWKS_URL" (:cognito-jwks-url cfg))))
+  (let [allow-unverified-jwt-claims (some-> js/process .-env (aget "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS"))
+        env (doto (js-obj)
+              (aset "DB" index-db)
+              (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
+              ;; Node adapter serves snapshot transit stream without gzip to avoid
+              ;; browser/adapter content-encoding mismatches during graph download.
+              (aset "DB_SYNC_SNAPSHOT_STREAM_GZIP" "false")
+              (aset "COGNITO_ISSUER" (:cognito-issuer cfg))
+              (aset "COGNITO_CLIENT_ID" (:cognito-client-id cfg))
+              (aset "COGNITO_JWKS_URL" (:cognito-jwks-url cfg)))]
+    (when (some? allow-unverified-jwt-claims)
+      (aset env "DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS" allow-unverified-jwt-claims))
+    env))
 
 (defn- access-allowed?
   [env graph-id request]
@@ -90,16 +98,22 @@
 (defn start!
   [overrides]
   (let [cfg (config/normalize-config overrides)
+        scheme (if (and (:base-url cfg) (string/starts-with? (:base-url cfg) "https"))
+                 "https"
+                 "http")
         index-db (storage/open-index-db (:data-dir cfg))
         assets-bucket (assets/make-bucket (node-path/join (:data-dir cfg) "assets"))
-        env (make-env cfg index-db assets-bucket)
         registry (atom {})
         deps {:config cfg
               :index-db index-db
               :assets-bucket assets-bucket}
+        env (doto (make-env cfg index-db assets-bucket)
+              (aset "DB_SYNC_DELETE_GRAPH"
+                    (fn [graph-id]
+                      (graph/delete-graph! registry deps graph-id))))
         server (.createServer http
                               (fn [req res]
-                                (-> (p/let [request (platform-node/request-from-node req {:scheme "http"})
+                                (-> (p/let [request (platform-node/request-from-node req {:scheme scheme})
                                             response (dispatch/handle-node-fetch {:request request
                                                                                   :env env
                                                                                   :registry registry
@@ -117,7 +131,7 @@
     (p/let [_ (index/<index-init! index-db)]
       (.on server "upgrade"
            (fn [req ^js socket head]
-             (let [request (platform-node/request-from-node req {:scheme "http"})
+             (let [request (platform-node/request-from-node req {:scheme scheme})
                    url (platform/request-url request)
                    path (.-pathname url)
                    parsed (node-routes/parse-sync-path path)

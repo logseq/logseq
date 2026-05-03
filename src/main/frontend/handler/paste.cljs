@@ -2,6 +2,7 @@
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.format.block :as block]
@@ -87,9 +88,20 @@
                               (when (contains? (set types) "web application/logseq")
                                 (.getType ^js (first clipboard-items)
                                           "web application/logseq"))))
-          blocks-str (when blocks-blob (.text blocks-blob))]
+          blocks-str (when (and blocks-blob (pos? (.-size blocks-blob)))
+                       (.text blocks-blob))]
     (when blocks-str
       (common-util/safe-read-map-string blocks-str))))
+
+(defn- get-copied-blocks-from-memory
+  [text]
+  (when-let [blocks-str (utils/getCopiedBlocksFromMemory text)]
+    (let [copied-blocks (and (string? blocks-str)
+                             (not (string/blank? blocks-str))
+                             (string/starts-with? (string/triml blocks-str) "{")
+                             (common-util/safe-read-map-string blocks-str))]
+      (when (seq (:blocks copied-blocks))
+        copied-blocks))))
 
 (defn- markdown-blocks?
   [text]
@@ -160,9 +172,11 @@
 (defn- paste-copied-blocks-or-text
   [input text e html]
   (util/stop e)
-  (let [repo (state/get-current-repo)]
+  (let [repo (state/get-current-repo)
+        copied-blocks-from-memory (get-copied-blocks-from-memory text)]
     (->
-     (p/let [{:keys [graph blocks embed-block?]} (get-copied-blocks)]
+     (p/let [{:keys [graph blocks embed-block?]} (or copied-blocks-from-memory
+                                                      (get-copied-blocks))]
        (if (and (seq blocks) (= graph repo))
        ;; Handle internal paste
          (let [revert-cut-txs (get-revert-cut-txs blocks)
@@ -173,7 +187,7 @@
                (when-let [current-block (state/get-edit-block)]
                  (cond
                    (some #(= block-id (:block/uuid %)) (db/get-block-parents repo (:block/uuid current-block) {}))
-                   (notification/show! "Can't embed parent block as its own property" :error)
+                   (notification/show! (t :asset/cannot-embed-parent-as-own-property) :error)
 
                    :else
                    (p/do!
