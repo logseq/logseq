@@ -3,8 +3,10 @@
   (:require ["fs-extra" :as fs]
             ["path" :as node-path]
             [electron.backup-file :as backup-file]
+            [electron.db-worker :as db-worker]
             [lambdaisland.glogi :as log]
             [logseq.cli.common.graph :as cli-common-graph]
+            [logseq.cli.transport :as cli-transport]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.backup :as sqlite-backup]
@@ -45,15 +47,15 @@
                        (rand-int 1000000)
                        ".sqlite")))
 
-(defn backup-db!
-  [db-name {:keys [force-backup?]}]
+(defn backup-db-with-sqlite-backup!
+  [db-name {:keys [force-backup? sqlite-backup!]}]
   (let [_ (ensure-graph-dir! db-name)
         [_db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)
         backups-path (common-sqlite/get-db-backups-path (cli-common-graph/get-db-graphs-dir) db-name)]
     (when (fs/existsSync db-path)
       (let [tmp-path (temp-backup-path backups-path)]
         (-> (p/let [_ (fs/ensureDirSync backups-path)
-                    _ (sqlite-backup/backup-db-file! db-path tmp-path)
+                    _ (sqlite-backup! db-path tmp-path)
                     payload (fs/readFileSync tmp-path)]
               (backup-file/backup-file db-name nil nil
                                        ".sqlite"
@@ -67,19 +69,42 @@
                            (catch :default _
                              nil)))))))))
 
-(defn- active-repos
+(defn backup-db!
+  [db-name opts]
+  (backup-db-with-sqlite-backup!
+   db-name
+   (assoc opts :sqlite-backup! sqlite-backup/backup-db-file!)))
+
+(defn backup-db-via-worker!
+  [db-name window-id opts]
+  (backup-db-with-sqlite-backup!
+   db-name
+   (assoc opts
+          :sqlite-backup!
+          (fn [_src-path dst-path]
+            (p/let [runtime (db-worker/ensure-runtime! db-name window-id)]
+              (cli-transport/invoke runtime
+                                    :thread-api/backup-db-sqlite
+                                    false
+                                    [db-name dst-path]))))))
+
+(defn- active-repo-window-ids
   []
-  (->> (:window->repo @*auto-backup)
-       vals
-       (remove nil?)
-       set
-       vec))
+  (let [repo->window-ids (reduce-kv (fn [m window-id repo]
+                                      (if (seq repo)
+                                        (update m repo (fnil conj []) window-id)
+                                        m))
+                                    {}
+                                    (:window->repo @*auto-backup))]
+    (mapv (fn [[repo window-ids]]
+            [repo (first window-ids)])
+          repo->window-ids)))
 
 (defn run-auto-backup!
   []
   (p/all
-   (for [repo (active-repos)]
-     (-> (backup-db! repo {})
+   (for [[repo window-id] (active-repo-window-ids)]
+     (-> (backup-db-via-worker! repo window-id {})
          (p/catch (fn [error]
                     (log/warn :electron/auto-db-backup-failed
                               {:repo repo
@@ -89,7 +114,7 @@
 (defn- reconcile-auto-backup-timer!
   []
   (let [{:keys [interval-id]} @*auto-backup
-        has-repos? (seq (active-repos))]
+        has-repos? (seq (active-repo-window-ids))]
     (cond
       (and has-repos? (nil? interval-id))
       (let [id (js/setInterval (fn [] (run-auto-backup!))

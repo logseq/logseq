@@ -114,6 +114,48 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest backup-db-with-sqlite-backup-uses-provided-snapshot-fn
+  (async done
+    (let [graphs-dir (node-helper/create-tmp-dir "electron-db-backup-custom-snapshot")
+          db-name "logseq_db_demo"
+          [_ db-path] (common-sqlite/get-db-full-path graphs-dir db-name)
+          backups-path (common-sqlite/get-db-backups-path graphs-dir db-name)
+          custom-calls (atom [])
+          fallback-calls (atom [])
+          backup-calls (atom [])]
+      (fs/ensureDirSync (node-path/dirname db-path))
+      (fs/writeFileSync db-path "seed")
+      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+                          sqlite-backup/backup-db-file! (fn [src dst]
+                                                          (swap! fallback-calls conj [src dst])
+                                                          (p/rejected (ex-info "fallback should not run" {})))
+                          backup-file/backup-file (fn [repo _dir _relative-path ext content & {:as opts}]
+                                                    (swap! backup-calls conj {:repo repo
+                                                                              :ext ext
+                                                                              :content (.toString content)
+                                                                              :opts opts})
+                                                    nil)]
+            (p/let [_ (electron-db/backup-db-with-sqlite-backup!
+                       db-name
+                       {:force-backup? true
+                        :sqlite-backup! (fn [src dst]
+                                          (swap! custom-calls conj [src dst])
+                                          (fs/writeFileSync dst "worker-copy")
+                                          (p/resolved nil))})]
+              (is (= [[db-path (second (first @custom-calls))]]
+                     @custom-calls))
+              (is (empty? @fallback-calls))
+              (is (= 1 (count @backup-calls)))
+              (let [{:keys [repo ext content opts]} (first @backup-calls)]
+                (is (= db-name repo))
+                (is (= ".sqlite" ext))
+                (is (= "worker-copy" content))
+                (is (= backups-path (:backups-dir opts)))
+                (is (= true (:force-backup? opts))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest auto-backup-tracker-runs-hourly-for-active-repos
   (async done
     (let [set-interval-calls (atom [])
@@ -128,9 +170,9 @@
                              timer-id))
       (set! js/clearInterval (fn [id]
                                (swap! clear-interval-calls conj id)))
-      (-> (p/with-redefs [electron-db/backup-db! (fn [repo _]
-                                                   (swap! backup-calls conj repo)
-                                                   (p/resolved nil))]
+      (-> (p/with-redefs [electron-db/backup-db-via-worker! (fn [repo window-id _]
+                                                              (swap! backup-calls conj [repo window-id])
+                                                              (p/resolved nil))]
             (p/let [_ (electron-db/sync-auto-backup-repo! 1 "logseq_db_demo")
                     _ (electron-db/sync-auto-backup-repo! 2 "logseq_db_demo")
                     _ ((ffirst @set-interval-calls))
@@ -139,7 +181,7 @@
               (is (= 1 (count @set-interval-calls)))
               (is (= [timer-id] @clear-interval-calls))
               (is (= [3600000] (mapv second @set-interval-calls)))
-              (is (= ["logseq_db_demo"] @backup-calls))))
+              (is (= [["logseq_db_demo" 1]] @backup-calls))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []

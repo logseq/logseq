@@ -1,6 +1,7 @@
 (ns logseq.db.sqlite.backup
   "Shared SQLite backup utilities for Node runtimes."
-  (:require ["node:sqlite" :as node-sqlite]
+  (:require ["node:fs" :as fs]
+            ["node:sqlite" :as node-sqlite]
             [clojure.string :as string]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -16,9 +17,6 @@
       (throw (ex-info "node:sqlite DatabaseSync constructor missing"
                       {:module-keys (js->clj (js/Object.keys node-sqlite))}))))
 
-(def ^:private DatabaseSync
-  (resolve-database-sync-ctor))
-
 (defn- resolve-sqlite-backup-fn
   []
   (or (gobj/get node-sqlite "backup")
@@ -30,17 +28,31 @@
 (def ^:private sqlite-backup-fn
   (resolve-sqlite-backup-fn))
 
+(defn- remove-file-if-exists!
+  [path]
+  (fs/rmSync path #js {:force true}))
+
 (defn backup-connection!
   [^js db path]
-  (sqlite-backup-fn db path))
+  (try
+    (-> (sqlite-backup-fn db path)
+        (p/catch (fn [error]
+                   (remove-file-if-exists! path)
+                   (throw error))))
+    (catch :default error
+      (remove-file-if-exists! path)
+      (p/rejected error))))
 
 (defn backup-db-file!
-  [src-path dst-path]
-  (let [db (new DatabaseSync src-path)]
-    (-> (backup-connection! db dst-path)
-        (p/finally (fn []
-                     (try
-                       (.close db)
-                       (catch :default error
-                         (when-not (string/includes? (str error) "database is not open")
-                           (throw error)))))))))
+  ([src-path dst-path]
+   (let [DatabaseSync (resolve-database-sync-ctor)
+         db (new DatabaseSync src-path)]
+     (-> (backup-connection! db dst-path)
+         (p/finally (fn []
+                      (try
+                        (.close db)
+                        (catch :default error
+                          (when-not (string/includes? (str error) "database is not open")
+                            (throw error)))))))))
+  ([db _src-path dst-path]
+   (backup-connection! db dst-path)))

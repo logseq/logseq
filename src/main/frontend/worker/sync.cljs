@@ -236,7 +236,7 @@
   (set! (.-onclose ws) nil))
 
 (defn- close-stale-ws-loop
-  [client ws]
+  [client ws url]
   (let [repo (:repo client)
         graph-id (:graph-id client)]
     (clear-stale-ws-loop-timer! client)
@@ -246,14 +246,23 @@
                      (when-let [current @worker-state/*db-sync-client]
                        (when (and (= repo (:repo current))
                                   (= graph-id (:graph-id current))
-                                  (identical? ws (:ws current))
-                                  (ws-open? ws))
-                         (let [now (common-util/time-ms)
-                               last-ts (or (some-> (:last-ws-message-ts current) deref) now)
-                               stale-ms (- now last-ts)]
-                           (when (>= stale-ms ws-stale-timeout-ms)
-                             (log/warn :db-sync/ws-stale-timeout {:repo repo :stale-ms stale-ms})
-                             (try (.close ws) (catch :default _ nil)))))))
+                                  (identical? ws (:ws current)))
+                         (cond
+                           (ws-open? ws)
+                           (let [now (common-util/time-ms)
+                                 last-ts (or (some-> (:last-ws-message-ts current) deref) now)
+                                 stale-ms (- now last-ts)]
+                             (when (>= stale-ms ws-stale-timeout-ms)
+                               (log/warn :db-sync/ws-stale-timeout {:repo repo :stale-ms stale-ms})
+                               (try (.close ws) (catch :default _ nil))))
+
+                           (contains? #{2 3} (ready-state ws))
+                           (do
+                             (log/warn :db-sync/ws-stale-closed {:repo repo :ready-state (ready-state ws)})
+                             (clear-stale-ws-loop-timer! current)
+                             (update-online-users! current [])
+                             (set-ws-state! current :closed)
+                             (schedule-reconnect! repo current url :stale-closed))))))
                    ws-stale-kill-interval-ms)]
         (reset! *timer timer))))
   client)
@@ -273,10 +282,8 @@
   [client repo graph-id]
   (when (and client (= repo (:repo client)) (= graph-id (:graph-id client)))
     (let [ws (:ws client)
-          ws-state (some-> (:ws-state client) deref)
           ws-ready-state (when ws (ready-state ws))]
-      (or (= :open ws-state)
-          (contains? #{0 1} ws-ready-state)))))
+      (contains? #{0 1} ws-ready-state))))
 
 (defn- connect!
   [repo client url token]
@@ -299,7 +306,7 @@
                 :current-client-f current-client
                 :broadcast-rtc-state!-f broadcast-rtc-state!
                 :fail-fast-f fail-fast})))
-      (close-stale-ws-loop updated ws))))
+      (close-stale-ws-loop updated ws url))))
 
 (defn stop!
   []

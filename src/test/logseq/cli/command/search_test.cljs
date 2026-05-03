@@ -84,6 +84,41 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-execute-search-block-renders-block-ref-labels
+  (async done
+         (let [ref-uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+               calls* (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (swap! calls* conj {:method method :args args})
+                                                  (case method
+                                                    :thread-api/q
+                                                    [{:db/id 7
+                                                      :block/title (str "foo [[" ref-uuid "]]" )}]
+
+                                                    :thread-api/pull
+                                                    {:db/id 99
+                                                     :block/uuid (uuid ref-uuid)
+                                                     :block/title "bar"}
+
+                                                    nil))]
+                 (p/let [result (search-command/execute-search-block
+                                 {:type :search-block :repo "demo" :query "foo"}
+                                 {})]
+                   (is (= :ok (:status result)))
+                   (is (= [{:db/id 7
+                            :block/title "foo [[bar]]"}]
+                          (get-in result [:data :items])))
+                   (is (= [:thread-api/q :thread-api/pull]
+                          (mapv :method @calls*)))
+                   (is (= ["demo"
+                           [:db/id :block/uuid :block/title :block/name]
+                           [:block/uuid (uuid ref-uuid)]]
+                          (-> @calls* second :args)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest test-execute-search-block-skips-block-on-recycled-page
   ;; Recycled pages get :block/parent set to the Recycle page id and
   ;; :logseq.property/deleted-at stamped on themselves. The recursive

@@ -68,6 +68,12 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - Use `logseq list ...`, `logseq show ...`, or `logseq query ...` first to discover valid ids/uuids.
 - For graph transfer flows, keep `graph export --file` and `graph import --input` paths consistent.
 
+## Structured block writes
+
+- When writing multi-item or hierarchical content, prefer a block tree instead of packing everything into one block.
+- Preserve the source structure as sibling and child blocks. Each logical bullet, row, or subsection should usually become its own block.
+- Reserve `--content` for true single-block writes or targeted updates to one existing block.
+- If the user asks to write notes, lists, outlines, imported data, or any content that already has structure, do not flatten it into one long `--content` string.
 
 ## Tag association semantics
 

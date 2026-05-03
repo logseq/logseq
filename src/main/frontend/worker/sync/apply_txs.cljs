@@ -28,7 +28,8 @@
    [logseq.outliner.page :as outliner-page]
    [logseq.outliner.property :as outliner-property]
    [logseq.outliner.recycle :as outliner-recycle]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   [frontend.worker.sync.asset-db-listener :as asset-db-listener]))
 
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *repo->latest-remote-checksum (atom {}))
@@ -79,7 +80,8 @@
   (set/union
    reverse-data-ignored-attrs
    rtc-const/ignore-attrs-when-syncing
-   rtc-const/ignore-entities-when-init-upload))
+   rtc-const/ignore-entities-when-init-upload
+   #{:block/pre-block?}))
 
 (defn- remove-ignored-attrs [tx-data]
   (remove (fn [d] (contains? rtc-ignored-attrs (:a d))) tx-data))
@@ -1028,6 +1030,7 @@
              (not (:sync-download-graph? tx-meta))
              (:persist-op? tx-meta true))
     (enqueue-local-tx! repo tx-report)
+    (asset-db-listener/generate-asset-ops repo tx-report)
     (when-let [client @worker-state/*db-sync-client]
       (when (and (= repo (:repo client))
                  (:kv/value (d/entity db-after :logseq.kv/graph-remote?)))
