@@ -543,8 +543,12 @@
                                (map (partial resolve-temp-id db))
                                (tx-sanitize/sanitize-tx db)
                                seq)
-              report (ldb/transact! conn tx-data {:transact-remote? true
-                                                  :t (:t remote-tx)})
+              tx-meta (cond-> {:transact-remote? true
+                                :rtc-tx? true}
+                        (and (integer? (:t remote-tx))
+                             (> (:t remote-tx) (:max-tx db)))
+                        (assoc :t (:t remote-tx)))
+              report (ldb/transact! conn tx-data tx-meta)
               results' (cond-> results
                          tx-data
                          (conj {:tx-data tx-data
@@ -850,6 +854,29 @@
 
 (declare handle-local-tx!)
 
+(defn- valid-entity-dispatch?
+  [entity]
+  (or (:block/uuid entity)
+      (:db/ident entity)
+      (:logseq.property.reaction/target entity)))
+
+(defn- retract-skeleton-entities!
+  [conn *batch-tx-data]
+  (let [db @conn
+        changed-eids (->> @*batch-tx-data
+                          (keep :e)
+                          distinct)
+        skeleton-eids (filterv
+                       (fn [eid]
+                         (when-let [entity (d/entity db eid)]
+                           (not (valid-entity-dispatch? entity))))
+                       changed-eids)]
+    (when (seq skeleton-eids)
+      (log/info :db-sync/retract-skeleton-entities {:eids skeleton-eids})
+      (ldb/transact! conn
+                     (mapv (fn [eid] [:db/retractEntity eid]) skeleton-eids)
+                     {:db-sync/internal-op :retract-skeleton-entities}))))
+
 (defn- rebase-local-op!
   [_repo conn local-tx rebase-db-before]
   (let [{:keys [forward-ops inverse-ops]} (rebase-history-ops local-tx)
@@ -869,9 +896,10 @@
             (ldb/batch-transact-with-temp-conn!
              conn
              tx-meta
-             (fn [conn]
+             (fn [conn *batch-tx-data]
                (doseq [op forward-ops']
-                 (replay-canonical-outliner-op! conn op rebase-db-before))))
+                 (replay-canonical-outliner-op! conn op rebase-db-before))
+               (retract-skeleton-entities! conn *batch-tx-data)))
             status (if rebase-tx-report :rebased :no-op)]
         {:tx-id (:tx-id local-tx)
          :status status})
@@ -903,6 +931,7 @@
                  :with-local-changes? true}
         *rebase-tx-reports (atom [])
         *rebase-results (atom [])
+        *batch-tx-data (atom [])
         rebase-db-before @conn
         conflicts (remote-sync-conflicts rebase-db-before local-txs remote-txs)]
     (try
@@ -918,9 +947,11 @@
                          (transact-remote-txs! conn remote-txs)
 
                          (reset! *rebase-results
-                                 (rebase-local-txs! repo conn local-txs rebase-db-before)))
+                                 (rebase-local-txs! repo conn local-txs rebase-db-before))
+                         (retract-skeleton-entities! conn *batch-tx-data))
 
                        {:listen-db (fn [{:keys [tx-meta tx-data] :as tx-report}]
+                                     (swap! *batch-tx-data into tx-data)
                                      (when (and (= :rebase (:outliner-op tx-meta)) (seq tx-data))
                                        (swap! *rebase-tx-reports conj tx-report)))})]
         (doseq [tx-report @*rebase-tx-reports]

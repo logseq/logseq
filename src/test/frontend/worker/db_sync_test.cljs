@@ -4395,6 +4395,45 @@
                 (is (empty? (non-recycle-validation-entities validation))
                     (str (:errors validation)))))))))))
 
+(deftest rebase-retracts-skeleton-entities-created-by-pending-replay-test
+  (testing "pending tx replay that only recreates non-structural attrs should not poison remote apply"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          page-id (:db/id (:block/page parent))
+          tx-id (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (seed-client-op-txs!
+           test-repo
+           [{:db-sync/tx-id tx-id
+             :db-sync/created-at 1
+             :db-sync/pending? true
+             :db-sync/outliner-op :save-block
+             :db-sync/forward-outliner-ops
+             [[:transact [[[:db/add -1 :logseq.property/created-by-ref page-id]] nil]]]
+             :db-sync/inverse-outliner-ops
+             [[:transact [[] nil]]]
+             :db-sync/reversed-tx-data
+             [[:db/add (:db/id parent) :block/title "parent"]]}])
+          (let [error (try
+                        (#'sync-apply/apply-remote-tx!
+                         test-repo
+                         nil
+                         [[:db/add (:db/id parent) :block/title "parent remote skeleton"]])
+                        nil
+                        (catch :default e
+                          e))]
+            (is (nil? error) (str (ex-message error) " " (pr-str (ex-data error)))))
+          (let [skeletons (->> (d/datoms @conn :avet :logseq.property/created-by-ref)
+                               (keep (fn [datom]
+                                       (let [ent (d/entity @conn (:e datom))]
+                                         (when (and (nil? (:block/uuid ent))
+                                                    (nil? (:db/ident ent))
+                                                    (nil? (:logseq.property.reaction/target ent)))
+                                           (:db/id ent))))))]
+            (is (= "parent remote skeleton"
+                   (:block/title (d/entity @conn (:db/id parent)))))
+            (is (empty? skeletons) (str skeletons))))))))
+
 (deftest apply-remote-tx-local-delete-remote-recreate-does-not-leave-local-only-delete-test
   (testing "if remote batch recreates a locally deleted block, client should not end with unsynced local-only deletion"
     (let [conn (db-test/create-conn-with-blocks
