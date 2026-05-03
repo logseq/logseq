@@ -25,6 +25,9 @@
              :desc "Print version"}})
 
 (declare table)
+(def ^:private export-obsidian-description
+  "Export a Logseq DB backup zip, db.sqlite file, or graph directory into Markdown files and assets ready for an Obsidian vault.")
+
 (defn- print-general-help [_m]
   (println (str "Usage: logseq [command] [options]\n\nOptions:\n"
                 (cli/format-opts {:spec default-spec})))
@@ -123,6 +126,8 @@
     :description "Export a local graph to Markdown like the in-app graph export."
     :fn (lazy-load-fn 'logseq.cli.commands.export/export)
     :spec cli-spec/export}
+   {:cmds ["export-obsidian"] :desc "Export DB backup as an Obsidian vault"
+    :description export-obsidian-description :fn (lazy-load-fn 'logseq.cli.commands.export-obsidian/export-obsidian) :spec cli-spec/export-obsidian}
    {:cmds ["export-edn"] :desc "Export DB graph as EDN"
     :description "Export a local graph to EDN or the current in-app graph if --api-server-token is given. See https://github.com/logseq/docs/blob/master/db-version.md#edn-data-export for more about this export type."
     :fn (lazy-load-fn 'logseq.cli.commands.export-edn/export)

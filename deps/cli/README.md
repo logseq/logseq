@@ -28,13 +28,14 @@ list                 List local graphs
 show                 Show DB graph(s) info
 search [options]     Search DB graph
 query [options]      Query DB graph(s)
-export [options]     Export DB graph as Markdown
-export-edn [options] Export DB graph as EDN
-import-edn [options] Import into DB graph with EDN
-append [options]     Appends text to current page
-mcp-server [options] Run a MCP server
-validate [options]   Validate DB graph
-help                 Print a command's help
+export [options]          Export DB graph as Markdown
+export-obsidian [options] Export DB backup as an Obsidian vault
+export-edn [options]      Export DB graph as EDN
+import-edn [options]      Import into DB graph with EDN
+append [options]          Appends text to current page
+mcp-server [options]      Run a MCP server
+validate [options]        Validate DB graph
+help                      Print a command's help
 
 $ logseq list
 db-test
@@ -123,6 +124,12 @@ $ logseq query '(task DOING)' -a my-token
 # Export local graph as markdown
 $ logseq export -g yep
 Exported 41 pages to yep_markdown_1756128259.zip
+
+# Export a DB backup zip, db.sqlite file, or graph directory to an Obsidian vault
+$ logseq export-obsidian --input ~/Downloads/logseq-db-backup.zip --output ~/Documents/ObsidianVault
+Exported 41 notes to /Users/me/Documents/ObsidianVault
+Copied assets into /Users/me/Documents/ObsidianVault/assets
+Wrote report to /Users/me/Documents/ObsidianVault/logseq-obsidian-export-report.json
 
 # Export current graph as EDN
 $ logseq export-edn -a my-token

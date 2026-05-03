@@ -8,6 +8,15 @@
    :file {:alias :f
           :desc "File to save export"}})
 
+(def export-obsidian
+  {:input {:alias :i
+           :require true
+           :desc "Path to a Logseq DB backup zip, db.sqlite file, or graph directory"}
+   :output {:alias :o
+            :require true
+            :desc "Path to the destination Obsidian vault directory"}
+   :keep-temp {:desc "Keep temporary extraction files for debugging"}})
+
 (def export-edn
   {:api-server-token {:alias :a
                       :desc "API server token to export current graph"}
