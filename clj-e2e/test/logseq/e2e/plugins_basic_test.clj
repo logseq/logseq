@@ -21,7 +21,7 @@
 (defonce ^:private *property-idx (atom 0))
 (defn- new-property
   []
-  (str "p" (swap! *property-idx inc)))
+  (str "test-property-" (swap! *property-idx inc)))
 
 (defn- assert-api-ls-block!
   ([ret] (assert-api-ls-block! ret 1))
@@ -112,17 +112,14 @@
 
 (deftest property-related-test
   (testing "properties management related apis"
-    (dorun
-     (map-indexed
-      (fn [idx property-type]
-        (let [property-name (str "p" idx)
-              _ (ls-api-call! :editor.upsertProperty property-name {:type property-type})
-              property (ls-api-call! :editor.getProperty property-name)]
-          (is (= (get property "ident") (str ":plugin.property._test_plugin/" property-name)))
-          (is (= (get property "type") property-type))
-          (ls-api-call! :editor.removeProperty property-name)
-          (is (nil? (ls-api-call! :editor.getProperty property-name)))))
-      ["default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"]))))
+    (doseq [property-type ["default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"]]
+      (let [property-name (new-property)
+            _ (ls-api-call! :editor.upsertProperty property-name {:type property-type})
+            property (ls-api-call! :editor.getProperty property-name)]
+        (is (= (get property "ident") (str ":plugin.property._test_plugin/" property-name)))
+        (is (= (get property "type") property-type))
+        (ls-api-call! :editor.removeProperty property-name)
+        (is (nil? (ls-api-call! :editor.getProperty property-name)))))))
 
 (deftest insert-block-with-properties
   (testing "insert block with properties"
