@@ -39,6 +39,18 @@
   (when (.hasOwnProperty (:actual m) "stack")
     (println (.-stack (:actual m)))))
 
+(defmethod ct/report [::node :fail] [m]
+  (ct/inc-report-counter! :fail)
+  (.write js/process.stderr
+          (str "\nFAIL in " (pr-str (ct/testing-vars-str m))
+               "\n" (when (seq (ct/testing-contexts-str))
+                      (str (ct/testing-contexts-str) "\n"))
+               (when-let [message (:message m)]
+                 (str message "\n"))
+               "expected: " (pr-str (:expected m))
+               "\n  actual: " (pr-str (:actual m))
+               "\n")))
+
 ;; CLI utils
 ;; =========
 
