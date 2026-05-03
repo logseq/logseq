@@ -4871,9 +4871,6 @@
                                       :download-fn download-fn
                                       :aes-key nil
                                       :get-conn-f worker-state/get-datascript-conn
-                                      :get-graph-id-f (fn [repo]
-                                                        (sync-large-title/get-graph-id
-                                                         worker-state/get-datascript-conn repo))
                                       :graph-e2ee?-f sync-crypt/graph-e2ee?
                                       :ensure-graph-aes-key-f sync-crypt/<ensure-graph-aes-key
                                       :fail-fast-f db-sync/fail-fast})
