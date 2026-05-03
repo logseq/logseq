@@ -226,7 +226,7 @@
 
   (<import-db [_this repo data]
     (->
-     (p/let [base64 (util/unit8array-to-base64string data)]
+     (p/let [base64 (util/uint8array-to-base64string data)]
        (state/<invoke-db-worker :thread-api/import-db-base64 repo base64))
      (p/catch (fn [error]
                 (log/error :import-db-error repo error "SQLiteDB import error")

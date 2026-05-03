@@ -31,6 +31,30 @@
 
 #?(:cljs
    (do
+     (defn uint8array-to-base64string
+       [payload]
+       (when payload
+         (try
+           (let [binary (apply str (map #(char %) payload))]
+             (base64/encodeString binary false))
+           (catch :default e
+             (js/console.error "Error converting Uint8Array to base64:" e)
+             nil))))
+
+     (defn base64string-to-unit8array
+       [base64-string]
+       (when base64-string
+         (try
+           (let [binary (base64/decodeString base64-string true)
+                 len (.-length binary)
+                 arr (new js/Uint8Array len)]
+             (doseq [i (range len)]
+               (aset arr i (.charCodeAt binary i)))
+             arr)
+           (catch :default e
+             (js/console.error "Error converting base64 to Uint8Array:" e)
+             nil))))
+
      (defn post-message
        [type data & {:keys [port]}]
        (when-let [worker (or port (when (exists? js/self) js/self))]
