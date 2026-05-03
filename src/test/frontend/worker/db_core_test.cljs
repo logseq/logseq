@@ -145,6 +145,44 @@
                            (is (empty? @imports))))))))
      (p/finally done))))
 
+(deftest import-db-base64-uses-active-pool-after-close-db
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [import-db! (get @thread-api/*thread-apis :thread-api/import-db-base64)
+              imported-pool-ids (atom [])
+              pool-seq (atom 0)
+              make-pool (fn [id]
+                          (let [pool #js {:id id
+                                          :paused false}]
+                            (set! (.-pauseVfs pool) (fn [] (set! (.-paused pool) true)))
+                            (set! (.-unpauseVfs pool) (fn [] (set! (.-paused pool) false)))
+                            pool))
+              existing-pool (make-pool "existing-pool")
+              sqlite-data (.encode (js/TextEncoder.) "SQLite format 3")
+              sqlite-base64 (.toString (js/Buffer.from sqlite-data) "base64")]
+          (reset! worker-state/*opfs-pools {test-repo existing-pool})
+          (let [platform' (build-test-platform
+                           {:import-db (fn [pool _path _data]
+                                         (swap! imported-pool-ids conj (.-id pool))
+                                         (if (.-paused pool)
+                                           (p/rejected (js/Error. "No available handles to import to."))
+                                           (p/resolved nil)))})]
+            (platform/set-platform!
+             (assoc platform'
+                    :storage
+                    (assoc (:storage platform')
+                           :install-opfs-pool (fn [_sqlite _pool-name]
+                                                (let [id (str "new-pool-" (swap! pool-seq inc))]
+                                                  (p/resolved (make-pool id))))))))
+          (-> (import-db! test-repo sqlite-base64)
+              (p/then (fn [_]
+                        (is (= ["new-pool-1"] @imported-pool-ids))))
+              (p/catch (fn [error]
+                         (is false (str "expected import to succeed with active pool, got " error))))))))
+     (p/finally done))))
+
 (deftest set-db-sync-config-keeps-only-non-auth-fields-test
   (let [set-config! (get @thread-api/*thread-apis :thread-api/set-db-sync-config)
         get-config (get @thread-api/*thread-apis :thread-api/get-db-sync-config)
