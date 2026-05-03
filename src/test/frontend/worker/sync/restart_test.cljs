@@ -58,3 +58,40 @@
                   (when prev-platform
                     (platform/set-platform! prev-platform))
                   (done)))))))
+
+(deftest stale-loop-marks-non-open-ws-closed-test
+  (let [broadcasts (atom [])
+        clear-interval-calls (atom [])
+        interval-f* (atom nil)
+        original-clear-interval js/clearInterval
+        original-set-interval js/setInterval
+        prev-client @worker-state/*db-sync-client
+        ws #js {:readyState 3
+                :close (fn [] nil)}
+        client {:repo "stale-repo"
+                :graph-id "graph-1"
+                :ws ws
+                :ws-state (atom :open)
+                :online-users (atom [])
+                :stale-kill-timer (atom nil)}]
+    (set! js/setInterval
+          (fn [f _ms]
+            (reset! interval-f* f)
+            :interval-id))
+    (set! js/clearInterval
+          (fn [interval-id]
+            (swap! clear-interval-calls conj interval-id)))
+    (reset! worker-state/*db-sync-client client)
+    (with-redefs [shared-service/broadcast-to-clients!
+                  (fn [topic payload]
+                    (swap! broadcasts conj [topic payload]))]
+      (try
+        (#'sync/close-stale-ws-loop client ws "wss://sync.example.test/sync/graph-1")
+        (@interval-f*)
+        (is (= :closed @(:ws-state client)))
+        (is (= [:interval-id] @clear-interval-calls))
+        (is (some #(= :rtc-sync-state (first %)) @broadcasts))
+        (finally
+          (reset! worker-state/*db-sync-client prev-client)
+          (set! js/setInterval original-set-interval)
+          (set! js/clearInterval original-clear-interval))))))
