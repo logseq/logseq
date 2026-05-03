@@ -4,7 +4,7 @@
   "packageManager": "pnpm@10.33.0",
   "private": true,
   "scripts": {
-    "dev": "cd ./worker && pnpm exec wrangler dev",
+    "dev": "pnpm exec wrangler dev --config worker/wrangler.toml",
     "watch": "clojure -M:cljs watch db-sync db-sync-node",
     "release": "clojure -M:cljs release db-sync",
     "delete-graphs-for-user": "node worker/scripts/delete_graphs_for_user.js",
@@ -16,15 +16,15 @@
     "start:node-adapter": "node worker/dist/node-adapter.js",
     "show-sqlite-checksum": "clojure -M:cljs compile db-sync-show-checksum && node worker/dist/show-sqlite-checksum.js",
     "recompute-log-checksum": "clojure -M:cljs compile db-sync-recompute-log-checksum && node worker/dist/recompute-log-checksum.js",
-    "migrate:local": "cd ./worker && wrangler d1 migrations apply DB --local",
-    "migrate:staging": "cd ./worker && wrangler d1 migrations apply logseq-sync-graph-meta-staging --env staging --remote",
-    "migrate:prod": "cd ./worker && wrangler d1 migrations apply logseq-sync-graphs-prod --env prod --remote",
+    "migrate:local": "pnpm exec wrangler d1 migrations apply DB --local --config worker/wrangler.toml",
+    "migrate:staging": "pnpm exec wrangler d1 migrations apply logseq-sync-graph-meta-staging --env staging --remote --config worker/wrangler.toml",
+    "migrate:prod": "pnpm exec wrangler d1 migrations apply logseq-sync-graphs-prod --env prod --remote --config worker/wrangler.toml",
     "test:node-adapter": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
     "test": "clojure -M:cljs compile db-sync-test && node worker/dist/worker-test.js",
     "clean": "rm -rf ./worker/dist/",
     "sentry:sourcemaps": "sentry-cli sourcemaps upload --release $SENTRY_RELEASE --rewrite --strip-prefix worker/dist/worker --url-prefix \"~/\" worker/dist/worker",
-    "deploy-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env prod",
-    "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env staging"
+    "deploy-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm sentry:sourcemaps && pnpm exec wrangler deploy --config worker/wrangler.toml --env prod",
+    "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm sentry:sourcemaps && pnpm exec wrangler deploy --config worker/wrangler.toml --env staging"
   },
   "dependencies": {
     "@sentry/cloudflare": "^10.45.0",
