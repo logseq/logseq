@@ -14,6 +14,8 @@ const shadowEntry = path.join(repoRoot, "static", "db-worker-node.js");
 const bundleEntry = path.join(distDir, "db-worker-node.js");
 const manifestPath = path.join(distDir, "db-worker-node-assets.json");
 const legacyNccOutDir = path.join(distDir, ".db-worker-node-ncc");
+const viteOutDir = path.join(distDir, ".db-worker-node-vite");
+const viteBundleEntry = path.join(viteOutDir, "db-worker-node.js");
 const builtinModuleSet = new Set([
   ...builtinModules,
   ...builtinModules.map((moduleName) => `node:${moduleName}`),
@@ -55,6 +57,7 @@ async function removeIfExists(targetPath) {
 async function cleanupPreviousBundle() {
   // Remove the legacy ncc output directory if it still exists from older builds.
   await removeIfExists(legacyNccOutDir);
+  await removeIfExists(viteOutDir);
   await removeIfExists(bundleEntry);
 
   if (await exists(manifestPath)) {
@@ -85,11 +88,11 @@ async function main() {
 
   await cleanupPreviousBundle();
   await fs.mkdir(distDir, { recursive: true });
-  const filesBefore = await listFilesRecursive(distDir);
 
   await build({
     configFile: false,
     logLevel: "error",
+    publicDir: false,
     build: {
       codeSplitting: false,
       minify: "terser",
@@ -97,7 +100,7 @@ async function main() {
       sourcemap: false,
       write: true,
       emptyOutDir: false,
-      outDir: distDir,
+      outDir: viteOutDir,
       lib: {
         entry: shadowEntry,
         formats: ["cjs"],
@@ -119,11 +122,11 @@ async function main() {
     },
   });
 
-  if (!(await exists(bundleEntry))) {
-    throw new Error(`vite bundle missing output file: ${bundleEntry}`);
+  if (!(await exists(viteBundleEntry))) {
+    throw new Error(`vite bundle missing output file: ${viteBundleEntry}`);
   }
 
-  const bundleContents = await fs.readFile(bundleEntry, "utf8");
+  const bundleContents = await fs.readFile(viteBundleEntry, "utf8");
   if (bundleContents.includes("node_modules/.pnpm/keytar")) {
     throw new Error(
       "vite bundle contains a pnpm keytar native path; keytar must stay external"
@@ -135,23 +138,25 @@ async function main() {
     );
   }
 
-  let filesAfter = await listFilesRecursive(distDir);
-  if (filesAfter.includes("index.html") && !filesBefore.includes("index.html")) {
-    await removeIfExists(path.join(distDir, "index.html"));
-    filesAfter = await listFilesRecursive(distDir);
+  let filesAfter = await listFilesRecursive(viteOutDir);
+  if (filesAfter.includes("index.html")) {
+    await removeIfExists(path.join(viteOutDir, "index.html"));
+    filesAfter = await listFilesRecursive(viteOutDir);
   }
 
   const extraJsFiles = filesAfter.filter(
     (relativePath) =>
       relativePath.endsWith(".js") &&
-      relativePath !== "db-worker-node.js" &&
-      !filesBefore.includes(relativePath)
+      relativePath !== "db-worker-node.js"
   );
   if (extraJsFiles.length > 0) {
     throw new Error(
       `vite bundle produced unexpected JS outputs: ${extraJsFiles.join(", ")}`
     );
   }
+
+  await fs.copyFile(viteBundleEntry, bundleEntry);
+  await removeIfExists(viteOutDir);
 
   await fs.writeFile(
     manifestPath,
