@@ -1,13 +1,12 @@
 (ns logseq.cli.commands-test
-  (:require [cljs.test :refer [async deftest is testing]]
-            [babashka.cli :as cli]
+  (:require [babashka.cli :as cli]
+            [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
             [logseq.cli.command.query :as query-command]
             [logseq.cli.command.server :as server-command]
-            [logseq.db.frontend.rules :as rules]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.command.sync :as sync-command]
             [logseq.cli.command.upsert :as upsert-command]
@@ -15,6 +14,7 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
+            [logseq.db.frontend.rules :as rules]
             [promesa.core :as p]))
 
 (defn- strip-ansi
@@ -197,8 +197,8 @@
               ["search block" "search page" "search property" "search tag"]
               ["search block" "search page" "search property" "search tag"]]
              ["example"
-              ["example upsert" "example upsert page" "example show"]
-              ["example upsert" "example show"]]]]
+              ["example graph" "example graph export" "example upsert" "example upsert page" "example show"]
+              ["example graph" "example upsert" "example show"]]]]
       (let [result (binding [style/*color-enabled?* true]
                      (commands/parse-args [group]))
             summary (:summary result)
@@ -351,15 +351,14 @@
   (testing "example query executes (not group help)"
     (let [result (commands/parse-args ["example" "query"])]
       (is (= :example (:command result)))
-      (is (not (:help? result)))))
-
-  )
+      (is (not (:help? result))))))
 
 (deftest test-parse-args-example-selectors
   (testing "example supports exact selectors"
     (doseq [args [["example" "upsert" "page"]
                   ["example" "show"]
-                  ["example" "search" "block"]]]
+                  ["example" "search" "block"]
+                  ["example" "graph" "export"]]]
       (let [result (commands/parse-args args)]
         (is (true? (:ok? result)))
         (is (= :example (:command result))))))
@@ -367,13 +366,14 @@
   (testing "example supports prefix selectors"
     (doseq [args [["example" "upsert"]
                   ["example" "list"]
-                  ["example" "query"]]]
+                  ["example" "query"]
+                  ["example" "graph"]]]
       (let [result (commands/parse-args args)]
         (is (true? (:ok? result)))
         (is (= :example (:command result))))))
 
   (testing "example rejects uncovered selectors"
-    (let [result (commands/parse-args ["example" "graph"])]
+    (let [result (commands/parse-args ["example" "sync"])]
       (is (false? (:ok? result)))
       (is (= :unknown-command (get-in result [:error :code]))))))
 
@@ -1604,9 +1604,7 @@
   (testing "remove block rejects invalid id vector"
     (let [result (commands/parse-args ["remove" "block" "--id" "[1 \"no\"]"])]
       (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
-
-  )
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
 (deftest test-verb-subcommand-parse-upsert-entity
   (testing "upsert tag parses with name"
@@ -2184,6 +2182,19 @@
       (is (= "edn" (get-in result [:options :type])))
       (is (= "export.edn" (get-in result [:options :file])))))
 
+  (testing "graph export parses EDN-only options"
+    (let [result (commands/parse-args ["graph" "export"
+                                       "--type" "edn"
+                                       "--file" "export.edn"
+                                       "--include-timestamps"
+                                       "--exclude-built-in-pages"
+                                       "--exclude-namespaces" "user,project"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-export (:command result)))
+      (is (= true (get-in result [:options :include-timestamps])))
+      (is (= true (get-in result [:options :exclude-built-in-pages])))
+      (is (= "user,project" (get-in result [:options :exclude-namespaces])))))
+
   (testing "graph import parses with type, input, and repo"
     (let [result (commands/parse-args ["graph" "import"
                                        "--type" "sqlite"
@@ -2194,6 +2205,16 @@
       (is (= "sqlite" (get-in result [:options :type])))
       (is (= "import.sqlite" (get-in result [:options :input])))
       (is (= "demo" (get-in result [:options :graph])))))
+
+  (testing "graph export rejects EDN-only options for sqlite"
+    (let [result (commands/parse-args ["graph" "export"
+                                       "--type" "sqlite"
+                                       "--file" "export.sqlite"
+                                       "--include-timestamps"
+                                       "--exclude-built-in-pages"
+                                       "--exclude-namespaces" "user,project"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
 
   (testing "graph export requires type"
     (let [result (commands/parse-args ["graph" "export" "--file" "export.edn"])]
@@ -2217,6 +2238,15 @@
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
+  (testing "graph import rejects unknown type"
+    (let [result (commands/parse-args ["graph" "import"
+                                       "--type" "zip"
+                                       "--input" "import.zip"
+                                       "--graph" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
+
+(deftest test-verb-subcommand-parse-sync-graph-requirements
   (testing "sync download requires graph"
     (let [result (commands/parse-args ["sync" "download"])]
       (is (false? (:ok? result)))
@@ -2240,16 +2270,9 @@
     (let [result (commands/parse-args ["sync" "ensure-keys" "--upload-keys"])]
       (is (true? (:ok? result)))
       (is (= :sync-ensure-keys (:command result)))
-      (is (= true (get-in result [:options :upload-keys])))))
+      (is (= true (get-in result [:options :upload-keys]))))))
 
-  (testing "graph import rejects unknown type"
-    (let [result (commands/parse-args ["graph" "import"
-                                       "--type" "zip"
-                                       "--input" "import.zip"
-                                       "--graph" "demo"])]
-      (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
-
+(deftest test-verb-subcommand-parse-server-cleanup
   (testing "server status is removed and parses as unknown command"
     (let [result (commands/parse-args ["server" "status" "--graph" "demo"])]
       (is (false? (:ok? result)))
@@ -2273,7 +2296,7 @@
       (is (= :graph-backup-list (:command result)))))
 
   (testing "graph backup create parses with optional name"
-    (let [result (commands/parse-args ["graph" "backup" "create" "--name" "nightly"]) ]
+    (let [result (commands/parse-args ["graph" "backup" "create" "--name" "nightly"])]
       (is (true? (:ok? result)))
       (is (= :graph-backup-create (:command result)))
       (is (= "nightly" (get-in result [:options :name])))))
@@ -2281,7 +2304,7 @@
   (testing "graph backup create with name carries source and naming components"
     (let [result (commands/parse-args ["graph" "backup" "create"
                                        "--graph" "demo"
-                                       "--name" "nightly"]) ]
+                                       "--name" "nightly"])]
       (is (true? (:ok? result)))
       (is (= "demo" (get-in result [:options :graph])))
       (is (= "nightly" (get-in result [:options :name])))))
@@ -2289,7 +2312,7 @@
   (testing "graph backup restore parses with --src and --dst"
     (let [result (commands/parse-args ["graph" "backup" "restore"
                                        "--src" "demo-nightly"
-                                       "--dst" "demo-restored"]) ]
+                                       "--dst" "demo-restored"])]
       (is (true? (:ok? result)))
       (is (= :graph-backup-restore (:command result)))
       (is (= "demo-nightly" (get-in result [:options :src])))
@@ -2367,15 +2390,28 @@
       (is (true? (:ok? result)))
       (is (= :graph-export (get-in result [:action :type])))))
 
+  (testing "graph export builds normalized EDN graph-options"
+    (let [parsed {:ok? true
+                  :command :graph-export
+                  :options {:type "edn"
+                            :file "export.edn"
+                            :include-timestamps true
+                            :exclude-built-in-pages true
+                            :exclude-namespaces " user, project ,,user "}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= {:include-timestamps? true
+              :exclude-built-in-pages? true
+              :exclude-namespaces #{:user :project}}
+             (get-in result [:action :graph-options])))))
+
   (testing "graph import requires repo"
     (let [parsed {:ok? true
                   :command :graph-import
                   :options {:type "edn" :input "import.edn"}}
           result (commands/build-action parsed {})]
       (is (false? (:ok? result)))
-      (is (= :missing-repo (get-in result [:error :code])))))
-
-)
+      (is (= :missing-repo (get-in result [:error :code]))))))
 
 (deftest test-build-action-graph-backup
   (testing "graph backup list resolves source repo from --graph"
@@ -3806,7 +3842,7 @@
                  (p/let [result (commands/execute action {})]
                    (is (= :ok (:status result)))
                    (is (= [[:save-block [{:block/uuid (uuid "00000000-0000-0000-0000-000000000001")
-                                           :block/title "Updated heading"} {}]]
+                                          :block/title "Updated heading"} {}]]
                            [:move-blocks [[(uuid "00000000-0000-0000-0000-000000000001")]
                                           (uuid "00000000-0000-0000-0000-000000000002")
                                           {:sibling? false :bottom? true}]]
@@ -3929,14 +3965,14 @@
 (deftest test-execute-graph-import-rejects-existing-graph
   (async done
          (let [{:keys [action]} (graph-command/build-import-action "logseq_db_demo" "sqlite" "/tmp/test-db.sqlite")]
-           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
-                              cli-server/ensure-server! (fn [_ _]
-                                                          (throw (ex-info "should not start server" {})))]
-                (p/let [result (commands/execute action {})]
-                  (is (= :error (:status result)))
-                  (is (= :graph-exists (get-in result [:error :code])))))
-              (p/catch (fn [e] (is false (str "unexpected error: " e))))
-              (p/finally done)))))
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])]
+                 cli-server/ensure-server! (fn [_ _]
+                                             (throw (ex-info "should not start server" {})))
+                 (p/let [result (commands/execute action {})]
+                   (is (= :error (:status result)))
+                   (is (= :graph-exists (get-in result [:error :code])))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-graph-import-edn-allows-existing-graph
   (async done
@@ -4003,23 +4039,40 @@
                                                     {:exported true}))
                                transport/write-output (fn [opts]
                                                         (swap! write-calls conj opts))]
-                 (p/let [edn-result (commands/execute {:type :graph-export :repo "logseq_db_demo" :graph "demo" :export-type "edn" :file "/tmp/export.edn" :allow-missing-graph true} {})
-                         sqlite-result (commands/execute {:type :graph-export :repo "logseq_db_demo" :graph "demo" :export-type "sqlite" :file "/tmp/export.sqlite" :allow-missing-graph true} {})]
+                 (p/let [edn-result (commands/execute {:type :graph-export
+                                                       :repo "logseq_db_demo"
+                                                       :graph "demo"
+                                                       :export-type "edn"
+                                                       :graph-options {:include-timestamps? true
+                                                                       :exclude-built-in-pages? true
+                                                                       :exclude-namespaces #{:user :project}}
+                                                       :file "/tmp/export.edn"
+                                                       :allow-missing-graph true}
+                                                      {})
+                         sqlite-result (commands/execute {:type :graph-export
+                                                          :repo "logseq_db_demo"
+                                                          :graph "demo"
+                                                          :export-type "sqlite"
+                                                          :file "/tmp/export.sqlite"
+                                                          :allow-missing-graph true}
+                                                         {})]
                    (is (= :ok (:status edn-result)))
                    (is (= :ok (:status sqlite-result)))
                    (is (= "edn" (get-in edn-result [:context :export-type])))
                    (is (= "/tmp/export.edn" (get-in edn-result [:context :file])))
                    (is (= "sqlite" (get-in sqlite-result [:context :export-type])))
                    (is (= "/tmp/export.sqlite" (get-in sqlite-result [:context :file])))
-                   (is (= [[:thread-api/export-edn false ["logseq_db_demo" {:export-type :graph}]]
-                           [:thread-api/export-db-base64 true ["logseq_db_demo"]]]
+                   (is (= [[:thread-api/export-edn false ["logseq_db_demo" {:export-type :graph
+                                                                            :graph-options {:include-timestamps? true
+                                                                                            :exclude-built-in-pages? true
+                                                                                            :exclude-namespaces #{:user :project}}}]]
+                           [:thread-api/backup-db-sqlite true ["logseq_db_demo" "/tmp/export.sqlite"]]]
                           @invoke-calls))
-                   (is (= 2 (count @write-calls)))
-                   (let [[edn-write sqlite-write] @write-calls]
-                     (is (= {:format :edn :path "/tmp/export.edn" :data {:exported true}} edn-write))
-                     (is (= :sqlite (:format sqlite-write)))
-                     (is (= "/tmp/export.sqlite" (:path sqlite-write)))
-                     (is (= "sqlite" (.toString (:data sqlite-write) "utf8"))))))
+                   (is (= 1 (count @write-calls)))
+                   (is (= {:format :edn
+                           :path "/tmp/export.edn"
+                           :data {:exported true}}
+                          (first @write-calls)))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
@@ -4158,9 +4211,9 @@
                               "test-repo" config)]
            (is (true? (:ok? action-result)))
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
-                                transport/invoke (fn [_ _method _ args]
-                                                   (reset! captured-args (second args))
-                                                   (p/resolved []))]
+                               transport/invoke (fn [_ _method _ args]
+                                                  (reset! captured-args (second args))
+                                                  (p/resolved []))]
                  (query-command/execute-query (:action action-result) config))
                (p/then (fn [_]
                          (let [args @captured-args
