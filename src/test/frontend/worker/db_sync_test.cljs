@@ -1565,6 +1565,24 @@
           (let [{persisted-tx-id :tx-id} (first (#'sync-apply/pending-txs test-repo))]
             (is (= tx-id persisted-tx-id))))))))
 
+(deftest handle-local-tx-enqueues-asset-op-for-local-asset-checksum-test
+  (testing "local asset checksum transactions should create pending asset upload ops"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          asset-uuid (random-uuid)
+          tx-report (d/with @conn
+                            [{:block/uuid asset-uuid
+                              :block/title "asset.png"
+                              :logseq.property.asset/type "png"
+                              :logseq.property.asset/checksum "sha-256-value"}]
+                            (assoc local-tx-meta :outliner-op :save-block))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (sync-apply/handle-local-tx! test-repo tx-report)
+          (let [asset-op (first (client-op/get-all-asset-ops test-repo))]
+            (is (= 1 (client-op/get-unpushed-asset-ops-count test-repo)))
+            (is (= asset-uuid (get-in asset-op [:update-asset 2 :block-uuid])))
+            (is (= :update-asset (first (:update-asset asset-op))))))))))
+
 (deftest apply-history-action-does-not-reuse-original-tx-id-test
   (testing "undo/redo history actions should not overwrite the original pending tx row"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
