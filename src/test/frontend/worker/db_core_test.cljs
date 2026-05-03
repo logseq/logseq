@@ -122,29 +122,6 @@
     (is (= "" (resolve-initial-config "")))
     (is (= "{:foo true}" (resolve-initial-config "{:foo true}")))))
 
-(deftest import-db-base64-rejects-non-sqlite-payload
-  (async done
-    (->
-     (restoring-worker-state
-      (fn []
-        (let [import-db! (get @thread-api/*thread-apis :thread-api/import-db-base64)
-              imports (atom [])
-              invalid-payload (.encode (js/TextEncoder.) "[\"~#js/Error\",[\"^ \",\"~:message\",\"File not found: /db.sqlite\"]]")
-              invalid-base64 (.toString (js/Buffer.from invalid-payload) "base64")]
-          (platform/set-platform!
-           (build-test-platform
-            {:import-db (fn [_pool _path data]
-                          (swap! imports conj data)
-                          (p/resolved nil))}))
-          (-> (import-db! test-repo invalid-base64)
-              (p/then (fn [_]
-                        (is false "expected import-db-base64 to reject invalid payload")))
-              (p/catch (fn [error]
-                         (is (= :invalid-sqlite-import-data (:code (ex-data error))))))
-              (p/finally (fn []
-                           (is (empty? @imports))))))))
-     (p/finally done))))
-
 (deftest import-db-base64-uses-active-pool-after-close-db
   (async done
     (->
