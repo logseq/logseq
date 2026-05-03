@@ -264,7 +264,6 @@
        :action {:type :invoke
                 :command :graph-create
                 :method :thread-api/create-or-open-db
-                :direct-pass? false
                 :args [repo {}]
                 :repo repo
                 :graph (core/repo->graph repo)
@@ -296,7 +295,6 @@
        :action {:type :invoke
                 :command :graph-validate
                 :method :thread-api/validate-db
-                :direct-pass? false
                 :args [repo options]
                 :repo repo
                 :graph (core/repo->graph repo)}})
@@ -442,7 +440,6 @@
           _ (fs/mkdirSync dir-path #js {:recursive true})
           _ (transport/invoke cfg
                               :thread-api/backup-db-sqlite
-                              true
                               [(:repo action) db-path])]
     {:status :ok
      :data {:backup-name backup-name
@@ -503,7 +500,6 @@
                 (p/resolved config))
           result (transport/invoke cfg
                                    (:method action)
-                                   (:direct-pass? action)
                                    (:args action))]
     (when-let [repo (:persist-repo action)]
       (cli-config/update-config! config {:graph repo}))
@@ -561,7 +557,7 @@
                     (or (get kv key)
                         (get kv (str ":" key))))]
     (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-                rows (transport/invoke cfg :thread-api/q false [(:repo action) [graph-info-kv-query]])
+                rows (transport/invoke cfg :thread-api/q [(:repo action) [graph-info-kv-query]])
                 kv (reduce (fn [acc [ident value]]
                              (assoc acc (ident->kv-key ident) value))
                            {}
@@ -584,7 +580,6 @@
               export-result (when (= export-type "edn")
                               (transport/invoke cfg
                                                 :thread-api/export-edn
-                                                false
                                                 [(:repo action) payload]))
               _ (case export-type
                   "edn"
@@ -594,7 +589,6 @@
                   "sqlite"
                   (transport/invoke cfg
                                     :thread-api/backup-db-sqlite
-                                    true
                                     [(:repo action) (:file action)])
                   (throw (ex-info "unsupported export type" {:export-type export-type}))) ]
         {:status :ok
@@ -618,8 +612,7 @@
               method (if (= import-type "sqlite")
                        :thread-api/import-db-base64
                        :thread-api/import-edn)
-              direct-pass? (= import-type "sqlite")
-              _ (transport/invoke cfg method direct-pass? [(:repo action) payload])
+              _ (transport/invoke cfg method [(:repo action) payload])
               _ (cli-server/restart-server! config (:repo action))]
         {:status :ok
          :data {:new-graph? new-graph?

@@ -886,14 +886,18 @@
   [repo]
   (<db-exists? repo))
 
-(def-thread-api :thread-api/export-db
+(def-thread-api :thread-api/export-db-base64
   [repo]
   (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
     (checkpoint-db! repo db))
   (p/let [data (<export-db-file repo)]
-    (platform/transfer (platform/current) data #js [(.-buffer data)])))
+    (when data
+      (let [buffer (if (instance? js/Buffer data)
+                     data
+                     (js/Buffer.from data))]
+        (.toString buffer "base64")))))
 
-(def-thread-api :thread-api/export-client-ops-db
+(def-thread-api :thread-api/export-client-ops-db-base64
   [repo]
   (when-let [^js db (worker-state/get-sqlite-conn repo :client-ops)]
     (checkpoint-db! repo db))
@@ -910,19 +914,11 @@
                       (str "/client-ops" repo-path)
                       (str "client-ops-" repo-path)]]
     (p/let [payload (<export-db-file-with-paths repo export-paths)]
-      (when (instance? js/Uint8Array payload)
-        (platform/transfer (platform/current) payload #js [(.-buffer payload)])))))
-
-(def-thread-api :thread-api/export-db-base64
-  [repo]
-  (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
-    (checkpoint-db! repo db))
-  (p/let [data (<export-db-file repo)]
-    (when data
-      (let [buffer (if (instance? js/Buffer data)
-                     data
-                     (js/Buffer.from data))]
-        (.toString buffer "base64")))))
+      (when payload
+        (let [buffer (if (instance? js/Buffer payload)
+                       payload
+                       (js/Buffer.from payload))]
+          (.toString buffer "base64"))))))
 
 (def-thread-api :thread-api/backup-db-sqlite
   [repo dst-path]
@@ -939,14 +935,6 @@
       (checkpoint-db! repo db)
       (p/let [_ (backup-db-fn db dst-path)]
         {:path dst-path}))))
-
-(def-thread-api :thread-api/import-db
-  [repo data]
-  (when-not (string/blank? repo)
-    (p/let [pool (<get-opfs-pool repo)
-            payload (require-sqlite-payload repo data)]
-      (<import-db pool payload)
-      nil)))
 
 (def-thread-api :thread-api/import-db-base64
   [repo base64]

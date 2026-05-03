@@ -10,7 +10,7 @@
          (let [ref-uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
                calls* (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (swap! calls* conj {:method method :args args})
                                                   (case method
                                                     :thread-api/cli-list-pages
@@ -47,7 +47,7 @@
          (let [ref-uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
                calls* (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (swap! calls* conj {:method method :args args})
                                                   (case method
                                                     :thread-api/cli-list-nodes

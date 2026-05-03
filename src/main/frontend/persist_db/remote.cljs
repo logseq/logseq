@@ -2,6 +2,7 @@
   "Remote `PersistentDB` implementation for Electron renderer via db-worker-node HTTP and SSE."
   (:require [clojure.string :as string]
             [frontend.persist-db.protocol :as protocol]
+            [frontend.util :as util]
             [logseq.db :as ldb]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
@@ -94,15 +95,10 @@
          :reconnect-delay-ms (or reconnect-delay-ms 1000))))
 
 (defn invoke!
-  [{:keys [base-url auth-token fetch-fn]} method direct-pass? args]
+  [{:keys [base-url auth-token fetch-fn]} method args]
   (let [payload (js/JSON.stringify
-                 (clj->js (if direct-pass?
-                            {:method method
-                             :directPass true
-                             :args args}
-                            {:method method
-                             :directPass false
-                             :argsTransit (ldb/write-transit-str args)})))]
+                 (clj->js {:method method
+                           :argsTransit (ldb/write-transit-str args)}))]
     (p/let [{:keys [status body]}
             (fetch-fn {:method "POST"
                        :url (invoke-url base-url)
@@ -110,9 +106,7 @@
                        :body payload})
             parsed (parse-response-body body)]
       (if (<= 200 status 299)
-        (if direct-pass?
-          (:result parsed)
-          (ldb/read-transit-str (:resultTransit parsed)))
+        (ldb/read-transit-str (:resultTransit parsed))
         (let [error (:error parsed)]
           (throw (ex-info (or (:message error) "db-worker invoke failed")
                           (cond-> {:status status
@@ -163,28 +157,29 @@
 (defrecord InRemote [client wrapped-worker disconnect!]
   protocol/PersistentDB
   (<new [_this repo opts]
-    (invoke! client "thread-api/create-or-open-db" false [repo opts]))
+    (invoke! client "thread-api/create-or-open-db" [repo opts]))
 
   (<list-db [_this]
-    (invoke! client "thread-api/list-db" false []))
+    (invoke! client "thread-api/list-db" []))
 
   (<unsafe-delete [_this repo]
-    (invoke! client "thread-api/unsafe-unlink-db" false [repo]))
+    (invoke! client "thread-api/unsafe-unlink-db" [repo]))
 
   (<release-access-handles [_this repo]
-    (invoke! client "thread-api/release-access-handles" false [repo]))
+    (invoke! client "thread-api/release-access-handles" [repo]))
 
   (<fetch-initial-data [_this repo opts]
-    (p/let [_ (invoke! client "thread-api/create-or-open-db" false [repo opts])]
-      (invoke! client "thread-api/get-initial-data" false [repo opts])))
+    (p/let [_ (invoke! client "thread-api/create-or-open-db" [repo opts])]
+      (invoke! client "thread-api/get-initial-data" [repo opts])))
 
   (<export-db [_this repo _opts]
-    (invoke! client "thread-api/export-db" true [repo]))
+    (p/let [base64 (invoke! client "thread-api/export-db-base64" [repo])]
+      (some-> base64 util/base64string-to-unit8array)))
 
   (<import-db [_this repo data]
     (->
-     (p/let [result-str (invoke! client "thread-api/import-db" true [repo data])]
-       (ldb/read-transit-str result-str))
+     (p/let [base64 (util/unit8array-to-base64string data)]
+       (invoke! client "thread-api/import-db-base64" [repo base64]))
      (p/catch (fn [error]
                 (log/error :import-db-error repo error "SQLiteDB import error")
                 (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))
@@ -192,8 +187,8 @@
 (defn start!
   [{:keys [base-url auth-token event-handler] :as opts}]
   (let [client (create-client (assoc opts :base-url base-url :auth-token auth-token))
-        wrapped-worker (fn [qkw direct-pass? & args]
-                         (invoke! client (method->str qkw) direct-pass? args))
+        wrapped-worker (fn [qkw & args]
+                         (invoke! client (method->str qkw) args))
         {:keys [disconnect!]} (connect-events! (assoc client
                                                       :event-handler event-handler
                                                       :auth-token auth-token)

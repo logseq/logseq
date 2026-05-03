@@ -201,7 +201,7 @@
               (vreset! thread-api/*thread-apis
                        (assoc thread-apis-prev
                               :thread-api/create-or-open-db (fn [_repo _opts] (p/resolved nil))
-                              :thread-api/export-db (fn [_repo] (p/resolved nil))
+                              :thread-api/export-db-base64 (fn [_repo] (p/resolved nil))
                               :thread-api/db-sync-rehydrate-large-titles (fn [_repo _graph-id] (p/resolved nil))))
               (-> (p/with-redefs [rtc-log-and-state/rtc-log (fn [& _] nil)
                                   client-op/update-graph-uuid (fn [& _] nil)
@@ -575,11 +575,11 @@
            (reset! db-sync/*repo->latest-remote-tx latest-tx-prev)
            (reset! db-sync/*repo->latest-remote-checksum latest-checksum-prev)))))))
 
-(deftest thread-api-export-client-ops-db-checkpoints-and-exports-client-ops-file-test
+(deftest thread-api-export-client-ops-db-base64-checkpoints-and-exports-client-ops-file-test
   (async done
     (restoring-worker-state
      (fn []
-       (let [export-client-ops-db (@thread-api/*thread-apis :thread-api/export-client-ops-db)
+       (let [export-client-ops-db-base64 (@thread-api/*thread-apis :thread-api/export-client-ops-db-base64)
              sql-calls (atom [])
              export-calls (atom [])
              expected-data (js/Uint8Array. #js [1 2 3])
@@ -596,15 +596,16 @@
                                                       (when (= :client-ops which-db)
                                                         #js {:exec (fn [sql]
                                                                      (swap! sql-calls conj sql))}))]
-           (-> (export-client-ops-db test-repo)
+           (-> (export-client-ops-db-base64 test-repo)
                (p/then (fn [result]
                          (is (= ["PRAGMA wal_checkpoint(TRUNCATE)"] @sql-calls))
                          (is (= 1 (count @export-calls)))
                          (is (contains? #{"client-ops/db.sqlite"
                                           "client-ops-/db.sqlite"}
                                         (first @export-calls)))
-                         (is (instance? js/Uint8Array result))
-                         (is (= [1 2 3] (vec result)))
+                         (is (string? result))
+                         (is (= [1 2 3]
+                                (vec (js/Uint8Array. (.from js/Buffer result "base64")))))
                          (done)))
                (p/catch (fn [error]
                           (is false (str error))

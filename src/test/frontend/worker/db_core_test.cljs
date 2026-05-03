@@ -122,26 +122,28 @@
     (is (= "" (resolve-initial-config "")))
     (is (= "{:foo true}" (resolve-initial-config "{:foo true}")))))
 
-(deftest import-db-rejects-non-sqlite-payload
+(deftest import-db-base64-rejects-non-sqlite-payload
   (async done
-    (restoring-worker-state
-     (fn []
-       (let [import-db! (get @thread-api/*thread-apis :thread-api/import-db)
-             imports (atom [])
-             invalid-payload (.encode (js/TextEncoder.) "[\"~#js/Error\",[\"^ \",\"~:message\",\"File not found: /db.sqlite\"]]")]
-         (platform/set-platform!
-          (build-test-platform
-           {:import-db (fn [_pool _path data]
-                         (swap! imports conj data)
-                         (p/resolved nil))}))
-         (-> (import-db! test-repo invalid-payload)
-             (p/then (fn [_]
-                       (is false "expected import-db to reject invalid payload")))
-             (p/catch (fn [error]
-                        (is (= :invalid-sqlite-import-data (:code (ex-data error))))))
-             (p/finally (fn []
-                          (is (empty? @imports))
-                          (done)))))))))
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [import-db! (get @thread-api/*thread-apis :thread-api/import-db-base64)
+              imports (atom [])
+              invalid-payload (.encode (js/TextEncoder.) "[\"~#js/Error\",[\"^ \",\"~:message\",\"File not found: /db.sqlite\"]]")
+              invalid-base64 (.toString (js/Buffer.from invalid-payload) "base64")]
+          (platform/set-platform!
+           (build-test-platform
+            {:import-db (fn [_pool _path data]
+                          (swap! imports conj data)
+                          (p/resolved nil))}))
+          (-> (import-db! test-repo invalid-base64)
+              (p/then (fn [_]
+                        (is false "expected import-db-base64 to reject invalid payload")))
+              (p/catch (fn [error]
+                         (is (= :invalid-sqlite-import-data (:code (ex-data error))))))
+              (p/finally (fn []
+                           (is (empty? @imports))))))))
+     (p/finally done))))
 
 (deftest set-db-sync-config-keeps-only-non-auth-fields-test
   (let [set-config! (get @thread-api/*thread-apis :thread-api/set-db-sync-config)
@@ -218,50 +220,54 @@
 
 (deftest search-build-blocks-indice-in-worker-reports-progress-to-main-thread-test
   (async done
-         (restoring-worker-state
-          (fn []
-            (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
-                  conn (d/create-conn db-schema/schema)
-                  search-db (fake-db)
-                  progress-calls (atom [])
-                  idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
-              (d/transact! conn [{:block/uuid (random-uuid)}])
-              (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
-              (reset! worker-state/*datascript-conns {test-repo conn})
-              (reset! idle-status-atom {test-repo {:idle? true
-                                                   :ts (.now js/Date)}})
-              (reset! worker-state/*main-thread
-                      (fn [qkw direct-pass? & args]
-                        (when (= qkw :thread-api/search-index-build-progress)
-                          (let [[repo payload] args]
-                            (swap! progress-calls conj {:qkw qkw
-                                                        :direct-pass? direct-pass?
-                                                        :repo repo
-                                                        :payload payload})))
-                        (p/resolved nil)))
-              (with-redefs [search/truncate-table! (fn [_db] nil)
-                            search/upsert-blocks! (fn [_db _blocks] nil)
-                            search/hidden-entity? (constantly false)
-                            search/block->index (fn [_entity]
-                                                  {:id "block-1"
-                                                   :page "page-1"
-                                                   :title "Hello"})]
-                (-> (build-index! test-repo true)
-                    (p/then (fn [_]
-                              (let [statuses (map (comp :status :payload) @progress-calls)
-                                    completed (some #(when (= :completed (get-in % [:payload :status]))
-                                                       %)
-                                                    @progress-calls)]
-                                (is (= false (:direct-pass? (first @progress-calls))))
-                                (is (= test-repo (:repo (first @progress-calls))))
-                                (is (= :running (first statuses)))
-                                (is (some #{:completed} statuses))
-                                (is (= :idle (last statuses)))
-                                (is (= 1 (get-in completed [:payload :processed])))
-                                (is (= 1 (get-in completed [:payload :total]))))))
-                    (p/catch (fn [error]
-                               (is false (str error))))
-                    (p/finally done))))))))
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+              conn (d/create-conn db-schema/schema)
+              search-db (fake-db)
+              progress-calls (atom [])
+              idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+          (d/transact! conn [{:block/uuid (random-uuid)}])
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! idle-status-atom {test-repo {:idle? true
+                                               :ts (.now js/Date)}})
+          (reset! worker-state/*main-thread
+                  (fn [qkw & args]
+                    (when (= qkw :thread-api/search-index-build-progress)
+                      (let [[repo payload] args]
+                        (swap! progress-calls conj {:qkw qkw
+                                                    :repo repo
+                                                    :payload payload})))
+                    (p/resolved nil)))
+          (with-redefs [search/truncate-table! (fn [_db] nil)
+                        search/upsert-blocks! (fn [_db _blocks] nil)
+                        search/hidden-entity? (constantly false)
+                        search/block->index (fn [_entity]
+                                              {:id "block-1"
+                                               :page "page-1"
+                                               :title "Hello"})]
+            (-> (p/let [_ (build-index! test-repo true)
+                        _ (p/loop [remaining 20]
+                            (if (or (seq @progress-calls)
+                                    (zero? remaining))
+                              nil
+                              (p/let [_ (p/delay 5)]
+                                (p/recur (dec remaining)))))]
+                  (let [statuses (map (comp :status :payload) @progress-calls)
+                        completed (some #(when (= :completed (get-in % [:payload :status]))
+                                           %)
+                                        @progress-calls)]
+                    (is (= test-repo (:repo (first @progress-calls))))
+                    (is (= :running (first statuses)))
+                    (is (some #{:completed} statuses))
+                    (is (= :idle (last statuses)))
+                    (is (= 1 (get-in completed [:payload :processed])))
+                    (is (= 1 (get-in completed [:payload :total])))))
+                (p/catch (fn [error]
+                           (is false (str error)))))))))
+     (p/finally done))))
 
 (deftest release-access-handles-clears-active-import-state-test
   (restoring-worker-state

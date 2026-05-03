@@ -121,7 +121,7 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               query (query-by-command (:type action))
-              result (transport/invoke cfg :thread-api/q false
+              result (transport/invoke cfg :thread-api/q
                                        [(:repo action) [query (:query action)]])
               ;; Hide recycled entries so search doesn't surface entries that
               ;; `remove page` / `remove block` already soft-deleted. Tag and

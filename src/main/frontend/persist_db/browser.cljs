@@ -147,16 +147,11 @@
                         "&publishing=" config/publishing?))
            _ (set-worker-fs worker)
            wrapped-worker* (Comlink/wrap worker)
-           wrapped-worker (fn [qkw direct-pass? & args]
+           wrapped-worker (fn [qkw & args]
                             (p/let [result (.remoteInvoke ^js wrapped-worker*
                                                           (str (namespace qkw) "/" (name qkw))
-                                                          direct-pass?
-                                                          (if direct-pass?
-                                                            (into-array args)
-                                                            (ldb/write-transit-str args)))]
-                              (if direct-pass?
-                                result
-                                (ldb/read-transit-str result))))
+                                                          (ldb/write-transit-str args))]
+                              (ldb/read-transit-str result)))
            t1 (util/time-ms)]
        (reset! state/*db-worker-thread worker)
        (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
@@ -219,7 +214,8 @@
         (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]
-    (-> (p/let [data (state/<invoke-db-worker-direct-pass :thread-api/export-db repo)]
+    (-> (p/let [base64 (state/<invoke-db-worker :thread-api/export-db-base64 repo)
+                data (some-> base64 util/base64string-to-unit8array)]
           (when data
             (if (:return-data? opts)
               data
@@ -230,8 +226,8 @@
 
   (<import-db [_this repo data]
     (->
-     (p/let [result-str (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)]
-       (ldb/read-transit-str result-str))
+     (p/let [base64 (util/unit8array-to-base64string data)]
+       (state/<invoke-db-worker :thread-api/import-db-base64 repo base64))
      (p/catch (fn [error]
                 (log/error :import-db-error repo error "SQLiteDB import error")
                 (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))
