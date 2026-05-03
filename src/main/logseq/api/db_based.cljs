@@ -58,7 +58,7 @@
         sibling? (if (entity-util/page? block) false sibling)
         uuid->properties (let [blocks (outliner-core/tree-vec-flatten blocks' :children)]
                            (when (some (fn [b] (seq (:properties b))) blocks)
-                             (zipmap (map :uuid blocks)
+                             (zipmap (map (comp str :uuid) blocks)
                                      (map :properties blocks))))]
     (p/let [result (editor-handler/insert-block-tree-after-target
                     (:db/id block) sibling? blocks' :markdown true)
@@ -67,7 +67,7 @@
         (p/doseq [block blocks]
           (let [id (:block/uuid block)
                 b (db/entity [:block/uuid id])
-                properties (when uuid->properties (uuid->properties id))]
+                properties (when uuid->properties (uuid->properties (str id)))]
             (when (seq properties)
               (api-block/db-based-save-block-properties! b properties {:plugin this
                                                                        :schema schema})))))
