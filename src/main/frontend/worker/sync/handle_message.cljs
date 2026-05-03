@@ -219,9 +219,12 @@
               (sync-apply/mark-failed-txs! repo [failed-tx-id])))
           ;; Backward compatibility for older servers without per-tx reject metadata.
           (sync-apply/mark-failed-txs! repo inflight))
-        (reset! (:inflight client) [])
-        (broadcast-rtc-state! client)
         (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
+        (reset! (:inflight client) [])
+        (try
+          (broadcast-rtc-state! client)
+          (catch :default e
+            (log/warn :db-sync/tx-reject-broadcast-failed e)))
         (fail-fast :db-sync/tx-rejected
                    rejected-data)))))
 
@@ -328,6 +331,30 @@
         (fail-fast :db-sync/invalid-field
                    {:repo repo :type (:type message)})))))
 
+(defn- <apply-pull-remote-txs!
+  [repo client remote-txs]
+  (try
+    (-> (sync-apply/apply-remote-txs! repo client remote-txs)
+        (p/catch (fn [e]
+                   (log/error ::apply-remote-tx e)
+                   (throw e))))
+    (catch :default e
+      (log/error ::apply-remote-tx e)
+      (p/rejected e))))
+
+(defn- <prepare-pull-remote-txs!
+  [repo client remote-txs]
+  (if (sync-crypt/graph-e2ee? repo)
+    (p/let [aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
+            _ (when (nil? aes-key)
+                (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
+      (p/all (mapv (fn [{:keys [t tx-data]}]
+                     (p/let [tx-data* (sync-crypt/<decrypt-tx-data aes-key tx-data)]
+                       {:t t
+                        :tx-data tx-data*}))
+                   remote-txs)))
+    (p/resolved remote-txs)))
+
 (defn- handle-pull-ok!
   [repo client local-tx remote-tx remote-checksum message]
   (clear-pending-pull! client)
@@ -342,22 +369,8 @@
                              txs)]
         (when (seq remote-txs)
           (->
-           (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
-                   aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
-                   _ (when (and graph-e2ee? (nil? aes-key))
-                       (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-                   remote-txs* (if aes-key
-                                 (p/all (mapv (fn [{:keys [t tx-data]}]
-                                                (p/let [tx-data* (sync-crypt/<decrypt-tx-data aes-key tx-data)]
-                                                  {:t t
-                                                   :tx-data tx-data*}))
-                                              remote-txs))
-                                 (p/resolved remote-txs))]
-             (try
-               (sync-apply/apply-remote-txs! repo client remote-txs*)
-               (catch :default e
-                 (log/error ::apply-remote-tx e)
-                 (throw e)))
+           (p/let [remote-txs* (<prepare-pull-remote-txs! repo client remote-txs)
+                   _ (<apply-pull-remote-txs! repo client remote-txs*)]
              (client-op/update-local-tx repo remote-tx)
              (broadcast-rtc-state! client)
              (verify-sync-checksum! repo client remote-tx remote-tx remote-checksum {:type "pull/ok"})

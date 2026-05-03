@@ -792,6 +792,36 @@
                 (is (= :db-sync/tx-rejected (-> captured :payload :type)))
                 (is (= rejected-tx (-> captured :payload :data)))))))))))
 
+(deftest tx-reject-broadcast-failure-still-surfaces-rejection-test
+  (testing "tx/reject should report the rejected tx even if state broadcast fails"
+    (let [raw-message (js/JSON.stringify
+                       (clj->js {:type "tx/reject"
+                                 :reason "db transact failed"
+                                 :t 3}))
+          captured (atom nil)
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-redefs [client-op/get-local-tx (constantly 0)
+                    shared-service/broadcast-to-clients! (fn [& _]
+                                                           (throw (ex-info "broadcast failed" {})))
+                    sync-log-state/rtc-log (fn [type payload]
+                                             (reset! captured {:type type
+                                                              :payload payload}))]
+        (try
+          (with-silenced-console-error
+            #(sync-handle-message/handle-message! test-repo client raw-message))
+          (is false "expected tx/reject to fail-fast")
+          (catch :default error
+            (let [data (ex-data error)]
+              (is (= :db-sync/tx-rejected (:type data)))
+              (is (= "db transact failed" (:reason data)))
+              (is (= [] @(:inflight client)))
+              (is (= :rtc.log/tx-rejected (:type @captured)))
+              (is (= :db-sync/tx-rejected (-> @captured :payload :type))))))))))
+
 (deftest tx-reject-db-transact-failed-marks-inflight-op-failed-test
   (testing "non-stale tx/reject should mark inflight ops failed and clear pending state"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)
@@ -1106,6 +1136,44 @@
                      (p/finally (fn []
                                   (reset! db-sync/*repo->latest-remote-tx latest-prev)
                                   (done))))))))))
+
+(deftest pull-ok-non-e2ee-does-not-fetch-aes-key-test
+  (testing "non-E2EE pull responses should apply plain tx data without fetching graph AES keys"
+    (async done
+           (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+                 parent-id (:db/id parent)
+                 new-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "remote-plain-title"]])
+                 raw-message (js/JSON.stringify
+                              (clj->js {:type "pull/ok"
+                                        :t 2
+                                        :txs [{:t 2 :tx new-tx}]}))
+                 latest-prev @db-sync/*repo->latest-remote-tx
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)}]
+             (reset! db-sync/*repo->latest-remote-tx {})
+             (with-datascript-conns conn client-ops-conn
+               (fn []
+                 (with-redefs [sync-crypt/graph-e2ee? (constantly false)
+                               sync-crypt/<ensure-graph-aes-key (fn [& _]
+                                                                  (p/rejected
+                                                                   (ex-info "unexpected AES fetch" {})))
+                               sync-crypt/<decrypt-tx-data (fn [& _]
+                                                             (p/rejected
+                                                              (ex-info "unexpected decrypt" {})))]
+                   (-> (p/let [_ (sync-handle-message/handle-message! test-repo client raw-message)
+                               parent' (d/entity @conn parent-id)]
+                         (is (= "remote-plain-title" (:block/title parent')))
+                         (is (= 2 (client-op/get-local-tx test-repo))))
+                       (p/catch
+                        (fn [error]
+                          (is false (str error))))
+                       (p/finally
+                        (fn []
+                          (reset! db-sync/*repo->latest-remote-tx latest-prev)
+                          (done)))))))))))
 
 (deftest pull-ok-batched-txs-preserve-tempid-boundaries-test
   (testing "pull/ok applies tx batches without cross-tx tempid collisions"
