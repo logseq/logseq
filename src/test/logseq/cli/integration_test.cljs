@@ -166,8 +166,8 @@
                                                           ["demo"])
                                  cli-server/ensure-server! (fn [config _repo]
                                                              (p/resolved (assoc config :base-url "http://example")))
-                                 transport/invoke (fn [_ method direct-pass? args]
-                                                    (swap! invoke-calls conj [method direct-pass? args])
+                                 transport/invoke (fn [_ method args]
+                                                    (swap! invoke-calls conj [method args])
                                                     (case method
                                                       :thread-api/set-db-sync-config
                                                       (p/resolved nil)
@@ -180,7 +180,7 @@
                      (is (= 0 (:exit-code result)))
                      (is (= "ok" (:status payload)))
                      (is (= :thread-api/sync-app-state (ffirst @invoke-calls)))
-                     (is (= "fresh-token" (get-in (nth @invoke-calls 0) [2 0 :auth/id-token])))
+                     (is (= "fresh-token" (get-in (nth @invoke-calls 0) [1 0 :auth/id-token])))
                      (is (= "fresh-token" (:id-token stored)))
                      (is (= "fresh-access-token" (:access-token stored)))))]
              (-> promise
@@ -210,7 +210,7 @@
                                                                              :refresh-token "refresh-token"}))
                                        cli-server/ensure-server! (fn [config _repo]
                                                                    (p/resolved (assoc config :base-url "http://example")))
-                                       transport/invoke (fn [_ method _direct-pass? args]
+                                       transport/invoke (fn [_ method args]
                                                           (swap! invoke-calls conj [method args])
                                                           (case method
                                                             :thread-api/set-db-sync-config
@@ -280,8 +280,8 @@
                        _ (p/with-redefs [cli-auth/resolve-auth! (fn [_config]
                                                                   (p/resolved {:id-token "runtime-token"
                                                                                :refresh-token "refresh-token"}))
-                                         transport/invoke (fn [_ method direct-pass? args]
-                                                            (swap! invoke-calls conj [method direct-pass? args])
+                                         transport/invoke (fn [_ method args]
+                                                            (swap! invoke-calls conj [method args])
                                                             (case method
                                                               :thread-api/set-db-sync-config
                                                               (p/resolved nil)
@@ -359,7 +359,7 @@
                                                                 (p/resolved {:id-token "runtime-token"}))
                                        cli-server/ensure-server! (fn [config _repo]
                                                                    (p/resolved (assoc config :base-url "http://example")))
-                                       transport/invoke (fn [_ method _direct-pass? args]
+                                       transport/invoke (fn [_ method args]
                                                           (swap! invoke-calls conj [method args])
                                                           (case method
                                                             :thread-api/set-db-sync-config
@@ -403,7 +403,7 @@
                                                                 (p/resolved {:id-token "runtime-token"}))
                                        cli-server/ensure-server! (fn [config _repo]
                                                                    (p/resolved (assoc config :base-url "http://example")))
-                                       transport/invoke (fn [_ method _direct-pass? args]
+                                       transport/invoke (fn [_ method args]
                                                           (swap! invoke-calls conj [method args])
                                                           (case method
                                                             :thread-api/set-db-sync-config

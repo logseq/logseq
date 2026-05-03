@@ -105,6 +105,23 @@
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
 #?(:cljs (defonce hsl2hex utils/hsl2hex))
 #?(:cljs (defonce base64string-to-unit8array utils/base64ToUint8Array))
+#?(:cljs
+   (defn unit8array-to-base64string
+     [payload]
+     (when payload
+       (let [buffer (cond
+                      (instance? js/Buffer payload)
+                      payload
+
+                      (instance? js/Uint8Array payload)
+                      (js/Buffer.from payload)
+
+                      (instance? js/ArrayBuffer payload)
+                      (js/Buffer.from payload)
+
+                      :else
+                      (js/Buffer.from payload))]
+         (.toString buffer "base64")))))
 
 #?(:cljs (def string-join-path common-util/string-join-path))
 

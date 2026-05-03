@@ -85,7 +85,6 @@
             (p/let [runtime (db-worker/ensure-runtime! db-name window-id)]
               (cli-transport/invoke runtime
                                     :thread-api/backup-db-sqlite
-                                    false
                                     [db-name dst-path]))))))
 
 (defn- active-repo-window-ids

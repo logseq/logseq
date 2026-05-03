@@ -203,15 +203,14 @@
            (set! config/db-sync-http-base (fn [] "https://sync.example.test"))
            (set! remote/start! (fn [{:keys [repo]}]
                                  (->FakeRemote repo
-                                               (fn [qkw direct-pass? & args]
-                                                 (swap! worker-calls conj [qkw direct-pass? args])
+                                               (fn [qkw & args]
+                                                 (swap! worker-calls conj [qkw args])
                                                  (p/resolved nil)))))
            (set! remote/stop! (fn [_] (p/resolved true)))
            (-> (p/let [_ (ensure-remote! "logseq_db_graph_a")]
                  (let [set-config-call (first (filter #(= :thread-api/set-db-sync-config (first %))
                                                       @worker-calls))]
                    (is (= [:thread-api/set-db-sync-config
-                           false
                            [{:enabled? true
                              :ws-url "wss://sync.example.test/sync/%s"
                              :http-base "https://sync.example.test"}]]
@@ -274,14 +273,14 @@
       (reset! persist-db/remote-db fake-client)
       (reset! persist-db/remote-repo "logseq_db_graph_a")
       (set! util/electron? (constantly true))
-      (set! remote/invoke! (fn [client method direct-pass? args]
-                             (swap! invoke-calls conj [client method direct-pass? args])
+      (set! remote/invoke! (fn [client method args]
+                             (swap! invoke-calls conj [client method args])
                              (p/resolved nil)))
       (set! remote/stop! (fn [client]
                            (swap! stop-calls conj client)
                            (p/resolved true)))
       (-> (p/let [_ (persist-db/<close-db "logseq_db_graph_a")]
-            (is (= [[(:client fake-client) "thread-api/close-db" false ["logseq_db_graph_a"]]]
+            (is (= [[(:client fake-client) "thread-api/close-db" ["logseq_db_graph_a"]]]
                    @invoke-calls))
             (is (= [fake-client] @stop-calls))
             (is (nil? @persist-db/remote-db))
@@ -307,8 +306,8 @@
       (reset! persist-db/remote-db fake-client)
       (reset! persist-db/remote-repo "logseq_db_graph_a")
       (set! util/electron? (constantly true))
-      (set! remote/invoke! (fn [client method direct-pass? args]
-                             (swap! invoke-calls conj [client method direct-pass? args])
+      (set! remote/invoke! (fn [client method args]
+                             (swap! invoke-calls conj [client method args])
                              (p/resolved nil)))
       (set! remote/stop! (fn [client]
                            (swap! stop-calls conj client)
@@ -345,28 +344,28 @@
              (set! state/<invoke-db-worker original-invoke)
              (done)))))))
 
-(deftest browser-export-db-on-electron-triggers-worker-export-then-local-backup
+(deftest browser-export-db-on-electron-triggers-worker-base64-export-then-local-backup
   (async done
     (let [ipc-calls (atom [])
           worker-export-calls (atom [])
           original-electron? util/electron?
           original-ipc ipc/ipc
-          original-invoke state/<invoke-db-worker-direct-pass]
+          original-invoke state/<invoke-db-worker]
       (set! util/electron? (constantly true))
       (set! ipc/ipc (fn [& args]
                       (swap! ipc-calls conj args)
                       (p/resolved :ok)))
-      (set! state/<invoke-db-worker-direct-pass
+      (set! state/<invoke-db-worker
             (fn [qkw & _]
               (swap! worker-export-calls conj qkw)
               (case qkw
-                :thread-api/export-db (p/resolved (.from js/Buffer "sqlite-bytes"))
+                :thread-api/export-db-base64 (p/resolved "c3FsaXRlLWJ5dGVz")
                 (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
       (-> (protocol/<export-db (browser/->InBrowser) "logseq_db_graph_a" {})
           (p/then (fn [_]
                     (is (= [[:db-export "logseq_db_graph_a" false]]
                            @ipc-calls))
-                    (is (= [:thread-api/export-db]
+                    (is (= [:thread-api/export-db-base64]
                            @worker-export-calls))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
@@ -374,5 +373,27 @@
            (fn []
              (set! util/electron? original-electron?)
              (set! ipc/ipc original-ipc)
-             (set! state/<invoke-db-worker-direct-pass original-invoke)
+             (set! state/<invoke-db-worker original-invoke)
+             (done)))))))
+
+(deftest browser-import-db-uses-base64-thread-api
+  (async done
+    (let [worker-import-calls (atom [])
+          original-invoke state/<invoke-db-worker
+          payload (.from js/Buffer "sqlite-bytes")]
+      (set! state/<invoke-db-worker
+            (fn [qkw & args]
+              (swap! worker-import-calls conj [qkw args])
+              (case qkw
+                :thread-api/import-db-base64 (p/resolved nil)
+                (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))) )
+      (-> (protocol/<import-db (browser/->InBrowser) "logseq_db_graph_a" payload)
+          (p/then (fn [_]
+                    (is (= [[:thread-api/import-db-base64 ["logseq_db_graph_a" "c3FsaXRlLWJ5dGVz"]]]
+                           @worker-import-calls))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally
+           (fn []
+             (set! state/<invoke-db-worker original-invoke)
              (done)))))))

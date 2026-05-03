@@ -956,7 +956,7 @@
   (async done
          (let [selectors (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ selector _] args]
                                                                        (swap! selectors conj selector)
@@ -1003,7 +1003,7 @@
   (async done
          (let [method-calls (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
-                               transport/invoke (fn [_ method _ _]
+                               transport/invoke (fn [_ method _]
                                                   (swap! method-calls conj method)
                                                   (case method
                                                     :thread-api/pull (p/resolved {:db/id 1
@@ -1027,7 +1027,7 @@
   (async done
          (let [method-calls (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
-                               transport/invoke (fn [_ method _ _]
+                               transport/invoke (fn [_ method _]
                                                   (swap! method-calls conj method)
                                                   (case method
                                                     :thread-api/pull (p/resolved {:db/id 1
@@ -1050,7 +1050,7 @@
 (deftest test-show-id-only-entity-is-not-found
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/pull (p/resolved {:db/id 212})
                                                   :thread-api/q (p/resolved [])
@@ -1355,7 +1355,7 @@
 (deftest test-list-execute-default-sort-updated-at
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/cli-list-pages [{:db/id 11 :block/title "Page C" :block/updated-at 30}
                                                                               {:db/id 7 :block/title "Page B" :block/updated-at 10}
@@ -1385,7 +1385,7 @@
 (deftest test-list-execute-default-limit-returns-newest-records
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/cli-list-pages (mapv (fn [id]
                                                                                      {:db/id id
@@ -1402,7 +1402,7 @@
 (deftest test-list-execute-default-sort-respects-order-and-explicit-sort
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/cli-list-pages [{:db/id 3 :block/title "Beta" :block/updated-at 20}
                                                                               {:db/id 2 :block/title "Gamma" :block/updated-at 5}
@@ -1421,7 +1421,7 @@
 (deftest test-list-property-execute-supports-cardinality-sort-and-fields
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/cli-list-properties [{:db/id 30
                                                                                     :block/title "Gamma"
@@ -1452,7 +1452,7 @@
   (async done
          (let [calls* (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (swap! calls* conj {:method method :args args})
                                                   (case method
                                                     :thread-api/pull
@@ -1487,7 +1487,7 @@
          (let [list-calls* (atom [])
                upsert-calls* (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (let [repo (first args)]
                                                     (cond
                                                       (= method :thread-api/q)
@@ -3066,7 +3066,7 @@
                        :name "Quote"}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q (if @created?*
                                                                     [{:db/id 4242
@@ -3096,7 +3096,7 @@
                        :name "Home"}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ _args]
+                               transport/invoke (fn [_ method _args]
                                                   (case method
                                                     ;; pull-tag-by-name finds no tag (only a page exists)
                                                     :thread-api/q (if @created?*
@@ -3124,7 +3124,7 @@
                        :name "Quote"}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q [{:db/id 4242
                                                                     :block/name "quote"
@@ -3153,7 +3153,7 @@
                                 :db/cardinality :db.cardinality/many}}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q (if @created?*
                                                                     [{:db/id 654
@@ -3187,7 +3187,7 @@
                        :id 4242}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (if (= lookup 4242)
@@ -3220,7 +3220,7 @@
                tag-uuid (uuid "00000000-0000-0000-0000-000000004242")]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (if (= lookup 4242)
@@ -3257,7 +3257,7 @@
                        :name "  #QUOTE "}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (if (= lookup 4242)
@@ -3294,7 +3294,7 @@
                        :name "Project Renamed"}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (if (= lookup 4242)
@@ -3328,7 +3328,7 @@
                        :name "Project Renamed"}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (if (= lookup 4242)
@@ -3360,7 +3360,7 @@
   (async done
          (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ args]
+                             transport/invoke (fn [_ method args]
                                                 (case method
                                                   :thread-api/pull (let [[_ _ lookup] args]
                                                                      (case lookup
@@ -3418,7 +3418,7 @@
                                                           (p/resolved (cond (= tags [:tag/new]) [{:db/id 101}]
                                                                             :else nil)))
                                add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (swap! property-lookups* conj lookup)
@@ -3460,7 +3460,7 @@
                                                                             :else nil)))
                                add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
                                add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q (let [[_ [_query input]] args]
                                                                     (if (= input "home")
@@ -3507,7 +3507,7 @@
                                add-command/resolve-tags (fn [_ _ _] (p/resolved nil))
                                add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
                                add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q (let [[_ [_query input]] args]
                                                                     (if (= input "home")
@@ -3551,7 +3551,7 @@
                                add-command/resolve-tags (fn [_ _ _] (p/resolved nil))
                                add-command/resolve-properties (fn [_ _ _ & _] (p/resolved nil))
                                add-command/resolve-property-identifiers (fn [_ _ _ & _] (p/resolved nil))
-                               transport/invoke (fn [_ method _ _]
+                               transport/invoke (fn [_ method _]
                                                   (case method
                                                     :thread-api/q [{:db/id 21
                                                                     :block/name "c1"
@@ -3578,7 +3578,7 @@
          (let [action {:type :upsert-page :mode :update :repo "demo" :id 50}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ _]
+                               transport/invoke (fn [_ method _]
                                                   (case method
                                                     :thread-api/pull {:db/id 50
                                                                       :block/name "home"
@@ -3601,7 +3601,7 @@
   (async done
          (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/pull {:db/id 50
                                                                     :block/uuid (uuid "00000000-0000-0000-0000-0000000000ee")
@@ -3643,7 +3643,7 @@
                                add-command/resolve-tags (fn [_ _ _] (p/resolved nil))
                                add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
                                add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (cond
@@ -3664,7 +3664,7 @@
          (let [ops* (atom [])]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/cli-list-tags [{:db/id 1 :block/title "Quote"}]
                                                     :thread-api/cli-list-properties [{:db/id 2 :block/title "owner"}]
@@ -3694,7 +3694,7 @@
   (async done
          (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/q [{:db/id 11
                                                                   :block/title "Recycled"
@@ -3715,7 +3715,7 @@
                page-uuid (uuid "00000000-0000-0000-0000-00000000abcd")]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q (let [[_ [_query input]] args]
                                                                     (if (= input "home")
@@ -3743,7 +3743,7 @@
   (async done
          (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/q [{:db/id 21
                                                                   :block/name "c1"
@@ -3771,7 +3771,7 @@
                page-uuid (uuid "00000000-0000-0000-0000-00000000abce")]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (if (= lookup 10)
@@ -3796,7 +3796,7 @@
   (async done
          (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/cli-list-tags [{:db/id 1 :block/title "Quote"}
                                                                              {:db/id 2 :block/title "QUOTE"}]
@@ -3827,7 +3827,7 @@
                                                                             :else nil)))
                                add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
                                add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (swap! calls* conj {:method method :args args})
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
@@ -3871,7 +3871,7 @@
   (async done
          (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ [repo [query-text query-input]]]
+                             transport/invoke (fn [_ method [repo [query-text query-input]]]
                                                 (is (= :thread-api/q method))
                                                 (is (= "logseq_db_demo" repo))
                                                 (is (= "quote" query-input))
@@ -3982,7 +3982,7 @@
                                cli-server/restart-server! (fn [_ _] (p/resolved {:ok? true}))
                                cli-server/ensure-server! (fn [config _] (assoc config :base-url "http://example"))
                                transport/read-input (fn [_] {:page "Test"})
-                               transport/invoke (fn [_ _ _ _] {:ok true})]
+                               transport/invoke (fn [_ _ _] {:ok true})]
                  (p/let [result (commands/execute action {})]
                    (is (= :ok (:status result))
                        "edn import into existing graph should succeed")))
@@ -4032,8 +4032,8 @@
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [config _]
                                                            (assoc config :base-url "http://127.0.0.1:9999"))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (if (= method :thread-api/export-db-base64)
                                                     "c3FsaXRl"
                                                     {:exported true}))
@@ -4062,11 +4062,11 @@
                    (is (= "/tmp/export.edn" (get-in edn-result [:context :file])))
                    (is (= "sqlite" (get-in sqlite-result [:context :export-type])))
                    (is (= "/tmp/export.sqlite" (get-in sqlite-result [:context :file])))
-                   (is (= [[:thread-api/export-edn false ["logseq_db_demo" {:export-type :graph
+                   (is (= [[:thread-api/export-edn ["logseq_db_demo" {:export-type :graph
                                                                             :graph-options {:include-timestamps? true
                                                                                             :exclude-built-in-pages? true
                                                                                             :exclude-namespaces #{:user :project}}}]]
-                           [:thread-api/backup-db-sqlite true ["logseq_db_demo" "/tmp/export.sqlite"]]]
+                           [:thread-api/backup-db-sqlite ["logseq_db_demo" "/tmp/export.sqlite"]]]
                           @invoke-calls))
                    (is (= 1 (count @write-calls)))
                    (is (= {:format :edn
@@ -4091,7 +4091,7 @@
                                                       (if (= format :edn)
                                                         {:page "Import Page"}
                                                         (js/Buffer.from "sqlite" "utf8")))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (swap! invoke-calls conj [method args])
                                                   {:ok true})]
                  (p/let [edn-result (commands/execute {:type :graph-import :repo "logseq_db_demo" :graph "demo" :import-type "edn" :input "/tmp/import.edn" :allow-missing-graph true} {})
@@ -4211,7 +4211,7 @@
                               "test-repo" config)]
            (is (true? (:ok? action-result)))
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
-                               transport/invoke (fn [_ _method _ args]
+                               transport/invoke (fn [_ _method args]
                                                   (reset! captured-args (second args))
                                                   (p/resolved []))]
                  (query-command/execute-query (:action action-result) config))

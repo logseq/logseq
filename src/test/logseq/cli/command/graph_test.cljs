@@ -40,7 +40,7 @@
                        :graph "demo-graph"}]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _]
                                                            (p/resolved {:base-url "http://example"}))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (swap! invoke-calls* conj [method args])
                                                   (p/resolved [[:logseq.kv/schema-version 7]
                                                                [:logseq.kv/graph-created-at 40000]
@@ -64,8 +64,8 @@
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [config _repo]
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved {:path (second args)}))]
                  (p/let [result (commands/execute {:type :graph-backup-create
                                                    :repo "logseq_db_demo"
@@ -74,7 +74,7 @@
                                                   {:root-dir root-dir})]
                    (is (= :ok (:status result)))
                    (is (= 1 (count @invoke-calls)))
-                   (let [[method _ [repo backup-db-path]] (first @invoke-calls)
+                   (let [[method [repo backup-db-path]] (first @invoke-calls)
                          expected-segment (node-path/join
                                            (graph-dir/repo->encoded-graph-dir-name repo)
                                            "backup"
@@ -188,7 +188,7 @@
                                transport/read-input (fn [{:keys [format path]}]
                                                       (swap! read-calls conj [format path])
                                                       (js/Buffer.from "sqlite" "utf8"))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (swap! invoke-calls conj [method args])
                                                   (p/resolved {:ok true}))]
                  (p/let [result (commands/execute {:type :graph-backup-restore
@@ -242,7 +242,7 @@
                        :graph "demo-graph"}]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _]
                                                            (p/resolved {:base-url "http://example"}))
-                               transport/invoke (fn [_ method _ _]
+                               transport/invoke (fn [_ method _]
                                                   (case method
                                                     :thread-api/q
                                                     (p/resolved [[:logseq.kv/db-type :sqlite]

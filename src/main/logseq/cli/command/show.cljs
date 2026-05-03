@@ -121,7 +121,7 @@
   [config repo root]
   (if (and (ordinary-block-root? root)
            (:db/id root))
-    (-> (transport/invoke config :thread-api/get-block-parents false [repo (:db/id root)])
+    (-> (transport/invoke config :thread-api/get-block-parents [repo (:db/id root)])
         (p/then (fn [parents]
                   (or parents []))))
     (p/resolved [])))
@@ -442,11 +442,11 @@
 
 (defn- fetch-linked-references
   [config repo root-id]
-  (p/let [refs (transport/invoke config :thread-api/get-block-refs false [repo root-id])
+  (p/let [refs (transport/invoke config :thread-api/get-block-refs [repo root-id])
           ref-ids (vec (keep :db/id refs))
           pulled (if (seq ref-ids)
                    (p/all (map (fn [id]
-                                 (transport/invoke config :thread-api/pull false [repo linked-ref-selector id]))
+                                 (transport/invoke config :thread-api/pull [repo linked-ref-selector id]))
                                ref-ids))
                    [])]
     (let [blocks (vec (remove (fn [block]
@@ -476,7 +476,7 @@
       (p/let [blocks (attach-user-properties config repo blocks)
               pages (if (seq page-ids)
                       (p/all (map (fn [id]
-                                    (transport/invoke config :thread-api/pull false
+                                    (transport/invoke config :thread-api/pull
                                                       [repo [:db/id :block/name :block/title :block/uuid] id]))
                                   page-ids))
                       [])]
@@ -636,7 +636,7 @@
           selector [:db/id :db/ident :block/title :block/name
                     :logseq.property/hide? :logseq.property/public?]]
       (p/let [entities (p/all (map (fn [property-key]
-                                     (transport/invoke config :thread-api/pull false
+                                     (transport/invoke config :thread-api/pull
                                                        [repo selector [:db/ident property-key]]))
                                    keys))]
         (->> (map vector keys entities)
@@ -655,13 +655,13 @@
           uuids* (vec uuids)]
       (p/let [id-entities (if (seq ids*)
                             (p/all (map (fn [id]
-                                          (transport/invoke config :thread-api/pull false
+                                          (transport/invoke config :thread-api/pull
                                                             [repo selector id]))
                                         ids*))
                             [])
               uuid-entities (if (seq uuids*)
                               (p/all (map (fn [uuid]
-                                            (transport/invoke config :thread-api/pull false
+                                            (transport/invoke config :thread-api/pull
                                                               [repo selector [:block/uuid uuid]]))
                                           uuids*))
                               [])]
@@ -706,14 +706,14 @@
                         [?b ?a ?v]]
           ids (vec block-ids)
           built-in-idents (vec displayable-built-in-properties)]
-      (p/let [user-pairs (transport/invoke config :thread-api/q false [repo [idents-query]])
-              built-in-pairs (transport/invoke config :thread-api/q false
+      (p/let [user-pairs (transport/invoke config :thread-api/q [repo [idents-query]])
+              built-in-pairs (transport/invoke config :thread-api/q
                                                [repo [built-in-query built-in-idents]])
               ident-type-pairs (into (vec user-pairs) built-in-pairs)
               datetime-idents (set (keep (fn [[a type]] (when (= :datetime type) a)) ident-type-pairs))
               property-idents (vec (map first ident-type-pairs))]
         (if (seq property-idents)
-          (p/let [rows (transport/invoke config :thread-api/q false
+          (p/let [rows (transport/invoke config :thread-api/q
                                          [repo [props-query ids property-idents]])]
             (reduce (fn [acc [block-id attr value]]
                       (let [value (if (and (number? value) (contains? datetime-idents attr))
@@ -759,7 +759,7 @@
   (let [query [:find (list 'pull '?b tree-block-selector)
                :in '$ '?page-id
                :where ['?b :block/page '?page-id]]]
-    (p/let [rows (transport/invoke config :thread-api/q false [repo [query page-id]])
+    (p/let [rows (transport/invoke config :thread-api/q [repo [query page-id]])
             blocks (->> rows
                         (map first)
                         (remove property-value-block?)
@@ -799,7 +799,7 @@
         uuid-str (:uuid opts)]
     (cond
       (some? id)
-      (p/let [entity (transport/invoke config :thread-api/pull false
+      (p/let [entity (transport/invoke config :thread-api/pull
                                        [repo show-root-selector id])]
         (p/let [entity (attach-user-properties-to-entity config repo entity)]
           (if (missing-show-entity? entity)
@@ -815,12 +815,12 @@
                 (throw (ex-info "entity not found" {:code :entity-not-found})))))))
 
       (seq uuid-str)
-      (p/let [entity (transport/invoke config :thread-api/pull false
+      (p/let [entity (transport/invoke config :thread-api/pull
                                        [repo show-root-selector
                                         [:block/uuid (uuid uuid-str)]])
               entity (if (:db/id entity)
                        entity
-                       (transport/invoke config :thread-api/pull false
+                       (transport/invoke config :thread-api/pull
                                          [repo show-root-selector
                                           [:block/uuid uuid-str]]))]
         (p/let [entity (attach-user-properties-to-entity config repo entity)]
@@ -837,7 +837,7 @@
                 (throw (ex-info "entity not found" {:code :entity-not-found})))))))
 
       (seq page)
-      (p/let [page-entity (transport/invoke config :thread-api/pull false
+      (p/let [page-entity (transport/invoke config :thread-api/pull
                                             [repo [:db/id :db/ident :block/uuid :block/title
                                                    :logseq.property/deleted-at
                                                    {:logseq.property/status [:db/ident :block/title]}

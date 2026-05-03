@@ -61,9 +61,9 @@
 (defn- <invoke-worker-get-blocks
   [graph requests]
   (p/let [result-transit-str
-          (state/<invoke-db-worker-direct-pass :thread-api/get-blocks
-                                               graph
-                                               (ldb/write-transit-str requests))]
+          (state/<invoke-db-worker :thread-api/get-blocks
+                                   graph
+                                   (ldb/write-transit-str requests))]
     (some-> result-transit-str ldb/read-transit-str)))
 
 (defonce ^:private *get-blocks-batch-enabled? (atom true))
