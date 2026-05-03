@@ -290,6 +290,10 @@
    [:block/refs {:optional true} [:set :int]]
    [:block/tx-id {:optional true} :int]
    [:block/collapsed? {:optional true} :boolean]
+   [:logseq.property.sync/large-title-object {:optional true}
+    [:map
+     [:asset-uuid :string]
+     [:asset-type :string]]]
    [:block/warning {:optional true} [:keyword]]
    [:logseq.property/created-by-ref {:optional true} :int]])
 
