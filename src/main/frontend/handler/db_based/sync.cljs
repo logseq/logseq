@@ -45,6 +45,7 @@
 
 (declare coerce-http-response)
 (declare <sync-auth-state-to-db-worker!)
+(declare <get-remote-graphs)
 
 (defn fetch-json
   [url opts {:keys [response-schema error-schema] :or {error-schema :error}}]
@@ -99,10 +100,15 @@
   [repo]
   (some #(when (= repo (:url %)) %) (state/get-rtc-graphs)))
 
+(defn- local-graph-id
+  [repo]
+  (some-> (db/get-db repo)
+          ldb/get-graph-rtc-uuid
+          str))
+
 (defn- graph-has-local-rtc-id?
   [repo]
-  (boolean (some-> (db/get-db repo)
-                   ldb/get-graph-rtc-uuid)))
+  (boolean (local-graph-id repo)))
 
 (defn- should-start-rtc?
   [repo]
@@ -110,6 +116,16 @@
        (let [graph (remote-graph repo)]
          (and (some? graph)
               (not= false (:graph-ready-for-use? graph))))))
+
+(defn- should-resume-graph-upload?
+  [repo]
+  (let [graph (remote-graph repo)
+        local-graph-uuid (local-graph-id repo)]
+    (and (not (true? (:rtc/uploading? @state/state)))
+         (some? graph)
+         (= false (:graph-ready-for-use? graph))
+         (string? local-graph-uuid)
+         (= local-graph-uuid (:GraphUUID graph)))))
 
 (defn- normalize-graph-e2ee?
   [graph-e2ee?]
@@ -185,16 +201,51 @@
           payload (sync-app-state-payload)]
     (state/<invoke-db-worker :thread-api/sync-app-state payload)))
 
+(defn- <upload-graph-and-refresh!
+  [repo]
+  (-> (p/let [_ (state/set-state! :rtc/uploading? true)
+              _ (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
+              graphs (<get-remote-graphs)]
+        graphs)
+      (p/finally
+        (fn []
+          (state/set-state! :rtc/uploading? false)))))
+
 (defn <rtc-start!
   [repo & {:keys [_stop-before-start?] :as _opts}]
   (p/let [_ (<wait-for-db-worker-ready!)]
-    (if (should-start-rtc? repo)
+    (cond
+      (should-start-rtc? repo)
       (do
         (log/info :db-sync/start {:repo repo})
         (p/let [_ (<sync-auth-state-to-db-worker!)]
           (state/<invoke-db-worker :thread-api/db-sync-start repo)))
+
+      (should-resume-graph-upload? repo)
+      (let [graph (remote-graph repo)]
+        (log/info :db-sync/resume-upload
+                  {:repo repo
+                   :graph-id (:GraphUUID graph)})
+        (p/let [_ (<upload-graph-and-refresh! repo)]
+          (if (should-start-rtc? repo)
+            (do
+              (log/info :db-sync/start {:repo repo :reason :bootstrap-upload-finished})
+              (p/let [_ (<sync-auth-state-to-db-worker!)]
+                (state/<invoke-db-worker :thread-api/db-sync-start repo)))
+            (do
+              (log/info :db-sync/skip-start
+                        {:repo repo
+                         :reason :graph-not-ready-for-use
+                         :remote-graphs-loading? (:rtc/loading-graphs? @state/state)
+                         :has-local-rtc-id? (graph-has-local-rtc-id? repo)})
+              (<rtc-stop!)))))
+
+      :else
       (do
-        (log/info :db-sync/skip-start {:repo repo :reason :graph-not-in-remote-list
+        (log/info :db-sync/skip-start {:repo repo
+                                       :reason (if (some? (remote-graph repo))
+                                                 :graph-not-ready-for-use
+                                                 :graph-not-in-remote-list)
                                        :remote-graphs-loading? (:rtc/loading-graphs? @state/state)
                                        :has-local-rtc-id? (graph-has-local-rtc-id? repo)})
         (<rtc-stop!)))))
@@ -384,11 +435,13 @@
                           :graph-uuid graph-uuid}))))
 
 (defn <rtc-upload-graph!
-  [repo _graph-e2ee?]
-  (p/do!
-   (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
-   (<get-remote-graphs)
-   (<rtc-start! repo)))
+  [repo graph-e2ee?]
+  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee? false)]
+    (when (nil? graph-id)
+      (throw (ex-info "graph id doesn't exist when uploading to server" {:repo repo})))
+    (p/do!
+     (<upload-graph-and-refresh! repo)
+     (<rtc-start! repo))))
 
 (defn <rtc-create-graph-and-start-sync!
   [repo graph-e2ee?]

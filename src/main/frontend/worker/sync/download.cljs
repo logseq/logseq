@@ -15,11 +15,13 @@
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
    [frontend.worker.sync.util :refer [fail-fast] :as sync-util]
    [lambdaisland.glogi :as log]
+   [logseq.db :as ldb]
    [logseq.db-sync.snapshot :as snapshot]
    [logseq.db.common.sqlite :as common-sqlite]
    [logseq.db.frontend.schema :as db-schema]
-   [promesa.core :as p]
-   [logseq.db :as ldb]))
+   [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+   [logseq.db.sqlite.util :as sqlite-util]
+   [promesa.core :as p]))
 
 (defn- ->uint8 [data]
   (cond
@@ -446,6 +448,13 @@
   (-> (p/let [state (require-import-state! repo graph-id import-id)
               _ (when (:rows-imported? state)
                   (<replay-imported-rows! state))
+              {:keys [conn graph-e2ee? imported-datoms]} (require-import-state! repo graph-id import-id)
+              _ (when (zero? imported-datoms)
+                  (ldb/transact! conn
+                                 (into (sqlite-create-graph/build-db-initial-data "" :remote-graph? true)
+                                       [(sqlite-util/kv :logseq.kv/graph-uuid (uuid graph-id))
+                                        (sqlite-util/kv :logseq.kv/graph-rtc-e2ee? graph-e2ee?)])
+                                 {:initial-db? true}))
               result (complete-datoms-import! repo graph-id remote-tx)
               _ (clear-import-state! import-id)]
         result)
@@ -503,14 +512,16 @@
                                                {:keys [import-id]} (prepare-import! repo true graph-id graph-e2ee?)]
                                          (reset! import-id* import-id)
                                          import-id)))]
-                (p/let [_ (do
-                            (reset! stage* :stream-snapshot)
-                            (<stream-snapshot-row-batches!
-                             resp
-                             25000
-                             (fn [rows]
-                               (p/let [import-id (ensure-import!)]
-                                 (import-rows-chunk! rows graph-id import-id)))))
+                (p/let [{:keys [chunk-count]} (do
+                                                (reset! stage* :stream-snapshot)
+                                                (<stream-snapshot-row-batches!
+                                                 resp
+                                                 25000
+                                                 (fn [rows]
+                                                   (p/let [import-id (ensure-import!)]
+                                                     (import-rows-chunk! rows graph-id import-id)))))
+                        _ (when (zero? chunk-count)
+                            (ensure-import!))
                         _ (log-f {:sub-type :download-completed
                                   :graph-uuid graph-id
                                   :message "Graph snapshot downloaded"})

@@ -2,12 +2,14 @@
   (:require [cljs.test :refer [deftest is async]]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.db :as db]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.persist-db :as persist-db]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (deftest remove-member-request-test
@@ -110,12 +112,13 @@
 
 (deftest rtc-upload-graph-creates-remote-graph-as-not-ready-test
   (async done
-         (let [upload-calls (atom [])
+         (let [create-calls (atom [])
+               upload-calls (atom [])
                refresh-calls (atom 0)
                start-calls (atom [])]
-           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                           (resolve true))
+           (-> (p/with-redefs [db-sync/<rtc-create-graph! (fn [repo graph-e2ee? & [graph-ready-for-use?]]
+                                                            (swap! create-calls conj [repo graph-e2ee? graph-ready-for-use?])
+                                                            (p/resolved "graph-3"))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! upload-calls conj args)
                                                          (p/resolved :ok))
@@ -127,6 +130,8 @@
                                                      (p/resolved :ok))]
                  (db-sync/<rtc-upload-graph! "logseq_db_demo" false))
                (p/then (fn [_]
+                         (is (= [["logseq_db_demo" false false]]
+                                @create-calls))
                          (is (= [[:thread-api/db-sync-upload-graph "logseq_db_demo"]]
                                 @upload-calls))
                          (is (= 1 @refresh-calls))
@@ -201,6 +206,8 @@
                   :rtc/loading-graphs? false)
            (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "demo-graph"
                                                              :graph-ready-for-use? false}])
+                               db/get-db (fn [_repo] :db)
+                               ldb/get-graph-rtc-uuid (fn [_db] nil)
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! calls conj args)
                                                          (p/resolved :ok))]
@@ -208,6 +215,51 @@
                (p/then (fn [_]
                          (is (not-any? #(= :thread-api/db-sync-start (first %)) @calls))
                          (is (some #(= :thread-api/db-sync-stop (first %)) @calls))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))
+               (p/finally (fn []
+                            (reset! state/*db-worker worker-prev)
+                            (reset! state/state state-prev)))))))
+
+(deftest rtc-start-resumes-upload-when-remote-graph-is-not-ready-for-use-test
+  (async done
+         (let [worker-prev @state/*db-worker
+               state-prev @state/state
+               calls (atom [])
+               upload-state-changes (atom [])
+               remote-graphs (atom [{:url "demo-graph"
+                                     :GraphUUID "11111111-1111-1111-1111-111111111111"
+                                     :graph-ready-for-use? false}])]
+           (reset! state/*db-worker :worker)
+           (swap! state/state assoc
+                  :rtc/uploading? false
+                  :rtc/loading-graphs? false)
+           (-> (p/with-redefs [state/get-rtc-graphs (fn [] @remote-graphs)
+                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))
+                               db/get-db (fn [_repo] :db)
+                               ldb/get-graph-rtc-uuid (fn [_db] (uuid "11111111-1111-1111-1111-111111111111"))
+                               state/set-state! (fn [k v]
+                                                  (when (= k :rtc/uploading?)
+                                                    (swap! upload-state-changes conj v))
+                                                  (swap! state/state assoc k v)
+                                                  nil)
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! calls conj args)
+                                                         (p/resolved :ok))
+                               db-sync/<get-remote-graphs (fn []
+                                                            (reset! remote-graphs
+                                                                    [{:url "demo-graph"
+                                                                      :GraphUUID "11111111-1111-1111-1111-111111111111"
+                                                                      :graph-ready-for-use? true}])
+                                                            (p/resolved @remote-graphs))]
+                 (db-sync/<rtc-start! "demo-graph"))
+               (p/then (fn [_]
+                         (is (some #(= [:thread-api/db-sync-upload-graph "demo-graph"] %) @calls))
+                         (is (some #(= [:thread-api/db-sync-start "demo-graph"] %) @calls))
+                         (is (= [true false] @upload-state-changes))
                          (done)))
                (p/catch (fn [error]
                           (is false (str error))

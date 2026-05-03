@@ -5,6 +5,7 @@
    [clojure.string :as string]
    [datascript.core :as d]
    [frontend.common.crypt :as crypt]
+   [frontend.common.thread-api :as thread-api]
    [frontend.worker-common.util :as worker-util]
    [frontend.worker.handler.page :as worker-page]
    [frontend.worker.pipeline :as worker-pipeline]
@@ -17,6 +18,7 @@
    [frontend.worker.sync.auth :as sync-auth]
    [frontend.worker.sync.client-op :as client-op]
    [frontend.worker.sync.crypt :as sync-crypt]
+   [frontend.worker.sync.download :as sync-download]
    [frontend.worker.sync.handle-message :as sync-handle-message]
    [frontend.worker.sync.large-title :as sync-large-title]
    [frontend.worker.sync.log-and-state :as sync-log-state]
@@ -4671,6 +4673,50 @@
                    (is (= [[1 2] [3 4] [5]] @seen-batches))
                    (is (= [[2 5] [4 5] [5 5]] @progress-calls)))
                  (p/finally done))))))
+
+(deftest finalize-import-seeds-empty-graph-test
+  (testing "empty snapshot imports seed the built-in graph structure before finalization"
+    (async done
+           (let [conn (db-test/create-conn)
+                 client-ops-conn (new-client-ops-db)
+                 import-id "import-1"
+                 graph-id "11111111-1111-1111-1111-111111111111"]
+             (with-datascript-conns
+               conn
+               client-ops-conn
+               (fn []
+                 (reset! @#'sync-download/*import-state
+                         {:repo test-repo
+                          :graph-id graph-id
+                          :import-id import-id
+                          :conn conn
+                          :graph-e2ee? true
+                          :imported-datoms 0
+                          :rows-db nil
+                          :rows-imported? false
+                          :rows-path nil
+                          :rows-pool nil})
+                 (with-redefs [thread-api/*thread-apis (atom {:thread-api/db-sync-rehydrate-large-titles
+                                                              (fn [_repo _graph-id] nil)})
+                               worker-state/get-sqlite-conn (fn [& _] nil)
+                               shared-service/broadcast-to-clients! (fn [& _] nil)]
+                   (let [result (sync-download/finalize-import! test-repo graph-id 7 import-id)]
+                     (-> result
+                         (p/then
+                          (fn [value]
+                            (is (nil? value))
+                            (is (= 7 (client-op/get-local-tx test-repo)))
+                            (is (= (uuid graph-id) (ldb/get-graph-rtc-uuid @conn)))
+                            (is (= true (:kv/value (d/entity @conn :logseq.kv/graph-rtc-e2ee?))))
+                            (is (some? (d/entity @conn :logseq.kv/schema-version)))
+                            (is (nil? @(deref #'sync-download/*import-state)))))
+                         (p/catch
+                          (fn [error]
+                            (is false (str error))))
+                         (p/finally
+                          (fn []
+                            (reset! @#'sync-download/*import-state nil)
+                            (done))))))))))))
 
 (deftest create-temp-sqlite-db-uses-opfs-pool-test
   (testing "temp upload db should use an OPFS-backed sqlite db instead of :memory:"
