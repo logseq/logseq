@@ -79,7 +79,8 @@
   (set/union
    reverse-data-ignored-attrs
    rtc-const/ignore-attrs-when-syncing
-   rtc-const/ignore-entities-when-init-upload))
+   rtc-const/ignore-entities-when-init-upload
+   #{:block/pre-block?}))
 
 (defn- remove-ignored-attrs [tx-data]
   (remove (fn [d] (contains? rtc-ignored-attrs (:a d))) tx-data))
