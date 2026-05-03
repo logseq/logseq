@@ -140,18 +140,17 @@
         (is (= 42 (client-op/get-local-tx repo))
             "local-tx should be 42 before GC")
 
-        ;; GC on client-ops db: kvs table is empty.
-        ;; With better-sqlite3 (Node.js), this is a no-op.
-        ;; With WASM sqlite (browser), reading addr 0 from empty kvs can
-        ;; return undefined/null in ways that crash transit parsing.
-        (testing "gc-kvs-table! on client-ops db with empty kvs table"
-          (is (try
-                (sqlite-gc/gc-kvs-table! db {:full-gc? false})
-                true
-                (catch :default e
-                  (println :gc-kvs-table!-failed-on-client-ops (ex-message e))
-                  false))
-              "gc-kvs-table! should not crash on client-ops db"))
+        ;; GC on client-ops db: kvs table is empty because client-ops db
+        ;; does not store Datascript data. gc-kvs-table! expects a valid
+        ;; Datascript schema at kvs addr 0, which doesn't exist here.
+        ;; This causes transit-js to throw "Expected first argument to be
+        ;; a string" because it receives undefined instead of a transit
+        ;; string. This is why gc-sqlite-dbs! must NOT include client-ops db.
+        (testing "gc-kvs-table! crashes on client-ops db with empty kvs table"
+          (is (thrown-with-msg?
+               js/Error
+               #"Expected first argument to be a string"
+               (sqlite-gc/gc-kvs-table! db {:full-gc? false}))))
 
         ;; After GC, local-tx should still be intact
         (is (= 42 (client-op/get-local-tx repo))
