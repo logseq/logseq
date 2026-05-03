@@ -91,8 +91,7 @@
                (assets-handler/handle request env)
                (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
                  (if (.-ok access-resp)
-                   (p/let [_ (<safe-touch-activity! request env graph-id)]
-                     (assets-handler/handle request env))
+                   (assets-handler/handle request env)
                    access-resp)))
              (http/bad-request "invalid asset path")))
 
@@ -112,15 +111,17 @@
                       (subs rest-path slash-idx))
                new-url (js/URL. (str (.-origin url) tail (.-search url)))]
            (if (seq graph-id)
-             (if (= method "OPTIONS")
-               (common/options-response)
-               (if (admin-token-valid? request env)
-                 (forward-sync-request request env graph-id new-url)
-                 (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
-                   (if (.-ok access-resp)
-                     (p/let [_ (<safe-touch-activity! request env graph-id)]
-                       (forward-sync-request request env graph-id new-url))
-                     access-resp))))
+               (if (= method "OPTIONS")
+                 (common/options-response)
+                 (if (admin-token-valid? request env)
+                   (forward-sync-request request env graph-id new-url)
+                   (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+                     (if (.-ok access-resp)
+                       (p/let [response (forward-sync-request request env graph-id new-url)
+                               _ (when (< (.-status response) 400)
+                                   (<safe-touch-activity! request env graph-id))]
+                         response)
+                       access-resp))))
              (http/bad-request "missing graph id")))
 
          :else
