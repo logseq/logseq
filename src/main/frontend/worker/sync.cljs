@@ -273,10 +273,8 @@
   [client repo graph-id]
   (when (and client (= repo (:repo client)) (= graph-id (:graph-id client)))
     (let [ws (:ws client)
-          ws-state (some-> (:ws-state client) deref)
           ws-ready-state (when ws (ready-state ws))]
-      (or (= :open ws-state)
-          (contains? #{0 1} ws-ready-state)))))
+      (contains? #{0 1} ws-ready-state))))
 
 (defn- connect!
   [repo client url token]
