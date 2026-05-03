@@ -20,7 +20,8 @@
 
 (deftest test-phase1-target-filter
   (let [targets (example-command/phase1-target-entries phase1-base-table)
-        groups (set (map (comp first :cmds) targets))]
+        groups (set (map (comp first :cmds) targets))
+        graph-export-present? (some #(= ["graph" "export"] (:cmds %)) targets)]
     (testing "phase1 includes inspect/edit groups"
       (is (contains? groups "list"))
       (is (contains? groups "upsert"))
@@ -29,8 +30,9 @@
       (is (contains? groups "search"))
       (is (contains? groups "show")))
 
-    (testing "phase1 excludes graph management commands"
-      (is (not (contains? groups "graph"))))))
+    (testing "phase1 includes graph export examples and graph prefix support"
+      (is graph-export-present?)
+      (is (contains? groups "graph")))))
 
 (deftest test-build-example-entries
   (let [entries (example-command/build-example-entries phase1-base-table)
@@ -38,15 +40,14 @@
     (testing "builds prefix selectors"
       (is (contains? cmds-set ["example" "upsert"]))
       (is (contains? cmds-set ["example" "query"]))
-      (is (contains? cmds-set ["example" "show"])))
+      (is (contains? cmds-set ["example" "show"]))
+      (is (contains? cmds-set ["example" "graph"])))
 
     (testing "builds exact selectors"
       (is (contains? cmds-set ["example" "upsert" "page"]))
       (is (contains? cmds-set ["example" "search" "block"]))
-      (is (contains? cmds-set ["example" "query" "list"])))
-
-    (testing "does not build uncovered selectors"
-      (is (not (contains? cmds-set ["example" "graph"])))))
+      (is (contains? cmds-set ["example" "query" "list"]))
+      (is (contains? cmds-set ["example" "graph" "export"]))))
 
   (testing "all generated entries use :example command keyword"
     (is (every? #(= :example (:command %))
@@ -61,6 +62,24 @@
       (is (= ["upsert page"] (get-in result [:action :matched-commands])))
       (is (seq (get-in result [:action :examples])))))
 
+  (testing "builds graph export exact selector action"
+    (let [result (example-command/build-action phase1-base-table ["example" "graph" "export"])
+          examples (get-in result [:action :examples])]
+      (is (true? (:ok? result)))
+      (is (= "graph export" (get-in result [:action :selector])))
+      (is (= ["graph export"] (get-in result [:action :matched-commands])))
+      (is (= ["logseq graph export --graph my-graph --type edn --file /tmp/my-graph.edn --include-timestamps --exclude-built-in-pages --exclude-namespaces user,project"
+              "logseq graph export --graph my-graph --type sqlite --file /tmp/my-graph.sqlite"]
+             examples))))
+
+  (testing "builds graph prefix selector action"
+    (let [result (example-command/build-action phase1-base-table ["example" "graph"])
+          matched-commands (set (get-in result [:action :matched-commands]))]
+      (is (true? (:ok? result)))
+      (is (= "graph" (get-in result [:action :selector])))
+      (is (contains? matched-commands "graph export"))
+      (is (seq (get-in result [:action :examples])))))
+
   (testing "builds prefix selector action"
     (let [result (example-command/build-action phase1-base-table ["example" "upsert"])]
       (is (true? (:ok? result)))
@@ -68,7 +87,7 @@
       (is (<= 2 (count (get-in result [:action :matched-commands]))))))
 
   (testing "rejects unknown selector"
-    (let [result (example-command/build-action phase1-base-table ["example" "graph"])]
+    (let [result (example-command/build-action phase1-base-table ["example" "sync"])]
       (is (false? (:ok? result)))
       (is (= :unknown-command (get-in result [:error :code])))))
 
