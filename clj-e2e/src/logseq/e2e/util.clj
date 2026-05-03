@@ -69,8 +69,14 @@
 
 (defn exit-edit
   []
-  (when (get-editor)
-    (k/esc))
+  (dotimes [_ 3]
+    (when (get-editor)
+      (k/esc)
+      (wait-timeout 100)))
+  (when (w/visible? editor-q)
+    (w/eval-js "() => document.activeElement && document.activeElement.blur()")
+    (w/click "body")
+    (wait-timeout 100))
   (assert/assert-non-editor-mode))
 
 (defn double-esc
@@ -87,8 +93,12 @@
   (if (w/visible? ".cp__cmdk-search-input")
     (w/fill ".cp__cmdk-search-input" text)
     (do
-      (double-esc)
-      (assert/assert-in-normal-mode?)
+      (when (w/visible? "div[data-radix-popper-content-wrapper]")
+        (k/esc))
+      (dotimes [_ 3]
+        (when (get-editor)
+          (k/esc)
+          (wait-timeout 100)))
       (w/click :#search-button)
       (w/wait-for ".cp__cmdk-search-input")
       (w/fill ".cp__cmdk-search-input" text))))

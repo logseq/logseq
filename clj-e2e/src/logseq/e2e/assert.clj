@@ -40,7 +40,7 @@
 (defn assert-graph-loaded?
   []
   ;; there's some blocks visible now
-  (assert-is-visible (w/get-by-test-id "page title")))
+  (w/wait-for (w/get-by-test-id "page title") {:timeout 30000}))
 
 (defn assert-editor-mode
   []

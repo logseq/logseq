@@ -40,12 +40,13 @@
     (w/refresh)
     (assert/assert-graph-loaded?)
     (if (test-env-ready?)
-      true
+      (assert/assert-in-normal-mode?)
       (if (< attempt 2)
         (recur (inc attempt))
-        (wait-test-env-ready!)))))
+        (do
+          (wait-test-env-ready!)
+          (assert/assert-in-normal-mode?))))))
 
 (defn developer-mode
   []
-  (w/eval-js e2e-init-script)
-  (assert/assert-in-normal-mode?))
+  (w/eval-js e2e-init-script))
