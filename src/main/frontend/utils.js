@@ -514,3 +514,17 @@ export function base64ToUint8Array (base64String) {
     return null
   }
 }
+
+export function uint8ArrayToBase64 (uint8Array) {
+  try {
+    let binary = ''
+    const len = uint8Array.byteLength
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(uint8Array[i])
+    }
+    return btoa(binary)
+  } catch (e) {
+    console.error('Error converting Uint8Array to base64:', e)
+    return null
+  }
+}

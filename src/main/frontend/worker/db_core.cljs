@@ -891,10 +891,7 @@
     (checkpoint-db! repo db))
   (p/let [data (<export-db-file repo)]
     (when data
-      (let [buffer (if (instance? js/Buffer data)
-                     data
-                     (js/Buffer.from data))]
-        (.toString buffer "base64")))))
+      (worker-util/uint8array-to-base64string data))))
 
 (def-thread-api :thread-api/export-client-ops-db-base64
   [repo]
@@ -914,10 +911,7 @@
                       (str "client-ops-" repo-path)]]
     (p/let [payload (<export-db-file-with-paths repo export-paths)]
       (when payload
-        (let [buffer (if (instance? js/Buffer payload)
-                       payload
-                       (js/Buffer.from payload))]
-          (.toString buffer "base64"))))))
+        (worker-util/uint8array-to-base64string payload)))))
 
 (def-thread-api :thread-api/backup-db-sqlite
   [repo dst-path]
@@ -939,7 +933,7 @@
   [repo base64]
   (when-not (string/blank? repo)
     (p/let [pool (<get-opfs-pool repo)
-            data (require-sqlite-payload repo (js/Buffer.from base64 "base64"))
+            data (require-sqlite-payload repo (worker-util/base64string-to-unit8array base64))
             _ (close-db! repo)
             _ (<import-db pool data)
             _ (start-db! repo {:import-type :sqlite-db})]
