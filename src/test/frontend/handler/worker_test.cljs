@@ -50,7 +50,7 @@
           wrapped-worker (fn [qkw & args]
                            (swap! calls conj [qkw args])
                            (p/resolved {:ok true}))]
-      (with-redefs [frontend.handler.worker/<db-worker-ui-action
+      (with-redefs [worker-handler/<db-worker-ui-action
                     (fn [_action _payload]
                       (p/resolved {:password "pw"}))]
         (-> (worker-handler/handle :db-worker/ui-request
@@ -72,7 +72,7 @@
           wrapped-worker (fn [qkw & args]
                            (swap! calls conj [qkw args])
                            (p/resolved {:ok true}))]
-      (with-redefs [frontend.handler.worker/<db-worker-ui-action
+      (with-redefs [worker-handler/<db-worker-ui-action
                     (fn [_action _payload]
                       (p/rejected (ex-info "boom" {:code :boom :x 1})))]
         (-> (worker-handler/handle :db-worker/ui-request
