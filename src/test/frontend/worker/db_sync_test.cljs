@@ -425,7 +425,7 @@
                                               :auth/oauth-token-url "https://auth.example.com/oauth2/token"
                                               :auth/oauth-client-id "worker-client-id"))
            (reset! worker-state/*main-thread
-                   (fn [qkw _direct-pass? _args-list]
+                   (fn [qkw & _args]
                      (when (= qkw :thread-api/ensure-id&access-token)
                        (swap! main-thread-calls inc))
                      (p/resolved {:id-token "legacy-token"})))
@@ -473,7 +473,7 @@
                                               :auth/oauth-token-url "https://auth.example.com/oauth2/token"
                                               :auth/oauth-client-id "worker-client-id"))
            (reset! worker-state/*main-thread
-                   (fn [qkw _direct-pass? _args-list]
+                   (fn [qkw & _args]
                      (when (= qkw :thread-api/ensure-id&access-token)
                        (swap! main-thread-calls inc))
                      (p/resolved {:id-token "fresh-legacy-token"})))

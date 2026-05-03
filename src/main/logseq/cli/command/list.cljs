@@ -334,7 +334,7 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               options (:options action)
-              items (transport/invoke cfg :thread-api/cli-list-pages false
+              items (transport/invoke cfg :thread-api/cli-list-pages
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
               order (or (:order options) "desc")
@@ -352,7 +352,7 @@
               options (cond-> (:options action)
                         ((some-fn :with-extends :with-properties) (:options action))
                         (assoc :expand true))
-              items (transport/invoke cfg :thread-api/cli-list-tags false
+              items (transport/invoke cfg :thread-api/cli-list-tags
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
               order (or (:order options) "desc")
@@ -370,7 +370,7 @@
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               options (cond-> (:options action)
                         (:with-classes (:options action)) (assoc :expand true))
-              items (transport/invoke cfg :thread-api/cli-list-properties false
+              items (transport/invoke cfg :thread-api/cli-list-properties
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
               order (or (:order options) "desc")
@@ -426,7 +426,7 @@
               worker-options (cond-> (dissoc options :tags :properties)
                                (seq tag-ids) (assoc :tag-ids tag-ids)
                                (seq property-idents) (assoc :property-idents property-idents))
-              items (transport/invoke cfg :thread-api/cli-list-nodes false
+              items (transport/invoke cfg :thread-api/cli-list-nodes
                                       [(:repo action) worker-options])
               sort-field (effective-sort-field options)
               order (or (:order options) "desc")
@@ -443,7 +443,7 @@
 
 (defn- ensure-asset-tag-id!
   [config repo]
-  (p/let [entity (transport/invoke config :thread-api/pull false
+  (p/let [entity (transport/invoke config :thread-api/pull
                                    [repo [:db/id] [:db/ident asset-tag-ident]])]
     (if-let [tag-id (:db/id entity)]
       tag-id
@@ -456,7 +456,7 @@
               options (:options action)
               asset-tag-id (ensure-asset-tag-id! cfg (:repo action))
               worker-options (assoc options :tag-ids [asset-tag-id])
-              items (transport/invoke cfg :thread-api/cli-list-nodes false
+              items (transport/invoke cfg :thread-api/cli-list-nodes
                                       [(:repo action) worker-options])
               sort-field (effective-sort-field options)
               order (or (:order options) "desc")
@@ -480,7 +480,7 @@
               options (:options action)
               status-input (some-> (:status options) string/trim)
               available-statuses (when (seq status-input)
-                                   (transport/invoke cfg :thread-api/q false
+                                   (transport/invoke cfg :thread-api/q
                                                      [(:repo action)
                                                       [task-status-command/status-closed-values-query]]))
               resolved-status (when (seq status-input)
@@ -494,7 +494,7 @@
                                      (assoc :status resolved-status)
                                      (seq (some-> (:priority options) string/trim))
                                      (assoc :priority (normalize-priority (:priority options))))]
-            (p/let [items (transport/invoke cfg :thread-api/cli-list-tasks false
+            (p/let [items (transport/invoke cfg :thread-api/cli-list-tasks
                                             [(:repo action) normalized-options])
                     sort-field (effective-sort-field normalized-options)
                     order (or (:order normalized-options) "desc")

@@ -80,7 +80,7 @@
                           vec)]
     (if (seq uuid-strings)
       (p/let [blocks (p/all (map (fn [uuid-str]
-                                   (transport/invoke config :thread-api/pull false
+                                   (transport/invoke config :thread-api/pull
                                                      [repo uuid-lookup-selector
                                                       [:block/uuid (uuid uuid-str)]]))
                                  uuid-strings))]

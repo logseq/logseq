@@ -64,24 +64,14 @@
   (->> (m/watch *db-worker)
        (m/eduction (map some?))))
 
-(defn- <invoke-db-worker*
-  [qkw direct-pass? args-list]
+(defn <invoke-db-worker
+  "invoke db-worker thread api"
+  [qkw & args]
   (let [worker @*db-worker]
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
       (throw (ex-info "db-worker has not been initialized" {})))
-    (apply worker qkw direct-pass? args-list)))
-
-(defn <invoke-db-worker
-  "invoke db-worker thread api"
-  [qkw & args]
-  (<invoke-db-worker* qkw false args))
-
-(defn <invoke-db-worker-direct-pass
-  "invoke db-worker thread api.
-  But directly pass args to db-worker, and result from db-worker as well."
-  [qkw & args]
-  (<invoke-db-worker* qkw true args))
+    (apply worker qkw args)))
 
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
