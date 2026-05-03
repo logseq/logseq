@@ -22,6 +22,7 @@ const outputFilePath = path.join(outputPath, '**')
 const rawCopySrc = (globs, options = {}) =>
   gulp.src(globs, { encoding: false, ...options })
 const staticCleanKeep = new Set([
+  'dist',
   'entitlements.plist',
   'node_modules',
   'package.json',
