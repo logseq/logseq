@@ -20,7 +20,7 @@
 
 (defn- today-page-title
   [config repo]
-  (p/let [journal (transport/invoke config :thread-api/pull false
+  (p/let [journal (transport/invoke config :thread-api/pull
                                     [repo [:logseq.property.journal/title-format] :logseq.class/Journal])
           formatter (or (:logseq.property.journal/title-format journal) "MMM do, yyyy")
           now (-> (js/Date.)
@@ -33,7 +33,7 @@
    of entity maps. Because :block/name is not unique (a tag, property and page
    can share the same name), callers should check for ambiguity."
   [config repo page-name selector]
-  (p/let [results (transport/invoke config :thread-api/q false
+  (p/let [results (transport/invoke config :thread-api/q
                                     [repo
                                      [{:find [[(list 'pull '?e selector) '...]]
                                        :in '[$ ?name]
@@ -67,15 +67,15 @@
     (if (:db/id page)
       page
       (let [page-name-lc (common-util/page-name-sanity-lc page-name)]
-        (p/let [_ (transport/invoke config :thread-api/apply-outliner-ops false
+        (p/let [_ (transport/invoke config :thread-api/apply-outliner-ops
                                     [repo [[:create-page [page-name {}]]] {}])]
-          (transport/invoke config :thread-api/pull false
+          (transport/invoke config :thread-api/pull
                             [repo [:db/id :block/uuid :block/name :block/title] [:block/name page-name-lc]]))))))
 
 (defn pull-tag-by-name
   "Look up a tag by name, constrained to entities tagged with :logseq.class/Tag."
   [config repo tag-name selector]
-  (p/let [result (transport/invoke config :thread-api/q false
+  (p/let [result (transport/invoke config :thread-api/q
                                    [repo
                                     [{:find [[(list 'pull '?e selector) '...]]
                                       :in '[$ ?name]
@@ -88,7 +88,7 @@
 (defn pull-property-by-name
   "Look up a property by name, constrained to entities tagged with :logseq.class/Property."
   [config repo property-name selector]
-  (p/let [result (transport/invoke config :thread-api/q false
+  (p/let [result (transport/invoke config :thread-api/q
                                    [repo
                                     [{:find [[(list 'pull '?e selector) '...]]
                                       :in '[$ ?name]
@@ -229,7 +229,7 @@
                             :reason :missing-created-uuids}))
       (p/let [entities (p/all
                         (map (fn [block-uuid]
-                               (transport/invoke config :thread-api/pull false
+                               (transport/invoke config :thread-api/pull
                                                  [repo [:db/id :block/uuid] [:block/uuid block-uuid]]))
                              ordered-uuids))]
         (created-ids-in-order ordered-uuids entities :block)))))
@@ -306,7 +306,7 @@
   (when (seq uuid-refs)
     (p/all
      (map (fn [uuid-ref]
-            (p/let [entity (transport/invoke config :thread-api/pull false
+            (p/let [entity (transport/invoke config :thread-api/pull
                                              [repo [:db/id :block/uuid] [:block/uuid (uuid uuid-ref)]])]
               (when-not (:db/id entity)
                 (throw (ex-info (str "block ref not found: " uuid-ref)
@@ -322,7 +322,7 @@
     (p/let [entities (p/all
                       (map (fn [id-str]
                              (let [id (parse-long id-str)]
-                               (p/let [entity (transport/invoke config :thread-api/pull false
+                               (p/let [entity (transport/invoke config :thread-api/pull
                                                                 [repo [:db/id :block/uuid :block/title] id])]
                                  (when-not (:db/id entity)
                                    (throw (ex-info (str "id ref not found: " id-str)
@@ -706,7 +706,7 @@
 
 (defn- pull-entity
   [config repo selector lookup]
-  (transport/invoke config :thread-api/pull false [repo selector lookup]))
+  (transport/invoke config :thread-api/pull [repo selector lookup]))
 
 (defn- tag-lookup-ref
   [tag]
@@ -1054,14 +1054,14 @@
   [config {:keys [repo target-id target-uuid target-page-name]}]
   (cond
     (some? target-id)
-    (p/let [block (transport/invoke config :thread-api/pull false
+    (p/let [block (transport/invoke config :thread-api/pull
                                     [repo [:db/id :block/uuid :block/title] target-id])]
       (if-let [block-uuid (:block/uuid block)]
         block-uuid
         (throw (ex-info "target block not found" {:code :target-not-found}))))
 
     (seq target-uuid)
-    (p/let [block (transport/invoke config :thread-api/pull false
+    (p/let [block (transport/invoke config :thread-api/pull
                                     [repo [:db/id :block/uuid :block/title] [:block/uuid (uuid target-uuid)]])]
       (if-let [block-uuid (:block/uuid block)]
         block-uuid
@@ -1207,7 +1207,7 @@
                     (into (map (fn [[k v]]
                                  [:batch-set-property [block-uuids k v {}]])
                                properties)))
-              apply-result (transport/invoke cfg :thread-api/apply-outliner-ops false [(:repo action) ops {}])
+              apply-result (transport/invoke cfg :thread-api/apply-outliner-ops [(:repo action) ops {}])
               created-ids (resolve-created-block-ids cfg (:repo action) blocks-for-insert apply-result)]
         {:status :ok
          :data {:result created-ids}})))

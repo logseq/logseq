@@ -52,7 +52,8 @@
    [logseq.outliner.recycle :as outliner-recycle]
    [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
    [missionary.core :as m]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   [shadow.resource :as rc]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -76,6 +77,13 @@
 (defonce ^:private *client-ops-cleanup-timers (atom {}))
 (def ^:private client-ops-cleanup-interval-ms (* 3 60 60 1000))
 (def ^:private wal-checkpoint-sql "PRAGMA wal_checkpoint(TRUNCATE)")
+(def ^:private default-graph-config-content (rc/inline "templates/config.edn"))
+
+(defn- resolve-initial-config
+  [config]
+  (if (some? config)
+    config
+    default-graph-config-content))
 
 
 (defn- node-runtime?
@@ -200,20 +208,6 @@
   [^js pool data]
   (let [storage (platform/storage (platform/current))]
     ((:import-db storage) pool repo-path data)))
-
-(def ^:private sqlite-file-header "SQLite format 3\u0000")
-
-(defn- require-sqlite-payload
-  [repo data]
-  (let [payload (->uint8array data)]
-    (when-not (and (instance? js/Uint8Array payload)
-                   (>= (.-byteLength payload) (count sqlite-file-header))
-                   (= sqlite-file-header
-                      (.decode (js/TextDecoder.) (.subarray payload 0 (count sqlite-file-header)))))
-      (throw (ex-info "invalid sqlite import data"
-                      {:code :invalid-sqlite-import-data
-                       :repo repo})))
-    payload))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
@@ -370,16 +364,15 @@
 
 (defn- gc-sqlite-dbs!
   "Gc main db weekly and rtc ops db each time when opening it"
-  [sqlite-db client-ops-db datascript-conn {:keys [full-gc?]}]
+  [sqlite-db datascript-conn {:keys [full-gc?]}]
   (let [last-gc-at (:kv/value (d/entity @datascript-conn :logseq.kv/graph-last-gc-at))]
     (when (or full-gc?
               (nil? last-gc-at)
               (not (number? last-gc-at))
               (> (- (common-util/time-ms) last-gc-at) (* 30 24 3600 1000))) ; 1 month ago
       (log/info :gc-sqlite-dbs "gc current graph")
-      (doseq [db (if @*publishing? [sqlite-db] [sqlite-db client-ops-db])]
-        (sqlite-gc/gc-kvs-table! db {:full-gc? full-gc?})
-        (.exec db "VACUUM"))
+      (sqlite-gc/gc-kvs-table! sqlite-db {:full-gc? full-gc?})
+      (.exec sqlite-db "VACUUM")
       (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
                                        :kv/value (common-util/time-ms)}]
         {:skip-validate-db? true
@@ -465,14 +458,14 @@
         (let [initial-tx-report (when-not (or initial-data-exists?
                                               (seq datoms)
                                               sync-download-graph?)
-                                  (let [config (or config "")
+                                  (let [config (resolve-initial-config config)
                                         initial-data (sqlite-create-graph/build-db-initial-data
                                                       config (select-keys opts [:import-type :graph-git-sha :remote-graph?]))]
                                     (ldb/transact! conn initial-data
                                                    {:initial-db? true})))]
           (when-not sync-download-graph?
             (db-migrate/migrate conn)
-            (gc-sqlite-dbs! db client-ops-db conn {})
+            (gc-sqlite-dbs! db conn {})
             (maybe-run-recycle-gc! conn))
 
           (when initial-tx-report
@@ -606,6 +599,19 @@
 (def-thread-api :thread-api/db-sync-upload-stopped?
   [repo]
   (db-sync/upload-stopped? repo))
+
+(def-thread-api :thread-api/db-sync-get-block-conflicts
+  [repo block-uuid]
+  (client-op/get-sync-conflicts repo block-uuid))
+
+(def-thread-api :thread-api/db-sync-clear-block-conflicts
+  [repo block-uuid]
+  (client-op/clear-sync-conflicts! repo block-uuid)
+  (shared-service/broadcast-to-clients!
+   :sync-conflicts-updated
+   {:repo repo
+    :block-uuid block-uuid
+    :conflicts []}))
 
 (def-thread-api :thread-api/db-sync-download-graph-by-id
   [repo graph-id graph-e2ee?]
@@ -865,43 +871,37 @@
   [repo]
   (<db-exists? repo))
 
-(def-thread-api :thread-api/export-db
-  [repo]
-  (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
-    (checkpoint-db! repo db))
-  (p/let [data (<export-db-file repo)]
-    (platform/transfer (platform/current) data #js [(.-buffer data)])))
-
-(def-thread-api :thread-api/export-client-ops-db
-  [repo]
-  (when-let [^js db (worker-state/get-sqlite-conn repo :client-ops)]
-    (checkpoint-db! repo db))
-  (let [^js client-ops-db (worker-state/get-sqlite-conn repo :client-ops)
-        ^js pool (get-storage-pool repo)
-        db-filename (some-> client-ops-db .-filename)
-        resolved-client-ops-path (when pool
-                                   (resolve-db-path repo pool (str "client-ops-" repo-path)))
-        export-paths [db-filename
-                      resolved-client-ops-path
-                      client-ops-repo-path
-                      (str "/" client-ops-repo-path)
-                      (str "client-ops" repo-path)
-                      (str "/client-ops" repo-path)
-                      (str "client-ops-" repo-path)]]
-    (p/let [payload (<export-db-file-with-paths repo export-paths)]
-      (when (instance? js/Uint8Array payload)
-        (platform/transfer (platform/current) payload #js [(.-buffer payload)])))))
-
 (def-thread-api :thread-api/export-db-base64
   [repo]
   (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
     (checkpoint-db! repo db))
   (p/let [data (<export-db-file repo)]
     (when data
-      (let [buffer (if (instance? js/Buffer data)
-                     data
-                     (js/Buffer.from data))]
-        (.toString buffer "base64")))))
+      (worker-util/uint8array-to-base64string data))))
+
+(def-thread-api :thread-api/export-client-ops-db-base64
+  [repo]
+  (when-let [^js db (worker-state/get-sqlite-conn repo :client-ops)]
+    (checkpoint-db! repo db))
+  (let [^js client-ops-db (worker-state/get-sqlite-conn repo :client-ops)
+        ^js pool (get-storage-pool repo)
+        db-filename (some-> client-ops-db .-filename)
+        db-file-name (subs repo-path 1)
+        flat-client-ops-path (str "client-ops-" db-file-name)
+        resolved-client-ops-path (when pool
+                                   (resolve-db-path repo pool (str "client-ops-" repo-path)))
+        export-paths [db-filename
+                      resolved-client-ops-path
+                      flat-client-ops-path
+                      (str "/" flat-client-ops-path)
+                      client-ops-repo-path
+                      (str "/" client-ops-repo-path)
+                      (str "client-ops" repo-path)
+                      (str "/client-ops" repo-path)
+                      (str "client-ops-" repo-path)]]
+    (p/let [payload (<export-db-file-with-paths repo export-paths)]
+      (when payload
+        (worker-util/uint8array-to-base64string payload)))))
 
 (def-thread-api :thread-api/backup-db-sqlite
   [repo dst-path]
@@ -919,20 +919,12 @@
       (p/let [_ (backup-db-fn db dst-path)]
         {:path dst-path}))))
 
-(def-thread-api :thread-api/import-db
-  [repo data]
-  (when-not (string/blank? repo)
-    (p/let [pool (<get-opfs-pool repo)
-            payload (require-sqlite-payload repo data)]
-      (<import-db pool payload)
-      nil)))
-
 (def-thread-api :thread-api/import-db-base64
   [repo base64]
   (when-not (string/blank? repo)
-    (p/let [pool (<get-opfs-pool repo)
-            data (require-sqlite-payload repo (js/Buffer.from base64 "base64"))
+    (p/let [data (worker-util/base64string-to-unit8array base64)
             _ (close-db! repo)
+            pool (<get-opfs-pool repo)
             _ (<import-db pool data)
             _ (start-db! repo {:import-type :sqlite-db})]
       nil)))
@@ -1211,10 +1203,10 @@
 
 (def-thread-api :thread-api/gc-graph
   [repo]
-  (let [{:keys [db client-ops]} (get @*sqlite-conns repo)
+  (let [{:keys [db]} (get @*sqlite-conns repo)
         conn (get @*datascript-conns repo)]
     (when (and db conn)
-      (gc-sqlite-dbs! db client-ops conn {:full-gc? true})
+      (gc-sqlite-dbs! db conn {:full-gc? true})
       nil)))
 
 (def-thread-api :thread-api/mobile-logs
@@ -1301,6 +1293,7 @@
   (set (map
         common-util/keyword->string
         [:sync-db-changes
+         :sync-conflicts-updated
          :notification
          :log
          :add-repo

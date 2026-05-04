@@ -60,9 +60,15 @@
   []
   (node-path/join js/__dirname "../static/db-worker-node.js"))
 
+(defn- db-worker-release-script-path-from
+  [dirname]
+  (if (= "js" (node-path/basename dirname))
+    (node-path/join dirname "db-worker-node.js")
+    (node-path/join dirname "js" "db-worker-node.js")))
+
 (defn- db-worker-release-script-path
   []
-  (node-path/join js/__dirname "js" "db-worker-node.js"))
+  (db-worker-release-script-path-from js/__dirname))
 
 (defn db-worker-script-path
   []

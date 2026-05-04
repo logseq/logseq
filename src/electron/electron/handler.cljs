@@ -234,10 +234,10 @@
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
     (db-worker/ensure-runtime! (canonical-repo repo) (.-id window))))
 
-(defmethod handle :db-export [_window [_ repo force-backup?]]
+(defmethod handle :db-export [window [_ repo force-backup?]]
   (when-let [repo (canonical-repo repo)]
     (db/ensure-graph-dir! repo)
-    (db/backup-db! repo {:force-backup? force-backup?})))
+    (db/backup-db-via-worker! repo (.-id window) {:force-backup? force-backup?})))
 
 (defmethod handle :db-get [_window [_ repo]]
   (when-let [repo (canonical-repo repo)]
@@ -523,7 +523,9 @@
                   (p/let [message (decode-main-ipc-message args-js)
                           _ (vreset! message* message)
                           result (handle (or (utils/get-win-from-sender event) window) message)]
-                    (sqlite-util/write-transit-str result))
+                    (if (= (some-> message last keyword) :js-obj)
+                      (bean/->js result)
+                      (sqlite-util/write-transit-str result)))
                   (p/catch (fn [e]
                              (let [command (command-name @message*)]
                                (when-not (contains? #{"mkdir" "stat"} command)

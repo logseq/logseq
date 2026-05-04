@@ -155,6 +155,7 @@ jobs:
         run: |
           test -f ./static/js/db-worker-node.js
           test -f ./static/js/logseq-cli.js
+          test -f ./static/.agents/skills/logseq-cli/SKILL.md
 
       - name: Update APP Version
         run: |
@@ -191,6 +192,7 @@ jobs:
         with:
           name: static
           path: static
+          include-hidden-files: true
 
   build-linux-x64:
     runs-on: ubuntu-22.04

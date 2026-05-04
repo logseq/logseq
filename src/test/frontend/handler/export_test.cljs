@@ -14,7 +14,8 @@
         uuid-p2 #uuid "97a00e55-48c3-48d8-b9ca-417b16e3a616"
         uuid-5 #uuid "708f7836-c1e2-4212-bd26-b53c7e9f1449"
         uuid-6 #uuid "de7724d5-b045-453d-a643-31b81d310071"
-        uuid-p3 #uuid "de13830f-9691-4074-a0d6-cc8ab9cf9074"]
+        uuid-p3 #uuid "de13830f-9691-4074-a0d6-cc8ab9cf9074"
+        uuid-7 #uuid "f81f4f64-578a-42ff-8741-19adac45f42a"]
     [{:page {:block/title "page1"}
       :blocks
       [{:block/title "1"
@@ -50,7 +51,13 @@
         :build/children
         [{:block/title "hidden-child"
           :build/keep-uuid? true
-          :block/uuid uuid-6}]}]}]))
+          :block/uuid uuid-6}]}]}
+     {:page {:block/title "page4"}
+      :blocks
+      [{:block/title "issue"
+        :build/keep-uuid? true
+        :block/uuid uuid-7
+        :build/properties {:user.property/reproducible-steps "Switch to a password protected graph"}}]}]))
 
 (use-fixtures :once
   {:before (fn []
@@ -84,6 +91,22 @@
 			- [[3]]
 	- 4")
     "97a00e55-48c3-48d8-b9ca-417b16e3a616"))
+
+(deftest export-blocks-as-markdown-with-properties
+  (is (= (string/trim "
+- issue
+  reproducible-steps:: Switch to a password protected graph")
+         (string/trim
+          (export-text/export-blocks-as-markdown
+           (state/get-current-repo)
+           [(uuid "f81f4f64-578a-42ff-8741-19adac45f42a")]
+           {:remove-options #{}}))))
+  (is (= "- issue"
+         (string/trim
+          (export-text/export-blocks-as-markdown
+           (state/get-current-repo)
+           [(uuid "f81f4f64-578a-42ff-8741-19adac45f42a")]
+           {:remove-options #{:property}})))))
 
 (deftest export-blocks-as-markdown-level<N
   (are [expect block-uuid-s]

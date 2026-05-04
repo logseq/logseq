@@ -100,8 +100,8 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/db-sync-status
                                                     (let [idx (swap! status-calls inc)]
@@ -131,8 +131,8 @@
                worker-sync-config (atom {:ws-url nil})]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/set-db-sync-config
                                                     (let [cfg (first args)]
@@ -159,7 +159,7 @@
                    (is (= :ok (:status result)))
                    (is (seq set-config-calls))
                    (is (every? #(= "wss://api.logseq.io/sync/%s"
-                                   (get-in % [2 0 :ws-url]))
+                                   (get-in % [1 0 :ws-url]))
                                set-config-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -170,8 +170,8 @@
          (let [invoke-calls (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/get-db-sync-config (p/resolved {:auth-token "worker-token"})
                                                     :thread-api/q (p/resolved true)
@@ -191,7 +191,7 @@
                                                        :refresh-token "refresh-token"
                                                        :id-token "runtime-token"})]
                    (is (= :ok (:status result)))
-                   (is (some #(= [:thread-api/verify-and-save-e2ee-password false ["refresh-token" "pw"]]
+                   (is (some #(= [:thread-api/verify-and-save-e2ee-password ["refresh-token" "pw"]]
                                  %)
                              @invoke-calls))))
                (p/catch (fn [e]
@@ -203,8 +203,8 @@
          (let [invoke-calls (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/db-sync-status
                                                     (p/resolved {:repo "logseq_db_demo"
@@ -232,7 +232,7 @@
                start-calls (atom 0)]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method _direct-pass? _args]
+                               transport/invoke (fn [_ method _args]
                                                   (case method
                                                     :thread-api/db-sync-start
                                                     (do
@@ -275,8 +275,8 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved {:ok true}))]
                  (p/let [result (sync-command/execute {:type :sync-start
                                                        :repo "logseq_db_demo"}
@@ -300,8 +300,8 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved {:ok true}))]
                  (p/let [result (sync-command/execute {:type :sync-upload
                                                        :repo "logseq_db_demo"}
@@ -325,8 +325,8 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved []))]
                  (p/let [result (sync-command/execute {:type :sync-download
                                                        :repo "logseq_db_demo"
@@ -366,8 +366,8 @@
                                cli-common/unlink-graph! (fn [& args]
                                                           (swap! unlink-calls conj args)
                                                           "/tmp/unlinked-demo")
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/set-db-sync-config
                                                     (p/resolved nil)
@@ -421,7 +421,7 @@
                                cli-common/unlink-graph! (fn [& args]
                                                           (swap! unlink-calls conj args)
                                                           "/tmp/unlinked-demo")
-                               transport/invoke (fn [_ method _direct-pass? _args]
+                               transport/invoke (fn [_ method _args]
                                                   (case method
                                                     :thread-api/db-sync-list-remote-graphs
                                                     (p/resolved [{:graph-id "remote-graph-id"
@@ -459,8 +459,8 @@
                                                         [])
                                cli-server/ensure-server! (fn [config _repo]
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/db-sync-list-remote-graphs
                                                     (p/resolved [{:graph-id "remote-graph-id"
@@ -484,12 +484,12 @@
                                                        :refresh-token "refresh-token"})]
                    (is (= :ok (:status result)))
                    (is (= "remote-graph-id" (get-in result [:data :graph-id])))
-                   (is (some #(= [:thread-api/get-e2ee-password false ["refresh-token"]]
+                   (is (some #(= [:thread-api/get-e2ee-password ["refresh-token"]]
                                  %)
                              @invoke-calls))
                    (is (not-any? #(= :thread-api/verify-and-save-e2ee-password (first %))
                                  @invoke-calls))
-                   (is (some #(= [:thread-api/db-sync-download-graph-by-id false ["logseq_db_demo" "remote-graph-id" true]]
+                   (is (some #(= [:thread-api/db-sync-download-graph-by-id ["logseq_db_demo" "remote-graph-id" true]]
                                  %)
                              @invoke-calls))))
                (p/catch (fn [e]
@@ -510,7 +510,7 @@
                                cli-common/unlink-graph! (fn [& args]
                                                           (swap! unlink-calls conj args)
                                                           "/tmp/unlinked-demo")
-                               transport/invoke (fn [_ method _direct-pass? _args]
+                               transport/invoke (fn [_ method _args]
                                                   (case method
                                                     :thread-api/db-sync-list-remote-graphs
                                                     (p/resolved [{:graph-id "remote-graph-id"
@@ -543,7 +543,7 @@
          (let [status-calls (atom 0)]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method _direct-pass? _args]
+                               transport/invoke (fn [_ method _args]
                                                   (case method
                                                     :thread-api/db-sync-status
                                                     (let [idx (swap! status-calls inc)]
@@ -580,8 +580,8 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/db-sync-stop (p/resolved {:ok true})
                                                     (p/resolved nil)))]
@@ -591,9 +591,9 @@
                    (is (= [[{:root-dir "/tmp"}
                             "logseq_db_demo"]]
                           @ensure-calls))
-                   (is (= [[:thread-api/set-db-sync-config false [{:ws-url nil
+                   (is (= [[:thread-api/set-db-sync-config [{:ws-url nil
                                                                    :http-base nil}]]
-                           [:thread-api/db-sync-stop false []]]
+                           [:thread-api/db-sync-stop []]]
                           @invoke-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -606,8 +606,8 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/db-sync-status (p/resolved {:repo "logseq_db_demo"
                                                                                             :ws-state :open
@@ -637,8 +637,8 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved {:ok true}))]
                  (p/let [_ (execute-with-runtime-auth {:type :sync-upload
                                                   :repo "logseq_db_demo"}
@@ -649,11 +649,11 @@
                           @ensure-calls))
                    (is (= :thread-api/sync-app-state (ffirst @invoke-calls)))
                    (is (= "runtime-token"
-                          (get-in (first @invoke-calls) [2 0 :auth/id-token])))
-                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                          (get-in (first @invoke-calls) [1 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config [{:ws-url nil
                                                                    :http-base nil}]]
                           (second @invoke-calls)))
-                   (is (= [:thread-api/db-sync-upload-graph false ["logseq_db_demo"]]
+                   (is (= [:thread-api/db-sync-upload-graph ["logseq_db_demo"]]
                           (nth @invoke-calls 2)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -664,8 +664,8 @@
          (let [invoke-calls (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/verify-and-save-e2ee-password
                                                     (p/resolved nil)
@@ -682,14 +682,14 @@
                                                        :refresh-token "refresh-token"
                                                        :id-token "runtime-token"})]
                    (is (= :ok (:status result)))
-                   (is (some #(= [:thread-api/verify-and-save-e2ee-password false ["refresh-token" "pw"]]
+                   (is (some #(= [:thread-api/verify-and-save-e2ee-password ["refresh-token" "pw"]]
                                  %)
                              @invoke-calls))
-                   (is (some #(= [:thread-api/db-sync-upload-graph false ["logseq_db_demo"]]
+                   (is (some #(= [:thread-api/db-sync-upload-graph ["logseq_db_demo"]]
                                  %)
                              @invoke-calls))
                    (let [method-index (fn [method]
-                                        (first (keep-indexed (fn [idx [method' _direct-pass? _args]]
+                                        (first (keep-indexed (fn [idx [method' _args]]
                                                               (when (= method method')
                                                                 idx))
                                                             @invoke-calls)))]
@@ -703,7 +703,7 @@
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                          (p/resolved (assoc config :base-url "http://example")))
-                             transport/invoke (fn [_ method _direct-pass? _args]
+                             transport/invoke (fn [_ method _args]
                                                 (case method
                                                   :thread-api/set-db-sync-config
                                                   (p/resolved nil)
@@ -730,7 +730,7 @@
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                          (p/resolved (assoc config :base-url "http://example")))
-                             transport/invoke (fn [_ method _direct-pass? _args]
+                             transport/invoke (fn [_ method _args]
                                                 (case method
                                                   :thread-api/set-db-sync-config
                                                   (p/resolved nil)
@@ -759,7 +759,7 @@
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                          (p/resolved (assoc config :base-url "http://example")))
-                             transport/invoke (fn [_ method _direct-pass? _args]
+                             transport/invoke (fn [_ method _args]
                                                 (case method
                                                   :thread-api/set-db-sync-config
                                                   (p/resolved nil)
@@ -791,8 +791,8 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/db-sync-list-remote-graphs
                                                     (p/resolved [{:graph-id "remote-graph-id"
@@ -818,24 +818,23 @@
                             "logseq_db_demo"]]
                           @ensure-calls))
                    (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
-                   (is (= "runtime-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
-                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                   (is (= "runtime-token" (get-in @invoke-calls [0 1 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config [{:ws-url nil
                                                                   :http-base nil}]]
                           (nth @invoke-calls 1)))
-                   (is (= [:thread-api/db-sync-list-remote-graphs false []]
+                   (is (= [:thread-api/db-sync-list-remote-graphs []]
                           (nth @invoke-calls 2)))
                    (is (= :thread-api/sync-app-state (get-in @invoke-calls [3 0])))
-                   (is (= "runtime-token" (get-in @invoke-calls [3 2 0 :auth/id-token])))
-                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                   (is (= "runtime-token" (get-in @invoke-calls [3 1 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config [{:ws-url nil
                                                                   :http-base nil}]]
                           (nth @invoke-calls 4)))
-                   (is (= [:thread-api/verify-and-save-e2ee-password false ["refresh-token" "pw"]]
+                   (is (= [:thread-api/verify-and-save-e2ee-password ["refresh-token" "pw"]]
                           (nth @invoke-calls 5)))
-                   (let [[method direct-pass? args] (nth @invoke-calls 6)]
+                   (let [[method args] (nth @invoke-calls 6)]
                      (is (= :thread-api/q method))
-                     (is (= false direct-pass?))
                      (is (= "logseq_db_demo" (first args))))
-                   (is (= [:thread-api/db-sync-download-graph-by-id false ["logseq_db_demo" "remote-graph-id" true]]
+                   (is (= [:thread-api/db-sync-download-graph-by-id ["logseq_db_demo" "remote-graph-id" true]]
                           (nth @invoke-calls 7)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -846,9 +845,8 @@
          (let [invoke-calls (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [cfg method direct-pass? args]
+                               transport/invoke (fn [cfg method args]
                                                   (swap! invoke-calls conj {:method method
-                                                                            :direct-pass? direct-pass?
                                                                             :args args
                                                                             :timeout-ms (:timeout-ms cfg)})
                                                   (case method
@@ -909,7 +907,7 @@
                                sync-command/print-progress-line! (fn [line]
                                                                    (swap! printed-lines conj line)
                                                                    nil)
-                               transport/invoke (fn [_ method _direct-pass? _args]
+                               transport/invoke (fn [_ method _args]
                                                   (case method
                                                     :thread-api/db-sync-list-remote-graphs
                                                     (p/resolved [{:graph-id "remote-graph-id"
@@ -989,8 +987,8 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/db-sync-list-remote-graphs
                                                     (p/resolved [{:graph-id "remote-graph-id"
@@ -1018,22 +1016,21 @@
                             "logseq_db_demo"]]
                           @ensure-calls))
                    (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
-                   (is (= "runtime-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
-                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                   (is (= "runtime-token" (get-in @invoke-calls [0 1 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config [{:ws-url nil
                                                                   :http-base nil}]]
                           (nth @invoke-calls 1)))
-                   (is (= [:thread-api/db-sync-list-remote-graphs false []]
+                   (is (= [:thread-api/db-sync-list-remote-graphs []]
                           (nth @invoke-calls 2)))
                    (is (= :thread-api/sync-app-state (get-in @invoke-calls [3 0])))
-                   (is (= "runtime-token" (get-in @invoke-calls [3 2 0 :auth/id-token])))
-                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                   (is (= "runtime-token" (get-in @invoke-calls [3 1 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config [{:ws-url nil
                                                                   :http-base nil}]]
                           (nth @invoke-calls 4)))
-                   (let [[method direct-pass? args] (nth @invoke-calls 5)]
+                   (let [[method args] (nth @invoke-calls 5)]
                      (is (= :thread-api/q method))
-                     (is (= false direct-pass?))
                      (is (= "logseq_db_demo" (first args))))
-                   (is (= [:thread-api/db-sync-download-graph-by-id false ["logseq_db_demo" "remote-graph-id" false]]
+                   (is (= [:thread-api/db-sync-download-graph-by-id ["logseq_db_demo" "remote-graph-id" false]]
                           (nth @invoke-calls 6)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -1044,8 +1041,8 @@
          (let [invoke-calls (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/db-sync-list-remote-graphs
                                                     (p/resolved [{:graph-id "other-id"
@@ -1061,11 +1058,11 @@
                    (is (= :error (:status result)))
                    (is (= :remote-graph-not-found (get-in result [:error :code])))
                    (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
-                   (is (= "runtime-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
-                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                   (is (= "runtime-token" (get-in @invoke-calls [0 1 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config [{:ws-url nil
                                                                    :http-base nil}]]
                           (nth @invoke-calls 1)))
-                   (is (= [:thread-api/db-sync-list-remote-graphs false []]
+                   (is (= [:thread-api/db-sync-list-remote-graphs []]
                           (nth @invoke-calls 2)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -1075,7 +1072,7 @@
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                          (p/resolved (assoc config :base-url "http://example")))
-                             transport/invoke (fn [_ method _direct-pass? _args]
+                             transport/invoke (fn [_ method _args]
                                                 (case method
                                                   :thread-api/db-sync-list-remote-graphs
                                                   (p/resolved [{:graph-id "remote-graph-id"
@@ -1109,8 +1106,8 @@
                                                            (p/resolved (assoc config
                                                                               :repo repo
                                                                               :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (case method
                                                     :thread-api/db-sync-list-remote-graphs
                                                     (p/resolved [{:graph-id "remote-graph-id"
@@ -1151,8 +1148,8 @@
                                cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved []))]
                  (p/let [_ (sync-command/execute {:type :sync-remote-graphs}
                                                  {:base-url "http://example"
@@ -1168,11 +1165,11 @@
                             :root-dir "/tmp"}]
                           @auth-calls))
                    (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
-                   (is (= "resolved-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
-                   (is (= [:thread-api/set-db-sync-config false [{:ws-url "wss://sync.example.com/sync/%s"
+                   (is (= "resolved-token" (get-in @invoke-calls [0 1 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config [{:ws-url "wss://sync.example.com/sync/%s"
                                                                    :http-base "https://sync.example.com"}]]
                           (nth @invoke-calls 1)))
-                   (is (= [:thread-api/db-sync-list-remote-graphs false []]
+                   (is (= [:thread-api/db-sync-list-remote-graphs []]
                           (nth @invoke-calls 2)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -1185,8 +1182,8 @@
                                                          (p/rejected (ex-info "missing auth"
                                                                               {:code :missing-auth
                                                                                :hint "Run logseq login first."})))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved []))]
                  (p/let [result (sync-command/execute {:type :sync-remote-graphs}
                                                       {:base-url "http://example"
@@ -1206,19 +1203,19 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved {:ok true}))]
                  (p/let [_ (execute-with-runtime-auth {:type :sync-ensure-keys}
                                                       {:base-url "http://example"
                                                        :root-dir "/tmp"})]
                    (is (= [] @ensure-calls))
                    (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
-                   (is (= "runtime-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
-                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                   (is (= "runtime-token" (get-in @invoke-calls [0 1 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config [{:ws-url nil
                                                                    :http-base nil}]]
                           (nth @invoke-calls 1)))
-                   (is (= [:thread-api/db-sync-ensure-user-rsa-keys false []]
+                   (is (= [:thread-api/db-sync-ensure-user-rsa-keys []]
                           (nth @invoke-calls 2)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -1227,8 +1224,8 @@
 (deftest test-execute-sync-ensure-keys-verifies-and-persists-e2ee-password-when-provided
   (async done
          (let [invoke-calls (atom [])]
-           (-> (p/with-redefs [transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+           (-> (p/with-redefs [transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved {:ok true}))]
                  (p/let [_ (sync-command/execute {:type :sync-ensure-keys
                                                   :e2ee-password "pw"}
@@ -1243,7 +1240,7 @@
                            :thread-api/set-db-sync-config
                            :thread-api/db-sync-ensure-user-rsa-keys]
                           (mapv first @invoke-calls)))
-                   (is (some #(= [:thread-api/verify-and-save-e2ee-password false ["refresh-token" "pw"]]
+                   (is (some #(= [:thread-api/verify-and-save-e2ee-password ["refresh-token" "pw"]]
                                  %)
                              @invoke-calls))))
                (p/catch (fn [e]
@@ -1253,8 +1250,8 @@
 (deftest test-execute-sync-ensure-keys-upload-keys-enables-server-upload-flow
   (async done
          (let [invoke-calls (atom [])]
-           (-> (p/with-redefs [transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+           (-> (p/with-redefs [transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved {:ok true}))]
                  (p/let [_ (sync-command/execute {:type :sync-ensure-keys
                                                   :upload-keys true
@@ -1270,11 +1267,11 @@
                            :thread-api/set-db-sync-config
                            :thread-api/verify-and-save-e2ee-password]
                           (mapv first @invoke-calls)))
-                   (is (some #(= [:thread-api/db-sync-ensure-user-rsa-keys false [{:ensure-server? true
+                   (is (some #(= [:thread-api/db-sync-ensure-user-rsa-keys [{:ensure-server? true
                                                                                      :password "pw"}]]
                                  %)
                              @invoke-calls))
-                   (is (some #(= [:thread-api/verify-and-save-e2ee-password false ["refresh-token" "pw"]]
+                   (is (some #(= [:thread-api/verify-and-save-e2ee-password ["refresh-token" "pw"]]
                                  %)
                              @invoke-calls))))
                (p/catch (fn [e]
@@ -1288,8 +1285,8 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved {:ok true}))]
                  (p/let [result (sync-command/execute {:type :sync-grant-access
                                                        :repo "logseq_db_demo"
@@ -1315,8 +1312,8 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved {:ok true}))]
                  (p/let [_ (execute-with-runtime-auth {:type :sync-grant-access
                                                   :repo "logseq_db_demo"
@@ -1328,11 +1325,11 @@
                             "logseq_db_demo"]]
                           @ensure-calls))
                    (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
-                   (is (= "runtime-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
-                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                   (is (= "runtime-token" (get-in @invoke-calls [0 1 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config [{:ws-url nil
                                                                    :http-base nil}]]
                           (nth @invoke-calls 1)))
-                   (is (= [:thread-api/db-sync-grant-graph-access false ["logseq_db_demo" "graph-uuid" "user@example.com"]]
+                   (is (= [:thread-api/db-sync-grant-graph-access ["logseq_db_demo" "graph-uuid" "user@example.com"]]
                           (nth @invoke-calls 2)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -1345,8 +1342,8 @@
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved {:ok true}))]
                  (p/let [_ (sync-command/execute {:type :sync-config-get
                                                   :config-key :ws-url}
@@ -1363,8 +1360,8 @@
   (async done
          (let [invoke-calls (atom [])
                update-calls (atom [])]
-           (-> (p/with-redefs [transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+           (-> (p/with-redefs [transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved nil))
                                cli-config/update-config! (fn [config updates]
                                                            (swap! update-calls conj [config updates])
@@ -1389,8 +1386,8 @@
   (async done
          (let [invoke-calls (atom [])
                update-calls (atom [])]
-           (-> (p/with-redefs [transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
+           (-> (p/with-redefs [transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
                                                   (p/resolved nil))
                                cli-config/update-config! (fn [config updates]
                                                            (swap! update-calls conj [config updates])

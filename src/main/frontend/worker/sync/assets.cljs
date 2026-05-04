@@ -116,11 +116,11 @@
                                  (throw (ex-info "read-asset failed"
                                                  {:type :rtc.exception/read-asset-failed}
                                                  e))))
-                  asset-file (if aes-key (->uint8 asset-file) asset-file)
+                  asset-bytes (if aes-key (->uint8 asset-file) asset-file)
                   payload (if (not aes-key)
-                            asset-file
-                            (ldb/write-transit-str
-                             (crypt/<encrypt-uint8array aes-key asset-file)))
+                            asset-bytes
+                            (p/let [encrypted-bytes (crypt/<encrypt-uint8array aes-key asset-bytes)]
+                              (ldb/write-transit-str encrypted-bytes)))
                   total (payload-size payload)
                   _ (notify-asset-progress! repo asset-id :upload 0 total)
                   headers (merge (sync-auth/auth-headers (worker-state/get-id-token))

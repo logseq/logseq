@@ -11,6 +11,8 @@ const repoRoot = path.resolve(__dirname, "..");
 const staticDir = path.join(repoRoot, "static");
 const staticJsDir = path.join(staticDir, "js");
 const distDir = path.join(repoRoot, "dist");
+const skillSourceDir = path.join(repoRoot, ".agents", "skills", "logseq-cli");
+const stagedSkillDir = path.join(staticDir, ".agents", "skills", "logseq-cli");
 
 const copyPairs = [
   {
@@ -25,6 +27,10 @@ const copyPairs = [
   {
     from: path.join(distDir, "db-worker-node.js"),
     to: path.join(staticJsDir, "db-worker-node.js"),
+  },
+  {
+    from: path.join(skillSourceDir, "SKILL.md"),
+    to: path.join(stagedSkillDir, "SKILL.md"),
   },
 ];
 
@@ -42,6 +48,7 @@ async function copyOne({ from, to, optional = false }) {
     if (optional) return;
     throw new Error(`missing required source file: ${from}`);
   }
+  await fs.mkdir(path.dirname(to), { recursive: true });
   await fs.copyFile(from, to);
 }
 

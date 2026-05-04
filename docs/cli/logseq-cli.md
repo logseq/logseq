@@ -115,6 +115,10 @@ Graph commands:
 - `graph validate --graph <name>` - validate graph data
 - `graph info [--graph <name>]` - show graph metadata (defaults to current graph)
 - `graph export --type edn|sqlite --file <path> [--graph <name>]` - export a graph to EDN or SQLite
+  - EDN export also accepts `--include-timestamps`, `--exclude-built-in-pages`, and `--exclude-namespaces <csv>`
+  - `--exclude-namespaces` trims CSV tokens, ignores empty tokens, removes duplicates, and can reduce backend export validation strictness
+  - SQLite export writes the snapshot directly to the destination path through `db-worker-node` instead of round-tripping a base64 payload through the CLI
+  - EDN-only export flags are rejected when `--type sqlite` is selected
 - `graph import --type edn|sqlite --input <path> --graph <name>` - import a graph from EDN or SQLite (new graph only)
 - `graph backup list` - list backup snapshots under `<root-dir>/graphs/<graph>/backup`
 - `graph backup create [--graph <name>] [--name <label>]` - create a backup snapshot for the selected graph

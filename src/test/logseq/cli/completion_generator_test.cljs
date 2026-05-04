@@ -131,6 +131,11 @@
       (is (= #{"edn" "sqlite"} (get-in export-entry [:spec :type :validate]))))
     (testing "export-spec :file has :complete :file"
       (is (= :file (get-in export-entry [:spec :file :complete]))))
+    (testing "export-spec includes EDN-only options"
+      (is (= :boolean (get-in export-entry [:spec :include-timestamps :coerce])))
+      (is (= :boolean (get-in export-entry [:spec :exclude-built-in-pages :coerce])))
+      (is (= "Namespaces to exclude from properties and classes"
+             (get-in export-entry [:spec :exclude-namespaces :desc]))))
     (testing "import-spec :type has :validate set"
       (is (= #{"edn" "sqlite"} (get-in import-entry [:spec :type :validate]))))
     (testing "import-spec :input has :complete :file"
@@ -283,6 +288,10 @@
       (is (string/includes? output "_logseq()")))
     (testing "output ends with compdef _logseq logseq"
       (is (string/includes? output "compdef _logseq logseq")))
+    (testing "graph export completion includes EDN-only options"
+      (is (re-find #"(?s)_logseq_graph_export\(\).*--include-timestamps" output))
+      (is (re-find #"(?s)_logseq_graph_export\(\).*--exclude-built-in-pages" output))
+      (is (re-find #"(?s)_logseq_graph_export\(\).*--exclude-namespaces" output)))
     (testing "boolean flags emit alias grouping"
       (is (string/includes? output "'{-v,--verbose}'[")))
     (testing "global profile flag is present in zsh completion"
@@ -435,9 +444,12 @@
       (is (string/includes? output "_logseq_is_value_opt()")))
     (testing "output ends with complete -F _logseq logseq"
       (is (string/includes? output "complete -F _logseq logseq")))
-    (testing "graph export case includes --type and --file"
+    (testing "graph export case includes --type, --file, and EDN-only options"
       (is (string/includes? output "--type"))
-      (is (string/includes? output "--file")))
+      (is (string/includes? output "--file"))
+      (is (string/includes? output "--include-timestamps"))
+      (is (string/includes? output "--exclude-built-in-pages"))
+      (is (string/includes? output "--exclude-namespaces")))
     (testing "graph backup options include --name, --src, and --dst"
       (is (string/includes? output "--name"))
       (is (string/includes? output "--src"))

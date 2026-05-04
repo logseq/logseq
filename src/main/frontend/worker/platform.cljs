@@ -146,9 +146,3 @@
   [platform type payload]
   (when-let [f (get-in platform [:broadcast :post-message!])]
     (f type payload)))
-
-(defn transfer
-  [platform data transferables]
-  (if-let [f (get-in platform [:storage :transfer])]
-    (f data transferables)
-    data))

@@ -1,5 +1,6 @@
 (ns frontend.persist-db.remote-test
   (:require [cljs.test :refer [async deftest is]]
+            [frontend.persist-db.protocol :as protocol]
             [frontend.persist-db.remote :as remote]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -16,10 +17,13 @@
                                             :body (js/JSON.stringify
                                                    #js {:ok true
                                                         :resultTransit (ldb/write-transit-str [{:repo "graph-a"}])})}))})]
-      (-> (p/let [result (remote/invoke! client "thread-api/list-db" false [])
-                  headers (:headers @captured)]
+      (-> (p/let [result (remote/invoke! client "thread-api/list-db" [])
+                  headers (:headers @captured)
+                  body (js->clj (js/JSON.parse (:body @captured)) :keywordize-keys true)]
             (is (= [{:repo "graph-a"}] result))
-            (is (= "Bearer token-1" (get headers "Authorization"))))
+            (is (= "Bearer token-1" (get headers "Authorization")))
+            (is (= "thread-api/list-db" (:method body)))
+            (is (string? (:argsTransit body))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
@@ -34,7 +38,7 @@
                                                    #js {:ok false
                                                         :error #js {:code "repo-locked"
                                                                     :message "graph already locked"}})}))})]
-      (-> (remote/invoke! client "thread-api/transact" false ["graph-a" [] {}])
+      (-> (remote/invoke! client "thread-api/transact" ["graph-a" [] {}])
           (p/then (fn [_]
                     (is false "expected invoke! to reject on non-2xx status")))
           (p/catch (fn [e]
@@ -93,8 +97,42 @@
                                             :body (js/JSON.stringify
                                                    #js {:ok true
                                                         :resultTransit (ldb/write-transit-str [])})}))})]
-      (-> (p/let [_ (remote/invoke! client "thread-api/list-db" false [])]
-            (is (nil? (get (:headers @captured) "Authorization"))))
+      (-> (p/let [_ (remote/invoke! client "thread-api/list-db" [])
+                  body (js->clj (js/JSON.parse (:body @captured)) :keywordize-keys true)]
+            (is (nil? (get (:headers @captured) "Authorization")))
+            (is (string? (:argsTransit body))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest remote-export-db-uses-base64-thread-api
+  (async done
+    (let [calls (atom [])
+          client {:base-url "http://127.0.0.1:9101"}
+          db (remote/->InRemote client nil nil)]
+      (-> (p/with-redefs [remote/invoke! (fn [client' method args]
+                                          (swap! calls conj [client' method args])
+                                          (p/resolved "c3FsaXRlLWJ5dGVz"))]
+            (p/let [result (protocol/<export-db db "graph-a" {:return-data? true})]
+              (is (= [client "thread-api/export-db-base64" ["graph-a"]]
+                     (first @calls)))
+              (is (= "sqlite-bytes" (.toString (js/Buffer.from result) "utf8")))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest remote-import-db-uses-base64-thread-api
+  (async done
+    (let [calls (atom [])
+          client {:base-url "http://127.0.0.1:9101"}
+          db (remote/->InRemote client nil nil)
+          payload (.from js/Buffer "sqlite-bytes")]
+      (-> (p/with-redefs [remote/invoke! (fn [client' method args]
+                                          (swap! calls conj [client' method args])
+                                          (p/resolved nil))]
+            (p/let [_ (protocol/<import-db db "graph-a" payload)]
+              (is (= [client "thread-api/import-db-base64" ["graph-a" "c3FsaXRlLWJ5dGVz"]]
+                     (first @calls)))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))

@@ -31,7 +31,7 @@
 
 (defonce *repo->pending-local-tx-count (atom {}))
 
-(def ^:private sqlite-schema-ready-key "__logseq_client_ops_schema_ready")
+(def ^:private sqlite-schema-ready-key "__logseq_client_ops_schema_ready_v2")
 (def ^:private sqlite-mode-key "__logseq_client_ops_sqlite_mode")
 (def ^:private sync-meta-table-sql
   "create table if not exists sync_meta (key text primary key, value text)")
@@ -59,6 +59,18 @@
   "create index if not exists idx_client_ops_pending_created on client_ops(kind, pending, created_at, id)")
 (def ^:private asset-index-sql
   "create index if not exists idx_client_ops_asset_uuid on client_ops(kind, asset_uuid)")
+(def ^:private sync-conflicts-table-sql
+  (str "create table if not exists sync_conflicts ("
+       "id integer primary key autoincrement,"
+       "block_uuid text not null,"
+       "attr text not null,"
+       "value text not null,"
+       "remote_t integer,"
+       "created_at integer not null,"
+       "unique(block_uuid, attr, value)"
+       ")"))
+(def ^:private sync-conflicts-block-index-sql
+  "create index if not exists idx_sync_conflicts_block_uuid on sync_conflicts(block_uuid, created_at)")
 
 (defn- client-ops-store
   [repo]
@@ -124,6 +136,19 @@
     :else nil))
 
 (defn- str->kw
+  [v]
+  (when (string? v)
+    (keyword v)))
+
+(defn- qualified-kw->str
+  [v]
+  (cond
+    (qualified-keyword? v) (subs (str v) 1)
+    (keyword? v) (name v)
+    (string? v) v
+    :else nil))
+
+(defn- str->qualified-kw
   [v]
   (when (string? v)
     (keyword v)))
@@ -211,8 +236,10 @@
        (fn [tx]
          (sqlite-run! tx sync-meta-table-sql [])
          (sqlite-run! tx client-ops-table-sql [])
+         (sqlite-run! tx sync-conflicts-table-sql [])
          (sqlite-run! tx pending-index-sql [])
-         (sqlite-run! tx asset-index-sql [])))
+         (sqlite-run! tx asset-index-sql [])
+         (sqlite-run! tx sync-conflicts-block-index-sql [])))
       (try
         (gobj/set db sqlite-schema-ready-key true)
         (catch :default _
@@ -400,6 +427,51 @@
       (->> rows
            (keep row->pending-local-tx)
            vec))))
+
+(defn add-sync-conflicts!
+  [repo conflicts]
+  (when-let [store (sqlite-store-or-throw repo)]
+    (let [now (.now js/Date)]
+      (doseq [{:keys [block-uuid attr value remote-t]} conflicts]
+        (when (and (uuid? block-uuid)
+                   (qualified-keyword? attr)
+                   (string? value))
+          (sqlite-run! store
+                       (str "insert into sync_conflicts "
+                            "(block_uuid, attr, value, remote_t, created_at) "
+                            "values (?, ?, ?, ?, ?) "
+                            "on conflict(block_uuid, attr, value) do update set "
+                            "remote_t = excluded.remote_t")
+                       [(str block-uuid)
+                        (qualified-kw->str attr)
+                        value
+                        remote-t
+                        now]))))))
+
+(defn get-sync-conflicts
+  [repo block-uuid]
+  (when (uuid? block-uuid)
+    (when-let [store (sqlite-store-or-throw repo)]
+      (->> (sqlite-rows store
+                        (str "select id, block_uuid, attr, value, remote_t, created_at "
+                             "from sync_conflicts where block_uuid = ? "
+                             "order by created_at desc, id desc")
+                        [(str block-uuid)])
+           (mapv (fn [row]
+                   {:id (aget row "id")
+                    :block-uuid (parse-uuid-str (aget row "block_uuid"))
+                    :attr (str->qualified-kw (aget row "attr"))
+                    :value (aget row "value")
+                    :remote-t (aget row "remote_t")
+                    :created-at (aget row "created_at")}))))))
+
+(defn clear-sync-conflicts!
+  [repo block-uuid]
+  (when (uuid? block-uuid)
+    (when-let [store (sqlite-store-or-throw repo)]
+      (sqlite-run! store
+                   "delete from sync_conflicts where block_uuid = ?"
+                   [(str block-uuid)]))))
 
 (defn- pending-tx-id?
   [store tx-id]

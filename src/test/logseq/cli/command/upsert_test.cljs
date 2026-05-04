@@ -19,7 +19,7 @@
                   :name "TagOne"}]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
-                          transport/invoke (fn [_ method _ args]
+                          transport/invoke (fn [_ method args]
                                              (case method
                                                :thread-api/q
                                                (let [[_ [query _]] args
@@ -97,7 +97,7 @@
                                                           (swap! add-actions* conj add-action)
                                                           (p/resolved {:status :ok
                                                                        :data {:result [101]}}))
-                          transport/invoke (fn [_ method _ args]
+                          transport/invoke (fn [_ method args]
                                              (case method
                                                :thread-api/pull
                                                (let [[_ _ lookup] args]
@@ -146,7 +146,7 @@
                           update-command/execute-update (fn [update-action _]
                                                           (swap! update-calls* conj update-action)
                                                           (p/resolved {:status :ok :data {:result nil}}))
-                          transport/invoke (fn [_ method _ args]
+                          transport/invoke (fn [_ method args]
                                              (case method
                                                :thread-api/pull
                                                (let [[_ _ lookup] args]
@@ -178,7 +178,7 @@
                   :id 42}]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
-                          transport/invoke (fn [_ method _ args]
+                          transport/invoke (fn [_ method args]
                                              (case method
                                                :thread-api/pull
                                                (let [[_ _ lookup] args]
@@ -213,7 +213,7 @@
                        :pos "last-child"}]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     ;; resolve-tags queries for the tag by name
                                                     :thread-api/q
@@ -323,7 +323,7 @@
                   :status-input "invalid-status"}]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
-                          transport/invoke (fn [_ method _ _]
+                          transport/invoke (fn [_ method _]
                                              (swap! calls* conj method)
                                              (case method
                                                :thread-api/q
@@ -362,7 +362,7 @@
                   :deadline deadline-ms}]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
-                          transport/invoke (fn [_ method _ args]
+                          transport/invoke (fn [_ method args]
                                              (case method
                                                :thread-api/q
                                                (let [[_ [_query input]] args]
@@ -430,7 +430,7 @@
                                       :logseq.property/deadline deadline-ms}}]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
-                          transport/invoke (fn [_ method _ args]
+                          transport/invoke (fn [_ method args]
                                              (case method
                                                :thread-api/q
                                                (let [[_ [_query input]] args]
@@ -495,7 +495,7 @@
                                      :logseq.property/deadline]}]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
-                          transport/invoke (fn [_ method _ args]
+                          transport/invoke (fn [_ method args]
                                              (case method
                                                :thread-api/q
                                                (let [[_ [_query input]] args]
@@ -558,7 +558,7 @@
                   :priority :logseq.property/priority.high}]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
-                          transport/invoke (fn [_ method _ args]
+                          transport/invoke (fn [_ method args]
                                              (case method
                                                :thread-api/q
                                                (p/resolved [:logseq.property/status.todo
@@ -616,7 +616,7 @@
                                                       (p/resolved (assoc config :base-url "http://example")))
                           add-command/resolve-tags (fn [_ _ _]
                                                      (p/resolved [{:db/id 100}]))
-                          add-command/resolve-properties (fn [_ _ _ _]
+                          add-command/resolve-properties (fn [_ _ _]
                                                            (p/rejected (ex-info "property not found"
                                                                                 {:code :property-not-found
                                                                                  :property :missing-prop})))
@@ -652,11 +652,11 @@
                                                      (if (seq tags)
                                                        (p/resolved [{:db/id 100}])
                                                        (p/resolved nil)))
-                          add-command/resolve-properties (fn [_ _ _ _]
+                          add-command/resolve-properties (fn [_ _ _]
                                                            (p/rejected (ex-info "property not found"
                                                                                 {:code :property-not-found
                                                                                  :property :missing-prop})))
-                          transport/invoke (fn [_ method _ _]
+                          transport/invoke (fn [_ method _]
                                              (when (= :thread-api/apply-outliner-ops method)
                                                (reset! mutation-called?* true))
                                              (throw (ex-info "unexpected invoke"
@@ -685,7 +685,7 @@
                   :priority :logseq.property/priority.high}]
       (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
                                                       (p/resolved (assoc config :base-url "http://example")))
-                          transport/invoke (fn [_ method _ _]
+                          transport/invoke (fn [_ method _]
                                              (swap! calls* conj method)
                                              (case method
                                                :thread-api/q

@@ -58,7 +58,6 @@
   [host port method args]
   (let [payload (js/JSON.stringify
                  (clj->js {:method method
-                           :directPass false
                            :argsTransit (ldb/write-transit-str args)}))]
     (p/let [{:keys [status body]}
             (http-request {:hostname host
@@ -81,7 +80,6 @@
   [host port method args]
   (let [payload (js/JSON.stringify
                  (clj->js {:method method
-                           :directPass false
                            :argsTransit (ldb/write-transit-str args)}))]
     (http-request {:hostname host
                    :port port
@@ -522,14 +520,11 @@
                invoke-calls (atom [])]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
-                                                    #js {:remoteInvoke (fn [method direct-pass? args]
+                                                    #js {:remoteInvoke (fn [method args-transit]
                                                                          (swap! invoke-calls conj
                                                                                 [method
-                                                                                 direct-pass?
-                                                                                 (if direct-pass?
-                                                                                   (vec (js->clj args))
-                                                                                   (ldb/read-transit-str args))])
-                                                                         (p/resolved nil))})
+                                                                                 (ldb/read-transit-str args-transit)])
+                                                                         (p/resolved (ldb/write-transit-str nil)))})
                                db-lock/ensure-lock! (fn [_]
                                                       (p/resolved {:path lock-file-path
                                                                    :lock {:repo repo
@@ -542,10 +537,10 @@
                                                                         :repo repo
                                                                         :create-empty-db? true
                                                                         :log-level "error"})
-                         _ (is (= ["thread-api/init" true []]
+                         _ (is (= ["thread-api/init" []]
                                   (first @invoke-calls)))
-                         _ (is (= ["thread-api/create-or-open-db" false [repo {:datoms []
-                                                                               :sync-download-graph? true}]]
+                         _ (is (= ["thread-api/create-or-open-db" [repo {:datoms []
+                                                                         :sync-download-graph? true}]]
                                   (second @invoke-calls)))
                          _ (stop!)]
                    true))
@@ -561,14 +556,11 @@
                invoke-calls (atom [])]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
-                                                    #js {:remoteInvoke (fn [method direct-pass? args]
+                                                    #js {:remoteInvoke (fn [method args-transit]
                                                                          (swap! invoke-calls conj
                                                                                 [method
-                                                                                 direct-pass?
-                                                                                 (if direct-pass?
-                                                                                   (vec (js->clj args))
-                                                                                   (ldb/read-transit-str args))])
-                                                                         (p/resolved nil))})
+                                                                                 (ldb/read-transit-str args-transit)])
+                                                                         (p/resolved (ldb/write-transit-str nil)))})
                                db-lock/ensure-lock! (fn [_]
                                                       (p/resolved {:path lock-file-path
                                                                    :lock {:repo repo
@@ -580,9 +572,9 @@
                  (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:root-dir data-dir
                                                                         :repo repo
                                                                         :log-level "error"})
-                         _ (is (= ["thread-api/init" true []]
+                         _ (is (= ["thread-api/init" []]
                                   (first @invoke-calls)))
-                         _ (is (= ["thread-api/create-or-open-db" false [repo {}]]
+                         _ (is (= ["thread-api/create-or-open-db" [repo {}]]
                                   (second @invoke-calls)))
                          _ (stop!)]
                    true))
@@ -598,14 +590,11 @@
                invoke-calls (atom [])]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
-                                                    #js {:remoteInvoke (fn [method direct-pass? args]
+                                                    #js {:remoteInvoke (fn [method args-transit]
                                                                          (swap! invoke-calls conj
                                                                                 [method
-                                                                                 direct-pass?
-                                                                                 (if direct-pass?
-                                                                                   (vec (js->clj args))
-                                                                                   (ldb/read-transit-str args))])
-                                                                         (p/resolved nil))})
+                                                                                 (ldb/read-transit-str args-transit)])
+                                                                         (p/resolved (ldb/write-transit-str nil)))})
                                db-lock/ensure-lock! (fn [_]
                                                       (p/resolved {:path lock-file-path
                                                                    :lock {:repo repo
@@ -618,11 +607,11 @@
                                                                         :repo repo
                                                                         :log-level "error"})
                          _ (stop!)]
-                   (is (= ["thread-api/init" true []]
+                   (is (= ["thread-api/init" []]
                           (first @invoke-calls)))
-                   (is (= ["thread-api/create-or-open-db" false [repo {}]]
+                   (is (= ["thread-api/create-or-open-db" [repo {}]]
                           (second @invoke-calls)))
-                   (is (= ["thread-api/close-db" false [repo]]
+                   (is (= ["thread-api/close-db" [repo]]
                           (nth @invoke-calls 2)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -636,8 +625,8 @@
                server-list-file (cli-config/server-list-path data-dir)]
            (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
                                db-core/init-core! (fn [_platform]
-                                                    #js {:remoteInvoke (fn [_method _direct-pass? _args]
-                                                                         (p/resolved nil))})
+                                                    #js {:remoteInvoke (fn [_method _args-transit]
+                                                                         (p/resolved (ldb/write-transit-str nil)))})
                                db-lock/ensure-lock! (fn [_]
                                                       (p/resolved {:path lock-file-path
                                                                    :lock {:repo repo
@@ -991,6 +980,30 @@
 
                                 :else
                                 (done)))))))))
+
+(deftest db-worker-node-export-client-ops-db-base64
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-export-client-ops")
+               repo (str "logseq_db_export_client_ops_" (subs (str (random-uuid)) 0 8))]
+           (-> (p/let [{:keys [host port stop!]}
+                       (start-daemon! {:root-dir data-dir
+                                       :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       export-base64 (invoke host port "thread-api/export-client-ops-db-base64" [repo])
+                       decoded (js/Buffer.from export-base64 "base64")]
+                 (is (string? export-base64))
+                 (is (pos? (count export-base64)))
+                 (is (= "SQLite format 3\u0000"
+                        (.toString (.subarray decoded 0 16) "utf8"))))
+               (p/catch (fn [e]
+                          (println "[db-worker-node-test] export-client-ops-db-base64 error:" e)
+                          (is false (str e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
 
 (deftest db-worker-node-backup-db-sqlite
   (async done

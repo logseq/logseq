@@ -103,24 +103,6 @@
       (string/replace #"[\\/]+" "_")
       (str "_client_ops_" (quot (util/time-ms) 1000))))
 
-(defn- ->uint8array
-  [data]
-  (cond
-    (instance? js/Uint8Array data)
-    data
-
-    (js/ArrayBuffer.isView data)
-    (js/Uint8Array. (.-buffer data) (.-byteOffset data) (.-byteLength data))
-
-    (instance? js/ArrayBuffer data)
-    (js/Uint8Array. data)
-
-    (array? data)
-    (js/Uint8Array. data)
-
-    :else
-    nil))
-
 (defn- <fetch-server-checksum-diagnostics
   [repo]
   (let [base (rtc-handler/http-base)
@@ -230,9 +212,9 @@
 (defn ^:export export-client-ops-sqlite
   []
   (if-let [repo (state/get-current-repo)]
-    (-> (state/<invoke-db-worker-direct-pass :thread-api/export-client-ops-db repo)
+    (-> (state/<invoke-db-worker :thread-api/export-client-ops-db-base64 repo)
         (p/then (fn [data]
-                  (if-let [payload (->uint8array data)]
+                  (if-let [payload (some-> data util/base64string-to-unit8array)]
                     (let [filename (client-ops-export-file-name repo)
                           blob (js/Blob. #js [payload] (clj->js {:type "application/octet-stream"}))]
                       (utils/saveToFile blob filename "sqlite")

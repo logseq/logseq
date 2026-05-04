@@ -31,15 +31,14 @@
                            (fn [_] (p/resolved nil))
                            #{}
                            {:import? false})
-                  args (list "thread-api/foo" true #js [1 2])
+                  args (list "thread-api/foo" "transit-payload")
                   remote-invoke (aget (:proxy service) "remoteInvoke")]
             (is (fn? remote-invoke))
             (when (fn? remote-invoke)
               (remote-invoke args))
-            (let [[method direct-pass? payload] @received]
+            (let [[method payload] @received]
               (is (= "thread-api/foo" method))
-              (is (= true direct-pass?))
-              (is (= [1 2] (js->clj payload)))))
+              (is (= "transit-payload" payload))))
           (p/finally (fn []
                        (when prev-platform
                          (platform/set-platform! prev-platform))))

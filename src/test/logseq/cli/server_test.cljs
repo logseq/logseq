@@ -60,6 +60,14 @@
   (is (= (cli-server/db-worker-script-path)
          (cli-server/db-worker-runtime-script-path))))
 
+(deftest db-worker-release-script-path-supports-cli-packaged-layout
+  (is (= (node-path/join "/tmp/app.asar/js" "db-worker-node.js")
+         (#'cli-server/db-worker-release-script-path-from "/tmp/app.asar/js"))))
+
+(deftest db-worker-release-script-path-supports-electron-packaged-layout
+  (is (= (node-path/join "/tmp/app.asar" "js" "db-worker-node.js")
+         (#'cli-server/db-worker-release-script-path-from "/tmp/app.asar"))))
+
 (deftest cli-server-spawn-server-does-not-forward-server-list-file
   (async done
          (let [spawn-server! #'cli-server/spawn-server!

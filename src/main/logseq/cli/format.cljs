@@ -67,6 +67,7 @@
     (js/JSON.stringify obj)))
 
 (def ^:private list-human-title-max-display-width-default 40)
+(def ^:private list-human-cell-max-lines 3)
 (def ^:private truncation-suffix "…")
 (def ^:private truncation-suffix-width (string-width truncation-suffix))
 
@@ -111,8 +112,12 @@
 
 (defn- truncate-title-to-display-width
   [value max-width]
-  (let [max-width (max 1 max-width)]
-    (->> (string/split (normalize-cell value) #"\n" -1)
+  (let [max-width (max 1 max-width)
+        text (normalize-cell value)
+        lines (if (string/includes? text "\n")
+                (string/split-lines text)
+                [text])]
+    (->> lines
          (map #(truncate-line-to-display-width % max-width))
          (string/join "\n"))))
 
@@ -123,6 +128,20 @@
            (pos? value))
     value
     list-human-title-max-display-width-default))
+
+(defn- truncate-cell-to-max-lines
+  [value max-lines]
+  (let [text (normalize-cell value)
+        lines (if (string/includes? text "\n")
+                (string/split-lines text)
+                [text])]
+    (if (and (pos? max-lines)
+             (> (count lines) max-lines))
+      (let [kept-lines (subvec (vec lines) 0 max-lines)
+            suffix-line-idx (dec max-lines)]
+        (string/join "\n"
+                     (update kept-lines suffix-line-idx #(str % truncation-suffix))))
+      text)))
 
 (defn- render-table
   [headers rows]
@@ -250,7 +269,7 @@
    ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
 
 (defn- format-list-dynamic
-  [items now-ms columns {:keys [title-max-display-width]}]
+  [items now-ms columns {:keys [title-max-display-width truncate-cell-max-lines]}]
   (let [items (or items [])
         active (filterv (fn [[_ _ ks always?]]
                           (or always? (apply items-have-key? items ks)))
@@ -258,20 +277,25 @@
         headers (mapv first active)
         rows (mapv (fn [item]
                      (mapv (fn [[header extractor _]]
-                             (let [cell (extractor item now-ms)]
+                             (let [base-cell (extractor item now-ms)
+                                   line-truncated-cell (if (number? truncate-cell-max-lines)
+                                                         (truncate-cell-to-max-lines base-cell truncate-cell-max-lines)
+                                                         base-cell)]
                                (if (and (= header "TITLE")
                                         (number? title-max-display-width))
-                                 (truncate-title-to-display-width cell title-max-display-width)
-                                 cell)))
+                                 (truncate-title-to-display-width line-truncated-cell title-max-display-width)
+                                 line-truncated-cell)))
                            active))
                    items)]
     (format-counted-table headers rows)))
 
 (defn- format-list-page
   ([items now-ms]
-   (format-list-page items now-ms nil))
+   (format-list-dynamic items now-ms list-page-columns {:title-max-display-width nil
+                                                         :truncate-cell-max-lines nil}))
   ([items now-ms title-max-display-width]
-   (format-list-dynamic items now-ms list-page-columns {:title-max-display-width title-max-display-width})))
+   (format-list-dynamic items now-ms list-page-columns {:title-max-display-width title-max-display-width
+                                                         :truncate-cell-max-lines list-human-cell-max-lines})))
 
 (defn- format-extends
   [classes]
@@ -294,9 +318,11 @@
 
 (defn- format-list-tag
   ([items now-ms]
-   (format-list-tag items now-ms nil))
+   (format-list-dynamic items now-ms list-tag-columns {:title-max-display-width nil
+                                                        :truncate-cell-max-lines nil}))
   ([items now-ms title-max-display-width]
-   (format-list-dynamic items now-ms list-tag-columns {:title-max-display-width title-max-display-width})))
+   (format-list-dynamic items now-ms list-tag-columns {:title-max-display-width title-max-display-width
+                                                        :truncate-cell-max-lines list-human-cell-max-lines})))
 
 (defn- normalize-property-type
   [value]
@@ -323,9 +349,11 @@
 
 (defn- format-list-property
   ([items now-ms]
-   (format-list-property items now-ms nil))
+   (format-list-dynamic items now-ms list-property-columns {:title-max-display-width nil
+                                                             :truncate-cell-max-lines nil}))
   ([items now-ms title-max-display-width]
-   (format-list-dynamic items now-ms list-property-columns {:title-max-display-width title-max-display-width})))
+   (format-list-dynamic items now-ms list-property-columns {:title-max-display-width title-max-display-width
+                                                             :truncate-cell-max-lines list-human-cell-max-lines})))
 
 (defn- format-task-choice
   [value prefix]
@@ -357,9 +385,11 @@
 
 (defn- format-list-task
   ([items now-ms]
-   (format-list-task items now-ms nil))
+   (format-list-dynamic items now-ms list-task-columns {:title-max-display-width nil
+                                                         :truncate-cell-max-lines nil}))
   ([items now-ms title-max-display-width]
-   (format-list-dynamic items now-ms list-task-columns {:title-max-display-width title-max-display-width})))
+   (format-list-dynamic items now-ms list-task-columns {:title-max-display-width title-max-display-width
+                                                         :truncate-cell-max-lines list-human-cell-max-lines})))
 
 (defn- normalize-node-type
   [value]
@@ -379,9 +409,11 @@
 
 (defn- format-list-node
   ([items now-ms]
-   (format-list-node items now-ms nil))
+   (format-list-dynamic items now-ms list-node-columns {:title-max-display-width nil
+                                                         :truncate-cell-max-lines nil}))
   ([items now-ms title-max-display-width]
-   (format-list-dynamic items now-ms list-node-columns {:title-max-display-width title-max-display-width})))
+   (format-list-dynamic items now-ms list-node-columns {:title-max-display-width title-max-display-width
+                                                         :truncate-cell-max-lines list-human-cell-max-lines})))
 
 (defn- normalize-asset-type
   [value]
@@ -400,9 +432,11 @@
 
 (defn- format-list-asset
   ([items now-ms]
-   (format-list-asset items now-ms nil))
+   (format-list-dynamic items now-ms list-asset-columns {:title-max-display-width nil
+                                                          :truncate-cell-max-lines nil}))
   ([items now-ms title-max-display-width]
-   (format-list-dynamic items now-ms list-asset-columns {:title-max-display-width title-max-display-width})))
+   (format-list-dynamic items now-ms list-asset-columns {:title-max-display-width title-max-display-width
+                                                          :truncate-cell-max-lines list-human-cell-max-lines})))
 
 (defn- quote-posix-shell
   [value]

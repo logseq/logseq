@@ -687,7 +687,7 @@
 
 (defn- pull-page-by-name
   [config repo page-name selector]
-  (transport/invoke config :thread-api/pull false
+  (transport/invoke config :thread-api/pull
                     [repo selector [:block/name (common-util/page-name-sanity-lc page-name)]]))
 
 (def ^:private pull-tag-by-name add-command/pull-tag-by-name)
@@ -731,7 +731,7 @@
   (if (seq property-idents)
     (p/all
      (map (fn [property-ident]
-            (p/let [entity (transport/invoke config :thread-api/pull false
+            (p/let [entity (transport/invoke config :thread-api/pull
                                              [repo [:db/id] [:db/ident property-ident]])]
               (when-not (:db/id entity)
                 (throw (ex-info "property not found"
@@ -753,12 +753,12 @@
       ;; :create-page in both cases is correct: outliner-page/create has a
       ;; (ldb/recycled? existing-page) branch that restores the recycled page
       ;; instead of creating a duplicate.
-      (p/let [result (transport/invoke config :thread-api/apply-outliner-ops false
+      (p/let [result (transport/invoke config :thread-api/apply-outliner-ops
                                        [repo [[:create-page [page-name {}]]] {}])
               ;; create-page returns [title' page-uuid]; use uuid to find
               ;; the page since the stored name may differ from the input
               created (if-let [page-uuid (second result)]
-                        (transport/invoke config :thread-api/pull false
+                        (transport/invoke config :thread-api/pull
                                           [repo [:db/id :block/uuid] [:block/uuid page-uuid]])
                         (pull-page-by-name config repo page-name [:db/id :block/uuid]))]
         (if (:db/id created)
@@ -798,7 +798,7 @@
 
 (defn- pull-entity-by-id
   [config repo selector id]
-  (transport/invoke config :thread-api/pull false
+  (transport/invoke config :thread-api/pull
                     [repo selector id]))
 
 (defn- throw-upsert-id-not-found!
@@ -907,7 +907,7 @@
 (defn- pull-entity-by-uuid
   [config repo selector uuid-value]
   (when-let [uuid* (normalize-lookup-uuid uuid-value)]
-    (transport/invoke config :thread-api/pull false
+    (transport/invoke config :thread-api/pull
                       [repo selector [:block/uuid uuid*]])))
 
 (defn- ensure-task-node!
@@ -962,7 +962,7 @@
 
 (defn- ensure-task-tag-id!
   [config repo]
-  (p/let [entity (transport/invoke config :thread-api/pull false
+  (p/let [entity (transport/invoke config :thread-api/pull
                                    [repo [:db/id] [:db/ident task-tag-ident]])]
     (if-let [tag-id (:db/id entity)]
       tag-id
@@ -1012,7 +1012,7 @@
                                              block-uuids
                                              task-op-plan)]
       (if (seq ops)
-        (transport/invoke cfg :thread-api/apply-outliner-ops false
+        (transport/invoke cfg :thread-api/apply-outliner-ops
                           [repo ops {}])
         (p/resolved nil)))
     (p/resolved nil)))
@@ -1128,7 +1128,7 @@
                                                 :update-properties update-properties
                                                 :remove-properties remove-properties})
               _ (when (seq ops)
-                  (transport/invoke cfg :thread-api/apply-outliner-ops false
+                  (transport/invoke cfg :thread-api/apply-outliner-ops
                                     [(:repo action) ops {}]))]
         {:status :ok
          :data {:result [page-id]}})
@@ -1148,7 +1148,7 @@
   (let [status-input (or (normalize-status-input (:status-input action))
                          (normalize-status-input (:status action)))]
     (if (seq status-input)
-      (p/let [available-statuses (transport/invoke cfg :thread-api/q false
+      (p/let [available-statuses (transport/invoke cfg :thread-api/q
                                                    [(:repo action)
                                                     [task-status-command/status-closed-values-query]])
               resolved-status (task-status-command/resolve-status-ident status-input available-statuses)]
@@ -1283,7 +1283,7 @@
 
 (defn- ensure-asset-tag-id!
   [config repo]
-  (p/let [entity (transport/invoke config :thread-api/pull false
+  (p/let [entity (transport/invoke config :thread-api/pull
                                    [repo [:db/id] [:db/ident asset-tag-ident]])]
     (if-let [tag-id (:db/id entity)]
       tag-id
@@ -1374,7 +1374,7 @@
                   _ (when (and (seq target-name)
                                (not conflict)
                                (not (rename-target-same-as-current? entity target-name)))
-                      (transport/invoke cfg :thread-api/apply-outliner-ops false
+                      (transport/invoke cfg :thread-api/apply-outliner-ops
                                         [(:repo action)
                                          [[:rename-page [(:block/uuid entity) target-name]]]
                                          {}]))]
@@ -1388,7 +1388,7 @@
                                               {:block/tags [:db/ident]}])
                   existing-id (:db/id existing)]
             (p/let [_ (when-not existing-id
-                        (transport/invoke cfg :thread-api/apply-outliner-ops false
+                        (transport/invoke cfg :thread-api/apply-outliner-ops
                                           [(:repo action)
                                            [[:create-page [(:name action) {:class? true}]]]
                                            {}]))
@@ -1426,7 +1426,7 @@
           (p/let [existing (ensure-property-by-id! cfg (:repo action) (:id action))
                   property-ident (:db/ident existing)
                   _ (when (seq (:schema action))
-                      (transport/invoke cfg :thread-api/apply-outliner-ops false
+                      (transport/invoke cfg :thread-api/apply-outliner-ops
                                         [(:repo action)
                                          [[:upsert-property [property-ident
                                                              (:schema action)
@@ -1440,7 +1440,7 @@
                     property-opts (cond-> {}
                                     (nil? property-ident)
                                     (assoc :property-name (:name action)))
-                    _ (transport/invoke cfg :thread-api/apply-outliner-ops false
+                    _ (transport/invoke cfg :thread-api/apply-outliner-ops
                                         [(:repo action)
                                          [[:upsert-property [property-ident
                                                              (:schema action)

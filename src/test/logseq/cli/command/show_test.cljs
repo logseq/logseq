@@ -106,7 +106,7 @@
 (deftest test-fetch-user-properties-formats-datetime
   (let [fetch #'show-command/fetch-user-properties
         call-count (atom 0)
-        mock-invoke (fn [_ _method _ _args]
+        mock-invoke (fn [_ _method _args]
                       (let [call-idx (swap! call-count inc)]
                         (p/resolved
                          (case call-idx
@@ -137,7 +137,7 @@
 (deftest test-fetch-user-properties-includes-built-in-datetime
   (let [fetch #'show-command/fetch-user-properties
         call-count (atom 0)
-        mock-invoke (fn [_ _method _ _args]
+        mock-invoke (fn [_ _method _args]
                       (let [call-idx (swap! call-count inc)]
                         (p/resolved
                          (case call-idx
@@ -177,7 +177,7 @@
            uuid-entities
            linked-refs-by-root-id
            parents-by-block-id]}]
-  (fn [_ method _ args]
+  (fn [_ method args]
     (case method
       :thread-api/pull
       (let [[_repo _selector target] args]
@@ -213,6 +213,57 @@
         (p/resolved (get parents-by-block-id block-id [])))
 
       (p/resolved nil))))
+
+(deftest test-tree->text-renders-block-refs-inside-string-property-values
+  (let [ref-uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        output (-> (show-command/tree->text
+                    {:root {:db/id 1
+                            :block/title "Root"
+                            :user.property/summary (str "Depends on [[" ref-uuid "]]" )}
+                     :uuid->label {(string/lower-case ref-uuid) "Resolved ref"}
+                     :property-titles {:user.property/summary "Summary"}
+                     :property-value-labels {}})
+                   style/strip-ansi)]
+    (is (string/includes? output "Summary: Depends on [[Resolved ref]]"))))
+
+(deftest test-tree->text-renders-block-refs-inside-map-backed-property-values
+  (let [title-ref-uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        value-ref-uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
+        output (-> (show-command/tree->text
+                    {:root {:db/id 1
+                            :block/title "Root"
+                            :user.property/title-ref {:block/title (str "Mapped [[" title-ref-uuid "]]" )}
+                            :user.property/value-ref {:logseq.property/value (str "Value [[" value-ref-uuid "]]" )}}
+                     :uuid->label {(string/lower-case title-ref-uuid) "Title ref"
+                                   (string/lower-case value-ref-uuid) "Value ref"}
+                     :property-titles {:user.property/title-ref "Title ref"
+                                       :user.property/value-ref "Value ref"}
+                     :property-value-labels {}})
+                   style/strip-ansi)]
+    (is (string/includes? output "Title ref: Mapped [[Title ref]]"))
+    (is (string/includes? output "Value ref: Value [[Value ref]]"))))
+
+(deftest test-tree->text-renders-block-refs-inside-many-ref-default-property-values
+  ;; Simulates a normal block with a user property:
+  ;; - property name: "Reproducible steps"
+  ;; - :logseq.property/type :default
+  ;; - :db/valueType :db.type/ref
+  ;; - :db/cardinality :db.cardinality/many
+  ;; where the property values are referenced blocks and one referenced
+  ;; block title contains a serialized block ref.
+  (let [nested-ref-uuid "dddddddd-dddd-dddd-dddd-dddddddddddd"
+        output (-> (show-command/tree->text
+                    {:root {:db/id 1
+                            :block/title "Root"
+                            :user.property/reproducible-steps [42 43]}
+                     :uuid->label {(string/lower-case nested-ref-uuid) "Resolved nested step"}
+                     :property-titles {:user.property/reproducible-steps "Reproducible steps"}
+                     :property-value-labels {42 (str "Step [[" nested-ref-uuid "]]" )
+                                             43 "Verify output"}})
+                   style/strip-ansi)]
+    (is (string/includes? output "Reproducible steps:"))
+    (is (string/includes? output "- Step [[Resolved nested step]]"))
+    (is (string/includes? output "- Verify output"))))
 
 (defn- contains-block-uuid?
   [value]
@@ -458,7 +509,7 @@
 
 (deftest test-execute-show-fails-when-breadcrumb-fetch-fails
   (async done
-         (let [invoke-mock (fn [_ method _ args]
+         (let [invoke-mock (fn [_ method args]
                              (case method
                                :thread-api/pull
                                (let [[_repo _selector target] args]
