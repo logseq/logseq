@@ -18,7 +18,9 @@ pnpm db-worker-node:release:bundle
 Desktop + CLI shared semantics:
 - Electron desktop and CLI are expected to use the same `db-worker-node` and lock-file protocol for a graph.
 - Disk SQLite under `~/logseq/graphs` is the source of truth; OPFS periodic export is not part of the desktop primary write path.
-- If a daemon already exists for the graph, CLI reuses it via lock-file discovery instead of starting a second writer.
+- If a daemon already exists for the graph and reports the same revision as the requester, CLI reuses it via lock-file discovery instead of starting a second writer.
+- If the discovered daemon reports a different revision, startup stops that exact server, starts a replacement from the requester's bundled runtime, and only returns a usable endpoint after the replacement reports the expected revision.
+- A proven revision mismatch may be stopped across owner sources for the same repo/root-dir. Matching-revision servers keep the normal owner boundary.
 - If lock ownership is invalid or stale, startup cleans stale lock state before retrying.
 - Lock metadata includes an `owner-source` value (`cli`, `electron`, `unknown`) and lifecycle actions enforce owner boundaries.
 - `server stop` and `server restart` are owner-aware: CLI can only stop/restart servers it owns (or legacy `unknown` ownership).
@@ -133,7 +135,7 @@ Backup scope note:
 
 Server commands:
 - `server list` - list running db-worker-node servers
-- `server cleanup` - terminate revision-mismatched CLI-owned db-worker-node servers discovered from lock files in the current root-dir
+- `server cleanup` - manually terminate revision-mismatched CLI-owned db-worker-node servers discovered from lock files in the current root-dir
 - `server start --graph <name>` - start db-worker-node for a graph
 - `server stop --graph <name>` - stop db-worker-node for a graph
 - `server restart --graph <name>` - restart db-worker-node for a graph
@@ -187,9 +189,12 @@ logseq skill install --global
 Server ownership behavior:
 - `server stop` and `server restart` can return `server-owned-by-other` if the daemon was started by another owner source.
 - `server start` can return `server-start-timeout-orphan` when lock creation times out and orphan matching processes are detected.
+- Normal connection startup compares the discovered server revision with the local requester revision. Missing revision is treated as mismatch.
+- On revision mismatch, startup attempts one graceful-first restart of the exact discovered server for the same repo/root-dir, even if the stale server has a different owner source. If the replacement still reports a different revision, startup fails fast and does not return an incompatible endpoint.
+- Manual `server stop` and `server restart` keep owner protections; cross-owner stop is only used by the automatic revision-mismatch startup path after the target mismatch is proven.
 - `server list` human output includes both `OWNER` and `REVISION` columns.
 - `server list` prints a compatibility warning in human output when any server revision string is not exactly equal to the local CLI revision string.
-- `server cleanup` checks discovered servers in the current root-dir, treats `revision != local CLI revision` (including missing revision) as mismatch, and attempts graceful-first termination only for `:owner-source :cli` targets.
+- `server cleanup` remains a manual maintenance command. It checks discovered servers in the current root-dir, treats `revision != local CLI revision` (including missing revision) as mismatch, and attempts graceful-first termination only for `:owner-source :cli` targets.
 - `server cleanup` structured output includes `checked`, `mismatched`, `eligible`, `skipped-owner`, `killed`, and `failed` summaries.
 - Structured output (`--output json|edn`) includes per-server `revision` data but does not include human warning text.
 
