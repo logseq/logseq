@@ -225,6 +225,12 @@
   [window-id]
   (ensure-window-stopped! manager window-id))
 
+(defn release-runtime!
+  ([repo window-id]
+   (release-runtime! manager repo window-id))
+  ([mgr repo window-id]
+   (ensure-stopped! mgr repo window-id)))
+
 (defn release-repo!
   [repo]
   (ensure-repo-stopped! manager repo))
