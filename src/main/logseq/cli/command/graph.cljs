@@ -5,6 +5,7 @@
             [cljs.pprint :as pprint]
             [clojure.string :as string]
             [logseq.cli.command.core :as core]
+            [logseq.cli.command.sync :as sync-command]
             [logseq.cli.common :as cli-common]
             [logseq.cli.config :as cli-config]
             [logseq.cli.humanize :as cli-humanize]
@@ -35,6 +36,12 @@
            :coerce common-graph/expand-home
            :complete :file}})
 
+(def ^:private graph-create-spec
+  {:enable-sync {:desc "Upload the new graph to Logseq Sync and start sync"
+                 :coerce :boolean}
+   :e2ee-password {:desc "Verify and persist E2EE password before enabling sync"
+                   :coerce :string}})
+
 (def ^:private graph-validate-spec
   {:fix {:desc "Attempt to fix validation errors"
          :alias :f
@@ -57,8 +64,10 @@
 (def entries
   [(core/command-entry ["graph" "list"] :graph-list "List graphs" {}
                        {:examples ["logseq graph list"]})
-   (core/command-entry ["graph" "create"] :graph-create "Create graph" {}
-                       {:examples ["logseq graph create --graph my-graph"]})
+   (core/command-entry ["graph" "create"] :graph-create "Create graph" graph-create-spec
+                       {:examples ["logseq graph create --graph my-graph"
+                                   "logseq graph create --graph my-graph --enable-sync"
+                                   "logseq graph create --graph my-graph --enable-sync --e2ee-password \"my-secret\""]})
    (core/command-entry ["graph" "switch"] :graph-switch "Switch current graph" {}
                        {:examples ["logseq graph switch --graph my-graph"]})
    (core/command-entry ["graph" "remove"] :graph-remove "Remove graph" {}
@@ -123,6 +132,11 @@
   (let [export-type (normalize-import-export-type (:type opts))
         edn-only-options-specified? (some #(contains? opts %) graph-export-edn-only-option-keys)]
     (cond
+      (and (= command :graph-create)
+           (contains? opts :e2ee-password)
+           (not (true? (:enable-sync opts))))
+      "--e2ee-password requires --enable-sync"
+
       (and (= command :graph-export)
            (= export-type "sqlite")
            edn-only-options-specified?)
@@ -260,15 +274,22 @@
     :graph-create
     (if-not (seq graph)
       (missing-graph-error)
-      {:ok? true
-       :action {:type :invoke
-                :command :graph-create
-                :method :thread-api/create-or-open-db
-                :args [repo {}]
-                :repo repo
-                :graph (core/repo->graph repo)
-                :allow-missing-graph true
-                :persist-repo (core/repo->graph repo)}})
+      (let [graph-name (core/repo->graph repo)
+            base-action {:command :graph-create
+                         :method :thread-api/create-or-open-db
+                         :args [repo {}]
+                         :repo repo
+                         :graph graph-name
+                         :allow-missing-graph true
+                         :require-missing-graph true
+                         :persist-repo graph-name}]
+        {:ok? true
+         :action (if (true? (:enable-sync options))
+                   (assoc base-action
+                          :type :graph-create-enable-sync
+                          :enable-sync true
+                          :e2ee-password (:e2ee-password options))
+                   (assoc base-action :type :invoke))}))
 
     :graph-switch
     (if-not (seq graph)
@@ -517,6 +538,31 @@
         :else
         {:status :ok :data {:result result}}))))
 
+(defn- sync-stage-action
+  [type {:keys [repo graph e2ee-password]}]
+  {:type type
+   :repo repo
+   :graph graph
+   :e2ee-password e2ee-password})
+
+(defn execute-graph-create-enable-sync
+  [action config]
+  (p/let [create-result (execute-invoke action config)]
+    (if (= :error (:status create-result))
+      create-result
+      (p/let [upload-result (sync-command/execute (sync-stage-action :sync-upload action) config)]
+        (if (= :error (:status upload-result))
+          upload-result
+          (p/let [start-result (sync-command/execute (sync-stage-action :sync-start action) config)]
+            (if (= :error (:status start-result))
+              start-result
+              {:status :ok
+               :data {:graph (:graph action)
+                      :repo (:repo action)
+                      :stages {:create (:data create-result)
+                               :upload (:data upload-result)
+                               :start (:data start-result)}}})))))))
+
 (defn execute-graph-remove
   [action config]
   (-> (p/let [stop-result (cli-server/stop-server! config (:repo action))
@@ -564,11 +610,11 @@
                            (or rows []))
                 created-at (kv-lookup kv "logseq.kv/graph-created-at")
                 schema-version (kv-lookup kv "logseq.kv/schema-version")]
-        {:status :ok
-         :data {:graph (:graph action)
-                :logseq.kv/graph-created-at created-at
-                :logseq.kv/schema-version schema-version
-                :kv kv}}))))
+          {:status :ok
+           :data {:graph (:graph action)
+                  :logseq.kv/graph-created-at created-at
+                  :logseq.kv/schema-version schema-version
+                  :kv kv}}))))
 
 (defn execute-graph-export
   [action config]
@@ -590,7 +636,7 @@
                   (transport/invoke cfg
                                     :thread-api/backup-db-sqlite
                                     [(:repo action) (:file action)])
-                  (throw (ex-info "unsupported export type" {:export-type export-type}))) ]
+                  (throw (ex-info "unsupported export type" {:export-type export-type})))]
         {:status :ok
          :data {:message (str "wrote " (:file action))}})))
 

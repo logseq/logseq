@@ -2167,12 +2167,41 @@
              (get-in result [:options :query])))
       (is (= "[\"Hello\"]" (get-in result [:options :inputs]))))))
 
-(deftest test-verb-subcommand-parse-graph-import-export
+(deftest test-verb-subcommand-parse-graph-create-enable-sync
   (testing "graph create requires --graph even with positional args"
     (let [result (commands/parse-args ["graph" "create" "demo"])]
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
+  (testing "graph create parses enable-sync"
+    (let [result (commands/parse-args ["graph" "create"
+                                       "--graph" "demo"
+                                       "--enable-sync"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-create (:command result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= true (get-in result [:options :enable-sync])))))
+
+  (testing "graph create parses enable-sync e2ee password"
+    (let [result (commands/parse-args ["graph" "create"
+                                       "--graph" "demo"
+                                       "--enable-sync"
+                                       "--e2ee-password" "pw"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-create (:command result)))
+      (is (= true (get-in result [:options :enable-sync])))
+      (is (= "pw" (get-in result [:options :e2ee-password])))))
+
+  (testing "graph create rejects e2ee password without enable-sync"
+    (let [result (commands/parse-args ["graph" "create"
+                                       "--graph" "demo"
+                                       "--e2ee-password" "pw"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? (get-in result [:error :message])
+                            "--e2ee-password requires --enable-sync")))))
+
+(deftest test-verb-subcommand-parse-graph-import-export
   (testing "graph export parses with type and file"
     (let [result (commands/parse-args ["graph" "export"
                                        "--type" "edn"
@@ -2369,6 +2398,49 @@
           result (commands/build-action parsed {})]
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
+
+  (testing "plain graph-create requires a missing local graph"
+    (let [parsed {:ok? true :command :graph-create :options {:graph "demo"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :invoke (get-in result [:action :type])))
+      (is (= :thread-api/create-or-open-db (get-in result [:action :method])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= "demo" (get-in result [:action :graph])))
+      (is (= true (get-in result [:action :allow-missing-graph])))
+      (is (= true (get-in result [:action :require-missing-graph])))
+      (is (= "demo" (get-in result [:action :persist-repo])))))
+
+  (testing "graph-create enable-sync builds orchestration action"
+    (let [parsed {:ok? true
+                  :command :graph-create
+                  :options {:graph "demo"
+                            :enable-sync true}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= {:type :graph-create-enable-sync
+              :command :graph-create
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :method :thread-api/create-or-open-db
+              :args ["logseq_db_demo" {}]
+              :allow-missing-graph true
+              :require-missing-graph true
+              :persist-repo "demo"
+              :enable-sync true
+              :e2ee-password nil}
+             (:action result)))))
+
+  (testing "graph-create enable-sync forwards e2ee password without printing fields"
+    (let [parsed {:ok? true
+                  :command :graph-create
+                  :options {:graph "demo"
+                            :enable-sync true
+                            :e2ee-password "pw"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :graph-create-enable-sync (get-in result [:action :type])))
+      (is (= "pw" (get-in result [:action :e2ee-password])))))
 
   (testing "graph-switch uses graph name"
     (let [parsed {:ok? true :command :graph-switch :options {:graph "demo"}}
