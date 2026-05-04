@@ -2198,7 +2198,7 @@
                                        "--e2ee-password" "pw"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))
-      (is (string/includes? (get-in result [:error :message])
+      (is (string/includes? (strip-ansi (get-in result [:error :message]))
                             "--e2ee-password requires --enable-sync")))))
 
 (deftest test-verb-subcommand-parse-graph-import-export
@@ -4135,9 +4135,9 @@
                    (is (= "sqlite" (get-in sqlite-result [:context :export-type])))
                    (is (= "/tmp/export.sqlite" (get-in sqlite-result [:context :file])))
                    (is (= [[:thread-api/export-edn ["logseq_db_demo" {:export-type :graph
-                                                                            :graph-options {:include-timestamps? true
-                                                                                            :exclude-built-in-pages? true
-                                                                                            :exclude-namespaces #{:user :project}}}]]
+                                                                      :graph-options {:include-timestamps? true
+                                                                                      :exclude-built-in-pages? true
+                                                                                      :exclude-namespaces #{:user :project}}}]]
                            [:thread-api/backup-db-sqlite ["logseq_db_demo" "/tmp/export.sqlite"]]]
                           @invoke-calls))
                    (is (= 1 (count @write-calls)))
