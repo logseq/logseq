@@ -5,6 +5,7 @@
             ["http" :as http]
             ["path" :as node-path]
             [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
             [logseq.cli.config :as cli-config]
             [logseq.cli.profile :as profile]
@@ -362,7 +363,9 @@
                          (is (= :server-revision-mismatch-after-restart (get-in result [:error :code])))
                          (is (= repo (get-in result [:error :repo])))
                          (is (= "expected-revision" (get-in result [:error :expected-revision])))
-                         (is (= "wrong-revision" (get-in result [:error :actual-revision])))))
+                         (is (= "wrong-revision" (get-in result [:error :actual-revision])))
+                         (is (string/includes? (get-in result [:error :message])
+                                               (cli-server/db-worker-script-path)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

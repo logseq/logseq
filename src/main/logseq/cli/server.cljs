@@ -7,8 +7,8 @@
             [lambdaisland.glogi :as log]
             [logseq.cli.profile :as profile]
             [logseq.cli.root-dir :as root-dir]
-            [logseq.cli.version :as version]
             [logseq.common.config :as common-config]
+            [logseq.common.version :as version]
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.db-worker.daemon :as daemon]
@@ -114,7 +114,9 @@
               :server-revision-mismatch-restart-failed
               "db-worker-node revision mismatch and restart failed"
               :server-revision-mismatch-after-restart
-              "db-worker-node revision still does not match after restart"
+              (str "db-worker-node revision still does not match after restart"
+                   "; db-worker-node path: "
+                   (db-worker-script-path))
               "db-worker-node revision does not match requester revision")
    :repo repo
    :expected-revision expected
@@ -347,13 +349,13 @@
         (p/let [server' (ensure-server-started-once! config repo)]
           (if-not (revision-mismatch? expected (:revision server'))
             server'
-            (throw (ex-info "db-worker-node revision still does not match after restart"
-                            (assoc (server-revision-mismatch-error
-                                    :server-revision-mismatch-after-restart
-                                    repo
-                                    expected
-                                    server')
-                                   :after-restart? true)))))))))
+            (let [error-data (assoc (server-revision-mismatch-error
+                                     :server-revision-mismatch-after-restart
+                                     repo
+                                     expected
+                                     server')
+                                    :after-restart? true)]
+              (throw (ex-info (:message error-data) error-data)))))))))
 
 (defn ensure-server!
   [config repo]
