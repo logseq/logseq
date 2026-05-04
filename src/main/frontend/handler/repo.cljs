@@ -19,6 +19,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
+            [logseq.common.version :as build-version]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
@@ -136,7 +137,7 @@
    (p/let [config config/config-default-content
            _ (persist-db/<new full-graph-name
                               (cond-> {:config config
-                                       :graph-git-sha config/revision
+                                       :graph-git-sha (build-version/revision)
                                        :remote-graph? remote-graph?}
                                 file-graph-import? (assoc :import-type :file-graph)))
            _ (start-repo-db-if-not-exists! full-graph-name)

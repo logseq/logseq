@@ -18,9 +18,6 @@
 
 (defonce publishing? common-config/PUBLISHING)
 
-(goog-define REVISION "unknown")
-(defonce revision REVISION)
-
 ;; this is a feature flag to enable the account tab
 ;; when it launches (when pro plan launches) it should be removed
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
