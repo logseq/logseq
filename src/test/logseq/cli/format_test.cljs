@@ -769,7 +769,43 @@
                                                   :input "/tmp/import.sqlite"}
                                         :data {:message "Imported sqlite from /tmp/import.sqlite"}}
                                        {:output-format nil})]
-      (is (= "Imported sqlite from /tmp/import.sqlite" result)))))
+      (is (= "Imported sqlite from /tmp/import.sqlite" result))))
+
+  (testing "graph create enable-sync renders a multi-line stage summary"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-create
+                                        :context {:graph "demo"
+                                                  :repo "logseq_db_demo"
+                                                  :enable-sync true
+                                                  :e2ee-password "pw"}
+                                        :data {:graph "demo"
+                                               :repo "logseq_db_demo"
+                                               :stages {:create {:result {:created? true}}
+                                                        :upload {:graph-id "graph-uuid"}
+                                                        :start {:ws-state :open}}}}
+                                       {:output-format nil})]
+      (is (= "Graph created and sync enabled\n  Graph: demo\n  Create: ok\n  Sync upload: ok\n  Sync start: ok"
+             result))
+      (is (not (string/includes? result "pw")))))
+
+  (testing "graph create enable-sync JSON exposes structured stage data without password"
+    (let [token "secret-password"
+          output (format/format-result {:status :ok
+                                        :command :graph-create
+                                        :context {:graph "demo"
+                                                  :repo "logseq_db_demo"
+                                                  :enable-sync true
+                                                  :e2ee-password token}
+                                        :data {:graph "demo"
+                                               :repo "logseq_db_demo"
+                                               :stages {:create {:result {:created? true}}
+                                                        :upload {:graph-id "graph-uuid"}
+                                                        :start {:ws-state :open}}}}
+                                       {:output-format :json})
+          parsed (js->clj (js/JSON.parse output) :keywordize-keys true)]
+      (is (= "demo" (get-in parsed [:data :graph])))
+      (is (= "graph-uuid" (get-in parsed [:data :stages :upload :graph-id])))
+      (is (not (string/includes? output token))))))
 
 (deftest test-human-output-graph-backup
   (testing "graph backup list renders metadata table"

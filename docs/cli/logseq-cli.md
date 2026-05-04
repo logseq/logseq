@@ -112,6 +112,9 @@ Timeouts:
 Graph commands:
 - `graph list` - list all db graphs
 - `graph create --graph <name>` - create a new db graph and switch to it
+  - Fails with `graph-exists` if a local graph with the same name already exists
+  - `--enable-sync` creates the graph, switches to it, uploads it to Logseq Sync, and starts sync in one command
+  - `--e2ee-password <password>` is accepted only with `--enable-sync` and uses the same password verification path as `sync upload` and `sync start`
 - `graph switch --graph <name>` - switch current graph
 - `graph remove --graph <name>` - remove a graph
 - `graph validate --graph <name>` - validate graph data
