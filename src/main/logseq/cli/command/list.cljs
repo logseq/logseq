@@ -6,6 +6,7 @@
             [logseq.cli.command.task-status :as task-status-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
+            [logseq.cli.uuid-refs :as uuid-refs]
             [logseq.common.util :as common-util]
             [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
@@ -309,6 +310,12 @@
     (some? offset) (->> (drop offset) vec)
     (some? limit) (->> (take limit) vec)))
 
+(defn- normalize-visible-title-fields
+  [config repo items fields]
+  (let [uuid-strings (uuid-refs/collect-uuid-refs-from-items items fields)]
+    (p/let [uuid->label (uuid-refs/fetch-uuid-labels config repo uuid-strings)]
+      (uuid-refs/normalize-item-string-fields items fields uuid->label))))
+
 (defn- prepare-tag-item
   [item {:keys [with-properties with-extends fields]}]
   (cond-> item
@@ -327,14 +334,15 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               options (:options action)
-              items (transport/invoke cfg :thread-api/cli-list-pages false
+              items (transport/invoke cfg :thread-api/cli-list-pages
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
               order (or (:order options) "desc")
               fields (parse-field-list (:fields options))
               sorted (apply-sort items sort-field order list-page-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (apply-fields limited fields list-page-field-map)]
+              final (apply-fields limited fields list-page-field-map)
+              final (normalize-visible-title-fields cfg (:repo action) final [:block/title])]
         {:status :ok
          :data {:items final}})))
 
@@ -344,7 +352,7 @@
               options (cond-> (:options action)
                         ((some-fn :with-extends :with-properties) (:options action))
                         (assoc :expand true))
-              items (transport/invoke cfg :thread-api/cli-list-tags false
+              items (transport/invoke cfg :thread-api/cli-list-tags
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
               order (or (:order options) "desc")
@@ -352,7 +360,8 @@
               prepared (mapv #(prepare-tag-item % options) items)
               sorted (apply-sort prepared sort-field order list-tag-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (apply-fields limited fields list-tag-field-map)]
+              final (apply-fields limited fields list-tag-field-map)
+              final (normalize-visible-title-fields cfg (:repo action) final [:block/title])]
         {:status :ok
          :data {:items final}})))
 
@@ -361,7 +370,7 @@
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               options (cond-> (:options action)
                         (:with-classes (:options action)) (assoc :expand true))
-              items (transport/invoke cfg :thread-api/cli-list-properties false
+              items (transport/invoke cfg :thread-api/cli-list-properties
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
               order (or (:order options) "desc")
@@ -369,7 +378,8 @@
               prepared (mapv #(prepare-property-item % options) items)
               sorted (apply-sort prepared sort-field order list-property-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (apply-fields limited fields list-property-field-map)]
+              final (apply-fields limited fields list-property-field-map)
+              final (normalize-visible-title-fields cfg (:repo action) final [:block/title])]
         {:status :ok
          :data {:items final}})))
 
@@ -416,14 +426,15 @@
               worker-options (cond-> (dissoc options :tags :properties)
                                (seq tag-ids) (assoc :tag-ids tag-ids)
                                (seq property-idents) (assoc :property-idents property-idents))
-              items (transport/invoke cfg :thread-api/cli-list-nodes false
+              items (transport/invoke cfg :thread-api/cli-list-nodes
                                       [(:repo action) worker-options])
               sort-field (effective-sort-field options)
               order (or (:order options) "desc")
               fields (parse-field-list (:fields options))
               sorted (apply-sort items sort-field order list-node-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (apply-fields limited fields list-node-field-map)]
+              final (apply-fields limited fields list-node-field-map)
+              final (normalize-visible-title-fields cfg (:repo action) final [:block/title :block/page-title])]
         {:status :ok
          :data {:items final}})))
 
@@ -432,7 +443,7 @@
 
 (defn- ensure-asset-tag-id!
   [config repo]
-  (p/let [entity (transport/invoke config :thread-api/pull false
+  (p/let [entity (transport/invoke config :thread-api/pull
                                    [repo [:db/id] [:db/ident asset-tag-ident]])]
     (if-let [tag-id (:db/id entity)]
       tag-id
@@ -445,14 +456,15 @@
               options (:options action)
               asset-tag-id (ensure-asset-tag-id! cfg (:repo action))
               worker-options (assoc options :tag-ids [asset-tag-id])
-              items (transport/invoke cfg :thread-api/cli-list-nodes false
+              items (transport/invoke cfg :thread-api/cli-list-nodes
                                       [(:repo action) worker-options])
               sort-field (effective-sort-field options)
               order (or (:order options) "desc")
               fields (parse-field-list (:fields options))
               sorted (apply-sort items sort-field order list-asset-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (apply-fields limited fields list-asset-field-map)]
+              final (apply-fields limited fields list-asset-field-map)
+              final (normalize-visible-title-fields cfg (:repo action) final [:block/title])]
         {:status :ok
          :data {:items final}})))
 
@@ -468,7 +480,7 @@
               options (:options action)
               status-input (some-> (:status options) string/trim)
               available-statuses (when (seq status-input)
-                                   (transport/invoke cfg :thread-api/q false
+                                   (transport/invoke cfg :thread-api/q
                                                      [(:repo action)
                                                       [task-status-command/status-closed-values-query]]))
               resolved-status (when (seq status-input)
@@ -482,13 +494,14 @@
                                      (assoc :status resolved-status)
                                      (seq (some-> (:priority options) string/trim))
                                      (assoc :priority (normalize-priority (:priority options))))]
-            (p/let [items (transport/invoke cfg :thread-api/cli-list-tasks false
+            (p/let [items (transport/invoke cfg :thread-api/cli-list-tasks
                                             [(:repo action) normalized-options])
                     sort-field (effective-sort-field normalized-options)
                     order (or (:order normalized-options) "desc")
                     fields (parse-field-list (:fields normalized-options))
                     sorted (apply-sort items sort-field order list-task-field-map)
                     limited (apply-offset-limit sorted (:offset normalized-options) (:limit normalized-options))
-                    final (apply-fields limited fields list-task-field-map)]
+                    final (apply-fields limited fields list-task-field-map)
+                    final (normalize-visible-title-fields cfg (:repo action) final [:block/title])]
               {:status :ok
                :data {:items final}}))))))

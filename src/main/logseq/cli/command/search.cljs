@@ -4,6 +4,7 @@
             [logseq.cli.command.core :as core]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
+            [logseq.cli.uuid-refs :as uuid-refs]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -102,18 +103,25 @@
                       :db/id))
        vec))
 
-(defn- normalize-items
+(defn- select-items
   [items]
   (->> (or items [])
        (filter map?)
        (map #(select-keys % [:db/id :db/ident :block/title]))
-       sort-items))
+       vec))
+
+(defn- normalize-items
+  [config repo items]
+  (let [sorted (sort-items (select-items items))
+        uuid-strings (uuid-refs/collect-uuid-refs-from-items sorted [:block/title])]
+    (p/let [uuid->label (uuid-refs/fetch-uuid-labels config repo uuid-strings)]
+      (uuid-refs/normalize-item-string-fields sorted [:block/title] uuid->label))))
 
 (defn- execute-search
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               query (query-by-command (:type action))
-              result (transport/invoke cfg :thread-api/q false
+              result (transport/invoke cfg :thread-api/q
                                        [(:repo action) [query (:query action)]])
               ;; Hide recycled entries so search doesn't surface entries that
               ;; `remove page` / `remove block` already soft-deleted. Tag and
@@ -121,9 +129,10 @@
               ;; so the recycle filter only applies to page and block search.
               filtered (cond->> (or result [])
                          (#{:search-page :search-block} (:type action))
-                         (remove ldb/recycled?))]
+                         (remove ldb/recycled?))
+              items (normalize-items cfg (:repo action) filtered)]
         {:status :ok
-         :data {:items (normalize-items filtered)}})))
+         :data {:items items}})))
 
 (defn execute-search-block
   [action config]

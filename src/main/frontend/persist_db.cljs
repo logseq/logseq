@@ -114,7 +114,7 @@
     (if (electron-runtime?)
       (if (= repo @remote-repo)
         (if-let [remote-client @remote-db]
-          (p/let [_ (-> (remote/invoke! (:client remote-client) "thread-api/close-db" false [repo])
+          (p/let [_ (-> (remote/invoke! (:client remote-client) "thread-api/close-db" [repo])
                         (p/catch (fn [_] nil)))
                   _ (<stop-remote-if-current! repo)]
             nil)

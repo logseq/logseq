@@ -435,6 +435,106 @@
         (is (string/includes? result "ABCDE…"))
         (is (not (string/includes? result "ABCDEFGH")))))))
 
+(deftest test-human-output-list-multiline-title-max-lines
+  (let [long-title "Line 1\nLine 2\nLine 3\nLine 4\nLine 5"]
+    (doseq [[label command item]
+            [["list page truncates multiline title to max 3 lines"
+              :list-page
+              {:db/id 1
+               :block/title long-title
+               :block/updated-at 90000
+               :block/created-at 40000}]
+             ["list tag truncates multiline title to max 3 lines"
+              :list-tag
+              {:db/id 2
+               :block/title long-title
+               :db/ident :logseq.class/Tag
+               :block/updated-at 90000
+               :block/created-at 40000}]
+             ["list property truncates multiline title to max 3 lines"
+              :list-property
+              {:db/id 3
+               :block/title long-title
+               :logseq.property/type :node
+               :db/cardinality :db.cardinality/one
+               :block/updated-at 90000
+               :block/created-at 40000}]
+             ["list task truncates multiline title to max 3 lines"
+              :list-task
+              {:db/id 4
+               :block/title long-title
+               :block/updated-at 90000
+               :block/created-at 40000}]
+             ["list node truncates multiline title to max 3 lines"
+              :list-node
+              {:db/id 5
+               :block/title long-title
+               :node/type "page"
+               :block/updated-at 90000
+               :block/created-at 40000}]
+             ["list asset truncates multiline title to max 3 lines"
+              :list-asset
+              {:db/id 6
+               :block/title long-title
+               :logseq.property.asset/type "png"
+               :logseq.property.asset/size 2048
+               :block/updated-at 90000
+               :block/created-at 40000}]]]
+      (testing label
+        (let [result (format/format-result {:status :ok
+                                            :command command
+                                            :data {:items [item]}}
+                                           {:output-format nil
+                                            :now-ms 100000})]
+          (is (string/includes? result "Line 1"))
+          (is (string/includes? result "Line 2"))
+          (is (string/includes? result "Line 3…"))
+          (is (not (string/includes? result "Line 4")))
+          (is (not (string/includes? result "Line 5")))
+          (is (string/includes? result "Count: 1")))))))
+
+(deftest test-list-multiline-title-json-edn-unchanged
+  (let [title "Line 1\nLine 2\nLine 3\nLine 4\nLine 5"
+        base-result {:status :ok
+                     :command :list-node
+                     :data {:items [{:db/id 11
+                                     :block/title title
+                                     :node/type "page"}]}}
+        json-result (format/format-result base-result {:output-format :json})
+        edn-result (format/format-result base-result {:output-format :edn})
+        parsed-json (js->clj (js/JSON.parse json-result) :keywordize-keys true)
+        parsed-edn (reader/read-string edn-result)]
+    (is (= title (get-in parsed-json [:data :items 0 :block/title])))
+    (is (= title (get-in parsed-edn [:data :items 0 :block/title])))))
+
+(deftest test-human-output-list-multiline-title-alignment
+  (let [result (format/format-result {:status :ok
+                                      :command :list-page
+                                      :data {:items [{:db/id 1
+                                                      :block/title "Line 1\nLine 2\nLine 3\nLine 4\nLine 5"
+                                                      :block/updated-at 90000
+                                                      :block/created-at 40000}
+                                                     {:db/id 2
+                                                      :block/title "Beta"
+                                                      :block/updated-at 90000
+                                                      :block/created-at 40000}]}}
+                                     {:output-format nil
+                                      :now-ms 100000})
+        lines (string/split-lines result)
+        line-1 (first (filter #(and (string/includes? % "Line 1")
+                                    (string/includes? % "10 seconds ago"))
+                              lines))
+        line-2 (first (filter #(and (string/includes? % "Beta")
+                                    (string/includes? % "10 seconds ago"))
+                              lines))
+        updated-at-idx-1 (.indexOf line-1 "10 seconds ago")
+        updated-at-idx-2 (.indexOf line-2 "10 seconds ago")
+        prefix-width-1 (string-width (subs line-1 0 updated-at-idx-1))
+        prefix-width-2 (string-width (subs line-2 0 updated-at-idx-2))]
+    (is (pos? updated-at-idx-1))
+    (is (pos? updated-at-idx-2))
+    (is (= prefix-width-1 prefix-width-2))))
+
 (deftest test-human-output-list-cjk-title-alignment
   (let [result (format/format-result {:status :ok
                                       :command :list-page

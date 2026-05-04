@@ -1,7 +1,10 @@
 (ns logseq.db-sync.worker.dispatch
   (:require [clojure.string :as string]
+            [lambdaisland.glogi :as log]
             [logseq.db-sync.common :as common]
+            [logseq.db-sync.index :as index]
             [logseq.db-sync.platform.core :as platform]
+            [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
             [logseq.db-sync.worker.http :as http]
@@ -26,6 +29,39 @@
         (.set (.-searchParams new-url) "graph-id" graph-id)
         (let [rewritten (platform/request (.toString new-url) request)]
           (.fetch stub rewritten))))))
+
+(defn- request-user-id
+  [request]
+  (let [token (auth/token-from-request request)
+        claims (when (string? token)
+                 (auth/unsafe-jwt-claims token))
+        user-id (some-> claims (aget "sub"))]
+    (when (string? user-id)
+      user-id)))
+
+(defn- <safe-touch-activity!
+  [request ^js env graph-id]
+  (let [db (aget env "DB")
+        user-id (request-user-id request)]
+    (if (and db (string? graph-id))
+      (try
+        (-> (p/let [_ (index/<graph-activity-touch! db graph-id)
+                    _ (when (string? user-id)
+                        (index/<user-activity-touch! db user-id))]
+              nil)
+            (p/catch (fn [error]
+                       (log/warn :db-sync/activity-touch-failed
+                                 {:graph-id graph-id
+                                  :user-id user-id
+                                  :error error})
+                       nil)))
+        (catch :default error
+          (log/warn :db-sync/activity-touch-failed
+                    {:graph-id graph-id
+                     :user-id user-id
+                     :error error})
+          (p/resolved nil)))
+      (p/resolved nil))))
 
 (defn handle-worker-fetch [request ^js env]
   (->
@@ -75,14 +111,17 @@
                       (subs rest-path slash-idx))
                new-url (js/URL. (str (.-origin url) tail (.-search url)))]
            (if (seq graph-id)
-             (if (= method "OPTIONS")
-               (common/options-response)
-               (if (admin-token-valid? request env)
-                 (forward-sync-request request env graph-id new-url)
-                 (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
-                   (if (.-ok access-resp)
-                     (forward-sync-request request env graph-id new-url)
-                     access-resp))))
+               (if (= method "OPTIONS")
+                 (common/options-response)
+                 (if (admin-token-valid? request env)
+                   (forward-sync-request request env graph-id new-url)
+                   (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+                     (if (.-ok access-resp)
+                       (p/let [response (forward-sync-request request env graph-id new-url)
+                               _ (when (< (.-status response) 400)
+                                   (<safe-touch-activity! request env graph-id))]
+                         response)
+                       access-resp))))
              (http/bad-request "missing graph id")))
 
          :else
