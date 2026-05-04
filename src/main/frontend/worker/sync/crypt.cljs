@@ -246,8 +246,8 @@
   (str "rtc-encrypted-aes-key###" graph-id))
 
 (defn- user-rsa-key-pair-idb-key
-  [user-id]
-  (str "rtc-user-rsa-key-pair###" user-id))
+  [base user-id]
+  (str "rtc-user-rsa-key-pair###" base "###" user-id))
 
 (defn <fetch-user-rsa-key-pair-raw
   [base]
@@ -266,14 +266,14 @@
   (when (and (string? base)
              (string? user-id)
              (user-rsa-key-pair-valid? pair))
-    (<set-item! (user-rsa-key-pair-idb-key user-id)
+    (<set-item! (user-rsa-key-pair-idb-key base user-id)
                 (ldb/write-transit-str pair)))
   pair)
 
 (defn- <get-user-rsa-key-pair-from-idb
   [base user-id]
   (when (and (string? base) (string? user-id))
-    (p/let [pair-str (<get-item (user-rsa-key-pair-idb-key user-id))
+    (p/let [pair-str (<get-item (user-rsa-key-pair-idb-key base user-id))
             pair (ldb/read-transit-str pair-str)]
       (when (user-rsa-key-pair-valid? pair)
         pair))))
@@ -283,7 +283,7 @@
   (let [k [base user-id]]
     (swap! *user-rsa-key-pair-inflight dissoc k)
     (when (and (string? base) (string? user-id))
-      (<clear-item! (user-rsa-key-pair-idb-key user-id)))))
+      (<clear-item! (user-rsa-key-pair-idb-key base user-id)))))
 
 (defn- <get-user-rsa-key-pair-raw
   [base]
