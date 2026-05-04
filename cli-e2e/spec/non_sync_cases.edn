@@ -318,6 +318,24 @@
       "--order"]}},
    :tags [:upsert :list],
    :extends :non-sync/graph-json-env}
+  {:id "node-list-renders-block-ref-labels-json",
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name RefNodeTag >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page RefNodePage >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content \"Task [[$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?uuid . :where [?e :block/title \"RefNodePage\"] [?e :block/uuid ?uuid]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')]]\" --update-tags '[\"RefNodeTag\"]' >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json list node --graph {{graph-arg}} --tags RefNodeTag --fields id,title,type --sort updated-at --order desc --limit 20"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"},
+    :stdout-contains ["Task [[RefNodePage]]"]},
+   :covers
+   {:commands ["upsert tag" "upsert page" "upsert block" "list node"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--name" "--page" "--target-page" "--content" "--update-tags"],
+     :list ["--tags" "--fields" "--limit" "--sort" "--order"]}},
+   :tags [:upsert :list],
+   :extends :non-sync/graph-json-env}
   {:id "asset-upsert-and-list-json",
    :setup ["printf 'asset-content' > {{export-path-arg}}.png"],
    :cmds
@@ -480,6 +498,23 @@
      :search ["--content"]}},
    :tags [:search :smoke],
    :extends :non-sync/graph-json-env}
+  {:id "search-block-renders-block-ref-labels-json",
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page SearchRefPage >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content \"foo [[$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?uuid . :where [?e :block/title \"SearchRefPage\"] [?e :block/uuid ?uuid]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')]]\" >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json search block --graph {{graph-arg}} --content foo"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths {[:status] "ok"},
+    :stdout-contains ["foo [[SearchRefPage]]"]},
+   :covers
+   {:commands ["upsert page" "upsert block" "search block"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--page" "--target-page" "--content"],
+     :search ["--content"]}},
+   :tags [:upsert :search],
+   :extends :non-sync/graph-json-env}
   {:id "search-page-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page SearchPageTarget >/dev/null"],
@@ -595,6 +630,24 @@
      ["--id" "--target-page" "--content" "--update-properties"],
      :show ["--id"]}},
    :tags [:upsert :show]}
+  {:id "show-property-many-ref-default-renders-nested-block-ref-human",
+   :setup
+   ["printf '%s' '{:properties {:user.property/reproducible-steps {:block/title \"Reproducible steps\" :logseq.property/type :default :db/cardinality :db.cardinality/many :db/valueType :db.type/ref :logseq.property/public? true}} :pages-and-blocks [{:page {:block/title \"Targets\"} :blocks [{:block/title \"Nested target\" :block/uuid #uuid \"11111111-1111-1111-1111-111111111111\" :build/keep-uuid? true} {:block/title \"Step [[11111111-1111-1111-1111-111111111111]]\" :block/uuid #uuid \"22222222-2222-2222-2222-222222222222\" :build/keep-uuid? true} {:block/title \"Verify output\" :block/uuid #uuid \"33333333-3333-3333-3333-333333333333\" :build/keep-uuid? true}]} {:page {:block/title \"Home\"} :blocks [{:block/title \"Alpha block\" :build/properties {:user.property/reproducible-steps #{[:block/uuid #uuid \"22222222-2222-2222-2222-222222222222\"] [:block/uuid #uuid \"33333333-3333-3333-3333-333333333333\"]}}}]}]}' > {{export-path-arg}}"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Home"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["Reproducible steps:" "Step [[Nested target]]" "Verify output"],
+    :stdout-not-contains ["Step [[11111111-1111-1111-1111-111111111111]]"]},
+   :covers
+   {:commands ["graph import" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--input"],
+     :show ["--page"]}},
+   :tags [:graph :show],
+   :extends :non-sync/graph-json-env}
   {:id "block-upsert-update-uuid-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"

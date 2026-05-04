@@ -22,7 +22,7 @@
         android:theme="@style/AppTheme">
         <activity
             android:name="com.logseq.app.MainActivity"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:exported="true"
             android:windowSoftInputMode="adjustResize"
             android:label="@string/title_activity_main"

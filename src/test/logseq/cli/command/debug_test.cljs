@@ -49,7 +49,7 @@
                        :lookup 42
                        :selector '[*]}]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo] config)
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (swap! invoke-calls* conj {:method method :args args})
                                                   (p/resolved {:db/id 42 :block/title "Debug Home"}))]
                  (p/let [result (debug-command/execute-debug-pull action {:base-url "http://example"})]
@@ -72,7 +72,7 @@
                        :lookup [:db/ident :missing/ident]
                        :selector '[*]}]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo] config)
-                               transport/invoke (fn [_ _method _ _args]
+                               transport/invoke (fn [_ _method _args]
                                                   (p/resolved nil))]
                  (p/let [result (debug-command/execute-debug-pull action {:base-url "http://example"})]
                    (is (= :error (:status result)))

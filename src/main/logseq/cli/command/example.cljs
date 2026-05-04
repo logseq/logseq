@@ -6,7 +6,7 @@
             [promesa.core :as p]))
 
 (def ^:private phase1-groups
-  ["list" "upsert" "remove" "query" "search" "show"])
+  ["graph" "list" "upsert" "remove" "query" "search" "show"])
 
 (defn- command-path->label
   [cmds]
@@ -23,11 +23,12 @@
 
 (defn phase1-target-entries
   [base-table]
-  (->> base-table
-       (filter (fn [entry]
-                 (contains? (set phase1-groups)
-                            (first (:cmds entry)))))
-       vec))
+  (let [phase1-group-set (set phase1-groups)]
+    (->> base-table
+         (filter (fn [entry]
+                   (contains? phase1-group-set
+                              (first (:cmds entry)))))
+         vec)))
 
 (defn- selector-definitions
   [base-table]

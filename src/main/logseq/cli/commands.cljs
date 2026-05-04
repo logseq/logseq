@@ -303,7 +303,8 @@
 
 (defn- validate-option-contracts
   [summary {:keys [command list-invalid-options-message remove-invalid-options-message
-                   show-invalid-options-message debug-invalid-options-message]}]
+                   show-invalid-options-message debug-invalid-options-message
+                   graph-invalid-options-message]}]
   (cond
     (and (list-validation-commands command)
          list-invalid-options-message)
@@ -312,6 +313,9 @@
     (and (remove-validation-commands command)
          remove-invalid-options-message)
     (command-core/invalid-options-result summary remove-invalid-options-message)
+
+    (and (= command :graph-export) graph-invalid-options-message)
+    (command-core/invalid-options-result summary graph-invalid-options-message)
 
     (and (= command :show) show-invalid-options-message)
     (command-core/invalid-options-result summary show-invalid-options-message)
@@ -397,6 +401,8 @@
                                      (list-command/invalid-options? command opts))
      :remove-invalid-options-message (when (remove-validation-commands command)
                                        (remove-command/invalid-options? command opts))
+     :graph-invalid-options-message (when (= command :graph-export)
+                                      (graph-command/invalid-options? command opts))
      :show-invalid-options-message (when (= command :show)
                                      (show-command/invalid-options? opts))
      :debug-invalid-options-message (when (= command :debug-pull)
@@ -414,7 +420,8 @@
   [summary {:keys [command opts args cmds spec long-desc examples]}]
   (let [opts (-> opts
                  command-core/normalize-opts
-                 (#(list-command/normalize-options command %)))
+                 (#(list-command/normalize-options command %))
+                 (#(graph-command/normalize-options command %)))
         args (vec args)
         cmd-summary (command-core/command-summary {:cmds cmds
                                                    :spec spec
@@ -590,7 +597,7 @@
 
         :graph-export
         (let [export-type (graph-command/normalize-import-export-type (:type options))]
-          (graph-command/build-export-action repo export-type (:file options)))
+          (graph-command/build-export-action repo export-type (:file options) options))
 
         :graph-import
         (let [import-repo (command-core/resolve-repo (:graph options))

@@ -450,15 +450,16 @@
               :cell timestamp-cell-cp})])
          (remove nil?))))
 
-(defn- sort-columns
+(defn sort-columns
   [columns ordered-column-ids]
   (if (seq ordered-column-ids)
     (let [id->columns (zipmap (map :id columns) columns)
-          ordered-id-set (set ordered-column-ids)]
+          distinct-ordered-ids (distinct ordered-column-ids)
+          ordered-id-set (set distinct-ordered-ids)]
       (concat
        (keep (fn [id]
                (get id->columns id))
-             ordered-column-ids)
+             distinct-ordered-ids)
        (remove
         (fn [column] (ordered-id-set (:id column)))
         columns)))

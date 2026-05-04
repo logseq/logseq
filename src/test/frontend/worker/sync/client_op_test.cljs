@@ -1,7 +1,9 @@
 (ns frontend.worker.sync.client-op-test
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.sync.client-op :as client-op]))
+            [frontend.worker.sync.client-op :as client-op]
+            [logseq.db.common.sqlite :as common-sqlite]
+            [logseq.db.sqlite.gc :as sqlite-gc]))
 
 (defn- new-memory-db
   []
@@ -120,3 +122,41 @@
         (is (= 0 (client-op/cleanup-finished-history-ops! repo #{}))))
       (finally
         (reset! worker-state/*client-ops-conns prev-client-ops-conns)))))
+
+(deftest gc-on-client-ops-db-preserves-sync-metadata-test
+  "Reproduces the bug where GC on client-ops db could reset local-tx to 0.
+  The client-ops db has a kvs table (created by create-kvs-table!) but it's
+  empty because client-ops doesn't store Datascript data. Running GC on an
+  empty kvs table is a no-op with better-sqlite3 but can crash or misbehave
+  with WASM sqlite (browser), leading to db corruption and local-tx reset."
+  (let [repo "repo-gc-test"]
+    (with-client-ops-db
+      repo
+      (fn [db]
+        ;; client-ops db gets a kvs table during db open, but it's empty
+        (common-sqlite/create-kvs-table! db)
+        (client-op/ensure-sqlite-schema! db)
+        (client-op/update-local-tx repo 42)
+        (is (= 42 (client-op/get-local-tx repo))
+            "local-tx should be 42 before GC")
+
+        ;; GC on client-ops db: kvs table is empty because client-ops db
+        ;; does not store Datascript data. gc-kvs-table! expects a valid
+        ;; Datascript schema at kvs addr 0, which doesn't exist here.
+        ;; This causes transit-js to throw "Expected first argument to be
+        ;; a string" because it receives undefined instead of a transit
+        ;; string. This is why gc-sqlite-dbs! must NOT include client-ops db.
+        (testing "gc-kvs-table! crashes on client-ops db with empty kvs table"
+          (is (thrown-with-msg?
+               js/Error
+               #"Expected first argument to be a string"
+               (sqlite-gc/gc-kvs-table! db {:full-gc? false}))))
+
+        ;; After GC, local-tx should still be intact
+        (is (= 42 (client-op/get-local-tx repo))
+            "local-tx should still be 42 after GC")
+
+        ;; VACUUM should also be safe
+        (.exec db "VACUUM")
+        (is (= 42 (client-op/get-local-tx repo))
+            "local-tx should still be 42 after VACUUM")))))

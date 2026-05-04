@@ -120,12 +120,10 @@
                      (swap! *sse-clients disj res))))
 
 (defn- <invoke!
-  [^js proxy method-str method-kw direct-pass? args]
-  (let [args' (if direct-pass?
-                (into-array (or args []))
-                (if (string? args)
-                  args
-                  (ldb/write-transit-str args)))
+  [^js proxy method-str method-kw args]
+  (let [args-transit (if (string? args)
+                       args
+                       (ldb/write-transit-str args))
         started-at (js/Date.now)
         timeout-id (js/setTimeout
                     (fn []
@@ -133,7 +131,7 @@
                                 {:method (or method-kw method-str)
                                  :elapsed-ms (- (js/Date.now) started-at)}))
                     10000)]
-    (-> (p/do! (.remoteInvoke proxy method-str (boolean direct-pass?) args'))
+    (-> (p/do! (.remoteInvoke proxy method-str args-transit))
         (p/finally (fn []
                      (js/clearTimeout timeout-id))))))
 
@@ -141,7 +139,7 @@
   [proxy]
   (let [method-kw :thread-api/init
         method-str (normalize-method-str method-kw)]
-    (<invoke! proxy method-str method-kw true #js [])))
+    (<invoke! proxy method-str method-kw [])))
 
 (defn- <close-bound-repo!
   [proxy repo]
@@ -149,7 +147,7 @@
     (p/resolved nil)
     (let [method-kw :thread-api/close-db
           method-str (normalize-method-str method-kw)]
-      (-> (<invoke! proxy method-str method-kw false [repo])
+      (-> (<invoke! proxy method-str method-kw [repo])
           (p/catch (fn [error]
                      (log/warn :db-worker-node-close-db-before-stop-failed
                                {:repo repo
@@ -196,7 +194,6 @@
 
 (def ^:private write-methods
   #{:thread-api/transact
-    :thread-api/import-db
     :thread-api/import-db-base64
     :thread-api/backup-db-sqlite
     :thread-api/import-edn
@@ -237,7 +234,7 @@
 (defn- set-main-thread-stub!
   []
   (reset! worker-state/*main-thread
-          (fn [qkw _direct-pass? & _args]
+          (fn [qkw & _args]
             (p/rejected (ex-info "main-thread is not available in db-worker-node"
                                  {:method qkw})))))
 
@@ -305,27 +302,20 @@
          (if (= method "POST")
            (-> (p/let [body (<read-body req)
                        payload (js/JSON.parse body)
-                       {:keys [method directPass argsTransit args]} (js->clj payload :keywordize-keys true)
+                       {:keys [method argsTransit args]} (js->clj payload :keywordize-keys true)
                        method-kw (normalize-method-kw method)
                        method-str (normalize-method-str method)
-                       direct-pass? (boolean directPass)
-                       args' (if direct-pass?
-                               args
-                               (or argsTransit args))
-                       args-for-validation (if direct-pass?
-                                             args'
-                                             (if (string? args')
-                                               (ldb/read-transit-str args')
-                                               args'))]
+                       args' (or argsTransit args)
+                       args-for-validation (if (string? args')
+                                             (ldb/read-transit-str args')
+                                             args')]
                  (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
                    (send-json! res status {:ok false :error error})
                    (p/let [_ (when (contains? write-methods method-kw)
                                (let [{:keys [path lock]} @*lock-info]
                                  (db-lock/assert-lock-owner! path lock)))
-                           result (<invoke! proxy method-str method-kw direct-pass? args')]
-                     (send-json! res 200 (if direct-pass?
-                                           {:ok true :result result}
-                                           {:ok true :resultTransit result})))))
+                           result (<invoke! proxy method-str method-kw args')]
+                     (send-json! res 200 {:ok true :resultTransit result}))))
                (p/catch (fn [error]
                           (let [data (ex-data error)
                                 status (invoke-error-status data)
@@ -585,7 +575,7 @@
                       _ (reset! *lock-info {:path path :lock lock})
                       _ (let [method-kw :thread-api/create-or-open-db
                               method-str (normalize-method-str method-kw)]
-                          (<invoke! proxy method-str method-kw false [repo (startup-db-opts opts)]))]
+                          (<invoke! proxy method-str method-kw [repo (startup-db-opts opts)]))]
                 (start-http-server! {:proxy proxy
                                      :repo repo
                                      :host host

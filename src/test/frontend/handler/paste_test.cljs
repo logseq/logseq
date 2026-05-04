@@ -171,6 +171,28 @@
                  #js {:clipboardData #js {:getData (constantly clipboard)}})]
         (is (= expected-blocks @actual-blocks))))))
 
+(deftest-async editor-on-paste-prefers-blocks-from-memory-when-clipboard-custom-type-is-missing
+  (let [actual-blocks (atom nil)
+        expected-blocks [{:block/title "Memory cache block"}]
+        clipboard-blocks-str (pr-str {:graph "test"
+                                      :blocks expected-blocks})
+        clipboard "fallback text"]
+    (p/with-redefs
+     [util/stop (constantly nil)
+      state/get-current-repo (constantly "test")
+      paste-handler/get-copied-blocks (fn []
+                                        (throw (js/Error. "should not read async clipboard when memory cache has payload")))
+      utils/getCopiedBlocksFromMemory (fn [text]
+                                        (when (= text clipboard)
+                                          clipboard-blocks-str))
+      editor-handler/paste-blocks (fn [blocks _] (reset! actual-blocks blocks))]
+      (p/let [_ ((paste-handler/editor-on-paste! nil)
+                 #js {:clipboardData #js {:getData (fn [k]
+                                                     (cond
+                                                       (= k "text") clipboard
+                                                       :else ""))}})]
+        (is (= expected-blocks @actual-blocks))))))
+
 (deftest-async editor-on-paste-with-selection-in-property
   (let [clipboard "after"
         expected-paste "after"
