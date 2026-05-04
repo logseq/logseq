@@ -68,6 +68,305 @@
   (is (= (node-path/join "/tmp/app.asar" "js" "db-worker-node.js")
          (#'cli-server/db-worker-release-script-path-from "/tmp/app.asar"))))
 
+(defn- write-test-lock!
+  [root-dir repo owner-source]
+  (let [lock-file (cli-server/lock-path root-dir repo)
+        lock {:repo repo
+              :pid (.-pid js/process)
+              :host "127.0.0.1"
+              :port 9400
+              :lock-id "revision-test-lock"
+              :owner-source owner-source}]
+    (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+    (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
+    lock-file))
+
+(defn- revision-test-server
+  [{:keys [repo port owner-source revision root-dir]}]
+  {:repo repo
+   :host "127.0.0.1"
+   :port port
+   :pid (.-pid js/process)
+   :owner-source owner-source
+   :root-dir root-dir
+   :revision revision
+   :status :ready})
+
+(deftest ensure-server-reuses-matching-revision
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-revision-match")
+               repo (str "logseq_db_revision_match_" (subs (str (random-uuid)) 0 8))
+               _lock-file (write-test-lock! root-dir repo :cli)
+               spawn-calls (atom 0)
+               shutdown-calls (atom 0)
+               server (revision-test-server {:repo repo
+                                             :port 9410
+                                             :owner-source :cli
+                                             :revision "expected-revision"
+                                             :root-dir root-dir})]
+           (-> (p/with-redefs [daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/spawn-server! (fn [_]
+                                                      (swap! spawn-calls inc)
+                                                      nil)
+                               cli-server/discover-servers (fn [_]
+                                                            (p/resolved [server]))
+                               daemon/http-request (fn [_]
+                                                     (swap! shutdown-calls inc)
+                                                     (p/resolved {:status 200 :body ""}))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :cli
+                                             :expected-revision "expected-revision"}
+                                            repo))
+               (p/then (fn [config]
+                         (is (= "http://127.0.0.1:9410" (:base-url config)))
+                         (is (= 0 @spawn-calls))
+                         (is (= 0 @shutdown-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-restarts-cli-owned-mismatched-revision
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-revision-restart-cli")
+               repo (str "logseq_db_revision_restart_cli_" (subs (str (random-uuid)) 0 8))
+               lock-file (write-test-lock! root-dir repo :cli)
+               discover-calls (atom 0)
+               spawn-calls (atom 0)
+               shutdown-calls (atom 0)
+               old-server (revision-test-server {:repo repo
+                                                 :port 9411
+                                                 :owner-source :cli
+                                                 :revision "old-revision"
+                                                 :root-dir root-dir})
+               new-server (revision-test-server {:repo repo
+                                                 :port 9412
+                                                 :owner-source :cli
+                                                 :revision "expected-revision"
+                                                 :root-dir root-dir})]
+           (-> (p/with-redefs [daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/spawn-server! (fn [_]
+                                                      (swap! spawn-calls inc)
+                                                      (write-test-lock! root-dir repo :cli)
+                                                      nil)
+                               daemon/http-request (fn [{:keys [path]}]
+                                                     (when (= "/v1/shutdown" path)
+                                                       (swap! shutdown-calls inc)
+                                                       (fs/rmSync lock-file #js {:force true}))
+                                                     (p/resolved {:status 200 :body ""}))
+                               cli-server/discover-servers (fn [_]
+                                                            (let [call (swap! discover-calls inc)]
+                                                              (p/resolved (case call
+                                                                            1 [old-server]
+                                                                            2 []
+                                                                            [new-server]))))
+                               daemon/wait-for-lock (fn [_] (p/resolved true))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :cli
+                                             :expected-revision "expected-revision"}
+                                            repo))
+               (p/then (fn [config]
+                         (is (= "http://127.0.0.1:9412" (:base-url config)))
+                         (is (= 1 @shutdown-calls))
+                         (is (= 1 @spawn-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-restarts-cross-owner-mismatched-revision
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-revision-cross-owner")
+               repo (str "logseq_db_revision_cross_owner_" (subs (str (random-uuid)) 0 8))
+               lock-file (write-test-lock! root-dir repo :electron)
+               discover-calls (atom 0)
+               spawn-calls (atom 0)
+               shutdown-calls (atom 0)
+               old-server (revision-test-server {:repo repo
+                                                 :port 9413
+                                                 :owner-source :electron
+                                                 :revision "old-revision"
+                                                 :root-dir root-dir})
+               new-server (revision-test-server {:repo repo
+                                                 :port 9414
+                                                 :owner-source :cli
+                                                 :revision "expected-revision"
+                                                 :root-dir root-dir})]
+           (-> (p/with-redefs [daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/spawn-server! (fn [_]
+                                                      (swap! spawn-calls inc)
+                                                      (write-test-lock! root-dir repo :cli)
+                                                      nil)
+                               daemon/http-request (fn [{:keys [path]}]
+                                                     (when (= "/v1/shutdown" path)
+                                                       (swap! shutdown-calls inc)
+                                                       (fs/rmSync lock-file #js {:force true}))
+                                                     (p/resolved {:status 200 :body ""}))
+                               cli-server/discover-servers (fn [_]
+                                                            (let [call (swap! discover-calls inc)]
+                                                              (p/resolved (case call
+                                                                            1 [old-server]
+                                                                            2 []
+                                                                            [new-server]))))
+                               daemon/wait-for-lock (fn [_] (p/resolved true))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :cli
+                                             :expected-revision "expected-revision"}
+                                            repo))
+               (p/then (fn [config]
+                         (is (= "http://127.0.0.1:9414" (:base-url config)))
+                         (is (= 1 @shutdown-calls))
+                         (is (= 1 @spawn-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-treats-missing-revision-as-mismatch
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-revision-missing")
+               repo (str "logseq_db_revision_missing_" (subs (str (random-uuid)) 0 8))
+               lock-file (write-test-lock! root-dir repo :cli)
+               discover-calls (atom 0)
+               spawn-calls (atom 0)
+               shutdown-calls (atom 0)
+               old-server (revision-test-server {:repo repo
+                                                 :port 9415
+                                                 :owner-source :cli
+                                                 :revision nil
+                                                 :root-dir root-dir})
+               new-server (revision-test-server {:repo repo
+                                                 :port 9416
+                                                 :owner-source :cli
+                                                 :revision "expected-revision"
+                                                 :root-dir root-dir})]
+           (-> (p/with-redefs [daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/spawn-server! (fn [_]
+                                                      (swap! spawn-calls inc)
+                                                      (write-test-lock! root-dir repo :cli)
+                                                      nil)
+                               daemon/http-request (fn [{:keys [path]}]
+                                                     (when (= "/v1/shutdown" path)
+                                                       (swap! shutdown-calls inc)
+                                                       (fs/rmSync lock-file #js {:force true}))
+                                                     (p/resolved {:status 200 :body ""}))
+                               cli-server/discover-servers (fn [_]
+                                                            (let [call (swap! discover-calls inc)]
+                                                              (p/resolved (case call
+                                                                            1 [old-server]
+                                                                            2 []
+                                                                            [new-server]))))
+                               daemon/wait-for-lock (fn [_] (p/resolved true))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :cli
+                                             :expected-revision "expected-revision"}
+                                            repo))
+               (p/then (fn [config]
+                         (is (= "http://127.0.0.1:9416" (:base-url config)))
+                         (is (= 1 @shutdown-calls))
+                         (is (= 1 @spawn-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-fails-when-restarted-server-still-mismatches
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-revision-still-mismatch")
+               repo (str "logseq_db_revision_still_mismatch_" (subs (str (random-uuid)) 0 8))
+               lock-file (write-test-lock! root-dir repo :cli)
+               discover-calls (atom 0)
+               spawn-calls (atom 0)
+               shutdown-calls (atom 0)
+               old-server (revision-test-server {:repo repo
+                                                 :port 9417
+                                                 :owner-source :cli
+                                                 :revision "old-revision"
+                                                 :root-dir root-dir})
+               wrong-server (revision-test-server {:repo repo
+                                                   :port 9418
+                                                   :owner-source :cli
+                                                   :revision "wrong-revision"
+                                                   :root-dir root-dir})]
+           (-> (p/with-redefs [daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/spawn-server! (fn [_]
+                                                      (swap! spawn-calls inc)
+                                                      (write-test-lock! root-dir repo :cli)
+                                                      nil)
+                               daemon/http-request (fn [{:keys [path]}]
+                                                     (when (= "/v1/shutdown" path)
+                                                       (swap! shutdown-calls inc)
+                                                       (fs/rmSync lock-file #js {:force true}))
+                                                     (p/resolved {:status 200 :body ""}))
+                               cli-server/discover-servers (fn [_]
+                                                            (let [call (swap! discover-calls inc)]
+                                                              (p/resolved (case call
+                                                                            1 [old-server]
+                                                                            2 []
+                                                                            [wrong-server]))))
+                               daemon/wait-for-lock (fn [_] (p/resolved true))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :cli
+                                             :expected-revision "expected-revision"}
+                                            repo))
+               (p/then (fn [_]
+                         (is false "expected revision mismatch after restart")))
+               (p/catch (fn [e]
+                          (let [data (ex-data e)]
+                            (is (= :server-revision-mismatch-after-restart (:code data)))
+                            (is (= "expected-revision" (:expected-revision data)))
+                            (is (= "wrong-revision" (:actual-revision data)))
+                            (is (= 1 @shutdown-calls))
+                            (is (= 1 @spawn-calls)))))
+               (p/finally done)))))
+
+(deftest start-server-reports-revision-mismatch-error-stably
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-start-revision-error")
+               repo (str "logseq_db_start_revision_error_" (subs (str (random-uuid)) 0 8))
+               lock-file (write-test-lock! root-dir repo :cli)
+               discover-calls (atom 0)
+               old-server (revision-test-server {:repo repo
+                                                 :port 9419
+                                                 :owner-source :cli
+                                                 :revision "old-revision"
+                                                 :root-dir root-dir})
+               wrong-server (revision-test-server {:repo repo
+                                                   :port 9420
+                                                   :owner-source :cli
+                                                   :revision "wrong-revision"
+                                                   :root-dir root-dir})]
+           (-> (p/with-redefs [daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/spawn-server! (fn [_]
+                                                      (write-test-lock! root-dir repo :cli)
+                                                      nil)
+                               daemon/http-request (fn [{:keys [path]}]
+                                                     (when (= "/v1/shutdown" path)
+                                                       (fs/rmSync lock-file #js {:force true}))
+                                                     (p/resolved {:status 200 :body ""}))
+                               cli-server/discover-servers (fn [_]
+                                                            (let [call (swap! discover-calls inc)]
+                                                              (p/resolved (case call
+                                                                            1 [old-server]
+                                                                            2 []
+                                                                            [wrong-server]))))
+                               daemon/wait-for-lock (fn [_] (p/resolved true))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/start-server! {:root-dir root-dir
+                                            :owner-source :cli
+                                            :expected-revision "expected-revision"}
+                                           repo))
+               (p/then (fn [result]
+                         (is (= false (:ok? result)))
+                         (is (= :server-revision-mismatch-after-restart (get-in result [:error :code])))
+                         (is (= repo (get-in result [:error :repo])))
+                         (is (= "expected-revision" (get-in result [:error :expected-revision])))
+                         (is (= "wrong-revision" (get-in result [:error :actual-revision])))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest cli-server-spawn-server-does-not-forward-server-list-file
   (async done
          (let [spawn-server! #'cli-server/spawn-server!
@@ -149,7 +448,8 @@
                                                                    (swap! spawn-calls inc)
                                                                    (throw (ex-info "should not spawn when server-list entry is ready" {})))]
                               (cli-server/ensure-server! {:root-dir root-dir
-                                                          :config-path config-path}
+                                                          :config-path config-path
+                                                          :expected-revision "server-revision"}
                                                          repo))
                             (p/then (fn [config]
                                       (is (= (str "http://" host ":" port) (:base-url config)))
@@ -308,7 +608,7 @@
                                                                             :port 9301
                                                                             :pid (.-pid js/process)
                                                                             :owner-source :cli
-                                                                            :revision nil
+                                                                            :revision "test-revision"
                                                                             :status :ready}])))
                                daemon/wait-for-ready (fn [_] (p/resolved true))]
                  (cli-server/ensure-server! {:root-dir root-dir
@@ -352,7 +652,7 @@
                                                                             :port 9310
                                                                             :pid (.-pid js/process)
                                                                             :owner-source :cli
-                                                                            :revision nil
+                                                                            :revision "test-revision"
                                                                             :status :ready}])))
                                daemon/wait-for-ready (fn [_] (p/resolved true))]
                  (cli-server/ensure-server! {:root-dir root-dir
@@ -385,7 +685,7 @@
                        :port 9311
                        :pid (.-pid js/process)
                        :owner-source :cli
-                       :revision nil
+                       :revision "test-revision"
                        :status :ready}]
            (-> (p/with-redefs [daemon/read-lock (fn [_]
                                                   (if (= 1 (swap! read-lock-calls inc))
@@ -452,7 +752,8 @@
                                                        (p/resolved {:status 200 :body ""})))
                                daemon/wait-for-ready (fn [_] (p/resolved true))]
                  (cli-server/ensure-server! {:root-dir root-dir
-                                             :config-path config-path}
+                                             :config-path config-path
+                                             :expected-revision "server-revision"}
                                             repo))
                (p/then (fn [config]
                          (is (= "http://127.0.0.1:9312" (:base-url config)))
@@ -482,7 +783,7 @@
                               :port 9320
                               :pid 1001
                               :owner-source :cli
-                              :revision nil
+                              :revision "test-revision"
                               :status :ready
                               :root-dir root-dir-a}
                local-server {:repo repo
@@ -490,7 +791,7 @@
                              :port 9321
                              :pid (.-pid js/process)
                              :owner-source :cli
-                             :revision nil
+                             :revision "test-revision"
                              :status :ready
                              :root-dir root-dir-b}]
            (-> (p/with-redefs [daemon/read-lock (fn [_]
@@ -543,7 +844,7 @@
                                                                           :port 9322
                                                                           :pid (.-pid js/process)
                                                                           :owner-source :cli
-                                                                          :revision nil
+                                                                          :revision "test-revision"
                                                                           :status :ready
                                                                           :root-dir symlink-root-dir}]))
                                daemon/wait-for-ready (fn [_] (p/resolved true))]
