@@ -3,7 +3,8 @@
             [frontend.config :as config]
             [frontend.mobile.util :as mobile-util]
             [frontend.util :as util]
-            [frontend.version :refer [version]]))
+            [frontend.version :refer [version]]
+            [logseq.common.version :as build-version]))
 
 (goog-define SENTRY-DSN "")
 
@@ -22,8 +23,8 @@
                                 (mobile-util/native-platform?) "mobile"
                                 :else "web")
                     :publishing config/publishing?}
-                    (not-empty config/revision)
-                    (assoc :revision config/revision))}
+                    (not-empty (build-version/revision))
+                    (assoc :revision (build-version/revision)))}
    ;; :integrations [(new posthog/SentryIntegration posthog "logseq" 5311485)
    ;;                (new BrowserTracing)]
    :ignoreErrors ["ResizeObserver loop limit exceeded"
