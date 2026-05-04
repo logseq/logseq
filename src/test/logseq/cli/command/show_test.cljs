@@ -106,7 +106,7 @@
 (deftest test-fetch-user-properties-formats-datetime
   (let [fetch #'show-command/fetch-user-properties
         call-count (atom 0)
-        mock-invoke (fn [_ _method _ _args]
+        mock-invoke (fn [_ _method _args]
                       (let [call-idx (swap! call-count inc)]
                         (p/resolved
                          (case call-idx
@@ -137,7 +137,7 @@
 (deftest test-fetch-user-properties-includes-built-in-datetime
   (let [fetch #'show-command/fetch-user-properties
         call-count (atom 0)
-        mock-invoke (fn [_ _method _ _args]
+        mock-invoke (fn [_ _method _args]
                       (let [call-idx (swap! call-count inc)]
                         (p/resolved
                          (case call-idx
@@ -177,7 +177,7 @@
            uuid-entities
            linked-refs-by-root-id
            parents-by-block-id]}]
-  (fn [_ method _ args]
+  (fn [_ method args]
     (case method
       :thread-api/pull
       (let [[_repo _selector target] args]
@@ -509,7 +509,7 @@
 
 (deftest test-execute-show-fails-when-breadcrumb-fetch-fails
   (async done
-         (let [invoke-mock (fn [_ method _ args]
+         (let [invoke-mock (fn [_ method args]
                              (case method
                                :thread-api/pull
                                (let [[_repo _selector target] args]

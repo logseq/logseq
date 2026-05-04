@@ -224,8 +224,8 @@
     (p/resolved nil)
     (-> (p/let [refresh-token (ensure-refresh-token! config)
                 _ (if (seq e2ee-password)
-                    (transport/invoke cfg :thread-api/verify-and-save-e2ee-password false [refresh-token e2ee-password])
-                    (transport/invoke cfg :thread-api/get-e2ee-password false [refresh-token]))]
+                    (transport/invoke cfg :thread-api/verify-and-save-e2ee-password [refresh-token e2ee-password])
+                    (transport/invoke cfg :thread-api/get-e2ee-password [refresh-token]))]
           nil)
         (p/catch (fn [error]
                    (if (missing-e2ee-password-diagnostic? error)
@@ -467,15 +467,15 @@
   [cfg config]
   (let [auth-state (worker-auth-state config)]
     (p/let [_ (when (seq auth-state)
-                (transport/invoke cfg :thread-api/sync-app-state false [auth-state]))
-            _ (transport/invoke cfg :thread-api/set-db-sync-config false [(sync-config config)])]
+                (transport/invoke cfg :thread-api/sync-app-state [auth-state]))
+            _ (transport/invoke cfg :thread-api/set-db-sync-config [(sync-config config)])]
       nil)))
 
 (defn- invoke-with-repo
   [config repo method args]
   (p/let [cfg (cli-server/ensure-server! config repo)
           _ (<sync-worker-runtime! cfg config)
-          result (transport/invoke cfg method false args)]
+          result (transport/invoke cfg method args)]
     result))
 
 (defn- invoke-global
@@ -483,7 +483,7 @@
   (let [base-url (:base-url config)]
     (if (seq base-url)
       (p/let [_ (<sync-worker-runtime! config config)]
-        (transport/invoke config method false args))
+        (transport/invoke config method args))
       (p/let [repo (or (core/resolve-repo (:graph config))
                        (p/let [graphs (cli-server/list-graphs config)]
                          (some-> graphs first core/resolve-repo)))
@@ -492,7 +492,7 @@
                     (p/rejected (ex-info "graph name is required"
                                          {:code :missing-graph})))
               _ (<sync-worker-runtime! cfg config)]
-        (transport/invoke cfg method false args)))))
+        (transport/invoke cfg method args)))))
 
 (defn- download-config
   [config]
@@ -500,7 +500,7 @@
 
 (defn- ensure-empty-download-db!
   [cfg repo]
-  (p/let [non-empty-entity-count (transport/invoke cfg :thread-api/q false [repo [sync-download-non-empty-query]])]
+  (p/let [non-empty-entity-count (transport/invoke cfg :thread-api/q [repo [sync-download-non-empty-query]])]
     (when (and (number? non-empty-entity-count)
                (pos? non-empty-entity-count))
       (throw (ex-info "graph db is not empty"
@@ -573,7 +573,7 @@
   [cfg config {:keys [e2ee-password]}]
   (if (seq e2ee-password)
     (p/let [refresh-token (ensure-refresh-token! config)
-            _ (transport/invoke cfg :thread-api/verify-and-save-e2ee-password false [refresh-token e2ee-password])]
+            _ (transport/invoke cfg :thread-api/verify-and-save-e2ee-password [refresh-token e2ee-password])]
       nil)
     (p/resolved nil)))
 
@@ -582,7 +582,7 @@
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               _ (<sync-worker-runtime! cfg config)
               _ (<verify-and-save-e2ee-password-on-worker-if-provided! cfg config action)
-              result (transport/invoke cfg :thread-api/db-sync-upload-graph false [(:repo action)])]
+              result (transport/invoke cfg :thread-api/db-sync-upload-graph [(:repo action)])]
         {:status :ok
          :data (if (map? result)
                  result
@@ -670,7 +670,7 @@
                                     (fn [event-type payload]
                                       (when-let [message (download-progress-message graph-id event-type payload)]
                                         (print-progress-line! message)))))
-                      result (-> (transport/invoke download-cfg :thread-api/db-sync-download-graph-by-id false
+                      result (-> (transport/invoke download-cfg :thread-api/db-sync-download-graph-by-id
                                                    [(:repo action) graph-id (:graph-e2ee? remote-graph)])
                                  (p/finally (fn []
                                               (when-let [close! (:close! events-sub)]
@@ -698,7 +698,7 @@
   (-> (p/let [config' (resolve-runtime-config! action config)
               cfg (cli-server/ensure-server! config' (:repo action))
               _ (<sync-worker-runtime! cfg config')
-              result (transport/invoke cfg :thread-api/db-sync-status false [(:repo action)])]
+              result (transport/invoke cfg :thread-api/db-sync-status [(:repo action)])]
         {:status :ok
          :data result})
       (p/catch (fn [error]
@@ -713,9 +713,9 @@
           (missing-sync-config-error (:type action) missing-keys)
           (p/let [cfg (cli-server/ensure-server! start-config (:repo action))
                   _ (<sync-worker-runtime! cfg start-config)
-                  graph-e2ee? (transport/invoke cfg :thread-api/q false [(:repo action) [graph-e2ee-query]])
+                  graph-e2ee? (transport/invoke cfg :thread-api/q [(:repo action) [graph-e2ee-query]])
                   _ (<ensure-e2ee-password-available! cfg start-config action (true? graph-e2ee?))
-                  _ (transport/invoke cfg :thread-api/db-sync-start false [(:repo action)])
+                  _ (transport/invoke cfg :thread-api/db-sync-start [(:repo action)])
                   result (wait-sync-start-ready start-config (:repo action) action)]
             result)))
       (p/catch (fn [error]

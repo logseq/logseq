@@ -671,7 +671,7 @@
                                 ENABLE_BITCODE = NO;
                                 INFOPLIST_FILE = App/Info.plist;
                                 INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-                                IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+                                IPHONEOS_DEPLOYMENT_TARGET = 16.6;
                                 LD_RUNPATH_SEARCH_PATHS = (
                                         "$(inherited)",
                                         "@executable_path/Frameworks",
@@ -704,7 +704,7 @@
                                 ENABLE_BITCODE = NO;
                                 INFOPLIST_FILE = App/Info.plist;
                                 INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-                                IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+                                IPHONEOS_DEPLOYMENT_TARGET = 16.6;
                                 LD_RUNPATH_SEARCH_PATHS = (
                                         "$(inherited)",
                                         "@executable_path/Frameworks",
@@ -734,7 +734,7 @@
                                 INFOPLIST_FILE = ShareViewController/Info.plist;
                                 INFOPLIST_KEY_CFBundleDisplayName = ShareViewController;
                                 INFOPLIST_KEY_NSHumanReadableCopyright = "";
-                                IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+                                IPHONEOS_DEPLOYMENT_TARGET = 16.6;
                                 LD_RUNPATH_SEARCH_PATHS = (
                                         "$(inherited)",
                                         "@executable_path/Frameworks",
@@ -767,7 +767,7 @@
                                 INFOPLIST_FILE = ShareViewController/Info.plist;
                                 INFOPLIST_KEY_CFBundleDisplayName = ShareViewController;
                                 INFOPLIST_KEY_NSHumanReadableCopyright = "";
-                                IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+                                IPHONEOS_DEPLOYMENT_TARGET = 16.6;
                                 LD_RUNPATH_SEARCH_PATHS = (
                                         "$(inherited)",
                                         "@executable_path/Frameworks",
@@ -804,7 +804,7 @@
                                 INFOPLIST_FILE = shortcuts/Info.plist;
                                 INFOPLIST_KEY_CFBundleDisplayName = shortcuts;
                                 INFOPLIST_KEY_NSHumanReadableCopyright = "";
-                                IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+                                IPHONEOS_DEPLOYMENT_TARGET = 26.0;
                                 LD_RUNPATH_SEARCH_PATHS = (
                                         "$(inherited)",
                                         "@executable_path/Frameworks",
@@ -846,7 +846,7 @@
                                 INFOPLIST_FILE = shortcuts/Info.plist;
                                 INFOPLIST_KEY_CFBundleDisplayName = shortcuts;
                                 INFOPLIST_KEY_NSHumanReadableCopyright = "";
-                                IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+                                IPHONEOS_DEPLOYMENT_TARGET = 26.0;
                                 LD_RUNPATH_SEARCH_PATHS = (
                                         "$(inherited)",
                                         "@executable_path/Frameworks",

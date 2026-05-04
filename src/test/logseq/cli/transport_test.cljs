@@ -218,11 +218,11 @@
                                                                        payload (js/JSON.parse (.toString buf "utf8"))]
                                                                    (reset! received (js->clj payload :keywordize-keys true))
                                                                    (.writeHead res 200 #js {"Content-Type" "application/json"})
-                                                                   (.end res (js/JSON.stringify #js {:result "ok"}))))))))]
-                 (p/let [result (transport/invoke {:base-url url} :thread-api/pull true ["repo" [:block/title]])]
+                                                                   (.end res (js/JSON.stringify #js {:resultTransit (ldb/write-transit-str "ok")}))))))))]
+                 (p/let [result (transport/invoke {:base-url url} :thread-api/pull ["repo" [:block/title]])]
                    (is (= "ok" result))
                    (is (= "thread-api/pull" (:method @received)))
-                   (is (= true (:directPass @received)))
+                   (is (string? (:argsTransit @received)))
                    (p/let [_ (stop!)] true)))
                (p/then (fn [_] (done)))
                (p/catch (fn [e]
@@ -231,13 +231,12 @@
 
 (deftest test-invoke-requires-explicit-base-url-and-method
   (testing "invoke fails fast when base-url is missing"
-    (let [message (capture-throw-message #(transport/invoke {} :thread-api/q true []))]
+    (let [message (capture-throw-message #(transport/invoke {} :thread-api/q []))]
       (is (re-find #"base-url is required" (or message "")))))
 
   (testing "invoke fails fast when method is missing"
     (let [message (capture-throw-message #(transport/invoke {:base-url "http://127.0.0.1:8123"}
                                                             nil
-                                                            true
                                                             []))]
       (is (re-find #"invoke method is required" (or message ""))))))
 
@@ -258,11 +257,10 @@
                                               (let [headers (.-headers req)]
                                                 (reset! auth-header (aget headers "authorization")))
                                               (.writeHead res 200 #js {"Content-Type" "application/json"})
-                                              (.end res (js/JSON.stringify #js {:result "ok"}))))]
+                                              (.end res (js/JSON.stringify #js {:resultTransit (ldb/write-transit-str "ok")}))))]
                  (p/let [result (transport/invoke {:base-url url
                                                    :auth-token "secret"}
                                                   :thread-api/pull
-                                                  true
                                                   ["repo" [:block/title]])]
                    (is (= "ok" result))
                    (is (nil? @auth-header))
@@ -278,16 +276,14 @@
            (-> (p/let [{:keys [url stop!]} (start-server
                                             (fn [_req ^js res]
                                               (.writeHead res 200 #js {"Content-Type" "application/json"})
-                                              (.end res (js/JSON.stringify #js {:result "ok"}))))
+                                              (.end res (js/JSON.stringify #js {:resultTransit (ldb/write-transit-str "ok")}))))
                        _ (transport/invoke {:base-url url
                                             :profile-session session}
                                            :thread-api/q
-                                           true
                                            ["repo" [:block/title]])
                        _ (transport/invoke {:base-url url
                                             :profile-session session}
                                            :thread-api/q
-                                           true
                                            ["repo" [:block/title]])
                        report (profile/report session {:command "query"
                                                        :status :ok})

@@ -60,11 +60,11 @@
 
 (defn- fetch-entity-by-uuid
   [config repo uuid-str]
-  (p/let [entity (transport/invoke config :thread-api/pull false
+  (p/let [entity (transport/invoke config :thread-api/pull
                                    [repo block-selector [:block/uuid (uuid uuid-str)]])]
     (if (:db/id entity)
       entity
-      (transport/invoke config :thread-api/pull false
+      (transport/invoke config :thread-api/pull
                         [repo block-selector [:block/uuid uuid-str]]))))
 
 (defn- ensure-non-page
@@ -77,7 +77,7 @@
   [config repo {:keys [id uuid]}]
   (cond
     (some? id)
-    (p/let [entity (transport/invoke config :thread-api/pull false
+    (p/let [entity (transport/invoke config :thread-api/pull
                                      [repo block-selector id])]
       (if (:db/id entity)
         (ensure-non-page entity "source must be a non-page block" :invalid-source)
@@ -96,7 +96,7 @@
   [config repo {:keys [target-id target-uuid target-page]}]
   (cond
     (some? target-id)
-    (p/let [entity (transport/invoke config :thread-api/pull false
+    (p/let [entity (transport/invoke config :thread-api/pull
                                      [repo block-selector target-id])]
       (if (:db/id entity)
         (ensure-non-page entity "target must be a block" :invalid-target)
@@ -110,7 +110,7 @@
 
     (seq target-page)
     (let [page-name (common-util/page-name-sanity-lc target-page)]
-      (p/let [entity (transport/invoke config :thread-api/pull false
+      (p/let [entity (transport/invoke config :thread-api/pull
                                        [repo [:db/id :block/uuid :block/name :block/title]
                                         [:block/name page-name]])]
         (if (:db/id entity)
@@ -285,7 +285,7 @@
                                  [:batch-set-property [block-uuids k v {}]])
                                update-properties)))
               result (if (seq ops)
-                       (transport/invoke cfg :thread-api/apply-outliner-ops false
+                       (transport/invoke cfg :thread-api/apply-outliner-ops
                                          [(:repo action) ops {}])
                        (p/resolved nil))]
         {:status :ok

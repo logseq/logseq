@@ -50,6 +50,40 @@
    (<delete-graph-storage! env url graph-id)
    (index/<graph-delete-index-entry! db graph-id)))
 
+(defn- <safe-user-activity-touch!
+  [db user-id]
+  (if (string? user-id)
+    (try
+      (-> (index/<user-activity-touch! db user-id)
+          (p/catch (fn [error]
+                     (log/warn :db-sync/activity-touch-user-failed
+                               {:user-id user-id
+                                :error error})
+                     nil)))
+      (catch :default error
+        (log/warn :db-sync/activity-touch-user-failed
+                  {:user-id user-id
+                   :error error})
+        (p/resolved nil)))
+    (p/resolved nil)))
+
+(defn- <safe-graph-activity-touch!
+  [db graph-id]
+  (if (string? graph-id)
+    (try
+      (-> (index/<graph-activity-touch! db graph-id)
+          (p/catch (fn [error]
+                     (log/warn :db-sync/activity-touch-graph-failed
+                               {:graph-id graph-id
+                                :error error})
+                     nil)))
+      (catch :default error
+        (log/warn :db-sync/activity-touch-graph-failed
+                  {:graph-id graph-id
+                   :error error})
+        (p/resolved nil)))
+    (p/resolved nil)))
+
 (defn ^:large-vars/cleanup-todo handle [{:keys [db ^js env request url claims route]}]
   (let [path-params (:path-params route)
         graph-id (:graph-id path-params)
@@ -370,12 +404,20 @@
                         (index/<user-upsert! db claims))]
               (if (nil? claims)
                 (http/unauthorized)
-                (handle {:db db
-                         :env env
-                         :request request
-                         :url url
-                         :claims claims
-                         :route route}))))))
+                (p/let [user-id (aget claims "sub")
+                        _ (<safe-user-activity-touch! db user-id)
+                        response (handle {:db db
+                                          :env env
+                                          :request request
+                                          :url url
+                                          :claims claims
+                                          :route route})
+                        graph-id (some-> route :path-params :graph-id)
+                        _ (when (and (string? user-id)
+                                     (string? graph-id)
+                                     (< (.-status response) 400))
+                            (<safe-graph-activity-touch! db graph-id))]
+                    response))))))
       (catch :default error
         (js/console.error "DEBUG handle-fetch error:" error)
         (log/error :db-sync/index-error error)

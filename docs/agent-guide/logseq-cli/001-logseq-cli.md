@@ -298,6 +298,10 @@ Graph management commands use `--graph` or the configured current graph, dependi
 - `graph validate --graph <name> [--fix]` delegates validation to the worker.
 - `graph info --graph <name>` reads graph metadata and `logseq.kv/*` values; human output redacts sensitive KV keys matching token/secret/password.
 - `graph export --graph <name> --type edn|sqlite --file <path>` exports EDN graph data or a SQLite snapshot.
+  - For `--type edn`, the CLI also accepts `--include-timestamps`, `--exclude-built-in-pages`, and `--exclude-namespaces <csv>`.
+  - `--exclude-namespaces` is normalized as trimmed CSV values with empty segments removed and duplicates collapsed; the worker receives the final value as a keyword set.
+  - `--exclude-namespaces` intentionally reduces some backend export validation strictness because excluded ontology namespaces cannot be validated the same way.
+  - For `--type sqlite`, the CLI rejects those EDN-only flags and invokes `:thread-api/backup-db-sqlite` so the worker writes the snapshot directly to the requested file path.
 - `graph import --graph <name> --type edn|sqlite --input <path>` imports EDN or SQLite data. SQLite import requires the target graph to be missing; EDN import can target a graph action that the worker can open.
 
 Graph backups are SQLite snapshot helpers under the graph's backup directory:
