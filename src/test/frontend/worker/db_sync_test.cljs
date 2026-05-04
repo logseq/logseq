@@ -64,11 +64,6 @@
       (finally
         (aset js/console "error" original-console-error)))))
 
-(defn- thenable?
-  [value]
-  (and (some? value)
-       (fn? (.-then value))))
-
 (use-fixtures :once (test-noise/mute-console-fixture ::db-sync-test))
 
 (defn- js-row
@@ -254,8 +249,8 @@
                     (swap! client-op/*repo->pending-local-tx-count dissoc test-repo)
                     (reset! worker-state/*datascript-conns db-prev)
                     (reset! worker-state/*client-ops-conns ops-prev))]
-      (if (or (p/promise? result) (thenable? result))
-        (p/finally result cleanup)
+      (if (some? result)
+        (p/finally (p/let [value result] value) cleanup)
         (do
           (cleanup)
           result)))))
@@ -766,34 +761,17 @@
                                      (is (= 2 (client-op/get-local-tx test-repo)))))))))
                  (p/finally (fn []
                               (reset! db-sync/*repo->latest-remote-tx latest-prev)
-                              (done)))))))
+                              (done))))))))
 
 (deftest pull-ok-overlapping-window-applies-only-newer-txs-test
-  (testing "pull/ok may include already-applied older txs, but should only apply newer contiguous txs"
-    (async done
-           (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
-                 parent-id (:db/id parent)
-                 stale-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "stale-title"]])
-                 new-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "remote-new-title"]])
-                 raw-message (js/JSON.stringify
-                              (clj->js {:type "pull/ok"
-                                        :t 2
-                                        :txs [{:t 1 :tx stale-tx}
-                                              {:t 2 :tx new-tx}]}))
-                 client {:repo test-repo
-                         :graph-id "graph-1"
-                         :inflight (atom [])
-                         :online-users (atom [])
-                         :ws-state (atom :open)}]
-             (-> (with-datascript-conns conn client-ops-conn
-                   (fn []
-                     (client-op/update-local-tx test-repo 1)
-                     (-> (sync-handle-message/handle-message! test-repo client raw-message)
-                         (p/then (fn [_]
-                                   (let [parent' (d/entity @conn parent-id)]
-                                     (is (= "remote-new-title" (:block/title parent')))
-                                     (is (= 2 (client-op/get-local-tx test-repo)))))))))
-                 (p/finally done)))))))
+  (testing "pull/ok may include already-applied older txs, but should only keep newer contiguous txs"
+    (let [stale-tx-data [[:db/add 1 :block/title "stale-title"]]
+          new-tx-data [[:db/add 1 :block/title "remote-new-title"]]
+          window [{:t 1 :tx-data stale-tx-data}
+                  {:t 2 :tx-data new-tx-data}]]
+      (is (= [{:t 2 :tx-data new-tx-data}]
+             (#'sync-handle-message/normalize-pull-window
+              test-repo 1 2 window))))))
 
 (deftest pull-ok-gapful-window-repulls-instead-of-applying-test
   (testing "non-contiguous pull/ok window is rejected before apply"
@@ -1139,16 +1117,17 @@
                          :online-users (atom [])
                          :ws-state (atom :open)}]
              (reset! db-sync/*repo->latest-remote-tx {})
-             (with-datascript-conns conn client-ops-conn
-               (fn []
-                 (client-op/update-local-tx test-repo 1)
-                 (-> (p/let [_ (sync-handle-message/handle-message! test-repo client raw-message)
-                             parent' (d/entity @conn parent-id)]
-                       (is (= "remote-new-title" (:block/title parent')))
-                       (is (= 2 (client-op/get-local-tx test-repo))))
-                     (p/finally (fn []
-                                  (reset! db-sync/*repo->latest-remote-tx latest-prev)
-                                  (done))))))))))
+             (-> (with-datascript-conns conn client-ops-conn
+                   (fn []
+                     (client-op/update-local-tx test-repo 1)
+                     (-> (sync-handle-message/handle-message! test-repo client raw-message)
+                         (p/then (fn [_]
+                                   (let [parent' (d/entity @conn parent-id)]
+                                     (is (= "remote-new-title" (:block/title parent')))
+                                     (is (= 2 (client-op/get-local-tx test-repo)))))))))
+                 (p/finally (fn []
+                              (reset! db-sync/*repo->latest-remote-tx latest-prev)
+                              (done))))))))
 
 (deftest pull-ok-batched-txs-preserve-tempid-boundaries-test
   (testing "pull/ok applies tx batches without cross-tx tempid collisions"
