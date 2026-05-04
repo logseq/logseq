@@ -83,6 +83,7 @@
 
 (def ^:private sync-start-timeout-ms 10000)
 (def ^:private sync-start-poll-interval-ms 1000)
+(def ^:private sync-upload-timeout-ms (* 30 60 1000))
 (def ^:private sync-download-timeout-ms (* 30 60 1000))
 
 (def ^:private sync-start-skipped-states
@@ -132,6 +133,11 @@
   [line]
   (when (seq (some-> line str string/trim))
     (println line)))
+
+(defn- sync-upload-invoke-config
+  [cfg]
+  (assoc cfg :timeout-ms (max 0 (or (:sync-upload-timeout-ms cfg)
+                                    sync-upload-timeout-ms))))
 
 (defn- sync-download-invoke-config
   [cfg]
@@ -580,9 +586,10 @@
 (defn- execute-sync-upload
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              upload-cfg (sync-upload-invoke-config cfg)
               _ (<sync-worker-runtime! cfg config)
-              _ (<verify-and-save-e2ee-password-on-worker-if-provided! cfg config action)
-              result (transport/invoke cfg :thread-api/db-sync-upload-graph [(:repo action)])]
+              _ (<verify-and-save-e2ee-password-on-worker-if-provided! upload-cfg config action)
+              result (transport/invoke upload-cfg :thread-api/db-sync-upload-graph [(:repo action)])]
         {:status :ok
          :data (if (map? result)
                  result
