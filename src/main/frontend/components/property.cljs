@@ -510,6 +510,11 @@
     (db/sub-block (:db/id linked-block))
     (db/sub-block (:db/id block))))
 
+(defn- show-property-panel-edit-button?
+  [property opts]
+  (and (contains? #{:date :datetime} (:logseq.property/type property))
+       (= :block-below (:property-position opts))))
+
 (defn- empty-panel-property-value?
   [value]
   (or (nil? value)
@@ -556,7 +561,7 @@
              (if (:class-schema? opts)
                (pv/property-value property (db/entity :logseq.property/description) opts)
                (pv/property-value block' property (assoc opts :suppress-inline-edit-icon? true)))]
-            (when (contains? #{:date :datetime} type)
+            (when (show-property-panel-edit-button? property opts)
               [:button.property-panel-edit-btn.select-none
                {:type "button"
                 :on-click (fn [e]
@@ -948,10 +953,12 @@
         hidden-properties (-> (concat block-hidden-properties
                                       (filter property-hide-f class-property-pairs))
                               (remove-built-in-or-other-position-properties true))
-        root-block? (or (= (str (:block/uuid block))
-                           (state/get-current-page))
-                        (and (= (str (:block/uuid block)) (:id opts))
-                             (not (entity-util/page? block))))]
+        current-route-page? (= (str (:block/uuid block)) (state/get-current-page))
+        root-block? (and (= (str (:block/uuid block)) (:id opts))
+                         (not (entity-util/page? block)))
+        show-hidden-properties-toggle-button? (and (seq hidden-properties)
+                                                   (or current-route-page?
+                                                       root-block?))]
     [:<>
      (load-bidirectional-properties block root-block? #(reset! *bidirectional-properties %))
      (let [has-bidirectional-properties? (seq bidirectional-properties)]
@@ -1007,8 +1014,12 @@
                nil)
 
              (when-not class?
-               (hidden-properties-cp block hidden-properties
-                                     (assoc opts :show-hidden-properties? show-hidden-properties?)))
+               [:<>
+                (when show-hidden-properties-toggle-button?
+                  [:div.mb-1
+                   (hidden-properties-toggle-button block {})])
+                (hidden-properties-cp block hidden-properties
+                                      (assoc opts :show-hidden-properties? show-hidden-properties?))])
 
              (when (and show-properties-panel? (not replace-renderer))
                [:div.properties-panel.gap-8
