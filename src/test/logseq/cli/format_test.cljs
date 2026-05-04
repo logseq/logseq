@@ -1393,6 +1393,55 @@
       (is (string/includes? result "Quote"))
       (is (string/includes? result "QUOTE")))))
 
+(deftest test-server-revision-mismatch-error-formatting
+  (testing "revision mismatch restart failure includes recovery hint"
+    (let [result (format/format-result {:status :error
+                                        :command :server-start
+                                        :error {:code :server-revision-mismatch-restart-failed
+                                                :message "db-worker-node revision mismatch and restart failed"
+                                                :repo "logseq_db_demo"
+                                                :expected-revision "expected-rev"
+                                                :actual-revision "old-rev"
+                                                :owner-source :electron}}
+                                       {:output-format nil})]
+      (is (= (str "Error (server-revision-mismatch-restart-failed): db-worker-node revision mismatch and restart failed\n"
+                  "Hint: Logseq tried to restart a revision-mismatched db-worker-node server and failed. Stop the server manually, then retry")
+             result))))
+
+  (testing "revision mismatch after restart includes fail-fast hint"
+    (let [result (format/format-result {:status :error
+                                        :command :server-start
+                                        :error {:code :server-revision-mismatch-after-restart
+                                                :message "db-worker-node revision still does not match after restart"
+                                                :repo "logseq_db_demo"
+                                                :expected-revision "expected-rev"
+                                                :actual-revision "wrong-rev"
+                                                :owner-source :cli}}
+                                       {:output-format nil})]
+      (is (= (str "Error (server-revision-mismatch-after-restart): db-worker-node revision still does not match after restart\n"
+                  "Hint: Logseq restarted db-worker-node, but the replacement still reports a different revision. Check the installed Logseq build and retry")
+             result))))
+
+  (testing "revision mismatch structured output preserves revision fields"
+    (let [payload {:status :error
+                   :command :server-start
+                   :error {:code :server-revision-mismatch-after-restart
+                           :message "db-worker-node revision still does not match after restart"
+                           :repo "logseq_db_demo"
+                           :expected-revision "expected-rev"
+                           :actual-revision "wrong-rev"
+                           :owner-source :cli}}
+          json-result (format/format-result payload {:output-format :json})
+          edn-result (format/format-result payload {:output-format :edn})
+          json-parsed (js->clj (js/JSON.parse json-result) :keywordize-keys true)
+          edn-parsed (reader/read-string edn-result)]
+      (is (= "expected-rev" (get-in json-parsed [:error :expected-revision])))
+      (is (= "wrong-rev" (get-in json-parsed [:error :actual-revision])))
+      (is (= "cli" (get-in json-parsed [:error :owner-source])))
+      (is (= "expected-rev" (get-in edn-parsed [:error :expected-revision])))
+      (is (= "wrong-rev" (get-in edn-parsed [:error :actual-revision])))
+      (is (= :cli (get-in edn-parsed [:error :owner-source]))))))
+
 (deftest test-human-output-doctor
   (testing "doctor renders concise check summary"
     (let [result (format/format-result {:status :ok
