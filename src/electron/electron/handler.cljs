@@ -234,6 +234,11 @@
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
     (db-worker/ensure-runtime! (canonical-repo repo) (.-id window))))
 
+(defmethod handle :releaseDbWorkerRuntime [^js window [_ repo]]
+  (if (string/blank? repo)
+    (p/rejected (ex-info "repo is required" {:code :missing-repo}))
+    (db-worker/release-runtime! (canonical-repo repo) (.-id window))))
+
 (defmethod handle :db-export [window [_ repo force-backup?]]
   (when-let [repo (canonical-repo repo)]
     (db/ensure-graph-dir! repo)
