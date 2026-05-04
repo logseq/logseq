@@ -11,6 +11,7 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
+            [logseq.cli.uuid-refs :as uuid-refs]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
@@ -120,7 +121,7 @@
   [config repo root]
   (if (and (ordinary-block-root? root)
            (:db/id root))
-    (-> (transport/invoke config :thread-api/get-block-parents false [repo (:db/id root)])
+    (-> (transport/invoke config :thread-api/get-block-parents [repo (:db/id root)])
         (p/then (fn [parents]
                   (or parents []))))
     (p/resolved [])))
@@ -237,35 +238,11 @@
          attach-user-properties
          attach-user-properties-to-entity)
 
-(def ^:private uuid-ref-pattern #"\[\[([0-9a-fA-F-]{36})\]\]")
-(def ^:private uuid-ref-max-depth 10)
-
 (defn- tag-label
   [tag]
   (or (:block/title tag)
       (:block/name tag)
       (some-> (:block/uuid tag) str)))
-
-(defn- replace-uuid-refs-once
-  [value uuid->label]
-  (if (and (string? value) (seq uuid->label))
-    (string/replace value uuid-ref-pattern
-                    (fn [[_ id]]
-                      (if-let [label (get uuid->label (string/lower-case id))]
-                        (str "[[" label "]]")
-                        (str "[[" id "]]"))))
-    value))
-
-(defn- replace-uuid-refs
-  [value uuid->label]
-  (loop [current value
-         remaining uuid-ref-max-depth]
-    (if (or (not (string? current)) (zero? remaining) (empty? uuid->label))
-      current
-      (let [next (replace-uuid-refs-once current uuid->label)]
-        (if (= next current)
-          current
-          (recur next (dec remaining)))))))
 
 (defn- tags->suffix
   [tags]
@@ -316,40 +293,46 @@
   (.toISOString (js/Date. ms)))
 
 (defn- property-value->string
-  ([value] (property-value->string value nil))
-  ([value labels]
-   (cond
-     (string? value) (nonblank-string value)
-     (number? value) (or (get labels value) (str value))
-     (uuid? value) (or (get labels value) (str value))
-     (lookup-ref? value) (let [uuid (second value)]
-                           (or (get labels uuid) (str uuid)))
-     (boolean? value) (str value)
-     (keyword? value) (str value)
-     (map? value) (or (nonblank-string (:block/title value))
-                      (nonblank-string (:block/name value))
-                      (when-let [id (:db/id value)]
-                        (get labels id))
-                      (when-let [uuid (:block/uuid value)]
-                        (get labels uuid))
-                      (when-let [val (:logseq.property/value value)]
-                        (if (string? val)
-                          (nonblank-string val)
-                          (str val)))
-                      (pr-str value))
-     (some? value) (str value)
-     :else nil)))
+  ([value] (property-value->string value nil nil))
+  ([value labels] (property-value->string value labels nil))
+  ([value labels uuid->label]
+   (let [render-visible (fn [text]
+                          (some-> text
+                                  nonblank-string
+                                  (uuid-refs/replace-uuid-refs uuid->label)))]
+     (cond
+       (string? value) (render-visible value)
+       (number? value) (render-visible (or (get labels value) (str value)))
+       (uuid? value) (render-visible (or (get labels value) (str value)))
+       (lookup-ref? value) (let [uuid (second value)]
+                             (render-visible (or (get labels uuid) (str uuid))))
+       (boolean? value) (str value)
+       (keyword? value) (str value)
+       (map? value) (or (render-visible (:block/title value))
+                        (render-visible (:block/name value))
+                        (when-let [id (:db/id value)]
+                          (render-visible (get labels id)))
+                        (when-let [uuid (:block/uuid value)]
+                          (render-visible (get labels uuid)))
+                        (when-let [val (:logseq.property/value value)]
+                          (if (string? val)
+                            (render-visible val)
+                            (str val)))
+                        (pr-str value))
+       (some? value) (str value)
+       :else nil))))
 
 (defn- normalize-property-values
-  ([value] (normalize-property-values value nil))
-  ([value labels]
+  ([value] (normalize-property-values value nil nil))
+  ([value labels] (normalize-property-values value labels nil))
+  ([value labels uuid->label]
    (let [values (cond
                   (set? value) (seq value)
                   (sequential? value) value
                   (nil? value) nil
                   :else [value])
          rendered (->> values
-                       (map #(property-value->string % labels))
+                       (map #(property-value->string % labels uuid->label))
                        (remove string/blank?)
                        vec)]
      (if (set? value)
@@ -357,11 +340,12 @@
        rendered))))
 
 (defn- node-user-property-entries
-  ([node] (node-user-property-entries node nil))
-  ([node labels]
+  ([node] (node-user-property-entries node nil nil))
+  ([node labels] (node-user-property-entries node labels nil))
+  ([node labels uuid->label]
    (->> node
         (filter (fn [[k _]] (displayable-property-key? k)))
-        (map (fn [[k v]] [k (normalize-property-values v labels)]))
+        (map (fn [[k v]] [k (normalize-property-values v labels uuid->label)]))
         (remove (fn [[_ values]] (empty? values)))
         vec)))
 
@@ -385,8 +369,8 @@
                 (map #(str item-indent "- " %) values)))))))
 
 (defn- node-property-lines
-  [node property-titles property-value-labels indent]
-  (let [property-entries (->> (node-user-property-entries node property-value-labels)
+  [node property-titles property-value-labels uuid->label indent]
+  (let [property-entries (->> (node-user-property-entries node property-value-labels uuid->label)
                               sort-property-entries)]
     (->> property-entries
          (mapcat (fn [[property-key values]]
@@ -418,7 +402,7 @@
                text text
                (:block/name node) (:block/name node)
                (:block/uuid node) (some-> (:block/uuid node) str))
-        base (replace-uuid-refs base uuid->label)
+        base (uuid-refs/replace-uuid-refs base uuid->label)
         tags-suffix (tags->suffix (:block/tags node))]
     (cond
       (and base tags-suffix) (str base " " tags-suffix)
@@ -428,8 +412,8 @@
 (defn- resolve-uuid-refs-in-node
   [node uuid->label]
   (cond-> node
-    (:block/title node) (update :block/title replace-uuid-refs uuid->label)
-    (:block/name node) (update :block/name replace-uuid-refs uuid->label)
+    (:block/title node) (update :block/title uuid-refs/replace-uuid-refs uuid->label)
+    (:block/name node) (update :block/name uuid-refs/replace-uuid-refs uuid->label)
     (:block/children node) (update :block/children (fn [children]
                                                      (mapv #(resolve-uuid-refs-in-node % uuid->label) children)))
     (:block/page node) (update :block/page (fn [page]
@@ -458,11 +442,11 @@
 
 (defn- fetch-linked-references
   [config repo root-id]
-  (p/let [refs (transport/invoke config :thread-api/get-block-refs false [repo root-id])
+  (p/let [refs (transport/invoke config :thread-api/get-block-refs [repo root-id])
           ref-ids (vec (keep :db/id refs))
           pulled (if (seq ref-ids)
                    (p/all (map (fn [id]
-                                 (transport/invoke config :thread-api/pull false [repo linked-ref-selector id]))
+                                 (transport/invoke config :thread-api/pull [repo linked-ref-selector id]))
                                ref-ids))
                    [])]
     (let [blocks (vec (remove (fn [block]
@@ -492,7 +476,7 @@
       (p/let [blocks (attach-user-properties config repo blocks)
               pages (if (seq page-ids)
                       (p/all (map (fn [id]
-                                    (transport/invoke config :thread-api/pull false
+                                    (transport/invoke config :thread-api/pull
                                                       [repo [:db/id :block/name :block/title :block/uuid] id]))
                                   page-ids))
                       [])]
@@ -545,13 +529,6 @@
                            :property-value-labels property-value-labels})))
           groups))))
 
-(defn- extract-uuid-refs
-  [value]
-  (->> (re-seq uuid-ref-pattern (or value ""))
-       (map second)
-       (filter common-util/uuid-string?)
-       distinct))
-
 (defn- collect-uuid-refs
   [{:keys [root]} linked-refs]
   (let [collect-nodes (fn collect-nodes [node]
@@ -565,34 +542,9 @@
                    (mapcat (fn [node] (keep node [:block/title :block/name])))
                    (remove string/blank?))]
     (->> texts
-         (mapcat extract-uuid-refs)
+         (mapcat uuid-refs/extract-uuid-refs)
          distinct
          vec)))
-
-(defn- uuid-entity-label
-  [entity]
-  (let [uuid-str (some-> (:block/uuid entity) str)]
-    (or (:block/title entity)
-        (:block/name entity)
-        uuid-str)))
-
-(defn- fetch-uuid-entities
-  [config repo uuid-strings]
-  (if (seq uuid-strings)
-    (p/let [blocks (p/all (map (fn [uuid-str]
-                                 (transport/invoke config :thread-api/pull false
-                                                   [repo [:db/id :block/uuid :block/title :block/name]
-                                                    [:block/uuid (uuid uuid-str)]]))
-                               uuid-strings))]
-      (->> blocks
-           (remove nil?)
-           (map (fn [block]
-                  (let [uuid-str (some-> (:block/uuid block) str)]
-                    [(string/lower-case uuid-str)
-                     {:id (:db/id block)
-                      :label (uuid-entity-label block)}])))
-           (into {})))
-    (p/resolved {})))
 
 (defn- collect-user-property-keys
   [{:keys [root linked-references]}]
@@ -684,7 +636,7 @@
           selector [:db/id :db/ident :block/title :block/name
                     :logseq.property/hide? :logseq.property/public?]]
       (p/let [entities (p/all (map (fn [property-key]
-                                     (transport/invoke config :thread-api/pull false
+                                     (transport/invoke config :thread-api/pull
                                                        [repo selector [:db/ident property-key]]))
                                    keys))]
         (->> (map vector keys entities)
@@ -703,13 +655,13 @@
           uuids* (vec uuids)]
       (p/let [id-entities (if (seq ids*)
                             (p/all (map (fn [id]
-                                          (transport/invoke config :thread-api/pull false
+                                          (transport/invoke config :thread-api/pull
                                                             [repo selector id]))
                                         ids*))
                             [])
               uuid-entities (if (seq uuids*)
                               (p/all (map (fn [uuid]
-                                            (transport/invoke config :thread-api/pull false
+                                            (transport/invoke config :thread-api/pull
                                                               [repo selector [:block/uuid uuid]]))
                                           uuids*))
                               [])]
@@ -754,14 +706,14 @@
                         [?b ?a ?v]]
           ids (vec block-ids)
           built-in-idents (vec displayable-built-in-properties)]
-      (p/let [user-pairs (transport/invoke config :thread-api/q false [repo [idents-query]])
-              built-in-pairs (transport/invoke config :thread-api/q false
+      (p/let [user-pairs (transport/invoke config :thread-api/q [repo [idents-query]])
+              built-in-pairs (transport/invoke config :thread-api/q
                                                [repo [built-in-query built-in-idents]])
               ident-type-pairs (into (vec user-pairs) built-in-pairs)
               datetime-idents (set (keep (fn [[a type]] (when (= :datetime type) a)) ident-type-pairs))
               property-idents (vec (map first ident-type-pairs))]
         (if (seq property-idents)
-          (p/let [rows (transport/invoke config :thread-api/q false
+          (p/let [rows (transport/invoke config :thread-api/q
                                          [repo [props-query ids property-idents]])]
             (reduce (fn [acc [block-id attr value]]
                       (let [value (if (and (number? value) (contains? datetime-idents attr))
@@ -807,7 +759,7 @@
   (let [query [:find (list 'pull '?b tree-block-selector)
                :in '$ '?page-id
                :where ['?b :block/page '?page-id]]]
-    (p/let [rows (transport/invoke config :thread-api/q false [repo [query page-id]])
+    (p/let [rows (transport/invoke config :thread-api/q [repo [query page-id]])
             blocks (->> rows
                         (map first)
                         (remove property-value-block?)
@@ -847,7 +799,7 @@
         uuid-str (:uuid opts)]
     (cond
       (some? id)
-      (p/let [entity (transport/invoke config :thread-api/pull false
+      (p/let [entity (transport/invoke config :thread-api/pull
                                        [repo show-root-selector id])]
         (p/let [entity (attach-user-properties-to-entity config repo entity)]
           (if (missing-show-entity? entity)
@@ -863,12 +815,12 @@
                 (throw (ex-info "entity not found" {:code :entity-not-found})))))))
 
       (seq uuid-str)
-      (p/let [entity (transport/invoke config :thread-api/pull false
+      (p/let [entity (transport/invoke config :thread-api/pull
                                        [repo show-root-selector
                                         [:block/uuid (uuid uuid-str)]])
               entity (if (:db/id entity)
                        entity
-                       (transport/invoke config :thread-api/pull false
+                       (transport/invoke config :thread-api/pull
                                          [repo show-root-selector
                                           [:block/uuid uuid-str]]))]
         (p/let [entity (attach-user-properties-to-entity config repo entity)]
@@ -885,7 +837,7 @@
                 (throw (ex-info "entity not found" {:code :entity-not-found})))))))
 
       (seq page)
-      (p/let [page-entity (transport/invoke config :thread-api/pull false
+      (p/let [page-entity (transport/invoke config :thread-api/pull
                                             [repo [:db/id :db/ident :block/uuid :block/title
                                                    :logseq.property/deleted-at
                                                    {:logseq.property/status [:db/ident :block/title]}
@@ -923,7 +875,7 @@
                           (str id-padding (style-glyph prefix)))
         append-property-lines (fn [node prefix]
                                 (let [indent (property-indent prefix)
-                                      prop-lines (node-property-lines node property-titles property-value-labels indent)]
+                                      prop-lines (node-property-lines node property-titles property-value-labels uuid->label indent)]
                                   (doseq [line prop-lines]
                                     (swap! lines conj line))))
         walk (fn walk [node prefix]
@@ -1031,7 +983,7 @@
                          (or linked-refs {:count 0 :blocks []})
                          {:count 0 :blocks []})
           uuid-refs (collect-uuid-refs tree-data linked-refs*)
-          uuid->entity (fetch-uuid-entities config (:repo action) uuid-refs)
+          uuid->entity (uuid-refs/fetch-uuid-entities config (:repo action) uuid-refs)
           uuid->label (->> uuid->entity
                            (keep (fn [[uuid-key {:keys [label]}]]
                                    (when (seq label)
@@ -1119,9 +1071,27 @@
       (assoc tree-data :breadcrumb-line breadcrumb-line)
       tree-data)))
 
+(defn- attach-property-value-uuid-labels
+  [config action tree-data]
+  (let [property-value-labels (:property-value-labels tree-data)
+        nested-uuid-refs (uuid-refs/collect-uuid-refs-from-strings (vals property-value-labels))]
+    (if (seq nested-uuid-refs)
+      (p/let [nested-uuid->entity (uuid-refs/fetch-uuid-entities config (:repo action) nested-uuid-refs)
+              nested-uuid->label (->> nested-uuid->entity
+                                      (keep (fn [[uuid-key {:keys [label]}]]
+                                              (when (seq label)
+                                                [uuid-key label])))
+                                      (into {}))]
+        (-> tree-data
+            (update :uuid->entity merge nested-uuid->entity)
+            (update :uuid->label merge nested-uuid->label)
+            (update :referenced-uuids #(vec (distinct (concat (or % []) nested-uuid-refs))))))
+      (p/resolved tree-data))))
+
 (defn- render-tree-text-with-properties
   [config action tree-data]
   (p/let [tree-data (attach-property-titles config (:repo action) tree-data)
+          tree-data (attach-property-value-uuid-labels config action tree-data)
           tree-data (attach-breadcrumb-line config action tree-data)]
     (render-tree-text tree-data action)))
 

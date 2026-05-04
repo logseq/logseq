@@ -115,7 +115,7 @@
 
 (defn invoke
   [{:keys [base-url timeout-ms profile-session]}
-   method direct-pass? args]
+   method args]
   (let [base-url (normalize-base-url base-url)
         method* (cond
                   (keyword? method) (subs (str method) 1)
@@ -128,43 +128,28 @@
           stage-key (str "transport.invoke:" method*)
           start-ms (js/Date.now)
           args-preview (cli-log/truncate-preview args)
-          payload (if direct-pass?
-                    {:method method*
-                     :directPass true
-                     :args args}
-                    {:method method*
-                     :directPass false
-                     :argsTransit (ldb/write-transit-str args)})
+          payload {:method method*
+                   :argsTransit (ldb/write-transit-str args)}
           body (js/JSON.stringify (clj->js payload))]
       (profile/time! profile-session stage-key
-                   (fn []
-                     (log/debug :event :cli.transport/invoke
-                                :method method*
-                                :direct-pass? direct-pass?
-                                :args args-preview
-                                :url url)
-                     (p/let [{:keys [body]} (request {:method "POST"
-                                                      :url url
-                                                      :headers (base-headers)
-                                                      :body body
-                                                      :timeout-ms timeout-ms})
-                             {:keys [result resultTransit]} (js->clj (js/JSON.parse body) :keywordize-keys true)]
-                       (if direct-pass?
-                         (let [response-preview (cli-log/truncate-preview result)]
-                           (log/debug :event :cli.transport/response
-                                      :method method*
-                                      :direct-pass? direct-pass?
-                                      :elapsed-ms (- (js/Date.now) start-ms)
-                                      :response response-preview)
-                           result)
-                         (let [decoded (ldb/read-transit-str resultTransit)
+                     (fn []
+                       (log/debug :event :cli.transport/invoke
+                                  :method method*
+                                  :args args-preview
+                                  :url url)
+                       (p/let [{:keys [body]} (request {:method "POST"
+                                                        :url url
+                                                        :headers (base-headers)
+                                                        :body body
+                                                        :timeout-ms timeout-ms})
+                               {:keys [resultTransit]} (js->clj (js/JSON.parse body) :keywordize-keys true)
+                               decoded (ldb/read-transit-str resultTransit)
                                response-preview (cli-log/truncate-preview decoded)]
-                           (log/debug :event :cli.transport/response
-                                      :method method*
-                                      :direct-pass? direct-pass?
-                                      :elapsed-ms (- (js/Date.now) start-ms)
-                                      :response response-preview)
-                           decoded))))))))
+                         (log/debug :event :cli.transport/response
+                                    :method method*
+                                    :elapsed-ms (- (js/Date.now) start-ms)
+                                    :response response-preview)
+                         decoded))))))
 
 (defn- decode-event
   [{:keys [type payload]}]

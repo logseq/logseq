@@ -282,7 +282,7 @@
                 args (cond-> (into [(:query action)] (:inputs action))
                        (= '% (last (:in query-map)))
                        (conj (rules/extract-rules rules/db-query-dsl-rules)))
-                results (transport/invoke cfg :thread-api/q false [(:repo action) args])]
+                results (transport/invoke cfg :thread-api/q [(:repo action) args])]
           {:status :ok
            :data {:result results}}))))
 

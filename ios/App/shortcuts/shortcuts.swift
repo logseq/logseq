@@ -150,8 +150,9 @@ struct Shortcuts: Widget {
     }
 }
 
-#Preview(as: .systemSmall) {
-    Shortcuts()
-} timeline: {
-    SimpleEntry(date: .now)
+struct Shortcuts_Previews: PreviewProvider {
+    static var previews: some View {
+        ShortcutsEntryView(entry: SimpleEntry(date: .now))
+            .previewContext(WidgetPreviewContext(family: .systemSmall))
+    }
 }

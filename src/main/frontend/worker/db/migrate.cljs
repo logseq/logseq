@@ -34,15 +34,30 @@
             :block/name (common-util/page-name-sanity-lc (:block/title page))})))
      pages)))
 
-(defn remove-block-path-refs
-  [db]
-  (when (d/entity db :block/path-refs)
-    (let [remove-datoms (->> (d/datoms db :avet :block/path-refs)
+(defn- delete-property
+  [db property-key]
+  (if (d/entity db property-key)
+    (let [remove-datoms (->> (d/datoms db :avet property-key)
                              (map :e)
                              (distinct)
                              (mapv (fn [id]
-                                     [:db/retract id :block/path-refs])))]
-      (conj remove-datoms [:db/retractEntity :block/path-refs]))))
+                                     [:db/retract id property-key])))]
+      (conj remove-datoms [:db/retractEntity property-key]))
+    (let [eids (d/q
+                 '[:find [?e ...]
+                   :in $ ?property-key
+                   :where
+                   [?e ?property-key ?v]]
+                 db
+                 property-key)]
+      (map
+        (fn [eid]
+          [:db/retract eid property-key])
+        eids))))
+
+(defn remove-block-path-refs
+  [db]
+  (delete-property db :block/path-refs))
 
 (defn- remove-position-property-from-url-properties
   [db]
@@ -80,7 +95,10 @@
                           :logseq.property/deleted-by-ref
                           :logseq.property.recycle/original-parent
                           :logseq.property.recycle/original-page
-                          :logseq.property.recycle/original-order]}]])
+                          :logseq.property.recycle/original-order]}]
+   ["65.25" {:delete-properties [:block/pre-block?
+                                 :logseq.property.embedding/hnsw-label
+                                 :logseq.property.embedding/hnsw-label-updated-at]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
@@ -172,7 +190,7 @@
 
 (defn- upgrade-version!
   "Return tx-data"
-  [conn version {:keys [properties classes fix] :as migrate-updates}]
+  [conn version {:keys [properties classes fix delete-properties] :as migrate-updates}]
   (let [version (db-schema/parse-schema-version version)
         db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
@@ -196,7 +214,11 @@
                                    {:db/ident db-ident})) new-classes)
         fixes (when (fn? fix)
                 (fix db))
-        tx-data (concat new-class-idents new-properties new-classes fixes)
+        delete-properties-tx (mapcat
+                               (fn [property]
+                                 (delete-property db property))
+                               delete-properties)
+        tx-data (concat new-class-idents new-properties new-classes fixes delete-properties-tx)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
                   tx-data)

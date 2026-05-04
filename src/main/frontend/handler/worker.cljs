@@ -60,6 +60,12 @@
 (defmethod handle :sync-db-changes [_ _worker data]
   (state/pub-event! [:db/sync-changes data]))
 
+(defmethod handle :sync-conflicts-updated [_ _worker {:keys [repo block-uuid conflicts]}]
+  (when (and (seq repo) block-uuid)
+    (state/set-state! :sync/block-conflicts
+                      (or conflicts [])
+                      :path-in-sub-atom [repo (str block-uuid)])))
+
 (defmethod handle :rtc-log [_ _worker log]
   (state/pub-event! [:rtc/log log]))
 
@@ -84,7 +90,7 @@
 
 (defn- <invoke-worker-thread-api
   [wrapped-worker qkw & args]
-  (apply wrapped-worker qkw false args))
+  (apply wrapped-worker qkw args))
 
 (defn- ui-request-error->payload
   [error]
