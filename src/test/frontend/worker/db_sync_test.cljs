@@ -64,6 +64,11 @@
       (finally
         (aset js/console "error" original-console-error)))))
 
+(defn- thenable?
+  [value]
+  (and (some? value)
+       (fn? (.-then value))))
+
 (use-fixtures :once (test-noise/mute-console-fixture ::db-sync-test))
 
 (defn- js-row
@@ -249,7 +254,7 @@
                     (swap! client-op/*repo->pending-local-tx-count dissoc test-repo)
                     (reset! worker-state/*datascript-conns db-prev)
                     (reset! worker-state/*client-ops-conns ops-prev))]
-      (if (p/promise? result)
+      (if (or (p/promise? result) (thenable? result))
         (p/finally result cleanup)
         (do
           (cleanup)
@@ -749,17 +754,19 @@
                          :online-users (atom [])
                          :ws-state (atom :open)}]
              (reset! db-sync/*repo->latest-remote-tx {})
-             (with-datascript-conns conn client-ops-conn
-               (fn []
-                 (client-op/update-local-tx test-repo 1)
-                 (-> (p/let [_ (sync-handle-message/handle-message! test-repo client raw-new)
-                             _ (sync-handle-message/handle-message! test-repo client raw-stale)
-                             parent' (d/entity @conn parent-id)]
-                       (is (= "remote-new-title" (:block/title parent')))
-                       (is (= 2 (client-op/get-local-tx test-repo))))
-                     (p/finally (fn []
-                                  (reset! db-sync/*repo->latest-remote-tx latest-prev)
-                                  (done))))))))))
+             (-> (with-datascript-conns conn client-ops-conn
+                   (fn []
+                     (client-op/update-local-tx test-repo 1)
+                     (-> (sync-handle-message/handle-message! test-repo client raw-new)
+                         (p/then (fn [_]
+                                   (sync-handle-message/handle-message! test-repo client raw-stale)))
+                         (p/then (fn [_]
+                                   (let [parent' (d/entity @conn parent-id)]
+                                     (is (= "remote-new-title" (:block/title parent')))
+                                     (is (= 2 (client-op/get-local-tx test-repo)))))))))
+                 (p/finally (fn []
+                              (reset! db-sync/*repo->latest-remote-tx latest-prev)
+                              (done)))))))
 
 (deftest pull-ok-overlapping-window-applies-only-newer-txs-test
   (testing "pull/ok may include already-applied older txs, but should only apply newer contiguous txs"
@@ -778,14 +785,15 @@
                          :inflight (atom [])
                          :online-users (atom [])
                          :ws-state (atom :open)}]
-             (with-datascript-conns conn client-ops-conn
-               (fn []
-                 (client-op/update-local-tx test-repo 1)
-                 (-> (p/let [_ (sync-handle-message/handle-message! test-repo client raw-message)
-                             parent' (d/entity @conn parent-id)]
-                       (is (= "remote-new-title" (:block/title parent')))
-                       (is (= 2 (client-op/get-local-tx test-repo))))
-                     (p/finally done))))))))
+             (-> (with-datascript-conns conn client-ops-conn
+                   (fn []
+                     (client-op/update-local-tx test-repo 1)
+                     (-> (sync-handle-message/handle-message! test-repo client raw-message)
+                         (p/then (fn [_]
+                                   (let [parent' (d/entity @conn parent-id)]
+                                     (is (= "remote-new-title" (:block/title parent')))
+                                     (is (= 2 (client-op/get-local-tx test-repo)))))))))
+                 (p/finally done)))))))
 
 (deftest pull-ok-gapful-window-repulls-instead-of-applying-test
   (testing "non-contiguous pull/ok window is rejected before apply"
@@ -1021,7 +1029,7 @@
   (testing "pull/ok clears pending pull marker so future changed can request next pull"
     (let [raw-message (js/JSON.stringify
                        (clj->js {:type "pull/ok"
-                                 :t 4
+                                 :t 3
                                  :txs []}))
           client {:repo test-repo
                   :graph-id "graph-1"
