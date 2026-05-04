@@ -1642,8 +1642,17 @@
 (defn on-tab
   "`direction` = :left | :right."
   [direction]
-  (let [blocks (get-selected-ordered-blocks)]
-    (block-handler/indent-outdent-blocks! blocks (= direction :right) nil)))
+  (let [blocks (get-selected-ordered-blocks)
+        indent? (= direction :right)
+        page (state/get-current-page)
+        zoom-root (when (and (not indent?) page (util/uuid-string? page))
+                    (db/entity [:block/uuid (parse-uuid page)]))
+        blocks (if zoom-root
+                 (remove (fn [b]
+                           (= (:db/id (:block/parent b)) (:db/id zoom-root)))
+                         blocks)
+                 blocks)]
+    (block-handler/indent-outdent-blocks! blocks indent? nil)))
 
 (defn- get-link [format link label]
   (let [link (or link "")
@@ -2486,11 +2495,18 @@
     (when block
       (let [node block-container
             prev-container-id (get-node-container-id node)
-            container-id (get-new-container-id (if indent? :indent :outdent) {})]
-        (p/do!
-         (block-handler/indent-outdent-blocks! [block] indent? save-current-block!)
-         (when (and (not= prev-container-id container-id) container-id)
-           (state/set-editing-block-id! [container-id (:block/uuid block)])))))))
+            container-id (get-new-container-id (if indent? :indent :outdent) {})
+            outdent-past-zoom-root? (when-not indent?
+                                      (let [page (state/get-current-page)]
+                                        (and page
+                                             (util/uuid-string? page)
+                                             (let [zoom-root (db/entity [:block/uuid (parse-uuid page)])]
+                                               (= (:db/id (:block/parent block)) (:db/id zoom-root))))))]
+        (when-not outdent-past-zoom-root?
+          (p/do!
+           (block-handler/indent-outdent-blocks! [block] indent? save-current-block!)
+           (when (and (not= prev-container-id container-id) container-id)
+             (state/set-editing-block-id! [container-id (:block/uuid block)]))))))))
 
 (defn keydown-tab-handler
   [direction]
