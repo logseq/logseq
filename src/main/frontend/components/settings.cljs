@@ -748,33 +748,32 @@
 (rum/defcs markdown-mirror-row < rum/reactive
   (rum/local false ::regenerating?)
   [state t]
-  (let [enabled? (true? (state/sub [:electron/user-cfgs :feature/markdown-mirror?]))
+  (let [repo (state/get-current-repo)
+        enabled? (true? (:feature/markdown-mirror? (when repo (state/sub [:config repo]))))
         *regenerating? (::regenerating? state)
         regenerate! (fn []
-                      (let [repo (state/get-current-repo)]
-                        (when (and repo @state/*db-worker (not @*regenerating?))
-                          (reset! *regenerating? true)
-                          (-> (state/<invoke-db-worker :thread-api/markdown-mirror-regenerate repo)
-                              (p/then (fn [_]
-                                        (notification/show!
-                                         (t :settings.features/markdown-mirror-regenerate-success)
-                                         :success)))
-                              (p/catch (fn [error]
-                                         (log/error :markdown-mirror/regenerate-failed
-                                                    {:repo repo
-                                                     :error error})
-                                         (notification/show!
-                                          (t :settings.features/markdown-mirror-regenerate-error (str error))
-                                          :error)))
-                              (p/finally #(reset! *regenerating? false))))))]
+                      (when (and repo @state/*db-worker (not @*regenerating?))
+                        (reset! *regenerating? true)
+                        (-> (state/<invoke-db-worker :thread-api/markdown-mirror-regenerate repo)
+                            (p/then (fn [_]
+                                      (notification/show!
+                                       (t :settings.features/markdown-mirror-regenerate-success)
+                                       :success)))
+                            (p/catch (fn [error]
+                                       (log/error :markdown-mirror/regenerate-failed
+                                                  {:repo repo
+                                                   :error error})
+                                       (notification/show!
+                                        (t :settings.features/markdown-mirror-regenerate-error (str error))
+                                        :error)))
+                            (p/finally #(reset! *regenerating? false)))))]
     (toggle
      "markdown-mirror"
      (t :settings.features/markdown-mirror)
      enabled?
      #(let [next-enabled? (not enabled?)
             repo (state/get-current-repo)]
-        (state/set-state! [:electron/user-cfgs :feature/markdown-mirror?] next-enabled?)
-        (ipc/ipc :userAppCfgs :feature/markdown-mirror? next-enabled?)
+        (config-handler/set-config! :feature/markdown-mirror? next-enabled?)
         (when (and repo @state/*db-worker)
           (-> (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled repo next-enabled?)
               (p/catch (fn [error]
