@@ -47,6 +47,13 @@
        (filter :block/page)
        first))
 
+(defn- page-block-titles
+  [db page-title]
+  (let [page (db-test/find-page-by-title db page-title)]
+    (->> (:block/_parent page)
+         (sort-by :block/order)
+         (mapv :block/title))))
+
 (defn- block-title-includes?
   [db block-uuid s]
   (string/includes? (:block/title (d/entity db [:block/uuid block-uuid])) s))
@@ -57,9 +64,13 @@
 (defn- block-marker [uuid]
   (str "  id:: " uuid))
 
+(defn- plain-block-line
+  [title]
+  (str "- " title))
+
 (defn- block-line
-  [uuid title]
-  (str "- " title "\n" (block-marker uuid)))
+  [_uuid title]
+  (plain-block-line title))
 
 (defn- nested-block-line
   [uuid title]
@@ -131,6 +142,52 @@
                     (is (= (str (page-marker page-uuid) "\n\n\n"
                                 (block-line block-uuid "See [[Foo]]"))
                            (get @files (page-path "pages/Source.md"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-omits-id-for-ordinary-leaf-blocks-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "11111111-1111-4111-8111-111111111115"
+          block-uuid #uuid "11111111-1111-4111-8111-111111111116"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Sparse"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "hello"
+                                               :block/uuid block-uuid}]}]})
+          page (db-test/find-page-by-title @conn "Sparse")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker page-uuid) "\n\n\n"
+                                (plain-block-line "hello"))
+                           (get @files (page-path "pages/Sparse.md"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-keeps-id-for-referenced-blocks-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "11111111-1111-4111-8111-111111111117"
+          target-uuid #uuid "11111111-1111-4111-8111-111111111118"
+          referrer-uuid #uuid "11111111-1111-4111-8111-111111111119"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Referenced"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "target"
+                                               :block/uuid target-uuid}
+                                              {:block/title "referrer"
+                                               :block/uuid referrer-uuid}]}]})
+          page (db-test/find-page-by-title @conn "Referenced")
+          target (d/entity @conn [:block/uuid target-uuid])
+          referrer (d/entity @conn [:block/uuid referrer-uuid])
+          _ (d/transact! conn [[:db/add (:db/id referrer) :block/refs (:db/id target)]])]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker page-uuid) "\n\n\n"
+                                "- target\n"
+                                (block-marker target-uuid) "\n"
+                                "- referrer")
+                           (get @files (page-path "pages/Referenced.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -395,7 +452,7 @@
                                                                               :relative-path relative-path}
                                                               {:platform platform})]
             (is (string/includes? generated (page-marker page-uuid)))
-            (is (string/includes? generated (block-marker block-uuid)))
+            (is (not (string/includes? generated (block-marker block-uuid))))
             (is (= :imported (:status result)))
             (is (= "after" (:block/title (d/entity @conn [:block/uuid block-uuid])))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -652,6 +709,90 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest two-way-unmarked-block-edit-keeps-existing-block-identity-test
+  (async done
+    (let [page-uuid #uuid "99999999-9999-4999-8999-999999999994"
+          block-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Unmarked Edit"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "before"
+                                               :block/uuid block-uuid}]}]})
+          content (str (page-marker page-uuid) "\n"
+                       "- after")]
+      (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Unmarked Edit.md" content {})
+          (p/then (fn [result]
+                    (is (= :imported (:status result)))
+                    (is (= "after" (:block/title (d/entity @conn [:block/uuid block-uuid]))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-unmarked-block-delete-keeps-surviving-block-identity-test
+  (async done
+    (let [page-uuid #uuid "99999999-9999-4999-8999-999999999993"
+          keep-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab2"
+          delete-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab3"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Unmarked Delete"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "keep"
+                                               :block/uuid keep-uuid}
+                                              {:block/title "delete"
+                                               :block/uuid delete-uuid}]}]})
+          content (str (page-marker page-uuid) "\n"
+                       "- keep")]
+      (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Unmarked Delete.md" content {})
+          (p/then (fn [result]
+                    (is (= :imported (:status result)))
+                    (is (= "keep" (:block/title (d/entity @conn [:block/uuid keep-uuid]))))
+                    (is (nil? (d/entity @conn [:block/uuid delete-uuid])))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-unmarked-block-insert-keeps-existing-block-identity-test
+  (async done
+    (let [page-uuid #uuid "99999999-9999-4999-8999-999999999992"
+          block-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab4"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Unmarked Insert"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "existing"
+                                               :block/uuid block-uuid}]}]})
+          content (str (page-marker page-uuid) "\n"
+                       "- existing\n"
+                       "- inserted")]
+      (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Unmarked Insert.md" content {})
+          (p/then (fn [result]
+                    (is (= :imported (:status result)))
+                    (is (= "existing" (:block/title (d/entity @conn [:block/uuid block-uuid]))))
+                    (is (some? (block-by-title @conn "inserted")))
+                    (is (= ["existing" "inserted"]
+                           (page-block-titles @conn "Unmarked Insert")))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-unmarked-block-insert-before-existing-preserves-sync-identity-test
+  (async done
+    (let [page-uuid #uuid "99999999-9999-4999-8999-999999999991"
+          block-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab5"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Unmarked Insert Before"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "existing"
+                                               :block/uuid block-uuid}]}]})
+          content (str (page-marker page-uuid) "\n"
+                       "- inserted\n"
+                       "- existing")]
+      (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Unmarked Insert Before.md" content {})
+          (p/then (fn [result]
+                    (is (= :imported (:status result)))
+                    (is (= "existing" (:block/title (d/entity @conn [:block/uuid block-uuid]))))
+                    (is (some? (block-by-title @conn "inserted")))
+                    (is (= ["inserted" "existing"]
+                           (page-block-titles @conn "Unmarked Insert Before")))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest two-way-file-edit-can-change-generated-block-content-immediately-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
@@ -825,7 +966,7 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
-(deftest two-way-inserted-block-gets-marker-through-suppressed-render-test
+(deftest two-way-inserted-block-rematerializes-sparse-ids-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
           page-uuid #uuid "99999999-9999-4999-8999-999999999997"
@@ -843,8 +984,8 @@
           (p/then (fn [result]
                     (is (= :imported (:status result)))
                     (is (some? (block-by-title @conn "inserted")))
-                    (is (re-find #"(?m)^  id:: [0-9a-fA-F-]{36}$"
-                                 (get @files (page-path "pages/Insert Page.md"))))))
+                    (is (not (re-find #"(?m)^  id:: [0-9a-fA-F-]{36}$"
+                                      (get @files (page-path "pages/Insert Page.md")))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 

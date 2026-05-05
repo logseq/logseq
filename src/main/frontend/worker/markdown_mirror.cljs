@@ -425,6 +425,24 @@
   [page]
   (sort-by :block/order (:block/_parent page)))
 
+(def ^:private basic-block-attrs
+  #{:block/uuid
+    :block/title
+    :block/page
+    :block/parent
+    :block/order
+    :block/created-at
+    :block/updated-at
+    :block/refs
+    :block/tags})
+
+(defn- block-needs-id?
+  [db block]
+  (or (seq (:block/_refs block))
+      (some (fn [datom]
+              (not (contains? basic-block-attrs (:a datom))))
+            (d/datoms db :eavt (:db/id block)))))
+
 (defn- page-blocks-by-uuid
   [db page]
   (->> (mapcat #(ldb/get-block-and-children db (:block/uuid %))
@@ -448,6 +466,139 @@
       (contains? page-block-by-uuid parent-ref)
       (contains? new-uuid-by-index parent-ref)))
 
+(defn- existing-children
+  [page existing-parent]
+  (if existing-parent
+    (sort-by :block/order (:block/_parent existing-parent))
+    (page-root-blocks page)))
+
+(defn- greedy-title-matches
+  [existing parsed]
+  (loop [[parsed-block & more] parsed
+         existing-start 0
+         used-existing #{}
+         matches {}]
+    (if (nil? parsed-block)
+      matches
+      (let [match-idx (first
+                       (keep-indexed
+                        (fn [idx existing-block]
+                          (when (and (<= existing-start idx)
+                                     (not (contains? used-existing idx))
+                                     (= (:block/title existing-block) (:title parsed-block)))
+                            idx))
+                        existing))]
+        (if (some? match-idx)
+          (recur more
+                 (inc match-idx)
+                 (conj used-existing match-idx)
+                 (assoc matches (:idx parsed-block) (nth existing match-idx)))
+          (recur more existing-start used-existing matches))))))
+
+(defn- positional-matches
+  [existing parsed already-matched]
+  (let [matched-parsed (set (keys already-matched))
+        matched-existing (set (map :db/id (vals already-matched)))
+        existing' (remove #(contains? matched-existing (:db/id %)) existing)
+        parsed' (remove #(contains? matched-parsed (:idx %)) parsed)]
+    (into {}
+          (keep (fn [[parsed-block existing-block]]
+                  (when (and parsed-block existing-block)
+                    [(:idx parsed-block) existing-block])))
+          (map vector parsed' existing'))))
+
+(defn- match-sibling-blocks
+  [existing parsed]
+  (let [existing-by-uuid (into {} (map (juxt :block/uuid identity)) existing)
+        explicit-matches (into {}
+                               (keep (fn [parsed-block]
+                                       (when-let [existing-block (and (:uuid parsed-block)
+                                                                      (get existing-by-uuid (:uuid parsed-block)))]
+                                         [(:idx parsed-block) existing-block])))
+                               parsed)
+        matched-parsed (set (keys explicit-matches))
+        matched-existing (set (map :db/id (vals explicit-matches)))
+        existing' (vec (remove #(contains? matched-existing (:db/id %)) existing))
+        parsed' (vec (remove #(or (:uuid %) (contains? matched-parsed (:idx %))) parsed))
+        title-matches (greedy-title-matches existing' parsed')
+        position-matches (positional-matches existing' parsed' title-matches)]
+    (merge explicit-matches title-matches position-matches)))
+
+(defn- infer-existing-block-uuids
+  [page blocks]
+  (let [parsed-by-parent (group-by :parent-ref blocks)]
+    (letfn [(infer-children [existing-parent parsed-parent-ref assignments]
+              (let [parsed-children (get parsed-by-parent parsed-parent-ref)
+                    matches (match-sibling-blocks (existing-children page existing-parent)
+                                                  parsed-children)
+                    assignments' (reduce-kv
+                                  (fn [acc idx existing-block]
+                                    (assoc acc idx (:block/uuid existing-block)))
+                                  assignments
+                                  matches)]
+                (reduce (fn [acc parsed-block]
+                          (let [existing-block (get matches (:idx parsed-block))
+                                parsed-child-ref (or (:uuid parsed-block) (:idx parsed-block))]
+                            (infer-children existing-block parsed-child-ref acc)))
+                        assignments'
+                        parsed-children)))]
+      (let [assignments (infer-children nil nil {})]
+        (mapv (fn [block]
+                (cond-> block
+                  (nil? (:uuid block))
+                  (assoc :uuid (get assignments (:idx block)))
+
+                  (integer? (:parent-ref block))
+                  (update :parent-ref #(or (get assignments %) %))))
+              blocks)))))
+
+(defn- parsed-children-by-parent
+  [blocks]
+  (->> blocks
+       (group-by :parent-ref)
+       (map (fn [[parent-ref children]]
+              [parent-ref (sort-by :idx children)]))
+       (into {})))
+
+(defn- assign-new-block-orders
+  [page page-block-by-uuid blocks]
+  (let [children-by-parent (parsed-children-by-parent blocks)]
+    (letfn [(existing-order [block]
+              (some-> (:uuid block) page-block-by-uuid :block/order))
+            (next-existing-order [blocks]
+              (some existing-order blocks))
+            (assign-children [parent-ref order-by-index]
+              (loop [[block & more] (get children-by-parent parent-ref)
+                     previous-order nil
+                     order-by-index order-by-index]
+                (if (nil? block)
+                  order-by-index
+                  (if-let [order (existing-order block)]
+                    (recur more
+                           order
+                           (assign-children (:uuid block) order-by-index))
+                    (let [new-run (vec (cons block (take-while #(nil? (existing-order %)) more)))
+                          remaining (drop (count new-run) more)
+                          next-order (next-existing-order remaining)
+                          orders (db-order/gen-n-keys (count new-run) previous-order next-order)
+                          order-by-index' (reduce (fn [acc [block order]]
+                                                    (assoc acc (:idx block) order))
+                                                  order-by-index
+                                                  (map vector new-run orders))
+                          order-by-index'' (reduce (fn [acc block]
+                                                     (assign-children (:idx block) acc))
+                                                   order-by-index'
+                                                   new-run)]
+                      (recur remaining
+                             (last orders)
+                             order-by-index''))))))]
+      (let [order-by-index (assign-children nil {})]
+        (mapv (fn [block]
+                (cond-> block
+                  (nil? (:uuid block))
+                  (assoc :order (get order-by-index (:idx block)))))
+              blocks)))))
+
 (defn- new-block-tx
   [page-id block page-block-by-uuid new-uuid-by-index now]
   (let [block-uuid (or (:uuid block)
@@ -461,7 +612,7 @@
      :block/title (or (:db-title block) (:title block))
      :block/page page-id
      :block/parent parent-id
-     :block/order (db-order/gen-key)
+     :block/order (or (:order block) (db-order/gen-key))
      :block/created-at now
      :block/updated-at now}))
 
@@ -576,8 +727,9 @@
                   (let [indent (apply str (repeat (dec level) "  "))
                         id-indent (str indent "  ")
                         children (sort-by :block/order (:block/_parent block))]
-                    (concat [(str indent "- " (:block/title block))
-                             (id-property-line id-indent (:block/uuid block))]
+                    (concat (cond-> [(str indent "- " (:block/title block))]
+                              (block-needs-id? db block)
+                              (conj (id-property-line id-indent (:block/uuid block))))
                             (mapcat #(render-block % (inc level)) children))))]
           (mapcat #(render-block % 1) (page-root-blocks page)))]
     (string/join "\n"
@@ -588,7 +740,9 @@
   [db page]
   (->> (mapcat #(ldb/get-block-and-children db (:block/uuid %))
                (page-root-blocks page))
-       (map (fn [block] {:uuid (:block/uuid block)}))))
+       (map (fn [block]
+              {:uuid (:block/uuid block)
+               :emit-id? (block-needs-id? db block)}))))
 
 (defn- add-ids-to-rendered-content
   [db page content]
@@ -603,7 +757,7 @@
           (let [lines' (cond-> lines
                          (not seen-block?) (into ["" ""])
                          true (conj line)
-                         block-id (conj (id-property-line (str spaces "  ") (:uuid block-id))))]
+                         (:emit-id? block-id) (conj (id-property-line (str spaces "  ") (:uuid block-id))))]
             (recur more
                    more-block-ids
                    lines'
@@ -706,14 +860,17 @@
                    :reason :block-marker-outside-page})
 
       :else
-      (let [new-uuids (->> (:blocks parsed)
+      (let [blocks (->> (:blocks parsed)
+                        (infer-existing-block-uuids page)
+                        (assign-new-block-orders page page-block-by-uuid))
+            new-uuids (->> blocks
                            (keep-indexed (fn [idx block]
                                            (when (nil? (:uuid block))
                                              [idx (random-uuid)])))
                            (into {}))
             now (common-util/time-ms)
             {parsed-blocks :blocks
-             ref-page-txs :page-txs} (with-content-ref-plans db (:blocks parsed) now)]
+             ref-page-txs :page-txs} (with-content-ref-plans db blocks now)]
         (if-not (every? #(parsed-parent-valid? % page-block-by-uuid new-uuids)
                         parsed-blocks)
           (p/resolved {:status :error

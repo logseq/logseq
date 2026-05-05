@@ -206,11 +206,11 @@ builds do not have the same graph-directory filesystem guarantees.
    APIs instead of introducing a separate renderer-side serializer.
 2. The mirror output should match normal Markdown export semantics for page
    content.
-3. Mirror files include `id:: <uuid>` property lines for page and block
-   identity. These `id::` lines are the only supported identity markers for
-   file-to-DB imports. Page identity is written in the page property section,
-   and block identity is written as an indented block property directly below
-   the block list item.
+3. Mirror files always include a page `id:: <uuid>` property line. Block
+   identity is sparse: ordinary blocks omit `id::`, while blocks that need a
+   stable visible address, such as blocks referenced by other blocks or blocks
+   with non-content identity-bearing state, include an indented block
+   `id:: <uuid>` property directly below the block list item.
 4. When page properties are present, including the page `id::` line, write two
    empty lines between the page property section and the first block.
 5. Mirror files include block and page property drawers, including user
@@ -234,8 +234,7 @@ builds do not have the same graph-directory filesystem guarantees.
    like `- not a block` inside the fence must not create a Logseq child block.
 5. Unsupported top-level Markdown, for example a top-level quote or fenced code
    block that is not under a `- ` item, is rejected. Rejecting is safer than
-   silently dropping it and then treating omitted block identity lines as
-   deletes.
+   silently dropping it and then treating omitted block list items as deletes.
 6. Property drawer edits from mirror files are ignored. The DB remains the
    source of truth for page and block properties.
 7. File deletes, moves, and directory deletes from the mirror watcher are
@@ -244,12 +243,15 @@ builds do not have the same graph-directory filesystem guarantees.
 8. Creating a new page or journal from a new mirror file is supported only when
    the path maps to `pages/<name>.md` or `journals/YYYY_MM_DD.md` and the file
    contains no page or block `id::` lines from another graph object.
-9. `[[page]]` references in imported block content create missing pages and are
+9. Existing unmarked blocks are matched back to current DB blocks by sibling
+   structure and stable content where possible, preserving block UUIDs for sync
+   convergence while avoiding verbose ids in ordinary Markdown.
+10. `[[page]]` references in imported block content create missing pages and are
    stored using internal id refs in the DB transaction.
-10. Simple hashtag refs such as `#tag1` and page-ref hashtags such as
+11. Simple hashtag refs such as `#tag1` and page-ref hashtags such as
     `#[[tag one]]` create missing tag/class pages and attach the tag to the
     block.
-11. The watcher suppresses Logseq's own mirror writes by comparing recent written
+12. The watcher suppresses Logseq's own mirror writes by comparing recent written
     content, not by ignoring every file event for a path during a time window.
     A real external edit that changes file content must import immediately.
 
