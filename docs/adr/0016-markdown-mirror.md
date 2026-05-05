@@ -1,7 +1,7 @@
 # ADR 0016: Electron Markdown Mirror
 
 Date: 2026-05-05
-Status: Proposed
+Status: Accepted
 
 ## Context
 Logseq DB graphs do not expose one editable Markdown file per page in the graph
@@ -22,14 +22,14 @@ builds do not have the same graph-directory filesystem guarantees.
 3. When the setting is enabled for the Electron app, Logseq writes derived
    Markdown files under the current graph directory:
    - journals:
-     `markdown-mirror/journals/<journal-file-name>.md`
+     `mirror/markdown/journals/<journal-file-name>.md`
    - other pages:
-     `markdown-mirror/pages/<page-file-name>.md`
+     `mirror/markdown/pages/<page-file-name>.md`
 4. For a graph at `~/logseq/graphs/graph-xxx`, mirror files are written under:
-   - `~/logseq/graphs/graph-xxx/markdown-mirror/journals/`
-   - `~/logseq/graphs/graph-xxx/markdown-mirror/pages/`
+   - `~/logseq/graphs/graph-xxx/mirror/markdown/journals/`
+   - `~/logseq/graphs/graph-xxx/mirror/markdown/pages/`
 5. Markdown Mirror is derived output. The DB remains the source of truth.
-6. Files under `markdown-mirror/**` must be ignored by graph import, file
+6. Files under `mirror/markdown/**` must be ignored by graph import, file
    watchers, and graph parsing so the mirror never feeds back into the graph.
 7. The feature is not available in browser or mobile builds, even if a stale
    setting value exists.
@@ -68,8 +68,8 @@ builds do not have the same graph-directory filesystem guarantees.
    Electron app and CLI do not produce different file names for the same graph.
 
 ## Output Layout and Naming
-1. Journal pages are written below `markdown-mirror/journals/`.
-2. Non-journal pages are written below `markdown-mirror/pages/`.
+1. Journal pages are written below `mirror/markdown/journals/`.
+2. Non-journal pages are written below `mirror/markdown/pages/`.
 3. Journal file names use the existing Logseq journal file-name rules for the
    graph configuration.
 4. Non-journal page file names use the normalized page title:
@@ -88,14 +88,14 @@ builds do not have the same graph-directory filesystem guarantees.
    page is renamed or deleted. Do not renumber existing duplicate-title mirror
    paths when another duplicate is created or removed.
 9. The implementation keeps a per-graph mirror index under
-   `markdown-mirror/.index.edn`.
+   `mirror/markdown/.index.edn`.
 10. The mirror index stores at least:
    - page uuid -> relative mirror path
    - relative mirror path -> page uuid
    - page uuid -> last known normalized title stem
 11. The mirror index is implementation metadata for path stability. It is not
    graph content and must be ignored by graph import and watchers along with the
-   rest of `markdown-mirror/**`.
+   rest of `mirror/markdown/**`.
 12. All mirror file names pass through a single cross-platform filename
    normalizer before joining paths.
 13. Duplicate journal-day entities indicate invalid graph state for the mirror.
@@ -109,7 +109,7 @@ builds do not have the same graph-directory filesystem guarantees.
 16. Page deletion deletes the corresponding mirror file and removes the page uuid
    from the mirror index.
 17. The write guard must reject any computed path outside the graph's
-   `markdown-mirror/` directory.
+   `mirror/markdown/` directory.
 18. Built-in pages and property pages are excluded from path allocation and
    mirror writes. User Tag/Class pages are not excluded by this rule. If a
    previously mirrored page becomes excluded, the old mirror file is removed.
@@ -209,7 +209,7 @@ builds do not have the same graph-directory filesystem guarantees.
 4. Mirror files include block and page property drawers, including user
    properties, with rendered property values.
 5. Assets are referenced as normal exported Markdown references. This ADR does
-   not copy assets into `markdown-mirror/`.
+   not copy assets into `mirror/markdown/`.
 6. Page references remain in Logseq wiki-link form, for example `[[Foo]]`.
 7. Ambiguous page references caused by duplicate page titles are an accepted
    limitation of Markdown Mirror. Do not rewrite page references to uuid-based
@@ -227,7 +227,7 @@ builds do not have the same graph-directory filesystem guarantees.
 
 ## Non-goals
 1. Markdown Mirror is not bidirectional sync.
-2. Editing files in `markdown-mirror/` does not update the graph.
+2. Editing files in `mirror/markdown/` does not update the graph.
 3. The mirror is not a backup format with guaranteed import fidelity.
 4. The mirror does not replace existing graph export features.
 5. The mirror does not support browser or mobile runtimes in this ADR.
@@ -241,7 +241,7 @@ builds do not have the same graph-directory filesystem guarantees.
 - The output layout is predictable for tools that watch journals and pages
   separately.
 - Page file names remain readable and practical in external Markdown tools.
-- Ignoring `markdown-mirror/**` prevents mirror-generated files from becoming
+- Ignoring `mirror/markdown/**` prevents mirror-generated files from becoming
   graph input.
 
 ### Tradeoffs
@@ -276,7 +276,7 @@ bb dev:test -v frontend.worker.markdown-mirror-test/mirror-path-collision-fails-
 ```
 
 Additional checks:
-- `markdown-mirror/**` is excluded from graph parsing and file watchers.
+- `mirror/markdown/**` is excluded from graph parsing and file watchers.
 - Editor save does not await mirror completion.
 - Browser and mobile builds do not expose the setting and do not schedule mirror
   jobs.

@@ -82,8 +82,8 @@
   [db block spaces-tabs context]
   (let [block (or (when-let [id (:db/id block)]
                     (d/entity db id))
-                  (when-let [uuid (:block/uuid block)]
-                    (d/entity db [:block/uuid uuid]))
+                  (when-let [block-uuid (:block/uuid block)]
+                    (d/entity db [:block/uuid block-uuid]))
                   block)
         properties (->> (db-property/properties block)
                         (remove (fn [[k _]]

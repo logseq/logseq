@@ -11,7 +11,7 @@
 
 (defn repo-mirror-dir
   [repo]
-  (str (graph-dir/repo->encoded-graph-dir-name repo) "/markdown-mirror"))
+  (str (graph-dir/repo->encoded-graph-dir-name repo) "/mirror/markdown"))
 
 (def ^:private invalid-file-name-chars-re
   #"[<>:\"|?*\\/]")
@@ -159,8 +159,7 @@
 (defn- supported-runtime?
   [platform*]
   (or (= :node (get-in platform* [:env :runtime]))
-      (and (= :browser (get-in platform* [:env :runtime]))
-           (= :electron (get-in platform* [:env :owner-source])))))
+      (= :electron (get-in platform* [:env :owner-source]))))
 
 (defn- duplicate-journal-day?
   [db journal-day]
@@ -296,7 +295,7 @@
                                        (log/error :markdown-mirror/flush-failed
                                                   {:repo repo
                                                    :error error})))))
-                      (or (:debounce-ms opts) 250))]
+                      (or (:debounce-ms opts) 1000))]
       (swap! *repo->flush-timeout assoc repo timeout-id))))
 
 (defn- <run-job!

@@ -82,7 +82,7 @@
     (let [root-dir (node-helper/create-tmp-dir "platform-node-text-files")]
       (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
                   storage (:storage platform)
-                  path "graph-a/markdown-mirror/pages/page.md"
+                  path "graph-a/mirror/markdown/pages/page.md"
                   _ ((:write-text-atomic! storage) path "mirror")
                   content ((:read-text! storage) path)
                   _ ((:delete-file! storage) path)
@@ -92,7 +92,7 @@
             (is (nil? deleted-content))
             (is (empty? (filter #(string/includes? % ".tmp-")
                                 (array-seq (fs/readdirSync
-                                            (node-path/join root-dir "graphs" "graph-a" "markdown-mirror" "pages")))))))
+                                            (node-path/join root-dir "graphs" "graph-a" "mirror" "markdown" "pages")))))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))

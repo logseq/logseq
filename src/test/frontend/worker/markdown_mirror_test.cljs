@@ -41,6 +41,10 @@
     (apply f args)
     (p/resolved ::missing-mirror-repo-fn)))
 
+(deftest repo-mirror-dir-is-under-mirror-markdown-test
+  (is (= "graph-xxx/mirror/markdown"
+         (markdown-mirror/repo-mirror-dir test-repo))))
+
 (deftest normalize-file-name-is-cross-platform-and-deterministic-test
   (testing "invalid filesystem characters and path separators are replaced"
     (is (= "A_B_C_D_E_F_G_H"

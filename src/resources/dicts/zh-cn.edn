@@ -1622,7 +1622,7 @@
  :settings.features/journals-enable-success "已启用日志页"
  :settings.features/login-prompt "你必须是 Logseq 的 Open Collective Sponsor 或者 Backer 才能提前使用新功能（仍在测试中），因此需要登录。"
  :settings.features/markdown-mirror "Markdown 镜像"
- :settings.features/markdown-mirror-desc "将已编辑页面的派生 Markdown 副本写入图谱的 markdown-mirror 文件夹。仅桌面端可用。"
+ :settings.features/markdown-mirror-desc "将已编辑页面的派生 Markdown 副本写入图谱的 mirror/markdown 文件夹。仅桌面端可用。"
  :settings.features/markdown-mirror-regenerate "重新生成完整镜像"
  :settings.features/markdown-mirror-regenerate-error "重新生成 Markdown 镜像失败：{1}"
  :settings.features/markdown-mirror-regenerate-success "Markdown 镜像已重新生成"

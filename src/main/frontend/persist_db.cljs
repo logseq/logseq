@@ -130,6 +130,13 @@
    :ws-url (config/db-sync-ws-url)
    :http-base (config/db-sync-http-base)})
 
+(defn- <sync-markdown-mirror-setting!
+  [repo]
+  (p/let [_ (state/load-app-user-cfgs)]
+    (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled
+                             repo
+                             (true? (get-in @state/state [:electron/user-cfgs :feature/markdown-mirror?])))))
+
 (defn- <ensure-remote!
   [repo]
   (if (or (nil? repo) (= repo @remote-repo))
@@ -149,7 +156,8 @@
                                                              (record-active-request-failure! repo session-id error))))]
         (set-remote-runtime! repo client session-id)
         (p/let [_ (state/<invoke-db-worker :thread-api/set-db-sync-config
-                                           (current-db-sync-config))]
+                                           (current-db-sync-config))
+                _ (<sync-markdown-mirror-setting! repo)]
           nil)
         (ldb/register-transact-fn!
          (fn remote-transact!
