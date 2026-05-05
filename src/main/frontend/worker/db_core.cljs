@@ -1098,7 +1098,12 @@
 (def-thread-api :thread-api/markdown-mirror-set-enabled
   [repo enabled?]
   (markdown-mirror/set-enabled! repo enabled?)
-  nil)
+  (if enabled?
+    (when-let [conn (worker-state/get-datascript-conn repo)]
+      (p/let [_ (markdown-mirror/<start-file-watcher! repo conn {})
+              result (markdown-mirror/<mirror-repo! repo @conn {})]
+        result))
+    (p/resolved (markdown-mirror/stop-file-watcher! repo))))
 
 (def-thread-api :thread-api/markdown-mirror-flush
   [repo]

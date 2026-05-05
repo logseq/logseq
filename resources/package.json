@@ -24,6 +24,7 @@
     "@js-joda/core": "3.2.0",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "abort-controller": "3.0.0",
+    "chokidar": "4.0.3",
     "command-exists": "1.2.9",
     "diff-match-patch": "1.0.5",
     "electron-dl": "4.0.0",

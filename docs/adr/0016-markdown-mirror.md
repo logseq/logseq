@@ -28,9 +28,11 @@ builds do not have the same graph-directory filesystem guarantees.
 4. For a graph at `~/logseq/graphs/graph-xxx`, mirror files are written under:
    - `~/logseq/graphs/graph-xxx/mirror/markdown/journals/`
    - `~/logseq/graphs/graph-xxx/mirror/markdown/pages/`
-5. Markdown Mirror is derived output. The DB remains the source of truth.
-6. Files under `mirror/markdown/**` must be ignored by graph import, file
-   watchers, and graph parsing so the mirror never feeds back into the graph.
+5. Markdown Mirror is derived output. The DB remains the source of truth for
+   unsupported or ambiguous edits.
+6. Files under `mirror/markdown/**` must be ignored by the normal graph import,
+   file watchers, and graph parsing. The only path from mirror files back into
+   the graph is the dedicated Markdown Mirror watcher described below.
 7. The feature is not available in browser or mobile builds, even if a stale
    setting value exists.
 8. Settings exposes an explicit "Regenerate full mirror" action that asks the
@@ -196,16 +198,16 @@ builds do not have the same graph-directory filesystem guarantees.
 8. Full regeneration is an explicit Settings action. The renderer only sends a
    worker request; page selection, rendering, and filesystem writes stay in the
    DB worker.
-9. Enabling the setting starts incremental mirroring for subsequent page edits.
-   It does not implicitly run full regeneration.
+9. Enabling the setting starts the Markdown Mirror watcher and runs a full
+   regeneration so external editors have current files immediately.
 
 ## Markdown Content
 1. Reuse the existing page-to-Markdown export pipeline used by worker export
    APIs instead of introducing a separate renderer-side serializer.
 2. The mirror output should match normal Markdown export semantics for page
    content.
-3. Mirror files do not include Logseq-internal mirror metadata in the Markdown
-   body.
+3. Mirror files include HTML comments for page and block identity. These
+   comments are the only supported identity markers for file-to-DB imports.
 4. Mirror files include block and page property drawers, including user
    properties, with rendered property values.
 5. Assets are referenced as normal exported Markdown references. This ADR does
@@ -214,6 +216,36 @@ builds do not have the same graph-directory filesystem guarantees.
 7. Ambiguous page references caused by duplicate page titles are an accepted
    limitation of Markdown Mirror. Do not rewrite page references to uuid-based
    links or relative Markdown links in this ADR.
+
+## File-to-DB Import Contract
+1. The mirror supports a constrained two-way sync path for DB graphs on Electron.
+   It is not a general Markdown importer.
+2. The only writable structural unit is a Logseq block rendered as a `- ` list
+   item. New blocks must be inserted as `- ` items.
+3. Indented non-list Markdown under a block belongs to that block's content.
+   This includes quotes, fenced code blocks, tables, and other Markdown
+   continuation lines.
+4. Lines inside an indented fenced code block are always block content. A line
+   like `- not a block` inside the fence must not create a Logseq child block.
+5. Unsupported top-level Markdown, for example a top-level quote or fenced code
+   block that is not under a `- ` item, is rejected. Rejecting is safer than
+   silently dropping it and then treating omitted block markers as deletes.
+6. Property drawer edits from mirror files are ignored. The DB remains the
+   source of truth for page and block properties.
+7. File deletes, moves, and directory deletes from the mirror watcher are
+   ignored. Page and block deletion from files is allowed only by removing block
+   marker/list-item pairs from an existing page file.
+8. Creating a new page or journal from a new mirror file is supported only when
+   the path maps to `pages/<name>.md` or `journals/YYYY_MM_DD.md` and the file
+   contains no page or block markers from another graph object.
+9. `[[page]]` references in imported block content create missing pages and are
+   stored using internal id refs in the DB transaction.
+10. Simple hashtag refs such as `#tag1` and page-ref hashtags such as
+    `#[[tag one]]` create missing tag/class pages and attach the tag to the
+    block.
+11. The watcher suppresses Logseq's own mirror writes by comparing recent written
+    content, not by ignoring every file event for a path during a time window.
+    A real external edit that changes file content must import immediately.
 
 ## Failure Handling
 1. Filesystem and path errors fail the mirror job for the affected page.
@@ -226,8 +258,9 @@ builds do not have the same graph-directory filesystem guarantees.
    that graph until the graph is reopened with a valid directory.
 
 ## Non-goals
-1. Markdown Mirror is not bidirectional sync.
-2. Editing files in `mirror/markdown/` does not update the graph.
+1. Markdown Mirror is not a general bidirectional Markdown sync engine.
+2. Editing files in `mirror/markdown/` updates the graph only within the
+   constrained import contract above.
 3. The mirror is not a backup format with guaranteed import fidelity.
 4. The mirror does not replace existing graph export features.
 5. The mirror does not support browser or mobile runtimes in this ADR.
@@ -251,7 +284,8 @@ builds do not have the same graph-directory filesystem guarantees.
 - Duplicate page references such as `[[Foo]]` remain ambiguous in mirror output.
 - The first version does not backfill every existing page automatically when the
   setting is enabled; users run full regeneration explicitly.
-- External edits to mirror files are overwritten by later Logseq edits.
+- External edits outside the constrained import contract are rejected or
+  overwritten by later Logseq edits.
 - Property pages are intentionally absent from the mirror, so the output is not
   a complete DB export even though page and block property drawers are included.
 
@@ -269,6 +303,13 @@ bb dev:test -v frontend.worker.markdown-mirror-test/same-title-pages-write-disti
 bb dev:test -v frontend.worker.markdown-mirror-test/page-references-remain-wiki-links-test
 bb dev:test -v frontend.worker.markdown-mirror-test/page-mirror-exports-property-values-test
 bb dev:test -v frontend.worker.markdown-mirror-test/page-mirror-exports-page-property-values-test
+bb dev:test -v frontend.worker.markdown-mirror-test/two-way-file-edit-can-change-generated-block-content-immediately-test
+bb dev:test -v frontend.worker.markdown-mirror-test/two-way-existing-block-page-ref-edit-creates-page-test
+bb dev:test -v frontend.worker.markdown-mirror-test/two-way-inserted-block-page-ref-creates-page-test
+bb dev:test -v frontend.worker.markdown-mirror-test/two-way-existing-block-hashtag-edit-creates-tag-test
+bb dev:test -v frontend.worker.markdown-mirror-test/two-way-existing-block-preserves-continuation-markdown-test
+bb dev:test -v frontend.worker.markdown-mirror-test/two-way-inserted-block-preserves-continuation-markdown-test
+bb dev:test -v frontend.worker.markdown-mirror-test/two-way-top-level-markdown-without-block-is-rejected-test
 bb dev:test -v frontend.worker.markdown-mirror-test/full-regeneration-writes-existing-non-built-in-non-property-pages-test
 bb dev:test -v frontend.worker.markdown-mirror-test/invalid-filename-characters-are-normalized-test
 bb dev:test -v frontend.worker.markdown-mirror-test/windows-reserved-filename-fails-with-diagnostic-test

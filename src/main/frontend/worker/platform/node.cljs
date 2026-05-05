@@ -448,6 +448,8 @@
                 :db-exists? (fn [graph] (db-exists? data-dir graph))
                 :resolve-db-path (fn [_repo pool path]
                                    (pool-path pool path))
+                :resolve-text-path (fn [path]
+                                     (path-under-data-dir data-dir path))
                 :export-file export-file
                 :import-db (fn [pool path data] (import-db write-guard-fn pool path data))
                 :remove-vfs! (fn [pool] (remove-vfs! pool))
