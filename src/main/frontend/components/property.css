@@ -71,7 +71,7 @@
   }
 
   .property-pair.property-panel-row {
-    @apply grid items-start px-3 gap-3 w-full;
+    @apply grid items-start pr-3 gap-3 w-full;
     grid-template-columns: fit-content(260px) minmax(0, 1fr);
     margin-left: 0;
   }
