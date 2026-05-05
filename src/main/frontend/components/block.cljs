@@ -3986,7 +3986,7 @@
                (and
                  (not collapsed?)
                  (not (or table? property?)))))
-       [:div (when-not (:page-title? config) {:style {:padding-left (if (util/mobile?) 12 45)}})
+       [:div (when-not (:page-title? config) {:style {:padding-left (if (util/mobile?) 12 42)}})
         (db-properties-cp config block {:in-block-container? true})])
 
      (when (and show-query? (not (:table? config)))
