@@ -193,10 +193,20 @@
       (log/error :sqlite-error error)
       (notification/show! (t :storage/sqlitedb-error error) :error))))
 
+(defn- <sync-markdown-mirror-setting!
+  [repo]
+  (if (and (util/electron?) repo)
+    (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled
+                             repo
+                             (true? (get-in @state/state [:electron/user-cfgs :feature/markdown-mirror?])))
+    (p/resolved nil)))
+
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo opts]
-    (state/<invoke-db-worker :thread-api/create-or-open-db repo opts))
+    (p/let [result (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
+            _ (<sync-markdown-mirror-setting! repo)]
+      result))
 
   (<list-db [_this]
     (-> (state/<invoke-db-worker :thread-api/list-db)
@@ -209,7 +219,8 @@
     (state/<invoke-db-worker :thread-api/release-access-handles repo))
 
   (<fetch-initial-data [_this repo opts]
-    (-> (p/let [_ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
+    (-> (p/let [_ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
+                _ (<sync-markdown-mirror-setting! repo)]
           (state/<invoke-db-worker :thread-api/get-initial-data repo opts))
         (p/catch sqlite-error-handler)))
 

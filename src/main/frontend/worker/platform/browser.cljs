@@ -155,8 +155,15 @@
 
 (defn- asset-delete!
   [repo file-name]
-  (-> (.unlink (browser-pfs) (asset-path repo file-name))
-      (p/catch (constantly nil))))
+  (let [^js pfs (browser-pfs)]
+    (-> (.unlink pfs (asset-path repo file-name))
+        (p/catch (constantly nil)))))
+
+(defn- unsupported-mirror-storage!
+  [& _args]
+  (throw (ex-info "Markdown mirror storage is not supported in browser workers"
+                  {:platform :browser
+                   :feature :markdown-mirror})))
 
 (defn- websocket-connect
   [url]
@@ -201,6 +208,9 @@
              :remove-vfs! remove-vfs!
              :read-text! read-text!
              :write-text! write-text!
+             :write-text-atomic! unsupported-mirror-storage!
+             :delete-file! unsupported-mirror-storage!
+             :mirror-read-text! unsupported-mirror-storage!
              :asset-read-bytes! asset-read-bytes!
              :asset-write-bytes! asset-write-bytes!
              :asset-stat asset-stat

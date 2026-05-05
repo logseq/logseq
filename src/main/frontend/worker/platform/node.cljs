@@ -252,6 +252,26 @@
             _ (ensure-dir! dir)]
       (fs/writeFile full-path text "utf8"))))
 
+(defn- write-text-atomic!
+  [write-guard-fn data-dir path text]
+  (let [full-path (path-under-data-dir data-dir path)
+        dir (node-path/dirname full-path)
+        tmp-path (node-path/join dir (str "." (node-path/basename full-path) ".tmp-" (random-uuid)))]
+    (p/let [_ (when write-guard-fn
+                (write-guard-fn))
+            _ (ensure-dir! dir)
+            _ (fs/writeFile tmp-path text "utf8")
+            _ (fs/rename tmp-path full-path)]
+      nil)))
+
+(defn- delete-file!
+  [write-guard-fn data-dir path]
+  (let [full-path (path-under-data-dir data-dir path)]
+    (p/let [_ (when write-guard-fn
+                (write-guard-fn))]
+      (-> (fs/rm full-path #js {:force true})
+          (p/catch (constantly nil))))))
+
 (defn- asset-file-path
   [data-dir repo file-name]
   (node-path/join (repo-dir data-dir repo)
@@ -433,6 +453,8 @@
                 :remove-vfs! (fn [pool] (remove-vfs! pool))
                 :read-text! (fn [path] (read-text! data-dir path))
                 :write-text! (fn [path text] (write-text! write-guard-fn data-dir path text))
+                :write-text-atomic! (fn [path text] (write-text-atomic! write-guard-fn data-dir path text))
+                :delete-file! (fn [path] (delete-file! write-guard-fn data-dir path))
                 :asset-read-bytes! (fn [repo file-name]
                                      (asset-read-bytes! data-dir repo file-name))
                 :asset-write-bytes! (fn [repo file-name payload]

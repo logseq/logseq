@@ -65,6 +65,7 @@ Rules:
 - Contents in '/logseq/.recycle/' are ignored
 - Contents in '/logseq/bak/' are ignored
 - Contents in  with '/logseq/version-files/' are ignored
+- Contents in '/markdown-mirror/' are ignored
 "
   [dir path]
   (let [dir (path/path-normalize dir)
@@ -73,7 +74,7 @@ Rules:
     (when (string? path)
       (or
        (some #(string/starts-with? rpath %)
-             ["." "logseq/.recycle" "logseq/bak" "logseq/version-files"])
+             ["." "logseq/.recycle" "logseq/bak" "logseq/version-files" "markdown-mirror"])
        (contains? #{"logseq/graphs-txid.edn" "logseq/pages-metadata.edn"} rpath)
        (some #(string/includes? rpath (str "/" % "/"))
              ["node_modules"])
