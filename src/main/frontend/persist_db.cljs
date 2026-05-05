@@ -132,10 +132,9 @@
 
 (defn- <sync-markdown-mirror-setting!
   [repo]
-  (p/let [_ (state/load-app-user-cfgs)]
-    (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled
-                             repo
-                             (true? (get-in @state/state [:electron/user-cfgs :feature/markdown-mirror?])))))
+  (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled
+                           repo
+                           (true? (:feature/markdown-mirror? (state/get-graph-config repo)))))
 
 (defn- <ensure-remote!
   [repo]
