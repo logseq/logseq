@@ -136,6 +136,33 @@
                            repo
                            (true? (:feature/markdown-mirror? (state/get-graph-config repo)))))
 
+(defn- graph-markdown-mirror-enabled?
+  [state repo]
+  (true? (get-in state [:config repo :feature/markdown-mirror?])))
+
+(defn- sync-markdown-mirror-setting-watch!
+  []
+  (remove-watch state/state :sync-markdown-mirror-setting)
+  (add-watch
+   state/state
+   :sync-markdown-mirror-setting
+   (fn [_ _ old-state new-state]
+     (let [repo (:git/current-repo new-state)
+           old-enabled? (graph-markdown-mirror-enabled? old-state repo)
+           new-enabled? (graph-markdown-mirror-enabled? new-state repo)]
+       (when (and repo
+                  @state/*db-worker
+                  (not= old-enabled? new-enabled?))
+         (-> (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled
+                                      repo
+                                      new-enabled?)
+             (p/catch (fn [error]
+                        (log/error :markdown-mirror/settings-watch-sync-failed
+                                   {:repo repo
+                                    :enabled? new-enabled?
+                                    :error error}))))))))
+  nil)
+
 (defn- <ensure-remote!
   [repo]
   (if (or (nil? repo) (= repo @remote-repo))
@@ -157,6 +184,7 @@
         (p/let [_ (state/<invoke-db-worker :thread-api/set-db-sync-config
                                            (current-db-sync-config))
                 _ (<sync-markdown-mirror-setting! repo)]
+          (sync-markdown-mirror-setting-watch!)
           nil)
         (ldb/register-transact-fn!
          (fn remote-transact!

@@ -63,6 +63,7 @@
 
 (defn- reset-runtime-state!
   []
+  (remove-watch state/state :sync-markdown-mirror-setting)
   (reset! persist-db/remote-db nil)
   (reset! persist-db/remote-repo nil)
   (reset! persist-db/remote-runtime-state nil)
@@ -506,6 +507,38 @@
           (p/finally (fn []
                        (reset! state/state original-state)
                        (set! util/electron? original-electron?)
+                       (set! state/<invoke-db-worker original-invoke)
+                       (done)))))))
+
+(deftest graph-config-change-syncs-markdown-mirror-worker-setting-test
+  (async done
+    (let [worker-calls (atom [])
+          sync-watch! #(when-let [f (resolve 'frontend.persist-db/sync-markdown-mirror-setting-watch!)]
+                         (f))
+          repo "logseq_db_graph_a"
+          original-state @state/state
+          original-invoke state/<invoke-db-worker]
+      (reset-runtime-state!)
+      (reset! state/state (assoc original-state
+                                 :git/current-repo repo
+                                 :config {repo {}}))
+      (reset! state/*db-worker (fn [& _] nil))
+      (set! state/<invoke-db-worker
+            (fn [qkw & args]
+              (swap! worker-calls conj [qkw args])
+              (p/resolved nil)))
+      (sync-watch!)
+      (swap! state/state assoc-in [:config repo :feature/markdown-mirror?] true)
+      (-> (p/delay 0)
+          (p/then (fn [_]
+                    (is (= [[:thread-api/markdown-mirror-set-enabled
+                             [repo true]]]
+                           @worker-calls))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (remove-watch state/state :sync-markdown-mirror-setting)
+                       (reset! state/state original-state)
                        (set! state/<invoke-db-worker original-invoke)
                        (done)))))))
 
