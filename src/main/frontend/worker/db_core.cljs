@@ -408,7 +408,9 @@
                       :skip-validate-db? true}))))
 
 (defn- <create-or-open-db!
-  [repo {:keys [config datoms sync-download-graph?] :as opts}]
+  [repo {:keys [config datoms sync-download-graph? creating-remote-graph?] :as opts}]
+  (when creating-remote-graph?
+    (client-op/update-local-tx repo 0))
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)]
@@ -453,14 +455,12 @@
         (when-not @*publishing?
           (client-op/ensure-sqlite-schema! client-ops-db))
         (ensure-client-ops-cleanup-timer! repo)
-        (when (nil? (client-op/get-local-tx repo))
-          (client-op/update-local-tx repo 0))
         (let [initial-tx-report (when-not (or initial-data-exists?
                                               (seq datoms)
                                               sync-download-graph?)
                                   (let [config (resolve-initial-config config)
                                         initial-data (sqlite-create-graph/build-db-initial-data
-                                                      config (select-keys opts [:import-type :graph-git-sha :remote-graph?]))]
+                                                      config (select-keys opts [:import-type :graph-git-sha :creating-remote-graph?]))]
                                     (ldb/transact! conn initial-data
                                                    {:initial-db? true})))]
           (when-not sync-download-graph?
