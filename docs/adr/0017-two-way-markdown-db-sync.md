@@ -45,9 +45,9 @@ diagnostics on ambiguous or unsafe cases instead of guessing.
 7. The current mirror path allocation does not persist the ADR 0016
    `.index.edn` identity map yet. It derives duplicate paths from current page
    title and UUID ordering.
-8. The mirror Markdown body uses sparse identity metadata. Page identity is
-   always present, while ordinary block ids are omitted to keep Markdown readable
-   and cheap for AI/editor usage.
+8. The mirror Markdown body uses only page-level visible identity metadata.
+   Block ids are omitted to keep Markdown readable and cheap for AI/editor
+   usage; block UUID preservation depends on the required sidecar snapshots.
 
 ## Decision
 1. Keep the DB as the authoritative sync data model.
@@ -70,19 +70,20 @@ diagnostics on ambiguous or unsafe cases instead of guessing.
    channel for this ADR.
 6. Add a dedicated Markdown Mirror watcher/importer. Do not remove
    `markdown-mirror/**` from generic graph ignored paths.
-7. Persist a per-graph mirror index under `markdown-mirror/.index.edn` before
-   enabling two-way mode. The index is required state, not an optimization.
+7. Persist hidden mirror sidecar state under `mirror/markdown/.logseq/` before
+   enabling two-way mode. The sidecar is required state, not an optimization.
+   Per-page snapshots live at `.logseq/pages/<page-uuid>.edn`; future
+   graph-wide indexes can live beside them.
 8. Two-way mode must include stable identity metadata without making ordinary
    Markdown noisy:
    - page identity is always `id:: <page-uuid>` in the page property section
-   - block identity is an indented `id:: <block-uuid>` block property only for
-     blocks that need a stable visible address, such as referenced blocks or
-     blocks with non-content identity-bearing state
-9. Ordinary blocks should not receive block ids in Markdown. The importer must
-   preserve their existing DB UUIDs by matching sibling structure and stable
-   content before creating or deleting blocks.
-10. The importer must fail fast on ambiguous identity, duplicate block ids,
-    unsafe paths, invalid page ids, parser errors, or unsupported file shapes.
+   - block identity is not emitted as `id::`; block references to non-page
+     blocks use `[[uuid]]` in content when needed
+9. Blocks should not receive block ids in Markdown. The importer must preserve
+   their existing DB UUIDs by matching sibling structure against the sidecar
+   snapshot before creating or deleting blocks.
+10. The importer must fail fast on ambiguous sidecar matching, unsafe paths,
+    invalid page ids, parser errors, or unsupported file shapes.
     It must not silently choose a winner.
 11. Mirror-origin property changes are ignored. The importer must not create,
     update, remove, or coerce page properties, block properties, class
@@ -90,16 +91,17 @@ diagnostics on ambiguous or unsafe cases instead of guessing.
 12. Destructive filesystem actions are ignored. Deleting, moving away, or
     renaming a mirror file must not delete, move, or rename a DB page.
 13. Block deletion is a content edit, not a filesystem delete. A stable changed
-    file may delete marked blocks that are absent from the parsed page, but only
+    file may delete blocks that are absent from the parsed page, but only
     after the page identity is validated and the whole file parses successfully.
 14. File-origin txs use dedicated tx-meta such as:
     - `:outliner-op :markdown-mirror/import-page`
     - `:markdown-mirror/source :file`
     - `:markdown-mirror/path <relative-path>`
 15. File-origin txs may still schedule DB-to-Markdown mirror rendering. This is
-    required when the import creates pages, journals, or blocks whose sparse id
-    status changed. The resulting filesystem write must be watcher-suppressed
-    by content hash/write id so it does not import itself.
+    required when the import creates pages, journals, blocks, tags, task
+    statuses, or references whose canonical Markdown changed. The resulting
+    filesystem write must be watcher-suppressed by content hash/write id so it
+    does not import itself.
 16. File-origin txs must still be persisted by db-sync. Do not mark them
     `:rtc-tx?`, `:sync-download-graph?`, or `:persist-op? false`.
 17. Sync rebase should see file-origin edits as canonical semantic ops when
@@ -117,46 +119,45 @@ diagnostics on ambiguous or unsafe cases instead of guessing.
 1. Reuse the existing `frontend.worker.markdown-mirror` scheduling path.
 2. Replace current duplicate-title path derivation with the persisted index
    required by ADR 0016 before enabling imports.
-3. When two-way mode is enabled, render the page `id::` and sparse block
-   `id::` lines.
-4. Write mirror files atomically and record:
-   - relative path
+3. When two-way mode is enabled, render the page `id::` line and do not render
+   block `id::` identity lines.
+4. Write mirror files atomically and record hidden sidecar state under
+   `mirror/markdown/.logseq/`:
+   - per-page snapshots at `.logseq/pages/<page-uuid>.edn`
    - page uuid
-   - sparse block uuid positions and content hashes
-   - full file content hash
-   - last writer id
-   - last DB basis tx or equivalent local generation stamp
+   - last rendered block UUID, parent UUID, sibling order, and title
+   - future full-file hashes, writer ids, and DB basis stamps if the watcher
+     needs stronger loop suppression than recent-write tracking
 5. After a DB-origin write, register the write id/content hash in watcher
    suppression before touching the file.
 
 ### Markdown to DB
 1. Watch only `markdown-mirror/pages/**.md` and
    `markdown-mirror/journals/**.md` through a dedicated watcher.
-2. Ignore editor temporary files, hidden files, non-Markdown files, `.index.edn`,
+2. Ignore editor temporary files, hidden files, non-Markdown files, `.logseq/**`,
    and paths outside the mirror directory.
 3. Debounce file events by relative path.
 4. Read the changed file after it becomes stable. A file is stable when size and
    mtime are unchanged across a short interval.
 5. Parse the file through mldoc/graph-parser in DB graph Markdown mode.
-6. Extract `id::` identity lines from raw Markdown before converting to DB
-   operations.
+6. Extract only the top-level page `id::` identity line from raw Markdown before
+   converting to DB operations. Indented block `id:: <uuid>` lines are rejected;
+   there is no compatibility path for old block identity markers.
 7. Build a page diff against the current DB page:
-   - match existing blocks by explicit block UUID when present
-   - infer existing UUIDs for unmarked blocks from sibling structure and stable
+   - infer existing UUIDs for blocks from sidecar sibling structure and stable
      content before treating them as new
    - create UUIDs only for unmatched new blocks
    - place new blocks without changing existing block parent/order
-   - delete existing marked blocks that are absent from a successfully parsed
+   - delete existing blocks that are absent from a successfully parsed
      changed file
    - ignore moves, reorders, indent, and outdent changes
    - detect content edits from parsed block titles
    - ignore page and block property edits from parsed values
 8. Apply the diff as one local transaction per file change. Preserve the user
    action boundary so sync rebase treats it atomically.
-9. On success, update the mirror index. Do not rewrite the file directly from
-   parsed Markdown. If the import changed sparse identity requirements, enqueue
-   normal DB-to-Markdown rendering with watcher suppression so the file receives
-   the canonical id state.
+9. On success, update the mirror index and sidecar snapshot. Do not rewrite the
+   file directly from parsed Markdown. Enqueue normal DB-to-Markdown rendering
+   with watcher suppression only when canonical Markdown must change.
 10. On failure, do not partially transact. Store diagnostics and leave the file
     unchanged for user inspection.
 
@@ -164,15 +165,14 @@ diagnostics on ambiguous or unsafe cases instead of guessing.
 1. Existing files are resolved by the mirror index and page `id::` together.
 2. If the path is already mapped in the mirror index, the file must contain the
    same page `id::`. Missing or mismatched page ids fail the import.
-3. Explicit block ids must be unique within the file.
-4. Existing explicit block ids must point to blocks that belong to the resolved
-   page.
-5. Unmarked blocks are matched to existing DB blocks by sibling structure and
+3. Indented block `id:: <uuid>` lines are rejected and must not bind a Markdown
+   list item to an existing block.
+4. Blocks are matched to existing DB blocks by sibling structure and
    stable content where possible. This preserves UUIDs for sync and avoids
    rewriting normal Markdown with ids everywhere.
-6. Existing blocks that cannot be matched from the parsed file are delete
+5. Existing blocks that cannot be matched from the parsed file are delete
    candidates.
-7. Delete candidates are reduced to top-level roots before creating
+6. Delete candidates are reduced to top-level roots before creating
    `:delete-blocks`; descendants of another deleted candidate are not emitted as
    separate delete ops.
 
@@ -187,8 +187,8 @@ diagnostics on ambiguous or unsafe cases instead of guessing.
 5. If there is no safe order gap, append the new block at the end of that
    parent and record diagnostics that exact placement was not preserved.
 6. New descendants below a new block keep their relative tree shape.
-7. If a new block appears under an unmarked existing-looking block whose parent
-   cannot be resolved, fail the import.
+7. If a new block appears under an existing-looking block whose parent cannot be
+   resolved, fail the import.
 
 ### New Files
 1. A new file under `markdown-mirror/pages/<stem>.md` creates a normal page only
@@ -201,8 +201,8 @@ diagnostics on ambiguous or unsafe cases instead of guessing.
    pages.
 4. New file content is imported as page blocks. Properties are ignored.
 5. A new file must not contain a page `id::`.
-6. If the new file contains explicit block ids that point to existing blocks, fail
-   the import and record diagnostics.
+6. Indented block `id:: <uuid>` lines in new files are rejected and must not
+   attach imported content to existing blocks.
 7. New file creation is based on stable changed-file content. It is not inferred
    from delete or move-away events.
 
@@ -228,25 +228,29 @@ Solution:
   content hash.
 - Mark DB-origin writes before the atomic rename.
 - Import only when the file hash does not match the last DB-origin write.
-- File-origin txs that require sparse id materialization enqueue DB-to-Markdown
-  rendering with watcher suppression instead of being imported again.
+- File-origin txs that require canonical Markdown updates enqueue
+  DB-to-Markdown rendering with watcher suppression instead of being imported
+  again.
 
 ### 2. Stable Block Identity
 Challenge: Markdown lines are not DB entities. Matching by content or position
 breaks on reorder, duplicates, and simultaneous edits.
 
 Solution:
-- Two-way mode always writes page `id::` and writes block `id::` only for blocks
-  whose identity must be visible in Markdown.
-- The importer first honors explicit block ids, then matches unmarked siblings
-  by stable content and position before creating new UUIDs.
-- The sidecar index stores the last known sparse id positions and content
-  hashes.
-- Import fails on duplicate explicit ids, unknown page ids, or explicit block
-  ids pointing outside the page.
+- Two-way mode always writes page `id::` and never writes block `id::`.
+- The importer uses the per-page sidecar snapshot to match siblings:
+  - unique unchanged titles act as sequence anchors
+  - edited blocks can match in order when the old title is retained in
+    the new title, or the new title is retained in the old title
+  - same-size unanchored gaps without such edit matches are positional edits
+  - unresolved duplicate or ambiguous gaps fail instead of guessing
+- The sidecar snapshot stores the last rendered block UUID, parent UUID,
+  sibling order, and title.
+- Import fails on unknown page ids, ambiguous sidecar matching, or malformed
+  page identity.
 - New unmatched blocks receive new UUIDs during import.
 - New files receive a new page UUID and new block UUIDs during import, but their
-  rendered Markdown still omits ordinary block ids.
+  rendered Markdown still omits block ids.
 
 ### 3. Sync Conflicts
 Challenge: A local file edit and remote DB edit can modify the same page before
@@ -357,17 +361,17 @@ Solution:
 - Keep full regeneration and full re-import as explicit user/CLI actions.
 
 ### 11. Atomicity and Crash Recovery
-Challenge: The DB, mirror file, and `.index.edn` can get out of sync if Logseq
-or the OS crashes.
+Challenge: The DB, mirror file, and `.logseq/` sidecar snapshots can get out of
+sync if Logseq or the OS crashes.
 
 Solution:
-- For DB-to-file: write file atomically, then update index atomically.
-- For file-to-DB: transact DB first, update index, then enqueue suppressed
-  DB-to-Markdown rendering when sparse ids need to be materialized or
-  removed.
-- On startup, validate index entries against DB pages and file hashes.
-- Rebuild missing index entries from DB; fail conflicting entries with
-  diagnostics.
+- For DB-to-file: write file atomically, then update sidecar snapshots
+  atomically.
+- For file-to-DB: transact DB first, update sidecar snapshots, then enqueue
+  suppressed DB-to-Markdown rendering when canonical Markdown needs to be
+  refreshed.
+- If a sidecar snapshot is missing or incompatible, rebuild it from DB state or
+  reject ambiguous/destructive imports instead of guessing.
 
 ### 12. E2EE Graphs
 Challenge: Sync graph content may be encrypted on the server, but local mirror
@@ -409,7 +413,7 @@ Solution:
   `markdown-mirror/` directory.
 - Reject symlinks that escape the mirror directory.
 - Never concatenate raw page titles into paths.
-- Treat malformed identity lines as import errors.
+- Treat malformed top-level page identity lines as import errors.
 
 ## Non-Goals
 1. Syncing Markdown files as server-side blobs.
@@ -425,16 +429,19 @@ Solution:
 - Sync graphs keep one source of truth: DB tx log plus existing db-sync.
 - External Markdown edits work offline and upload when normal sync resumes.
 - Remote changes converge through existing rebase/checksum machinery.
-- Sparse identity lines plus structural matching make imports deterministic
-  without adding block ids to every ordinary block.
+- Sidecar structural matching keeps imports deterministic without adding block
+  ids to every block.
 - Dedicated watcher/importer keeps generic graph parsing from ingesting mirror
   output accidentally.
 - Ignoring property and file-delete changes reduces the risk of corrupting or
   losing DB data from external editor behavior.
 
 ### Tradeoffs
-- Two-way mode needs metadata in Markdown files, unlike one-way mirror mode.
-- The sidecar index becomes required operational state.
+- Two-way mode needs a page id in Markdown and hidden sidecar metadata, unlike
+  one-way mirror mode.
+- The hidden sidecar snapshots become required operational state. Missing or
+  incompatible snapshots must be regenerated from DB state or cause
+  destructive/ambiguous imports to fail; the importer must not guess.
 - Some Markdown edits will fail until the supported round-trip subset expands.
 - External property edits, page renames, and file deletes are ignored.
 - Block deletes and new page/journal creation are supported but require stricter
@@ -443,11 +450,12 @@ Solution:
 
 ## Implementation Order
 1. Implement and test the ADR 0016 mirror index first.
-2. Add two-way sparse identity lines behind a separate two-way setting.
+2. Add two-way page identity and sidecar snapshots behind a separate two-way
+   setting.
 3. Add dedicated mirror watcher with write suppression and stable-file reads.
 4. Build parser-to-page-tree conversion for one file.
 5. Build block-level diff to canonical outliner ops.
-6. Wire file-origin tx-meta, watcher suppression, and post-import sparse-id
+6. Wire file-origin tx-meta, watcher suppression, and post-import canonical
    rendering rules.
 7. Add sync-graph tests proving file-origin txs enter `client_ops` and remote
    txs rewrite mirror files without feedback loops.
@@ -461,13 +469,12 @@ bb dev:test -v frontend.worker.markdown-mirror-test/two-way-db-write-suppresses-
 bb dev:test -v frontend.worker.markdown-mirror-test/two-way-file-edit-transacts-local-db-test
 bb dev:test -v frontend.worker.markdown-mirror-test/two-way-file-edit-enters-db-sync-pending-queue-test
 bb dev:test -v frontend.worker.markdown-mirror-test/two-way-remote-sync-write-updates-file-without-upload-loop-test
-bb dev:test -v frontend.worker.markdown-mirror-test/two-way-inserted-block-rematerializes-sparse-ids-test
+bb dev:test -v frontend.worker.markdown-mirror-test/two-way-inserted-block-does-not-rewrite-edited-file-test
 bb dev:test -v frontend.worker.markdown-mirror-test/two-way-importer-does-not-rewrite-parsed-file-directly-test
-bb dev:test -v frontend.worker.markdown-mirror-test/two-way-duplicate-block-marker-fails-test
 bb dev:test -v frontend.worker.markdown-mirror-test/two-way-ambiguous-page-path-fails-test
 bb dev:test -v frontend.worker.markdown-mirror-test/two-way-property-edits-are-ignored-test
-bb dev:test -v frontend.worker.markdown-mirror-test/two-way-block-move-is-ignored-test
-bb dev:test -v frontend.worker.markdown-mirror-test/two-way-missing-block-marker-deletes-block-test
+bb dev:test -v frontend.worker.markdown-mirror-test/two-way-indented-block-id-line-is-rejected-test
+bb dev:test -v frontend.worker.markdown-mirror-test/two-way-missing-block-deletes-block-test
 bb dev:test -v frontend.worker.markdown-mirror-test/two-way-unmarked-block-insert-before-existing-preserves-sync-identity-test
 bb dev:test -v frontend.worker.markdown-mirror-test/two-way-new-page-file-creates-page-test
 bb dev:test -v frontend.worker.markdown-mirror-test/two-way-new-journal-file-creates-journal-test

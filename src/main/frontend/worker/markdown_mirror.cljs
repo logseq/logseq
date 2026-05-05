@@ -1,6 +1,7 @@
 (ns frontend.worker.markdown-mirror
   "Markdown mirror derived-file support for DB graphs."
-  (:require [clojure.string :as string]
+  (:require [cljs.reader :as reader]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.graph-dir :as graph-dir]
             [frontend.worker.platform :as platform]
@@ -13,7 +14,10 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
+
+(def ^:private snapshot-version 1)
 
 (defn repo-mirror-dir
   [repo]
@@ -113,6 +117,10 @@
   [repo relative-path]
   (str (repo-mirror-dir repo) "/" relative-path))
 
+(defn- page-snapshot-relative-path
+  [page-uuid]
+  (str ".logseq/pages/" page-uuid ".edn"))
+
 (defn- normalize-watch-path
   [path]
   (some-> path str (string/replace "\\" "/")))
@@ -173,7 +181,10 @@
 
 (defn- line-level
   [spaces]
-  (inc (quot (count spaces) 2)))
+  (let [n (count spaces)]
+    (if (zero? n)
+      1
+      (inc (quot (inc n) 2)))))
 
 (defn- strip-prefix-spaces
   [line n]
@@ -191,18 +202,6 @@
 (defn- append-block-line
   [blocks idx line]
   (update-in blocks [idx :title] #(str % "\n" line)))
-
-(defn- assoc-block-uuid
-  [blocks idx block-uuid]
-  (assoc-in blocks [idx :uuid] block-uuid))
-
-(defn- assoc-stack-ref
-  [stack idx block-uuid]
-  (mapv (fn [entry]
-          (if (= idx (:idx entry))
-            (assoc entry :ref block-uuid)
-            entry))
-        stack))
 
 (defn- continuation-line
   [line continuation-indent]
@@ -238,32 +237,27 @@
               (if (zero? (count spaces))
                 (recur more id stack blocks
                        current-block-idx continuation-indent fenced-code?)
-                (if (and (some? current-block-idx)
-                         (= (count spaces) continuation-indent))
-                  (recur more page-uuid
-                         (assoc-stack-ref stack current-block-idx id)
-                         (assoc-block-uuid blocks current-block-idx id)
-                         current-block-idx continuation-indent fenced-code?)
-                  (recur more page-uuid stack blocks
-                         current-block-idx continuation-indent fenced-code?))))
+                {:error :block-id-marker-not-supported}))
             (if-let [[_ spaces title] (re-matches markdown-block-re line)]
               (let [current-level (line-level spaces)
                     idx (count blocks)
                     stack' (->> stack
                                 (remove (fn [{:keys [level]}] (>= level current-level)))
                                 vec)
-                    parent-ref (:ref (peek stack'))
-                    block {:uuid nil
-                           :idx idx
-                           :title title
-                           :level current-level
-                           :parent-ref parent-ref}
-                    stack'' (conj stack' {:level current-level
-                                          :idx idx
-                                          :ref idx})
-                    continuation-indent' (+ (count spaces) 2)]
-                (recur more page-uuid stack'' (conj blocks block)
-                       idx continuation-indent' (fenced-code-boundary? title)))
+                    parent-ref (:ref (peek stack'))]
+                (if (and (> current-level 1) (nil? parent-ref))
+                  {:error :orphaned-block}
+                  (let [block {:uuid nil
+                               :idx idx
+                               :title title
+                               :level current-level
+                               :parent-ref parent-ref}
+                        stack'' (conj stack' {:level current-level
+                                              :idx idx
+                                              :ref idx})
+                        continuation-indent' (+ (count spaces) 2)]
+                    (recur more page-uuid stack'' (conj blocks block)
+                           idx continuation-indent' (fenced-code-boundary? title)))))
               (cond
                 (or (string/blank? line)
                     (re-matches property-line-re line))
@@ -324,6 +318,92 @@
                                       :tag? true}))
                                  (re-seq simple-hashtag-re title))]
     (distinct (concat page-ref-targets simple-tag-targets))))
+
+(defn- status-marker
+  [status]
+  (when-let [content (some-> (cond
+                               (keyword? status) (name status)
+                               :else (or (db-property/closed-value-content status)
+                                         (:block/title status)
+                                         (:logseq.property/value status)))
+                             str
+                             string/trim)]
+    (when-not (string/blank? content)
+      (-> content
+          string/upper-case
+          (string/replace #"\s+" "-")))))
+
+(defn- status-marker->ident
+  [db]
+  (->> (db-property/get-closed-property-values db :logseq.property/status)
+       (keep (fn [status]
+               (when-let [marker (status-marker status)]
+                 [marker (:db/ident status)])))
+       (into {})))
+
+(defn- parse-title-status
+  [db title]
+  (let [title (or title "")]
+    (if-let [[_ marker body] (re-matches #"^([^\s]+)(?:\s+(.*))?$" title)]
+      (if-let [status-ident (get (status-marker->ident db) (string/upper-case marker))]
+        {:title (or body "")
+         :status-ident status-ident}
+        {:title title})
+      {:title title})))
+
+(defn- simple-tag-token?
+  [title]
+  (boolean
+   (re-matches #"[^\s#\[\]\(\),.;:'\"`]+" (or title ""))))
+
+(defn- tag-token
+  [tag]
+  (let [title (or (:block/title tag) (:block/name tag))]
+    (when-not (string/blank? title)
+      (if (simple-tag-token? title)
+        (str "#" title)
+        (str "#[[" title "]]")))))
+
+(defn- built-in-tag?
+  [tag]
+  (or (ldb/built-in? tag)
+      (some-> tag :db/ident namespace (= "logseq.class"))))
+
+(defn- mirror-tag-tokens
+  [block]
+  (->> (:block/tags block)
+       (remove built-in-tag?)
+       (keep tag-token)
+       sort
+       vec))
+
+(defn- strip-existing-tag-suffixes
+  [title block]
+  (let [tokens (set (mirror-tag-tokens block))]
+    (loop [title' (string/trimr (or title ""))]
+      (if-let [token (first (filter (fn [token]
+                                      (or (= title' token)
+                                          (string/ends-with? title' (str " " token))))
+                                    tokens))]
+        (let [n (count title')
+              m (count token)
+              title'' (if (= title' token)
+                        ""
+                        (subs title' 0 (- n m 1)))]
+          (recur (string/trimr title'')))
+        title'))))
+
+(defn- normalize-parsed-block-title
+  [db page-block-by-uuid block]
+  (let [{:keys [title status-ident]} (parse-title-status db (:title block))
+        status-ident (or status-ident (:status-ident block))
+        existing-block (some-> (:uuid block) page-block-by-uuid)
+        title' (cond-> title
+                 existing-block
+                 (strip-existing-tag-suffixes existing-block))]
+    (cond-> (assoc block :title title')
+      status-ident
+      (assoc :status-ident status-ident))))
 
 (defn- ensure-tag-txs
   [db block-ref title page]
@@ -425,24 +505,6 @@
   [page]
   (sort-by :block/order (:block/_parent page)))
 
-(def ^:private basic-block-attrs
-  #{:block/uuid
-    :block/title
-    :block/page
-    :block/parent
-    :block/order
-    :block/created-at
-    :block/updated-at
-    :block/refs
-    :block/tags})
-
-(defn- block-needs-id?
-  [db block]
-  (or (seq (:block/_refs block))
-      (some (fn [datom]
-              (not (contains? basic-block-attrs (:a datom))))
-            (d/datoms db :eavt (:db/id block)))))
-
 (defn- page-blocks-by-uuid
   [db page]
   (->> (mapcat #(ldb/get-block-and-children db (:block/uuid %))
@@ -450,15 +512,6 @@
        (filter :block/uuid)
        (map (juxt :block/uuid identity))
        (into {})))
-
-(defn- duplicate-marker?
-  [blocks]
-  (let [markers (keep :uuid blocks)]
-    (not= (count markers) (count (set markers)))))
-
-(defn- parsed-existing-markers-valid?
-  [blocks page-block-by-uuid]
-  (every? #(contains? page-block-by-uuid %) (keep :uuid blocks)))
 
 (defn- parsed-parent-valid?
   [{:keys [parent-ref]} page-block-by-uuid new-uuid-by-index]
@@ -471,6 +524,249 @@
   (if existing-parent
     (sort-by :block/order (:block/_parent existing-parent))
     (page-root-blocks page)))
+
+(defn- page-snapshot
+  [db page]
+  (letfn [(snapshot-block [parent-uuid block]
+            (cons {:uuid (:block/uuid block)
+                   :parent-uuid parent-uuid
+                   :title (:block/title block)
+                   :order (:block/order block)}
+                  (mapcat #(snapshot-block (:block/uuid block) %)
+                          (sort-by :block/order (:block/_parent block)))))]
+    {:version snapshot-version
+     :page-uuid (:block/uuid page)
+     :blocks (vec (mapcat #(snapshot-block nil %) (page-root-blocks page)))}))
+
+(defn- parse-page-snapshot
+  [content page-uuid]
+  (try
+    (let [snapshot (reader/read-string content)]
+      (when (and (= snapshot-version (:version snapshot))
+                 (= page-uuid (:page-uuid snapshot))
+                 (vector? (:blocks snapshot)))
+        snapshot))
+    (catch :default _e
+      nil)))
+
+(defn- <read-page-snapshot
+  [platform* repo page-uuid]
+  (p/let [content (<read-text platform* (mirror-path repo (page-snapshot-relative-path page-uuid)))]
+    (when content
+      (parse-page-snapshot content page-uuid))))
+
+(defn- <write-page-snapshot!
+  [platform* repo db page]
+  (<write-if-changed! platform*
+                      repo
+                      (mirror-path repo (page-snapshot-relative-path (:block/uuid page)))
+                      (pr-str (page-snapshot db page))))
+
+(defn- duplicate-title?
+  [blocks]
+  (let [titles (map :title blocks)]
+    (not= (count titles) (count (set titles)))))
+
+(defn- title-edit-match?
+  [old-title new-title]
+  (let [old-title (or old-title "")
+        new-title (or new-title "")]
+    (and (not= old-title new-title)
+         (or (string/includes? old-title new-title)
+             (string/includes? new-title old-title)))))
+
+(def ^:private concat-title-separators
+  [" " "\n" ""])
+
+(defn- concat-title-match
+  [old-blocks old-start new-title]
+  (let [old-blocks (vec old-blocks)]
+    (first
+     (keep (fn [start]
+             (first
+              (keep (fn [end]
+                      (let [blocks (subvec old-blocks start end)
+                            titles (map :title blocks)]
+                        (when (some #(= new-title (string/join % titles))
+                                    concat-title-separators)
+                          {:block (first blocks)
+                           :next-start end})))
+                    (range (+ start 2) (inc (count old-blocks))))))
+           (range old-start (count old-blocks))))))
+
+(defn- unique-title-anchor-matches
+  [snapshot-blocks parsed-blocks]
+  (let [snapshot-title-counts (frequencies (map :title snapshot-blocks))
+        parsed-title-counts (frequencies (map :title parsed-blocks))
+        snapshot-by-title (into {} (map (juxt :title identity)) snapshot-blocks)]
+    (->> parsed-blocks
+         (keep (fn [parsed-block]
+                 (let [title (:title parsed-block)]
+                   (when (and (= 1 (get snapshot-title-counts title))
+                              (= 1 (get parsed-title-counts title)))
+                     [(:idx parsed-block) (get snapshot-by-title title)]))))
+         (into {}))))
+
+(defn- containment-title-matches
+  [old-blocks new-blocks]
+  (loop [[new-block & more] new-blocks
+         old-start 0
+         matches {}]
+    (if (nil? new-block)
+      {:matches matches}
+      (if-let [{:keys [block next-start]} (concat-title-match old-blocks old-start (:title new-block))]
+        (recur more
+               next-start
+               (assoc matches (:idx new-block) block))
+        (let [exact-match (first
+                           (keep-indexed
+                            (fn [idx old-block]
+                              (when (and (<= old-start idx)
+                                         (= (:title old-block) (:title new-block)))
+                                [idx old-block]))
+                            old-blocks))]
+          (if exact-match
+            (let [[old-idx old-block] exact-match]
+              (recur more
+                     (inc old-idx)
+                     (assoc matches (:idx new-block) old-block)))
+            (let [candidates (keep-indexed
+                              (fn [idx old-block]
+                                (when (and (<= old-start idx)
+                                           (title-edit-match? (:title old-block) (:title new-block)))
+                                  [idx old-block]))
+                              old-blocks)]
+              (cond
+                (> (count candidates) 1)
+                {:error :ambiguous-unmarked-blocks}
+
+                (= 1 (count candidates))
+                (let [[old-idx old-block] (first candidates)]
+                  (recur more
+                         (inc old-idx)
+                         (assoc matches (:idx new-block) old-block)))
+
+                :else
+                (recur more old-start matches)))))))))
+
+(defn- resolve-sidecar-gap
+  [old-blocks new-blocks]
+  (cond
+    (or (empty? old-blocks) (empty? new-blocks))
+    {:matches {}}
+
+    (= (count old-blocks) (count new-blocks))
+    (if (and (duplicate-title? old-blocks)
+             (not= (map :title old-blocks) (map :title new-blocks)))
+      {:error :ambiguous-unmarked-blocks}
+      (let [result (containment-title-matches old-blocks new-blocks)]
+        (if (or (:error result) (seq (:matches result)))
+          result
+          {:matches (into {}
+                          (map (fn [old-block new-block]
+                                 [(:idx new-block) old-block])
+                               old-blocks
+                               new-blocks))})))
+
+    :else
+    (containment-title-matches old-blocks new-blocks)))
+
+(defn- sidecar-sibling-matches
+  [snapshot-blocks parsed-blocks]
+  (let [snapshot-blocks (vec (sort-by :order snapshot-blocks))
+        parsed-blocks (vec (sort-by :idx parsed-blocks))
+        parsed-position-by-idx (into {}
+                                     (map-indexed (fn [position parsed-block]
+                                                    [(:idx parsed-block) position]))
+                                     parsed-blocks)
+        snapshot-by-uuid (into {} (map (juxt :uuid identity)) snapshot-blocks)
+        explicit-matches (into {}
+                               (keep (fn [parsed-block]
+                                       (when-let [snapshot-block (and (:uuid parsed-block)
+                                                                      (get snapshot-by-uuid (:uuid parsed-block)))]
+                                         [(:idx parsed-block) snapshot-block])))
+                               parsed-blocks)
+        explicit-parsed (set (keys explicit-matches))
+        explicit-snapshot (set (map :uuid (vals explicit-matches)))
+        remaining-snapshot (vec (remove #(contains? explicit-snapshot (:uuid %)) snapshot-blocks))
+        remaining-parsed (vec (remove #(contains? explicit-parsed (:idx %)) parsed-blocks))
+        title-matches (unique-title-anchor-matches remaining-snapshot remaining-parsed)
+        snapshot-index-by-uuid (into {}
+                                     (map-indexed (fn [idx snapshot-block]
+                                                    [(:uuid snapshot-block) idx]))
+                                     snapshot-blocks)
+        anchors (->> (merge explicit-matches title-matches)
+                     (map (fn [[parsed-idx snapshot-block]]
+                            {:parsed-position (get parsed-position-by-idx parsed-idx)
+                             :parsed-idx parsed-idx
+                             :snapshot-idx (get snapshot-index-by-uuid (:uuid snapshot-block))}))
+                     (filter #(and (some? (:parsed-position %))
+                                   (some? (:snapshot-idx %))))
+                     (sort-by (juxt :parsed-position :snapshot-idx))
+                     (reduce (fn [anchors anchor]
+                               (if (< (:snapshot-idx (peek anchors) -1)
+                                      (:snapshot-idx anchor))
+                                 (conj anchors anchor)
+                                 anchors))
+                             [])
+                     vec)]
+    (loop [[left right & more] (concat [{:parsed-idx -1 :snapshot-idx -1}]
+                                       anchors
+                                       [{:parsed-position (count parsed-blocks)
+                                         :parsed-idx (count parsed-blocks)
+                                         :snapshot-idx (count snapshot-blocks)}])
+           matches (merge explicit-matches title-matches)]
+      (if (nil? right)
+        {:matches matches}
+        (let [old-gap (subvec snapshot-blocks (inc (:snapshot-idx left)) (:snapshot-idx right))
+              new-gap (subvec parsed-blocks (inc (:parsed-position left -1)) (:parsed-position right))
+              result (resolve-sidecar-gap old-gap new-gap)]
+          (if-let [error (:error result)]
+            {:error error}
+            (recur (cons right more)
+                   (merge matches (:matches result)))))))))
+
+(defn- unreduced-value
+  [value]
+  (if (reduced? value) @value value))
+
+(defn- infer-existing-block-uuids-from-snapshot
+  [snapshot blocks]
+  (let [parsed-by-parent (group-by :parent-ref blocks)
+        snapshot-by-parent (group-by :parent-uuid (:blocks snapshot))]
+    (letfn [(infer-children [snapshot-parent-uuid parsed-parent-ref assignments]
+              (let [parsed-children (get parsed-by-parent parsed-parent-ref)
+                    snapshot-children (get snapshot-by-parent snapshot-parent-uuid)
+                    result (sidecar-sibling-matches snapshot-children parsed-children)]
+                (if-let [error (:error result)]
+                  (reduced {:error error})
+                  (let [matches (:matches result)
+                        assignments' (reduce-kv
+                                      (fn [acc idx snapshot-block]
+                                        (assoc acc idx (:uuid snapshot-block)))
+                                      assignments
+                                      matches)]
+                    (reduce (fn [acc parsed-block]
+                              (if (:error acc)
+                                (reduced acc)
+                                (let [snapshot-block (get matches (:idx parsed-block))
+                                      parsed-child-ref (or (:uuid parsed-block) (:idx parsed-block))]
+                                  (if snapshot-block
+                                    (infer-children (:uuid snapshot-block) parsed-child-ref acc)
+                                    acc))))
+                            assignments'
+                            parsed-children)))))]
+      (let [assignments (unreduced-value (infer-children nil nil {}))]
+        (if (:error assignments)
+          assignments
+          {:blocks (mapv (fn [block]
+                           (cond-> block
+                             (nil? (:uuid block))
+                             (assoc :uuid (get assignments (:idx block)))
+
+                             (integer? (:parent-ref block))
+                             (update :parent-ref #(or (get assignments %) %))))
+                         blocks)})))))
 
 (defn- greedy-title-matches
   [existing parsed]
@@ -560,42 +856,31 @@
               [parent-ref (sort-by :idx children)]))
        (into {})))
 
-(defn- assign-new-block-orders
-  [page page-block-by-uuid blocks]
+(defn- assign-block-orders
+  [page-block-by-uuid blocks]
   (let [children-by-parent (parsed-children-by-parent blocks)]
     (letfn [(existing-order [block]
               (some-> (:uuid block) page-block-by-uuid :block/order))
-            (next-existing-order [blocks]
-              (some existing-order blocks))
             (assign-children [parent-ref order-by-index]
-              (loop [[block & more] (get children-by-parent parent-ref)
-                     previous-order nil
-                     order-by-index order-by-index]
-                (if (nil? block)
-                  order-by-index
-                  (if-let [order (existing-order block)]
-                    (recur more
-                           order
-                           (assign-children (:uuid block) order-by-index))
-                    (let [new-run (vec (cons block (take-while #(nil? (existing-order %)) more)))
-                          remaining (drop (count new-run) more)
-                          next-order (next-existing-order remaining)
-                          orders (db-order/gen-n-keys (count new-run) previous-order next-order)
-                          order-by-index' (reduce (fn [acc [block order]]
-                                                    (assoc acc (:idx block) order))
-                                                  order-by-index
-                                                  (map vector new-run orders))
-                          order-by-index'' (reduce (fn [acc block]
-                                                     (assign-children (:idx block) acc))
-                                                   order-by-index'
-                                                   new-run)]
-                      (recur remaining
-                             (last orders)
-                             order-by-index''))))))]
+              (let [children (vec (get children-by-parent parent-ref))
+                    child-orders (map existing-order children)
+                    assign-new-orders? (some nil? child-orders)
+                    orders (when assign-new-orders?
+                             (db-order/gen-n-keys (count children) nil nil))
+                    order-by-index' (if assign-new-orders?
+                                      (reduce (fn [acc [block order]]
+                                                (assoc acc (:idx block) order))
+                                              order-by-index
+                                              (map vector children orders))
+                                      order-by-index)]
+                (reduce (fn [acc block]
+                          (assign-children (or (:uuid block) (:idx block)) acc))
+                        order-by-index'
+                        children)))]
       (let [order-by-index (assign-children nil {})]
         (mapv (fn [block]
                 (cond-> block
-                  (nil? (:uuid block))
+                  (contains? order-by-index (:idx block))
                   (assoc :order (get order-by-index (:idx block)))))
               blocks)))))
 
@@ -608,13 +893,16 @@
                       parent
                       [:block/uuid (get new-uuid-by-index parent-ref)])
                     page-id)]
-    {:block/uuid block-uuid
-     :block/title (or (:db-title block) (:title block))
-     :block/page page-id
-     :block/parent parent-id
-     :block/order (or (:order block) (db-order/gen-key))
-     :block/created-at now
-     :block/updated-at now}))
+    (cond-> {:block/uuid block-uuid
+             :block/title (or (:db-title block) (:title block))
+             :block/page page-id
+             :block/parent parent-id
+             :block/order (or (:order block) (db-order/gen-key))
+             :block/created-at now
+             :block/updated-at now}
+      (:status-ident block)
+      (assoc :logseq.property/status (:status-ident block)
+             :block/tags :logseq.class/Task))))
 
 (defn- top-level-delete-uuids
   [db delete-uuids]
@@ -627,13 +915,54 @@
                          (ldb/get-block-parents db block-uuid {:depth 100}))))
          vec)))
 
+(defn- has-deleted-ancestor?
+  [db deleted-uuids block-uuid]
+  (boolean
+   (some (fn [ancestor]
+           (let [ancestor-uuid (:block/uuid ancestor)]
+             (and (not= block-uuid ancestor-uuid)
+                  (contains? deleted-uuids ancestor-uuid))))
+         (ldb/get-block-parents db block-uuid {:depth 100}))))
+
 (defn- update-existing-block-tx
   [block parsed-block now]
-  (let [title (or (:db-title parsed-block) (:title parsed-block))]
-    (when (not= (:block/title block) title)
-      {:db/id (:db/id block)
-       :block/title title
-       :block/updated-at now})))
+  (let [title (or (:db-title parsed-block) (:title parsed-block))
+        tx (cond-> {:db/id (:db/id block)}
+             (not= (:block/title block) title)
+             (assoc :block/title title
+                    :block/updated-at now)
+
+             (and (:order parsed-block)
+                  (not= (:block/order block) (:order parsed-block)))
+             (assoc :block/order (:order parsed-block)))]
+    (when (< 1 (count tx))
+      tx)))
+
+(defn- explicit-status-ident
+  [db block]
+  (when (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
+    (:db/ident (:logseq.property/status block))))
+
+(defn- existing-block-status-txs
+  [db block parsed-block]
+  (let [block-id (:db/id block)
+        status-ident (:status-ident parsed-block)
+        old-status-ident (explicit-status-ident db block)
+        old-status (when old-status-ident (d/entity db old-status-ident))
+        task? (some #(= :logseq.class/Task (:db/ident %)) (:block/tags block))]
+    (if status-ident
+      (cond-> []
+        (not= old-status-ident status-ident)
+        (conj [:db/add block-id :logseq.property/status status-ident])
+
+        (not task?)
+        (conj [:db/add block-id :block/tags :logseq.class/Task]))
+      (cond-> []
+        old-status-ident
+        (conj [:db/retract block-id :logseq.property/status (:db/id old-status)])
+
+        (and old-status-ident task?)
+        (conj [:db/retract block-id :block/tags :logseq.class/Task])))))
 
 (defn- title-content-ref-uuids
   [title]
@@ -714,56 +1043,106 @@
   (when (seq tx-data)
     (ldb/transact! conn tx-data (import-tx-meta relative-path outliner-ops))))
 
+(defn- file-origin-tx?
+  [tx-report]
+  (= :file (get-in tx-report [:tx-meta :markdown-mirror/source])))
+
 (defn- id-property-line
   ([block-uuid]
    (id-property-line "" block-uuid))
   ([indent block-uuid]
    (str indent "id:: " block-uuid)))
 
+(defn- content-has-status-marker?
+  [content marker]
+  (or (= content marker)
+      (string/starts-with? content (str marker " "))))
+
+(defn- content-tag-titles
+  [content]
+  (->> (content-ref-targets content)
+       (keep (fn [{:keys [title tag?]}]
+               (when tag? (string/lower-case title))))
+       set))
+
+(defn- token-title
+  [token]
+  (if (string/starts-with? token "#[[")
+    (subs token 3 (- (count token) 2))
+    (subs token 1)))
+
+(defn- decorate-block-content
+  [{:keys [status-marker tag-tokens]} content]
+  (let [content (or content "")
+        content (if (and status-marker
+                         (not (content-has-status-marker? content status-marker)))
+                  (if (string/blank? content)
+                    status-marker
+                    (str status-marker " " content))
+                  content)
+        existing-tag-titles (content-tag-titles content)
+        tag-tokens' (remove (fn [token]
+                              (contains? existing-tag-titles
+                                         (string/lower-case (token-title token))))
+                            tag-tokens)]
+    (if (seq tag-tokens')
+      (str content " " (string/join " " tag-tokens'))
+      content)))
+
+(defn- decorate-block-line
+  [block-info line]
+  (if-let [[_ spaces title] (re-matches markdown-block-re line)]
+    (str spaces "- " (decorate-block-content block-info title))
+    line))
+
+(defn- block-line-info
+  [db block]
+  {:uuid (:block/uuid block)
+   :status-marker (when (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
+                    (some-> (:logseq.property/status block) status-marker))
+   :tag-tokens (mirror-tag-tokens block)})
+
 (defn- materialize-markers-content
   [db page]
   (let [block-lines
         (letfn [(render-block [block level]
                   (let [indent (apply str (repeat (dec level) "  "))
-                        id-indent (str indent "  ")
                         children (sort-by :block/order (:block/_parent block))]
-                    (concat (cond-> [(str indent "- " (:block/title block))]
-                              (block-needs-id? db block)
-                              (conj (id-property-line id-indent (:block/uuid block))))
+                    (concat [(str indent "- " (decorate-block-content
+                                               (block-line-info db block)
+                                               (:block/title block)))]
                             (mapcat #(render-block % (inc level)) children))))]
           (mapcat #(render-block % 1) (page-root-blocks page)))]
     (string/join "\n"
-                 (concat [(id-property-line (:block/uuid page)) "" ""]
+                 (concat [(id-property-line (:block/uuid page)) ""]
                          block-lines))))
 
-(defn- block-id-lines
+(defn- rendered-block-line-infos
   [db page]
   (->> (mapcat #(ldb/get-block-and-children db (:block/uuid %))
                (page-root-blocks page))
        (map (fn [block]
-              {:uuid (:block/uuid block)
-               :emit-id? (block-needs-id? db block)}))))
+              (block-line-info db block)))))
 
-(defn- add-ids-to-rendered-content
+(defn- add-page-id-to-rendered-content
   [db page content]
-  (let [block-ids (block-id-lines db page)]
+  (let [block-line-infos (rendered-block-line-infos db page)]
     (loop [[line & more] (string/split-lines (or content ""))
-           [block-id & more-block-ids] block-ids
+           [block-line-info & more-block-line-infos] block-line-infos
            lines [(id-property-line (:block/uuid page))]
            seen-block? false]
       (if (nil? line)
         (string/join "\n" lines)
         (if-let [[_ spaces _title] (re-matches markdown-block-re line)]
           (let [lines' (cond-> lines
-                         (not seen-block?) (into ["" ""])
-                         true (conj line)
-                         (:emit-id? block-id) (conj (id-property-line (str spaces "  ") (:uuid block-id))))]
+                         (not seen-block?) (conj "")
+                         true (conj (decorate-block-line block-line-info line)))]
             (recur more
-                   more-block-ids
+                   more-block-line-infos
                    lines'
                    true))
           (recur more
-                 (cons block-id more-block-ids)
+                 (cons block-line-info more-block-line-infos)
                  (conj lines line)
                  seen-block?))))))
 
@@ -771,10 +1150,12 @@
   [repo db page {:keys [platform] :as _opts}]
   (when platform
     (when-let [relative-path (page-relative-path db page)]
-      (<write-if-changed! platform
-                          repo
-                          (mirror-path repo relative-path)
-                          (materialize-markers-content db page)))))
+      (p/let [result (<write-if-changed! platform
+                                         repo
+                                         (mirror-path repo relative-path)
+                                         (materialize-markers-content db page))
+              _ (<write-page-snapshot! platform repo db page)]
+        result))))
 
 (defn- import-new-file!
   [repo conn relative-path _content parsed opts]
@@ -789,18 +1170,15 @@
       (p/resolved {:status :error
                    :reason :new-file-has-page-marker})
 
-      (seq (keep :uuid (:blocks parsed)))
-      (p/resolved {:status :error
-                   :reason :new-file-has-block-marker})
-
       (existing-page-for-path db relative-path nil)
       (p/resolved {:status :error
                    :reason :page-already-exists})
 
       :else
       (let [now (common-util/time-ms)
+            blocks (mapv #(normalize-parsed-block-title db {} %) (:blocks parsed))
             {parsed-blocks :blocks
-             ref-page-txs :page-txs} (with-content-ref-plans db (:blocks parsed) now)
+             ref-page-txs :page-txs} (with-content-ref-plans db blocks now)
             page-uuid (:uuid page-plan)
             page-tx (cond-> {:block/title (:title page-plan)
                              :block/name (common-util/page-name-sanity-lc (:title page-plan))
@@ -827,7 +1205,7 @@
                                     (tag-ref-add-txs
                                      [:block/uuid (get new-uuid-by-index (:idx block))]
                                      block))
-                                   parsed-blocks)
+                                  parsed-blocks)
             tx-data (vec (concat [page-tx] ref-page-txs block-txs block-ref-txs block-tag-txs))
             page-options (cond-> {:redirect? false
                                   :uuid page-uuid}
@@ -851,98 +1229,114 @@
       (p/resolved {:status :error
                    :reason :page-marker-mismatch})
 
-      (duplicate-marker? (:blocks parsed))
-      (p/resolved {:status :error
-                   :reason :duplicate-block-marker})
-
-      (not (parsed-existing-markers-valid? (:blocks parsed) page-block-by-uuid))
-      (p/resolved {:status :error
-                   :reason :block-marker-outside-page})
-
       :else
-      (let [blocks (->> (:blocks parsed)
-                        (infer-existing-block-uuids page)
-                        (assign-new-block-orders page page-block-by-uuid))
-            new-uuids (->> blocks
-                           (keep-indexed (fn [idx block]
-                                           (when (nil? (:uuid block))
-                                             [idx (random-uuid)])))
-                           (into {}))
-            now (common-util/time-ms)
-            {parsed-blocks :blocks
-             ref-page-txs :page-txs} (with-content-ref-plans db blocks now)]
-        (if-not (every? #(parsed-parent-valid? % page-block-by-uuid new-uuids)
-                        parsed-blocks)
-          (p/resolved {:status :error
-                       :reason :unresolved-parent})
-          (let [seen-markers (set (keep :uuid parsed-blocks))
-                existing-uuids (set (keys page-block-by-uuid))
-                delete-uuids (top-level-delete-uuids db (remove seen-markers existing-uuids))
-                save-txs (keep (fn [block]
-                                 (when-let [uuid (:uuid block)]
-                                   (update-existing-block-tx (get page-block-by-uuid uuid) block now)))
-                               parsed-blocks)
-                save-ref-txs (mapcat (fn [block]
+      (p/let [snapshot (when-let [platform (:platform opts)]
+                         (<read-page-snapshot platform repo (:block/uuid page)))]
+        (let [matching-blocks (mapv #(normalize-parsed-block-title db {} %) (:blocks parsed))
+              inferred (if snapshot
+                         (infer-existing-block-uuids-from-snapshot snapshot matching-blocks)
+                         {:blocks (infer-existing-block-uuids page (:blocks parsed))})]
+          (if-let [error (:error inferred)]
+            {:status :error
+             :reason error}
+            (let [blocks (mapv #(normalize-parsed-block-title db page-block-by-uuid %)
+                                (:blocks inferred))
+                  blocks (assign-block-orders page-block-by-uuid blocks)
+                  new-uuids (->> blocks
+                                 (keep-indexed (fn [idx block]
+                                                 (when (nil? (:uuid block))
+                                                   [idx (random-uuid)])))
+                                 (into {}))
+                  now (common-util/time-ms)
+                  {parsed-blocks :blocks
+                   ref-page-txs :page-txs} (with-content-ref-plans db blocks now)]
+              (if-not (every? #(parsed-parent-valid? % page-block-by-uuid new-uuids)
+                              parsed-blocks)
+                {:status :error
+                 :reason :unresolved-parent}
+                (let [seen-markers (set (keep :uuid parsed-blocks))
+                      existing-uuids (set (keys page-block-by-uuid))
+                      delete-uuids (set (remove seen-markers existing-uuids))
+                      top-level-delete-uuids (top-level-delete-uuids db delete-uuids)
+                      save-txs (keep (fn [block]
                                        (when-let [uuid (:uuid block)]
-                                         (existing-block-content-ref-txs
-                                          db
-                                          (get page-block-by-uuid uuid)
-                                          block)))
-                                      parsed-blocks)
-                save-tag-txs (mapcat (fn [block]
-                                       (when-let [uuid (:uuid block)]
-                                         (existing-block-tag-ref-txs
-                                          db
-                                          (get page-block-by-uuid uuid)
-                                          block)))
-                                      parsed-blocks)
-                new-blocks (keep-indexed (fn [idx block]
-                                           (when (nil? (:uuid block))
-                                             (new-block-tx (:db/id page)
-                                                           block
-                                                           page-block-by-uuid
-                                                           new-uuids
-                                                           now)))
-                                         parsed-blocks)
-                new-block-ref-txs (mapcat (fn [block]
-                                            (when (nil? (:uuid block))
-                                              (content-ref-add-txs
-                                               [:block/uuid (get new-uuids (:idx block))]
-                                               block)))
+                                         (update-existing-block-tx (get page-block-by-uuid uuid) block now)))
+                                     parsed-blocks)
+                      save-status-txs (mapcat (fn [block]
+                                                (when-let [uuid (:uuid block)]
+                                                  (existing-block-status-txs
+                                                   db
+                                                   (get page-block-by-uuid uuid)
+                                                   block)))
+                                              parsed-blocks)
+                      save-ref-txs (mapcat (fn [block]
+                                             (when-let [uuid (:uuid block)]
+                                               (existing-block-content-ref-txs
+                                                db
+                                                (get page-block-by-uuid uuid)
+                                                block)))
                                            parsed-blocks)
-                new-block-tag-txs (mapcat (fn [block]
-                                            (when (nil? (:uuid block))
-                                              (tag-ref-add-txs
-                                               [:block/uuid (get new-uuids (:idx block))]
-                                               block)))
+                      save-tag-txs (mapcat (fn [block]
+                                             (when-let [uuid (:uuid block)]
+                                               (existing-block-tag-ref-txs
+                                                db
+                                                (get page-block-by-uuid uuid)
+                                                block)))
                                            parsed-blocks)
-                delete-txs (mapcat (fn [block-uuid]
-                                     [[:db/retractEntity (:db/id (get page-block-by-uuid block-uuid))]])
-                                   delete-uuids)
-                tx-data (vec (concat ref-page-txs
-                                     save-txs
-                                     save-ref-txs
-                                     save-tag-txs
-                                     new-blocks
-                                     new-block-ref-txs
-                                     new-block-tag-txs
-                                     delete-txs))
-                outliner-ops (cond-> []
-                               (seq save-txs)
-                               (conj [:save-block [(first save-txs) {}]])
-                               (seq new-blocks)
-                               (conj [:insert-blocks [(vec new-blocks) (:block/uuid page) {:sibling? false}]])
-                               (seq delete-uuids)
-                               (conj [:delete-blocks [(vec delete-uuids) {}]]))]
-            (if (seq tx-data)
-              (do
-                (transact-import! conn tx-data relative-path outliner-ops)
-                (p/let [_ (when (or (seq new-blocks) (seq delete-uuids))
-                            (<materialize-markers! repo @conn (d/entity @conn (:db/id page)) opts))]
-                  {:status :imported
-                   :count (count tx-data)}))
-              (p/resolved {:status :skipped
-                           :reason :no-db-changes}))))))))
+                      new-blocks (keep-indexed (fn [idx block]
+                                                 (when (nil? (:uuid block))
+                                                   (new-block-tx (:db/id page)
+                                                                 block
+                                                                 page-block-by-uuid
+                                                                 new-uuids
+                                                                 now)))
+                                               parsed-blocks)
+                      new-block-ref-txs (mapcat (fn [block]
+                                                  (when (nil? (:uuid block))
+                                                    (content-ref-add-txs
+                                                     [:block/uuid (get new-uuids (:idx block))]
+                                                     block)))
+                                                parsed-blocks)
+                      new-block-tag-txs (mapcat (fn [block]
+                                                  (when (nil? (:uuid block))
+                                                    (tag-ref-add-txs
+                                                     [:block/uuid (get new-uuids (:idx block))]
+                                                     block)))
+                                                parsed-blocks)
+                      delete-txs (mapcat (fn [block-uuid]
+                                           [[:db/retractEntity (:db/id (get page-block-by-uuid block-uuid))]])
+                                         delete-uuids)
+                      tx-data (vec (concat ref-page-txs
+                                           save-txs
+                                           save-status-txs
+                                           save-ref-txs
+                                           save-tag-txs
+                                           new-blocks
+                                           new-block-ref-txs
+                                           new-block-tag-txs
+                                           delete-txs))
+                      outliner-ops (cond-> []
+                                     (seq save-txs)
+                                     (conj [:save-block [(first save-txs) {}]])
+                                     (seq new-blocks)
+                                     (conj [:insert-blocks [(vec new-blocks) (:block/uuid page) {:sibling? false}]])
+                                     (seq top-level-delete-uuids)
+                                     (conj [:delete-blocks [(vec top-level-delete-uuids) {}]]))]
+                  (if (some (fn [block]
+                              (when-let [uuid (:uuid block)]
+                                (has-deleted-ancestor? db delete-uuids uuid)))
+                            parsed-blocks)
+                    {:status :error
+                     :reason :orphaned-block}
+                    (if (seq tx-data)
+                      (do
+                        (transact-import! conn tx-data relative-path outliner-ops)
+                        (p/let [_ (when-let [platform (:platform opts)]
+                                    (<write-page-snapshot! platform repo @conn (d/entity @conn (:db/id page))))]
+                          {:status :imported
+                           :count (count tx-data)}))
+                      {:status :skipped
+                       :reason :no-db-changes})))))))))))
 
 (defn <import-file-content!
   [repo conn relative-path content {:keys [platform] :as opts}]
@@ -1071,6 +1465,12 @@
       (and (:block/parent entity) (ldb/page? (:block/parent entity))) (:db/id (:block/parent entity))
       (some-> entity :block/parent :block/page) (:db/id (:block/page (:block/parent entity))))))
 
+(defn- referrer-page-ids
+  [db eid]
+  (when-let [entity (d/entity db eid)]
+    (->> (:block/_refs entity)
+         (keep #(page-id-for-entity db (:db/id %))))))
+
 (defn affected-page-ids
   [{:keys [db-before db-after tx-data]}]
   (->> tx-data
@@ -1078,7 +1478,13 @@
                  (cond-> [(page-id-for-entity db-before e)
                           (page-id-for-entity db-after e)]
                    (= a :block/page)
-                   (conj v))))
+                   (conj v)
+
+                   true
+                   (into (referrer-page-ids db-before e))
+
+                   true
+                   (into (referrer-page-ids db-after e)))))
        (remove nil?)
        set))
 
@@ -1134,7 +1540,7 @@
 
 (defn- render-page-content
   [db page options]
-  (add-ids-to-rendered-content
+  (add-page-id-to-rendered-content
    db
    page
    (common-file/block->content
@@ -1142,6 +1548,8 @@
     (:block/uuid page)
     {:include-page-properties? true}
     {:export-bullet-indentation (or (:export-bullet-indentation options) "  ")
+     :excluded-properties #{:logseq.property/status}
+     :preserve-block-refs? true
      :date-formatter (:date-formatter options)})))
 
 (defn- mirrorable-page?
@@ -1212,7 +1620,9 @@
           (if-let [relative-path (page-relative-path db page opts)]
             (let [path (mirror-path repo relative-path)
                   content (render-page-content db page opts)]
-              (<write-if-changed! platform* repo path content))
+              (p/let [result (<write-if-changed! platform* repo path content)
+                      _ (<write-page-snapshot! platform* repo db page)]
+                result))
             (p/resolved (invalid-file-name-result repo page))))
         (p/resolved {:status :skipped
                      :reason :missing-page
@@ -1295,7 +1705,8 @@
   (let [platform* (or platform (platform/current))]
     (if (and (enabled? repo)
              (supported-runtime? platform*)
-             (not (get-in tx-report [:tx-meta :from-disk?])))
+             (not (get-in tx-report [:tx-meta :from-disk?]))
+             (not (file-origin-tx? tx-report)))
       (let [jobs (map #(page-job repo tx-report % opts)
                       (affected-page-ids tx-report))]
         (if defer?

@@ -89,6 +89,8 @@
                         (remove (fn [[k _]]
                                   (contains? db-property/db-attribute-properties k)))
                         (remove (fn [[k _]]
+                                  (contains? (:excluded-properties context) k)))
+                        (remove (fn [[k _]]
                                   (:logseq.property/hide? (d/entity db k))))
                         (into {}))]
     (when (seq properties)
@@ -124,7 +126,10 @@
 (defn- block-title-content
   [db b context]
   (or (property-value-block-content db b context)
-      (db-content/recur-replace-uuid-in-block-title (d/entity db (:db/id b)))))
+      (db-content/recur-replace-uuid-in-block-title
+       (d/entity db (:db/id b))
+       10
+       {:replace-block-refs? (not (:preserve-block-refs? context))})))
 
 (defn- transform-content
   [db b level {:keys [heading-to-list? include-properties?]

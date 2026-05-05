@@ -206,19 +206,22 @@ builds do not have the same graph-directory filesystem guarantees.
    APIs instead of introducing a separate renderer-side serializer.
 2. The mirror output should match normal Markdown export semantics for page
    content.
-3. Mirror files always include a page `id:: <uuid>` property line. Block
-   identity is sparse: ordinary blocks omit `id::`, while blocks that need a
-   stable visible address, such as blocks referenced by other blocks or blocks
-   with non-content identity-bearing state, include an indented block
-   `id:: <uuid>` property directly below the block list item.
-4. When page properties are present, including the page `id::` line, write two
-   empty lines between the page property section and the first block.
-5. Mirror files include block and page property drawers, including user
+3. Mirror files always include a page `id:: <uuid>` property line. Blocks do
+   not include visible `id::` identity lines; block identity is preserved by the
+   hidden sidecar snapshot and by block references that use `[[uuid]]` when a
+   non-page block must be linked from Markdown content.
+4. When page properties are present, including the page `id::` line, write one
+   empty line between the page property section and the first block.
+5. The mirror writes a hidden sidecar snapshot under
+   `mirror/markdown/.logseq/pages/<page-uuid>.edn`. It records the last
+   rendered sibling order, titles, and UUIDs for each block so Markdown can
+   stay readable while file edits still match stable DB identity.
+6. Mirror files include block and page property drawers, including user
    properties, with rendered property values.
-6. Assets are referenced as normal exported Markdown references. This ADR does
+7. Assets are referenced as normal exported Markdown references. This ADR does
    not copy assets into `mirror/markdown/`.
-7. Page references remain in Logseq wiki-link form, for example `[[Foo]]`.
-8. Ambiguous page references caused by duplicate page titles are an accepted
+8. Page references remain in Logseq wiki-link form, for example `[[Foo]]`.
+9. Ambiguous page references caused by duplicate page titles are an accepted
    limitation of Markdown Mirror. Do not rewrite page references to uuid-based
    links or relative Markdown links in this ADR.
 
@@ -242,16 +245,18 @@ builds do not have the same graph-directory filesystem guarantees.
    list items from an existing page file.
 8. Creating a new page or journal from a new mirror file is supported only when
    the path maps to `pages/<name>.md` or `journals/YYYY_MM_DD.md` and the file
-   contains no page or block `id::` lines from another graph object.
-9. Existing unmarked blocks are matched back to current DB blocks by sibling
-   structure and stable content where possible, preserving block UUIDs for sync
-   convergence while avoiding verbose ids in ordinary Markdown.
-10. `[[page]]` references in imported block content create missing pages and are
+   contains no top-level page `id::` line from another graph object.
+9. Existing blocks are matched back to current DB blocks by sibling structure
+   and stable content where possible, preserving block UUIDs for sync
+   convergence while avoiding verbose ids in Markdown.
+10. Indented block `id:: <uuid>` lines are rejected instead of treated as a
+    compatibility marker for old mirror output.
+11. `[[page]]` references in imported block content create missing pages and are
    stored using internal id refs in the DB transaction.
-11. Simple hashtag refs such as `#tag1` and page-ref hashtags such as
+12. Simple hashtag refs such as `#tag1` and page-ref hashtags such as
     `#[[tag one]]` create missing tag/class pages and attach the tag to the
     block.
-12. The watcher suppresses Logseq's own mirror writes by comparing recent written
+13. The watcher suppresses Logseq's own mirror writes by comparing recent written
     content, not by ignoring every file event for a path during a time window.
     A real external edit that changes file content must import immediately.
 

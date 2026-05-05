@@ -194,6 +194,9 @@
   ([ent]
    (recur-replace-uuid-in-block-title ent 10))
   ([ent max-depth]
+   (recur-replace-uuid-in-block-title ent max-depth {}))
+  ([ent max-depth {:keys [replace-block-refs?]
+                   :or {replace-block-refs? true}}]
    (let [title (:block/title ent)]
      (if (some->> title (re-find id-ref-pattern))
        (let [id->title (loop [frontier (set (:block/refs ent))
@@ -211,8 +214,12 @@
                                                  (keep :block/uuid)
                                                  new-refs)
                                  id->title' (reduce (fn [m {:block/keys [title]
-                                                            block-uuid :block/uuid}]
-                                                      (if (and block-uuid (string? title))
+                                                            block-uuid :block/uuid
+                                                            :as ref}]
+                                                      (if (and block-uuid
+                                                               (string? title)
+                                                               (or replace-block-refs?
+                                                                   (entity-util/page? ref)))
                                                         (assoc m (str block-uuid) title)
                                                         m))
                                                     id->title
