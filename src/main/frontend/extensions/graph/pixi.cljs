@@ -37,15 +37,6 @@
   [hex-color]
   (js/parseInt (subs hex-color 1) 16))
 
-(defn- node-color
-  [kind dark?]
-  (case kind
-    "tag" (if dark? "#34D399" "#047857")
-    "object" (if dark? "#60A5FA" "#2563EB")
-    "journal" (if dark? "#FBBF24" "#B45309")
-    "property" (if dark? "#F59E0B" "#C2410C")
-    (if dark? "#94A3B8" "#475569")))
-
 (defn- edge-color
   [dark?]
   (if dark? "#334155" "#CBD5E1"))
@@ -54,76 +45,9 @@
   [dark?]
   (if dark? "#E2E8F0" "#0F172A"))
 
-(defn- build-degree-map
-  [links]
-  (reduce
-   (fn [m {:keys [source target]}]
-     (-> m
-         (update source (fnil inc 0))
-         (update target (fnil inc 0))))
-   {}
-   links))
-
-(def ^:private golden-angle 2.399963229728653)
-
-(defn- spiral-position
-  [idx spacing]
-  (let [r (* spacing (js/Math.sqrt (inc idx)))
-        theta (* idx golden-angle)]
-    [(* r (js/Math.cos theta))
-     (* r (js/Math.sin theta))]))
-
-(defn- node-radius
-  [kind degree]
-  (let [base (case kind
-               "tag" 5.6
-               "object" 4.4
-               "journal" 4.4
-               3.8)]
-    (+ base (min 4.2 (js/Math.sqrt (double degree))))))
-
 (defn- layout-nodes
   [nodes links view-mode dark?]
-  (let [view-mode (normalize-view-mode view-mode)
-        degree (build-degree-map links)
-        decorate (fn [node x y]
-                   (let [kind (:kind node)
-                         d (get degree (:id node) 0)]
-                     (assoc node
-                            :x x
-                            :y y
-                            :radius (node-radius kind d)
-                            :degree d
-                            :color (node-color kind dark?)
-                            :color-int (color->int (node-color kind dark?)))))
-        sort-by-degree-desc (fn [items]
-                              (sort-by (fn [item]
-                                         (- (get degree (:id item) 0)))
-                                       items))]
-    (if (= view-mode :tags-and-objects)
-      (let [tags (sort-by-degree-desc (filter #(= "tag" (:kind %)) nodes))
-            others (sort-by-degree-desc (remove #(= "tag" (:kind %)) nodes))
-            tag-count (max 1 (count tags))
-            tag-ring-radius (max 140 (* 20 (js/Math.sqrt tag-count)))
-            tag-layout (map-indexed
-                        (fn [idx node]
-                          (let [theta (* (/ (* 2 js/Math.PI) tag-count) idx)]
-                            (decorate node
-                                      (* tag-ring-radius (js/Math.cos theta))
-                                      (* tag-ring-radius (js/Math.sin theta)))))
-                        tags)
-            others-layout (map-indexed
-                           (fn [idx node]
-                             (let [[x y] (spiral-position idx 12)]
-                               (decorate node (+ 240 x) y)))
-                           others)]
-        (vec (concat tag-layout others-layout)))
-      (->> (sort-by-degree-desc nodes)
-           (map-indexed
-            (fn [idx node]
-              (let [[x y] (spiral-position idx 11)]
-                (decorate node x y))))
-           vec))))
+  (logic/layout-nodes nodes links view-mode dark?))
 
 (defn- index-layouted-nodes
   [layouted-nodes]

@@ -93,3 +93,26 @@
     (is (= 0.5 (get weights "c")))
     (is (= 0.25 (get weights "d")))
     (is (nil? (get weights "e")))))
+
+(deftest layout-nodes-uses-link-forces
+  (let [nodes [{:id "tag-a" :kind "tag" :label "Tag A"}
+               {:id "obj-linked" :kind "object" :label "Linked object"}
+               {:id "obj-island" :kind "object" :label "Island object"}]
+        links [{:source "obj-linked" :target "tag-a"}]
+        layouted (logic/layout-nodes nodes links :tags-and-objects false)
+        by-id (into {} (map (juxt :id identity) layouted))
+        distance (fn [a b]
+                   (let [a* (get by-id a)
+                         b* (get by-id b)
+                         dx (- (:x a*) (:x b*))
+                         dy (- (:y a*) (:y b*))]
+                     (js/Math.sqrt (+ (* dx dx) (* dy dy)))))]
+    (is (= 3 (count layouted)))
+    (is (every? #(and (number? (:x %))
+                      (number? (:y %))
+                      (number? (:degree %))
+                      (number? (:radius %))
+                      (number? (:color-int %)))
+                layouted))
+    (is (< (distance "tag-a" "obj-linked")
+           (distance "tag-a" "obj-island")))))
