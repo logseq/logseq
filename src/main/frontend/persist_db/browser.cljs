@@ -198,7 +198,7 @@
   (if (and (util/electron?) repo)
     (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled
                              repo
-                             (true? (get-in @state/state [:electron/user-cfgs :feature/markdown-mirror?])))
+                             (true? (:feature/markdown-mirror? (state/get-graph-config repo))))
     (p/resolved nil)))
 
 (defrecord InBrowser []

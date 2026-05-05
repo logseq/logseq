@@ -357,7 +357,7 @@
           original-stop! remote/stop!]
       (reset-runtime-state!)
       (reset! state/state (assoc-in original-state
-                                    [:electron/user-cfgs :feature/markdown-mirror?]
+                                    [:config "logseq_db_graph_a" :feature/markdown-mirror?]
                                     true))
       (set! ipc/ipc (fn [channel repo]
                       (is (= "db-worker-runtime" channel))
@@ -384,7 +384,49 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
-(deftest electron-ensure-remote-loads-markdown-mirror-setting-before-sync-test
+(deftest electron-ensure-remote-pushes-graph-markdown-mirror-setting-on-start-test
+  (async done
+    (let [worker-calls (atom [])
+          ensure-remote! #'persist-db/<ensure-remote!
+          original-state @state/state
+          original-ipc ipc/ipc
+          original-start! remote/start!
+          original-stop! remote/stop!]
+      (reset-runtime-state!)
+      (reset! state/state (-> original-state
+                              (assoc :electron/user-cfgs {:feature/markdown-mirror? true})
+                              (assoc-in [:config ::state/global-config] {:feature/markdown-mirror? true})
+                              (assoc-in [:config "logseq_db_graph_a"] {})
+                              (assoc-in [:config "logseq_db_graph_b"] {:feature/markdown-mirror? true})))
+      (set! ipc/ipc (fn [channel repo]
+                      (is (= "db-worker-runtime" channel))
+                      (p/resolved {:base-url "http://127.0.0.1:9101"
+                                   :auth-token nil
+                                   :repo repo})))
+      (set! remote/start! (fn [{:keys [repo]}]
+                            (->FakeRemote repo
+                                          (fn [qkw & args]
+                                            (swap! worker-calls conj [qkw args])
+                                            (p/resolved nil)))))
+      (set! remote/stop! (fn [_] (p/resolved true)))
+      (-> (p/let [_ (ensure-remote! "logseq_db_graph_a")
+                  _ (ensure-remote! "logseq_db_graph_b")]
+            (is (= [[:thread-api/markdown-mirror-set-enabled
+                     ["logseq_db_graph_a" false]]
+                    [:thread-api/markdown-mirror-set-enabled
+                     ["logseq_db_graph_b" true]]]
+                   (filterv #(= :thread-api/markdown-mirror-set-enabled (first %))
+                            @worker-calls))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (reset! state/state original-state)
+                       (set! ipc/ipc original-ipc)
+                       (set! remote/start! original-start!)
+                       (set! remote/stop! original-stop!)
+                       (done)))))))
+
+(deftest electron-ensure-remote-uses-graph-markdown-mirror-setting-before-sync-test
   (async done
     (let [ipc-calls (atom [])
           worker-calls (atom [])
@@ -395,7 +437,11 @@
           original-start! remote/start!
           original-stop! remote/stop!]
       (reset-runtime-state!)
-      (swap! state/state assoc :electron/user-cfgs nil)
+      (swap! state/state
+             (fn [state]
+               (-> state
+                   (assoc :electron/user-cfgs nil)
+                   (assoc-in [:config "logseq_db_graph_a" :feature/markdown-mirror?] true))))
       (set! util/electron? (constantly true))
       (set! ipc/ipc (fn [channel & args]
                       (swap! ipc-calls conj (into [channel] args))
@@ -405,9 +451,6 @@
                                      :auth-token nil
                                      :repo (first args)})
 
-                        :userAppCfgs
-                        (p/resolved {:feature/markdown-mirror? true})
-
                         (p/resolved nil))))
       (set! remote/start! (fn [{:keys [repo]}]
                             (->FakeRemote repo
@@ -416,8 +459,7 @@
                                             (p/resolved nil)))))
       (set! remote/stop! (fn [_] (p/resolved true)))
       (-> (p/let [_ (ensure-remote! "logseq_db_graph_a")]
-            (is (= [["db-worker-runtime" "logseq_db_graph_a"]
-                    [:userAppCfgs]]
+            (is (= [["db-worker-runtime" "logseq_db_graph_a"]]
                    @ipc-calls))
             (is (= [:thread-api/markdown-mirror-set-enabled
                     ["logseq_db_graph_a" true]]
@@ -431,6 +473,40 @@
                        (set! ipc/ipc original-ipc)
                        (set! remote/start! original-start!)
                        (set! remote/stop! original-stop!)
+                       (done)))))))
+
+(deftest browser-fetch-initial-data-pushes-graph-markdown-mirror-setting-test
+  (async done
+    (let [worker-calls (atom [])
+          original-state @state/state
+          original-electron? util/electron?
+          original-invoke state/<invoke-db-worker]
+      (reset! state/state (-> original-state
+                              (assoc :electron/user-cfgs {:feature/markdown-mirror? true})
+                              (assoc-in [:config ::state/global-config] {:feature/markdown-mirror? true})
+                              (assoc-in [:config "logseq_db_graph_a"] {})))
+      (set! util/electron? (constantly true))
+      (set! state/<invoke-db-worker
+            (fn [qkw & args]
+              (swap! worker-calls conj [qkw args])
+              (case qkw
+                :thread-api/create-or-open-db (p/resolved nil)
+                :thread-api/markdown-mirror-set-enabled (p/resolved nil)
+                :thread-api/get-initial-data (p/resolved {:schema {:repo (first args)}
+                                                          :initial-data []})
+                (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
+      (-> (protocol/<fetch-initial-data (browser/->InBrowser) "logseq_db_graph_a" {})
+          (p/then (fn [_]
+                    (is (= [:thread-api/markdown-mirror-set-enabled
+                            ["logseq_db_graph_a" false]]
+                           (first (filter #(= :thread-api/markdown-mirror-set-enabled (first %))
+                                          @worker-calls))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (reset! state/state original-state)
+                       (set! util/electron? original-electron?)
+                       (set! state/<invoke-db-worker original-invoke)
                        (done)))))))
 
 (deftest electron-list-db-without-current-repo-does-not-bootstrap-runtime
