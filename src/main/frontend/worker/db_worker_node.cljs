@@ -8,8 +8,8 @@
             [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.platform.node :as platform-node]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.version :as worker-version]
             [lambdaisland.glogi :as log]
+            [logseq.common.version :as build-version]
             [logseq.cli.root-dir :as root-dir]
             [logseq.cli.style :as style]
             [logseq.db :as ldb]
@@ -278,7 +278,7 @@
    :pid (.-pid js/process)
    :owner-source (name (normalize-owner-source owner-source))
    :root-dir root-dir
-   :revision (worker-version/revision)})
+   :revision (build-version/revision)})
 
 (defn- make-server
   [proxy {:keys [bound-repo stop-fn host port owner-source root-dir]}]
@@ -598,7 +598,7 @@
       (show-help!)
       (.exit js/process 0))
     (when version?
-      (println (worker-version/format-version))
+      (println (build-version/format-version))
       (.exit js/process 0))
     (when-not (seq root-dir)
       (.error js/console "root-dir is required")

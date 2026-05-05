@@ -10,6 +10,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :as version]
+            [logseq.common.version :as build-version]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -132,7 +133,7 @@
        [:span.text-base (t :mobile.settings/version)]
        [:span.text-sm version/version]]
 
-      (let [revision (string/replace config/revision "-dirty" "")]
+      (let [revision (string/replace (build-version/revision) "-dirty" "")]
         [:div.mobile-setting-item
          {:on-click (fn []
                       (js/window.open (str "https://github.com/logseq/logseq/commit/" revision)))}

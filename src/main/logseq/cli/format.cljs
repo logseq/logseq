@@ -208,6 +208,9 @@
     :root-dir-permission "Check filesystem permissions or set LOGSEQ_CLI_ROOT_DIR"
     :server-owned-by-other "Retry from the process owner that started the server"
     :server-start-timeout-orphan "Check and stop lingering db-worker-node processes, then retry"
+    :server-revision-mismatch "Logseq will restart revision-mismatched db-worker-node servers automatically; retry after stopping any lingering server manually"
+    :server-revision-mismatch-restart-failed "Logseq tried to restart a revision-mismatched db-worker-node server and failed. Stop the server manually, then retry"
+    :server-revision-mismatch-after-restart "Logseq restarted db-worker-node, but the replacement still reports a different revision. Check the installed Logseq build and retry"
     nil))
 
 (defn- format-candidates
@@ -922,15 +925,27 @@
   [{:keys [src]}]
   (str "Removed backup: " (or src "-")))
 
+(defn- format-graph-create-enable-sync
+  [{:keys [graph stages]}]
+  (string/join "\n"
+               ["Graph created and sync enabled"
+                (str "  Graph: " (or graph "-"))
+                (str "  Create: " (if (contains? stages :create) "ok" "-"))
+                (str "  Sync upload: " (if (contains? stages :upload) "ok" "-"))
+                (str "  Sync start: " (if (contains? stages :start) "ok" "-"))]))
+
 (defn- format-graph-action
-  [command {:keys [graph]}]
-  (let [verb (case command
-               :graph-create "Created"
-               :graph-switch "Switched to"
-               :graph-remove "Removed"
-               :graph-validate "Validated"
-               "Updated")]
-    (str verb " graph " (pr-str graph))))
+  [command {:keys [graph]} data]
+  (if (and (= command :graph-create)
+           (map? (:stages data)))
+    (format-graph-create-enable-sync data)
+    (let [verb (case command
+                 :graph-create "Created"
+                 :graph-switch "Switched to"
+                 :graph-remove "Removed"
+                 :graph-validate "Validated"
+                 "Updated")]
+      (str verb " graph " (pr-str graph)))))
 
 (defn- quote-cli-arg
   [value]
@@ -976,7 +991,7 @@
         :graph-backup-remove (format-graph-backup-remove context)
         :graph-info (format-graph-info data now-ms)
         (:graph-create :graph-switch :graph-remove :graph-validate)
-        (format-graph-action command context)
+        (format-graph-action command context data)
         :server-list (format-server-list (:servers data)
                                          (get-in human [:server-list :revision-mismatch]))
         :server-cleanup (format-server-cleanup data)

@@ -15,6 +15,20 @@
    ["mkdir -p '{{tmp-dir}}/graphs-b'"
     "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
     "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"]},
+  :sync/create-enable-base
+  {:cleanup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
+    "{{cli}} --root-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json server stop --graph {{graph-arg}}"],
+   :tags [:sync],
+   :vars
+   {:sync-port "18080",
+    :sync-http-base "http://127.0.0.1:18080",
+    :sync-ws-url "ws://127.0.0.1:18080/sync/%s",
+    :home-dir "{{tmp-dir}}/home",
+    :auth-path "{{tmp-dir}}/home/logseq/auth.json",
+    :cli-home "HOME='{{tmp-dir}}/home' {{cli}}"},
+   :setup
+   ["mkdir -p '{{tmp-dir}}/graphs-b'"]},
   :sync/common
   {:extends :sync/base,
    :cmds
@@ -36,7 +50,36 @@
    {:commands ["sync upload" "sync download" "sync status"],
     :options {:global ["--config" "--graph" "--root-dir" "--output"]}}}}
  :cases
- [{:tags [:happy-path :bootstrap :a-to-b],
+ [{:tags [:happy-path :bootstrap :create-enable-sync :a-to-b],
+   :extends :sync/create-enable-base,
+   :setup
+   ["{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} --enable-sync --e2ee-password {{e2ee-password-arg}}"
+    "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{root-dir}}' --config '{{config-path}}' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
+    "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page SyncCreateEnableHome >/dev/null"
+    "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page SyncCreateEnableHome --content '{{marker-content}}' >/dev/null"
+    "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{root-dir}}' --config '{{config-path}}' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
+    "{{cli-home}} --root-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync download --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"
+    "{{cli-home}} --root-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync start --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}}"
+    "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 120 --interval-s 1"],
+   :cmds
+   ["python3 '{{repo-root}}/cli-e2e/scripts/compare_graph_queries.py' --cli '{{repo-root}}/static/logseq-cli.js' --graph '{{graph}}' --config-a '{{config-path}}' --root-dir-a '{{root-dir}}' --config-b '{{tmp-dir}}/cli-b.edn' --root-dir-b '{{tmp-dir}}/graphs-b' --query '[:find ?title :where [?b :block/title ?title] [(= ?title \"{{marker-content}}\")] ]' --require-result"
+    "{{cli-home}} --root-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync status --graph {{graph-arg}}"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :pending-local] 0,
+     [:data :pending-asset] 0,
+     [:data :pending-server] 0,
+     [:data :last-error] nil}},
+   :covers
+   {:commands ["graph create" "sync download" "sync status"],
+    :options {:global ["--config" "--graph" "--root-dir" "--output"],
+              :graph-create ["--enable-sync" "--e2ee-password"]}},
+   :id "sync-graph-create-enable-sync-a-to-b",
+   :graph "sync-e2e-create-enable-sync-a-to-b",
+   :vars {:marker-content "sync-create-enable-sync-a-to-b-marker"}}
+  {:tags [:happy-path :bootstrap :a-to-b],
    :extends :sync/common,
    :setup
    ["{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page SyncBootstrapHome >/dev/null"

@@ -1281,8 +1281,11 @@
                        _ (is (fs/existsSync server-list-file))
                        _ (is (string/includes? (.toString (fs/readFileSync server-list-file) "utf8")
                                                (str (.-pid js/process) " " port)))
+                       health (http-get host port "/healthz")
+                       health-body (js->clj (js/JSON.parse (:body health)) :keywordize-keys true)
                        ensured (cli-server/ensure-server! {:root-dir data-dir
-                                                           :config-path config-path}
+                                                           :config-path config-path
+                                                           :expected-revision (:revision health-body)}
                                                           repo)
                        url (js/URL. (:base-url ensured))
                        cli-host (.-hostname url)

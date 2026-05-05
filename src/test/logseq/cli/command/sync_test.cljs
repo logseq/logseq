@@ -633,17 +633,21 @@
 (deftest test-execute-sync-upload
   (async done
          (let [ensure-calls (atom [])
-               invoke-calls (atom [])]
+               invoke-calls (atom [])
+               invoke-timeouts (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
-                               transport/invoke (fn [_ method args]
+                               transport/invoke (fn [cfg method args]
                                                   (swap! invoke-calls conj [method args])
+                                                  (swap! invoke-timeouts conj [method (:timeout-ms cfg)])
                                                   (p/resolved {:ok true}))]
                  (p/let [_ (execute-with-runtime-auth {:type :sync-upload
                                                   :repo "logseq_db_demo"}
-                                                 {:root-dir "/tmp"})]
+                                                 {:root-dir "/tmp"
+                                                  :timeout-ms 10000})]
                    (is (= [[{:root-dir "/tmp"
+                             :timeout-ms 10000
                              :id-token "runtime-token"}
                             "logseq_db_demo"]]
                           @ensure-calls))
@@ -654,7 +658,9 @@
                                                                    :http-base nil}]]
                           (second @invoke-calls)))
                    (is (= [:thread-api/db-sync-upload-graph ["logseq_db_demo"]]
-                          (nth @invoke-calls 2)))))
+                          (nth @invoke-calls 2)))
+                   (is (= [:thread-api/db-sync-upload-graph 1800000]
+                          (nth @invoke-timeouts 2)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

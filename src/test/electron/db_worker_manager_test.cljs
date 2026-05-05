@@ -78,6 +78,26 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
+(deftest release-runtime-detaches-only-requested-window-repo-association
+  (async done
+    (let [stop-calls (atom [])
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo] (p/resolved (runtime repo)))
+                    :stop-daemon! (fn [rt]
+                                    (swap! stop-calls conj (:repo rt))
+                                    (p/resolved true))})]
+      (-> (p/let [_ (db-worker/ensure-started! manager "graph-a" :window-1)
+                  _ (db-worker/ensure-started! manager "graph-a" :window-2)
+                  _ (db-worker/release-runtime! manager "graph-a" :window-1)
+                  state @(:state manager)]
+            (is (empty? @stop-calls))
+            (is (nil? (get-in state [:window->repo :window-1])))
+            (is (= "graph-a" (get-in state [:window->repo :window-2])))
+            (is (= #{:window-2} (get-in state [:repos "graph-a" :windows]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
 (deftest ensure-stopped-stale-repo-does-not-clear-new-window-mapping
   (async done
     (let [stop-calls (atom [])

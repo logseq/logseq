@@ -34,15 +34,14 @@
                                      "externs.js"]
                            :warnings {:fn-deprecated false
                                       :redef false}}
-        :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
+        :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]
         :closure-defines {lambdaisland.glogi.console/colorize "false"
                           lambdaisland.glogi.console/timestamp "true"
                           goog.debug.LOGGING_ENABLED true
                           frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
                           frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
-                          frontend.config/ENABLE-DB-SYNC-LOCAL #shadow/env ["ENABLE_DB_SYNC_LOCAL" :as :bool :default false]
-                          frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
+                          frontend.config/ENABLE-DB-SYNC-LOCAL #shadow/env ["ENABLE_DB_SYNC_LOCAL" :as :bool :default false]}
 
         :devtools {:before-load frontend.core/stop          ;; before live-reloading any code call this function
                    :after-load frontend.core/start          ;; after live-reloading finishes call this function
@@ -75,6 +74,7 @@
                                            "externs.js"]
                                  :warnings {:fn-deprecated false
                                             :redef false}}
+              :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]
               :closure-defines {goog.debug.LOGGING_ENABLED true
                                 lambdaisland.glogi.console/colorize "false"
                                 lambdaisland.glogi.console/timestamp "true"}
@@ -86,7 +86,7 @@
   :db-worker-node {:target :node-script
                    :output-to "static/db-worker-node.js"
                    :main frontend.worker.db-worker-node/main
-                   :build-hooks [(shadow.hooks/db-worker-node-metadata-hook "--long --always --dirty")]
+                   :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]
                    :compiler-options {:infer-externs :auto
                                       :source-map true
                                       :externs ["datascript/externs.js"
@@ -99,7 +99,7 @@
                :output-to "static/logseq-cli.js"
                :main logseq.cli.main/main
                :devtools {:enabled false}
-               :build-hooks [(shadow.hooks/logseq-cli-metadata-hook "--long --always --dirty")]
+               :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]
                :closure-defines {goog.debug.LOGGING_ENABLED true
                                  lambdaisland.glogi.console/colorize "false"
                                  lambdaisland.glogi.console/timestamp "true"}
@@ -133,7 +133,7 @@
                                         "externs.js"]
                               :warnings {:fn-deprecated false
                                          :redef false}}
-           :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
+           :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]
            :closure-defines
            {lambdaisland.glogi.console/colorize "false"
             lambdaisland.glogi.console/timestamp "true"
@@ -141,8 +141,7 @@
             frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
             frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
             ;; frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
-            frontend.config/ENABLE-DB-SYNC-LOCAL #shadow/env ["ENABLE_DB_SYNC_LOCAL" :as :bool :default false]
-            frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]}
+            frontend.config/ENABLE-DB-SYNC-LOCAL #shadow/env ["ENABLE_DB_SYNC_LOCAL" :as :bool :default false]}
 
            :devtools {:before-load mobile.core/stop!          ;; before live-reloading any code call this function
                       :after-load mobile.core/render!          ;; after live-reloading finishes call this function
@@ -155,6 +154,7 @@
              :main electron.core/main
              :devtools {:before-load electron.core/stop
                         :after-load electron.core/start}
+             :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]
              :compiler-options {:infer-externs :auto
                                 :source-map true
                                 :source-map-include-sources-content true
@@ -168,13 +168,12 @@
 
   :test {:target :node-test
          :output-to "static/tests.js"
+         :build-hooks [(shadow.hooks/build-metadata-hook
+                        {:build-time "test-build-time"
+                         :revision "test-revision"})]
          :closure-defines {frontend.util/NODETEST true
                            frontend.worker-common.util/NODETEST true
-                           logseq.shui.util/NODETEST true
-                           frontend.worker.version/BUILD_TIME "test-worker-build-time"
-                           frontend.worker.version/REVISION "test-worker-revision"
-                           logseq.cli.version/BUILD_TIME "test-build-time"
-                           logseq.cli.version/REVISION "test-revision"}
+                           logseq.shui.util/NODETEST true}
          :devtools {:enabled false}
          ;; disable :static-fns to allow for with-redefs and repl development
          :compiler-options {:static-fns false}
@@ -182,6 +181,9 @@
 
   :test-no-worker {:target :node-test
                    :output-to "static/tests-no-worker.js"
+                   :build-hooks [(shadow.hooks/build-metadata-hook
+                                  {:build-time "test-build-time"
+                                   :revision "test-revision"})]
                    :closure-defines {frontend.util/NODETEST true
                                      frontend.worker-common.util/NODETEST true
                                      logseq.shui.util/NODETEST true}
@@ -192,6 +194,7 @@
                    :main frontend.test.frontend-node-test-runner/main}
 
   :gen-malli-kondo-config {:target :node-script
+                           :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]
                            :closure-defines {frontend.util/NODETEST true}
                            :devtools {:enabled false}
                            :compiler-options {:static-fns false}
@@ -213,6 +216,7 @@
 
                :output-dir "./static/js/publishing"
                :asset-path "static/js"
+               :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]
                :closure-defines {logseq.common.config/PUBLISHING true
                                  goog.debug.LOGGING_ENABLED true}
                :compiler-options {:infer-externs :auto

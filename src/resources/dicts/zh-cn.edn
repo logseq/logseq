@@ -731,6 +731,8 @@
  :graph.page/title "页面图谱"
 
  :graph.switch/add-graph-action "再添加一份图谱"
+ :graph.switch/db-worker-unavailable-no-fallback-warning "图谱“{1}”的数据库 worker 不可用，且没有其他可用图谱。"
+ :graph.switch/db-worker-unavailable-switching-warning "图谱“{1}”的数据库 worker 不可用。正在切换到图谱“{2}”。"
  :graph.switch/empty-desc "没有匹配的图谱。你想再添加一份图谱吗？"
  :graph.switch/prompt "切换到："
  :graph.switch/select-prompt "请选择一份图谱"

@@ -734,6 +734,8 @@
  :graph.page/title "Page graph"
 
  :graph.switch/add-graph-action "Yes, add another graph"
+ :graph.switch/db-worker-unavailable-no-fallback-warning "The database worker for graph \"{1}\" is unavailable, and no other graph is available."
+ :graph.switch/db-worker-unavailable-switching-warning "The database worker for graph \"{1}\" is unavailable. Switching to graph \"{2}\"."
  :graph.switch/empty-desc "No matched graphs. Do you want to add another one?"
  :graph.switch/prompt "Switch to:"
  :graph.switch/select-prompt "Select a graph"

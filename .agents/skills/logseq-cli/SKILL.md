@@ -53,6 +53,8 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - If a user request is task-related, prefer task-scoped commands first.
 - Use `list task`, `upsert task`, and other `... task` commands before block/page-level alternatives.
 - Only fall back to `upsert block`/`list page` style workflows when task commands cannot satisfy the requested operation.
+- For any task state, create/update the task with `upsert task --status <status>` and keep status markers out of `--content`.
+- If the same task block also needs additional tags, use explicit tag association separately, for example `upsert block --id <task-block-id> --update-tags '["AI-GENERATED" "CLI"]'`.
 
 ## Examples policy
 
@@ -78,20 +80,37 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 ## Tag association semantics
 
 - For block or page tag association, prefer explicit CLI tag options such as `--update-tags` and `--remove-tags`.
-- Do not treat writing `#TagName` inside `--content` as equivalent guidance to explicit tag association.
 - `upsert block` supports `--update-tags` in both create mode and update mode.
 - `--update-tags` expects an EDN vector.
 - Tag values may be tag title/name strings, db/id, UUID, or `:db/ident` values.
-- String tag values may include a leading `#`, but they should still be passed inside `--update-tags` rather than embedded in content as a substitute for association.
-- If the user asks to tag a block or page, prefer explicit tag association over embedding hashtags in content.
+- String tag values may include a leading `#`, but they should still be passed inside `--update-tags`.
+- If the user asks to tag a block or page, prefer explicit tag association.
 - Tags must already exist and be public. If needed, create the tag first with `upsert tag --name "<TagName>"`.
 
-## Pitfalls
+## Anti-patterns and correct usage
 
-- `--content "Summary #AI-GENERATED"` is not the same guidance as `--update-tags '["AI-GENERATED"]'`.
-- Do not pass `--update-tags` as a comma-separated string. Use an EDN vector.
-- Do not assume a hashtag in block text will replace the need for explicit tag association when the user asks for a tagged block.
-- If tag association fails, verify the tag exists and is public before retrying.
+### Task status in block content
+
+- Anti-pattern: store task state in content, for example `--content "DONE Implemented and verified ..."` with `upsert block`.
+- Correct usage: store task state as structured task data with `upsert task --status <status>` and keep content free of `TODO`, `DOING`, `DONE`, or other status markers.
+- Example:
+  1. `logseq upsert task --graph "Lambda RTC" --target-page "May 4th, 2026" --content "Some content here" --status done --output json`
+  2. If tags are needed, use the returned block id: `logseq upsert block --graph "Lambda RTC" --id <returned-block-id> --update-tags '["AI-GENERATED" "CLI" "db-sync"]'`
+
+### Hashtags in content instead of tag association
+
+- Anti-pattern: treat content hashtags as tag association, for example `--content "Summary #AI-GENERATED"`.
+- Correct usage: keep tags in explicit tag options, for example `upsert block --update-tags '["AI-GENERATED"]'`.
+
+### Comma-separated tag lists
+
+- Anti-pattern: pass tag updates as a comma-separated string, for example `--update-tags "AI-GENERATED,CLI"`.
+- Correct usage: pass an EDN vector, for example `--update-tags '["AI-GENERATED" "CLI"]'`.
+
+### Missing or private tags
+
+- Anti-pattern: retry the same tag association command after a tag association failure without checking tag state.
+- Correct usage: verify the tag exists and is public; create it first when needed with `upsert tag --name "<TagName>"`.
 
 ## Tips
 

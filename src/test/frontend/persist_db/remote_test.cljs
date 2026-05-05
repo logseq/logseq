@@ -86,6 +86,67 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
+(deftest connect-events-closes-current-subscription-before-reconnect
+  (async done
+    (let [open-count (atom 0)
+          closed (atom [])
+          scheduled (atom nil)
+          latest-handlers (atom nil)
+          wrapped-worker (fn [& _] nil)
+          client (remote/create-client
+                  {:base-url "http://127.0.0.1:9101"
+                   :open-sse-fn (fn [{:keys [on-error]}]
+                                  (let [subscription-id (swap! open-count inc)]
+                                    (reset! latest-handlers {:on-error on-error})
+                                    {:close! (fn []
+                                               (swap! closed conj subscription-id))}))
+                   :schedule-fn (fn [f _delay-ms]
+                                  (reset! scheduled f)
+                                  :scheduled)
+                   :reconnect-delay-ms 1})
+          sub (remote/connect-events! client wrapped-worker)]
+      (-> (p/let [_ ((:on-error @latest-handlers) (js/Error. "disconnect"))
+                  scheduled-fn @scheduled
+                  _ (is (= [1] @closed))
+                  _ (is (fn? scheduled-fn))
+                  _ (when (fn? scheduled-fn)
+                      (scheduled-fn))
+                  _ ((:on-error @latest-handlers) (js/Error. "disconnect"))]
+            (is (= 2 @open-count))
+            (is (= [1 2] @closed))
+            ((:disconnect! sub)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest connect-events-scheduled-reconnect-does-not-open-after-disconnect
+  (async done
+    (let [open-count (atom 0)
+          scheduled (atom nil)
+          latest-handlers (atom nil)
+          wrapped-worker (fn [& _] nil)
+          client (remote/create-client
+                  {:base-url "http://127.0.0.1:9101"
+                   :open-sse-fn (fn [{:keys [on-error]}]
+                                  (swap! open-count inc)
+                                  (reset! latest-handlers {:on-error on-error})
+                                  {:close! (fn [] nil)})
+                   :schedule-fn (fn [f _delay-ms]
+                                  (reset! scheduled f)
+                                  :scheduled)
+                   :reconnect-delay-ms 1})
+          sub (remote/connect-events! client wrapped-worker)]
+      (-> (p/let [_ ((:on-error @latest-handlers) (js/Error. "disconnect"))
+                  scheduled-fn @scheduled
+                  _ (is (fn? scheduled-fn))
+                  _ ((:disconnect! sub))
+                  _ (when (fn? scheduled-fn)
+                      (scheduled-fn))]
+            (is (= 1 @open-count)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
 (deftest invoke-without-auth-token-omits-authorization-header
   (async done
     (let [captured (atom nil)

@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is use-fixtures]]
             [electron.ipc :as ipc]
             [frontend.config :as config]
+            [frontend.handler.notification :as notification]
             [frontend.persist-db.browser :as browser]
             [frontend.persist-db :as persist-db]
             [frontend.persist-db.protocol :as protocol]
@@ -43,14 +44,16 @@
   (reset! *previous-runtime-state
           {:remote-db @persist-db/remote-db
            :remote-repo @persist-db/remote-repo
+           :remote-runtime-state @persist-db/remote-runtime-state
            :db-worker @state/*db-worker
            :transact-fn @ldb/*transact-fn}))
 
 (defn- restore-runtime-state!
   []
-  (let [{:keys [remote-db remote-repo db-worker transact-fn]} @*previous-runtime-state]
+  (let [{:keys [remote-db remote-repo remote-runtime-state db-worker transact-fn]} @*previous-runtime-state]
     (reset! persist-db/remote-db remote-db)
     (reset! persist-db/remote-repo remote-repo)
+    (reset! persist-db/remote-runtime-state remote-runtime-state)
     (reset! state/*db-worker db-worker)
     (reset! ldb/*transact-fn transact-fn)
     (reset! *previous-runtime-state nil)))
@@ -62,8 +65,122 @@
   []
   (reset! persist-db/remote-db nil)
   (reset! persist-db/remote-repo nil)
+  (reset! persist-db/remote-runtime-state nil)
   (reset! state/*db-worker nil)
   (reset! ldb/*transact-fn nil))
+
+(defn- success-body
+  [result]
+  (js/JSON.stringify
+   #js {:ok true
+        :resultTransit (ldb/write-transit-str result)}))
+
+(defn- error-body
+  [code message]
+  (js/JSON.stringify
+   #js {:ok false
+        :error #js {:code code
+                    :message message}}))
+
+(defn- <capture-result
+  [promise]
+  (-> promise
+      (p/then (fn [value]
+                {:status :resolved
+                 :value value}))
+      (p/catch (fn [error]
+                 {:status :rejected
+                  :error error}))))
+
+(defn- db-worker-runtime
+  [results sse-state]
+  {:base-url "http://127.0.0.1:9101"
+   :auth-token nil
+   :fetch-fn (fn [{:keys [body]}]
+               (let [request (js->clj (js/JSON.parse body) :keywordize-keys true)
+                     method (:method request)]
+                 (case method
+                   "thread-api/set-db-sync-config"
+                   (p/resolved {:status 200
+                                :body (success-body nil)})
+
+                   "thread-api/list-db"
+                   (let [result (first @results)]
+                     (swap! results #(vec (rest %)))
+                     (cond
+                       (= :success result)
+                       (p/resolved {:status 200
+                                    :body (success-body [{:name "logseq_db_graph_a"}])})
+
+                       (= :app-error result)
+                       (p/resolved {:status 409
+                                    :body (error-body "repo-locked" "graph already locked")})
+
+                       (fn? result)
+                       (result)
+
+                       :else
+                       (p/rejected (js/Error. "Failed to fetch")))))))
+   :open-sse-fn (fn [{:keys [on-error]}]
+                  (swap! (:open-count sse-state) inc)
+                  (reset! (:on-error sse-state) on-error)
+                  {:close! (fn []
+                             (swap! (:close-count sse-state) inc))})
+   :schedule-fn (fn [f _delay-ms]
+                  (swap! (:scheduled sse-state) conj f)
+                  :scheduled)})
+
+(defn- sse-state
+  []
+  {:on-error (atom nil)
+   :open-count (atom 0)
+   :close-count (atom 0)
+   :scheduled (atom [])})
+
+(defn- install-electron-failover-test-env!
+  [{:keys [current-repo repos results events current-repo-updates notifications sse]
+    :or {sse (sse-state)}}]
+  (let [originals {:original-state @state/state
+                   :electron? util/electron?
+                   :ipc ipc/ipc
+                   :pub-event! state/pub-event!
+                   :set-current-repo! state/set-current-repo!
+                   :notification-show! notification/show!}]
+    (reset-runtime-state!)
+    (swap! state/state assoc :git/current-repo current-repo)
+    (swap! state/state assoc-in [:me :repos] repos)
+    (set! util/electron? (constantly true))
+    (set! ipc/ipc (fn [channel repo]
+                    (case channel
+                      "db-worker-runtime"
+                      (p/resolved (assoc (db-worker-runtime results sse) :repo repo))
+
+                      (p/resolved nil))))
+    (set! state/pub-event! (fn [event]
+                             (swap! events conj event)
+                             (p/resolved true)))
+    (set! state/set-current-repo! (fn [repo]
+                                    (swap! current-repo-updates conj repo)
+                                    (swap! state/state assoc :git/current-repo repo)
+                                    nil))
+    (set! notification/show! (fn [content status]
+                               (swap! notifications conj [content status])
+                               nil))
+    originals))
+
+(defn- restore-electron-failover-test-env!
+  [{:keys [original-state electron? ipc pub-event! set-current-repo! notification-show!]}]
+  (reset! state/state original-state)
+  (set! util/electron? electron?)
+  (set! ipc/ipc ipc)
+  (set! state/pub-event! pub-event!)
+  (set! state/set-current-repo! set-current-repo!)
+  (set! notification/show! notification-show!)
+  (reset-runtime-state!))
+
+(defn- graph-repos
+  [& graphs]
+  (mapv (fn [graph] {:url graph}) graphs))
 
 (deftest electron-fetch-init-data-starts-remote-runtime
   (async done
@@ -259,6 +376,212 @@
                        (set! remote/start! original-start!)
                        (set! remote/stop! original-stop!)
                        (done)))))))
+
+(deftest electron-list-db-failover-switches-after-third-server-unavailable-failure
+  (async done
+         (let [results (atom [:transport-error :transport-error :transport-error])
+               events (atom [])
+               current-repo-updates (atom [])
+               notifications (atom [])
+               originals (install-electron-failover-test-env!
+                          {:current-repo "logseq_db_graph_a"
+                           :repos (graph-repos "logseq_db_graph_a" "logseq_db_graph_b")
+                           :results results
+                           :events events
+                           :current-repo-updates current-repo-updates
+                           :notifications notifications})]
+           (-> (p/let [first-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status first-result)))
+                       _ (is (= [] @events))
+                       second-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status second-result)))
+                       _ (is (= [] @events))
+                       third-result (<capture-result (persist-db/<list-db))]
+                 (is (= :rejected (:status third-result)))
+                 (is (= [nil] @current-repo-updates))
+                 (is (= [[:graph/switch "logseq_db_graph_b" {:persist? false}]] @events))
+                 (is (= 1 (count @notifications)))
+                 (is (= :warning (second (first @notifications)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (restore-electron-failover-test-env! originals)
+                            (done)))))))
+
+(deftest electron-sse-errors-trigger-failover-after-third-server-unavailable-failure
+  (async done
+    (let [results (atom [])
+          events (atom [])
+          current-repo-updates (atom [])
+          notifications (atom [])
+          sse (sse-state)
+          ensure-remote! #'persist-db/<ensure-remote!
+          originals (install-electron-failover-test-env!
+                     {:current-repo "logseq_db_graph_a"
+                      :repos (graph-repos "logseq_db_graph_a" "logseq_db_graph_b")
+                      :results results
+                      :events events
+                      :current-repo-updates current-repo-updates
+                      :notifications notifications
+                      :sse sse})]
+      (-> (p/let [_ (ensure-remote! "logseq_db_graph_a")
+                  on-error @(:on-error sse)
+                  _ (is (fn? on-error))
+                  _ (on-error (js/Error. "connect ECONNREFUSED"))
+                  _ (is (= [] @events))
+                  _ (is (= 1 (count @(:scheduled sse))))
+                  _ (on-error (js/Error. "connect ECONNREFUSED"))
+                  _ (is (= [] @events))
+                  _ (is (= 2 (count @(:scheduled sse))))
+                  _ (on-error (js/Error. "connect ECONNREFUSED"))]
+            (is (= [nil] @current-repo-updates))
+            (is (= [[:graph/switch "logseq_db_graph_b" {:persist? false}]] @events))
+            (is (= 1 (count @notifications)))
+            (is (= :warning (second (first @notifications))))
+            (is (= 1 @(:close-count sse)))
+            (is (= 2 (count @(:scheduled sse)))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (restore-electron-failover-test-env! originals)
+                       (done)))))))
+
+(deftest electron-list-db-success-resets-server-unavailable-failure-count
+  (async done
+         (let [results (atom [:transport-error :success :transport-error :transport-error :transport-error])
+               events (atom [])
+               current-repo-updates (atom [])
+               notifications (atom [])
+               originals (install-electron-failover-test-env!
+                          {:current-repo "logseq_db_graph_a"
+                           :repos (graph-repos "logseq_db_graph_a" "logseq_db_graph_b")
+                           :results results
+                           :events events
+                           :current-repo-updates current-repo-updates
+                           :notifications notifications})]
+           (-> (p/let [first-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status first-result)))
+                       success-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :resolved (:status success-result)))
+                       _ (is (= [] @events))
+                       second-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status second-result)))
+                       third-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status third-result)))
+                       _ (is (= [] @events))
+                       fourth-result (<capture-result (persist-db/<list-db))]
+                 (is (= :rejected (:status fourth-result)))
+                 (is (= [[:graph/switch "logseq_db_graph_b" {:persist? false}]] @events)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (restore-electron-failover-test-env! originals)
+                            (done)))))))
+
+(deftest electron-list-db-app-level-errors-do-not-count-toward-failover
+  (async done
+         (let [results (atom [:app-error :app-error :app-error :transport-error :transport-error :transport-error])
+               events (atom [])
+               current-repo-updates (atom [])
+               notifications (atom [])
+               originals (install-electron-failover-test-env!
+                          {:current-repo "logseq_db_graph_a"
+                           :repos (graph-repos "logseq_db_graph_a" "logseq_db_graph_b")
+                           :results results
+                           :events events
+                           :current-repo-updates current-repo-updates
+                           :notifications notifications})]
+           (-> (p/let [first-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status first-result)))
+                       second-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status second-result)))
+                       third-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status third-result)))
+                       _ (is (= [] @events))
+                       fourth-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status fourth-result)))
+                       fifth-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status fifth-result)))
+                       _ (is (= [] @events))
+                       sixth-result (<capture-result (persist-db/<list-db))]
+                 (is (= :rejected (:status sixth-result)))
+                 (is (= [[:graph/switch "logseq_db_graph_b" {:persist? false}]] @events)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (restore-electron-failover-test-env! originals)
+                            (done)))))))
+
+(deftest electron-list-db-failover-without-fallback-clears-current-repo
+  (async done
+         (let [results (atom [:transport-error :transport-error :transport-error])
+               events (atom [])
+               current-repo-updates (atom [])
+               notifications (atom [])
+               originals (install-electron-failover-test-env!
+                          {:current-repo "logseq_db_graph_a"
+                           :repos (graph-repos "logseq_db_graph_a")
+                           :results results
+                           :events events
+                           :current-repo-updates current-repo-updates
+                           :notifications notifications})]
+           (-> (p/let [first-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status first-result)))
+                       second-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status second-result)))
+                       third-result (<capture-result (persist-db/<list-db))]
+                 (is (= :rejected (:status third-result)))
+                 (is (= [nil] @current-repo-updates))
+                 (is (= [] @events))
+                 (is (= 1 (count @notifications)))
+                 (is (= :warning (second (first @notifications)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (restore-electron-failover-test-env! originals)
+                            (done)))))))
+
+(deftest electron-list-db-late-stale-failure-does-not-increment-new-graph-count
+  (async done
+         (let [late-reject! (atom nil)
+               late-promise (js/Promise. (fn [_resolve reject]
+                                           (reset! late-reject! reject)))
+               results (atom [(fn [] late-promise)
+                              :transport-error :transport-error :transport-error
+                              :transport-error :transport-error])
+               events (atom [])
+               current-repo-updates (atom [])
+               notifications (atom [])
+               originals (install-electron-failover-test-env!
+                          {:current-repo "logseq_db_graph_a"
+                           :repos (graph-repos "logseq_db_graph_a" "logseq_db_graph_b")
+                           :results results
+                           :events events
+                           :current-repo-updates current-repo-updates
+                           :notifications notifications})
+               late-result (<capture-result (persist-db/<list-db))]
+           (-> (p/let [first-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status first-result)))
+                       second-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status second-result)))
+                       third-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status third-result)))
+                       _ (is (= [[:graph/switch "logseq_db_graph_b" {:persist? false}]] @events))
+                       _ (swap! state/state assoc :git/current-repo "logseq_db_graph_b")
+                       fourth-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status fourth-result)))
+                       fifth-result (<capture-result (persist-db/<list-db))
+                       _ (is (= :rejected (:status fifth-result)))
+                       _ (when @late-reject!
+                           (@late-reject! (js/Error. "Failed to fetch")))
+                       stale-result late-result]
+                 (is (= :rejected (:status stale-result)))
+                 (is (= [[:graph/switch "logseq_db_graph_b" {:persist? false}]] @events)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (restore-electron-failover-test-env! originals)
+                            (done)))))))
 
 (deftest electron-close-db-disconnects-current-remote-runtime
   (async done

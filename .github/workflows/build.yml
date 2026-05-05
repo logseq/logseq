@@ -90,15 +90,8 @@ jobs:
       - name: Run ClojureScript tests
         run: pnpm cljs:run-test
 
-      - name: Setup CLI integration test
-        # logseq-cli.js needed just for test-cli-query-human-output-pipes-to-show
-        run: clojure -M:cljs compile logseq-cli && pnpm db-worker-node:release:bundle
-
-      - name: Run ClojureScript integration tests
-        run: pnpm cljs:run-integration-test
-
       - name: Run CLI E2E tests
-        run: bb dev:cli-e2e --verbose --skip-build
+        run: bb dev:cli-e2e --verbose
 
   lint:
     runs-on: ubuntu-22.04
