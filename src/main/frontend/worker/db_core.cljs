@@ -17,6 +17,7 @@
    [frontend.worker.db.migrate :as db-migrate]
    [frontend.worker.db.validate :as worker-db-validate]
    [frontend.worker.export :as worker-export]
+   [frontend.worker.markdown-mirror :as markdown-mirror]
    [frontend.worker.pipeline :as worker-pipeline]
    [frontend.worker.platform :as platform]
    [frontend.worker.publish]
@@ -1093,6 +1094,20 @@
     (log/error :thread-api/sync-app-state new-state))
   (worker-state/set-new-state! new-state)
   nil)
+
+(def-thread-api :thread-api/markdown-mirror-set-enabled
+  [repo enabled?]
+  (markdown-mirror/set-enabled! repo enabled?)
+  nil)
+
+(def-thread-api :thread-api/markdown-mirror-flush
+  [repo]
+  (markdown-mirror/<flush-repo! repo {}))
+
+(def-thread-api :thread-api/markdown-mirror-regenerate
+  [repo]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (markdown-mirror/<mirror-repo! repo @conn {})))
 
 (def-thread-api :thread-api/export-get-debug-datoms
   [repo]

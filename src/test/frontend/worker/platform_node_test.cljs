@@ -77,6 +77,26 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest node-platform-writes-text-atomically-and-deletes-files
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-text-files")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
+                  storage (:storage platform)
+                  path "graph-a/markdown-mirror/pages/page.md"
+                  _ ((:write-text-atomic! storage) path "mirror")
+                  content ((:read-text! storage) path)
+                  _ ((:delete-file! storage) path)
+                  deleted-content (-> ((:read-text! storage) path)
+                                      (p/catch (constantly nil)))]
+            (is (= "mirror" content))
+            (is (nil? deleted-content))
+            (is (empty? (filter #(string/includes? % ".tmp-")
+                                (array-seq (fs/readdirSync
+                                            (node-path/join root-dir "graphs" "graph-a" "markdown-mirror" "pages")))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest node-platform-cli-owner-bypasses-keychain-in-cli-e2e-test
   (async done
     (let [root-dir (node-helper/create-tmp-dir "platform-node-cli-secrets")
