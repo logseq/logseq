@@ -1,5 +1,6 @@
 (ns ^:node-only logseq.graph-parser.exporter-test
   (:require ["fs" :as fs]
+            ["os" :as os]
             ["path" :as node-path]
             [cljs.test :refer [are deftest is testing]]
             [clojure.set :as set]
@@ -184,8 +185,28 @@
       (p/finally (fn [_]
                    (reset! gp-block/*export-to-db-graph? false)))))
 
+(defn- write-temp-graph-file
+  [relative-path content]
+  (let [dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-graph-parser-test-"))
+        file-path (node-path/join dir relative-path)]
+    (fs/mkdirSync (node-path/dirname file-path) #js {:recursive true})
+    (fs/writeFileSync file-path content)
+    file-path))
+
 ;; Tests
 ;; =====
+
+(deftest-async import-block-with-journal-ref-and-time-property-value
+  (p/let [file (write-temp-graph-file
+                 "journals/2023_06_21.md"
+                 "- DONE foo bar #sometag1 #sometag2\n  completed:: [[Sun, 06.08.2023]] *14:42*\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {:user-config {:journal/page-title-format "EEE, dd.MM.yyyy"}})]
+    (is (some? (db-test/find-block-by-content @conn #"foo bar"))
+        "Block with a journal reference plus time in a property value imports")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
 
 (deftest update-asset-links-in-block-title
   (are [x y]
