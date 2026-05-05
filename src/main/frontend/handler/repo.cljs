@@ -132,13 +132,13 @@
   (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
     (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
-(defn- create-db [full-graph-name {:keys [file-graph-import? remote-graph?]}]
+(defn- create-db [full-graph-name {:keys [file-graph-import? creating-remote-graph?]}]
   (->
    (p/let [config config/config-default-content
            _ (persist-db/<new full-graph-name
                               (cond-> {:config config
                                        :graph-git-sha (build-version/revision)
-                                       :remote-graph? remote-graph?}
+                                       :creating-remote-graph? creating-remote-graph?}
                                 file-graph-import? (assoc :import-type :file-graph)))
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
