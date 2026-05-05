@@ -34,8 +34,7 @@
                 (map #(str "LPT" %) (range 1 10)))))
 
 (def ^:private max-file-stem-length 160)
-(def ^:private page-marker-re #"^\s*<!--\s*logseq:page\s+([0-9a-fA-F-]{36})\s*-->\s*$")
-(def ^:private block-marker-re #"^\s*<!--\s*logseq:block\s+([0-9a-fA-F-]{36})\s*-->\s*$")
+(def ^:private id-property-re #"^(\s*)id::\s*([0-9a-fA-F-]{36})\s*$")
 (def ^:private markdown-block-re #"^(\s*)-\s?(.*)$")
 (def ^:private property-line-re #"^\s*[^:\s][^:]*::\s?.*$")
 (def ^:private ref-or-tag-re #"(#?)\[\[([^\[\]]+)\]\]")
@@ -193,6 +192,18 @@
   [blocks idx line]
   (update-in blocks [idx :title] #(str % "\n" line)))
 
+(defn- assoc-block-uuid
+  [blocks idx block-uuid]
+  (assoc-in blocks [idx :uuid] block-uuid))
+
+(defn- assoc-stack-ref
+  [stack idx block-uuid]
+  (mapv (fn [entry]
+          (if (= idx (:idx entry))
+            (assoc entry :ref block-uuid)
+            entry))
+        stack))
+
 (defn- continuation-line
   [line continuation-indent]
   (let [prefix (apply str (repeat continuation-indent " "))]
@@ -203,7 +214,6 @@
   [content]
   (let [lines (string/split-lines (or content ""))]
     (loop [[line & more] lines
-           pending-marker nil
            page-uuid nil
            stack []
            blocks []
@@ -219,49 +229,57 @@
                   fenced-code?' (if (fenced-code-boundary? line')
                                   false
                                   fenced-code?)]
-              (recur more pending-marker page-uuid stack
+              (recur more page-uuid stack
                      (append-block-line blocks current-block-idx line')
                      current-block-idx continuation-indent fenced-code?'))
             {:error :unsupported-top-level-markdown})
-          (if-let [[_ page-uuid-str] (re-matches page-marker-re line)]
-            (recur more nil (parse-uuid-safe page-uuid-str) stack blocks
-                   current-block-idx continuation-indent fenced-code?)
-            (if-let [[_ block-uuid-str] (re-matches block-marker-re line)]
-              (recur more (parse-uuid-safe block-uuid-str) page-uuid stack blocks
-                     current-block-idx continuation-indent fenced-code?)
-              (if-let [[_ spaces title] (re-matches markdown-block-re line)]
-                (let [current-level (line-level spaces)
-                      idx (count blocks)
-                      stack' (->> stack
-                                  (remove (fn [{:keys [level]}] (>= level current-level)))
-                                  vec)
-                      parent-ref (:ref (peek stack'))
-                      block {:uuid pending-marker
-                             :idx idx
-                             :title title
-                             :level current-level
-                             :parent-ref parent-ref}
-                      stack'' (conj stack' {:level current-level
-                                            :ref (or (:uuid block) idx)})
-                      continuation-indent' (+ (count spaces) 2)]
-                  (recur more nil page-uuid stack'' (conj blocks block)
-                         idx continuation-indent' (fenced-code-boundary? title)))
-                (cond
-                  (or (string/blank? line)
-                      (re-matches property-line-re line))
-                  (recur more pending-marker page-uuid stack blocks
+          (if-let [[_ spaces id-str] (re-matches id-property-re line)]
+            (let [id (parse-uuid-safe id-str)]
+              (if (zero? (count spaces))
+                (recur more id stack blocks
+                       current-block-idx continuation-indent fenced-code?)
+                (if (and (some? current-block-idx)
+                         (= (count spaces) continuation-indent))
+                  (recur more page-uuid
+                         (assoc-stack-ref stack current-block-idx id)
+                         (assoc-block-uuid blocks current-block-idx id)
                          current-block-idx continuation-indent fenced-code?)
+                  (recur more page-uuid stack blocks
+                         current-block-idx continuation-indent fenced-code?))))
+            (if-let [[_ spaces title] (re-matches markdown-block-re line)]
+              (let [current-level (line-level spaces)
+                    idx (count blocks)
+                    stack' (->> stack
+                                (remove (fn [{:keys [level]}] (>= level current-level)))
+                                vec)
+                    parent-ref (:ref (peek stack'))
+                    block {:uuid nil
+                           :idx idx
+                           :title title
+                           :level current-level
+                           :parent-ref parent-ref}
+                    stack'' (conj stack' {:level current-level
+                                          :idx idx
+                                          :ref idx})
+                    continuation-indent' (+ (count spaces) 2)]
+                (recur more page-uuid stack'' (conj blocks block)
+                       idx continuation-indent' (fenced-code-boundary? title)))
+              (cond
+                (or (string/blank? line)
+                    (re-matches property-line-re line))
+                (recur more page-uuid stack blocks
+                       current-block-idx continuation-indent fenced-code?)
 
-                  (and (some? current-block-idx)
-                       (some? continuation-indent)
-                       (continuation-line line continuation-indent))
-                  (let [line' (continuation-line line continuation-indent)]
-                    (recur more pending-marker page-uuid stack
-                           (append-block-line blocks current-block-idx line')
-                           current-block-idx continuation-indent (fenced-code-boundary? line')))
+                (and (some? current-block-idx)
+                     (some? continuation-indent)
+                     (continuation-line line continuation-indent))
+                (let [line' (continuation-line line continuation-indent)]
+                  (recur more page-uuid stack
+                         (append-block-line blocks current-block-idx line')
+                         current-block-idx continuation-indent (fenced-code-boundary? line')))
 
-                  :else
-                  {:error :unsupported-top-level-markdown})))))))))
+                :else
+                {:error :unsupported-top-level-markdown}))))))))
 
 (defn- relative-path->new-page
   [relative-path]
@@ -398,9 +416,9 @@
         (recur more
                planned-pages'
                (conj blocks' (assoc block
-                                     :db-title db-title
-                                     :content-ref-uuids (set (map :block/uuid refs))
-                                     :tag-ref-uuids (set (map :block/uuid tag-refs))))
+                                    :db-title db-title
+                                    :content-ref-uuids (set (map :block/uuid refs))
+                                    :tag-ref-uuids (set (map :block/uuid tag-refs))))
                (into page-txs new-page-txs))))))
 
 (defn- page-root-blocks
@@ -545,45 +563,55 @@
   (when (seq tx-data)
     (ldb/transact! conn tx-data (import-tx-meta relative-path outliner-ops))))
 
+(defn- id-property-line
+  ([block-uuid]
+   (id-property-line "" block-uuid))
+  ([indent block-uuid]
+   (str indent "id:: " block-uuid)))
+
 (defn- materialize-markers-content
   [db page]
   (let [block-lines
         (letfn [(render-block [block level]
                   (let [indent (apply str (repeat (dec level) "  "))
+                        id-indent (str indent "  ")
                         children (sort-by :block/order (:block/_parent block))]
-                    (concat [(str "<!-- logseq:block " (:block/uuid block) " -->")
-                             (str indent "- " (:block/title block))]
+                    (concat [(str indent "- " (:block/title block))
+                             (id-property-line id-indent (:block/uuid block))]
                             (mapcat #(render-block % (inc level)) children))))]
           (mapcat #(render-block % 1) (page-root-blocks page)))]
     (string/join "\n"
-                 (cons (str "<!-- logseq:page " (:block/uuid page) " -->")
-                       block-lines))))
+                 (concat [(id-property-line (:block/uuid page)) "" ""]
+                         block-lines))))
 
-(defn- block-marker-lines
+(defn- block-id-lines
   [db page]
   (->> (mapcat #(ldb/get-block-and-children db (:block/uuid %))
                (page-root-blocks page))
        (map (fn [block] {:uuid (:block/uuid block)}))))
 
-(defn- add-markers-to-rendered-content
+(defn- add-ids-to-rendered-content
   [db page content]
-  (let [markers (block-marker-lines db page)]
+  (let [block-ids (block-id-lines db page)]
     (loop [[line & more] (string/split-lines (or content ""))
-           [marker & more-markers] markers
-           lines [(str "<!-- logseq:page " (:block/uuid page) " -->")]]
+           [block-id & more-block-ids] block-ids
+           lines [(id-property-line (:block/uuid page))]
+           seen-block? false]
       (if (nil? line)
         (string/join "\n" lines)
-        (if (re-matches markdown-block-re line)
+        (if-let [[_ spaces _title] (re-matches markdown-block-re line)]
+          (let [lines' (cond-> lines
+                         (not seen-block?) (into ["" ""])
+                         true (conj line)
+                         block-id (conj (id-property-line (str spaces "  ") (:uuid block-id))))]
+            (recur more
+                   more-block-ids
+                   lines'
+                   true))
           (recur more
-                 more-markers
-                 (cond-> lines
-                   marker
-                   (conj (str "<!-- logseq:block " (:uuid marker) " -->"))
-                   true
-                   (conj line)))
-          (recur more
-                 (cons marker more-markers)
-                 (conj lines line)))))))
+                 (cons block-id more-block-ids)
+                 (conj lines line)
+                 seen-block?))))))
 
 (defn- <materialize-markers!
   [repo db page {:keys [platform] :as _opts}]
@@ -642,9 +670,9 @@
                                      block))
                                   parsed-blocks)
             block-tag-txs (mapcat (fn [block]
-                                     (tag-ref-add-txs
-                                      [:block/uuid (get new-uuid-by-index (:idx block))]
-                                      block))
+                                    (tag-ref-add-txs
+                                     [:block/uuid (get new-uuid-by-index (:idx block))]
+                                     block))
                                    parsed-blocks)
             tx-data (vec (concat [page-tx] ref-page-txs block-txs block-ref-txs block-tag-txs))
             page-options (cond-> {:redirect? false
@@ -698,18 +726,18 @@
                                    (update-existing-block-tx (get page-block-by-uuid uuid) block now)))
                                parsed-blocks)
                 save-ref-txs (mapcat (fn [block]
-                                        (when-let [uuid (:uuid block)]
-                                          (existing-block-content-ref-txs
-                                           db
-                                           (get page-block-by-uuid uuid)
-                                           block)))
+                                       (when-let [uuid (:uuid block)]
+                                         (existing-block-content-ref-txs
+                                          db
+                                          (get page-block-by-uuid uuid)
+                                          block)))
                                       parsed-blocks)
                 save-tag-txs (mapcat (fn [block]
-                                        (when-let [uuid (:uuid block)]
-                                          (existing-block-tag-ref-txs
-                                           db
-                                           (get page-block-by-uuid uuid)
-                                           block)))
+                                       (when-let [uuid (:uuid block)]
+                                         (existing-block-tag-ref-txs
+                                          db
+                                          (get page-block-by-uuid uuid)
+                                          block)))
                                       parsed-blocks)
                 new-blocks (keep-indexed (fn [idx block]
                                            (when (nil? (:uuid block))
@@ -720,16 +748,16 @@
                                                            now)))
                                          parsed-blocks)
                 new-block-ref-txs (mapcat (fn [block]
-                                             (when (nil? (:uuid block))
-                                               (content-ref-add-txs
-                                                [:block/uuid (get new-uuids (:idx block))]
-                                                block)))
+                                            (when (nil? (:uuid block))
+                                              (content-ref-add-txs
+                                               [:block/uuid (get new-uuids (:idx block))]
+                                               block)))
                                            parsed-blocks)
                 new-block-tag-txs (mapcat (fn [block]
-                                             (when (nil? (:uuid block))
-                                               (tag-ref-add-txs
-                                                [:block/uuid (get new-uuids (:idx block))]
-                                                block)))
+                                            (when (nil? (:uuid block))
+                                              (tag-ref-add-txs
+                                               [:block/uuid (get new-uuids (:idx block))]
+                                               block)))
                                            parsed-blocks)
                 delete-txs (mapcat (fn [block-uuid]
                                      [[:db/retractEntity (:db/id (get page-block-by-uuid block-uuid))]])
@@ -949,7 +977,7 @@
 
 (defn- render-page-content
   [db page options]
-  (add-markers-to-rendered-content
+  (add-ids-to-rendered-content
    db
    page
    (common-file/block->content

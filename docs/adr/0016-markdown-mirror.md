@@ -206,14 +206,19 @@ builds do not have the same graph-directory filesystem guarantees.
    APIs instead of introducing a separate renderer-side serializer.
 2. The mirror output should match normal Markdown export semantics for page
    content.
-3. Mirror files include HTML comments for page and block identity. These
-   comments are the only supported identity markers for file-to-DB imports.
-4. Mirror files include block and page property drawers, including user
+3. Mirror files include `id:: <uuid>` property lines for page and block
+   identity. These `id::` lines are the only supported identity markers for
+   file-to-DB imports. Page identity is written in the page property section,
+   and block identity is written as an indented block property directly below
+   the block list item.
+4. When page properties are present, including the page `id::` line, write two
+   empty lines between the page property section and the first block.
+5. Mirror files include block and page property drawers, including user
    properties, with rendered property values.
-5. Assets are referenced as normal exported Markdown references. This ADR does
+6. Assets are referenced as normal exported Markdown references. This ADR does
    not copy assets into `mirror/markdown/`.
-6. Page references remain in Logseq wiki-link form, for example `[[Foo]]`.
-7. Ambiguous page references caused by duplicate page titles are an accepted
+7. Page references remain in Logseq wiki-link form, for example `[[Foo]]`.
+8. Ambiguous page references caused by duplicate page titles are an accepted
    limitation of Markdown Mirror. Do not rewrite page references to uuid-based
    links or relative Markdown links in this ADR.
 
@@ -229,15 +234,16 @@ builds do not have the same graph-directory filesystem guarantees.
    like `- not a block` inside the fence must not create a Logseq child block.
 5. Unsupported top-level Markdown, for example a top-level quote or fenced code
    block that is not under a `- ` item, is rejected. Rejecting is safer than
-   silently dropping it and then treating omitted block markers as deletes.
+   silently dropping it and then treating omitted block identity lines as
+   deletes.
 6. Property drawer edits from mirror files are ignored. The DB remains the
    source of truth for page and block properties.
 7. File deletes, moves, and directory deletes from the mirror watcher are
    ignored. Page and block deletion from files is allowed only by removing block
-   marker/list-item pairs from an existing page file.
+   list items from an existing page file.
 8. Creating a new page or journal from a new mirror file is supported only when
    the path maps to `pages/<name>.md` or `journals/YYYY_MM_DD.md` and the file
-   contains no page or block markers from another graph object.
+   contains no page or block `id::` lines from another graph object.
 9. `[[page]]` references in imported block content create missing pages and are
    stored using internal id refs in the DB transaction.
 10. Simple hashtag refs such as `#tag1` and page-ref hashtags such as

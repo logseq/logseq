@@ -52,10 +52,18 @@
   (string/includes? (:block/title (d/entity db [:block/uuid block-uuid])) s))
 
 (defn- page-marker [uuid]
-  (str "<!-- logseq:page " uuid " -->"))
+  (str "id:: " uuid))
 
 (defn- block-marker [uuid]
-  (str "<!-- logseq:block " uuid " -->"))
+  (str "  id:: " uuid))
+
+(defn- block-line
+  [uuid title]
+  (str "- " title "\n" (block-marker uuid)))
+
+(defn- nested-block-line
+  [uuid title]
+  (str "  - " title "\n    id:: " uuid))
 
 (defn- <mirror-repo!
   [& args]
@@ -120,9 +128,8 @@
           page (db-test/find-page-by-title @conn "Source")]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
-                    (is (= (str (page-marker page-uuid) "\n"
-                                (block-marker block-uuid) "\n"
-                                "- See [[Foo]]")
+                    (is (= (str (page-marker page-uuid) "\n\n\n"
+                                (block-line block-uuid "See [[Foo]]"))
                            (get @files (page-path "pages/Source.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -155,11 +162,9 @@
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
                     (let [path (page-path "pages/Page A.md")
-                          content (str (page-marker page-uuid) "\n"
-                                       (block-marker block-uuid-1) "\n"
-                                       "- hello\n"
-                                       (block-marker block-uuid-2) "\n"
-                                       "- world")]
+                          content (str (page-marker page-uuid) "\n\n\n"
+                                       (block-line block-uuid-1 "hello") "\n"
+                                       (block-line block-uuid-2 "world"))]
                       (is (= content (get @files path)))
                       (is (= [[path content]] @writes)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -188,9 +193,9 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Issue.md"))]
                       (is (= (str (page-marker page-uuid) "\n"
-                                  "reproducible-steps:: Open settings\n"
-                                  (block-marker block-uuid) "\n"
+                                  "reproducible-steps:: Open settings\n\n\n"
                                   "- TODO body\n"
+                                  (block-marker block-uuid) "\n"
                                   "  Status:: Todo\n"
                                   "  reproducible-steps:: Click mirror\n"
                                   "  rating:: 5")
@@ -221,9 +226,8 @@
                       (is (= (str (page-marker page-uuid) "\n"
                                   "p1:: hello\n"
                                   "p2:: 1\n"
-                                  "p3:: Author 1\n"
-                                  (block-marker block-uuid) "\n"
-                                  "- body")
+                                  "p3:: Author 1\n\n\n"
+                                  (block-line block-uuid "body"))
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -254,9 +258,9 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "journals/2026_05_05.md"))]
                       (is (= (str (page-marker page-uuid) "\n"
-                                  "p1:: hey\n"
-                                  (block-marker block-uuid) "\n"
+                                  "p1:: hey\n\n\n"
                                   "- TODO hello great test\n"
+                                  (block-marker block-uuid) "\n"
                                   "  Status:: Todo\n"
                                   "  p1:: hello\n"
                                   "  p2:: 1\n"
@@ -302,17 +306,14 @@
       (-> (<mirror-repo! test-repo @conn {:platform platform})
           (p/then (fn [result]
                     (is (not= ::missing-mirror-repo-fn result))
-                    (is (= (str (page-marker page-uuid) "\n"
-                                (block-marker page-block-uuid) "\n"
-                                "- alpha")
+                    (is (= (str (page-marker page-uuid) "\n\n\n"
+                                (block-line page-block-uuid "alpha"))
                            (get @files (page-path "pages/Page A.md"))))
-                    (is (= (str (page-marker journal-uuid) "\n"
-                                (block-marker journal-block-uuid) "\n"
-                                "- journal")
+                    (is (= (str (page-marker journal-uuid) "\n\n\n"
+                                (block-line journal-block-uuid "journal"))
                            (get @files (page-path "journals/2024_05_08.md"))))
-                    (is (= (str (page-marker class-uuid) "\n"
-                                (block-marker class-block-uuid) "\n"
-                                "- class")
+                    (is (= (str (page-marker class-uuid) "\n\n\n"
+                                (block-line class-block-uuid "class"))
                            (get @files (page-path "pages/Project.md"))))
                     (is (nil? (get @files (page-path "pages/Built In.md"))))
                     (is (nil? (get @files (page-path "pages/rating.md"))))))
@@ -333,9 +334,8 @@
           page (db-test/find-page-by-title @conn "Page A")]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
-                    (is (= (str (page-marker page-uuid) "\n"
-                                (block-marker block-uuid) "\n"
-                                "- desktop")
+                    (is (= (str (page-marker page-uuid) "\n\n\n"
+                                (block-line block-uuid "desktop"))
                            (get @files (page-path "pages/Page A.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -369,9 +369,8 @@
           journal (db-test/find-journal-by-journal-day @conn 20240506)]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id journal) {:platform platform})
           (p/then (fn [_]
-                    (is (= (str (page-marker page-uuid) "\n"
-                                (block-marker block-uuid) "\n"
-                                "- journal item")
+                    (is (= (str (page-marker page-uuid) "\n\n\n"
+                                (block-line block-uuid "journal item"))
                            (get @files (page-path "journals/2024_05_06.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -486,9 +485,8 @@
                                                                                      :defer? true})
                   _ (markdown-mirror/<flush-repo! test-repo {:platform platform})]
             (is (= [[(page-path "pages/Page A.md")
-                     (str (page-marker page-uuid) "\n"
-                          (block-marker block-uuid) "\n"
-                          "- latest")]]
+                     (str (page-marker page-uuid) "\n\n\n"
+                          (block-line block-uuid "latest"))]]
                    @writes)))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -514,9 +512,8 @@
       (-> (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform})
           (p/then (fn [_]
                     (is (= [old-path] @deletes))
-                    (is (= (str (page-marker page-uuid) "\n"
-                                (block-marker block-uuid) "\n"
-                                "- body")
+                    (is (= (str (page-marker page-uuid) "\n\n\n"
+                                (block-line block-uuid "body"))
                            (get @files (page-path "pages/New Name.md"))))
                     (is (nil? (get @files old-path)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -583,9 +580,8 @@
                                                :block/uuid block-uuid}]}]})
           page (db-test/find-page-by-title @conn "Page A")
           path (page-path "pages/Page A.md")
-          content (str (page-marker page-uuid) "\n"
-                       (block-marker block-uuid) "\n"
-                       "- same")
+          content (str (page-marker page-uuid) "\n\n\n"
+                       (block-line block-uuid "same"))
           _ (swap! files assoc path content)]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
@@ -647,8 +643,8 @@
                                                :block/uuid block-uuid}]}]})
           relative-path "pages/Import Page.md"
           content (str (page-marker page-uuid) "\n"
-                       (block-marker block-uuid) "\n"
-                       "- after")]
+                       "- after\n"
+                       (block-marker block-uuid))]
       (-> (markdown-mirror/<import-file-content! test-repo conn relative-path content {})
           (p/then (fn [result]
                     (is (= :imported (:status result)))
@@ -700,8 +696,8 @@
                                                :block/uuid block-uuid}]}]})
           relative-path "pages/Ref Edit.md"
           content (str (page-marker page-uuid) "\n"
-                       (block-marker block-uuid) "\n"
-                       "- [[foo]] test")]
+                       "- [[foo]] test\n"
+                       (block-marker block-uuid))]
       (-> (markdown-mirror/<import-file-content! test-repo conn relative-path content {})
           (p/then (fn [result]
                     (let [foo (db-test/find-page-by-title @conn "foo")
@@ -723,8 +719,8 @@
                                      :blocks [{:block/title "before"
                                                :block/uuid block-uuid}]}]})
           content (str (page-marker page-uuid) "\n"
-                       (block-marker block-uuid) "\n"
-                       "- object 1 #tag1")]
+                       "- object 1 #tag1\n"
+                       (block-marker block-uuid))]
       (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Tag Edit.md" content {})
           (p/then (fn [result]
                     (let [tag (db-test/find-page-by-title @conn "tag1")
@@ -748,8 +744,8 @@
                                      :blocks [{:block/title "before"
                                                :block/uuid block-uuid}]}]})
           content (str (page-marker page-uuid) "\n"
-                       (block-marker block-uuid) "\n"
                        "- intro\n"
+                       (block-marker block-uuid) "\n"
                        "  > quoted\n"
                        "  ```clojure\n"
                        "  - not a child\n"
@@ -776,8 +772,8 @@
                                      :blocks [{:block/title "existing"
                                                :block/uuid block-uuid}]}]})
           content (str (page-marker page-uuid) "\n"
-                       (block-marker block-uuid) "\n"
                        "- existing\n"
+                       (block-marker block-uuid) "\n"
                        "- inserted\n"
                        "  > quote")]
       (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Continuation Insert.md" content {})
@@ -818,8 +814,8 @@
                                                :build/properties {:user.property/rating 5}}]}]})
           page (db-test/find-page-by-title @conn "Property Ignore")
           content (str (page-marker (:block/uuid page)) "\n"
-                       (block-marker block-uuid) "\n"
                        "- task\n"
+                       (block-marker block-uuid) "\n"
                        "  rating:: 10")]
       (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Property Ignore.md" content {})
           (p/then (fn [result]
@@ -840,15 +836,15 @@
                                      :blocks [{:block/title "existing"
                                                :block/uuid block-uuid}]}]})
           content (str (page-marker page-uuid) "\n"
-                       (block-marker block-uuid) "\n"
                        "- existing\n"
+                       (block-marker block-uuid) "\n"
                        "- inserted")]
       (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Insert Page.md" content {:platform platform})
           (p/then (fn [result]
                     (is (= :imported (:status result)))
                     (is (some? (block-by-title @conn "inserted")))
-                    (is (string/includes? (get @files (page-path "pages/Insert Page.md"))
-                                          "<!-- logseq:block "))))
+                    (is (re-find #"(?m)^  id:: [0-9a-fA-F-]{36}$"
+                                 (get @files (page-path "pages/Insert Page.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -863,8 +859,8 @@
                                      :blocks [{:block/title "existing"
                                                :block/uuid block-uuid}]}]})
           content (str (page-marker page-uuid) "\n"
-                       (block-marker block-uuid) "\n"
                        "- existing\n"
+                       (block-marker block-uuid) "\n"
                        "- [[foo]] test")]
       (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Inserted Ref.md" content {:platform platform})
           (p/then (fn [result]
@@ -892,8 +888,8 @@
                                               {:block/title "delete"
                                                :block/uuid delete-uuid}]}]})
           content (str (page-marker page-uuid) "\n"
-                       (block-marker keep-uuid) "\n"
-                       "- keep")]
+                       "- keep\n"
+                       (block-marker keep-uuid))]
       (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Delete Block.md" content {})
           (p/then (fn [result]
                     (is (= :imported (:status result)))
@@ -916,10 +912,9 @@
                                                                  :block/uuid child-uuid}]}]}]})
           child-before (d/entity @conn [:block/uuid child-uuid])
           content (str (page-marker page-uuid) "\n"
-                       (block-marker parent-uuid) "\n"
                        "- parent\n"
-                       (block-marker child-uuid) "\n"
-                       "- child")]
+                       (block-marker parent-uuid) "\n"
+                       (nested-block-line child-uuid "child"))]
       (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Move Ignore.md" content {})
           (p/then (fn [result]
                     (is (= :skipped (:status result)))
@@ -938,7 +933,7 @@
                     (is (some? (db-test/find-page-by-title @conn "New Imported")))
                     (is (some? (block-by-title @conn "hello")))
                     (is (string/includes? (get @files (page-path "pages/New Imported.md"))
-                                          "<!-- logseq:page "))))
+                                          "id:: "))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
