@@ -1599,12 +1599,40 @@
                  (>= pos 1))
         (util/nth-safe value pos)))))
 
+(defn- get-focused-root-block
+  []
+  (let [page (state/get-current-page)]
+    (when (and page (util/uuid-string? page))
+      (db/entity [:block/uuid (parse-uuid page)]))))
+
+(defn- focused-root-block?
+  [block root-block]
+  (and block root-block
+       (= (:db/id block) (:db/id root-block))))
+
+(defn- outdent-past-focused-root?
+  [block root-block]
+  (= (:db/id (:block/parent block)) (:db/id root-block)))
+
+(defn- block-eligible-for-indent-outdent?
+  [block indent? root-block]
+  (and block
+       (not (focused-root-block? block root-block))
+       (or indent?
+           (not (outdent-past-focused-root? block root-block)))))
+
+(defn- block-eligible-for-move-up-down?
+  [block root-block]
+  (and block
+       (not (focused-root-block? block root-block))))
+
 (defn move-up-down
   [up?]
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
     (let [edit-block-id (:block/uuid (state/get-edit-block))
+          root-block (get-focused-root-block)
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
                              result (ui-outliner-tx/transact!
@@ -1616,20 +1644,25 @@
       (if edit-block-id
         (when-let [block (db/entity [:block/uuid edit-block-id])]
           (let [blocks [(assoc block :block/title (state/get-edit-content))]
+                blocks (filter #(block-eligible-for-move-up-down? % root-block) blocks)
                 container-id (get-new-container-id (if up? :move-up :move-down) {})]
-            (p/do!
-             (save-current-block!)
-             (move-nodes blocks)
-             (if container-id
-               (state/set-editing-block-id! [container-id edit-block-id])
-               (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
-                 (.focus input)
-                 (util/scroll-editor-cursor input))))))
+            (when (seq blocks)
+              (p/do!
+               (save-current-block!)
+               (move-nodes blocks)
+               (if container-id
+                 (state/set-editing-block-id! [container-id edit-block-id])
+                 (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
+                   (.focus input)
+                   (util/scroll-editor-cursor input)))))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
-                  blocks (map db/entity lookup-refs)]
-              (move-nodes blocks))))))))
+                  blocks (->> lookup-refs
+                              (map db/entity)
+                              (filter #(block-eligible-for-move-up-down? % root-block)))]
+              (when (seq blocks)
+                (move-nodes blocks)))))))))
 
 (defn get-selected-ordered-blocks
   []
@@ -1644,15 +1677,10 @@
   [direction]
   (let [blocks (get-selected-ordered-blocks)
         indent? (= direction :right)
-        page (state/get-current-page)
-        zoom-root (when (and (not indent?) page (util/uuid-string? page))
-                    (db/entity [:block/uuid (parse-uuid page)]))
-        blocks (if zoom-root
-                 (remove (fn [b]
-                           (= (:db/id (:block/parent b)) (:db/id zoom-root)))
-                         blocks)
-                 blocks)]
-    (block-handler/indent-outdent-blocks! blocks indent? nil)))
+        root-block (get-focused-root-block)
+        blocks (filter #(block-eligible-for-indent-outdent? % indent? root-block) blocks)]
+    (when (seq blocks)
+      (block-handler/indent-outdent-blocks! blocks indent? nil))))
 
 (defn- get-link [format link label]
   (let [link (or link "")
@@ -2496,13 +2524,8 @@
       (let [node block-container
             prev-container-id (get-node-container-id node)
             container-id (get-new-container-id (if indent? :indent :outdent) {})
-            outdent-past-zoom-root? (when-not indent?
-                                      (let [page (state/get-current-page)]
-                                        (and page
-                                             (util/uuid-string? page)
-                                             (let [zoom-root (db/entity [:block/uuid (parse-uuid page)])]
-                                               (= (:db/id (:block/parent block)) (:db/id zoom-root))))))]
-        (when-not outdent-past-zoom-root?
+            root-block (get-focused-root-block)]
+        (when (block-eligible-for-indent-outdent? block indent? root-block)
           (p/do!
            (block-handler/indent-outdent-blocks! [block] indent? save-current-block!)
            (when (and (not= prev-container-id container-id) container-id)
