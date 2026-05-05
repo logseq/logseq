@@ -314,7 +314,9 @@
             _ (when (and old-path
                          new-path
                          (not= old-path new-path)
-                         (= :written (:status result)))
+                         (or (= :written (:status result))
+                             (and (= :skipped (:status result))
+                                  (= :unchanged (:reason result)))))
                 (<delete-file! platform* old-path))]
       result)))
 
