@@ -91,7 +91,7 @@ jobs:
         run: pnpm cljs:run-test
 
       - name: Run CLI E2E tests
-        run: bb dev:cli-e2e --verbose
+        run: bb dev:cli-e2e --jobs 1 --verbose
 
   lint:
     runs-on: ubuntu-22.04
