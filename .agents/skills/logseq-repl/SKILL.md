@@ -19,25 +19,25 @@ The workflow uses one shared state directory: `<repo>/tmp/logseq-repl/`.
 Start everything with the default Logseq data root (`$LOGSEQ_CLI_ROOT_DIR` or `~/logseq`):
 
 ```bash
-./scripts/start-repl.sh --repo demo
+scripts/start-repl.sh --repo demo
 ```
 
 Start everything with an explicit Logseq data root:
 
 ```bash
-./scripts/start-repl.sh --repo demo --root-dir ~/logseq
+scripts/start-repl.sh --repo demo --root-dir ~/logseq
 ```
 
 Clean up everything:
 
 ```bash
-./scripts/cleanup-repl.sh
+scripts/cleanup-repl.sh
 ```
 
 Verify all REPL targets after startup:
 
 ```bash
-./scripts/verify-repls.sh
+scripts/verify-repls.sh
 ```
 
 `start-repl.sh` starts:
