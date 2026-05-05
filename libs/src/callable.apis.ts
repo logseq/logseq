@@ -1,8 +1,8 @@
 import { PluginLocal } from './LSPlugin.core'
 
 /**
- * theses apis run in host from user callable apis,
- * like logseq.apis.cljs but here is for js/ts.
+ * These APIs run in the host and are callable by users,
+ * similar to logseq.apis.cljs but for JS/TS.
  */
 
 export function setSDKMetadata(this: PluginLocal, data: any) {
