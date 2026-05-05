@@ -1,6 +1,7 @@
 (ns logseq.graph-parser.whiteboard
-  "Whiteboard related parser utilities" 
-  (:require [logseq.graph-parser.util :as gp-util]
+  "Whiteboard related parser utilities"
+  (:require [clojure.string :as string]
+            [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]))
 
@@ -43,16 +44,22 @@
 
 
 (defn- get-shape-refs [shape]
-  (let [portal-refs (when (= "logseq-portal" (:type shape))
+  (let [page-id (:pageId shape)
+        portal-refs (when (and (= "logseq-portal" (:type shape))
+                               (string? page-id)
+                               (not (string/blank? page-id)))
                       [(if (= (:blockType shape) "P")
-                         {:block/name (gp-util/page-name-sanity-lc (:pageId shape))}
-                         {:block/uuid (uuid (:pageId shape))})])
+                         {:block/name (gp-util/page-name-sanity-lc page-id)}
+                         (when-let [u (parse-uuid page-id)]
+                           {:block/uuid u}))])
         shape-link-refs (->> (:refs shape)
-                             (filter (complement empty?))
-                             (map (fn [ref] (if (parse-uuid ref)
-                                              {:block/uuid (parse-uuid ref)}
+                             (filter string?)
+                             (filter (complement string/blank?))
+                             (map (fn [ref] (if-let [u (parse-uuid ref)]
+                                              {:block/uuid u}
                                               {:block/name (gp-util/page-name-sanity-lc ref)}))))]
-    (concat portal-refs shape-link-refs)))
+    (->> (concat portal-refs shape-link-refs)
+         (remove nil?))))
 
 (defn- with-whiteboard-block-refs
   [shape page-name]
@@ -77,10 +84,12 @@
   [block page-name]
   (let [shape? (shape-block? block)
         shape (block->shape block)
+        shape-id (:id shape)
+        shape-uuid (when (and shape? (string? shape-id)) (parse-uuid shape-id))
         default-page-ref {:block/name (gp-util/page-name-sanity-lc page-name)}]
-    (merge (when shape?
+    (merge (when (and shape? shape-uuid)
              (merge
-              {:block/uuid (uuid (:id shape))}
+              {:block/uuid shape-uuid}
               (with-whiteboard-block-refs shape page-name)
               (with-whiteboard-content shape)))
            (when (nil? (:block/parent block)) {:block/parent default-page-ref})
