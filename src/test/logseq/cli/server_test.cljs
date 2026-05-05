@@ -11,6 +11,7 @@
             [logseq.cli.profile :as profile]
             [logseq.cli.server :as cli-server]
             [logseq.cli.test-helper :as test-helper]
+            [logseq.common.version :as version]
             [logseq.db-worker.daemon :as daemon]
             [promesa.core :as p]))
 
@@ -611,7 +612,7 @@
                                                                             :port 9301
                                                                             :pid (.-pid js/process)
                                                                             :owner-source :cli
-                                                                            :revision "test-revision"
+                                                                            :revision (version/revision)
                                                                             :status :ready}])))
                                daemon/wait-for-ready (fn [_] (p/resolved true))]
                  (cli-server/ensure-server! {:root-dir root-dir
@@ -655,7 +656,7 @@
                                                                             :port 9310
                                                                             :pid (.-pid js/process)
                                                                             :owner-source :cli
-                                                                            :revision "test-revision"
+                                                                            :revision (version/revision)
                                                                             :status :ready}])))
                                daemon/wait-for-ready (fn [_] (p/resolved true))]
                  (cli-server/ensure-server! {:root-dir root-dir
@@ -688,7 +689,7 @@
                        :port 9311
                        :pid (.-pid js/process)
                        :owner-source :cli
-                       :revision "test-revision"
+                       :revision (version/revision)
                        :status :ready}]
            (-> (p/with-redefs [daemon/read-lock (fn [_]
                                                   (if (= 1 (swap! read-lock-calls inc))
@@ -786,7 +787,7 @@
                               :port 9320
                               :pid 1001
                               :owner-source :cli
-                              :revision "test-revision"
+                              :revision (version/revision)
                               :status :ready
                               :root-dir root-dir-a}
                local-server {:repo repo
@@ -794,7 +795,7 @@
                              :port 9321
                              :pid (.-pid js/process)
                              :owner-source :cli
-                             :revision "test-revision"
+                             :revision (version/revision)
                              :status :ready
                              :root-dir root-dir-b}]
            (-> (p/with-redefs [daemon/read-lock (fn [_]
@@ -847,7 +848,7 @@
                                                                           :port 9322
                                                                           :pid (.-pid js/process)
                                                                           :owner-source :cli
-                                                                          :revision "test-revision"
+                                                                          :revision (version/revision)
                                                                           :status :ready
                                                                           :root-dir symlink-root-dir}]))
                                daemon/wait-for-ready (fn [_] (p/resolved true))]
