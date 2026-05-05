@@ -123,6 +123,7 @@ export type IUserConditionSlotHook<C = any, E = any> = (
 export type EntityID = number
 export type BlockUUID = string
 export type BlockUUIDTuple = ['uuid', BlockUUID]
+export type RendererKey = string
 
 export type IEntityID = { id: EntityID; [key: string]: any }
 export type IBatchBlock = {
@@ -919,7 +920,7 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: { replaceState: boolean }
   ) => void
 
-  openInRightSidebar: (id: BlockUUID | EntityID) => void
+  openInRightSidebar: (idOrKey: BlockUUID | EntityID | RendererKey) => void
   openPDFViewer: (assetBlockIdOrFileUrl: string | EntityID) => Promise<void>
 
   /**
