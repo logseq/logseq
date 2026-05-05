@@ -16,26 +16,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gpg \
     build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
 
-# install NodeJS & yarn
-RUN curl -sL https://deb.nodesource.com/setup_24.x | bash -
-
-RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | \
-    tee /etc/apt/trusted.gpg.d/yarn.gpg && \
-    echo "deb https://dl.yarnpkg.com/debian/ stable main" | \
-    tee /etc/apt/sources.list.d/yarn.list && \
-    apt-get update && apt-get install -y nodejs yarn
+# install NodeJS & pnpm
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
+    apt-get update && apt-get install -y nodejs && \
+    corepack enable && corepack prepare pnpm@10.33.0 --activate
 
 WORKDIR /data
 
 # build Logseq static resources
 RUN git clone -b master https://github.com/logseq/logseq.git .
 
-RUN yarn config set network-timeout 240000 -g && yarn install
+RUN pnpm install --config.network-timeout=240000
 
-RUN  yarn release
+RUN pnpm release
 
 # Web App Runner image
 FROM nginx:1.24.0-alpine3.17
 
 COPY --from=builder /data/static /usr/share/nginx/html
-

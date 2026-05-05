@@ -1,7 +1,7 @@
 (ns query
   "A script that queries any db graph from the commandline e.g.
 
-  $ yarn -s nbb-logseq script/query.cljs db-name '[:find (pull ?b [:block/name :block/title]) :where [?b :block/created-at]]'"
+  $ pnpm exec nbb-logseq script/query.cljs db-name '[:find (pull ?b [:block/name :block/title]) :where [?b :block/created-at]]'"
   (:require ["child_process" :as child-process]
             [babashka.cli :as cli]
             [clojure.edn :as edn]

@@ -23,7 +23,7 @@
 (def user-allowed-internal-property-types
   "Internal property types that users are allowed to store. These aren't available in the UI
    so these would normally be created via EDN or the API."
-  #{:map})
+  #{:map :json :string})
 
 (assert (set/subset? user-allowed-internal-property-types internal-built-in-property-types))
 

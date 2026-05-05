@@ -209,6 +209,43 @@
       (editor/save-block! repo block-uuid "# bar")
       (is (= "bar" (:block/title (model/query-block-by-uuid block-uuid)))))))
 
+(deftest block-default-collapsed-respects-ignore-block-collapsed-flag
+  (with-redefs [db/entity (constantly nil)]
+    (is (true? (editor/block-default-collapsed?
+                {:block/collapsed? true}
+                {})))
+    (is (not (editor/block-default-collapsed?
+              {:block/collapsed? true}
+              {:ignore-block-collapsed? true}))
+        "Flashcard review should be able to ignore persisted collapsed state")
+    (is (true? (editor/block-default-collapsed?
+                {:block/collapsed? false}
+                {:ignore-block-collapsed? true
+                 :default-collapsed? true}))
+        "Ignore flag should not disable other default-collapsed rules")))
+
+(deftest load-children-respects-ignore-block-collapsed-flag
+  (is (false? (#'editor/load-children?
+               {:block/collapsed? true}
+               nil
+               false))
+      "Collapsed blocks should not load children by default")
+  (is (true? (#'editor/load-children?
+              {:block/collapsed? true}
+              nil
+              true))
+      "Flashcard answer mode should force loading children for collapsed blocks")
+  (is (true? (#'editor/load-children?
+              {:block/collapsed? true}
+              false
+              false))
+      "Temporary expanded UI state should load children")
+  (is (false? (#'editor/load-children?
+               {:block/collapsed? false}
+               true
+               false))
+      "Temporary collapsed UI state should skip children loading"))
+
 (deftest paste-cut-recycled-block-moves-existing-node-out-of-recycle
   (test-helper/load-test-files [{:page {:block/title "Page 1"}
                                  :blocks [{:block/title "source"}]}
@@ -231,3 +268,23 @@
       (is (nil? (:logseq.property/deleted-at source')))
       (is (nil? (:logseq.property.recycle/original-page source')))
       (is (not= (:db/id recycle-page) (:db/id (:block/page source')))))))
+
+(deftest focused-root-block-operation-guards-test
+  (let [root-block {:db/id 1}
+        focused-root-block {:db/id 1}
+        root-child-block {:db/id 2
+                          :block/parent {:db/id 1}}
+        non-root-block {:db/id 3
+                        :block/parent {:db/id 9}}]
+    (testing "Root block cannot be indented or outdented when focused"
+      (is (false? (#'editor/block-eligible-for-indent-outdent? root-block true focused-root-block)))
+      (is (false? (#'editor/block-eligible-for-indent-outdent? root-block false focused-root-block))))
+    (testing "A direct child of focused root cannot be outdented but can be indented"
+      (is (false? (#'editor/block-eligible-for-indent-outdent? root-child-block false focused-root-block)))
+      (is (true? (#'editor/block-eligible-for-indent-outdent? root-child-block true focused-root-block))))
+    (testing "Non-root blocks keep normal indent/outdent behavior"
+      (is (true? (#'editor/block-eligible-for-indent-outdent? non-root-block true focused-root-block)))
+      (is (true? (#'editor/block-eligible-for-indent-outdent? non-root-block false focused-root-block))))
+    (testing "Root block cannot move up/down when focused"
+      (is (false? (#'editor/block-eligible-for-move-up-down? root-block focused-root-block)))
+      (is (true? (#'editor/block-eligible-for-move-up-down? non-root-block focused-root-block))))))

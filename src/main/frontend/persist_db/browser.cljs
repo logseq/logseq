@@ -121,6 +121,9 @@
 
 (defn stop-db-worker!
   []
+  (when @state/*db-worker
+    (-> (state/<invoke-db-worker :thread-api/cancel-ui-requests {:reason :stop-db-worker})
+        (p/catch (constantly nil))))
   (when-let [^js worker @state/*db-worker-thread]
     (set! (.-onmessage worker) nil)
     (.terminate worker))
@@ -144,16 +147,11 @@
                         "&publishing=" config/publishing?))
            _ (set-worker-fs worker)
            wrapped-worker* (Comlink/wrap worker)
-           wrapped-worker (fn [qkw direct-pass? & args]
+           wrapped-worker (fn [qkw & args]
                             (p/let [result (.remoteInvoke ^js wrapped-worker*
                                                           (str (namespace qkw) "/" (name qkw))
-                                                          direct-pass?
-                                                          (if direct-pass?
-                                                            (into-array args)
-                                                            (ldb/write-transit-str args)))]
-                              (if direct-pass?
-                                result
-                                (ldb/read-transit-str result))))
+                                                          (ldb/write-transit-str args))]
+                              (ldb/read-transit-str result)))
            t1 (util/time-ms)]
        (reset! state/*db-worker-thread worker)
        (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
@@ -180,9 +178,9 @@
                       (log/error :init-sqlite-wasm-error ["Can't init SQLite wasm" error]))))))))
 
 (defn <export-db!
-  [repo data]
+  [repo]
   (when (util/electron?)
-    (ipc/ipc :db-export repo data)))
+    (ipc/ipc :db-export repo false)))
 
 (defn- sqlite-error-handler
   [error]
@@ -211,26 +209,25 @@
     (state/<invoke-db-worker :thread-api/release-access-handles repo))
 
   (<fetch-initial-data [_this repo opts]
-    (-> (p/let [db-exists? (state/<invoke-db-worker :thread-api/db-exists repo)
-                disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
-                _ (when disk-db-data
-                    (state/<invoke-db-worker-direct-pass :thread-api/import-db repo disk-db-data))
-                _ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
+    (-> (p/let [_ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
           (state/<invoke-db-worker :thread-api/get-initial-data repo opts))
         (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]
-    (-> (p/let [data (state/<invoke-db-worker-direct-pass :thread-api/export-db repo)]
+    (-> (p/let [base64 (state/<invoke-db-worker :thread-api/export-db-base64 repo)
+                data (some-> base64 util/base64string-to-unit8array)]
           (when data
             (if (:return-data? opts)
               data
-              (<export-db! repo data))))
+              (<export-db! repo))))
         (p/catch (fn [error]
                    (log/error :export-db-error repo error "SQLiteDB save error")
                    (notification/show! (t :storage/sqlitedb-save-error error) :error) {}))))
 
   (<import-db [_this repo data]
-    (-> (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)
-        (p/catch (fn [error]
-                   (log/error :import-db-error repo error "SQLiteDB import error")
-                   (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))
+    (->
+     (p/let [base64 (util/uint8array-to-base64string data)]
+       (state/<invoke-db-worker :thread-api/import-db-base64 repo base64))
+     (p/catch (fn [error]
+                (log/error :import-db-error repo error "SQLiteDB import error")
+                (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))

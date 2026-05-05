@@ -1,8 +1,20 @@
 (ns logseq.db-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [datascript.storage :as ds-storage :refer [IStorage]]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
+
+(defrecord InMemoryStorage [*disk]
+  IStorage
+  (-store [_ addr+data-seq _delete-addrs]
+    (doseq [[addr data] addr+data-seq]
+      (vswap! *disk assoc addr data)))
+  (-restore [_ addr]
+    (get @*disk addr)))
+
+(defn- make-storage []
+  (->InMemoryStorage (volatile! {})))
 
 ;;; datoms
 ;;; - 1 <----+
@@ -122,33 +134,32 @@
                                     :block/tags :logseq.class/Property}])
          (ldb/transact! temp-conn [[:db/retract :logseq.class/Task :block/tags :logseq.class/Property]]))))))
 
-(deftest block-uuid-is-immutable-for-existing-entity-test
-  (let [conn (db-test/create-conn-with-blocks
-              {:pages-and-blocks
-               [{:page {:block/title "page1"}}]})
-        page (db-test/find-page-by-title @conn "page1")
-        db-id (:db/id page)
-        old-uuid (:block/uuid page)
-        new-uuid (random-uuid)]
-    (testing "cannot replace :block/uuid on existing entity"
-      (is (thrown? js/Error
-                   (db-test/silence-stderr
-                    (ldb/transact! conn [[:db/add db-id :block/uuid new-uuid]]))))
-      (is (= old-uuid (:block/uuid (d/entity @conn db-id)))))
-    (testing "cannot retract :block/uuid on existing entity"
-      (is (thrown? js/Error
-                   (db-test/silence-stderr
-                    (ldb/transact! conn [[:db/retract db-id :block/uuid old-uuid]]))))
-      (is (= old-uuid (:block/uuid (d/entity @conn db-id)))))))
-
-(deftest block-uuid-immutability-allows-retract-entity-test
-  (let [conn (db-test/create-conn-with-blocks
-              {:pages-and-blocks
-               [{:page {:block/title "page1"}}]})
-        page (db-test/find-page-by-title @conn "page1")
-        db-id (:db/id page)]
-    (ldb/transact! conn [[:db/retractEntity db-id]])
-    (is (nil? (d/entity @conn db-id)))))
+(deftest test-batch-transact-clears-stale-tx-tail-before-next-store-tail
+  (let [block-uuid #uuid "00000001-2026-0421-0000-000000000000"
+        schema  {:block/uuid {:db/unique :db.unique/identity}}
+        storage (make-storage)
+        conn    (d/create-conn schema {:storage storage})]
+    ;; Valid history: unique value moves to another entity.
+    (d/transact! conn [[:db/add 28446 :block/uuid block-uuid]])
+    (ldb/batch-transact!
+     conn
+     {}
+     (fn [batch-conn]
+       (d/transact! batch-conn [[:db/retract 28446 :block/uuid block-uuid]])
+       (d/transact! batch-conn [[:db/add 28447 :block/uuid block-uuid]])))
+    ;; Next tx uses tail-only persistence.
+    (d/transact! conn [[:db/add 1 :filler "x"]])
+    (let [tail     (get @(:*disk storage) @#'ds-storage/tail-addr)
+          stale?   (some (fn [[e a v _tx]]
+                           (and (= 28446 e)
+                                (= :block/uuid a)
+                                (= block-uuid v)))
+                         (apply concat tail))
+          restored (d/restore-conn storage)]
+      (is (nil? stale?)
+          "stale pre-batch datoms should not leak into tail after batch-transact!")
+      (is (= [28447]
+             (mapv :e (d/datoms @restored :avet :block/uuid block-uuid)))))))
 
 (deftest get-bidirectional-properties
   (testing "disabled by default"

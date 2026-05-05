@@ -1,6 +1,7 @@
 {
   "name": "@logseq/cljs-libs",
   "version": "0.0.12",
+  "packageManager": "pnpm@10.33.0",
   "description": "Logseq plugin API wrapper",
   "dependencies": {
     "@logseq/libs": "0.3.2"

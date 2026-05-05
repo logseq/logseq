@@ -1599,12 +1599,40 @@
                  (>= pos 1))
         (util/nth-safe value pos)))))
 
+(defn- get-focused-root-block
+  []
+  (let [page (state/get-current-page)]
+    (when (and page (util/uuid-string? page))
+      (db/entity [:block/uuid (parse-uuid page)]))))
+
+(defn- focused-root-block?
+  [block root-block]
+  (and block root-block
+       (= (:db/id block) (:db/id root-block))))
+
+(defn- outdent-past-focused-root?
+  [block root-block]
+  (= (:db/id (:block/parent block)) (:db/id root-block)))
+
+(defn- block-eligible-for-indent-outdent?
+  [block indent? root-block]
+  (and block
+       (not (focused-root-block? block root-block))
+       (or indent?
+           (not (outdent-past-focused-root? block root-block)))))
+
+(defn- block-eligible-for-move-up-down?
+  [block root-block]
+  (and block
+       (not (focused-root-block? block root-block))))
+
 (defn move-up-down
   [up?]
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
     (let [edit-block-id (:block/uuid (state/get-edit-block))
+          root-block (get-focused-root-block)
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
                              result (ui-outliner-tx/transact!
@@ -1616,20 +1644,25 @@
       (if edit-block-id
         (when-let [block (db/entity [:block/uuid edit-block-id])]
           (let [blocks [(assoc block :block/title (state/get-edit-content))]
+                blocks (filter #(block-eligible-for-move-up-down? % root-block) blocks)
                 container-id (get-new-container-id (if up? :move-up :move-down) {})]
-            (p/do!
-             (save-current-block!)
-             (move-nodes blocks)
-             (if container-id
-               (state/set-editing-block-id! [container-id edit-block-id])
-               (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
-                 (.focus input)
-                 (util/scroll-editor-cursor input))))))
+            (when (seq blocks)
+              (p/do!
+               (save-current-block!)
+               (move-nodes blocks)
+               (if container-id
+                 (state/set-editing-block-id! [container-id edit-block-id])
+                 (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
+                   (.focus input)
+                   (util/scroll-editor-cursor input)))))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
-                  blocks (map db/entity lookup-refs)]
-              (move-nodes blocks))))))))
+                  blocks (->> lookup-refs
+                              (map db/entity)
+                              (filter #(block-eligible-for-move-up-down? % root-block)))]
+              (when (seq blocks)
+                (move-nodes blocks)))))))))
 
 (defn get-selected-ordered-blocks
   []
@@ -1642,8 +1675,12 @@
 (defn on-tab
   "`direction` = :left | :right."
   [direction]
-  (let [blocks (get-selected-ordered-blocks)]
-    (block-handler/indent-outdent-blocks! blocks (= direction :right) nil)))
+  (let [blocks (get-selected-ordered-blocks)
+        indent? (= direction :right)
+        root-block (get-focused-root-block)
+        blocks (filter #(block-eligible-for-indent-outdent? % indent? root-block) blocks)]
+    (when (seq blocks)
+      (block-handler/indent-outdent-blocks! blocks indent? nil))))
 
 (defn- get-link [format link label]
   (let [link (or link "")
@@ -2486,11 +2523,13 @@
     (when block
       (let [node block-container
             prev-container-id (get-node-container-id node)
-            container-id (get-new-container-id (if indent? :indent :outdent) {})]
-        (p/do!
-         (block-handler/indent-outdent-blocks! [block] indent? save-current-block!)
-         (when (and (not= prev-container-id container-id) container-id)
-           (state/set-editing-block-id! [container-id (:block/uuid block)])))))))
+            container-id (get-new-container-id (if indent? :indent :outdent) {})
+            root-block (get-focused-root-block)]
+        (when (block-eligible-for-indent-outdent? block indent? root-block)
+          (p/do!
+           (block-handler/indent-outdent-blocks! [block] indent? save-current-block!)
+           (when (and (not= prev-container-id container-id) container-id)
+             (state/set-editing-block-id! [container-id (:block/uuid block)]))))))))
 
 (defn keydown-tab-handler
   [direction]
@@ -3029,7 +3068,7 @@
          true)))
 
 (defn- db-collapsable?
-  [block]
+  [block & {:keys [page-title?]}]
   (let [class-properties (:classes-properties (outliner-property/get-block-classes-properties (db/get-db) (:db/id block)))
         db (db/get-db)
         attributes (set (remove #{:block/alias} db-property/db-attribute-properties))
@@ -3037,7 +3076,9 @@
                         (map (partial entity-plus/entity-memoized db))
                         (concat class-properties)
                         (remove (fn [e] (attributes (:db/ident e))))
-                        (remove outliner-property/property-with-other-position?)
+                        (remove (fn [k]
+                                  (when-not page-title?
+                                    (outliner-property/property-with-other-position? k))))
                         (remove (fn [e] (:logseq.property/hide? e)))
                         (remove nil?))]
     (or (seq properties)
@@ -3046,13 +3087,13 @@
 (defn collapsable?
   ([block-id]
    (collapsable? block-id {}))
-  ([block-id {:keys [semantic? ignore-children?]
+  ([block-id {:keys [semantic? ignore-children? page-title?]
               :or {semantic? false
                    ignore-children? false}}]
    (when block-id
      (if-let [block (db/entity [:block/uuid block-id])]
        (or (if ignore-children? false (db-model/has-children? block-id))
-           (db-collapsable? block)
+           (db-collapsable? block {:page-title? page-title?})
            (and
             (:outliner/block-title-collapse-enabled? (state/get-config))
             (block-with-title? (get block :block/format :markdown)
@@ -3453,7 +3494,8 @@
   [block config]
   (let [block (or (db/entity (:db/id block)) block)]
     (or
-     (util/collapsed? block)
+     (and (not (:ignore-block-collapsed? config))
+          (util/collapsed? block))
      (and (util/mobile?) (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block))
      (and (or (:list-view? config) (:ref? config))
           (or (:block/_parent block) (:block.temp/has-children? block))
@@ -3463,6 +3505,13 @@
      (and (or (:view? config) (:popup? config))
           (or (ldb/page? block)
               (:table-block-title? config))))))
+
+(defn load-children?
+  [block temporary-collapsed-state ignore-block-collapsed?]
+  (or ignore-block-collapsed?
+      (not (if-some [result temporary-collapsed-state]
+             result
+             (:block/collapsed? block)))))
 
 (defn batch-set-heading!
   [block-ids heading]

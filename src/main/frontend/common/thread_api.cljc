@@ -35,20 +35,17 @@
 #?(:cljs
    (defn remote-function
      "Return a promise whose value is transit-str."
-     [qualified-kw-str direct-pass? args-transit-str-or-args-array]
+     [qualified-kw-str args-transit-str]
      (let [qkw (keyword qualified-kw-str)]
        (vswap! *profile update qkw inc)
        (if-let [f (@*thread-apis qkw)]
-         (let [result (apply f (cond-> args-transit-str-or-args-array
-                                 (not direct-pass?) ldb/read-transit-str))
+         (let [result (apply f (ldb/read-transit-str args-transit-str))
                result-promise
                (if (fn? result) ;; missionary task is a fn
                  (js/Promise. result)
                  result)]
            (->
             (p/let [result' result-promise]
-              (if direct-pass?
-                result'
-                (write-transit-str-with-catch result' qualified-kw-str)))
+              (write-transit-str-with-catch result' qualified-kw-str))
             (p/catch (fn [e] (write-transit-str-with-catch e qualified-kw-str)))))
          (throw (ex-info (str "not found thread-api: " qualified-kw-str) {}))))))

@@ -15,6 +15,9 @@
 -/resources/static/js/react-force-graph.min.js
 -/resources/js/lsplugin.user.js
 -/resources/js/pdf_viewer2.js
+-/deps/db-sync/test/logseq/db_sync/fixtures/*.edn
+-/src/test/fixtures/*.transit
+-/src/test/migration/*.transit
 -/deps/graph-parser/test/resources/
 -/ios/App/App/public
 -/android/

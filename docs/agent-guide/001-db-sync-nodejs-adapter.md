@@ -84,7 +84,7 @@ Run the Node adapter integration tests.
 
 ```bash
 cd deps/db-sync
-npm run test:node-adapter
+pnpm test:node-adapter
 ```
 
 Expected result is a zero exit code and logs that the Node adapter started and all tests passed.

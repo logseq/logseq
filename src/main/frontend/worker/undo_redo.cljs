@@ -166,6 +166,12 @@
     (contains? #{:invalid-history-action-ops}
                reason)))
 
+(defn- expected-invalid-history-action-reason?
+  [reason]
+  (contains? #{:invalid-history-action-ops
+               :invalid-history-action-tx}
+             reason))
+
 (declare undo-redo-aux)
 
 (defn- empty-stack-result
@@ -226,11 +232,12 @@
 
           :else
           (do
-            (log/error ::undo-redo-worker-action-unavailable
-                       {:undo? undo?
-                        :repo repo
-                        :tx-id tx-id
-                        :result worker-result})
+            (when-not (expected-invalid-history-action-reason? (:reason worker-result))
+              (log/error ::undo-redo-worker-action-unavailable
+                         {:undo? undo?
+                          :repo repo
+                          :tx-id tx-id
+                          :result worker-result}))
             (clear-history! repo)
             (empty-stack-result undo?))))
       (catch :default e

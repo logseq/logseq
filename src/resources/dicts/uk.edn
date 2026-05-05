@@ -970,7 +970,7 @@
  :mobile.share/unsupported-content-warning "Розбір поточного спільного вмісту не підтримується. Будь ласка, повідомте наступні коди на {1}. Ми розглянемо це найближчим часом."
  :mobile.share/unsupported-import-type "Імпорт файлу {1} не підтримується. Ви можете повідомити на {2}. Ми розглянемо це найближчим часом."
 
- :mobile.tab/capture "Захват"
+ :mobile.tab/capture "Збір"
  :mobile.tab/go-to "Перейти"
  :mobile.tab/graphs "Графи"
 
@@ -1173,6 +1173,7 @@
  :plugin/new-registered "Новый плагін зарегистрирован"
  :plugin/no-settings-schema "Немає схеми налаштувань!"
  :plugin/not-installed "Не встановленно"
+ :plugin/open-logs "Переглянути журнали"
  :plugin/open-logseq-dir "Відкрити папку Logseq"
  :plugin/open-package "Відкрити пакунок"
  :plugin/open-preferences "Відкрити налаштування"
@@ -1729,7 +1730,6 @@
  :ui/deleted "Видалено"
  :ui/dont-remind-me-again "Більше не нагадувати"
  :ui/empty "Порожньо"
- :ui/error "Помилка"
  :ui/error-boundary-error "Помилка перехоплена інтерфейсом!\n {1}"
  :ui/export "Експорт"
  :ui/false "Хибно"

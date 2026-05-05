@@ -970,7 +970,7 @@
  :mobile.share/unsupported-content-warning "目前不支援解析此分享內容。請在 {1} 上回報以下代碼，我們會盡快處理。"
  :mobile.share/unsupported-import-type "不支援匯入 {1} 檔案。您可以在 {2} 上回報，我們會盡快處理。"
 
- :mobile.tab/capture "捕獲"
+ :mobile.tab/capture "速記"
  :mobile.tab/go-to "前往"
  :mobile.tab/graphs "圖譜"
 
@@ -1173,6 +1173,7 @@
  :plugin/new-registered "新外掛已註冊！"
  :plugin/no-settings-schema "沒有設定結構！"
  :plugin/not-installed "尚未下載"
+ :plugin/open-logs "查看日誌"
  :plugin/open-logseq-dir "開啟"
  :plugin/open-package "開啟封包"
  :plugin/open-preferences "開啟外掛偏好設定"
@@ -1729,7 +1730,6 @@
  :ui/deleted "已刪除"
  :ui/dont-remind-me-again "不再提醒"
  :ui/empty "空"
- :ui/error "錯誤"
  :ui/error-boundary-error "UI 攔截到錯誤！\n {1}"
  :ui/export "匯出"
  :ui/false "否"

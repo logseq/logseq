@@ -2,8 +2,8 @@
   "Export client-ops tx entities to an EDN file sorted by :db-sync/created-at asc.
 
   Examples:
-  $ yarn -s nbb-logseq script/export_client_ops_ops.cljs /path/to/client-ops.sqlite
-  $ yarn -s nbb-logseq script/export_client_ops_ops.cljs /path/to/client-ops.sqlite --out client-ops-ops.edn"
+  $ pnpm exec nbb-logseq script/export_client_ops_ops.cljs /path/to/client-ops.sqlite
+  $ pnpm exec nbb-logseq script/export_client_ops_ops.cljs /path/to/client-ops.sqlite --out client-ops-ops.edn"
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [babashka.cli :as cli]
@@ -32,7 +32,7 @@
    :db-sync/reversed-tx-data])
 
 (defn usage []
-  (str "Usage: yarn -s nbb-logseq script/export_client_ops_ops.cljs <client-ops-db> [--out <file.edn>]\n"
+  (str "Usage: pnpm exec nbb-logseq script/export_client_ops_ops.cljs <client-ops-db> [--out <file.edn>]\n"
        "Options:\n"
        (cli/format-opts {:spec spec})))
 

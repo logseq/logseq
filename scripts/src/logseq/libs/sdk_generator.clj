@@ -183,7 +183,7 @@
 
 (defn ensure-schema! [schema-path]
   (when-not (fs/exists? schema-path)
-    (throw (ex-info (str "Schema not found, run `yarn --cwd libs generate:schema` first: " schema-path)
+    (throw (ex-info (str "Schema not found, run `pnpm --dir libs generate:schema` first: " schema-path)
                     {:schema schema-path}))))
 
 (defn write-namespaces!

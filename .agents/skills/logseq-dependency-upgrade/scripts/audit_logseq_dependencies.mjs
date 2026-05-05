@@ -214,37 +214,99 @@ function parseBbEntries(bbFiles) {
 }
 
 // ---------------------------------------------------------------------------
-// Lockfile resolution (yarn.lock v1)
+// Lockfile resolution (pnpm-lock.yaml)
 // ---------------------------------------------------------------------------
 
-function parseYarnLock(lockPath) {
+function parseYamlScalar(raw) {
+  return String(raw).trim().replace(/^['"]|['"]$/g, '');
+}
+
+function normalizePnpmVersion(raw) {
+  const value = parseYamlScalar(raw);
+  const peerSuffixIndex = value.indexOf('(');
+  return peerSuffixIndex === -1 ? value : value.slice(0, peerSuffixIndex);
+}
+
+function parsePnpmLock(lockPath) {
   const resolved = new Map();
   if (!existsSync(lockPath)) return resolved;
-  const content = readFileSync(lockPath, 'utf8');
-  let currentSpecs = null;
+  const lines = readFileSync(lockPath, 'utf8').split('\n');
+
+  let inImporters = false;
+  let inRootImporter = false;
+  let currentSection = null;
+  let currentPackage = null;
+  let currentSpecifier = null;
   let currentVersion = null;
-  for (const line of content.split('\n')) {
-    if (line.startsWith('#') || line.trim() === '') continue;
-    if (!line.startsWith(' ') && line.endsWith(':')) {
-      if (currentSpecs && currentVersion) {
-        for (const spec of currentSpecs) resolved.set(spec, currentVersion);
-      }
-      currentSpecs = line.slice(0, -1).split(', ').map(s => s.replace(/^"|"$/g, ''));
-      currentVersion = null;
-    } else if (line.startsWith('  version ')) {
-      currentVersion = line.replace(/^  version "?/, '').replace(/"$/, '');
+
+  const flush = () => {
+    if (currentPackage && currentSpecifier && currentVersion) {
+      resolved.set(`${currentPackage}@${currentSpecifier}`, normalizePnpmVersion(currentVersion));
+    }
+    currentPackage = null;
+    currentSpecifier = null;
+    currentVersion = null;
+  };
+
+  for (const line of lines) {
+    if (!inImporters) {
+      if (line === 'importers:') inImporters = true;
+      continue;
+    }
+
+    if (!inRootImporter) {
+      if (line === 'packages:' || line === 'snapshots:') break;
+      if (line === '  .:') inRootImporter = true;
+      continue;
+    }
+
+    if (line === 'packages:' || line === 'snapshots:') {
+      flush();
+      break;
+    }
+
+    const sectionMatch = line.match(/^    (dependencies|devDependencies|optionalDependencies):$/);
+    if (sectionMatch) {
+      flush();
+      currentSection = sectionMatch[1];
+      continue;
+    }
+
+    if (line.match(/^    [^ ].*:/) && !sectionMatch) {
+      flush();
+      currentSection = null;
+      continue;
+    }
+
+    if (!currentSection) continue;
+
+    const packageMatch = line.match(/^      (.+):$/);
+    if (packageMatch) {
+      flush();
+      currentPackage = parseYamlScalar(packageMatch[1]);
+      continue;
+    }
+
+    const specifierMatch = line.match(/^        specifier:\s+(.+)$/);
+    if (specifierMatch) {
+      currentSpecifier = parseYamlScalar(specifierMatch[1]);
+      continue;
+    }
+
+    const versionMatch = line.match(/^        version:\s+(.+)$/);
+    if (versionMatch) {
+      currentVersion = versionMatch[1];
     }
   }
-  if (currentSpecs && currentVersion) {
-    for (const spec of currentSpecs) resolved.set(spec, currentVersion);
-  }
+
+  flush();
   return resolved;
 }
 
 function findLockFileForPackageJson(packageJsonPath) {
   const dir = dirname(join(root, packageJsonPath));
-  const yarnLock = join(dir, 'yarn.lock');
-  if (existsSync(yarnLock)) return yarnLock;
+  const pnpmLock = join(dir, 'pnpm-lock.yaml');
+  if (existsSync(pnpmLock)) return pnpmLock;
   return null;
 }
 
@@ -252,7 +314,7 @@ const lockCache = new Map();
 function getResolvedVersion(packageJsonPath, pkg, specifier) {
   const lockPath = findLockFileForPackageJson(packageJsonPath);
   if (!lockPath) return null;
-  if (!lockCache.has(lockPath)) lockCache.set(lockPath, parseYarnLock(lockPath));
+  if (!lockCache.has(lockPath)) lockCache.set(lockPath, parsePnpmLock(lockPath));
   const lock = lockCache.get(lockPath);
   return lock.get(`${pkg}@${specifier}`) || null;
 }
@@ -794,7 +856,7 @@ async function main() {
   if (alreadyResolvedItems.length > 0) {
     L.push('## Already Resolved via Lockfile');
     L.push('');
-    L.push('These declare a version range whose lockfile has **already resolved to the latest** version. They appear again in the Upgrade Batches with the `already resolved in lockfile` risk note — only the declared version in the manifest needs updating (`yarn install` is NOT required, making this zero-risk).');
+    L.push('These declare a version range whose lockfile has **already resolved to the latest** version. They appear again in the Upgrade Batches with the `already resolved in lockfile` risk note — only the declared version in the manifest needs updating (`pnpm install` is NOT required, making this zero-risk).');
     L.push('');
     L.push(row(['Package', 'Declared Range', 'Lockfile Resolved (= Latest)', 'File(s)']));
     L.push(row(['---', '---', '---', '---']));

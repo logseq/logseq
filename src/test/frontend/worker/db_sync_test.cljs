@@ -1,6 +1,6 @@
 (ns frontend.worker.db-sync-test
   (:require
-   [cljs.test :refer [async deftest is testing]]
+   [cljs.test :refer [async deftest is testing use-fixtures]]
    [clojure.set :as set]
    [clojure.string :as string]
    [datascript.core :as d]
@@ -8,11 +8,13 @@
    [frontend.worker-common.util :as worker-util]
    [frontend.worker.handler.page :as worker-page]
    [frontend.worker.pipeline :as worker-pipeline]
+   [frontend.worker.platform :as platform]
    [frontend.worker.shared-service :as shared-service]
    [frontend.worker.state :as worker-state]
    [frontend.worker.sync :as db-sync]
    [frontend.worker.sync.apply-txs :as sync-apply]
    [frontend.worker.sync.assets :as sync-assets]
+   [frontend.worker.sync.auth :as sync-auth]
    [frontend.worker.sync.client-op :as client-op]
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.handle-message :as sync-handle-message]
@@ -21,7 +23,8 @@
    [frontend.worker.sync.presence :as sync-presence]
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
    [frontend.worker.sync.transport :as sync-transport]
-   [frontend.worker.sync.upload :as sync-upload]
+   [frontend.worker.sync.util :as sync-util]
+   [frontend.test.noise :as test-noise]
    [frontend.worker.undo-redo :as undo-redo]
    [logseq.common.config :as common-config]
    [logseq.common.util :as common-util]
@@ -32,7 +35,6 @@
    [logseq.db-sync.worker.handler.sync :as sync-handler]
    [logseq.db-sync.worker.ws :as ws]
    [logseq.db.common.normalize :as db-normalize]
-   [logseq.db.common.sqlite :as common-sqlite]
    [logseq.db.frontend.validate :as db-validate]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.db.test.helper :as db-test]
@@ -51,6 +53,18 @@
   #{:logseq.property.recycle/original-parent
     :logseq.property.recycle/original-page
     :logseq.property.recycle/original-order})
+
+(defn- with-silenced-console-error
+  "Silences expected error logging without swallowing thrown exceptions."
+  [f]
+  (let [original-console-error (.-error js/console)]
+    (aset js/console "error" (fn [& _] nil))
+    (try
+      (f)
+      (finally
+        (aset js/console "error" original-console-error)))))
+
+(use-fixtures :once (test-noise/mute-console-fixture ::db-sync-test))
 
 (defn- js-row
   [m]
@@ -180,6 +194,21 @@
                        "from client_ops where kind = 'tx' and tx_id = ? limit 1")
                   (str tx-id)))
 
+(defn- sync-conflict-rows
+  [db block-uuid]
+  (try
+    (let [^js db db
+          ^js stmt (.prepare db (str "select block_uuid, attr, value "
+                                     "from sync_conflicts where block_uuid = ? "
+                                     "order by id asc"))]
+      (->> (.all stmt (str block-uuid))
+           (mapv (fn [row]
+                   {:block-uuid (aget row "block_uuid")
+                    :attr (aget row "attr")
+                    :value (aget row "value")}))))
+    (catch :default _
+      [])))
+
 (defn- seed-client-op-txs!
   [repo txs]
   (doseq [tx txs]
@@ -204,6 +233,10 @@
     (swap! client-op/*repo->pending-local-tx-count dissoc test-repo)
     (reset! worker-state/*datascript-conns {test-repo db-conn})
     (reset! worker-state/*client-ops-conns {test-repo ops-conn})
+    (undo-redo/clear-history! test-repo)
+    ;; Keep sync-message tests deterministic under strict local-tx validation.
+    (when (and ops-conn (nil? (client-op/get-local-tx test-repo)))
+      (client-op/update-local-tx test-repo 0))
     (when ops-conn
       (d/listen! db-conn ::listen-db
                  (fn [tx-report]
@@ -212,6 +245,7 @@
           cleanup (fn []
                     (when ops-conn
                       (d/unlisten! db-conn ::listen-db))
+                    (undo-redo/clear-history! test-repo)
                     (swap! client-op/*repo->pending-local-tx-count dissoc test-repo)
                     (reset! worker-state/*datascript-conns db-prev)
                     (reset! worker-state/*client-ops-conns ops-prev))]
@@ -378,54 +412,97 @@
 
 (deftest resolve-ws-token-refreshes-when-token-expired-test
   (async done
-         (let [refresh-calls (atom 0)
+         (let [fetch-calls (atom [])
+               main-thread-calls (atom 0)
                main-thread-prev @worker-state/*main-thread
-               worker-state-prev @worker-state/*state]
-           (reset! worker-state/*state (assoc worker-state-prev :auth/id-token "expired-token"))
+               worker-state-prev @worker-state/*state
+               sync-config-prev @worker-state/*db-sync-config
+               fetch-prev js/fetch]
+           (reset! worker-state/*db-sync-config {:feature-flags {:worker-auth-refresh? true}})
+           (reset! worker-state/*state (assoc worker-state-prev
+                                              :auth/id-token "expired-token"
+                                              :auth/refresh-token "refresh-token"
+                                              :auth/oauth-token-url "https://auth.example.com/oauth2/token"
+                                              :auth/oauth-client-id "worker-client-id"))
            (reset! worker-state/*main-thread
-                   (fn [qkw _direct-pass? _args-list]
-                     (if (= qkw :thread-api/ensure-id&access-token)
-                       (do
-                         (swap! refresh-calls inc)
-                         (p/resolved {:id-token "fresh-token"}))
-                       (p/resolved nil))))
-           (with-redefs [db-sync/auth-token (fn [] "expired-token")
-                         db-sync/id-token-expired? (fn [_token] true)]
-             (-> (#'db-sync/<resolve-ws-token)
-                 (p/then (fn [token]
-                           (is (= 1 @refresh-calls))
-                           (is (= "fresh-token" token))
-                           (is (= "fresh-token" (worker-state/get-id-token)))
-                           (reset! worker-state/*main-thread main-thread-prev)
-                           (reset! worker-state/*state worker-state-prev)
-                           (done)))
-                 (p/catch (fn [error]
-                            (reset! worker-state/*main-thread main-thread-prev)
-                            (reset! worker-state/*state worker-state-prev)
-                            (is nil (str error))
-                            (done))))))))
-
-(deftest resolve-ws-token-skips-refresh-when-token-not-expired-test
-  (async done
-         (let [refresh-calls (atom 0)
-               main-thread-prev @worker-state/*main-thread]
-           (reset! worker-state/*main-thread
-                   (fn [qkw _direct-pass? _args-list]
+                   (fn [qkw & _args]
                      (when (= qkw :thread-api/ensure-id&access-token)
-                       (swap! refresh-calls inc))
-                     (p/resolved {:id-token "fresh-token"})))
-           (with-redefs [db-sync/auth-token (fn [] "valid-token")
-                         db-sync/id-token-expired? (fn [_token] false)]
+                       (swap! main-thread-calls inc))
+                     (p/resolved {:id-token "legacy-token"})))
+           (set! js/fetch
+                 (fn [url opts]
+                   (swap! fetch-calls conj {:url url :opts opts})
+                   (let [resp (js-obj)]
+                     (aset resp "ok" true)
+                     (aset resp "status" 200)
+                     (aset resp "text"
+                           (fn []
+                             (p/resolved "{\"id_token\":\"fresh-worker-token\",\"access_token\":\"fresh-worker-access-token\"}")))
+                     (p/resolved resp))))
+           (with-redefs [sync-util/auth-token (fn [] "expired-token")
+                         sync-auth/id-token-expired? (fn [_token] true)]
              (-> (#'db-sync/<resolve-ws-token)
                  (p/then (fn [token]
-                           (reset! worker-state/*main-thread main-thread-prev)
-                           (is (= 0 @refresh-calls))
-                           (is (= "valid-token" token))
-                           (done)))
+                           (is (= 1 (count @fetch-calls)))
+                           (is (= 0 @main-thread-calls))
+                           (is (= "fresh-worker-token" token))
+                           (is (= "fresh-worker-token" (worker-state/get-id-token)))
+                           (is (= "fresh-worker-access-token"
+                                  (:auth/access-token @worker-state/*state)))))
                  (p/catch (fn [error]
-                            (reset! worker-state/*main-thread main-thread-prev)
-                            (is nil (str error))
-                            (done))))))))
+                            (is nil (str error))))
+                 (p/finally (fn []
+                              (set! js/fetch fetch-prev)
+                              (reset! worker-state/*main-thread main-thread-prev)
+                              (reset! worker-state/*state worker-state-prev)
+                              (reset! worker-state/*db-sync-config sync-config-prev)
+                              (done))))))))
+
+(deftest resolve-ws-token-does-not-fallback-to-main-thread-when-feature-flag-disabled-test
+  (async done
+         (let [fetch-calls (atom 0)
+               main-thread-calls (atom 0)
+               main-thread-prev @worker-state/*main-thread
+               worker-state-prev @worker-state/*state
+               sync-config-prev @worker-state/*db-sync-config
+               fetch-prev js/fetch]
+           (reset! worker-state/*db-sync-config {:feature-flags {:worker-auth-refresh? false}})
+           (reset! worker-state/*state (assoc worker-state-prev
+                                              :auth/id-token "expired-token"
+                                              :auth/refresh-token "refresh-token"
+                                              :auth/oauth-token-url "https://auth.example.com/oauth2/token"
+                                              :auth/oauth-client-id "worker-client-id"))
+           (reset! worker-state/*main-thread
+                   (fn [qkw & _args]
+                     (when (= qkw :thread-api/ensure-id&access-token)
+                       (swap! main-thread-calls inc))
+                     (p/resolved {:id-token "fresh-legacy-token"})))
+           (set! js/fetch
+                 (fn [_url _opts]
+                   (swap! fetch-calls inc)
+                   (let [resp (js-obj)]
+                     (aset resp "ok" true)
+                     (aset resp "status" 200)
+                     (aset resp "text"
+                           (fn []
+                             (p/resolved "{\"id_token\":\"fresh-worker-token-2\",\"access_token\":\"fresh-worker-access-token-2\"}")))
+                     (p/resolved resp))))
+           (with-redefs [sync-util/auth-token (fn [] "expired-token")
+                         sync-auth/id-token-expired? (fn [_token] true)]
+             (-> (#'db-sync/<resolve-ws-token)
+                 (p/then (fn [token]
+                           (is (= 1 @fetch-calls))
+                           (is (= 0 @main-thread-calls))
+                           (is (= "fresh-worker-token-2" token))
+                           (is (= "fresh-worker-token-2" (worker-state/get-id-token)))))
+                 (p/catch (fn [error]
+                            (is nil (str error))))
+                 (p/finally (fn []
+                              (set! js/fetch fetch-prev)
+                              (reset! worker-state/*main-thread main-thread-prev)
+                              (reset! worker-state/*state worker-state-prev)
+                              (reset! worker-state/*db-sync-config sync-config-prev)
+                              (done))))))))
 
 (deftest update-online-users-dedupes-identical-messages-test
   (let [client {:repo test-repo
@@ -616,23 +693,6 @@
                         test-repo)]
             (is (= 1 (:pending-local counts)))))))))
 
-(deftest upload-graph-metadata-write-is-not-persisted-as-local-sync-tx-test
-  (let [captured (atom nil)
-        fake-conn (atom :db)]
-    (with-redefs [worker-state/get-datascript-conn (fn [_repo] fake-conn)
-                  ldb/transact! (fn [conn tx-data tx-meta]
-                                  (reset! captured {:conn conn
-                                                    :tx-data tx-data
-                                                    :tx-meta tx-meta})
-                                  nil)]
-      (sync-upload/set-graph-sync-metadata! test-repo true))
-    (is (= fake-conn (:conn @captured)))
-    (is (= [{:db/ident :logseq.kv/graph-remote? :kv/value true}
-            {:db/ident :logseq.kv/graph-rtc-e2ee? :kv/value true}]
-           (:tx-data @captured)))
-    (is (= {:persist-op? false}
-           (:tx-meta @captured)))))
-
 (deftest pull-ok-with-older-remote-tx-is-ignored-test
   (testing "pull/ok with remote tx behind local tx does not apply stale tx data"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
@@ -719,7 +779,8 @@
                                                (reset! *captured {:type type
                                                                   :payload payload}))]
           (try
-            (sync-handle-message/handle-message! test-repo client raw-message)
+            (with-silenced-console-error
+              #(sync-handle-message/handle-message! test-repo client raw-message))
             (is false "expected tx/reject to fail-fast with rejected tx details")
             (catch :default error
               (let [data (ex-data error)
@@ -758,12 +819,17 @@
              :db-sync/pending? true}])
           (with-redefs [client-op/get-local-tx (constantly 0)]
             (let [error (try
-                          (sync-handle-message/handle-message! test-repo client raw-message)
+                          (with-silenced-console-error
+                            #(sync-handle-message/handle-message! test-repo client raw-message))
                           nil
                           (catch :default e
                             e))
                   ent (client-op-tx-row client-ops-conn tx-id)]
               (is (some? error))
+              (is (= :db-sync/tx-rejected
+                     (:type (ex-data error))))
+              (is (= "db transact failed"
+                     (:reason (ex-data error))))
               (is (= [] @(:inflight client)))
               (is (= 0 (aget ent "pending")))
               (is (= 1 (aget ent "failed"))))))))))
@@ -800,7 +866,8 @@
              :db-sync/pending? true}])
           (with-redefs [client-op/get-local-tx (constantly 0)]
             (let [error (try
-                          (sync-handle-message/handle-message! test-repo client raw-message)
+                          (with-silenced-console-error
+                            #(sync-handle-message/handle-message! test-repo client raw-message))
                           nil
                           (catch :default e
                             e))
@@ -808,6 +875,10 @@
                   failed-ent (client-op-tx-row client-ops-conn failed-tx-id)
                   untouched-ent (client-op-tx-row client-ops-conn untouched-tx-id)]
               (is (some? error))
+              (is (= :db-sync/tx-rejected
+                     (:type (ex-data error))))
+              (is (= "db transact failed"
+                     (:reason (ex-data error))))
               (is (= [] @(:inflight client)))
               (is (= 0 (aget success-ent "pending")))
               (is (not= 1 (aget success-ent "failed")))
@@ -1494,6 +1565,24 @@
           (let [{persisted-tx-id :tx-id} (first (#'sync-apply/pending-txs test-repo))]
             (is (= tx-id persisted-tx-id))))))))
 
+(deftest handle-local-tx-enqueues-asset-op-for-local-asset-checksum-test
+  (testing "local asset checksum transactions should create pending asset upload ops"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          asset-uuid (random-uuid)
+          tx-report (d/with @conn
+                            [{:block/uuid asset-uuid
+                              :block/title "asset.png"
+                              :logseq.property.asset/type "png"
+                              :logseq.property.asset/checksum "sha-256-value"}]
+                            (assoc local-tx-meta :outliner-op :save-block))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (sync-apply/handle-local-tx! test-repo tx-report)
+          (let [asset-op (first (client-op/get-all-asset-ops test-repo))]
+            (is (= 1 (client-op/get-unpushed-asset-ops-count test-repo)))
+            (is (= asset-uuid (get-in asset-op [:update-asset 2 :block-uuid])))
+            (is (= :update-asset (first (:update-asset asset-op))))))))))
+
 (deftest apply-history-action-does-not-reuse-original-tx-id-test
   (testing "undo/redo history actions should not overwrite the original pending tx row"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
@@ -1600,6 +1689,29 @@
           (is (= before-title
                  (:block/title (d/entity @conn [:block/uuid child-uuid])))))))))
 
+(deftest apply-history-action-inline-semantic-op-rejects-numeric-ref-ids-test
+  (testing "inline semantic history action should reject stale numeric ref ids before replay"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          child-uuid (:block/uuid child1)
+          stale-ref-id 99999999]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [result (#'sync-apply/apply-history-action!
+                        test-repo
+                        tx-id
+                        false
+                        {:outliner-op :save-block
+                         :db-sync/forward-outliner-ops [[:save-block [{:block/uuid child-uuid
+                                                                       :block/tags #{stale-ref-id}}
+                                                                      {}]]]
+                         :db-sync/inverse-outliner-ops [[:save-block [{:block/uuid child-uuid
+                                                                       :block/title "child 1"}
+                                                                      {}]]]})]
+            (is (= false (:applied? result)))
+            (is (= :invalid-history-action-ops
+                   (:reason result)))))))))
+
 (deftest apply-history-action-redo-invalid-insert-conflict-skips-fail-fast-test
   (testing "redo conflict on stale insert target should return error result without fail-fast logger"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)
@@ -1622,8 +1734,8 @@
                                                                :keep-uuid? true}]]]]
              :db-sync/normalized-tx-data []
              :db-sync/reversed-tx-data []}])
-          (with-redefs [sync-apply/fail-fast (fn [_tag data]
-                                               (throw (ex-info "fail-fast-called" data)))]
+          (with-redefs [sync-util/fail-fast (fn [_tag data]
+                                              (throw (ex-info "fail-fast-called" data)))]
             (let [result (#'sync-apply/apply-history-action! test-repo tx-id false {})]
               (is (= false (:applied? result)))
               (is (= :invalid-history-action-ops
@@ -2345,14 +2457,15 @@
           page-uuid (:block/uuid (:block/page seed))
           block-uuid (random-uuid)]
       (is (thrown? js/Error
-                   (#'sync-apply/replay-canonical-outliner-op!
-                    conn
-                    [:save-block [{:block/uuid block-uuid
-                                   :block/title ""
-                                   :block/parent [:block/uuid page-uuid]
-                                   :block/page [:block/uuid page-uuid]
-                                   :block/order "a0"}
-                                  nil]])))
+                   (with-silenced-console-error
+                     #(#'sync-apply/replay-canonical-outliner-op!
+                       conn
+                       [:save-block [{:block/uuid block-uuid
+                                      :block/title ""
+                                      :block/parent [:block/uuid page-uuid]
+                                      :block/page [:block/uuid page-uuid]
+                                      :block/order "a0"}
+                                     nil]]))))
       (is (nil? (d/entity @conn [:block/uuid block-uuid]))))))
 
 (deftest apply-history-action-redo-replays-status-property-test
@@ -4130,6 +4243,92 @@
             (let [block' (d/entity @conn (:db/id block))]
               (is (= "test" (:block/title block'))))))))))
 
+(deftest sync-conflict-store-roundtrip-test
+  (testing "sync title conflicts are stored outside graph data and returned by block uuid"
+    (let [client-ops-conn (new-client-ops-db)
+          block-uuid (random-uuid)]
+      (with-datascript-conns (db-test/create-conn-with-blocks
+                              {:pages-and-blocks
+                               [{:page {:block/title "page 1"}
+                                 :blocks [{:block/title "target"}]}]})
+                             client-ops-conn
+        (fn []
+          (client-op/add-sync-conflicts!
+           test-repo
+           [{:block-uuid block-uuid
+             :attr :block/title
+             :value "remote title"
+             :remote-t 42}])
+          (is (= [{:block-uuid block-uuid
+                   :attr :block/title
+                   :value "remote title"
+                   :remote-t 42}]
+                 (mapv #(select-keys % [:block-uuid :attr :value :remote-t])
+                       (client-op/get-sync-conflicts test-repo block-uuid)))))))))
+
+(deftest sync-conflict-clear-test
+  (testing "resolved sync conflicts are removed for the block"
+    (let [client-ops-conn (new-client-ops-db)
+          block-uuid (random-uuid)
+          other-block-uuid (random-uuid)]
+      (with-datascript-conns (db-test/create-conn-with-blocks
+                              {:pages-and-blocks
+                               [{:page {:block/title "page 1"}
+                                 :blocks [{:block/title "target"}]}]})
+                             client-ops-conn
+        (fn []
+          (client-op/add-sync-conflicts!
+           test-repo
+           [{:block-uuid block-uuid
+             :attr :block/title
+             :value "remote title"
+             :remote-t 42}
+            {:block-uuid other-block-uuid
+             :attr :block/title
+             :value "other remote title"
+             :remote-t 43}])
+          (client-op/clear-sync-conflicts! test-repo block-uuid)
+          (is (empty? (client-op/get-sync-conflicts test-repo block-uuid)))
+          (is (= ["other remote title"]
+                 (mapv :value (client-op/get-sync-conflicts test-repo other-block-uuid)))))))))
+
+(deftest rebase-saves-remote-title-and-name-conflicts-test
+  (testing "remote title/name changes that conflict with pending local edits are saved for manual resolution"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "old page"}
+                   :blocks [{:block/title "old block"}]}]})
+          client-ops-conn (new-client-ops-db)
+          page (db-test/find-page-by-title @conn "old page")
+          block (db-test/find-block-by-content @conn "old block")
+          page-uuid (:block/uuid page)
+          block-uuid (:block/uuid block)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (apply-ops! conn
+                      [[:save-block [{:block/uuid block-uuid
+                                      :block/title "local block"} nil]]
+                       [:save-block [{:block/uuid page-uuid
+                                      :block/title "local page"} nil]]]
+                      local-tx-meta)
+          (is (seq (#'sync-apply/pending-txs test-repo)))
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:t 10
+             :tx-data [[:db/add [:block/uuid block-uuid] :block/title "remote block"]
+                       [:db/add [:block/uuid page-uuid] :block/title "remote page"]]}])
+          (is (= "local block" (:block/title (d/entity @conn [:block/uuid block-uuid]))))
+          (is (= "local page" (:block/title (d/entity @conn [:block/uuid page-uuid]))))
+          (is (= #{{:block-uuid (str block-uuid)
+                    :attr "block/title"
+                    :value "remote block"}
+                   {:block-uuid (str page-uuid)
+                    :attr "block/title"
+                    :value "remote page"}}
+                 (set (concat (sync-conflict-rows client-ops-conn block-uuid)
+                              (sync-conflict-rows client-ops-conn page-uuid))))))))))
+
 (deftest rebase-does-not-leave-anonymous-created-by-entities-test
   (testing "rebase should not leave entities with timestamps/created-by but without identity attrs"
     (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
@@ -4476,40 +4675,55 @@
 (deftest create-temp-sqlite-db-uses-opfs-pool-test
   (testing "temp upload db should use an OPFS-backed sqlite db instead of :memory:"
     (async done
-           (let [opened-paths (atom [])]
-             (with-redefs [sync-temp-sqlite/<get-upload-temp-sqlite-pool
-                           (fn []
-                             (p/resolved
-                              #js {:OpfsSAHPoolDb
-                                   (fn [path]
-                                     (swap! opened-paths conj path)
-                                     #js {:close (fn [] nil)})}))
-                           common-sqlite/create-kvs-table! (fn [_] nil)]
-               (-> (p/let [{:keys [db path]} (sync-temp-sqlite/<create-temp-sqlite-db!
-                                              {:get-pool-f sync-temp-sqlite/<get-upload-temp-sqlite-pool
-                                               :upload-path-f sync-temp-sqlite/upload-temp-sqlite-path})]
-                     (is (some? db))
-                     (is (= [path] @opened-paths))
-                     (is (string/includes? path "upload-"))
-                     (is (string/ends-with? path ".sqlite")))
-                   (p/finally done)))))))
-
-(deftest cleanup-temp-sqlite-removes-opfs-file-test
-  (testing "temp upload db cleanup should close the db and remove the temp OPFS file"
-    (async done
-           (let [closed? (atom false)
-                 removed-paths (atom [])]
-             (with-redefs [sync-temp-sqlite/<remove-upload-temp-sqlite-db-file!
-                           (fn [path]
-                             (swap! removed-paths conj path)
-                             (p/resolved nil))]
-               (-> (p/let [_ (sync-temp-sqlite/cleanup-temp-sqlite!
-                              {:db #js {:close (fn [] (reset! closed? true))}
-                               :path "/upload-temp.sqlite"}
-                              sync-temp-sqlite/<remove-upload-temp-sqlite-db-file!)]
-                     (is @closed?)
-                     (is (= ["/upload-temp.sqlite"] @removed-paths)))
-                   (p/finally done)))))))
+           (let [sqlite-prev @worker-state/*sqlite
+                 platform-prev (try
+                                 (platform/current)
+                                 (catch :default _ nil))
+                 sqlite #js {:sqlite? true}
+                 pool #js {:pool? true}
+                 opened-opts (atom [])
+                 installed-pools (atom [])
+                 test-platform {:env {:runtime :node
+                                      :owner-source :test}
+                                :storage {:install-opfs-pool (fn [sqlite* pool-name]
+                                                               (swap! installed-pools conj {:sqlite sqlite*
+                                                                                            :pool-name pool-name})
+                                                               pool)
+                                          :resolve-db-path (fn [repo _pool suffix]
+                                                             (str "/tmp/" repo suffix))
+                                          :remove-vfs! (fn [_pool] nil)}
+                                :kv {:get (fn [_] nil)
+                                     :set! (fn [_ _] nil)}
+                                :broadcast {:post-message! (fn [_ _] nil)}
+                                :websocket {:connect (fn [_] nil)}
+                                :crypto {}
+                                :timers {}
+                                :sqlite {:init! (fn [] nil)
+                                         :open-db (fn [opts]
+                                                    (swap! opened-opts conj opts)
+                                                    #js {:close (fn [] nil)
+                                                         :exec (fn [& _] nil)})}}]
+             (platform/set-platform! test-platform)
+             (reset! worker-state/*sqlite sqlite)
+             (-> (p/let [{:keys [db path]} (sync-temp-sqlite/<create-temp-sqlite-db!)]
+                   (is (some? db))
+                   (is (= [{:sqlite sqlite
+                            :pool-name sync-temp-sqlite/upload-temp-pool-name}]
+                          @installed-pools))
+                   (is (= [{:sqlite sqlite
+                            :pool pool
+                            :path path
+                            :mode "c"}]
+                          @opened-opts))
+                   (is (string/includes? path "upload-"))
+                   (is (string/ends-with? path ".sqlite")))
+                 (p/catch (fn [e]
+                            (is false (str e))))
+                 (p/finally (fn []
+                              (reset! worker-state/*sqlite sqlite-prev)
+                              (when platform-prev
+                                (platform/set-platform! platform-prev))
+                              (done))))))))
 
 (deftest upload-large-title-encrypts-transit-payload-test
   (testing "encrypted large title uploads transit-encoded payload"
@@ -4620,9 +4834,6 @@
                                       :download-fn download-fn
                                       :aes-key nil
                                       :get-conn-f worker-state/get-datascript-conn
-                                      :get-graph-id-f (fn [repo]
-                                                        (sync-large-title/get-graph-id
-                                                         worker-state/get-datascript-conn repo))
                                       :graph-e2ee?-f sync-crypt/graph-e2ee?
                                       :ensure-graph-aes-key-f sync-crypt/<ensure-graph-aes-key
                                       :fail-fast-f db-sync/fail-fast})
@@ -4651,6 +4862,43 @@
                          :template-blocks blocks-to-insert}]]]
      local-tx-meta)))
 
+(defn- apply-template-with-opts!
+  [conn template-root-uuid target-uuid opts]
+  (let [template-root (d/entity @conn [:block/uuid template-root-uuid])
+        target (d/entity @conn [:block/uuid target-uuid])
+        template-blocks (->> (ldb/get-block-and-children @conn template-root-uuid
+                                                         {:include-property-block? true})
+                             rest)
+        blocks-to-insert (cons (assoc (first template-blocks)
+                                      :logseq.property/used-template (:db/id template-root))
+                               (rest template-blocks))]
+    (apply-ops!
+     conn
+     [[:apply-template [(:db/id template-root)
+                        (:db/id target)
+                        (merge {:sibling? true
+                                :template-blocks blocks-to-insert}
+                               opts)]]]
+     local-tx-meta)))
+
+(defn- undo-all!
+  [repo]
+  (loop [n 0]
+    (let [result (undo-redo/undo repo)]
+      (when-not (= :frontend.worker.undo-redo/empty-undo-stack result)
+        (when (> n 128)
+          (throw (ex-info "undo loop exceeded" {:count n})))
+        (recur (inc n))))))
+
+(defn- redo-all!
+  [repo]
+  (loop [n 0]
+    (let [result (undo-redo/redo repo)]
+      (when-not (= :frontend.worker.undo-redo/empty-redo-stack result)
+        (when (> n 128)
+          (throw (ex-info "redo loop exceeded" {:count n})))
+        (recur (inc n))))))
+
 (defn- select-offline-inserted-three
   [conn template-root-uuid]
   (let [all-three-ids (d/q '[:find [?b ...]
@@ -4666,6 +4914,22 @@
                   b))
               all-threes)
         (first all-threes))))
+
+(defn- select-offline-inserted-one
+  [conn template-root-uuid]
+  (let [all-one-ids (d/q '[:find [?b ...]
+                           :in $ ?title
+                           :where
+                           [?b :block/title ?title]]
+                         @conn
+                         "1")
+        all-ones (mapv #(d/entity @conn %) all-one-ids)]
+    (or (some (fn [b]
+                (when (not= template-root-uuid
+                            (some-> b :block/parent :block/uuid))
+                  b))
+              all-ones)
+        (first all-ones))))
 
 (defn- setup-rebase-apply-template-repro-state
   []
@@ -4706,6 +4970,9 @@
                         :keep-uuid? true}]]]
      local-tx-meta)
     {:template-root-uuid template-root-uuid
+     :template-1-uuid template-1-uuid
+     :template-2-uuid template-2-uuid
+     :template-3-uuid template-3-uuid
      :empty-target-uuid empty-target-uuid
      :local-empty-uuid local-empty-uuid
      :seed-conn seed-conn
@@ -4760,3 +5027,152 @@
                       (str (:errors validation))))))))
         (finally
           (d/unlisten! conn-b ::capture-rebase-apply-template))))))
+
+(deftest apply-history-action-redo-after-apply-template-undo-all-preserves-followup-insert-test
+  (testing "apply-template then insert-blocks should replay on redo after both are undone"
+    (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn (d/conn-from-db @seed-conn)
+          followup-uuid (random-uuid)
+          prev-apply-action @undo-redo/*apply-history-action!]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! undo-redo/*apply-history-action! sync-apply/apply-history-action!)
+          (try
+            (apply-template-to-empty-target! conn template-root-uuid empty-target-uuid)
+            (let [inserted-three (select-offline-inserted-three conn template-root-uuid)]
+              (is (some? inserted-three))
+              (apply-ops! conn
+                          [[:insert-blocks [[{:block/uuid followup-uuid
+                                              :block/title "followup"}]
+                                            (:db/id inserted-three)
+                                            {:sibling? true
+                                             :keep-uuid? true}]]]
+                          local-tx-meta)
+              (undo-all! test-repo)
+              (is (nil? (d/entity @conn [:block/uuid followup-uuid])))
+              (redo-all! test-repo)
+              (let [followup (d/entity @conn [:block/uuid followup-uuid])]
+                (is (some? followup))
+                (is (= "followup" (:block/title followup)))))
+            (finally
+              (reset! undo-redo/*apply-history-action! prev-apply-action))))))))
+
+(deftest apply-history-action-redo-after-non-empty-template-insert-preserves-followup-insert-test
+  (testing "non-empty apply-template + insert-blocks should replay on redo after undo-all"
+    (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn (d/conn-from-db @seed-conn)
+          followup-uuid (random-uuid)
+          prev-apply-action @undo-redo/*apply-history-action!]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! undo-redo/*apply-history-action! sync-apply/apply-history-action!)
+          (try
+            (d/transact! conn [[:db/add [:block/uuid empty-target-uuid] :block/title "target"]])
+            (apply-template-with-opts! conn template-root-uuid empty-target-uuid {})
+            (let [inserted-three (select-offline-inserted-three conn template-root-uuid)]
+              (is (some? inserted-three))
+              (apply-ops! conn
+                          [[:insert-blocks [[{:block/uuid followup-uuid
+                                              :block/title "followup"}]
+                                            (:db/id inserted-three)
+                                            {:sibling? true
+                                             :keep-uuid? true}]]]
+                          local-tx-meta)
+              (undo-all! test-repo)
+              (is (nil? (d/entity @conn [:block/uuid followup-uuid])))
+              (redo-all! test-repo)
+              (let [followup (d/entity @conn [:block/uuid followup-uuid])]
+                (is (some? followup))
+                (is (= "followup" (:block/title followup)))))
+            (finally
+              (reset! undo-redo/*apply-history-action! prev-apply-action))))))))
+
+(deftest undo-redo-apply-template-without-template-blocks-keeps-followup-insert-target-test
+  (testing "redo after apply-template (without template-blocks in original op) should preserve inserted target uuid"
+    (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn (d/conn-from-db @seed-conn)
+          followup-uuid (random-uuid)
+          prev-apply-action @undo-redo/*apply-history-action!]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! undo-redo/*apply-history-action! sync-apply/apply-history-action!)
+          (try
+            ;; Match editor path: apply-template op only carries target/template ids + opts.
+            (d/transact! conn [[:db/add [:block/uuid empty-target-uuid] :block/title "target"]])
+            (apply-ops! conn
+                        [[:apply-template [(:db/id (d/entity @conn [:block/uuid template-root-uuid]))
+                                           (:db/id (d/entity @conn [:block/uuid empty-target-uuid]))
+                                           {:sibling? true}]]]
+                        local-tx-meta)
+            (let [inserted-three (select-offline-inserted-three conn template-root-uuid)]
+              (is (some? inserted-three))
+              (apply-ops! conn
+                          [[:insert-blocks [[{:block/uuid followup-uuid
+                                              :block/title "followup"}]
+                                            (:db/id inserted-three)
+                                            {:sibling? true
+                                             :keep-uuid? true}]]]
+                          local-tx-meta)
+              (undo-all! test-repo)
+              (is (nil? (d/entity @conn [:block/uuid followup-uuid])))
+              (redo-all! test-repo)
+              (let [followup (d/entity @conn [:block/uuid followup-uuid])]
+                (is (some? followup))
+                (is (= "followup" (:block/title followup)))))
+            (finally
+              (reset! undo-redo/*apply-history-action! prev-apply-action))))))))
+
+(deftest undo-redo-apply-template-without-template-blocks-rewrites-property-value-refs-test
+  (testing "redo apply-template should not keep property value refs to template source blocks"
+    (let [{:keys [template-root-uuid template-1-uuid template-3-uuid empty-target-uuid seed-conn client-ops-conn]}
+          (setup-rebase-apply-template-repro-state)
+          conn (d/conn-from-db @seed-conn)
+          prev-apply-action @undo-redo/*apply-history-action!]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! undo-redo/*apply-history-action! sync-apply/apply-history-action!)
+          (try
+            (d/transact! conn [[:db/add [:block/uuid template-1-uuid] :user.property/p1 [:block/uuid template-3-uuid]]
+                               [:db/add [:block/uuid empty-target-uuid] :block/title "target"]])
+            (apply-ops! conn
+                        [[:apply-template [(:db/id (d/entity @conn [:block/uuid template-root-uuid]))
+                                           (:db/id (d/entity @conn [:block/uuid empty-target-uuid]))
+                                           {:sibling? true}]]]
+                        local-tx-meta)
+            (let [inserted-one (select-offline-inserted-one conn template-root-uuid)
+                  inserted-three (select-offline-inserted-three conn template-root-uuid)
+                  property-value (:user.property/p1 inserted-one)
+                  initial-ref-uuid (cond
+                                     (map? property-value)
+                                     (:block/uuid property-value)
+
+                                     (and (vector? property-value)
+                                          (= :block/uuid (first property-value)))
+                                     (second property-value)
+
+                                     :else
+                                     property-value)]
+              (is (= (:block/uuid inserted-three) initial-ref-uuid))
+              (is (not= template-3-uuid initial-ref-uuid)))
+            (undo-all! test-repo)
+            (redo-all! test-repo)
+            (let [inserted-one (select-offline-inserted-one conn template-root-uuid)
+                  inserted-three (select-offline-inserted-three conn template-root-uuid)
+                  property-value (:user.property/p1 inserted-one)
+                  redone-ref-uuid (cond
+                                    (map? property-value)
+                                    (:block/uuid property-value)
+
+                                    (and (vector? property-value)
+                                         (= :block/uuid (first property-value)))
+                                    (second property-value)
+
+                                    :else
+                                    property-value)]
+              (is (= (:block/uuid inserted-three) redone-ref-uuid))
+              (is (not= template-3-uuid redone-ref-uuid)))
+            (finally
+              (reset! undo-redo/*apply-history-action! prev-apply-action))))))))

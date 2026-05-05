@@ -82,16 +82,27 @@ conditions:
   (assert (some? repo))
   (reset! *rtc-start-trigger repo))
 
+(defn- document-visible->restart-event
+  [visibility]
+  (when (= "visible" visibility)
+    :document-visible&rtc-not-running))
+
+(defn- network-online->restart-event
+  [online?]
+  (when online?
+    :network-online&rtc-not-running))
+
+(defn- mobile-app-active->restart-event
+  [app-active?]
+  (when app-active?
+    :mobile-app-active&rtc-not-running))
+
 (def ^:private document-visible&rtc-not-running-flow
   (m/ap
     (let [visibility (m/?< flows/document-visibility-state-flow)]
       (try
-        (if (= "visible" visibility)
-          (let [rtc-lock (:rtc-lock (m/? (c.m/snapshot-of-flow rtc-state-flow)))]
-            (if (not rtc-lock)
-              :document-visible&rtc-not-running
-              (m/amb)))
-          (m/amb))
+        (or (document-visible->restart-event visibility)
+            (m/amb))
         (catch Cancelled _
           (m/amb))))))
 
@@ -99,12 +110,8 @@ conditions:
   (m/ap
     (let [online? (m/?< flows/network-online-event-flow)]
       (try
-        (if online?
-          (let [rtc-running? (m/? (c.m/snapshot-of-flow rtc-running-flow))]
-            (if (not rtc-running?)
-              :network-online&rtc-not-running
-              (m/amb)))
-          (m/amb))
+        (or (network-online->restart-event online?)
+            (m/amb))
         (catch Cancelled _
           (m/amb))))))
 
@@ -112,12 +119,8 @@ conditions:
   (m/ap
     (let [app-active? (m/?< mobile-flows/mobile-app-state-flow)]
       (try
-        (if app-active?
-          (let [rtc-running? (m/? (c.m/snapshot-of-flow rtc-running-flow))]
-            (if (not rtc-running?)
-              :mobile-app-active&rtc-not-running
-              (m/amb)))
-          (m/amb))
+        (or (mobile-app-active->restart-event app-active?)
+            (m/amb))
         (catch Cancelled _ (m/amb))))))
 
 (def trigger-start-rtc-flow

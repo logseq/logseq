@@ -27,35 +27,26 @@ file](/.github/workflows/deps-graph-parser.yml) for linting examples.
 
 ### Setup
 
-To run linters and tests, you'll want to install yarn dependencies once:
+To run linters and tests, you'll want to install pnpm dependencies once:
 ```
-yarn install
+pnpm install
 ```
 
 This step is not needed if you're just running the frontend application.
 
 ### Testing
 
-Since this library is compatible with cljs and nbb-logseq, tests are run against both languages.
-
-Nbb tests use [nbb-test-runner](https://github.com/nextjournal/nbb-test-runner).
-Some basic usage:
+Testing is done with nbb-logseq and
+[nbb-test-runner](https://github.com/nextjournal/nbb-test-runner). Some basic usage:
 
 ```
 # Run all tests
-$ yarn test
+$ pnpm test
 # List available options
-$ yarn test -H
+$ pnpm test -H
 # Run tests with :focus metadata flag
-$ yarn test -i focus
+$ pnpm test -i focus
 ```
-
-ClojureScript tests use https://github.com/Olical/cljs-test-runner. To run tests:
-```
-clojure -M:test
-```
-
-To see available options that can run specific tests or namespaces: `clojure -M:test --help`
 
 ### Managing dependencies
 

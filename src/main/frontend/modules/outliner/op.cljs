@@ -25,6 +25,9 @@
 (defn- ->block-id
   [block-or-id]
   (cond
+    (keyword? block-or-id)
+    (:block/uuid (db-utils/entity block-or-id))
+
     (de/entity? block-or-id)
     (:block/uuid block-or-id)
 
@@ -50,7 +53,8 @@
   [block & {:as opts}]
   (op-transact!
    (when-let [block' (if (de/entity? block)
-                       (dissoc (.-kv ^js block) :db/id)
+                       (-> (dissoc (.-kv ^js block) :db/id)
+                           (assoc :block/uuid (:block/uuid block)))
                        block)]
      [:save-block [block' opts]])))
 

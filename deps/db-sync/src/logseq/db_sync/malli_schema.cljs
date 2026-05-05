@@ -148,7 +148,7 @@
 (def graphs-list-response-schema
   [:map
    [:graphs [:sequential graph-info-schema]]
-   [:user-rsa-keys-exists? :boolean]])
+   [:user-rsa-keys-exists? {:optional true} :boolean]])
 
 (def graph-create-request-schema
   [:map

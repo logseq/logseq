@@ -2,8 +2,10 @@
   "Convert blocks to file content. Used for frontend exports and CLI"
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.tree :as otree]))
 
@@ -12,32 +14,109 @@
   (let [lines (string/split-lines content)]
     (string/join (str "\n" spaces-tabs) lines)))
 
+(defn- datetime-journal-title
+  [v context]
+  (when (integer? v)
+    (let [journal-day (cond
+                        (<= 10000101 v 99991231)
+                        v
+
+                        (>= v 100000000000)
+                        (date-time-util/ms->journal-day v)
+
+                        :else
+                        nil)]
+      (when journal-day
+        (date-time-util/int->journal-title
+         journal-day
+         (or (:date-formatter context)
+             date-time-util/default-journal-title-formatter))))))
+
+(defn- property-value->string
+  [property v context]
+  (cond
+    (and (map? v) (:db/id v))
+    (str (db-property/property-value-content v))
+
+    (set? v)
+    (->> v
+         (sort-by (fn [item]
+                    [(if (:block/order item) 0 1)
+                     (str (or (:block/order item)
+                              (property-value->string property item context)))]))
+         (map #(property-value->string property % context))
+         (string/join ", "))
+
+    (sequential? v)
+    (->> v
+         (map #(property-value->string property % context))
+         (string/join ", "))
+
+    (keyword? v)
+    (name v)
+
+    (and (= :datetime (:logseq.property/type property))
+         (integer? v))
+    (or (datetime-journal-title v context)
+        (str v))
+
+    (some? v)
+    (str v)))
+
+(defn- block-properties-content
+  [db block spaces-tabs context]
+  (let [properties (->> (db-property/properties block)
+                        (remove (fn [[k _]]
+                                  (contains? db-property/db-attribute-properties k)))
+                        (remove (fn [[k _]]
+                                  (:logseq.property/hide? (d/entity db k))))
+                        (into {}))]
+    (when (seq properties)
+      (let [sorted-properties (->> (keys properties)
+                                   (keep (fn [k] (d/entity db k)))
+                                   db-property/sort-properties)]
+        (->> sorted-properties
+             (keep (fn [property]
+                     (let [property-ident (:db/ident property)]
+                       (when (contains? properties property-ident)
+                       (str spaces-tabs
+                            (or (:block/title property)
+                                (:block/raw-title property)
+                                (name property-ident))
+                            ":: "
+                            (property-value->string property (get properties property-ident) context))))))
+             (string/join "\n"))))))
+
 (defn- transform-content
-  [db b level {:keys [heading-to-list?]} context]
+  [db b level {:keys [heading-to-list? include-properties?]
+               :or {include-properties? true}} context]
   (let [heading (:logseq.property/heading b)
         ;; replace [[uuid]] with block's content
         title (db-content/recur-replace-uuid-in-block-title (d/entity db (:db/id b)))
         content (or title "")
-        content (let [[prefix spaces-tabs]
-                      (let [level (if (and heading-to-list? heading)
-                                    (if (> heading 1)
-                                      (dec heading)
-                                      heading)
-                                    level)
-                            spaces-tabs (->>
-                                         (repeat (dec level) (:export-bullet-indentation context))
-                                         (apply str))]
-                        [(str spaces-tabs "-") (str spaces-tabs "  ")])
-                      content (if heading-to-list?
-                                (-> (string/replace content #"^\s?#+\s+" "")
-                                    (string/replace #"^\s?#+\s?$" ""))
-                                content)
-                      new-content (indented-block-content (string/trim content) spaces-tabs)
-                      sep (if (string/blank? new-content)
-                            ""
-                            " ")]
-                  (str prefix sep new-content))]
-    content))
+        level (if (and heading-to-list? heading)
+                (if (> heading 1)
+                  (dec heading)
+                  heading)
+                level)
+        spaces-tabs (->>
+                     (repeat (dec level) (:export-bullet-indentation context))
+                     (apply str))
+        prefix (str spaces-tabs "-")
+        property-spaces-tabs (str spaces-tabs "  ")
+        content (if heading-to-list?
+                  (-> (string/replace content #"^\s?#+\s+" "")
+                      (string/replace #"^\s?#+\s?$" ""))
+                  content)
+        new-content (indented-block-content (string/trim content) property-spaces-tabs)
+        sep (if (string/blank? new-content)
+              ""
+              " ")
+        content (str prefix sep new-content)]
+    (if-let [properties-content (when-not (false? include-properties?)
+                                  (block-properties-content db b property-spaces-tabs context))]
+      (str content "\n" properties-content)
+      content)))
 
 (defn- tree->file-content-aux
   [db tree {:keys [init-level link] :as opts} context]

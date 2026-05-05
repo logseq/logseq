@@ -2,7 +2,8 @@
   "Large title offload and rehydration helpers for db sync."
   (:require [datascript.core :as d]
             [logseq.db :as ldb]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.worker.sync.util :refer [get-graph-id]]))
 
 (def large-title-byte-limit 4096)
 (def large-title-asset-type "txt")
@@ -35,12 +36,6 @@
   (and (map? value)
        (string? (:asset-uuid value))
        (string? (:asset-type value))))
-
-(defn get-graph-id
-  [get-datascript-conn repo]
-  (when-let [conn (get-datascript-conn repo)]
-    (when-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
-      (str graph-uuid))))
 
 (defn asset-url
   [base graph-id asset-uuid asset-type]
@@ -134,12 +129,11 @@
                 tx-data
                 conn
                 get-conn-f
-                get-graph-id-f
                 graph-e2ee?-f
                 ensure-graph-aes-key-f
                 fail-fast-f]}]
   (when-let [conn* (or conn (get-conn-f repo))]
-    (let [graph-id* (or graph-id (get-graph-id-f repo))
+    (let [graph-id* (or graph-id (get-graph-id repo))
           items (if (seq tx-data)
                   (->> tx-data
                        (keep (fn [item]

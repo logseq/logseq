@@ -27,20 +27,24 @@
   (util/profile
     :export-blocks-as-markdown
     (try
-      (let [open-blocks-only? (boolean (get-in options [:other-options :open-blocks-only]))
+      (let [remove-options (set (:remove-options options))
+            include-properties? (not (contains? remove-options :property))
+            open-blocks-only? (boolean (get-in options [:other-options :open-blocks-only]))
             content
             (cond
              ;; page
               (and (= 1 (count root-block-uuids-or-page-uuid))
                    (ldb/page? (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)])))
               (common/get-page-content (first root-block-uuids-or-page-uuid)
-                                       {:open-blocks-only? open-blocks-only?})
+                                       {:open-blocks-only? open-blocks-only?
+                                        :include-properties? include-properties?})
               (and (coll? root-block-uuids-or-page-uuid) (every? #(ldb/page? (db/entity [:block/uuid %])) root-block-uuids-or-page-uuid))
               (->> (mapv (fn [id] (:block/title (db/entity [:block/uuid id]))) root-block-uuids-or-page-uuid)
                    (string/join "\n"))
               :else
               (common/root-block-uuids->content repo root-block-uuids-or-page-uuid
-                                                {:open-blocks-only? open-blocks-only?}))
+                                                {:open-blocks-only? open-blocks-only?
+                                                 :include-properties? include-properties?}))
             first-block (and (coll? root-block-uuids-or-page-uuid)
                              (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
             format (get first-block :block/format :markdown)]

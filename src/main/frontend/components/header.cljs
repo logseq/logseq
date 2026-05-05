@@ -31,6 +31,7 @@
             [frontend.version :refer [version]]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.common.version :as build-version]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -106,7 +107,7 @@
   (let [ua (.-userAgent js/navigator)
         safe-ua (string/replace ua #"[^_/a-zA-Z0-9\.\(\)]+" " ")
         platform (str "App Version: " version "\n"
-                      "Git Revision: " config/REVISION "\n"
+                      "Git Revision: " (build-version/revision) "\n"
                       "Platform: " safe-ua "\n"
                       "Language: " (.-language js/navigator) "\n"
                       "Plugins: " (string/join ", " (map (fn [[k v]]

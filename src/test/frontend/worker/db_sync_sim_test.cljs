@@ -1,11 +1,12 @@
 (ns frontend.worker.db-sync-sim-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [deftest is testing use-fixtures]]
             [clojure.data :as data]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.db.conn-state :as db-conn-state]
             [frontend.state :as state]
+            [frontend.test.noise :as test-noise]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
@@ -25,6 +26,8 @@
 (def ^:private repo-c "db-sync-sim-repo-c")
 (def ^:private base-page-title "Home")
 (def ^:private default-seed 1337)
+
+(use-fixtures :once (test-noise/mute-console-fixture ::db-sync-sim-test))
 
 (defn- new-client-ops-db
   []

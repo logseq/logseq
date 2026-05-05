@@ -94,7 +94,7 @@ function main() {
   const scriptPath = 'script/replay_sync_artifact.cljs';
 
   const commandArgs = [
-    '-s',
+    'exec',
     'nbb-logseq',
     '-cp',
     'src:script:../db-sync/src',
@@ -112,7 +112,7 @@ function main() {
     commandArgs.push('--pretty');
   }
 
-  const result = spawnSync('yarn', commandArgs, {
+  const result = spawnSync('pnpm', commandArgs, {
     cwd: dbDir,
     stdio: ['ignore', 'pipe', 'pipe'],
     encoding: 'utf8',
@@ -123,7 +123,7 @@ function main() {
     const stdout = (result.stdout || '').trim();
     const detail = stderr || stdout;
     throw new Error(
-      `Replay command failed (exit ${result.status ?? 'unknown'}): yarn ${commandArgs.join(' ')}` +
+      `Replay command failed (exit ${result.status ?? 'unknown'}): pnpm ${commandArgs.join(' ')}` +
         (detail ? `\n${detail}` : '')
     );
   }
