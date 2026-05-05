@@ -368,6 +368,33 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest rename-with-unchanged-content-removes-old-mirror-path-test
+  (async done
+    (let [{:keys [platform files deletes]} (fake-platform)
+          page-uuid #uuid "55555555-5555-4555-8555-555555555556"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Old Name2"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "body"}]}]})
+          page (db-test/find-page-by-title @conn "Old Name2")
+          old-path (page-path "pages/Old Name2.md")
+          new-path (page-path "pages/New Name2.md")
+          ;; pre-populate both old and new paths with same content
+          _ (swap! files assoc old-path "- body")
+          _ (swap! files assoc new-path "- body")
+          tx-report (d/with @conn [{:db/id (:db/id page)
+                                    :block/title "New Name2"
+                                    :block/name "new name2"}])
+          _ (d/reset-conn! conn (:db-after tx-report))]
+      (markdown-mirror/set-enabled! test-repo true)
+      (-> (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform})
+          (p/then (fn [_]
+                    ;; old-path must be cleaned up even though new-path was unchanged
+                    (is (= [old-path] @deletes))
+                    (is (nil? (get @files old-path)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest delete-removes-mirror-file-test
   (async done
     (let [{:keys [platform files deletes writes]} (fake-platform)
