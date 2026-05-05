@@ -693,12 +693,17 @@
               (fn [v]
                 (assoc-in v [0 :asc?] (not (:query-sort-desc props))))))))
 
+(defn- property-ref-name->page-name
+  [page-name user-config]
+  (let [[_ page-name' _journal-day]
+        (gp-block/convert-page-if-journal page-name (get-date-formatter user-config) {:export-to-db-graph? true})]
+    page-name'))
+
 (defn- update-page-or-date-values
   "Converts :node or :date names to entity values"
-  [page-names-to-uuids property-values]
+  [page-names-to-uuids property-values user-config]
   (set (map #(vector :block/uuid
-                     ;; assume for now a ref's :block/name can always be translated by lc helper
-                     (get-page-uuid page-names-to-uuids (common-util/page-name-sanity-lc %) {:original-name %}))
+                     (get-page-uuid page-names-to-uuids (property-ref-name->page-name % user-config) {:original-name %}))
             property-values)))
 
 (defn- handle-changed-property
@@ -710,7 +715,7 @@
   building the additional tx to ensure this happens"
   [val prop page-names-to-uuids properties-text-values
    {:keys [ignored-properties property-schemas]}
-   {:keys [property-changes log-fn upstream-properties]}]
+   {:keys [property-changes log-fn upstream-properties user-config]}]
   (let [type-change (get-in property-changes [prop :type])]
     (cond
       ;; ignore :to as any property value gets stringified
@@ -719,7 +724,7 @@
 
       ;; treat it the same as a :node
       (= {:from :node :to :date} type-change)
-      (update-page-or-date-values page-names-to-uuids val)
+      (update-page-or-date-values page-names-to-uuids val user-config)
 
       ;; Change to :node as dates can be pages but pages can't be dates
       (= {:from :date :to :node} type-change)
@@ -727,7 +732,7 @@
         (swap! upstream-properties assoc prop {:schema {:logseq.property/type :node}
                                                :from-type :date})
         (swap! property-schemas assoc-in [prop :logseq.property/type] :node)
-        (update-page-or-date-values page-names-to-uuids val))
+        (update-page-or-date-values page-names-to-uuids val user-config))
 
       ;; Unlike the other property changes, this one changes all the previous values of a property
       ;; in order to accommodate the change
@@ -753,7 +758,7 @@
 (defn- update-user-property-values
   [props page-names-to-uuids properties-text-values
    {:keys [property-schemas] :as import-state}
-   {:keys [property-changes] :as options}]
+   {:keys [property-changes user-config] :as options}]
   (->> props
        (keep (fn [[prop val]]
                (if (get-in property-changes [prop :type])
@@ -763,7 +768,7 @@
                   (if (set? val)
                     (if (= :default (:logseq.property/type (get @property-schemas prop)))
                       (get properties-text-values prop)
-                      (update-page-or-date-values page-names-to-uuids val))
+                      (update-page-or-date-values page-names-to-uuids val user-config))
                     val)])))
        (into {})))
 
