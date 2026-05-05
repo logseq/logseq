@@ -1,7 +1,10 @@
 (ns frontend.worker.markdown-mirror-test
   (:require [cljs.test :refer [async deftest is testing]]
             [datascript.core :as d]
+            [frontend.worker.db-listener :as db-listener]
             [frontend.worker.markdown-mirror :as markdown-mirror]
+            [frontend.worker.platform :as worker-platform]
+            [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
 
@@ -295,6 +298,30 @@
       (-> (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform})
           (p/then (fn [_]
                     (is (empty? @writes))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest db-listener-transact-writes-updated-page-mirror-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "33333333-3333-4333-8333-333333333334"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Page A"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "before"}]}]})
+          page (db-test/find-page-by-title @conn "Page A")
+          block (first-block page)]
+      (markdown-mirror/set-enabled! test-repo true)
+      (db-listener/listen-db-changes! test-repo conn :handler-keys [:markdown-mirror])
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (with-redefs [worker-platform/current (constantly platform)]
+                      (ldb/transact! conn [{:db/id (:db/id block)
+                                            :block/title "after"}] {:outliner-op :save-block}))
+                    (markdown-mirror/<flush-repo! test-repo {:platform platform})))
+          (p/then (fn [_]
+                    (is (= "- after"
+                           (get @files (page-path "pages/Page A.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
