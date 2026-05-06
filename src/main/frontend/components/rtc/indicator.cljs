@@ -93,8 +93,9 @@
    (or progress {})))
 
 (defn asset-status-rows
-  [{:keys [pending-asset-ops asset-transfer-counts]}]
-  (let [{:keys [upload download]} asset-transfer-counts]
+  [{:keys [pending-asset-ops]
+    transfer-counts :asset-transfer-counts}]
+  (let [{:keys [upload download]} transfer-counts]
     (cond-> []
       (pos? (or pending-asset-ops 0))
       (conj {:count pending-asset-ops
