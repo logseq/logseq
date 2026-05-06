@@ -83,6 +83,11 @@
   [client users]
   (sync-presence/update-online-users! broadcast-rtc-state! client users))
 
+(defn- clear-inflight!
+  [client]
+  (when-let [*inflight (:inflight client)]
+    (reset! *inflight [])))
+
 (defn- ws-base-url
   []
   (sync-auth/ws-base-url @worker-state/*db-sync-config))
@@ -224,6 +229,7 @@
         (fn [_]
           (log/info :db-sync/ws-closed {:repo repo})
           (clear-stale-ws-loop-timer! client)
+          (clear-inflight! client)
           (update-online-users! client [])
           (set-ws-state! client :closed)
           (schedule-reconnect! repo client url :close))))
@@ -260,6 +266,7 @@
                            (do
                              (log/warn :db-sync/ws-stale-closed {:repo repo :ready-state (ready-state ws)})
                              (clear-stale-ws-loop-timer! current)
+                             (clear-inflight! current)
                              (update-online-users! current [])
                              (set-ws-state! current :closed)
                              (schedule-reconnect! repo current url :stale-closed))))))
