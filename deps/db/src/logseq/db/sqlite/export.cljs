@@ -189,24 +189,26 @@
   "The caller of this fn is responsible for building any classes or properties from this fn
    unless shallow-copy?"
   [class-ent {:keys [include-uuid? shallow-copy? include-timestamps? include-alias?]}]
-  (cond-> (select-keys class-ent [:block/title :block/collapsed?])
-    include-uuid?
-    (assoc :block/uuid (:block/uuid class-ent) :build/keep-uuid? true)
-    include-timestamps?
-    (merge (select-keys class-ent [:block/created-at :block/updated-at]))
-    (and (:logseq.property.class/properties class-ent) (not shallow-copy?))
-    (assoc :build/class-properties
-           (->> (:logseq.property.class/properties class-ent)
-                (sort-by :block/order)
-                (mapv :db/ident)))
-    (and (not shallow-copy?) include-alias? (:block/alias class-ent))
-    (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias class-ent))))
-    ;; It's caller's responsibility to ensure parent is included in final export
-    (and (not shallow-copy?)
-         (:logseq.property.class/extends class-ent)
-         (not= [:logseq.class/Root] (mapv :db/ident (:logseq.property.class/extends class-ent))))
-    (assoc :build/class-extends
-           (set (map :db/ident (:logseq.property.class/extends class-ent))))))
+  (let [class-properties (->> (:logseq.property.class/properties class-ent)
+                              (sort-by :block/order)
+                              (map :db/ident)
+                              (remove (set ignored-properties))
+                              vec)]
+    (cond-> (select-keys class-ent [:block/title :block/collapsed?])
+      include-uuid?
+      (assoc :block/uuid (:block/uuid class-ent) :build/keep-uuid? true)
+      include-timestamps?
+      (merge (select-keys class-ent [:block/created-at :block/updated-at]))
+      (and (seq class-properties) (not shallow-copy?))
+      (assoc :build/class-properties class-properties)
+      (and (not shallow-copy?) include-alias? (:block/alias class-ent))
+      (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias class-ent))))
+      ;; It's caller's responsibility to ensure parent is included in final export
+      (and (not shallow-copy?)
+           (:logseq.property.class/extends class-ent)
+           (not= [:logseq.class/Root] (mapv :db/ident (:logseq.property.class/extends class-ent))))
+      (assoc :build/class-extends
+             (set (map :db/ident (:logseq.property.class/extends class-ent)))))))
 
 (defn- build-node-classes
   [db build-block block-tags properties]
