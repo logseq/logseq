@@ -313,16 +313,8 @@
                   asset-file
                   (if (not aes-key)
                     body
-                    (try
-                      (let [asset-file-untransited (ldb/read-transit-str (.decode (js/TextDecoder.) body))]
-                        (crypt/<decrypt-uint8array aes-key asset-file-untransited))
-                      (catch js/SyntaxError _
-                        body)
-                      (catch :default e
-                        ;; if decrypt failed, write origin-body
-                        (if (= "decrypt-uint8array" (ex-message e))
-                          body
-                          (throw e)))))]
+                    (let [asset-file-untransited (ldb/read-transit-str (.decode (js/TextDecoder.) body))]
+                      (crypt/<decrypt-uint8array aes-key asset-file-untransited)))]
             (<write-asset-bytes! repo asset-id asset-type asset-file))
           (p/catch
            (fn [e]
