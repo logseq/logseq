@@ -4266,6 +4266,44 @@
                  (mapv #(select-keys % [:block-uuid :attr :value :remote-t])
                        (client-op/get-sync-conflicts test-repo block-uuid)))))))))
 
+(deftest sync-title-conflict-store-keeps-only-latest-non-empty-value-test
+  (testing "newer title conflicts replace previous title conflicts for the block"
+    (let [client-ops-conn (new-client-ops-db)
+          block-uuid (random-uuid)]
+      (with-datascript-conns (db-test/create-conn-with-blocks
+                              {:pages-and-blocks
+                               [{:page {:block/title "page 1"}
+                                 :blocks [{:block/title "target"}]}]})
+                             client-ops-conn
+        (fn []
+          (client-op/add-sync-conflicts!
+           test-repo
+           [{:block-uuid block-uuid
+             :attr :block/title
+             :value "first remote title"
+             :remote-t 42}
+            {:block-uuid block-uuid
+             :attr :block/title
+             :value ""
+             :remote-t 43}
+            {:block-uuid block-uuid
+             :attr :block/title
+             :value "latest remote title"
+             :remote-t 44}])
+          (is (= [{:block-uuid block-uuid
+                   :attr :block/title
+                   :value "latest remote title"
+                   :remote-t 44}]
+                 (mapv #(select-keys % [:block-uuid :attr :value :remote-t])
+                       (client-op/get-sync-conflicts test-repo block-uuid))))
+          (client-op/add-sync-conflicts!
+           test-repo
+           [{:block-uuid block-uuid
+             :attr :block/title
+             :value ""
+             :remote-t 45}])
+          (is (empty? (client-op/get-sync-conflicts test-repo block-uuid))))))))
+
 (deftest sync-conflict-clear-test
   (testing "resolved sync conflicts are removed for the block"
     (let [client-ops-conn (new-client-ops-db)
