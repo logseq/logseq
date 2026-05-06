@@ -109,14 +109,14 @@
                              (throw (ex-info (name tag) data))) )
                   asset-id (str asset-uuid)
                   put-url (sync-large-title/asset-url base graph-id asset-id asset-type)
-                  asset-file (try
+                  asset-bytes (->
                                (<read-asset-bytes repo asset-id asset-type)
-                               (catch :default e
-                                 (log/info :read-asset e)
-                                 (throw (ex-info "read-asset failed"
-                                                 {:type :rtc.exception/read-asset-failed}
-                                                 e))))
-                  asset-bytes (if aes-key (->uint8 asset-file) asset-file)
+                               (p/catch (fn [e]
+                                          (log/error :read-asset-failed e)
+                                          (throw (ex-info "read-asset failed"
+                                                          {:type :rtc.exception/read-asset-failed}
+                                                          e)))))
+                  asset-bytes (if aes-key (->uint8 asset-bytes) asset-bytes)
                   payload (if (not aes-key)
                             asset-bytes
                             (p/let [encrypted-bytes (crypt/<encrypt-uint8array aes-key asset-bytes)]
