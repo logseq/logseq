@@ -13,6 +13,7 @@
             [logseq.cli.test-helper :as test-helper]
             [logseq.common.version :as version]
             [logseq.db-worker.daemon :as daemon]
+            [logseq.db-worker.server-list :as server-list]
             [promesa.core :as p]))
 
 (deftest spawn-server-omits-host-and-port-flags
@@ -965,6 +966,34 @@
                                           (.toString (fs/readFileSync server-list-file) "utf8"))]
                            (is (or (nil? contents)
                                    (= "" contents))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest list-servers-preserves-concurrent-server-list-writes
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-list-race")
+               config-path (node-path/join root-dir "cli.edn")
+               server-list-file (cli-config/server-list-path root-dir)
+               stale-entry {:pid 999999 :port 65535}
+               live-entry {:pid (.-pid js/process) :port 65432}
+               appended? (atom false)]
+           (fs/writeFileSync server-list-file
+                             (str (:pid stale-entry) " " (:port stale-entry) "\n")
+                             "utf8")
+           (-> (p/with-redefs [daemon/pid-status (fn [pid]
+                                                   (when (and (= (:pid stale-entry) pid)
+                                                              (not @appended?))
+                                                     (reset! appended? true)
+                                                     (server-list/append-entry! server-list-file live-entry))
+                                                   :not-found)]
+                 (cli-server/list-servers {:root-dir root-dir
+                                           :config-path config-path}))
+               (p/then (fn [servers]
+                         (is (empty? servers))
+                         (is @appended?)
+                         (is (= [live-entry]
+                                (server-list/read-entries server-list-file)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

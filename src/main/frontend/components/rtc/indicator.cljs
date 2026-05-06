@@ -78,11 +78,46 @@
         (keep #(get % repo))
         (dedupe))))
 
+(defn asset-transfer-counts
+  [progress]
+  (reduce-kv
+   (fn [counts _id {:keys [direction loaded total]}]
+     (if (and (contains? #{:upload :download} direction)
+              (number? loaded)
+              (number? total)
+              (not= loaded total))
+       (update counts direction inc)
+       counts))
+   {:upload 0
+    :download 0}
+   (or progress {})))
+
+(defn asset-status-rows
+  [{:keys [pending-asset-ops asset-transfer-counts]}]
+  (let [{:keys [upload download]} asset-transfer-counts]
+    (cond-> []
+      (pos? (or pending-asset-ops 0))
+      (conj {:count pending-asset-ops
+             :label-key :sync/pending-asset-uploads})
+
+      (pos? (or upload 0))
+      (conj {:count upload
+             :label-key :sync/assets-uploading})
+
+      (pos? (or download 0))
+      (conj {:count download
+             :label-key :sync/assets-downloading}))))
+
+(defn- asset-status-label
+  [label-key]
+  (case label-key
+    :sync/pending-asset-uploads (t :sync/pending-asset-uploads)
+    :sync/assets-uploading (t :sync/assets-uploading)
+    :sync/assets-downloading (t :sync/assets-downloading)))
+
 (rum/defc assets-progressing
-  []
-  (let [repo (state/get-current-repo)
-        progress (hooks/use-flow-state (asset-upload-download-progress-flow repo))
-        downloading (->>
+  [progress]
+  (let [downloading (->>
                      (keep (fn [[id {:keys [direction loaded total]}]]
                              (when (and (= direction :download)
                                         (not= loaded total)
@@ -122,17 +157,25 @@
 (rum/defc details
   []
   (let [online? (hooks/use-flow-state flows/network-online-event-flow)
+        repo (state/get-current-repo)
+        asset-progress (hooks/use-flow-state (asset-upload-download-progress-flow repo))
         [expand-debug? set-expand-debug!] (hooks/use-state false)
         show-checksums? (or config/dev? util/node-test?)
         {:keys [graph-uuid local-tx remote-tx local-checksum remote-checksum rtc-state
-                download-logs upload-logs misc-logs pending-local-ops pending-server-ops]}
-        (hooks/use-flow-state (m/watch *detail-info))]
+                download-logs upload-logs misc-logs pending-local-ops pending-asset-ops pending-server-ops]}
+        (hooks/use-flow-state (m/watch *detail-info))
+        asset-rows (asset-status-rows {:pending-asset-ops pending-asset-ops
+                                       :asset-transfer-counts (asset-transfer-counts asset-progress)})]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
      [:div.font-medium.mb-2 (t (if online? :sync/online :sync/offline))]
      [:div [:span.font-medium.mr-1 (or pending-local-ops 0)] (t :sync/pending-local-changes)]
+     (for [{:keys [count label-key]} asset-rows]
+       [:div {:key (name label-key)}
+        [:span.font-medium.mr-1 count]
+        (asset-status-label label-key)])
      ;; FIXME: pending-server-ops
      [:div [:span.font-medium.mr-1 (or pending-server-ops 0)] (t :sync/pending-server-changes)]
-     (assets-progressing)
+     (assets-progressing asset-progress)
      ;; FIXME: What's the type for downloaded log?
      (when-let [latest-log (some (fn [l] (when (contains? #{:rtc.log/push-local-update} (:type l)) l)) misc-logs)]
        (when-let [time (:created-at latest-log)]
