@@ -1852,16 +1852,17 @@
       (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Tag Edit.md" content {})
           (p/then (fn [result]
                     (let [tag (db-test/find-page-by-title @conn "tag1")
-                          block (d/entity @conn [:block/uuid block-uuid])]
+                          block (d/entity @conn [:block/uuid block-uuid])
+                          block-content-ref-ids (->> (:block/refs block)
+                                                     (remove #(= :block/tags (:db/ident %)))
+                                                     (map :db/id)
+                                                     set)]
                       (is (= :imported (:status result)))
-	                      (is (some? tag))
-	                      (is (some #(= :logseq.class/Tag (:db/ident %)) (:block/tags tag)))
-	                      (is (block-title-includes? @conn block-uuid "#tag1"))
-	                      (is (= #{(:db/id tag)} (set (map :db/id (:block/tags block)))))
-	                      (is (= #{(:db/id tag)} (set (map :db/id (:block/refs block))))
-	                          (pr-str (map (fn [ref]
-	                                         (select-keys ref [:db/id :db/ident :block/title :block/uuid]))
-	                                       (:block/refs block)))))))
+                      (is (some? tag))
+                      (is (some #(= :logseq.class/Tag (:db/ident %)) (:block/tags tag)))
+                      (is (block-title-includes? @conn block-uuid "#tag1"))
+                      (is (= #{(:db/id tag)} (set (map :db/id (:block/tags block)))))
+                      (is (= #{(:db/id tag)} block-content-ref-ids)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 

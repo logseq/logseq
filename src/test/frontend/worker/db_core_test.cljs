@@ -205,7 +205,8 @@
       (->
        (restoring-worker-state
         (fn []
-          (let [set-two-way-enabled! (get-thread-api :thread-api/markdown-mirror-set-two-way-enabled)
+          (let [set-enabled! (get-thread-api :thread-api/markdown-mirror-set-enabled)
+                set-two-way-enabled! (get-thread-api :thread-api/markdown-mirror-set-two-way-enabled)
                 conn (d/create-conn)
                 calls (atom [])]
             (reset! worker-state/*datascript-conns {test-repo conn})
@@ -217,7 +218,9 @@
                   (fn [& _]
                     (swap! calls conj :mirror-repo)
                     (p/resolved {:status :mirrored})))
-            (-> (set-two-way-enabled! test-repo true false)
+            (-> (p/let [_ (set-enabled! test-repo true)
+                        _ (reset! calls [])]
+                  (set-two-way-enabled! test-repo true false))
                 (p/then (fn [_]
                           (is (= [:start-file-watcher :mirror-repo] @calls))))))))
        (p/catch (fn [error]
@@ -251,6 +254,41 @@
                   (is false (str "unexpected error: " error))))
        (p/finally (fn []
                     (set! markdown-mirror/<start-file-watcher! start-file-watcher!-orig)
+                    (done)))))))
+
+(deftest markdown-mirror-two-way-enable-rejects-disabled-mirror-test
+  (async done
+    (let [start-file-watcher!-orig markdown-mirror/<start-file-watcher!
+          mirror-repo!-orig markdown-mirror/<mirror-repo!]
+      (->
+       (restoring-worker-state
+        (fn []
+          (let [set-enabled! (get-thread-api :thread-api/markdown-mirror-set-enabled)
+                set-two-way-enabled! (get-thread-api :thread-api/markdown-mirror-set-two-way-enabled)
+                conn (d/create-conn)
+                calls (atom [])]
+            (reset! worker-state/*datascript-conns {test-repo conn})
+            (set! markdown-mirror/<start-file-watcher!
+                  (fn [& _]
+                    (swap! calls conj :start-file-watcher)
+                    (p/resolved {:status :watching})))
+            (set! markdown-mirror/<mirror-repo!
+                  (fn [& _]
+                    (swap! calls conj :mirror-repo)
+                    (p/resolved {:status :mirrored})))
+            (-> (p/let [_ (set-enabled! test-repo true)
+                        _ (set-enabled! test-repo false)]
+                  (set-two-way-enabled! test-repo true false))
+                (p/then (fn [_]
+                          (is false "expected disabled markdown mirror to be rejected")))
+                (p/catch (fn [error]
+                           (is (= :markdown-mirror-disabled (:reason (ex-data error))))
+                           (is (= [:mirror-repo] @calls))))))))
+       (p/catch (fn [error]
+                  (is false (str "unexpected error: " error))))
+       (p/finally (fn []
+                    (set! markdown-mirror/<start-file-watcher! start-file-watcher!-orig)
+                    (set! markdown-mirror/<mirror-repo! mirror-repo!-orig)
                     (done)))))))
 
 (deftest resolve-initial-config-falls-back-to-template-config-test

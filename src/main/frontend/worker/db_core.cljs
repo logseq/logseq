@@ -1115,6 +1115,12 @@
                           :feature :markdown-mirror-two-way
                           :reason :collaborated-graph}))
 
+    (not (markdown-mirror/enabled? repo))
+    (p/rejected (ex-info "Two-way Markdown Mirror requires Markdown Mirror to be enabled"
+                         {:repo repo
+                          :feature :markdown-mirror-two-way
+                          :reason :markdown-mirror-disabled}))
+
     :else
     (when-let [conn (worker-state/get-datascript-conn repo)]
       (p/let [_ (markdown-mirror/<start-file-watcher! repo conn {})
