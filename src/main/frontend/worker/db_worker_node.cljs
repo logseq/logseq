@@ -9,6 +9,7 @@
             [frontend.worker.platform.node :as platform-node]
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.common.version :as build-version]
             [logseq.cli.root-dir :as root-dir]
             [logseq.cli.style :as style]
@@ -221,7 +222,7 @@
            :error {:code :missing-repo
                    :message "repo is required"}}
 
-          (not= repo bound-repo)
+          (not (graph-dir/same-repo? repo bound-repo))
           {:status 409
            :error {:code :repo-mismatch
                    :message "repo does not match bound repo"
@@ -437,7 +438,7 @@
                               {:code :repo-locked
                                :repo target-repo})))
           _ (when (and (seq target-repo)
-                       (not= target-repo (:repo lock)))
+                       (not (graph-dir/same-repo? target-repo (:repo lock))))
               (throw (ex-info "graph lock repo mismatch"
                               {:code :repo-locked
                                :repo target-repo
