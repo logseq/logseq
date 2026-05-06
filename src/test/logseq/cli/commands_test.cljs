@@ -641,6 +641,21 @@
                   "1000 └── Child B")
              (strip-ansi output))))))
 
+(deftest test-tree->text-linked-display-marker-keeps-id-alignment
+  (testing "show tree text renders link display marker after the db/id and tree glyph prefix"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 42
+                            :block/title "Target"
+                            :show/linked-display? true
+                            :block/children [{:db/id 7
+                                              :block/title "Child"}]}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (string/includes? output (style/dim "→ ")))
+      (is (= (str "42 → Target\n"
+                  "7  └── Child")
+             (strip-ansi output))))))
+
 (deftest test-tree->text-multiline
   (testing "show tree text renders multiline blocks under glyph column"
     (let [tree->text #'show-command/tree->text
