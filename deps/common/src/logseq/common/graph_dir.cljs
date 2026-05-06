@@ -45,6 +45,24 @@
       (subs repo (count common-config/db-version-prefix))
       repo)))
 
+(defn repo-identity
+  "Return the canonical value used for repo identity comparison.
+
+  Repo identity comparison is based on the graph directory key, so `demo` and
+  `logseq_db_demo` identify the same graph. Use this helper, or `same-repo?`,
+  whenever code needs to decide whether two repo names represent the same graph."
+  [repo]
+  (repo->graph-dir-key repo))
+
+(defn same-repo?
+  "Return true when two repo names identify the same graph."
+  [a b]
+  (let [a' (repo-identity a)
+        b' (repo-identity b)]
+    (and (some? a')
+         (some? b')
+         (= a' b'))))
+
 (defn graph-dir-key->encoded-dir-name
   [graph-dir-key]
   (when (some? graph-dir-key)

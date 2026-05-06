@@ -273,6 +273,25 @@
     (sequential? value) (some contains-block-uuid? value)
     :else false))
 
+(defn- contains-show-internal-key?
+  [value]
+  (cond
+    (map? value) (or (some (fn [k]
+                             (and (qualified-keyword? k)
+                                  (= "show" (namespace k))))
+                           (keys value))
+                     (some contains-show-internal-key? (vals value)))
+    (sequential? value) (some contains-show-internal-key? value)
+    :else false))
+
+(defn- contains-string?
+  [value needle]
+  (cond
+    (string? value) (string/includes? value needle)
+    (map? value) (some #(contains-string? % needle) (vals value))
+    (sequential? value) (some #(contains-string? % needle) value)
+    :else false))
+
 (deftest test-truncate-breadcrumb-segment
   (let [truncate (fn [value]
                    (call-private 'truncate-breadcrumb-segment value))
@@ -771,4 +790,260 @@
                    (is (= [1 2]
                           (mapv #(get-in % [:root :db/id]) (:data multi-edn))))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-linked-root-renders-target-tree
+  (async done
+         (let [invoke-mock (make-show-invoke-mock
+                            {:entities-by-id {10 {:db/id 10
+                                                  :block/title "Source A"
+                                                  :block/page {:db/id 100}
+                                                  :block/link {:db/id 20
+                                                               :block/title "Target B"
+                                                               :block/page {:db/id 200}}}
+                                              20 {:db/id 20
+                                                  :block/title "Target B"
+                                                  :block/page {:db/id 200}}}
+                             :children-by-page-id {100 [{:db/id 11
+                                                         :block/title "Source-only child"
+                                                         :block/order 0
+                                                         :block/parent {:db/id 10}}]
+                                                   200 [{:db/id 21
+                                                         :block/title "Target child"
+                                                         :block/order 0
+                                                         :block/parent {:db/id 20}}]}})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [result (show-command/execute-show {:type :show
+                                                           :repo "demo"
+                                                           :id 10
+                                                           :linked-references? false
+                                                           :ref-id-footer? false}
+                                                          {:output-format nil})
+                         plain (-> result :data :message style/strip-ansi)]
+                   (is (= :ok (:status result)))
+                   (is (string/includes? plain "Target B"))
+                   (is (string/includes? plain "Target child"))
+                   (is (not (string/includes? plain "Source A")))
+                   (is (not (string/includes? plain "Source-only child")))
+                   (is (re-find #"(?m)^20\s+→ Target B$" plain))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-linked-child-renders-target-at-source-position-and-depth
+  (async done
+         (let [invoke-mock (make-show-invoke-mock
+                            {:entities-by-page-name {"Home" {:db/id 100
+                                                              :db/ident :block/name
+                                                              :block/title "Home"}}
+                             :entities-by-id {20 {:db/id 20
+                                                  :block/title "Target B"
+                                                  :block/page {:db/id 200}}}
+                             :children-by-page-id {100 [{:db/id 10
+                                                         :block/title "Source child A"
+                                                         :block/order 0
+                                                         :block/parent {:db/id 100}
+                                                         :block/link {:db/id 20
+                                                                      :block/title "Target B"
+                                                                      :block/page {:db/id 200}}}]
+                                                   200 [{:db/id 21
+                                                         :block/title "Target grandchild"
+                                                         :block/order 0
+                                                         :block/parent {:db/id 20}}]}})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [level-3 (show-command/execute-show {:type :show
+                                                            :repo "demo"
+                                                            :page "Home"
+                                                            :level 3
+                                                            :linked-references? false
+                                                            :ref-id-footer? false}
+                                                           {:output-format nil})
+                         level-2 (show-command/execute-show {:type :show
+                                                            :repo "demo"
+                                                            :page "Home"
+                                                            :level 2
+                                                            :linked-references? false
+                                                            :ref-id-footer? false}
+                                                           {:output-format nil})
+                         plain-3 (-> level-3 :data :message style/strip-ansi)
+                         plain-2 (-> level-2 :data :message style/strip-ansi)]
+                   (is (= :ok (:status level-3)))
+                   (is (string/includes? plain-3 "100 Home"))
+                   (is (re-find #"(?m)^20\s+└── → Target B$" plain-3))
+                   (is (re-find #"(?m)^21\s+    └── Target grandchild$" plain-3))
+                   (is (not (string/includes? plain-3 "Source child A")))
+                   (is (= :ok (:status level-2)))
+                   (is (re-find #"(?m)^20\s+└── → Target B$" plain-2))
+                   (is (not (string/includes? plain-2 "Target grandchild")))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-linked-root-fetches-target-linked-references
+  (async done
+         (let [get-block-refs-calls (atom [])
+               base-invoke (make-show-invoke-mock
+                            {:entities-by-id {10 {:db/id 10
+                                                  :block/title "Source A"
+                                                  :block/page {:db/id 100}
+                                                  :block/link {:db/id 20
+                                                               :block/title "Target B"
+                                                               :block/page {:db/id 200}}}
+                                              20 {:db/id 20
+                                                  :block/title "Target B"
+                                                  :block/page {:db/id 200}}
+                                              30 {:db/id 30
+                                                  :block/title "Ref to target"
+                                                  :block/page {:db/id 300}}}
+                             :children-by-page-id {100 []
+                                                   200 []}
+                             :linked-refs-by-root-id {20 [{:db/id 30}]}})
+               invoke-mock (fn [config method args]
+                             (when (= method :thread-api/get-block-refs)
+                               (swap! get-block-refs-calls conj args))
+                             (base-invoke config method args))]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [result (show-command/execute-show {:type :show
+                                                           :repo "demo"
+                                                           :id 10
+                                                           :linked-references? true
+                                                           :ref-id-footer? false}
+                                                          {:output-format nil})]
+                   (is (= :ok (:status result)))
+                   (is (= [["demo" 20]] @get-block-refs-calls))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-linked-reference-wrapper-renders-target
+  (async done
+         (let [invoke-mock (make-show-invoke-mock
+                            {:entities-by-id {1 {:db/id 1
+                                                 :block/title "Root"
+                                                 :block/page {:db/id 100}}
+                                              10 {:db/id 10
+                                                  :block/title "Reference wrapper"
+                                                  :block/page {:db/id 300
+                                                               :block/title "Refs"}
+                                                  :block/link {:db/id 20
+                                                               :block/title "Reference target"
+                                                               :block/page {:db/id 400}}}
+                                              20 {:db/id 20
+                                                  :block/title "Reference target"
+                                                  :block/page {:db/id 400
+                                                               :block/title "Target Page"}}}
+                             :children-by-page-id {100 []
+                                                   400 []}
+                             :linked-refs-by-root-id {1 [{:db/id 10}]}})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [result (show-command/execute-show {:type :show
+                                                           :repo "demo"
+                                                           :id 1
+                                                           :linked-references? true
+                                                           :ref-id-footer? false}
+                                                          {:output-format nil})
+                         plain (-> result :data :message style/strip-ansi)]
+                   (is (= :ok (:status result)))
+                   (is (string/includes? plain "Linked References (1)"))
+                   (is (string/includes? plain "Reference target"))
+                   (is (not (string/includes? plain "Reference wrapper")))
+                   (is (re-find #"(?m)^20\s+└── → Reference target$" plain))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-structured-output-linked-root-uses-target-without-internal-marker
+  (async done
+         (let [invoke-mock (make-show-invoke-mock
+                            {:entities-by-id {10 {:db/id 10
+                                                  :block/uuid (uuid "11111111-1111-1111-1111-111111111111")
+                                                  :block/title "Source A"
+                                                  :block/page {:db/id 100}
+                                                  :block/link {:db/id 20
+                                                               :block/title "Target B"
+                                                               :block/page {:db/id 200}}}
+                                              20 {:db/id 20
+                                                  :block/uuid (uuid "22222222-2222-2222-2222-222222222222")
+                                                  :block/title "Target B"
+                                                  :block/page {:db/id 200}}}
+                             :children-by-page-id {100 []
+                                                   200 [{:db/id 21
+                                                         :block/uuid (uuid "33333333-3333-3333-3333-333333333333")
+                                                         :block/title "Target child"
+                                                         :block/order 0
+                                                         :block/parent {:db/id 20}}]}})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [json-result (show-command/execute-show {:type :show
+                                                                :repo "demo"
+                                                                :id 10
+                                                                :linked-references? false}
+                                                               {:output-format :json})
+                         edn-result (show-command/execute-show {:type :show
+                                                               :repo "demo"
+                                                               :id 10
+                                                               :linked-references? false}
+                                                              {:output-format :edn})]
+                   (doseq [result [json-result edn-result]]
+                     (is (= :ok (:status result)))
+                     (is (= 20 (get-in result [:data :root :db/id])))
+                     (is (= "Target B" (get-in result [:data :root :block/title])))
+                     (is (= "Target child" (get-in result [:data :root :block/children 0 :block/title])))
+                     (is (not (contains-string? (:data result) "Source A")))
+                     (is (not (contains-string? (:data result) "→")))
+                     (is (not (contains-block-uuid? (:data result))))
+                     (is (not (contains-show-internal-key? (:data result)))))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-linked-root-cycle-fails-fast
+  (async done
+         (let [invoke-mock (make-show-invoke-mock
+                            {:entities-by-id {10 {:db/id 10
+                                                  :block/title "Source A"
+                                                  :block/page {:db/id 100}
+                                                  :block/link {:db/id 20
+                                                               :block/title "Source B"
+                                                               :block/page {:db/id 200}}}
+                                              20 {:db/id 20
+                                                  :block/title "Source B"
+                                                  :block/page {:db/id 200}
+                                                  :block/link {:db/id 10
+                                                               :block/title "Source A"
+                                                               :block/page {:db/id 100}}}}
+                             :children-by-page-id {100 []
+                                                   200 []}})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (show-command/execute-show {:type :show
+                                            :repo "demo"
+                                            :id 10
+                                            :linked-references? false}
+                                           {:output-format :json}))
+               (p/then (fn [_]
+                         (is false "expected execute-show to reject for a block link cycle")))
+               (p/catch (fn [error]
+                          (is (= :block-link-cycle (-> error ex-data :code)))))
+               (p/finally done)))))
+
+(deftest test-execute-show-linked-root-missing-target-fails-fast
+  (async done
+         (let [invoke-mock (make-show-invoke-mock
+                            {:entities-by-id {10 {:db/id 10
+                                                  :block/title "Source A"
+                                                  :block/page {:db/id 100}
+                                                  :block/link {:db/id 404}}
+                                              404 {:db/id 404}}
+                             :children-by-page-id {100 []}})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (show-command/execute-show {:type :show
+                                            :repo "demo"
+                                            :id 10
+                                            :linked-references? false}
+                                           {:output-format :json}))
+               (p/then (fn [_]
+                         (is false "expected execute-show to reject for a missing block link target")))
+               (p/catch (fn [error]
+                          (is (= :block-link-target-not-found (-> error ex-data :code)))))
                (p/finally done)))))

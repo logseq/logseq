@@ -7,7 +7,6 @@
             [frontend.worker.db-core :as db-worker]
             [frontend.worker.platform :as platform]
             [frontend.worker.db.validate :as worker-db-validate]
-            [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
@@ -106,7 +105,6 @@
         datascript-prev @worker-state/*datascript-conns
         client-ops-prev @worker-state/*client-ops-conns
         opfs-prev @worker-state/*opfs-pools
-        fuzzy-prev @search/fuzzy-search-indices
         sqlite-prev @worker-state/*sqlite
         platform-prev @@#'platform/*platform
         cleanup (fn []
@@ -121,7 +119,6 @@
                   (reset! worker-state/*datascript-conns datascript-prev)
                   (reset! worker-state/*client-ops-conns client-ops-prev)
                   (reset! worker-state/*opfs-pools opfs-prev)
-                  (reset! search/fuzzy-search-indices fuzzy-prev)
                   (reset! worker-state/*sqlite sqlite-prev)
                   (reset! @#'platform/*platform platform-prev))]
     (set! db-worker/close-db! close-db!-orig)
@@ -140,7 +137,7 @@
           (cleanup)
           result)))))
 
-(deftest close-db-clears-fuzzy-search-cache-test
+(deftest close-db-clears-worker-state-test
   (restoring-worker-state
    (fn []
      (let [closed (atom [])
@@ -155,14 +152,12 @@
        (reset! worker-state/*client-ops-conns {test-repo :client-ops})
        (reset! worker-state/*opfs-pools
                {test-repo #js {:pauseVfs (fn [] (swap! pause-calls inc))}})
-       (reset! search/fuzzy-search-indices {test-repo :stale-cache})
        (reset! client-op/*repo->pending-local-tx-count {test-repo 9})
 
        (db-worker/close-db! test-repo)
 
        (is (= #{:db :search :client-ops} (set @closed)))
        (is (= 1 @pause-calls))
-       (is (nil? (get @search/fuzzy-search-indices test-repo)))
        (is (nil? (get @client-op/*repo->pending-local-tx-count test-repo)))
        (is (nil? (get @worker-state/*sqlite-conns test-repo)))))))
 

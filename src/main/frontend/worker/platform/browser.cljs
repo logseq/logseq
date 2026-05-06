@@ -106,7 +106,9 @@
 (defn- graph-assets-dir
   [repo]
   (when-let [graph-name (some-> repo common-config/strip-leading-db-version-prefix)]
-    (str "/" graph-name "/assets")))
+    (path/url-to-path
+     (path/path-join (str "memory:///" graph-name)
+                     common-config/local-assets-dir))))
 
 (defn- ensure-pfs-dir!
   [^js pfs dir]
@@ -155,7 +157,7 @@
 
 (defn- asset-delete!
   [repo file-name]
-  (-> (.unlink (browser-pfs) (asset-path repo file-name))
+  (-> (.unlink ^js (browser-pfs) (asset-path repo file-name))
       (p/catch (constantly nil))))
 
 (defn- websocket-connect
