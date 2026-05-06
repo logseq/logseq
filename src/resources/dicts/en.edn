@@ -1625,6 +1625,7 @@
  :settings.editor/spell-checker "Spell checker"
  :settings.editor/wide-mode "Wide mode"
 
+ :settings.features/alpha-features "Alpha features"
  :settings.features/enable-flashcards "Flashcards"
  :settings.features/enable-journals "Journals"
  :settings.features/home-default-page "Set the default home page"
@@ -1636,6 +1637,10 @@
  :settings.features/markdown-mirror-regenerate "Regenerate full mirror"
  :settings.features/markdown-mirror-regenerate-error "Failed to regenerate Markdown Mirror: {1}"
  :settings.features/markdown-mirror-regenerate-success "Markdown Mirror regenerated"
+ :settings.features/markdown-mirror-two-way "Two-way Markdown sync"
+ :settings.features/markdown-mirror-two-way-collaboration-disabled "Two-way Markdown sync is not available for graphs shared with multiple collaborators."
+ :settings.features/markdown-mirror-two-way-desc "Import supported edits from mirror/markdown back into the graph. Off by default."
+ :settings.features/markdown-mirror-two-way-warning "Two-way Markdown sync imports local file edits into this graph. It can conflict with Logseq Sync and may slow large graphs. Continue?"
  :settings.features/page-not-found "The page \"{1}\" doesn't exist yet. Please create that page first, and then try again."
  :settings.features/plugin-system "Plugins"
 

@@ -110,6 +110,10 @@
                    (p/resolved {:status 200
                                 :body (success-body nil)})
 
+                   "thread-api/markdown-mirror-set-two-way-enabled"
+                   (p/resolved {:status 200
+                                :body (success-body nil)})
+
                    "thread-api/list-db"
                    (let [result (first @results)]
                      (swap! results #(vec (rest %)))
@@ -493,6 +497,7 @@
               (case qkw
                 :thread-api/create-or-open-db (p/resolved nil)
                 :thread-api/markdown-mirror-set-enabled (p/resolved nil)
+                :thread-api/markdown-mirror-set-two-way-enabled (p/resolved nil)
                 :thread-api/get-initial-data (p/resolved {:schema {:repo (first args)}
                                                           :initial-data []})
                 (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
@@ -532,7 +537,9 @@
       (-> (p/delay 0)
           (p/then (fn [_]
                     (is (= [[:thread-api/markdown-mirror-set-enabled
-                             [repo true]]]
+                             (list repo true)]
+                            [:thread-api/markdown-mirror-set-two-way-enabled
+                             (list repo false false)]]
                            @worker-calls))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))

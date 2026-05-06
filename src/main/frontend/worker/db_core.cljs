@@ -1100,10 +1100,26 @@
   (markdown-mirror/set-enabled! repo enabled?)
   (if enabled?
     (when-let [conn (worker-state/get-datascript-conn repo)]
+      (markdown-mirror/<mirror-repo! repo @conn {}))
+    (p/resolved (markdown-mirror/stop-file-watcher! repo))))
+
+(def-thread-api :thread-api/markdown-mirror-set-two-way-enabled
+  [repo enabled? collaborated-graph?]
+  (cond
+    (not enabled?)
+    (p/resolved (markdown-mirror/stop-file-watcher! repo))
+
+    collaborated-graph?
+    (p/rejected (ex-info "Two-way Markdown Mirror is not available for collaborated graphs"
+                         {:repo repo
+                          :feature :markdown-mirror-two-way
+                          :reason :collaborated-graph}))
+
+    :else
+    (when-let [conn (worker-state/get-datascript-conn repo)]
       (p/let [_ (markdown-mirror/<start-file-watcher! repo conn {})
               result (markdown-mirror/<mirror-repo! repo @conn {})]
-        result))
-    (p/resolved (markdown-mirror/stop-file-watcher! repo))))
+        result))))
 
 (def-thread-api :thread-api/markdown-mirror-flush
   [repo]

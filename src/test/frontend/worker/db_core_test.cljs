@@ -7,6 +7,7 @@
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.export :as worker-export]
+            [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.platform :as platform]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
@@ -52,7 +53,8 @@
           :thread-api/import-db-base64 :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
           :thread-api/search-truncate-tables :thread-api/search-build-blocks-indice :thread-api/search-build-blocks-indice-in-worker
           :thread-api/search-build-pages-indice :thread-api/apply-outliner-ops :thread-api/sync-app-state
-          :thread-api/markdown-mirror-set-enabled :thread-api/markdown-mirror-flush :thread-api/markdown-mirror-regenerate
+          :thread-api/markdown-mirror-set-enabled :thread-api/markdown-mirror-set-two-way-enabled
+          :thread-api/markdown-mirror-flush :thread-api/markdown-mirror-regenerate
           :thread-api/export-get-debug-datoms :thread-api/export-get-all-page->content :thread-api/validate-db
           :thread-api/recompute-checksum-diagnostics :thread-api/export-edn :thread-api/import-edn :thread-api/get-view-data
           :thread-api/get-class-objects :thread-api/get-property-values :thread-api/get-bidirectional-properties
@@ -166,6 +168,90 @@
     (is (contains? api-map :thread-api/db-sync-grant-graph-access))
     (is (contains? api-map :thread-api/db-sync-ensure-user-rsa-keys))
     (is (contains? api-map :thread-api/db-sync-upload-graph))))
+
+(deftest markdown-mirror-enable-does-not-start-two-way-file-import-watcher-test
+  (async done
+    (let [start-file-watcher!-orig markdown-mirror/<start-file-watcher!
+          mirror-repo!-orig markdown-mirror/<mirror-repo!]
+      (->
+       (restoring-worker-state
+        (fn []
+          (let [set-enabled! (get-thread-api :thread-api/markdown-mirror-set-enabled)
+                conn (d/create-conn)
+                calls (atom [])]
+            (reset! worker-state/*datascript-conns {test-repo conn})
+            (set! markdown-mirror/<start-file-watcher!
+                  (fn [& _]
+                    (swap! calls conj :start-file-watcher)
+                    (p/resolved {:status :watching})))
+            (set! markdown-mirror/<mirror-repo!
+                  (fn [& _]
+                    (swap! calls conj :mirror-repo)
+                    (p/resolved {:status :mirrored})))
+            (-> (set-enabled! test-repo true)
+                (p/then (fn [_]
+                          (is (= [:mirror-repo] @calls))))))))
+       (p/catch (fn [error]
+                  (is false (str "unexpected error: " error))))
+       (p/finally (fn []
+                    (set! markdown-mirror/<start-file-watcher! start-file-watcher!-orig)
+                    (set! markdown-mirror/<mirror-repo! mirror-repo!-orig)
+                    (done)))))))
+
+(deftest markdown-mirror-two-way-enable-starts-file-import-watcher-test
+  (async done
+    (let [start-file-watcher!-orig markdown-mirror/<start-file-watcher!
+          mirror-repo!-orig markdown-mirror/<mirror-repo!]
+      (->
+       (restoring-worker-state
+        (fn []
+          (let [set-two-way-enabled! (get-thread-api :thread-api/markdown-mirror-set-two-way-enabled)
+                conn (d/create-conn)
+                calls (atom [])]
+            (reset! worker-state/*datascript-conns {test-repo conn})
+            (set! markdown-mirror/<start-file-watcher!
+                  (fn [& _]
+                    (swap! calls conj :start-file-watcher)
+                    (p/resolved {:status :watching})))
+            (set! markdown-mirror/<mirror-repo!
+                  (fn [& _]
+                    (swap! calls conj :mirror-repo)
+                    (p/resolved {:status :mirrored})))
+            (-> (set-two-way-enabled! test-repo true false)
+                (p/then (fn [_]
+                          (is (= [:start-file-watcher :mirror-repo] @calls))))))))
+       (p/catch (fn [error]
+                  (is false (str "unexpected error: " error))))
+       (p/finally (fn []
+                    (set! markdown-mirror/<start-file-watcher! start-file-watcher!-orig)
+                    (set! markdown-mirror/<mirror-repo! mirror-repo!-orig)
+                    (done)))))))
+
+(deftest markdown-mirror-two-way-enable-rejects-collaborated-graph-test
+  (async done
+    (let [start-file-watcher!-orig markdown-mirror/<start-file-watcher!]
+      (->
+       (restoring-worker-state
+        (fn []
+          (let [set-two-way-enabled! (get-thread-api :thread-api/markdown-mirror-set-two-way-enabled)
+                conn (d/create-conn)
+                calls (atom [])]
+            (reset! worker-state/*datascript-conns {test-repo conn})
+            (set! markdown-mirror/<start-file-watcher!
+                  (fn [& _]
+                    (swap! calls conj :start-file-watcher)
+                    (p/resolved {:status :watching})))
+            (-> (set-two-way-enabled! test-repo true true)
+                (p/then (fn [_]
+                          (is false "expected collaborated graph to be rejected")))
+                (p/catch (fn [error]
+                           (is (= :collaborated-graph (:reason (ex-data error))))
+                           (is (empty? @calls))))))))
+       (p/catch (fn [error]
+                  (is false (str "unexpected error: " error))))
+       (p/finally (fn []
+                    (set! markdown-mirror/<start-file-watcher! start-file-watcher!-orig)
+                    (done)))))))
 
 (deftest resolve-initial-config-falls-back-to-template-config-test
   (let [resolve-initial-config #'db-core/resolve-initial-config

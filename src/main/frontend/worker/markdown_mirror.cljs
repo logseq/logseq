@@ -540,7 +540,7 @@
     (page-root-blocks page)))
 
 (defn- page-snapshot
-  [db page]
+  [_db page]
   (letfn [(snapshot-block [parent-uuid block]
             (cons {:uuid (str (:block/uuid block))
                    :parent-uuid (some-> parent-uuid str)
@@ -1046,7 +1046,8 @@
 
 (defn- existing-block-content-ref-txs
   [db block parsed-block]
-  (let [old-ref-uuids (set (concat (title-content-ref-uuids (:block/title block))
+  (let [old-ref-uuids (set (concat (map :block/uuid (:block/refs block))
+                                   (title-content-ref-uuids (:block/title block))
                                    (title-ref-uuids db (:block/title block))))
         new-ref-uuids (:content-ref-uuids parsed-block)
         block-id (:db/id block)]
@@ -1119,13 +1120,14 @@
     (subs token 1)))
 
 (defn- decorate-block-content
-  [{:keys [status-marker tag-tokens]} content]
+  [{:keys [tag-tokens] :as block-info} content]
   (let [content (or content "")
-        content (if (and status-marker
-                         (not (content-has-status-marker? content status-marker)))
+        status-marker' (:status-marker block-info)
+        content (if (and status-marker'
+                         (not (content-has-status-marker? content status-marker')))
                   (if (string/blank? content)
-                    status-marker
-                    (str status-marker " " content))
+                    status-marker'
+                    (str status-marker' " " content))
                   content)
         existing-tag-titles (content-tag-titles content)
         tag-tokens' (remove (fn [token]
@@ -1175,15 +1177,15 @@
   [db page content]
   (let [block-line-infos (rendered-block-line-infos db page)]
     (loop [[line & more] (string/split-lines (or content ""))
-           [block-line-info & more-block-line-infos] block-line-infos
+           [block-line-info' & more-block-line-infos] block-line-infos
            lines [(id-property-line (:block/uuid page))]
            seen-block? false]
       (if (nil? line)
         (string/join "\n" lines)
-        (if-let [[_ spaces _title] (re-matches markdown-block-re line)]
+        (if (re-matches markdown-block-re line)
           (let [lines' (cond-> lines
                          (not seen-block?) (conj "")
-                         true (conj (decorate-block-line block-line-info line)))]
+                         true (conj (decorate-block-line block-line-info' line)))]
             (recur more
                    more-block-line-infos
                    lines'
@@ -1267,6 +1269,107 @@
            :reason :new-file
            :page-uuid page-uuid})))))
 
+(defn- existing-block-save-txs
+  [page-block-by-uuid parsed-blocks now]
+  (keep (fn [block]
+          (when-let [uuid (:uuid block)]
+            (update-existing-block-tx (get page-block-by-uuid uuid) block now)))
+        parsed-blocks))
+
+(defn- existing-block-status-import-txs
+  [db page-block-by-uuid parsed-blocks]
+  (mapcat (fn [block]
+            (when-let [uuid (:uuid block)]
+              (existing-block-status-txs
+               db
+               (get page-block-by-uuid uuid)
+               block)))
+          parsed-blocks))
+
+(defn- existing-block-content-ref-import-txs
+  [db page-block-by-uuid parsed-blocks]
+  (mapcat (fn [block]
+            (when-let [uuid (:uuid block)]
+              (existing-block-content-ref-txs
+               db
+               (get page-block-by-uuid uuid)
+               block)))
+          parsed-blocks))
+
+(defn- existing-block-tag-ref-import-txs
+  [db page-block-by-uuid parsed-blocks]
+  (mapcat (fn [block]
+            (when-let [uuid (:uuid block)]
+              (existing-block-tag-ref-txs
+               db
+               (get page-block-by-uuid uuid)
+               block)))
+          parsed-blocks))
+
+(defn- new-existing-file-block-txs
+  [page page-block-by-uuid new-uuids parsed-blocks now]
+  (keep (fn [block]
+          (when (nil? (:uuid block))
+            (new-block-tx (:db/id page)
+                          block
+                          page-block-by-uuid
+                          new-uuids
+                          now)))
+        parsed-blocks))
+
+(defn- new-existing-file-block-ref-txs
+  [new-uuids parsed-blocks]
+  (mapcat (fn [block]
+            (when (nil? (:uuid block))
+              (content-ref-add-txs
+               [:block/uuid (get new-uuids (:idx block))]
+               block)))
+          parsed-blocks))
+
+(defn- new-existing-file-block-tag-txs
+  [new-uuids parsed-blocks]
+  (mapcat (fn [block]
+            (when (nil? (:uuid block))
+              (tag-ref-add-txs
+               [:block/uuid (get new-uuids (:idx block))]
+               block)))
+          parsed-blocks))
+
+(defn- deleted-existing-file-block-txs
+  [page-block-by-uuid delete-uuids]
+  (map (fn [block-uuid]
+         [:db/retractEntity (:db/id (get page-block-by-uuid block-uuid))])
+       delete-uuids))
+
+(defn- existing-file-tx-plan
+  [db page page-block-by-uuid parsed-blocks ref-page-txs new-uuids delete-uuids top-level-delete-uuids' now]
+  (let [save-txs (existing-block-save-txs page-block-by-uuid parsed-blocks now)
+        save-status-txs (existing-block-status-import-txs db page-block-by-uuid parsed-blocks)
+        save-ref-txs (existing-block-content-ref-import-txs db page-block-by-uuid parsed-blocks)
+        save-tag-txs (existing-block-tag-ref-import-txs db page-block-by-uuid parsed-blocks)
+        new-blocks (new-existing-file-block-txs page page-block-by-uuid new-uuids parsed-blocks now)
+        new-block-ref-txs (new-existing-file-block-ref-txs new-uuids parsed-blocks)
+        new-block-tag-txs (new-existing-file-block-tag-txs new-uuids parsed-blocks)
+        delete-txs (deleted-existing-file-block-txs page-block-by-uuid delete-uuids)
+        tx-data (vec (concat ref-page-txs
+                             save-txs
+                             save-status-txs
+                             save-ref-txs
+                             save-tag-txs
+                             new-blocks
+                             new-block-ref-txs
+                             new-block-tag-txs
+                             delete-txs))
+        outliner-ops (cond-> []
+                       (seq save-txs)
+                       (conj [:save-block [(first save-txs) {}]])
+                       (seq new-blocks)
+                       (conj [:insert-blocks [(vec new-blocks) (:block/uuid page) {:sibling? false}]])
+                       (seq top-level-delete-uuids')
+                       (conj [:delete-blocks [(vec top-level-delete-uuids') {}]]))]
+    {:tx-data tx-data
+     :outliner-ops outliner-ops}))
+
 (defn- import-existing-file!
   [repo conn relative-path parsed page opts]
   (let [db @conn
@@ -1301,77 +1404,23 @@
                               parsed-blocks)
                 {:status :error
                  :reason :unresolved-parent}
-                (let [seen-markers (set (keep :uuid parsed-blocks))
-                      existing-uuids (set (keys page-block-by-uuid))
-                      delete-uuids (set (remove seen-markers existing-uuids))
-                      top-level-delete-uuids (top-level-delete-uuids db delete-uuids)
-                      save-txs (keep (fn [block]
-                                       (when-let [uuid (:uuid block)]
-                                         (update-existing-block-tx (get page-block-by-uuid uuid) block now)))
-                                     parsed-blocks)
-                      save-status-txs (mapcat (fn [block]
-                                                (when-let [uuid (:uuid block)]
-                                                  (existing-block-status-txs
-                                                   db
-                                                   (get page-block-by-uuid uuid)
-                                                   block)))
-                                              parsed-blocks)
-                      save-ref-txs (mapcat (fn [block]
-                                             (when-let [uuid (:uuid block)]
-                                               (existing-block-content-ref-txs
-                                                db
-                                                (get page-block-by-uuid uuid)
-                                                block)))
-                                           parsed-blocks)
-                      save-tag-txs (mapcat (fn [block]
-                                             (when-let [uuid (:uuid block)]
-                                               (existing-block-tag-ref-txs
-                                                db
-                                                (get page-block-by-uuid uuid)
-                                                block)))
-                                           parsed-blocks)
-                      new-blocks (keep-indexed (fn [idx block]
-                                                 (when (nil? (:uuid block))
-                                                   (new-block-tx (:db/id page)
-                                                                 block
-                                                                 page-block-by-uuid
-                                                                 new-uuids
-                                                                 now)))
-                                               parsed-blocks)
-                      new-block-ref-txs (mapcat (fn [block]
-                                                  (when (nil? (:uuid block))
-                                                    (content-ref-add-txs
-                                                     [:block/uuid (get new-uuids (:idx block))]
-                                                     block)))
-                                                parsed-blocks)
-                      new-block-tag-txs (mapcat (fn [block]
-                                                  (when (nil? (:uuid block))
-                                                    (tag-ref-add-txs
-                                                     [:block/uuid (get new-uuids (:idx block))]
-                                                     block)))
-                                                parsed-blocks)
-                      delete-txs (mapcat (fn [block-uuid]
-                                           [[:db/retractEntity (:db/id (get page-block-by-uuid block-uuid))]])
-                                         delete-uuids)
-                      tx-data (vec (concat ref-page-txs
-                                           save-txs
-                                           save-status-txs
-                                           save-ref-txs
-                                           save-tag-txs
-                                           new-blocks
-                                           new-block-ref-txs
-                                           new-block-tag-txs
-                                           delete-txs))
-                      outliner-ops (cond-> []
-                                     (seq save-txs)
-                                     (conj [:save-block [(first save-txs) {}]])
-                                     (seq new-blocks)
-                                     (conj [:insert-blocks [(vec new-blocks) (:block/uuid page) {:sibling? false}]])
-                                     (seq top-level-delete-uuids)
-                                     (conj [:delete-blocks [(vec top-level-delete-uuids) {}]]))]
-                  (if (some (fn [block]
-                              (when-let [uuid (:uuid block)]
-                                (has-deleted-ancestor? db delete-uuids uuid)))
+	                (let [seen-markers (set (keep :uuid parsed-blocks))
+	                      existing-uuids (set (keys page-block-by-uuid))
+	                      delete-uuids (set (remove seen-markers existing-uuids))
+	                      top-level-delete-uuids' (top-level-delete-uuids db delete-uuids)
+	                      {:keys [tx-data outliner-ops]} (existing-file-tx-plan
+	                                                       db
+	                                                       page
+	                                                       page-block-by-uuid
+	                                                       parsed-blocks
+	                                                       ref-page-txs
+	                                                       new-uuids
+	                                                       delete-uuids
+	                                                       top-level-delete-uuids'
+	                                                       now)]
+	                  (if (some (fn [block]
+	                              (when-let [uuid (:uuid block)]
+	                                (has-deleted-ancestor? db delete-uuids uuid)))
                             parsed-blocks)
                     {:status :error
                      :reason :orphaned-block}

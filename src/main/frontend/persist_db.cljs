@@ -132,13 +132,27 @@
 
 (defn- <sync-markdown-mirror-setting!
   [repo]
-  (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled
-                           repo
-                           (true? (:feature/markdown-mirror? (state/get-graph-config repo)))))
+  (let [graph-config (state/get-graph-config repo)
+        mirror-enabled? (true? (:feature/markdown-mirror? graph-config))
+        two-way-enabled? (and mirror-enabled?
+                              (true? (:feature/markdown-mirror-two-way? graph-config)))
+        collaborated-graph? (< 1 (count (get-in @state/state [:rtc/users-info repo])))]
+    (p/let [_ (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled
+                                       repo
+                                       mirror-enabled?)]
+      (state/<invoke-db-worker :thread-api/markdown-mirror-set-two-way-enabled
+                               repo
+                               two-way-enabled?
+                               collaborated-graph?))))
 
 (defn- graph-markdown-mirror-enabled?
   [state repo]
   (true? (get-in state [:config repo :feature/markdown-mirror?])))
+
+(defn- graph-markdown-mirror-two-way-enabled?
+  [state repo]
+  (and (graph-markdown-mirror-enabled? state repo)
+       (true? (get-in state [:config repo :feature/markdown-mirror-two-way?]))))
 
 (defn- sync-markdown-mirror-setting-watch!
   []
@@ -149,17 +163,26 @@
    (fn [_ _ old-state new-state]
      (let [repo (:git/current-repo new-state)
            old-enabled? (graph-markdown-mirror-enabled? old-state repo)
-           new-enabled? (graph-markdown-mirror-enabled? new-state repo)]
+           new-enabled? (graph-markdown-mirror-enabled? new-state repo)
+           old-two-way-enabled? (graph-markdown-mirror-two-way-enabled? old-state repo)
+           new-two-way-enabled? (graph-markdown-mirror-two-way-enabled? new-state repo)
+           collaborated-graph? (< 1 (count (get-in new-state [:rtc/users-info repo])))]
        (when (and repo
                   @state/*db-worker
-                  (not= old-enabled? new-enabled?))
-         (-> (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled
-                                      repo
-                                      new-enabled?)
+                  (or (not= old-enabled? new-enabled?)
+                      (not= old-two-way-enabled? new-two-way-enabled?)))
+         (-> (p/let [_ (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled
+                                                repo
+                                                new-enabled?)]
+               (state/<invoke-db-worker :thread-api/markdown-mirror-set-two-way-enabled
+                                        repo
+                                        new-two-way-enabled?
+                                        collaborated-graph?))
              (p/catch (fn [error]
                         (log/error :markdown-mirror/settings-watch-sync-failed
                                    {:repo repo
                                     :enabled? new-enabled?
+                                    :two-way-enabled? new-two-way-enabled?
                                     :error error}))))))))
   nil)
 

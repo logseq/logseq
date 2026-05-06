@@ -683,17 +683,17 @@
           :on-change #(set-url! (util/evalue %))}]]]
       [:p.pt-2.flex.gap-2
        (shui/button
-         {:size :sm
-          :on-click (fn []
-                      (let [trimmed (string/trim url)]
-                        (if (string/blank? trimmed)
-                          (reset-url!)
-                          (if-not (config/valid-publish-server-url? trimmed)
-                            (notification/show! (t :settings.sync-server/url-invalid-error) :error)
-                            (do
-                              (config/set-custom-publish-server-url! trimmed)
-                              (notification/show! (t :settings-page/publish-server-url-saved) :success))))))}
-         (t :ui/save))
+        {:size :sm
+         :on-click (fn []
+                     (let [trimmed (string/trim url)]
+                       (if (string/blank? trimmed)
+                         (reset-url!)
+                         (if-not (config/valid-publish-server-url? trimmed)
+                           (notification/show! (t :settings.sync-server/url-invalid-error) :error)
+                           (do
+                             (config/set-custom-publish-server-url! trimmed)
+                             (notification/show! (t :settings-page/publish-server-url-saved) :success))))))}
+        (t :ui/save))
        (when (seq url)
          (shui/button
           {:size :sm
@@ -745,11 +745,23 @@
    {:left-label (t :settings.features/enable-flashcards)
     :action (flashcards-enabled-switcher enable-flashcards?)}))
 
+(defn- markdown-mirror-collaborated-graph?
+  [repo]
+  (< 1 (count (get-in @state/state [:rtc/users-info repo]))))
+
+(defn- <markdown-mirror-collaborated-graph?
+  [repo]
+  (if (and repo (ldb/get-graph-rtc-uuid (db/get-db)))
+    (p/let [_ (rtc-handler/<rtc-get-users-info)]
+      (markdown-mirror-collaborated-graph? repo))
+    (p/resolved false)))
+
 (rum/defcs markdown-mirror-row < rum/reactive
   (rum/local false ::regenerating?)
   [state t]
   (let [repo (state/get-current-repo)
-        enabled? (true? (:feature/markdown-mirror? (when repo (state/sub [:config repo]))))
+        graph-config (when repo (state/sub [:config repo]))
+        enabled? (true? (:feature/markdown-mirror? graph-config))
         *regenerating? (::regenerating? state)
         regenerate! (fn []
                       (when (and repo @state/*db-worker (not @*regenerating?))
@@ -774,8 +786,12 @@
      #(let [next-enabled? (not enabled?)
             repo (state/get-current-repo)]
         (config-handler/set-config! :feature/markdown-mirror? next-enabled?)
+        (when-not next-enabled?
+          (config-handler/set-config! :feature/markdown-mirror-two-way? false))
         (when (and repo @state/*db-worker)
-          (-> (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled repo next-enabled?)
+          (-> (p/let [_ (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled repo next-enabled?)]
+                (when-not next-enabled?
+                  (state/<invoke-db-worker :thread-api/markdown-mirror-set-two-way-enabled repo false false)))
               (p/catch (fn [error]
                          (log/error :markdown-mirror/settings-sync-failed
                                     {:repo repo
@@ -788,6 +804,60 @@
        :class "text-sm"
        :disabled @*regenerating?
        :on-click regenerate!)])))
+
+(rum/defc markdown-mirror-two-way-row < rum/reactive
+  [t]
+  (let [repo (state/get-current-repo)
+        graph-config (when repo (state/sub [:config repo]))
+        mirror-enabled? (true? (:feature/markdown-mirror? graph-config))
+        enabled? (and mirror-enabled? (true? (:feature/markdown-mirror-two-way? graph-config)))
+        sync-two-way! (fn [next-enabled?]
+                        (when (and repo @state/*db-worker)
+                          (-> (state/<invoke-db-worker :thread-api/markdown-mirror-set-two-way-enabled repo next-enabled? false)
+                              (p/catch (fn [error]
+                                         (log/error :markdown-mirror/two-way-settings-sync-failed
+                                                    {:repo repo
+                                                     :error error}))))))]
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+     {:class (when-not mirror-enabled? "opacity-50")}
+     [:label.block.text-sm.font-medium.leading-5.opacity-70
+      {:for "markdown-mirror-two-way"}
+      (t :settings.features/markdown-mirror-two-way)]
+     [:div.rounded-md.sm:max-w-tss.sm:col-span-2
+      [:div.rounded-md {:style {:display "flex" :gap "1rem" :align-items "center"}}
+       (if mirror-enabled?
+         (ui/toggle
+          enabled?
+          #(if (not enabled?)
+             (-> (p/let [collaborated-graph? (<markdown-mirror-collaborated-graph? repo)]
+                   (cond
+                     collaborated-graph?
+                     (notification/show!
+                      (t :settings.features/markdown-mirror-two-way-collaboration-disabled)
+                      :warning)
+
+                     (js/confirm (t :settings.features/markdown-mirror-two-way-warning))
+                     (do
+                       (config-handler/set-config! :feature/markdown-mirror-two-way? true)
+                       (sync-two-way! true))))
+                 (p/catch (fn [error]
+                            (log/error :markdown-mirror/two-way-settings-sync-failed
+                                       {:repo repo
+                                        :error error}))))
+             (do
+               (config-handler/set-config! :feature/markdown-mirror-two-way? false)
+               (sync-two-way! false)))
+          true)
+         [:span.pointer-events-none
+          (ui/toggle false (constantly nil) true)])
+       [:span.text-sm.opacity-50 (t :settings.features/markdown-mirror-two-way-desc)]]]]))
+
+(defn alpha-features-section
+  [t]
+  [:div.panel-wrap.is-alpha-features
+   [:h2.opacity-70 (t :settings.features/alpha-features)]
+   (markdown-mirror-row t)
+   (markdown-mirror-two-way-row t)])
 
 (defn https-user-agent-row [agent-opts]
   (row-with-button-action
@@ -1081,44 +1151,46 @@
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         logged-in? (user-handler/logged-in?)]
-    [:div.panel-wrap.is-features.mb-8
-     (journal-row enable-journals?)
-     (when (not enable-journals?)
-       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-        [:label.block.text-sm.font-medium.leading-5.opacity-70
-         {:for "default page"}
-         (t :settings.features/home-default-page)]
-        [:div.mt-1.sm:mt-0.sm:col-span-2
-         [:div.max-w-lg.rounded-md.sm:max-w-xs
-          [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
-           {:default-value (state/sub-default-home-page)
-            :on-blur       update-home-page
-            :on-key-press  (fn [e]
-                             (when (= "Enter" (util/ekey e))
-                               (update-home-page e)))}]]]])
-     (when (and web-platform? config/feature-plugin-system-on?)
-       (plugin-system-switcher-row))
+    [:<>
+     [:div.panel-wrap.is-features.mb-8
+      (journal-row enable-journals?)
+      (when (not enable-journals?)
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+         [:label.block.text-sm.font-medium.leading-5.opacity-70
+          {:for "default page"}
+          (t :settings.features/home-default-page)]
+         [:div.mt-1.sm:mt-0.sm:col-span-2
+          [:div.max-w-lg.rounded-md.sm:max-w-xs
+           [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
+            {:default-value (state/sub-default-home-page)
+             :on-blur       update-home-page
+             :on-key-press  (fn [e]
+                              (when (= "Enter" (util/ekey e))
+                                (update-home-page e)))}]]]])
+      (when (and web-platform? config/feature-plugin-system-on?)
+        (plugin-system-switcher-row))
+      (when (util/electron?)
+        (http-server-switcher-row))
+      (flashcards-switcher-row enable-flashcards?)]
      (when (util/electron?)
-       (http-server-switcher-row))
-     (when (util/electron?)
-       (markdown-mirror-row t))
-     (flashcards-switcher-row enable-flashcards?)
+       (alpha-features-section t))
      (when-not web-platform?
-       [:div.mt-1.sm:mt-0.sm:col-span-2
-        [:hr]
-        (if logged-in?
-          [:div
-           (user-handler/email)
-           [:p (ui/button (t :ui/logout) {:class "p-1"
-                                          :icon "logout"
-                                          :on-click user-handler/logout})]]
-          [:div
-           (ui/button (t :ui/login) {:class "p-1"
-                                     :icon "login"
-                                     :on-click (fn []
-                                                 (state/close-settings!)
-                                                 (state/pub-event! [:user/login]))})
-           [:p.text-sm.opacity-50 (t :settings.features/login-prompt)]])])]))
+       [:div.panel-wrap.is-features.mb-8
+        [:div.mt-1.sm:mt-0.sm:col-span-2
+         [:hr]
+         (if logged-in?
+           [:div
+            (user-handler/email)
+            [:p (ui/button (t :ui/logout) {:class "p-1"
+                                           :icon "logout"
+                                           :on-click user-handler/logout})]]
+           [:div
+            (ui/button (t :ui/login) {:class "p-1"
+                                      :icon "login"
+                                      :on-click (fn []
+                                                  (state/close-settings!)
+                                                  (state/pub-event! [:user/login]))})
+            [:p.text-sm.opacity-50 (t :settings.features/login-prompt)]])]])]))
 
 (def DEFAULT-ACTIVE-TAB-STATE (if config/ENABLE-SETTINGS-ACCOUNT-TAB [:account :account] [:general :general]))
 
@@ -1492,9 +1564,9 @@
         :encryption
         (encryption)
 
-         :ai
-         (if (util/electron?)
-           (settings-ai)
-           (settings-advanced))
+        :ai
+        (if (util/electron?)
+          (settings-ai)
+          (settings-advanced))
 
         nil)]]]))

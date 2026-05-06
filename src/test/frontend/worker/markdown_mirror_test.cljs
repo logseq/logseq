@@ -183,10 +183,6 @@
   [_uuid title]
   (plain-block-line title))
 
-(defn- nested-block-line
-  [_uuid title]
-  (str "  - " title))
-
 (defn- <mirror-repo!
   [& args]
   (if-let [f (resolve 'frontend.worker.markdown-mirror/<mirror-repo!)]
@@ -792,7 +788,6 @@
                                              :block/uuid page-uuid}
                                      :blocks [{:block/title "before"
                                                :block/uuid block-uuid}]}]})
-          page (db-test/find-page-by-title @conn "File Origin Quiet")
           path (page-path "pages/File Origin Quiet.md")
           edited-content (str (page-marker page-uuid) "\n\n- after")
           block (d/entity @conn [:block/uuid block-uuid])
@@ -1859,11 +1854,14 @@
                     (let [tag (db-test/find-page-by-title @conn "tag1")
                           block (d/entity @conn [:block/uuid block-uuid])]
                       (is (= :imported (:status result)))
-                      (is (some? tag))
-                      (is (some #(= :logseq.class/Tag (:db/ident %)) (:block/tags tag)))
-                      (is (block-title-includes? @conn block-uuid "#tag1"))
-                      (is (= #{(:db/id tag)} (set (map :db/id (:block/tags block)))))
-                      (is (= #{(:db/id tag)} (set (map :db/id (:block/refs block))))))))
+	                      (is (some? tag))
+	                      (is (some #(= :logseq.class/Tag (:db/ident %)) (:block/tags tag)))
+	                      (is (block-title-includes? @conn block-uuid "#tag1"))
+	                      (is (= #{(:db/id tag)} (set (map :db/id (:block/tags block)))))
+	                      (is (= #{(:db/id tag)} (set (map :db/id (:block/refs block))))
+	                          (pr-str (map (fn [ref]
+	                                         (select-keys ref [:db/id :db/ident :block/title :block/uuid]))
+	                                       (:block/refs block)))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -1935,8 +1933,7 @@
 
 (deftest two-way-property-edits-are-ignored-test
   (async done
-    (let [page-uuid #uuid "99999999-9999-4999-8999-999999999998"
-          block-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab"
+    (let [block-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab"
           conn (db-test/create-conn-with-blocks
                 {:properties {:user.property/rating {:logseq.property/type :number}}
                  :pages-and-blocks [{:page {:block/title "Property Ignore"}
