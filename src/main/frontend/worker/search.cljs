@@ -1,31 +1,16 @@
 (ns frontend.worker.search
   "Full-text and fuzzy search"
-  (:require ["fuse.js" :as Fuse]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.search-fuzzy :as fuzzy]
-            [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.text :as text]))
-
-(def fuse
-  ;; Fuse 6 exposed the constructor on `default`, while Fuse 7's CJS path returns
-  ;; the constructor directly.
-  (or (aget Fuse "default") Fuse))
-
-;; TODO: use sqlite for fuzzy search
-;; maybe https://github.com/nalgeon/sqlean/blob/main/docs/fuzzy.md?
-(defonce fuzzy-search-indices (atom {}))
-
-(defn clear-fuzzy-search-indice!
-  [repo]
-  (swap! fuzzy-search-indices dissoc repo))
 
 (defn- add-blocks-fts-triggers!
   "Table bindings of blocks tables and the blocks FTS virtual tables"
@@ -398,19 +383,61 @@ DROP TRIGGER IF EXISTS blocks_au;
        (prn :debug "Search blocks failed: ")
        (js/console.error e)))))
 
-(defn exact-matched?
-  "Check if two strings points toward same search result"
-  [q match]
-  (when (and (string? q) (string? match))
-    (boolean
-     (reduce
-      (fn [coll char']
-        (let [coll' (drop-while #(not= char' %) coll)]
-          (if (seq coll')
-            (rest coll')
-            (reduced false))))
-      (seq (fuzzy/search-normalize match true))
-      (seq (fuzzy/search-normalize q true))))))
+(def fuzzy-search-candidate-multiplier 4)
+(def fuzzy-search-min-candidate-limit 40)
+(def fuzzy-search-max-candidate-limit 400)
+
+(defn- fuzzy-candidate-limit
+  [limit]
+  (-> (* fuzzy-search-candidate-multiplier limit)
+      (max fuzzy-search-min-candidate-limit)
+      (min fuzzy-search-max-candidate-limit)))
+
+(defn- like-escape-char
+  [c]
+  (let [s (str c)]
+    (if (#{"%" "_" "\\"} s)
+      (str "\\" s)
+      s)))
+
+(defn- fuzzy-like-pattern
+  [q]
+  (str "%" (string/join "%" (map like-escape-char q)) "%"))
+
+(defn- search-blocks-fuzzy-aux
+  [db q page limit]
+  (let [q (some-> q
+                  (fuzzy/search-normalize true)
+                  fuzzy/clean-str)
+        q (if (= \# (first q)) (subs q 1) q)]
+    (when-not (string/blank? q)
+      (try
+        (let [candidate-limit (fuzzy-candidate-limit limit)
+              sql (str "select id, page, title from blocks where "
+                       (if page "page = ? and " "")
+                       "lower(title) like ? escape '\\' "
+                       "order by id = page desc limit ?")
+              bind (if page
+                     [page (fuzzy-like-pattern q) candidate-limit]
+                     [(fuzzy-like-pattern q) candidate-limit])
+              result (.exec db (bean/->js
+                                {:sql sql
+                                 :bind bind
+                                 :rowMode "array"}))
+              blocks (bean/->clj result)]
+          (->> blocks
+               (keep (fn [[id page title]]
+                       (when title
+                         (let [keyword-score (fuzzy/score q title)]
+                           (when (pos? keyword-score)
+                             {:id id
+                              :keyword-score keyword-score
+                              :page page
+                              :title title})))))
+               (sort-by :keyword-score #(compare %2 %1))))
+        (catch :default e
+          (prn :debug "Fuzzy search blocks failed: ")
+          (js/console.error e))))))
 
 (defn hidden-entity?
   [entity]
@@ -423,17 +450,6 @@ DROP TRIGGER IF EXISTS blocks_au;
   [entity]
   (and (or (ldb/page? entity) (ldb/object? entity))
        (not (hidden-entity? entity))))
-
-(defn get-all-fuzzy-supported-blocks
-  "Only pages and objects are supported now."
-  [db]
-  (let [page-ids (->> (d/datoms db :avet :block/name)
-                      (map :e))
-        object-ids (->> (d/datoms db :avet :block/tags)
-                        (map :e))
-        blocks (->> (distinct (concat page-ids object-ids))
-                    (map #(d/entity db %)))]
-    (remove hidden-entity? blocks)))
 
 (defn- sanitize
   [content]
@@ -466,51 +482,52 @@ DROP TRIGGER IF EXISTS blocks_au;
         (prn "Error: failed to run block->index on block " (:db/id block))
         (js/console.error e)))))
 
-(defn build-fuzzy-search-indice
-  "Build a block title indice from scratch.
-   Incremental page title indice is implemented in frontend.search.sync-search-indice!"
-  [repo db]
-  (let [blocks (->> (get-all-fuzzy-supported-blocks db)
-                    (map block->index)
-                    (bean/->js))
-        indice (fuse. blocks
-                      (clj->js {:keys ["title"]
-                                :shouldSort true
-                                :tokenize true
-                                :distance 1024
-                                :threshold 0.5 ;; search for 50% match from the start
-                                :minMatchCharLength 1}))]
-    (swap! fuzzy-search-indices assoc repo indice)
-    indice))
+(def ^:private search-result-block-key ::block)
 
-(defn fuzzy-search
-  "Return a list of blocks (pages && tagged blocks) that match the query. Takes the following
-  options:
-   * :limit - Number of result to limit search results. Defaults to 100"
-  [repo db q {:keys [limit]
-              :or {limit 100}}]
-  (when repo
-    (let [q (fuzzy/search-normalize q true)
-          q (fuzzy/clean-str q)
-          q (if (= \# (first q)) (subs q 1) q)]
-      (when-not (string/blank? q)
-        (let [indice (or (get @fuzzy-search-indices repo)
-                         (build-fuzzy-search-indice repo db))
-              result (->> (.search indice q (clj->js {:limit limit}))
-                          (bean/->clj))]
-          (->> (map :item result)
-               (filter (fn [{:keys [title]}]
-                         (exact-matched? q title)))))))))
+(def ^:private search-result-pull-selector
+  '[:db/id
+    :block/uuid
+    :block/title
+    {:block/page [:block/uuid]}
+    {:block/parent [:db/id :block/uuid :block/title :logseq.property/built-in?
+                    :logseq.property/hide? :logseq.property/deleted-at]}
+    {:block/tags [:db/id :db/ident :block/title :logseq.property/icon]}
+    {:block/_alias [:block/uuid :block/title]}
+    :logseq.property/icon
+    :logseq.property.node/display-type
+    :logseq.property/hide?
+    :logseq.property/deleted-at
+    :logseq.property/built-in?])
+
+(defn- pull-search-result-blocks
+  [db results]
+  (let [lookup-refs (mapv (fn [{:keys [id]}]
+                            [:block/uuid (uuid id)])
+                          results)]
+    (if (seq lookup-refs)
+      (->> (d/pull-many db search-result-pull-selector lookup-refs)
+           (keep (fn [block]
+                   (when-let [id (:block/uuid block)]
+                     [(str id) block])))
+           (into {}))
+      {})))
 
 ;; Combine and re-rank keyword results
 (defn combine-results
   [db keyword-results]
-  (let [all-ids (set (map :id keyword-results))
-        merged (keep (fn [id]
-                       (let [block (when id (d/entity db [:block/uuid (uuid id)]))]
+  (let [unique-results (loop [seen #{}
+                              results []
+                              remaining (seq keyword-results)]
+                         (if-let [{:keys [id] :as result} (first remaining)]
+                           (if (or (nil? id) (contains? seen id))
+                             (recur seen results (next remaining))
+                             (recur (conj seen id) (conj results result) (next remaining)))
+                           results))
+        block-by-id (pull-search-result-blocks db unique-results)
+        merged (keep (fn [{:keys [id] :as result}]
+                       (let [block (get block-by-id id)]
                          (when-not (ldb/hidden? block)
-                           (let [result (first (filter #(= (:id %) id) keyword-results))
-                                 keyword-score (if (ldb/page? block)
+                           (let [keyword-score (if (ldb/page? block)
                                                  (+ (or (:keyword-score result) 0.0) 2)
                                                  (or (:keyword-score result) 0.0))
                                  combined-score (+ keyword-score
@@ -522,9 +539,10 @@ DROP TRIGGER IF EXISTS blocks_au;
                                                      :else
                                                      0))]
                              (assoc result
+                                    search-result-block-key block
                                     :combined-score combined-score
                                     :keyword-score keyword-score)))))
-                     all-ids)
+                     unique-results)
         sorted-result (sort-by :combined-score #(compare %2 %1) merged)]
     sorted-result))
 
@@ -559,9 +577,10 @@ DROP TRIGGER IF EXISTS blocks_au;
        (code-block? code-class block))))
 
 (defn- search-result->block-result
-  [conn q code-class option {:keys [id page title snippet]}]
+  [conn q code-class option {:keys [id page title snippet] :as result}]
   (let [block-id (uuid id)]
-    (when-let [block (d/entity @conn [:block/uuid block-id])]
+    (when-let [block (or (get result search-result-block-key)
+                         (d/entity @conn [:block/uuid block-id]))]
       (when (include-search-block? conn block code-class option)
         (let [display-title (if (:enable-snippet? option)
                               (ensure-highlighted-snippet snippet title q)
@@ -590,9 +609,9 @@ DROP TRIGGER IF EXISTS blocks_au;
    * :dev? - Allow all nodes to be seen for development. Defaults to false
    * :code-only? - Whether to return only code blocks. Defaults to false
    * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
-  [repo conn search-db q {:keys [limit search-limit page enable-snippet? page-only? code-only?]
-                          :as option
-                          :or {enable-snippet? true}}]
+  [conn search-db q {:keys [limit search-limit page enable-snippet? page-only? code-only?]
+                     :as option
+                     :or {enable-snippet? true}}]
   (when-not (string/blank? q)
     (let [option (assoc option :enable-snippet? enable-snippet?)
           match-input (get-match-input q)
@@ -613,9 +632,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                              (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
                                   (map (fn [result]
                                          (assoc result :keyword-score (fuzzy/score q (:title result)))))))
-          fuzzy-result (->> (fuzzy-search repo @conn q option)
-                            (map (fn [result]
-                                   (assoc result :keyword-score (fuzzy/score q (:title result))))))
+          fuzzy-result (search-blocks-fuzzy-aux search-db q page limit)
           ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
           ;;  _ (doseq [item (concat fuzzy-result matched-result)]
           ;;      (prn :debug :keyword-search-result item))
@@ -624,11 +641,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                        (d/entity @conn :logseq.class/Code-block))
           result (->> combined-result
                       (common-util/distinct-by :id)
-                      (keep #(search-result->block-result conn q code-class option %)))
-          result (cond->> result
-                   search-limit
-                   (take limit))]
-      (common-util/distinct-by :block/uuid result))))
+                      (keep #(search-result->block-result conn q code-class option %)))]
+      (take limit result))))
 
 (defn truncate-table!
   [db]
@@ -645,8 +659,7 @@ DROP TRIGGER IF EXISTS blocks_au;
          (remove hidden-entity?))))
 
 (defn build-blocks-indice
-  [repo db]
-  (build-fuzzy-search-indice repo db)
+  [db]
   (->> (get-all-blocks db)
        (keep block->index)))
 
@@ -723,22 +736,8 @@ DROP TRIGGER IF EXISTS blocks_au;
       (get-blocks-from-datoms-impl tx-report datoms))))
 
 (defn sync-search-indice
-  [repo tx-report]
+  [tx-report]
   (let [{:keys [blocks-to-add blocks-to-remove]} (get-affected-blocks tx-report)]
-    ;; update page title indice
-    (let [fuzzy-blocks-to-add (filter page-or-object? blocks-to-add)
-          fuzzy-blocks-to-remove (filter page-or-object? blocks-to-remove)]
-      (when (or (seq fuzzy-blocks-to-add) (seq fuzzy-blocks-to-remove))
-        (swap! fuzzy-search-indices update repo
-               (fn [indice]
-                 (when indice
-                   (doseq [page-entity fuzzy-blocks-to-remove]
-                     (.remove indice (fn [page] (= (str (:block/uuid page-entity)) (gobj/get page "id")))))
-                   (doseq [page fuzzy-blocks-to-add]
-                     (.remove indice (fn [p] (= (str (:block/uuid page)) (gobj/get p "id"))))
-                     (.add indice (bean/->js (block->index page))))
-                   indice)))))
-
     ;; update block indice
     (when (or (seq blocks-to-add) (seq blocks-to-remove))
       (let [blocks-to-add' (keep block->index blocks-to-add)
