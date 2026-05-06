@@ -57,13 +57,13 @@ scripts/verify-repls.sh
 Before starting or attaching:
 
 ```bash
-./scripts/cleanup-repl.sh
+scripts/cleanup-repl.sh
 ```
 
 Then start all runtimes:
 
 ```bash
-./scripts/start-repl.sh --repo demo
+scripts/start-repl.sh --repo demo
 ```
 
 Use `--root-dir <path>` if the target graph lives outside `$LOGSEQ_CLI_ROOT_DIR` or `~/logseq`.
