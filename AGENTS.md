@@ -47,3 +47,4 @@
 - Avoid creating new class or property unless you have to.
 - Avoid shadow var, e.g. `bytes` should be named as `payload`.
 - Avoid using `js/Buffer` in browser related code.
+- Git commits should include a concise summary.
