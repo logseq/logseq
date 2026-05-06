@@ -17,6 +17,7 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.core :as shortcut]
@@ -455,9 +456,48 @@
       (handler)
       #(.removeEventListener js/window.visualViewport "resize" handler))))
 
+(defn- plain-tab-key?
+  [e]
+  (and (or (= "Tab" (gobj/get e "key"))
+           (= 9 (gobj/get e "keyCode")))
+       (not (gobj/get e "shiftKey"))
+       (not (gobj/get e "ctrlKey"))
+       (not (gobj/get e "metaKey"))
+       (not (gobj/get e "altKey"))))
+
+(defn- tab-complete-mixin
+  []
+  {:did-mount
+   (fn [state]
+     (let [*state (volatile! state)
+           handler (fn [e]
+                     (let [[_matched {:keys [complete-on-tab?]}] (:rum/args @*state)]
+                       (when (and complete-on-tab? (plain-tab-key? e))
+                         (ui-handler/auto-complete-complete @*state e))))]
+       (.addEventListener js/window "keydown" handler true)
+       (assoc state ::tab-complete-state *state
+              ::tab-complete-handler handler)))
+
+   :will-remount
+   (fn [old-state new-state]
+     (if-let [*state (::tab-complete-state old-state)]
+       (let [new-state' (assoc new-state
+                               ::tab-complete-state *state
+                               ::tab-complete-handler (::tab-complete-handler old-state))]
+         (vreset! *state new-state')
+         new-state')
+       new-state))
+
+   :will-unmount
+   (fn [state]
+     (when-let [handler (::tab-complete-handler state)]
+       (.removeEventListener js/window "keydown" handler true))
+     state)})
+
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
   (shortcut/mixin* :shortcut.handler/auto-complete)
+  (tab-complete-mixin)
   [state
    matched
    {:keys [on-chosen
