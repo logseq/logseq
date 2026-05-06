@@ -50,12 +50,17 @@
   ;; Check https://www.sqlite.org/fts5.html#the_experimental_trigram_tokenizer.
   (.exec db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(id, title, page, tokenize=\"trigram\")"))
 
+(defn- create-blocks-title-index!
+  [db]
+  (.exec db "CREATE INDEX IF NOT EXISTS blocks_title_nocase_idx ON blocks(title COLLATE NOCASE)"))
+
 (defn create-tables-and-triggers!
   "Open a SQLite db for search index"
   [db]
   (try
     (create-blocks-table! db)
     (create-blocks-fts-table! db)
+    (create-blocks-title-index! db)
     (add-blocks-fts-triggers! db)
     (catch :default e
       (prn "Failed to create tables and triggers")
@@ -404,6 +409,50 @@ DROP TRIGGER IF EXISTS blocks_au;
   [q]
   (str "%" (string/join "%" (map like-escape-char q)) "%"))
 
+(defn- exec-search-blocks-fuzzy
+  [db sql bind]
+  (-> (.exec db (bean/->js
+                 {:sql sql
+                  :bind bind
+                  :rowMode "array"}))
+      bean/->clj))
+
+(defn- fuzzy-block-rows->results
+  [q blocks]
+  (->> blocks
+       (keep (fn [[id page title]]
+               (when title
+                 (let [keyword-score (fuzzy/score q title)]
+                   (when (pos? keyword-score)
+                     {:id id
+                      :keyword-score keyword-score
+                      :page page
+                      :title title})))))
+       (sort-by (juxt (fn [{:keys [id page]}]
+                        (not= id page))
+                      (comp - :keyword-score)))))
+
+(defn- multi-term-query?
+  [q]
+  (boolean (re-find #"\S\s+\S" q)))
+
+(defn- exact-title-query?
+  [q]
+  (not (re-find #"\s" q)))
+
+(defn- search-blocks-exact-title-aux
+  [db q page limit]
+  (try
+    (let [sql (str "select id, page, title from blocks where "
+                   (if page "page = ? and " "")
+                   "title = ? COLLATE NOCASE limit ?")
+          bind (if page [page q limit] [q limit])
+          blocks (exec-search-blocks-fuzzy db sql bind)]
+      (fuzzy-block-rows->results q blocks))
+    (catch :default e
+      (prn :debug "Exact title search blocks failed: ")
+      (js/console.error e))))
+
 (defn- search-blocks-fuzzy-aux
   [db q page limit]
   (let [q (some-> q
@@ -413,28 +462,30 @@ DROP TRIGGER IF EXISTS blocks_au;
     (when-not (string/blank? q)
       (try
         (let [candidate-limit (fuzzy-candidate-limit limit)
-              sql (str "select id, page, title from blocks where "
-                       (if page "page = ? and " "")
-                       "lower(title) like ? escape '\\' "
-                       "order by id = page desc limit ?")
-              bind (if page
-                     [page (fuzzy-like-pattern q) candidate-limit]
-                     [(fuzzy-like-pattern q) candidate-limit])
-              result (.exec db (bean/->js
-                                {:sql sql
-                                 :bind bind
-                                 :rowMode "array"}))
-              blocks (bean/->clj result)]
-          (->> blocks
-               (keep (fn [[id page title]]
-                       (when title
-                         (let [keyword-score (fuzzy/score q title)]
-                           (when (pos? keyword-score)
-                             {:id id
-                              :keyword-score keyword-score
-                              :page page
-                              :title title})))))
-               (sort-by :keyword-score #(compare %2 %1))))
+              pattern (fuzzy-like-pattern q)
+              blocks (if page
+                       (exec-search-blocks-fuzzy
+                        db
+                        "select id, page, title from blocks where page = ? and lower(title) like ? escape '\\' limit ?"
+                        [page pattern candidate-limit])
+                       (let [page-blocks (exec-search-blocks-fuzzy
+                                          db
+                                          "select id, page, title from blocks where id = page and lower(title) like ? escape '\\' limit ?"
+                                          [pattern candidate-limit])
+                             page-ids (set (map first page-blocks))
+                             remaining (- candidate-limit (count page-blocks))]
+                         (if (pos? remaining)
+                           (let [block-candidates (exec-search-blocks-fuzzy
+                                                   db
+                                                   "select id, page, title from blocks where lower(title) like ? escape '\\' limit ?"
+                                                   [pattern (+ remaining (count page-blocks))])
+                                 block-candidates (->> block-candidates
+                                                       (remove (fn [[id]]
+                                                                 (contains? page-ids id)))
+                                                       (take remaining))]
+                             (concat page-blocks block-candidates))
+                           page-blocks)))]
+          (fuzzy-block-rows->results q blocks))
         (catch :default e
           (prn :debug "Fuzzy search blocks failed: ")
           (js/console.error e))))))
@@ -640,24 +691,33 @@ DROP TRIGGER IF EXISTS blocks_au;
                             (str "%" (string/replace q #"\s+" "%") "%"))
           limit (or limit 100)
           limit-p (or search-limit limit)
+          exact-title-result (when (and (not page-only?)
+                                        (exact-title-query? q))
+                               (search-blocks-exact-title-aux search-db q page limit-p))
+          enough-exact-title-results? (>= (count exact-title-result) limit-p)
           ;; don't use sqlite snippet function anymore, all snippets will be handled by ensure-highlighted-snippet
           select "select id, page, title, rank from blocks_fts where "
           pg-sql (if page "page = ? and" "")
           match-sql (if (ns-util/namespace-page? q)
-                      (str select pg-sql " title match ? or title match ? order by rank limit ?")
-                      (str select pg-sql " title match ? order by rank limit ?"))
+                      (str select pg-sql " title match ? or title match ? limit ?")
+                      (str select pg-sql " title match ? limit ?"))
           non-match-sql (str select pg-sql " title like ? limit ?")
-          matched-result (when-not page-only?
+          matched-result (when (and (not page-only?)
+                                    (not enough-exact-title-results?))
                            (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
           non-match-result (when (and (not page-only?) non-match-input)
                              (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
                                   (map (fn [result]
                                          (assoc result :keyword-score (fuzzy/score q (:title result)))))))
-          fuzzy-result (search-blocks-fuzzy-aux search-db q page limit)
+          skip-fuzzy? (or enough-exact-title-results?
+                          (and (multi-term-query? q)
+                               (seq matched-result)))
+          fuzzy-result (when-not skip-fuzzy?
+                         (search-blocks-fuzzy-aux search-db q page limit))
           ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
           ;;  _ (doseq [item (concat fuzzy-result matched-result)]
           ;;      (prn :debug :keyword-search-result item))
-          combined-result (combine-results @conn (concat fuzzy-result matched-result non-match-result))
+          combined-result (combine-results @conn (concat exact-title-result fuzzy-result matched-result non-match-result))
           code-class (when code-only?
                        (d/entity @conn :logseq.class/Code-block))
           matched-count (when include-matched-count?
