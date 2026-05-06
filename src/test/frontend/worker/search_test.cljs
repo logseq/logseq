@@ -321,6 +321,61 @@
                                             "logseq"
                                             {:limit 10 :enable-snippet? false}))))))))
 
+(deftest search-blocks-can-return-matched-count
+  (testing "cmd-k can show total matched nodes while returning the first page only"
+    (let [rows (mapv (fn [n]
+                       {:id (test-uuid-string n)
+                        :page (test-uuid-string n)
+                        :title (str "logseq result " n)
+                        :keyword-score 1})
+                     (range 1 101))
+          blocks (into {}
+                       (map (fn [{:keys [id title]}]
+                              [id {:db/id id
+                                   :block/uuid (uuid id)
+                                   :block/title title}])
+                            rows))]
+      (with-redefs [search/combine-results (fn [_db results]
+                                             (doall results)
+                                             rows)
+                    d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    ldb/page? (constantly false)
+                    ldb/built-in? (constantly false)]
+        (let [result (search/search-blocks (atom :large-db)
+                                           (checking-db)
+                                           "logseq"
+                                           {:limit 10
+                                            :enable-snippet? false
+                                            :include-matched-count? true})]
+          (is (= 10 (count (:items result))))
+          (is (= 100 (:matched-count result))))))))
+
+(deftest search-result-omits-empty-optional-fields
+  (testing "search responses avoid serializing nil optional fields for every row"
+    (let [block-id #uuid "00000000-0000-0000-0000-000000000123"
+          block {:db/id 1
+                 :block/uuid block-id
+                 :block/title "logseq result"}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (when (= id block-id)
+                                 block))
+                    ldb/page? (constantly false)
+                    ldb/built-in? (constantly false)]
+        (let [result (#'search/search-result->block-result
+                      (atom :db)
+                      "logseq"
+                      nil
+                      {:enable-snippet? false}
+                      {:id (str block-id)
+                       :page (str block-id)
+                       :title "logseq result"})]
+          (is (= "logseq result" (:block/title result)))
+          (is (not (contains? result :block/parent)))
+          (is (not (contains? result :block/tags)))
+          (is (not (contains? result :logseq.property/icon)))
+          (is (not (contains? result :alias))))))))
+
 (deftest upsert-blocks-batches-rows-into-single-sql-statement
   (let [calls (atom [])
         tx #js {:exec (fn [opts]

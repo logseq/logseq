@@ -584,21 +584,42 @@ DROP TRIGGER IF EXISTS blocks_au;
       (when (include-search-block? conn block code-class option)
         (let [display-title (if (:enable-snippet? option)
                               (ensure-highlighted-snippet snippet title q)
-                              (or snippet title))]
-          {:db/id (:db/id block)
-           :block/uuid (:block/uuid block)
-           :block/title display-title
-           :block.temp/original-title (:block/title block)
-           :block/page (or
-                        (:block/uuid (:block/page block))
-                        (when (and page (common-util/uuid-string? page))
-                          (uuid page)))
-           :block/parent (:db/id (:block/parent block))
-           :block/tags (seq (map :db/id (:block/tags block)))
-           :logseq.property/icon (:logseq.property/icon block)
-           :page? (ldb/page? block)
-           :alias (some-> (first (:block/_alias block))
-                          (select-keys [:block/uuid :block/title]))})))))
+                              (or snippet title))
+              block-page (or
+                          (:block/uuid (:block/page block))
+                          (when (and page (common-util/uuid-string? page))
+                            (uuid page)))
+              parent-id (:db/id (:block/parent block))
+              tag-ids (seq (map :db/id (:block/tags block)))
+              icon (:logseq.property/icon block)
+              alias (some-> (first (:block/_alias block))
+                            (select-keys [:block/uuid :block/title]))]
+          (cond-> {:db/id (:db/id block)
+                   :block/uuid (:block/uuid block)
+                   :block/title display-title
+                   :block.temp/original-title (:block/title block)
+                   :page? (ldb/page? block)}
+            block-page
+            (assoc :block/page block-page)
+
+            parent-id
+            (assoc :block/parent parent-id)
+
+            tag-ids
+            (assoc :block/tags tag-ids)
+
+            icon
+            (assoc :logseq.property/icon icon)
+
+            alias
+            (assoc :alias alias)))))))
+
+(defn- search-result-visible?
+  [conn code-class option {:keys [id] :as result}]
+  (let [block-id (uuid id)]
+    (when-let [block (or (get result search-result-block-key)
+                         (d/entity @conn [:block/uuid block-id]))]
+      (include-search-block? conn block code-class option))))
 
 (defn search-blocks
   "Options:
@@ -609,7 +630,7 @@ DROP TRIGGER IF EXISTS blocks_au;
    * :dev? - Allow all nodes to be seen for development. Defaults to false
    * :code-only? - Whether to return only code blocks. Defaults to false
    * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
-  [conn search-db q {:keys [limit search-limit page enable-snippet? page-only? code-only?]
+  [conn search-db q {:keys [limit search-limit page enable-snippet? page-only? code-only? include-matched-count?]
                      :as option
                      :or {enable-snippet? true}}]
   (when-not (string/blank? q)
@@ -639,10 +660,15 @@ DROP TRIGGER IF EXISTS blocks_au;
           combined-result (combine-results @conn (concat fuzzy-result matched-result non-match-result))
           code-class (when code-only?
                        (d/entity @conn :logseq.class/Code-block))
+          matched-count (when include-matched-count?
+                          (count (filter #(search-result-visible? conn code-class option %) combined-result)))
           result (->> combined-result
                       (common-util/distinct-by :id)
                       (keep #(search-result->block-result conn q code-class option %)))]
-      (take limit result))))
+      (if include-matched-count?
+        {:items (take limit result)
+         :matched-count matched-count}
+        (take limit result)))))
 
 (defn truncate-table!
   [db]
