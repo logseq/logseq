@@ -281,7 +281,7 @@
 (defn- close-other-dbs!
   [repo]
   (doseq [[r {:keys [db search client-ops]}] @*sqlite-conns]
-    (when-not (= repo r)
+    (when-not (graph-dir/same-repo? repo r)
       (close-db-aux! r db search client-ops))))
 
 (defn close-db!
@@ -634,7 +634,7 @@
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
-  (when-not (= repo (worker-state/get-current-repo)) ; graph switched
+  (when-not (graph-dir/same-repo? repo (worker-state/get-current-repo)) ; graph switched
     (reset! worker-state/*deleted-block-uuid->db-id {}))
   (start-db! repo opts))
 
