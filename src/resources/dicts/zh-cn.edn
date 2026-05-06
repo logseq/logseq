@@ -1707,7 +1707,9 @@
  :storage.recycle/retention-desc "已删除的页面和块会保留在此处，直到被恢复或在 30 天后被自动垃圾回收。"
  :storage.recycle/title "回收站"
 
+ :sync/assets-downloading "正在下载资源"
  :sync/assets-downloading-count "正在下载资源（{1}）"
+ :sync/assets-uploading "正在上传资源"
  :sync/assets-uploading-count "正在上传资源（{1}）"
  :sync/conflicts-description "这些服务器版本与本地编辑冲突。复制你需要的文本，然后手动编辑该块。"
  :sync/conflicts-title "同步冲突"
@@ -1721,6 +1723,7 @@
  :sync/more-debug-info "更多调试信息"
  :sync/offline "离线"
  :sync/online "在线"
+ :sync/pending-asset-uploads "待上传的资源"
  :sync/pending-local-changes "待同步的本地更改"
  :sync/pending-server-changes "待同步的服务器更改"
  :sync/show-conflicts "显示同步冲突"

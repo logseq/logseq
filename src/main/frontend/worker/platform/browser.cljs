@@ -106,7 +106,9 @@
 (defn- graph-assets-dir
   [repo]
   (when-let [graph-name (some-> repo common-config/strip-leading-db-version-prefix)]
-    (str "/" graph-name "/assets")))
+    (path/url-to-path
+     (path/path-join (str "memory:///" graph-name)
+                     common-config/local-assets-dir))))
 
 (defn- ensure-pfs-dir!
   [^js pfs dir]

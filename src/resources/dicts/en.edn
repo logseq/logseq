@@ -1724,7 +1724,9 @@
  :storage.recycle/retention-desc "Deleted pages and blocks stay here until restored or automatically garbage collected after 30 days."
  :storage.recycle/title "Recycle"
 
+ :sync/assets-downloading "downloading assets"
  :sync/assets-downloading-count "Downloading assets ({1})"
+ :sync/assets-uploading "uploading assets"
  :sync/assets-uploading-count "Uploading assets ({1})"
  :sync/conflicts-description "These server versions conflicted with local edits. Copy the text you want and edit the block manually."
  :sync/conflicts-title "Sync conflicts"
@@ -1738,6 +1740,7 @@
  :sync/more-debug-info "More debug info"
  :sync/offline "Offline"
  :sync/online "Online"
+ :sync/pending-asset-uploads "pending asset uploads"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
  :sync/show-conflicts "Show sync conflicts"
