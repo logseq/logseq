@@ -1,5 +1,6 @@
 (ns electron.db-worker
   (:require [logseq.cli.server :as cli-server]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.db-worker.daemon :as daemon]
             [promesa.core :as p]))
 
@@ -8,9 +9,40 @@
   {:repos {}
    :window->repo {}})
 
+(defn- repo-key
+  [repo]
+  (graph-dir/repo-identity repo))
+
+(defn- merge-repo-entry
+  [existing entry]
+  (if existing
+    (-> existing
+        (update :windows (fnil into #{}) (:windows entry))
+        (update :runtime #(or % (:runtime entry))))
+    entry))
+
+(defn- normalize-state
+  [state]
+  (let [state (merge (initial-state) state)
+        repos (reduce-kv (fn [m repo entry]
+                           (if-let [key (repo-key repo)]
+                             (update m key merge-repo-entry entry)
+                             m))
+                         {}
+                         (:repos state))
+        window->repo (reduce-kv (fn [m window-id repo]
+                                  (if-let [key (repo-key repo)]
+                                    (assoc m window-id key)
+                                    m))
+                                {}
+                                (:window->repo state))]
+    (assoc state
+           :repos repos
+           :window->repo window->repo)))
+
 (defn- ensure-state
   [state]
-  (merge (initial-state) state))
+  (normalize-state state))
 
 (defn- dissoc-window
   [state window-id]
@@ -100,39 +132,40 @@
 
 (defn ensure-started!
   [{:keys [state start-daemon! stop-daemon! runtime-ready?] :as manager} repo window-id]
-  (p/let [current-repo (get-in (ensure-state @state) [:window->repo window-id])
-          _ (when (and current-repo (not= current-repo repo))
-              (ensure-window-stopped! manager window-id))]
-    (if-let [entry (get-in (ensure-state @state) [:repos repo])]
-      (p/let [runtime (:runtime entry)
-              ready? (runtime-ready? runtime)]
-        (if ready?
-          (do
-            (swap! state (fn [current]
-                           (-> (ensure-state current)
-                               (update-in [:repos repo :windows] (fnil conj #{}) window-id)
-                               (assoc-in [:window->repo window-id] repo))))
-            runtime)
-          (p/let [_ (when (owned-runtime? runtime)
-                      (-> (stop-daemon! runtime)
-                          (p/catch (fn [_] nil))))
-                  runtime' (start-daemon! repo)]
-            (swap! state
-                   (fn [current]
-                     (let [current' (ensure-state current)
-                           windows (get-in current' [:repos repo :windows] #{})]
-                       (-> current'
-                           (assoc-in [:repos repo] {:runtime runtime'
-                                                    :windows (conj windows window-id)})
-                           (assoc-in [:window->repo window-id] repo)))))
-            runtime')))
-      (p/let [runtime (start-daemon! repo)]
-        (swap! state (fn [current]
-                       (-> (ensure-state current)
-                           (assoc-in [:repos repo] {:runtime runtime
-                                                    :windows #{window-id}})
-                           (assoc-in [:window->repo window-id] repo))))
-        runtime))))
+  (let [key (repo-key repo)]
+    (p/let [current-repo (get-in (ensure-state @state) [:window->repo window-id])
+            _ (when (and current-repo (not= current-repo key))
+                (ensure-window-stopped! manager window-id))]
+      (if-let [entry (get-in (ensure-state @state) [:repos key])]
+        (p/let [runtime (:runtime entry)
+                ready? (runtime-ready? runtime)]
+          (if ready?
+            (do
+              (swap! state (fn [current]
+                             (-> (ensure-state current)
+                                 (update-in [:repos key :windows] (fnil conj #{}) window-id)
+                                 (assoc-in [:window->repo window-id] key))))
+              runtime)
+            (p/let [_ (when (owned-runtime? runtime)
+                        (-> (stop-daemon! runtime)
+                            (p/catch (fn [_] nil))))
+                    runtime' (start-daemon! repo)]
+              (swap! state
+                     (fn [current]
+                       (let [current' (ensure-state current)
+                             windows (get-in current' [:repos key :windows] #{})]
+                         (-> current'
+                             (assoc-in [:repos key] {:runtime runtime'
+                                                     :windows (conj windows window-id)})
+                             (assoc-in [:window->repo window-id] key)))))
+              runtime')))
+        (p/let [runtime (start-daemon! repo)]
+          (swap! state (fn [current]
+                         (-> (ensure-state current)
+                             (assoc-in [:repos key] {:runtime runtime
+                                                     :windows #{window-id}})
+                             (assoc-in [:window->repo window-id] key))))
+          runtime)))))
 
 (defn- parse-runtime-lock
   [{:keys [base-url]}]
@@ -156,20 +189,21 @@
 
 (defn ensure-stopped!
   [{:keys [state stop-daemon!]} repo window-id]
-  (if (= repo (get-in (ensure-state @state) [:window->repo window-id]))
-    (ensure-window-stopped! {:state state :stop-daemon! stop-daemon!} window-id)
-    (let [runtime* (atom nil)]
-      (swap! state
-             (fn [current]
-               (let [[next-state runtime] (detach-window-from-repo current repo window-id)]
-                 (reset! runtime* runtime)
-                 next-state)))
-      (if-let [runtime @runtime*]
-        (if (owned-runtime? runtime)
-          (p/let [_ (stop-daemon! runtime)]
-            true)
-          (p/resolved true))
-        (p/resolved false)))))
+  (let [key (repo-key repo)]
+    (if (= key (get-in (ensure-state @state) [:window->repo window-id]))
+      (ensure-window-stopped! {:state state :stop-daemon! stop-daemon!} window-id)
+      (let [runtime* (atom nil)]
+        (swap! state
+               (fn [current]
+                 (let [[next-state runtime] (detach-window-from-repo current key window-id)]
+                   (reset! runtime* runtime)
+                   next-state)))
+        (if-let [runtime @runtime*]
+          (if (owned-runtime? runtime)
+            (p/let [_ (stop-daemon! runtime)]
+              true)
+            (p/resolved true))
+          (p/resolved false))))))
 
 (defn stop-all!
   [{:keys [state stop-daemon!]}]
@@ -185,10 +219,11 @@
 
 (defn ensure-repo-stopped!
   [{:keys [state stop-daemon!]} repo]
-  (let [runtime* (atom nil)]
+  (let [key (repo-key repo)
+        runtime* (atom nil)]
     (swap! state
            (fn [current]
-             (let [[next-state runtime] (detach-repo current repo)]
+             (let [[next-state runtime] (detach-repo current key)]
                (reset! runtime* runtime)
                next-state)))
     (if-let [runtime @runtime*]
