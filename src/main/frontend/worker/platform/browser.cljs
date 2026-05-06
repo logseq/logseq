@@ -157,7 +157,7 @@
 
 (defn- asset-delete!
   [repo file-name]
-  (-> (.unlink (browser-pfs) (asset-path repo file-name))
+  (-> (.unlink ^js (browser-pfs) (asset-path repo file-name))
       (p/catch (constantly nil))))
 
 (defn- websocket-connect
