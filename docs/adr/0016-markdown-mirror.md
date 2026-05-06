@@ -213,9 +213,10 @@ builds do not have the same graph-directory filesystem guarantees.
 4. When page properties are present, including the page `id::` line, write one
    empty line between the page property section and the first block.
 5. The mirror writes a hidden sidecar snapshot under
-   `mirror/markdown/.logseq/pages/<page-uuid>.edn`. It records the last
+   `mirror/markdown/.logseq/pages/<page-uuid>.json`. It records the last
    rendered sibling order, titles, and UUIDs for each block so Markdown can
-   stay readable while file edits still match stable DB identity.
+   stay readable while file edits still match stable DB identity. The sidecar
+   uses JSON rather than EDN to keep watcher read/parse overhead low.
 6. Mirror files include block and page property drawers, including user
    properties, with rendered property values.
 7. Assets are referenced as normal exported Markdown references. This ADR does

@@ -1,7 +1,6 @@
 (ns frontend.worker.markdown-mirror
   "Markdown mirror derived-file support for DB graphs."
-  (:require [cljs.reader :as reader]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.graph-dir :as graph-dir]
             [frontend.worker.platform :as platform]
@@ -18,6 +17,7 @@
             [promesa.core :as p]))
 
 (def ^:private snapshot-version 1)
+(def ^:private default-max-import-bytes (* 100 1024))
 
 (defn repo-mirror-dir
   [repo]
@@ -119,7 +119,7 @@
 
 (defn- page-snapshot-relative-path
   [page-uuid]
-  (str ".logseq/pages/" page-uuid ".edn"))
+  (str ".logseq/pages/" page-uuid ".json"))
 
 (defn- normalize-watch-path
   [path]
@@ -157,6 +157,20 @@
                         path')]
     (when (and relative-path (markdown-relative-path? relative-path))
       relative-path)))
+
+(defn- content-too-large?
+  [content max-import-bytes]
+  (and (string? content)
+       (< max-import-bytes (count content))))
+
+(defn- file-too-large?
+  [stats max-import-bytes]
+  (let [size (cond
+               (number? stats) stats
+               (some? stats) (.-size stats)
+               :else nil)]
+    (and (number? size)
+         (< max-import-bytes size))))
 
 (defn- mark-recent-write!
   [repo path content]
@@ -528,24 +542,41 @@
 (defn- page-snapshot
   [db page]
   (letfn [(snapshot-block [parent-uuid block]
-            (cons {:uuid (:block/uuid block)
-                   :parent-uuid parent-uuid
+            (cons {:uuid (str (:block/uuid block))
+                   :parent-uuid (some-> parent-uuid str)
                    :title (:block/title block)
                    :order (:block/order block)}
                   (mapcat #(snapshot-block (:block/uuid block) %)
                           (sort-by :block/order (:block/_parent block)))))]
     {:version snapshot-version
-     :page-uuid (:block/uuid page)
+     :page-uuid (str (:block/uuid page))
      :blocks (vec (mapcat #(snapshot-block nil %) (page-root-blocks page)))}))
+
+(defn- snapshot-block-from-json
+  [block]
+  (let [block-uuid (parse-uuid-safe (:uuid block))
+        parent-uuid (when-let [parent-uuid (:parent-uuid block)]
+                      (parse-uuid-safe parent-uuid))]
+    (when block-uuid
+      {:uuid block-uuid
+       :parent-uuid parent-uuid
+       :title (:title block)
+       :order (:order block)})))
 
 (defn- parse-page-snapshot
   [content page-uuid]
   (try
-    (let [snapshot (reader/read-string content)]
+    (let [snapshot (js->clj (js/JSON.parse content) :keywordize-keys true)
+          snapshot-page-uuid (parse-uuid-safe (:page-uuid snapshot))
+          raw-blocks (:blocks snapshot)
+          blocks (into [] (keep snapshot-block-from-json) raw-blocks)]
       (when (and (= snapshot-version (:version snapshot))
-                 (= page-uuid (:page-uuid snapshot))
-                 (vector? (:blocks snapshot)))
-        snapshot))
+                 (= page-uuid snapshot-page-uuid)
+                 (vector? raw-blocks)
+                 (= (count blocks) (count raw-blocks)))
+        {:version (:version snapshot)
+         :page-uuid snapshot-page-uuid
+         :blocks blocks}))
     (catch :default _e
       nil)))
 
@@ -560,7 +591,7 @@
   (<write-if-changed! platform*
                       repo
                       (mirror-path repo (page-snapshot-relative-path (:block/uuid page)))
-                      (pr-str (page-snapshot db page))))
+                      (js/JSON.stringify (clj->js (page-snapshot db page)))))
 
 (defn- duplicate-title?
   [blocks]
@@ -1339,18 +1370,23 @@
                        :reason :no-db-changes})))))))))))
 
 (defn <import-file-content!
-  [repo conn relative-path content {:keys [platform] :as opts}]
-  (let [parsed (parse-mirror-content content)
-        page (existing-page-for-path @conn relative-path (:page-uuid parsed))]
-    (if (:error parsed)
-      (p/resolved {:status :error
-                   :reason (:error parsed)})
-      (if (and platform (not (supported-runtime? platform)))
-        (p/resolved {:status :skipped
-                     :reason :unsupported-runtime})
-        (if page
-          (import-existing-file! repo conn relative-path parsed page opts)
-          (import-new-file! repo conn relative-path content parsed opts))))))
+  [repo conn relative-path content {:keys [platform max-import-bytes] :as opts}]
+  (let [max-import-bytes (or max-import-bytes default-max-import-bytes)]
+    (if (content-too-large? content max-import-bytes)
+      (p/resolved {:status :skipped
+                   :reason :file-too-large
+                   :max-import-bytes max-import-bytes})
+      (let [parsed (parse-mirror-content content)
+            page (existing-page-for-path @conn relative-path (:page-uuid parsed))]
+        (if (:error parsed)
+          (p/resolved {:status :error
+                       :reason (:error parsed)})
+          (if (and platform (not (supported-runtime? platform)))
+            (p/resolved {:status :skipped
+                         :reason :unsupported-runtime})
+            (if page
+              (import-existing-file! repo conn relative-path parsed page opts)
+              (import-new-file! repo conn relative-path content parsed opts))))))))
 
 (defn <handle-file-event!
   [repo conn {:keys [type relative-path content]} {:keys [platform] :as opts}]
@@ -1411,6 +1447,7 @@
       (let [watch-root (watch-root-path platform* repo)
             watch! (or (:chokidar-watch! opts) chokidar-watch!)
             watcher (watch! watch-root {:ignore-initial true
+                                        :alwaysStat true
                                         :await-write-finish {:stability-threshold 200
                                                              :poll-interval 50}})]
         (stop-file-watcher! repo)
@@ -1423,32 +1460,42 @@
                                              :relative-path relative-path
                                              :event event
                                              :error error})))))
-                (handle-path! [event path]
+                (handle-path! [event path stats]
                   (when-let [relative-path (watcher-event-relative-path repo watch-root path)]
                     (let [storage-path (mirror-path repo relative-path)
-                          ttl-ms (or ignored-recent-write-ms 1000)]
+                          ttl-ms (or ignored-recent-write-ms 1000)
+                          max-import-bytes (or (:max-import-bytes opts) default-max-import-bytes)]
                       (if (= :changed event)
-                        (handle-result
-                         relative-path
-                         event
-                         (p/let [content (<read-text platform* storage-path)]
-                           (if (= content (recent-written-content repo storage-path ttl-ms))
-                             {:status :skipped
-                              :reason :ignored-self-write}
-                             (<handle-file-event! repo conn {:type event
-                                                             :relative-path relative-path
-                                                             :content content}
-                                                  {:platform platform*}))))
+                        (if (file-too-large? stats max-import-bytes)
+                          (handle-result
+                           relative-path
+                           event
+                           (p/resolved {:status :skipped
+                                        :reason :file-too-large
+                                        :max-import-bytes max-import-bytes}))
+                          (handle-result
+                           relative-path
+                           event
+                           (p/let [content (<read-text platform* storage-path)]
+                             (if (= content (recent-written-content repo storage-path ttl-ms))
+                               {:status :skipped
+                                :reason :ignored-self-write}
+                               (<handle-file-event! repo conn {:type event
+                                                               :relative-path relative-path
+                                                               :content content}
+                                                    (assoc opts
+                                                           :platform platform*
+                                                           :max-import-bytes max-import-bytes))))))
                         (handle-result
                          relative-path
                          event
                          (<handle-file-event! repo conn {:type event
                                                          :relative-path relative-path}
-                                              {:platform platform*}))))))]
-          (register-watch-handler! watcher "add" #(handle-path! :changed %))
-          (register-watch-handler! watcher "change" #(handle-path! :changed %))
-          (register-watch-handler! watcher "unlink" #(handle-path! :deleted %))
-          (register-watch-handler! watcher "unlinkDir" #(handle-path! :deleted %))
+                                              (assoc opts :platform platform*)))))))]
+          (register-watch-handler! watcher "add" #(handle-path! :changed %1 %2))
+          (register-watch-handler! watcher "change" #(handle-path! :changed %1 %2))
+          (register-watch-handler! watcher "unlink" #(handle-path! :deleted %1 %2))
+          (register-watch-handler! watcher "unlinkDir" #(handle-path! :deleted %1 %2))
           (register-watch-handler! watcher "error"
                                    #(log/error :markdown-mirror/watch-error
                                                {:repo repo

@@ -72,7 +72,7 @@ diagnostics on ambiguous or unsafe cases instead of guessing.
    `markdown-mirror/**` from generic graph ignored paths.
 7. Persist hidden mirror sidecar state under `mirror/markdown/.logseq/` before
    enabling two-way mode. The sidecar is required state, not an optimization.
-   Per-page snapshots live at `.logseq/pages/<page-uuid>.edn`; future
+   Per-page snapshots live at `.logseq/pages/<page-uuid>.json`; future
    graph-wide indexes can live beside them.
 8. Two-way mode must include stable identity metadata without making ordinary
    Markdown noisy:
@@ -123,11 +123,13 @@ diagnostics on ambiguous or unsafe cases instead of guessing.
    block `id::` identity lines.
 4. Write mirror files atomically and record hidden sidecar state under
    `mirror/markdown/.logseq/`:
-   - per-page snapshots at `.logseq/pages/<page-uuid>.edn`
+   - per-page JSON snapshots at `.logseq/pages/<page-uuid>.json`
    - page uuid
    - last rendered block UUID, parent UUID, sibling order, and title
    - future full-file hashes, writer ids, and DB basis stamps if the watcher
      needs stronger loop suppression than recent-write tracking
+   JSON is used for sidecar snapshots instead of EDN to reduce parse overhead in
+   watcher/import paths.
 5. After a DB-origin write, register the write id/content hash in watcher
    suppression before touching the file.
 

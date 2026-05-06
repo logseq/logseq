@@ -39,7 +39,11 @@
   (str (markdown-mirror/repo-mirror-dir test-repo) "/" path))
 
 (defn- sidecar-page-path [page-uuid]
-  (page-path (str ".logseq/pages/" page-uuid ".edn")))
+  (page-path (str ".logseq/pages/" page-uuid ".json")))
+
+(defn- parse-json
+  [content]
+  (js->clj (js/JSON.parse content) :keywordize-keys true))
 
 (defn- markdown-writes
   [writes]
@@ -406,7 +410,11 @@
                                        (block-line block-uuid-2 "world"))]
                       (is (= content (get @files path)))
                       (is (= [[path content]] (markdown-writes writes)))
-                      (is (string? (get @files (sidecar-page-path page-uuid)))))))
+                      (let [sidecar (parse-json (get @files (sidecar-page-path page-uuid)))]
+                        (is (= 1 (:version sidecar)))
+                        (is (= (str page-uuid) (:page-uuid sidecar)))
+                        (is (= [(str block-uuid-1) (str block-uuid-2)]
+                               (mapv :uuid (:blocks sidecar))))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -2103,6 +2111,7 @@
             (is (= :watching (:status start-result)))
             (is (= [(str "/tmp/logseq/" (markdown-mirror/repo-mirror-dir test-repo))
                     {:ignore-initial true
+                     :alwaysStat true
                      :await-write-finish {:stability-threshold 200
                                           :poll-interval 50}}]
                    @watched))
@@ -2111,4 +2120,38 @@
             (is (some? (block-by-title @conn "from watcher")))
             (is (true? @closed?)))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-watcher-skips-large-file-before-reading-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks {:pages-and-blocks []})
+          read-count (atom 0)
+          platform' (assoc-in platform [:storage :read-text!]
+                              (fn [path]
+                                (swap! read-count inc)
+                                (p/resolved (get @files path))))
+          handlers (atom {})
+          watcher #js {}
+          _ (set! (.-on watcher)
+                  (fn [event handler]
+                    (swap! handlers assoc event handler)
+                    watcher))
+          _ (set! (.-close watcher) (fn [] nil))
+          relative-path "journals/2026_05_05.md"
+          storage-path (page-path relative-path)
+          stats #js {:size 11}]
+      (swap! files assoc storage-path "- too large")
+      (-> (p/let [_ (markdown-mirror/<start-file-watcher! test-repo conn {:platform platform'
+                                                                          :chokidar-watch! (fn [_path _opts] watcher)
+                                                                          :max-import-bytes 10})
+                  result ((get @handlers "change") (str "/tmp/logseq/" storage-path) stats)
+                  _ (markdown-mirror/stop-file-watcher! test-repo)]
+            (is (= :skipped (:status result)))
+            (is (= :file-too-large (:reason result)))
+            (is (= 0 @read-count))
+            (is (nil? (db-test/find-journal-by-journal-day @conn 20260505))))
+          (p/catch (fn [e]
+                     (markdown-mirror/stop-file-watcher! test-repo)
+                     (is false (str "unexpected error: " e))))
           (p/finally done)))))
