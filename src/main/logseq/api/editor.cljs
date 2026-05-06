@@ -173,7 +173,7 @@
     (when-let [pid (api-plugin/get-caller-plugin-id)]
       (state/sidebar-add-block!
         (state/get-current-repo)
-        (keyword pid (str "_sidebar." block-id-or-uuid-or-key))
+        (keyword pid (str block-id-or-uuid-or-key))
         :plugin))))
 
 (defn new_block_uuid []
