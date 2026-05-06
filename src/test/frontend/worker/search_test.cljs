@@ -192,7 +192,7 @@
 
 (deftest search-blocks-aux-bind-count
   (testing "namespace match SQL keeps bind count aligned"
-    (let [sql "select id, page, title, rank from blocks_fts where title match ? or title match ? order by rank limit ?"
+    (let [sql "select id, page, title, rank from blocks_fts where title match ? or title match ? limit ?"
           result (#'search/search-blocks-aux (checking-db) sql "a/b" "a/b" nil 10 true)]
       (is (some? result))
       (is (empty? result))))
@@ -211,8 +211,18 @@
 
 (deftest search-blocks-large-graph-benchmark-regression
   (testing "cmd-k and autocomplete queries must not scan the full Datascript graph while typing"
-    (let [db (checking-db)]
-      (is (empty? (search/search-blocks (atom :large-db) db "alpha" {:limit 10}))))))
+    (let [calls (atom [])
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")
+                                bind (aget opts "bind")
+                                expected (sql-placeholder-count sql)
+                                actual (count bind)]
+                            (swap! calls conj sql)
+                            (when-not (= expected actual)
+                              (throw (js/Error. (str "Bind index " (inc expected) " is out of range."))))
+                            #js []))}]
+      (is (empty? (search/search-blocks (atom :large-db) db "alpha" {:limit 10})))
+      (is (not-any? #(string/includes? % "order by rank") @calls)))))
 
 (deftest search-blocks-fuzzy-matches-from-search-db
   (testing "subsequence fuzzy matching comes from the search db without an in-memory index"
@@ -240,17 +250,22 @@
         (is (some #(= ["%n%w%p%" 40] (:bind %)) @calls))))))
 
 (deftest search-blocks-fuzzy-prioritizes-page-candidates
-  (testing "large graphs keep page rows in the bounded fuzzy candidate window"
+  (testing "large graphs keep page rows first without sorting the whole blocks table"
     (let [page-id "67e55044-10b1-426f-9247-bb680e5fe0c8"
           block-id "8f14e45f-ea6e-4be8-b53f-bf0f2ca8a5db"
           calls (atom [])
           db #js {:exec (fn [opts]
                           (let [sql (aget opts "sql")]
                             (swap! calls conj sql)
-                            (if (and (string/includes? sql "order by id = page desc")
-                                     (string/includes? sql "lower(title) like ?"))
-                              (clj->js [[page-id page-id "New Project"]
-                                        [block-id page-id "New Project task"]])
+                            (cond
+                              (string/includes? sql "title = ? COLLATE NOCASE")
+                              #js []
+
+                              (and (string/includes? sql "id = page")
+                                   (string/includes? sql "lower(title) like ?"))
+                              (clj->js [[page-id page-id "New Project"]])
+
+                              :else
                               (clj->js [[block-id page-id "New Project task"]]))))}]
       (with-redefs [search/combine-results (fn [_db results] results)
                     search/search-result->block-result
@@ -258,13 +273,84 @@
                       result)]
         (let [result (vec (search/search-blocks (atom :large-db) db "nwp" {:limit 10}))]
           (is (some #(= page-id (:id %)) result))
-          (is (some #(string/includes? % "order by id = page desc") @calls)))))))
+          (is (= page-id (:id (first result))))
+          (is (some #(string/includes? % "id = page") @calls))
+          (is (not-any? #(string/includes? % "order by id = page desc") @calls)))))))
+
+(deftest search-blocks-skips-fuzzy-for-multi-term-keyword-hits
+  (testing "exact multi-term FTS hits do not pay a broad fuzzy LIKE scan"
+    (let [page-id "29089538-74f7-44b6-954b-494ca9e82182"
+          calls (atom [])
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")]
+                            (swap! calls conj sql)
+                            (cond
+                              (string/includes? sql "lower(title) like ?")
+                              (throw (js/Error. "fuzzy LIKE should not run"))
+
+                              (string/includes? sql "title match ?")
+                              (clj->js [[page-id page-id "Page-10000" -16 nil]])
+
+                              :else
+                              #js [])))}]
+      (with-redefs [search/combine-results (fn [_db results] results)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      result)]
+        (let [result (vec (search/search-blocks (atom :large-db)
+                                                db
+                                                "page 10000"
+                                                {:limit 10}))]
+          (is (= [{:id page-id
+                   :page page-id
+                   :title "Page-10000"}]
+                 (mapv #(select-keys % [:id :page :title]) result)))
+          (is (some #(string/includes? % "title match ?") @calls))
+          (is (not-any? #(string/includes? % "lower(title) like ?") @calls)))))))
 
 (defn- test-uuid-string
   [n]
   (let [hex (.toString n 16)]
     (str "00000000-0000-0000-0000-"
          (subs (str "000000000000" hex) (count hex)))))
+
+(deftest search-blocks-skips-fts-for-enough-exact-title-hits
+  (testing "very common exact titles avoid expensive FTS scans"
+    (let [calls (atom [])
+          exact-rows (mapv (fn [n]
+                             [(test-uuid-string n)
+                              (test-uuid-string 999)
+                              "Block"])
+                           (range 100 200))
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")]
+                            (swap! calls conj sql)
+                            (cond
+                              (string/includes? sql "title = ? COLLATE NOCASE")
+                              (clj->js exact-rows)
+
+                              (string/includes? sql "title match ?")
+                              (throw (js/Error. "FTS should not run"))
+
+                              (string/includes? sql "lower(title) like ?")
+                              (throw (js/Error. "fuzzy LIKE should not run"))
+
+                              :else
+                              #js [])))}]
+      (with-redefs [search/combine-results (fn [_db results] results)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      result)]
+        (let [result (vec (search/search-blocks (atom :large-db)
+                                                db
+                                                "block"
+                                                {:limit 10
+                                                 :search-limit 100}))]
+          (is (= 10 (count result)))
+          (is (every? #(= "Block" (:title %)) result))
+          (is (some #(string/includes? % "title = ? COLLATE NOCASE") @calls))
+          (is (not-any? #(string/includes? % "title match ?") @calls))
+          (is (not-any? #(string/includes? % "lower(title) like ?") @calls)))))))
 
 (deftest combine-results-large-result-benchmark
   (testing "large search result sets combine without quadratic scans and keep page boost ranking"
