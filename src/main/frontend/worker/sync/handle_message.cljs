@@ -238,6 +238,12 @@
     :current-client-f current-client
     :broadcast-rtc-state!-f broadcast-rtc-state!
     :fail-fast-f fail-fast})
+  (log/info :db-sync/handle-hello
+            {:empty-inflight? (empty? @(:inflight client))
+             :online? (worker-state/online?)
+             :ws-open? (when-let [ws (:ws client)]
+                         (ws-open? ws))
+             :pending-txs-count (count (sync-apply/pending-txs repo {:limit 50}))})
   (sync-apply/enqueue-flush-pending! repo client))
 
 (defn- handle-online-users!
@@ -325,6 +331,7 @@
         "pull/ok" (handle-pull-ok! repo client local-tx remote-tx remote-checksum message)
         "changed" (handle-changed! repo client local-tx remote-tx)
         "tx/reject" (handle-tx-reject! repo client message local-tx)
+        "pong" nil
         (fail-fast :db-sync/invalid-field
                    {:repo repo :type (:type message)})))))
 

@@ -201,6 +201,8 @@
         (let [delay (reconnect-delay-ms attempt)
               timeout-id (js/setTimeout
                           (fn []
+                            (log/info :db-sync/ws-reconnect {:repo repo
+                                                             :db-sync-client-exists? (some? @worker-state/*db-sync-client)})
                             (swap! reconnect assoc :timer nil)
                             (when-let [current @worker-state/*db-sync-client]
                               (when (and (= (:repo current) repo)
@@ -296,6 +298,8 @@
   [repo client url token]
   (when (:ws client)
     (stop-client! client))
+  (log/info :db-sync/connect! {:repo repo
+                               :token-exists? (some? (or token (auth-token)))})
   (when-let [token' (or token (auth-token))]
     (let [ws (platform/websocket-connect (platform/current) (sync-transport/append-token url token'))
           updated (assoc client :ws ws)]
