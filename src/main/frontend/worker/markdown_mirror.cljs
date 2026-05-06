@@ -611,19 +611,28 @@
 
 (defn- concat-title-match
   [old-blocks old-start new-title]
-  (let [old-blocks (vec old-blocks)]
-    (first
-     (keep (fn [start]
-             (first
-              (keep (fn [end]
-                      (let [blocks (subvec old-blocks start end)
-                            titles (map :title blocks)]
-                        (when (some #(= new-title (string/join % titles))
-                                    concat-title-separators)
-                          {:block (first blocks)
-                           :next-start end})))
-                    (range (+ start 2) (inc (count old-blocks))))))
-           (range old-start (count old-blocks))))))
+  (let [old-blocks (vec old-blocks)
+        new-title (or new-title "")
+        new-title-len (count new-title)
+        old-block-count (count old-blocks)]
+    (loop [start old-start]
+      (when (< start old-block-count)
+        (let [match (loop [end start
+                           titles []
+                           titles-len 0]
+                      (when (< end old-block-count)
+                        (let [title (or (:title (old-blocks end)) "")
+                              titles' (conj titles title)
+                              titles-len' (+ titles-len (count title))]
+                          (when (<= titles-len' new-title-len)
+                            (if (and (<= 2 (count titles'))
+                                     (some #(= new-title (string/join % titles'))
+                                           concat-title-separators))
+                              {:block (old-blocks start)
+                               :next-start (inc end)}
+                              (recur (inc end) titles' titles-len'))))))]
+          (or match
+              (recur (inc start))))))))
 
 (defn- unique-title-anchor-matches
   [snapshot-blocks parsed-blocks]
@@ -645,40 +654,47 @@
          matches {}]
     (if (nil? new-block)
       {:matches matches}
-      (if-let [{:keys [block next-start]} (concat-title-match old-blocks old-start (:title new-block))]
-        (recur more
-               next-start
-               (assoc matches (:idx new-block) block))
-        (let [exact-match (first
-                           (keep-indexed
-                            (fn [idx old-block]
-                              (when (and (<= old-start idx)
-                                         (= (:title old-block) (:title new-block)))
-                                [idx old-block]))
-                            old-blocks))]
-          (if exact-match
-            (let [[old-idx old-block] exact-match]
-              (recur more
-                     (inc old-idx)
-                     (assoc matches (:idx new-block) old-block)))
-            (let [candidates (keep-indexed
-                              (fn [idx old-block]
-                                (when (and (<= old-start idx)
-                                           (title-edit-match? (:title old-block) (:title new-block)))
-                                  [idx old-block]))
-                              old-blocks)]
-              (cond
-                (> (count candidates) 1)
-                {:error :ambiguous-unmarked-blocks}
+      (let [exact-match (first
+                         (keep-indexed
+                          (fn [idx old-block]
+                            (when (and (<= old-start idx)
+                                       (= (:title old-block) (:title new-block)))
+                              [idx old-block]))
+                          old-blocks))]
+        (if (and exact-match (= old-start (first exact-match)))
+          (let [[_old-idx old-block] exact-match]
+            (recur more
+                   (inc old-start)
+                   (assoc matches (:idx new-block) old-block)))
+          (if-let [{:keys [block next-start]} (concat-title-match old-blocks old-start (:title new-block))]
+            (recur more
+                   next-start
+                   (assoc matches (:idx new-block) block))
+            (if exact-match
+              (let [[old-idx old-block] exact-match]
+                (recur more
+                       (inc old-idx)
+                       (assoc matches (:idx new-block) old-block)))
+              (let [candidates (keep-indexed
+                                (fn [idx old-block]
+                                  (when (and (<= old-start idx)
+                                             (title-edit-match? (:title old-block) (:title new-block)))
+                                    [idx old-block]))
+                                old-blocks)]
+                (cond
+                  (> (count candidates) 1)
+                  {:error :ambiguous-unmarked-blocks}
 
-                (= 1 (count candidates))
-                (let [[old-idx old-block] (first candidates)]
+                  (= 1 (count candidates))
+                  (let [[old-idx old-block] (first candidates)]
+                    (recur more
+                           (inc old-idx)
+                           (assoc matches (:idx new-block) old-block)))
+
+                  :else
                   (recur more
-                         (inc old-idx)
-                         (assoc matches (:idx new-block) old-block)))
-
-                :else
-                (recur more old-start matches)))))))))
+                         old-start
+                         matches))))))))))
 
 (defn- resolve-sidecar-gap
   [old-blocks new-blocks]
