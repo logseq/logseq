@@ -51,6 +51,11 @@
          (filter #(.isDirectory %))
          (map #(.-name %)))))
 
+(defn- path-at-or-under?
+  [path dir]
+  (or (= path dir)
+      (string/starts-with? path (str dir "/"))))
+
 (defn ignored-path?
   "Given a graph directory and path, returns truthy value on whether the path is
   ignored. Useful for contexts like reading a graph's directory and file watcher
@@ -73,8 +78,9 @@ Rules:
         rpath (path/trim-dir-prefix dir path)]
     (when (string? path)
       (or
-       (some #(string/starts-with? rpath %)
-             ["." "logseq/.recycle" "logseq/bak" "logseq/version-files" "mirror/markdown"])
+       (string/starts-with? rpath ".")
+       (some #(path-at-or-under? rpath %)
+             ["logseq/.recycle" "logseq/bak" "logseq/version-files" "mirror/markdown"])
        (contains? #{"logseq/graphs-txid.edn" "logseq/pages-metadata.edn"} rpath)
        (some #(string/includes? rpath (str "/" % "/"))
              ["node_modules"])
