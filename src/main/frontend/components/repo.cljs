@@ -53,6 +53,23 @@
       (i18n/locale-format-date (js/Date. dst))
       (catch js/Error _e nil))))
 
+(defn- open-repo-folder!
+  [{:keys [root]}]
+  (util/open-url (str "file://" root)))
+
+(defn- delete-local-graph!
+  [{:keys [url] :as repo}]
+  (let [graph-name (config/db-graph-name url)
+        dialog-config {:cancel-label (t :ui/cancel)
+                       :ok-label (t :ui/confirm)}]
+    (-> (shui/dialog-confirm!
+         [:p.font-medium.-my-4 (t :graph/delete-local-confirm-desc graph-name)
+          [:span.my-2.flex.font-normal.opacity-75
+           [:small (t :graph/delete-warning)]]]
+         dialog-config)
+        (p/then (fn []
+                  (repo-handler/remove-repo! repo))))))
+
 (rum/defc ^:large-vars/cleanup-todo repos-inner
   "Graph list in `All graphs` page"
   [repos]
@@ -81,14 +98,14 @@
 
      [:div.controls
       [:div.flex.flex-row.items-center
-       (when (util/electron?)
+       (when (and (util/electron?) root)
          [:a.text-xs.items-center.text-gray-08.hover:underline.hidden.group-hover:flex
-          {:on-click #(util/open-url (str "file://" root))}
+          {:on-click #(open-repo-folder! repo)}
           (shui/tabler-icon "folder-pin") [:span.pl-1 root]])
 
        (let [manager? (user-handler/manager? url)
-             config {:cancel-label (t :ui/cancel)
-                     :ok-label (t :ui/confirm)}]
+             dialog-config {:cancel-label (t :ui/cancel)
+                            :ok-label (t :ui/confirm)}]
          (shui/dropdown-menu
           (shui/dropdown-menu-trigger
            {:asChild true}
@@ -103,15 +120,7 @@
              (shui/dropdown-menu-item
               {:key "delete-locally"
                :class "delete-local-graph-menu-item"
-               :on-click (fn []
-                           (let [prompt-str (t :graph/delete-local-confirm-desc graph-name)]
-                             (-> (shui/dialog-confirm!
-                                  [:p.font-medium.-my-4 prompt-str
-                                   [:span.my-2.flex.font-normal.opacity-75
-                                    [:small (t :graph/delete-warning)]]]
-                                  config)
-                                 (p/then (fn []
-                                           (repo-handler/remove-repo! repo))))))}
+               :on-click #(delete-local-graph! repo)}
               (t :graph/delete-local-action)))
            (when (and root
                       (user-handler/logged-in?)
@@ -154,7 +163,7 @@
                                   [:p.font-medium.-my-4 prompt-str
                                    [:span.my-2.flex.font-normal.opacity-75
                                     [:small (t :graph/delete-warning)]]]
-                                  config)
+                                  dialog-config)
                                  (p/then
                                   (fn []
                                     (state/set-state! :rtc/loading-graphs? true)
@@ -173,7 +182,7 @@
                            (let [prompt-str (t :graph/leave-confirm-desc)]
                              (-> (shui/dialog-confirm!
                                   [:p.font-medium.-my-4 prompt-str]
-                                  config)
+                                  dialog-config)
                                  (p/then
                                   (fn []
                                     (state/set-state! :rtc/loading-graphs? true)
@@ -390,6 +399,26 @@
      (when footer?
        (repos-footer))]))
 
+(defn- current-repo-context-menu-content
+  [repo]
+  [:<>
+   (shui/dropdown-menu-item
+    {:key "open-repo-folder"
+     :on-click #(open-repo-folder! repo)}
+    [:span.flex.items-center.gap-1
+     (ui/icon "folder-pin")
+     (t :graph/open-folder-action)])
+
+   (shui/dropdown-menu-separator)
+
+   (shui/dropdown-menu-item
+    {:key "delete-locally"
+     :class "delete-local-graph-menu-item"
+     :on-click #(delete-local-graph! repo)}
+    [:span.flex.items-center.gap-1.text-red-700
+     (ui/icon "trash")
+     (t :graph/delete-local-action)])])
+
 (rum/defcs graphs-selector < rum/reactive
   [_state]
   (let [current-repo (state/get-current-repo)
@@ -399,16 +428,26 @@
         remote? (:remote? current-repo')
         short-repo-name (if current-repo
                           (db/get-short-repo-name repo-name)
-                          (t :graph.switch/select-prompt))]
+                          (t :graph.switch/select-prompt))
+        selector-opts (cond-> {:on-click (fn [^js e]
+                                           (shui/popup-show! (.closest (.-target e) "a")
+                                                             (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
+                                                             {:as-dropdown? true
+                                                              :content-props {:class "repos-list"}
+                                                              :align :start}))}
+                        (and (util/electron?) (:root current-repo'))
+                        (assoc :on-context-menu
+                               (fn [^js e]
+                                 (util/stop e)
+                                 (shui/popup-show! e
+                                                   (fn [] (current-repo-context-menu-content current-repo'))
+                                                   {:as-dropdown? true
+                                                    :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                                    :class "w-60"}}))))]
     [:div.cp__graphs-selector.flex.items-center.justify-between
      (ui/tooltip
       [:a.item.flex.items-center.gap-1.select-none
-       {:on-click (fn [^js e]
-                    (shui/popup-show! (.closest (.-target e) "a")
-                                      (fn [{:keys [id]}] (repos-dropdown-content {:contentid id}))
-                                      {:as-dropdown? true
-                                       :content-props {:class "repos-list"}
-                                       :align :start}))}
+       selector-opts
        [:span.thumb (shui/tabler-icon (if remote? "cloud" "topology-star") {:size 16})]
        [:strong short-repo-name]
        (shui/tabler-icon "selector" {:size 18})]

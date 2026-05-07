@@ -702,6 +702,7 @@
  :graph/n-hops-from-selected-nodes "距选中节点 N 跳"
  :graph/name-placeholder "你的知识库名称"
  :graph/nodes "节点"
+ :graph/open-folder-action "打开图谱所在文件夹"
  :graph/orphan-pages "孤立页面"
  :graph/page-count "{1} 个页面"
  :graph/pause-simulation "暂停模拟"
