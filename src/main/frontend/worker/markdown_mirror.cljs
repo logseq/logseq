@@ -145,12 +145,25 @@
   [platform*]
   (:storage platform*))
 
+(defn- not-found-error?
+  [error]
+  (let [data (ex-data error)
+        code (or (:code data) (some-> error .-code))
+        name (some-> error .-name)
+        message (some-> error .-message)]
+    (or (contains? #{:not-found :enoent "ENOENT" "NotFoundError"} code)
+        (= "NotFoundError" name)
+        (boolean (some-> message (string/starts-with? "ENOENT:"))))))
+
 (defn- <read-text
   [platform* path]
   (if-let [f (or (:mirror-read-text! (storage platform*))
                  (:read-text! (storage platform*)))]
     (-> (f path)
-        (p/catch (constantly nil)))
+        (p/catch (fn [error]
+                   (if (not-found-error? error)
+                     nil
+                     (p/rejected error)))))
     (p/rejected (ex-info "platform storage/read-text! missing" {:path path}))))
 
 (defn- <write-text-atomic!

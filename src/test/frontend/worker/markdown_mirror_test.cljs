@@ -35,6 +35,13 @@
 (defn- page-path [path]
   (str (markdown-mirror/repo-mirror-dir test-repo) "/" path))
 
+(defn- js-error
+  [message data]
+  (let [error (js/Error. message)]
+    (doseq [[k v] data]
+      (aset error (name k) v))
+    error))
+
 (defn- first-block [page]
   (-> page :block/_page first))
 
@@ -147,6 +154,44 @@
                       (is (= "- hello\n- world" (get @files path)))
                       (is (= [[path "- hello\n- world"]] @writes)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest missing-mirror-file-read-still-writes-page-mirror-test
+  (async done
+    (let [{:keys [platform files writes]} (fake-platform)
+          missing-error (js-error "ENOENT: missing mirror file" {:code "ENOENT"})
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Page A"}
+                                     :blocks [{:block/title "hello"}]}]})
+          page (db-test/find-page-by-title @conn "Page A")]
+      (-> (markdown-mirror/<mirror-page!
+           test-repo @conn (:db/id page)
+           {:platform (assoc-in platform [:storage :read-text!]
+                                (fn [_path] (p/rejected missing-error)))})
+          (p/then (fn [_]
+                    (let [path (page-path "pages/Page A.md")]
+                      (is (= "- hello" (get @files path)))
+                      (is (= [[path "- hello"]] @writes)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest unexpected-mirror-file-read-error-rejects-page-mirror-test
+  (async done
+    (let [{:keys [platform writes]} (fake-platform)
+          read-error (ex-info "permission denied" {:code :eacces})
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Page A"}
+                                     :blocks [{:block/title "hello"}]}]})
+          page (db-test/find-page-by-title @conn "Page A")]
+      (-> (markdown-mirror/<mirror-page!
+           test-repo @conn (:db/id page)
+           {:platform (assoc-in platform [:storage :read-text!]
+                                (fn [_path] (p/rejected read-error)))})
+          (p/then (fn [_]
+                    (is false "Expected mirror write to reject when read fails unexpectedly")))
+          (p/catch (fn [error]
+                     (is (= read-error error))
+                     (is (empty? @writes))))
           (p/finally done)))))
 
 (deftest page-mirror-exports-property-values-test
