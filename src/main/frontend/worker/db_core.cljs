@@ -270,7 +270,6 @@
   (swap! *client-ops-conns dissoc repo)
   (swap! client-op/*repo->pending-local-tx-count dissoc repo)
   (swap! *search-index-build-ids dissoc repo)
-  (search/clear-fuzzy-search-indice! repo)
   (when db (.close db))
   (when search (.close search))
   (when client-ops (.close client-ops))
@@ -282,7 +281,7 @@
 (defn- close-other-dbs!
   [repo]
   (doseq [[r {:keys [db search client-ops]}] @*sqlite-conns]
-    (when-not (= repo r)
+    (when-not (graph-dir/same-repo? repo r)
       (close-db-aux! r db search client-ops))))
 
 (defn close-db!
@@ -408,7 +407,9 @@
                       :skip-validate-db? true}))))
 
 (defn- <create-or-open-db!
-  [repo {:keys [config datoms sync-download-graph?] :as opts}]
+  [repo {:keys [config datoms sync-download-graph? creating-remote-graph?] :as opts}]
+  (when creating-remote-graph?
+    (client-op/update-local-tx repo 0))
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)]
@@ -453,14 +454,12 @@
         (when-not @*publishing?
           (client-op/ensure-sqlite-schema! client-ops-db))
         (ensure-client-ops-cleanup-timer! repo)
-        (when (nil? (client-op/get-local-tx repo))
-          (client-op/update-local-tx repo 0))
         (let [initial-tx-report (when-not (or initial-data-exists?
                                               (seq datoms)
                                               sync-download-graph?)
                                   (let [config (resolve-initial-config config)
                                         initial-data (sqlite-create-graph/build-db-initial-data
-                                                      config (select-keys opts [:import-type :graph-git-sha :remote-graph?]))]
+                                                      config (select-keys opts [:import-type :graph-git-sha :creating-remote-graph?]))]
                                     (ldb/transact! conn initial-data
                                                    {:initial-db? true})))]
           (when-not sync-download-graph?
@@ -635,7 +634,7 @@
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
-  (when-not (= repo (worker-state/get-current-repo)) ; graph switched
+  (when-not (graph-dir/same-repo? repo (worker-state/get-current-repo)) ; graph switched
     (reset! worker-state/*deleted-block-uuid->db-id {}))
   (start-db! repo opts))
 
@@ -703,23 +702,22 @@
   [repo q option]
   (let [search-db (get-search-db repo)
         conn (worker-state/get-datascript-conn repo)]
-    (search/search-blocks repo conn search-db q option)))
+    (search/search-blocks conn search-db q option)))
 
 (def-thread-api :thread-api/block-refs-check
   [repo id {:keys [unlinked?]}]
-  (m/sp
-    (when-let [conn (worker-state/get-datascript-conn repo)]
-      (let [db @conn
-            block (d/entity db id)]
-        (if unlinked?
-          (let [title (string/lower-case (:block/title block))
-                result (m/? (search-blocks repo title {:limit 100}))]
-            (boolean (some (fn [b]
-                             (let [block (d/entity db (:db/id b))]
-                               (and (not= id (:db/id block))
-                                    (not ((set (map :db/id (:block/refs block))) id))
-                                    (string/includes? (string/lower-case (:block/title block)) title)))) result)))
-          (some? (first (common-initial-data/get-block-refs db (:db/id block)))))))))
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn
+          block (d/entity db id)]
+      (if unlinked?
+        (let [title (string/lower-case (:block/title block))
+              result (search-blocks repo title {:limit 100})]
+          (boolean (some (fn [b]
+                           (let [block (d/entity db (:db/id b))]
+                             (and (not= id (:db/id block))
+                                  (not ((set (map :db/id (:block/refs block))) id))
+                                  (string/includes? (string/lower-case (:block/title block)) title)))) result)))
+        (some? (first (common-initial-data/get-block-refs db (:db/id block))))))))
 
 (def-thread-api :thread-api/get-block-parents
   [repo id depth]
@@ -954,7 +952,7 @@
 (def-thread-api :thread-api/search-build-blocks-indice
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (search/build-blocks-indice repo @conn)))
+    (search/build-blocks-indice @conn)))
 
 (defn- take-block-datoms-batch
   [datoms batch-size time-budget-ms]
@@ -1051,8 +1049,6 @@
         (if (and (= version search-db-version) (not force?))
           version
           (when-let [conn (worker-state/get-datascript-conn repo)]
-            (when force?
-              (search/build-fuzzy-search-indice repo @conn))
             (let [build-id (start-search-index-build! repo)]
               (-> (<build-blocks-fts! repo search-db conn build-id)
                   (p/catch (fn [error]

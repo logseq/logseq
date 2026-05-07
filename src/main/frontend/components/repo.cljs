@@ -488,7 +488,7 @@
                        (do
                          (set-creating-db? true)
                          (p/let [repo (repo-handler/new-db! graph-name
-                                                            {:remote-graph? cloud?})]
+                                                            {:creating-remote-graph? cloud?})]
                            (when cloud?
                              (->
                               (p/do
