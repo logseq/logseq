@@ -126,6 +126,64 @@
   (or (property-value-block-content db b context)
       (db-content/recur-replace-uuid-in-block-title (d/entity db (:db/id b)))))
 
+(defn- bounded-heading-level
+  [heading level]
+  (cond
+    (integer? heading)
+    (-> heading (max 1) (min 6))
+
+    (true? heading)
+    (min (inc level) 6)
+
+    :else
+    nil))
+
+(defn- strip-heading-prefix
+  [content]
+  (-> (string/replace content #"^\s?#+\s+" "")
+      (string/replace #"^\s?#+\s?$" "")))
+
+(defn- quote-content
+  [content]
+  (->> (or (seq (string/split-lines content)) [""])
+       (map (fn [line]
+              (if (string/blank? line)
+                ">"
+                (str "> " line))))
+       (string/join "\n")))
+
+(defn- code-fence
+  [content]
+  (apply str (repeat (max 3 (inc (apply max 0 (map count (re-seq #"`+" content))))) "`")))
+
+(defn- fenced-code-content
+  [content lang]
+  (let [fence (code-fence content)]
+    (str fence (when-not (string/blank? lang) lang)
+         "\n" content "\n" fence)))
+
+(defn- displayed-math-content
+  [content]
+  (str "$$\n" content "\n$$"))
+
+(defn- format-markdown-block-content
+  [b content level heading-to-list?]
+  (let [content (or content "")]
+    (case (:logseq.property.node/display-type b)
+      :quote
+      (quote-content content)
+
+      :code
+      (fenced-code-content content (:logseq.property.code/lang b))
+
+      :math
+      (displayed-math-content content)
+
+      (if-let [heading-level (and (not heading-to-list?)
+                                  (bounded-heading-level (:logseq.property/heading b) level))]
+        (str (apply str (repeat heading-level "#")) " " (strip-heading-prefix content))
+        content))))
+
 (defn- transform-content
   [db b level {:keys [heading-to-list? include-properties?]
                :or {include-properties? true}} context]
@@ -144,9 +202,8 @@
         prefix (str spaces-tabs "-")
         property-spaces-tabs (str spaces-tabs "  ")
         content (if heading-to-list?
-                  (-> (string/replace content #"^\s?#+\s+" "")
-                      (string/replace #"^\s?#+\s?$" ""))
-                  content)
+                  (strip-heading-prefix content)
+                  (format-markdown-block-content b content level heading-to-list?))
         new-content (indented-block-content (string/trim content) property-spaces-tabs)
         sep (if (string/blank? new-content)
               ""
