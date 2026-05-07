@@ -11,6 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -28,14 +29,18 @@
   (reset! remote-repo nil)
   (reset! state/*db-worker nil))
 
+(defn- same-remote-repo?
+  [repo runtime-repo]
+  (graph-dir/same-repo? repo runtime-repo))
+
 (defn- <stop-remote-if-current!
   [repo]
-  (if (and repo (= repo @remote-repo))
+  (if (and repo (same-remote-repo? repo @remote-repo))
     (if-let [remote-client @remote-db]
       (-> (remote/stop! remote-client)
           (p/finally
            (fn []
-             (when (= repo @remote-repo)
+             (when (same-remote-repo? repo @remote-repo)
                (clear-remote-runtime!)))))
       (do
         (clear-remote-runtime!)
@@ -55,7 +60,7 @@
 
 (defn- active-runtime-session?
   [state repo session-id]
-  (and (= repo (:repo state))
+  (and (same-remote-repo? repo (:repo state))
        (= session-id (:session-id state))))
 
 (defn- reset-active-request-failures!
@@ -84,7 +89,7 @@
         (p/catch (fn [error]
                    (log/warn :db-worker-failover-stop-error {:repo repo
                                                              :error error})))))
-  (when (= repo @remote-repo)
+  (when (same-remote-repo? repo @remote-repo)
     (clear-remote-runtime!))
   (-> (ipc/ipc "releaseDbWorkerRuntime" repo)
       (p/catch (fn [error]
@@ -132,7 +137,7 @@
 
 (defn- <ensure-remote!
   [repo]
-  (if (or (nil? repo) (= repo @remote-repo))
+  (if (or (nil? repo) (same-remote-repo? repo @remote-repo))
     (p/resolved @remote-db)
     (let [session-id (str (random-uuid))]
       (p/let [_ (when @remote-db
@@ -194,7 +199,7 @@
 (defn <close-db [repo]
   (when repo
     (if (electron-runtime?)
-      (if (= repo @remote-repo)
+      (if (same-remote-repo? repo @remote-repo)
         (if-let [remote-client @remote-db]
           (p/let [_ (-> (remote/invoke! (:client remote-client) "thread-api/close-db" [repo])
                         (p/catch (fn [_] nil)))

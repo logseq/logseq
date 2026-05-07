@@ -533,6 +533,26 @@
     (is (= (expand-properties (:properties original-data)) (:properties imported-ontology)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-ontology)))))
 
+(deftest export-graph-ontology-ignores-legacy-internal-class-properties
+  (let [legacy-property :logseq.property.embedding/hnsw-label-updated-at
+        original-data
+        {:properties {:user.property/p1 {:logseq.property/type :default}}
+         :classes {:user.class/MyClass {:build/class-properties [:user.property/p1]}}}
+        conn (db-test/create-conn-with-blocks original-data)
+        _ (d/transact! conn
+                       [{:db/ident legacy-property
+                         :block/uuid (random-uuid)
+                         :block/title "HNSW label updated-at"
+                         :block/tags :logseq.class/Property
+                         :logseq.property/built-in? true
+                         :logseq.property/type :number}
+                        {:db/id (:db/id (d/entity @conn :user.class/MyClass))
+                         :logseq.property.class/properties [legacy-property]}])
+        export-edn (sqlite-export/build-export @conn {:export-type :graph-ontology})]
+    (is (= [:user.property/p1]
+           (get-in export-edn [:classes :user.class/MyClass :build/class-properties])))
+    (is (not (contains? (:properties export-edn) legacy-property)))))
+
 (deftest import-view-blocks
   (let [original-data
         ;; Test a mix of page and block types

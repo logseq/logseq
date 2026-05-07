@@ -197,7 +197,7 @@
       :else
       nil)))
 
-(def ^:private show-root-selector
+(def ^:private link-target-selector
   [:db/id
    :db/ident
    :block/name
@@ -206,7 +206,15 @@
    :logseq.property/created-from-property
    {:logseq.property/status [:db/ident :block/title]}
    {:block/page [:db/id :block/title :block/name :block/uuid]}
-   {:block/tags [:db/id :db/ident :block/name :block/title :block/uuid]}])
+   {:block/tags [:db/id :db/ident :block/name :block/title :block/uuid]}
+   {:block/parent [:db/id
+                   :block/name
+                   :block/title
+                   :block/uuid
+                   {:block/page [:db/id :block/name :block/title :block/uuid]}]}])
+
+(def ^:private show-root-selector
+  (conj link-target-selector {:block/link link-target-selector}))
 
 (def ^:private tree-block-selector
   [:db/id
@@ -217,7 +225,8 @@
    {:logseq.property/status [:db/ident :block/title]}
    :block/order
    {:block/parent [:db/id]}
-   {:block/tags [:db/id :block/name :block/title :block/uuid]}])
+   {:block/tags [:db/id :block/name :block/title :block/uuid]}
+   {:block/link link-target-selector}])
 
 (def ^:private linked-ref-selector
   [:db/id
@@ -232,7 +241,8 @@
                    :block/name
                    :block/title
                    :block/uuid
-                   {:block/page [:db/id :block/name :block/title :block/uuid]}]}])
+                   {:block/page [:db/id :block/name :block/title :block/uuid]}]}
+   {:block/link link-target-selector}])
 
 (declare tree->text
          attach-user-properties
@@ -782,6 +792,116 @@
                         (sort-children (get parent->children parent-id)))))]
     (build root-id 1)))
 
+(defn- link-target-key
+  [link]
+  (cond
+    (map? link) (or (:db/id link)
+                    (when-let [uuid (:block/uuid link)]
+                      [:block/uuid uuid]))
+    (number? link) link
+    (uuid? link) [:block/uuid link]
+    (and (vector? link) (= 2 (count link))) link
+    :else nil))
+
+(defn- link-target-id
+  [link]
+  (cond
+    (map? link) (:db/id link)
+    (number? link) link
+    :else nil))
+
+(declare fetch-tree-for-entity
+         missing-show-entity?
+         resolve-linked-blocks-in-node)
+
+(defn- pull-link-target
+  [config repo link]
+  (if-let [target-key (link-target-key link)]
+    (p/let [target (transport/invoke config :thread-api/pull [repo show-root-selector target-key])
+            target (attach-user-properties-to-entity config repo target)]
+      (if (missing-show-entity? target)
+        (throw (ex-info "block link target not found"
+                        {:code :block-link-target-not-found
+                         :target target-key}))
+        target))
+    (throw (ex-info "block link target not found"
+                    {:code :block-link-target-not-found
+                     :target link}))))
+
+(defn- remaining-linked-depth
+  [max-depth depth]
+  (when max-depth
+    (max 1 (inc (- max-depth depth)))))
+
+(defn- resolve-linked-target-node
+  [config repo source-node max-depth depth visited]
+  (let [source-id (:db/id source-node)
+        link (:block/link source-node)
+        target-id (link-target-id link)]
+    (when (and target-id (contains? visited target-id))
+      (throw (ex-info "block link cycle detected"
+                      {:code :block-link-cycle
+                       :source-id source-id
+                       :target-id target-id})))
+    (p/let [target (pull-link-target config repo link)
+            target-id (:db/id target)]
+      (when (contains? visited target-id)
+        (throw (ex-info "block link cycle detected"
+                        {:code :block-link-cycle
+                         :source-id source-id
+                         :target-id target-id})))
+      (let [visited* (cond-> (conj visited target-id)
+                       source-id (conj source-id))]
+        (p/let [target-root (fetch-tree-for-entity config repo target (remaining-linked-depth max-depth depth))
+                resolved-target (resolve-linked-blocks-in-node config repo target-root max-depth depth visited*)]
+          (assoc resolved-target
+                 :show/linked-display? true
+                 :show/link-source-id source-id
+                 :show/link-source-uuid (:block/uuid source-node)))))))
+
+(defn- resolve-linked-blocks-in-node
+  [config repo node max-depth depth visited]
+  (if (:block/link node)
+    (resolve-linked-target-node config repo node max-depth depth visited)
+    (let [children (:block/children node)]
+      (if (seq children)
+        (p/let [children* (p/all (map (fn [child]
+                                        (resolve-linked-blocks-in-node config repo child max-depth (inc depth) visited))
+                                      children))]
+          (assoc node :block/children (vec children*)))
+        (p/resolved node)))))
+
+(defn- fetch-tree-for-entity
+  [config repo entity max-depth]
+  (let [entity-id (:db/id entity)]
+    (if-let [page-id (get-in entity [:block/page :db/id])]
+      (p/let [blocks (fetch-blocks-for-page config repo page-id)
+              children (build-tree blocks entity-id max-depth)]
+        (assoc entity :block/children children))
+      (if entity-id
+        (p/let [blocks (fetch-blocks-for-page config repo entity-id)
+                children (build-tree blocks entity-id max-depth)]
+          (assoc entity :block/children children))
+        (throw (ex-info "block link target not found"
+                        {:code :block-link-target-not-found}))))))
+
+(defn- resolve-linked-blocks-in-tree-data
+  [config action tree-data]
+  (let [max-depth (or (:level action) 10)]
+    (p/let [root (resolve-linked-blocks-in-node config (:repo action) (:root tree-data) max-depth 1 #{})]
+      (assoc tree-data :root root))))
+
+(defn- resolve-linked-blocks-in-linked-references
+  [config action linked-refs]
+  (let [max-depth (or (:level action) 10)
+        blocks (:blocks linked-refs)]
+    (if (seq blocks)
+      (p/let [blocks* (p/all (map (fn [block]
+                                    (resolve-linked-blocks-in-node config (:repo action) block max-depth 1 #{}))
+                                  blocks))]
+        (assoc linked-refs :blocks (vec blocks*)))
+      (p/resolved linked-refs))))
+
 (defn- entity-id-only?
   [entity]
   (and (map? entity)
@@ -804,15 +924,8 @@
         (p/let [entity (attach-user-properties-to-entity config repo entity)]
           (if (missing-show-entity? entity)
             (throw (ex-info "entity not found" {:code :entity-not-found}))
-            (if-let [page-id (get-in entity [:block/page :db/id])]
-              (p/let [blocks (fetch-blocks-for-page config repo page-id)
-                      children (build-tree blocks (:db/id entity) max-depth)]
-                {:root (assoc entity :block/children children)})
-              (if-let [entity-id (:db/id entity)]
-                (p/let [blocks (fetch-blocks-for-page config repo entity-id)
-                        children (build-tree blocks entity-id max-depth)]
-                  {:root (assoc entity :block/children children)})
-                (throw (ex-info "entity not found" {:code :entity-not-found})))))))
+            (p/let [root (fetch-tree-for-entity config repo entity max-depth)]
+              {:root root}))))
 
       (seq uuid-str)
       (p/let [entity (transport/invoke config :thread-api/pull
@@ -826,15 +939,8 @@
         (p/let [entity (attach-user-properties-to-entity config repo entity)]
           (if (missing-show-entity? entity)
             (throw (ex-info "entity not found" {:code :entity-not-found}))
-            (if-let [page-id (get-in entity [:block/page :db/id])]
-              (p/let [blocks (fetch-blocks-for-page config repo page-id)
-                      children (build-tree blocks (:db/id entity) max-depth)]
-                {:root (assoc entity :block/children children)})
-              (if-let [entity-id (:db/id entity)]
-                (p/let [blocks (fetch-blocks-for-page config repo entity-id)
-                        children (build-tree blocks entity-id max-depth)]
-                  {:root (assoc entity :block/children children)})
-                (throw (ex-info "entity not found" {:code :entity-not-found})))))))
+            (p/let [root (fetch-tree-for-entity config repo entity max-depth)]
+              {:root root}))))
 
       (seq page)
       (p/let [page-entity (transport/invoke config :thread-api/pull
@@ -844,12 +950,10 @@
                                                    {:block/tags [:db/id :block/name :block/title :block/uuid]}]
                                              [:block/name page]])]
         (p/let [page-entity (attach-user-properties-to-entity config repo page-entity)]
-          (if-let [page-id (and (not (ldb/recycled? page-entity))
-                                (:db/id page-entity))]
-            (p/let [blocks (fetch-blocks-for-page config repo page-id)
-                    children (build-tree blocks page-id max-depth)]
-              {:root (assoc (dissoc page-entity :logseq.property/deleted-at)
-                            :block/children children)})
+          (if (and (not (ldb/recycled? page-entity))
+                   (:db/id page-entity))
+            (p/let [root (fetch-tree-for-entity config repo page-entity max-depth)]
+              {:root (dissoc root :logseq.property/deleted-at)})
             (throw (ex-info "page not found" {:code :page-not-found})))))
 
       :else
@@ -858,7 +962,10 @@
 (defn tree->text
   [{:keys [root uuid->label property-titles property-value-labels]}]
   (let [label (fn [node]
-                (or (block-label (assoc node :uuid->label uuid->label)) "-"))
+                (let [label* (or (block-label (assoc node :uuid->label uuid->label)) "-")]
+                  (if (:show/linked-display? node)
+                    (str (style/dim "→ ") label*)
+                    label*)))
         collect-nodes (fn collect-nodes [node]
                         (if-let [children (:block/children node)]
                           (into [node] (mapcat collect-nodes children))
@@ -975,6 +1082,7 @@
 (defn- build-tree-data
   [config action]
   (p/let [tree-data (fetch-tree config action)
+          tree-data (resolve-linked-blocks-in-tree-data config action tree-data)
           root-id (get-in tree-data [:root :db/id])
           linked-enabled? (not= false (:linked-references? action))
           linked-refs (when (and linked-enabled? root-id)
@@ -982,6 +1090,9 @@
           linked-refs* (if linked-enabled?
                          (or linked-refs {:count 0 :blocks []})
                          {:count 0 :blocks []})
+          linked-refs* (if linked-enabled?
+                         (resolve-linked-blocks-in-linked-references config action linked-refs*)
+                         linked-refs*)
           uuid-refs (collect-uuid-refs tree-data linked-refs*)
           uuid->entity (uuid-refs/fetch-uuid-entities config (:repo action) uuid-refs)
           uuid->label (->> uuid->entity
@@ -1041,7 +1152,16 @@
 
 (defn- strip-show-internal-data
   [tree-data]
-  (dissoc tree-data :referenced-uuids :uuid->entity))
+  (walk/postwalk
+   (fn [entry]
+     (if (map? entry)
+       (->> entry
+            (remove (fn [[k _]]
+                      (and (qualified-keyword? k)
+                           (= "show" (namespace k)))))
+            (into {}))
+       entry))
+   (dissoc tree-data :referenced-uuids :uuid->entity)))
 
 (defn- render-tree-text
   [tree-data action]

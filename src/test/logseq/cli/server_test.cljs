@@ -13,6 +13,7 @@
             [logseq.cli.test-helper :as test-helper]
             [logseq.common.version :as version]
             [logseq.db-worker.daemon :as daemon]
+            [logseq.db-worker.server-list :as server-list]
             [promesa.core :as p]))
 
 (deftest spawn-server-omits-host-and-port-flags
@@ -124,6 +125,40 @@
                          (is (= "http://127.0.0.1:9410" (:base-url config)))
                          (is (= 0 @spawn-calls))
                          (is (= 0 @shutdown-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-reuses-prefix-free-discovered-server
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-prefix-free-reuse")
+               requested-repo "logseq_db_demo"
+               _lock-file (write-test-lock! root-dir requested-repo :cli)
+               spawn-calls (atom 0)
+               server (revision-test-server {:repo "demo"
+                                             :port 9420
+                                             :owner-source :cli
+                                             :revision "expected-revision"
+                                             :root-dir root-dir})]
+           (-> (p/with-redefs [daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/spawn-server! (fn [_]
+                                                      (swap! spawn-calls inc)
+                                                      nil)
+                               cli-server/discover-servers (fn [_]
+                                                            (p/resolved [server]))
+                               daemon/wait-for (fn [pred-fn _opts]
+                                                 (p/let [matched? (pred-fn)]
+                                                   (if matched?
+                                                     true
+                                                     (throw (ex-info "timed out" {:code :timeout})))))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :cli
+                                             :expected-revision "expected-revision"}
+                                            requested-repo))
+               (p/then (fn [config]
+                         (is (= "http://127.0.0.1:9420" (:base-url config)))
+                         (is (= 0 @spawn-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -965,6 +1000,34 @@
                                           (.toString (fs/readFileSync server-list-file) "utf8"))]
                            (is (or (nil? contents)
                                    (= "" contents))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest list-servers-preserves-concurrent-server-list-writes
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-list-race")
+               config-path (node-path/join root-dir "cli.edn")
+               server-list-file (cli-config/server-list-path root-dir)
+               stale-entry {:pid 999999 :port 65535}
+               live-entry {:pid (.-pid js/process) :port 65432}
+               appended? (atom false)]
+           (fs/writeFileSync server-list-file
+                             (str (:pid stale-entry) " " (:port stale-entry) "\n")
+                             "utf8")
+           (-> (p/with-redefs [daemon/pid-status (fn [pid]
+                                                   (when (and (= (:pid stale-entry) pid)
+                                                              (not @appended?))
+                                                     (reset! appended? true)
+                                                     (server-list/append-entry! server-list-file live-entry))
+                                                   :not-found)]
+                 (cli-server/list-servers {:root-dir root-dir
+                                           :config-path config-path}))
+               (p/then (fn [servers]
+                         (is (empty? servers))
+                         (is @appended?)
+                         (is (= [live-entry]
+                                (server-list/read-entries server-list-file)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
