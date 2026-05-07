@@ -592,6 +592,26 @@
                                             :hide? true
                                             :public? false}
                                    :queryable? false}
+     :logseq.property.asset/source-url {:title "Source URL"
+                                        :schema {:type :string
+                                                 :hide? false
+                                                 :public? true}
+                                        :queryable? true}
+     :logseq.property.asset/source-name {:title "Source"
+                                         :schema {:type :string
+                                                  :hide? false
+                                                  :public? true}
+                                         :queryable? true}
+     :logseq.property.asset/license {:title "License"
+                                     :schema {:type :string
+                                              :hide? false
+                                              :public? true}
+                                     :queryable? true}
+     :logseq.property.asset/attribution {:title "Attribution"
+                                         :schema {:type :string
+                                                  :hide? false
+                                                  :public? true}
+                                         :queryable? false}
      :logseq.property.fsrs/due {:title "Due"
                                 :schema
                                 {:type :datetime

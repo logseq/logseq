@@ -55,6 +55,29 @@
 (defn- deprecated-ensure-graph-uuid
   [_db])
 
+(defn- fix-asset-source-url-property-type
+  "65.27 mistakenly registered :logseq.property.asset/source-url with type :url
+   (a ref-typed schema), which made datascript treat string URLs as tempid
+   lookups during transact and block all asset saves. Coerce the existing
+   property's type to :string in any DB that ran the bad migration."
+  [db]
+  (when-let [e (d/entity db :logseq.property.asset/source-url)]
+    (when (= :url (:logseq.property/type e))
+      [[:db/add (:db/id e) :logseq.property/type :string]])))
+
+(defn- fix-asset-source-url-schema-lock
+  "65.28 changed :logseq.property/type to :string but left :db/valueType
+   :db.type/ref on the entity. In Logseq's datascript fork, :db/valueType
+   on a :db/ident-keyed entity IS the live schema entry — so the attribute
+   stayed ref-typed and string URLs continued to fail with 'Tempids used
+   only as value in transaction'. Mirror logseq.outliner.property's
+   ref→non-ref retraction (property.cljs:178-179) to release the lock."
+  [db]
+  (when-let [e (d/entity db :logseq.property.asset/source-url)]
+    (when (and (:db/valueType e)
+               (not= :url (:logseq.property/type e)))
+      [[:db/retract (:db/id e) :db/valueType]])))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -79,7 +102,13 @@
    ["65.23" {:properties [:logseq.property.asset/align]}]
    ["65.24" {:properties [:logseq.property.class/default-icon]}]
    ["65.25" {:properties [:logseq.property/wikidata-id]}]
-   ["65.26" {:properties [:logseq.property/property-key-width]}]])
+   ["65.26" {:properties [:logseq.property/property-key-width]}]
+   ["65.27" {:properties [:logseq.property.asset/source-url
+                          :logseq.property.asset/source-name
+                          :logseq.property.asset/license
+                          :logseq.property.asset/attribution]}]
+   ["65.28" {:fix fix-asset-source-url-property-type}]
+   ["65.29" {:fix fix-asset-source-url-schema-lock}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
