@@ -39,6 +39,26 @@
                 date-time-util/default-journal-title-formatter)
             " HH:mm")))))
 
+(declare property-value->string block-properties-content)
+
+(defn- property-value-sort-key
+  [db property item context]
+  [(if (:block/order item) 0 1)
+   (str (or (:block/order item)
+            (property-value->string db property item context)))])
+
+(defn- property-values->seq
+  [db property v context]
+  (if (set? v)
+    (sort-by #(property-value-sort-key db property % context) v)
+    [v]))
+
+(defn- property-values->string
+  [db property v context]
+  (->> (property-values->seq db property v context)
+       (map #(property-value->string db property % context))
+       (string/join ", ")))
+
 (defn- property-value->string
   [db property v context]
   (letfn [(entity-map [x]
@@ -67,18 +87,10 @@
                                    ""))))
 
       (set? v)
-      (->> v
-           (sort-by (fn [item]
-                      [(if (:block/order item) 0 1)
-                       (str (or (:block/order item)
-                                (property-value->string db property item context)))]))
-           (map #(property-value->string db property % context))
-           (string/join ", "))
+      (property-values->string db property v context)
 
       (sequential? v)
-      (->> v
-           (map #(property-value->string db property % context))
-           (string/join ", "))
+      (property-values->string db property v context)
 
       (keyword? v)
       (name v)
@@ -90,18 +102,6 @@
 
       (some? v)
       (str v))))
-
-(declare block-properties-content)
-
-(defn- property-values->seq
-  [db property v context]
-  (if (set? v)
-    (->> v
-         (sort-by (fn [item]
-                    [(if (:block/order item) 0 1)
-                     (str (or (:block/order item)
-                              (property-value->string db property item context)))])))
-    [v]))
 
 (defn- property-value-block-title
   [db property v context]

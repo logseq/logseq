@@ -571,7 +571,7 @@
   (cons block (mapcat outline-block-and-children (outline-children block))))
 
 (defn- page-blocks-by-uuid
-  [db page]
+  [_db page]
   (->> (mapcat outline-block-and-children (page-root-blocks page))
        (filter :block/uuid)
        (map (juxt :block/uuid identity))

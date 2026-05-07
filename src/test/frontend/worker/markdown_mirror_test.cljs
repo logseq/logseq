@@ -552,7 +552,7 @@
                                 "    - Irish poet and playwright")))
                       (is (string/includes?
                            content
-                           (str "  * books::\n")))
+                           "  * books::\n"))
                       (is (string/includes?
                            content
                            (str "    - The Picture of Dorian Gray\n"
