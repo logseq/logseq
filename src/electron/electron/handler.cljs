@@ -381,43 +381,81 @@
 
 (def *request-abort-signals (atom {}))
 
+(defn- response-headers->map
+  [^js headers]
+  (let [result (atom {})]
+    (when headers
+      (.forEach headers (fn [value key]
+                          (swap! result assoc key value))))
+    @result))
+
+(defn- request-body->js
+  [payload]
+  (cond
+    (nil? payload) nil
+    (string? payload) payload
+    (instance? js/ArrayBuffer payload) payload
+    (js/ArrayBuffer.isView payload) payload
+    :else (js/JSON.stringify (bean/->js payload))))
+
+(defn- read-response-body
+  [^js res type method]
+  (if (or (= :HEAD method) (contains? #{204 205} (.-status res)))
+    (p/resolved nil)
+    (case type
+      :json
+      (.json res)
+
+      :arraybuffer
+      (.arrayBuffer res)
+
+      :base64
+      (-> (.arrayBuffer res)
+          (p/then #(-> (js/Buffer.from %)
+                       (.toString "base64"))))
+
+      :text
+      (.text res))))
+
 (defmethod handle :httpRequest [_ [_ req-id opts]]
-  (let [{:keys [url abortable method data returnType headers]} opts]
+  (let [{:keys [url abortable method data body returnType headers timeout includeResponse]} opts]
     (when-let [[method type] (and (not (string/blank? url))
                                   [(keyword (string/upper-case (or method "GET")))
                                    (keyword (string/lower-case (or returnType "json")))])]
-      (-> (utils/fetch url
-                       (-> {:method  method
-                            :headers (and headers (bean/->js headers))}
-                           (merge (when (and (not (contains? #{:GET :HEAD} method)) data)
-                                    ;; TODO: support type of arrayBuffer
-                                    {:body (js/JSON.stringify (bean/->js data))})
+      (let [payload (if (some? body) body data)
+            timeout (when (and (number? timeout) (pos? timeout)) timeout)
+            ^js controller (when (or abortable timeout) (AbortController.))
+            timeout-id (when (and timeout controller)
+                         (js/setTimeout #(.abort controller) timeout))]
+        (when controller
+          (swap! *request-abort-signals assoc req-id controller))
+        (-> (utils/fetch url
+                         (-> {:method  method
+                              :headers (and headers (bean/->js headers))}
+                             (merge (when (and (not (contains? #{:GET :HEAD} method)) (some? payload))
+                                      {:body (request-body->js payload)})
 
-                                  (when-let [^js controller (and abortable (AbortController.))]
-                                    (swap! *request-abort-signals assoc req-id controller)
-                                    {:signal (.-signal controller)}))))
-          (p/then (fn [^js res]
-                    (case type
-                      :json
-                      (.json res)
-
-                      :arraybuffer
-                      (.arrayBuffer res)
-
-                      :base64
-                        (-> (.arrayBuffer res)
-                          (p/then #(-> (js/Buffer.from %)
-                                 (.toString "base64"))))
-
-                      :text
-                      (.text res))))
+                                    (when controller
+                                      {:signal (.-signal controller)}))))
+            (p/then (fn [^js res]
+                      (p/let [payload (read-response-body res type method)]
+                        (if includeResponse
+                          {:status (.-status res)
+                           :statusText (.-statusText res)
+                           :ok (.-ok res)
+                           :url (.-url res)
+                           :headers (response-headers->map (.-headers res))
+                           :body payload}
+                          payload))))
           (p/catch
            (fn [^js e]
              ;; TODO: handle special cases
              (throw e)))
           (p/finally
             (fn []
-              (swap! *request-abort-signals dissoc req-id)))))))
+              (when timeout-id
+                (js/clearTimeout timeout-id))
+              (swap! *request-abort-signals dissoc req-id))))))))
 
 (defmethod handle :httpRequestAbort [_ [_ req-id]]
   (when-let [^js controller (get @*request-abort-signals req-id)]
