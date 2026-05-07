@@ -818,8 +818,18 @@
   }
 }
 
-.asset-picker-trash {
+.asset-picker-topbar-actions {
   justify-self: end;
+  /* Right-side group: holds the (avatar-mode-only) color trigger and the
+     trash button. Flex-row aligns them on a single baseline; the gap
+     mirrors the icon-picker's `.tab-actions gap-1` so the two topbars
+     read as the same chrome at different drill levels.
+
+     Distinct class from `.asset-picker-actions` (the floating bottom bar
+     in this same picker). Sharing the class clobbered both — the bottom
+     bar's `position: absolute; bottom: 0;` flung this topbar group off
+     to the picker's footer. */
+  @apply flex items-center gap-1;
 
   /* Delete button - matching icon picker styling */
   .ui__button[data-action=del] {

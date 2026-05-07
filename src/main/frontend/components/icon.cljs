@@ -2806,9 +2806,13 @@
                    ;; Fall back to async API.
                    (<read-from-async-api)))))))
 
-;; Forward declaration: keyboard-nav-controller is defined later in the file
-;; (near the icon-picker) but consumed here by the asset-picker.
+;; Forward declarations: defined later in the file (near the icon-picker)
+;; but consumed here by the asset-picker. Without these, CLJS emits direct
+;; namespace property references at compile time and the call sites blow up
+;; at runtime with "undefined" — which manifests as the entire enclosing
+;; subtree (e.g. the topbar action group) failing to render.
 (declare keyboard-nav-controller)
+(declare color-picker)
 
 (rum/defcs asset-picker < rum/reactive db-mixins/query
   (rum/local "" ::search-q)
@@ -2909,7 +2913,8 @@
                    (reset! *asset-picker-open? false)
 
                    state)}
-  [state {:keys [on-chosen on-back on-delete del-btn? current-icon avatar-context page-title]}]
+  [state {:keys [on-chosen on-back on-delete del-btn? current-icon avatar-context page-title
+                 *color preview-target-db-id]}]
   (let [*search-q (::search-q state)
         *loading? (::loading? state)
         *loaded-assets (::loaded-assets state)
@@ -2973,6 +2978,13 @@
         (fn [new-mode]
           (when (not= new-mode @*mode)
             (reset! *mode new-mode)
+            ;; The color trigger is rendered Avatar-mode-only, so its
+            ;; trigger button vanishes when the user toggles to Image. The
+            ;; popover lives in a portal and won't auto-close on trigger
+            ;; unmount; dismiss it explicitly by id so it doesn't orphan
+            ;; over an unrelated topbar.
+            (when (= new-mode :image)
+              (shui/popup-hide! :asset-picker-color))
             (when-let [asset-uuid (get-in current-icon [:data :asset-uuid])]
               (let [asset-type (get-in current-icon [:data :asset-type])
                     image-data {:asset-uuid asset-uuid :asset-type asset-type}
@@ -3348,7 +3360,49 @@
           :on-change (fn [m _e] (on-mode-change m))
           :aria-label "Icon rendering mode"
           :button-attrs {:data-topbar-stop "tab"}})]
-       [:div.asset-picker-trash
+       ;; Right-side action group. Holds the color trigger (Avatar mode
+       ;; only) and the trash button. Bundling them under one grid slot
+       ;; keeps the topbar's three-column layout (back / segment / actions)
+       ;; intact when the color trigger appears or disappears.
+       ;; Class name is intentionally NOT `.asset-picker-actions` — that
+       ;; class is already used for the floating bottom action bar
+       ;; ("Add image via URL" / "Upload image", icon.css:1000) which
+       ;; sets `position: absolute; bottom: 0`. Reusing it here would
+       ;; punt the topbar group off-screen.
+       [:div.asset-picker-topbar-actions
+        ;; Color trigger — Avatar mode only. Mirrors the icon-picker's
+        ;; topbar trigger (same component, same `*color` atom) so backing
+        ;; out updates the parent in lockstep. Hidden in Image mode since
+        ;; image assets aren't tinted; an explicit popup-id lets
+        ;; on-mode-change dismiss the popover when the user toggles to
+        ;; Image while it's open.
+        (when (and avatar-mode? *color)
+          (color-picker *color
+                        (fn [c]
+                          ;; Sync first, then commit. The on-chosen wrapper
+                          ;; receives the recolored avatar; without the
+                          ;; sync, a parent re-render would see stale
+                          ;; @*color. Mirrors the icon-picker callback at
+                          ;; icon.cljs:5642-5662.
+                          (reset! *color c)
+                          (let [icon (or (when (= :avatar (:type current-icon)) current-icon)
+                                         synthesized-avatar-context)]
+                            (on-chosen nil
+                                       (-> icon
+                                           (assoc :color c)
+                                           (assoc-in [:data :color] c)
+                                           (assoc-in [:data :backgroundColor] c))
+                                       true)))
+                        :on-hover! (when preview-target-db-id
+                                     (fn [c]
+                                       (state/set-state! :ui/icon-hover-preview
+                                                         {:db-id preview-target-db-id
+                                                          :color c})))
+                        :on-hover-end! (when preview-target-db-id
+                                         (fn []
+                                           (state/set-state! :ui/icon-hover-preview nil)))
+                        :button-attrs {:data-topbar-stop "color"}
+                        :popup-id :asset-picker-color))
         (when del-btn?
           (shui/button {:variant :outline :size :sm
                         :data-action "del"
@@ -4991,7 +5045,7 @@
        :open? open?})]))
 
 (rum/defc color-picker
-  [*color on-select! & {:keys [on-hover! on-hover-end! button-attrs after-close!]}]
+  [*color on-select! & {:keys [on-hover! on-hover-end! button-attrs after-close! popup-id]}]
   (let [;; Defensive: never let the CSS sentinel "inherit" leak into React state.
         initial-color (let [v @*color] (when (and v (not= v "inherit")) v))
         [color, set-color!] (rum/use-state initial-color)
@@ -5059,27 +5113,31 @@
              :on-click (fn [^js e]
                          (shui/popup-show!
                           (.-target e) content-fn
-                          {;; Disable shui's own focus-restore (a 16ms
-                           ;; setTimeout in popup/core.cljs:107-111 that
-                           ;; .focuses `.closest("[tabindex='0']")` of
-                           ;; the trigger). For our color trigger that
-                           ;; resolves to the active tab in the icon
-                           ;; picker's topbar (roving tabindex), which
-                           ;; would override the picker's manual focus
-                           ;; placement after color commit.
-                           :focus-trigger? false
-                           :content-props
-                           {:side "bottom"
-                            :side-offset 6
-                            ;; Also prevent Radix's default focus-restore
-                            ;; on close. By default it focuses *shui's*
-                            ;; hidden floating trigger button (rendered
-                            ;; at body level), outside the icon picker
-                            ;; subtree → capture-phase keydown listener
-                            ;; stops receiving arrow keys.
-                            :onCloseAutoFocus (fn [^js e]
-                                                (.preventDefault e)
-                                                (some-> after-close! (apply [])))}}))})
+                          (cond-> {;; Disable shui's own focus-restore (a 16ms
+                                   ;; setTimeout in popup/core.cljs:107-111 that
+                                   ;; .focuses `.closest("[tabindex='0']")` of
+                                   ;; the trigger). For our color trigger that
+                                   ;; resolves to the active tab in the icon
+                                   ;; picker's topbar (roving tabindex), which
+                                   ;; would override the picker's manual focus
+                                   ;; placement after color commit.
+                                   :focus-trigger? false
+                                   :content-props
+                                   {:side "bottom"
+                                    :side-offset 6
+                                    ;; Also prevent Radix's default focus-restore
+                                    ;; on close. By default it focuses *shui's*
+                                    ;; hidden floating trigger button (rendered
+                                    ;; at body level), outside the icon picker
+                                    ;; subtree → capture-phase keydown listener
+                                    ;; stops receiving arrow keys.
+                                    :onCloseAutoFocus (fn [^js e]
+                                                        (.preventDefault e)
+                                                        (some-> after-close! (apply [])))}}
+                            ;; Caller-supplied id lets external code dismiss
+                            ;; this popover by name (e.g. asset-picker hides
+                            ;; it when the user toggles segment to Image).
+                            popup-id (assoc :id popup-id))))})
      (if color
        ;; Mirror the recents-lane swatch: when the picked color renders
        ;; differently in light vs dark themes, split the trigger fill into
@@ -5503,7 +5561,18 @@
                      ;; lands on the requested tab; otherwise nil and it
                      ;; falls back to current-icon / avatar-context cues.
                      :initial-mode @*asset-picker-initial-mode
-                     :page-title page-title})
+                     :page-title page-title
+                     ;; Threaded so the asset-picker can host its own color
+                     ;; trigger (Avatar mode only) without diverging state —
+                     ;; it observes and writes the same atom the icon-picker's
+                     ;; topbar trigger uses, so backing out reflects the new
+                     ;; color in the parent immediately.
+                     :*color *color
+                     ;; Same db-id used by the icon-picker for live hover
+                     ;; preview of icon/color on the page-icon. Threading it
+                     ;; here lets the asset-picker's color trigger drive the
+                     ;; same preview state.
+                     :preview-target-db-id preview-target-db-id})
 
       :text-picker
       ;; Level 2: Text Picker view
