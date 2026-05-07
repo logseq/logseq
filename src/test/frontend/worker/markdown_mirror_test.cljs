@@ -84,6 +84,24 @@
             "pages/Same Name (2).md"]
            paths))))
 
+(deftest normalized-title-collisions-write-distinct-stable-paths-test
+  (let [page-uuid-1 #uuid "11111111-1111-4111-8111-111111111111"
+        page-uuid-2 #uuid "22222222-2222-4222-8222-222222222222"
+        conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "A/B"
+                                           :block/uuid page-uuid-1}
+                                   :blocks [{:block/title "first"}]}
+                                  {:page {:block/title "A:B"
+                                           :block/uuid page-uuid-2}
+                                   :blocks [{:block/title "second"}]}]})
+        pages (->> ["A/B" "A:B"]
+                   (map #(db-test/find-page-by-title @conn %))
+                   (sort-by (comp str :block/uuid)))
+        paths (mapv #(markdown-mirror/page-relative-path @conn %) pages)]
+    (is (= ["pages/A_B.md"
+            "pages/A_B (2).md"]
+           paths))))
+
 (deftest page-references-remain-wiki-links-test
   (async done
     (let [{:keys [platform files]} (fake-platform)

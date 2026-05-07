@@ -66,6 +66,19 @@
       (when (= 8 (count s))
         (str (subs s 0 4) "_" (subs s 4 6) "_" (subs s 6 8))))))
 
+(defn- non-journal-page?
+  [page]
+  (and (ldb/page? page)
+       (not (ldb/journal? page))))
+
+(defn- pages-with-file-stem
+  [db stem]
+  (->> (d/datoms db :avet :block/name)
+       (map #(d/entity db (:e %)))
+       (filter #(and (non-journal-page? %)
+                     (= stem (normalize-file-stem (:block/title %)))))
+       (sort-by (comp str :block/uuid))))
+
 (defn page-relative-path
   ([db page]
    (page-relative-path db page {}))
@@ -76,11 +89,7 @@
        (when-let [stem (normalize-file-stem (journal-file-stem-fn (:block/journal-day page)))]
          (str "journals/" stem ".md"))
        (when-let [stem (normalize-file-stem (:block/title page))]
-         (let [duplicate-pages (->> (d/datoms db :avet :block/title (:block/title page))
-                                    (map #(d/entity db (:e %)))
-                                    (filter #(and (ldb/page? %)
-                                                  (not (ldb/journal? %))))
-                                    (sort-by (comp str :block/uuid)))
+         (let [duplicate-pages (pages-with-file-stem db stem)
                index (inc (or (first (keep-indexed
                                        (fn [idx p]
                                          (when (= (:block/uuid page) (:block/uuid p))
