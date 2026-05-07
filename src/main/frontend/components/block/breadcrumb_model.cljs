@@ -84,7 +84,8 @@
 (defn normalize-breadcrumb-text
   "Extracts a short plain-text label from block raw-title.
    Returns at most max-segment-text-length characters of the first
-   non-empty line.  Does NOT invoke mldoc parse or markup rendering."
+   non-empty line (plus a trailing ellipsis if truncated).
+   Does NOT invoke mldoc parse or markup rendering."
   [raw-title]
   (when (string? raw-title)
     (let [line (some (fn [line]
