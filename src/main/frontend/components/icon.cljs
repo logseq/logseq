@@ -333,13 +333,19 @@
         explicit-bg (get avatar-data :backgroundColor)
         explicit-color (get avatar-data :color)
         shape (or (get avatar-data :shape) :circle)
+        fb-type (or (get avatar-data :fallback-type) :letters)
+        fb-icon (get avatar-data :fallback-icon)
         display-text (subs avatar-value 0 (min 3 (count avatar-value)))
         ;; Scale font-size with avatar size
         font-size (cond
                     (<= size 16) "8px"
                     (<= size 24) "10px"
                     (<= size 32) "12px"
-                    :else "14px")]
+                    :else "14px")
+        icon-size (max 10 (int (* size 0.55)))
+        fallback-style (avatar-fallback-style {:font-size font-size
+                                               :bg explicit-bg
+                                               :color explicit-color})]
     (shui/avatar
      {:style {:width size :height size}
       :data-shape (name shape)}
@@ -348,13 +354,16 @@
        (shui/avatar-image {:src url
                            :style {:object-fit "cover"}
                            :data-shape (name shape)}))
-     ;; Fallback (shows while loading or on error)
+     ;; Fallback (shows while loading, on error, OR when there's no image
+     ;; but the avatar still wants to render — Letters or Icon.
      (shui/avatar-fallback
-      {:style (avatar-fallback-style {:font-size font-size
-                                      :bg explicit-bg
-                                      :color explicit-color})
+      {:style fallback-style
        :data-shape (name shape)}
-      display-text))))
+      (if (and (= fb-type :icon) (not (string/blank? fb-icon)))
+        (shui/tabler-icon fb-icon
+                          {:size icon-size
+                           :style {:color (:color fallback-style)}})
+        display-text)))))
 
 (defn measure-text-width
   "Measure pixel width of text at given font-size using offscreen canvas."
@@ -524,28 +533,49 @@
                    ;; until the image lands; if the asset is truly gone the
                    ;; initials persist as the natural error state.
                    (avatar-image-cp asset-uuid asset-type avatar-data opts)
-                   ;; Text-only avatar
+                   ;; Text-only avatar (no image set). Renders either initials
+                   ;; or a tabler icon depending on :fallback-type.
                    (let [size (or (:size opts) 20)
                          avatar-value (get avatar-data :value)
                          explicit-bg (get avatar-data :backgroundColor)
                          explicit-color (get avatar-data :color)
                          shape (or (get avatar-data :shape) :circle)
+                         fb-type (or (get avatar-data :fallback-type) :letters)
+                         fb-icon (get avatar-data :fallback-icon)
                          display-text (subs avatar-value 0 (min 3 (count avatar-value)))
-                         ;; Scale font-size with avatar size
+                         ;; Scale font-size with avatar size. The earlier
+                         ;; tier capped at 14px past 32px, which left the
+                         ;; 38px page-icon and 56px customize-band preview
+                         ;; reading as too-small text on too-big tiles.
+                         ;; Past 32px we step proportionally (~38–40% of
+                         ;; size) so the text fills the chip the way
+                         ;; Notion / Linear / Slack avatars do.
                          font-size (cond
                                      (<= size 16) "8px"
                                      (<= size 24) "10px"
                                      (<= size 32) "12px"
-                                     :else "14px")]
+                                     (<= size 40) "16px"
+                                     (<= size 56) "22px"
+                                     :else (str (int (* size 0.4)) "px"))
+                         ;; Icon glyph scales to ~55% of the avatar's box.
+                         icon-size (max 10 (int (* size 0.55)))
+                         fallback-style (avatar-fallback-style {:font-size font-size
+                                                                :bg explicit-bg
+                                                                :color explicit-color})]
                      (shui/avatar
                       {:style {:width size :height size}
                        :data-shape (name shape)}
                       (shui/avatar-fallback
-                       {:style (avatar-fallback-style {:font-size font-size
-                                                       :bg explicit-bg
-                                                       :color explicit-color})
+                       {:style fallback-style
                         :data-shape (name shape)}
-                       display-text)))))
+                       (if (and (= fb-type :icon) (not (string/blank? fb-icon)))
+                         ;; Icon fallback inherits the foreground color from
+                         ;; avatar-fallback-style (which has already been
+                         ;; contrast-adjusted against the muted background).
+                         (shui/tabler-icon fb-icon
+                                           {:size icon-size
+                                            :style {:color (:color fallback-style)}})
+                         display-text))))))
 
                ;; Image with asset — let image-icon-cp resolve via the filesystem
                ;; loader. Don't gate on a renderer-side `db/entity` check:
@@ -612,9 +642,12 @@
       default-icon
       (case (:type default-icon)
         :avatar (when (:block/title node-entity)
-                  ;; Inherit color + shape from the class default. New :shape
-                  ;; field defaults via normalize-icon when missing.
-                  (let [inherited (select-keys (:data default-icon) [:backgroundColor :color :shape])]
+                  ;; Inherit color + shape + fallback from the class default.
+                  ;; normalize-icon downstream applies defaults for any field
+                  ;; the class doesn't override.
+                  (let [inherited (select-keys (:data default-icon)
+                                               [:backgroundColor :color
+                                                :shape :fallback-type :fallback-icon])]
                     (cond-> {:type :avatar
                              :data (merge inherited
                                           {:value (derive-avatar-initials (:block/title node-entity))})}
@@ -752,15 +785,30 @@
   [v]
   (cond
     ;; Already unified shape? (has :data key)
-    ;; Avatars get a small post-pass to ensure new fields (:shape) have
-    ;; defaults applied — legacy data stored before those fields existed
-    ;; would otherwise bypass the normalization branch below entirely.
+    ;; Avatars get a small post-pass to ensure new fields (:shape,
+    ;; :fallback-type, :fallback-icon) have defaults applied — legacy data
+    ;; stored before those fields existed would otherwise bypass the
+    ;; normalization branch below entirely.
     (and (map? v) (keyword? (:type v)) (contains? v :data))
     (if (= :avatar (:type v))
-      (let [explicit-shape (or (get-in v [:data :shape]) (:shape v))]
+      (let [explicit-shape (or (get-in v [:data :shape]) (:shape v))
+            fb-type (or (get-in v [:data :fallback-type]) (:fallback-type v))
+            fb-icon (or (get-in v [:data :fallback-icon]) (:fallback-icon v))
+            ;; A nil fb-type defaults to :letters. A :icon fb-type with no
+            ;; fb-icon set degrades back to :letters so the renderer always
+            ;; has a usable invariant: :fallback-type :icon implies a
+            ;; non-blank :fallback-icon present.
+            effective-fb-type (cond
+                                (nil? fb-type) :letters
+                                (and (= fb-type :icon) (string/blank? fb-icon)) :letters
+                                :else fb-type)]
         (cond-> v
           (nil? explicit-shape) (assoc-in [:data :shape] :circle)
-          (some? explicit-shape) (assoc-in [:data :shape] explicit-shape)))
+          (some? explicit-shape) (assoc-in [:data :shape] explicit-shape)
+          true (assoc-in [:data :fallback-type] effective-fb-type)
+          (and (= effective-fb-type :icon)
+               (not (string/blank? fb-icon)))
+          (assoc-in [:data :fallback-icon] fb-icon)))
       v)
 
     ;; Legacy map with :type
@@ -806,16 +854,32 @@
                       asset-type (or (get-in v [:data :asset-type]) (:asset-type v))
                       ;; Shape: defaults to :circle for backward compat with avatars
                       ;; saved before the shape field existed.
-                      shape (or (get-in v [:data :shape]) (:shape v) :circle)]
+                      shape (or (get-in v [:data :shape]) (:shape v) :circle)
+                      ;; Fallback layer: rendered when no image is set.
+                      ;; :letters → render the auto-derived initials.
+                      ;; :icon    → render :fallback-icon (a tabler icon name).
+                      ;; Default :letters; an :icon type with no icon set
+                      ;; degrades to :letters so the renderer never has to
+                      ;; render an empty avatar.
+                      fb-type (or (get-in v [:data :fallback-type]) (:fallback-type v))
+                      fb-icon (or (get-in v [:data :fallback-icon]) (:fallback-icon v))
+                      effective-fb-type (cond
+                                          (nil? fb-type) :letters
+                                          (and (= fb-type :icon) (string/blank? fb-icon)) :letters
+                                          :else fb-type)]
                   {:type :avatar
                    :id (or id (str "avatar-" value))
                    :label (or label value)
                    :data (cond-> {:value value
                                   :backgroundColor backgroundColor
                                   :color color
-                                  :shape shape}
+                                  :shape shape
+                                  :fallback-type effective-fb-type}
                            asset-uuid (assoc :asset-uuid asset-uuid)
-                           asset-type (assoc :asset-type asset-type))})
+                           asset-type (assoc :asset-type asset-type)
+                           (and (= effective-fb-type :icon)
+                                (not (string/blank? fb-icon)))
+                           (assoc :fallback-icon fb-icon))})
         :image (let [;; Extract asset-uuid, stripping "image-" prefix if present (from :id fallback)
                      raw-uuid (or (get-in v [:data :asset-uuid]) (:asset-uuid v) value)
                      asset-uuid (if (and (string? raw-uuid) (string/starts-with? raw-uuid "image-"))
@@ -3480,16 +3544,64 @@
                 preview-icon (or (when (= :avatar (:type current-icon)) current-icon)
                                  synthesized-avatar-context)
                 current-shape (or (get-in preview-icon [:data :shape]) :circle)
+                current-fb-type (or (get-in preview-icon [:data :fallback-type]) :letters)
+                current-fb-icon (get-in preview-icon [:data :fallback-icon])
                 set-shape! (fn [new-shape]
                              (on-chosen nil
                                         (assoc-in preview-icon [:data :shape] new-shape)
                                         true))
-                reset-shape! (fn []
-                               ;; Phase 1: Reset only resets shape (the only
-                               ;; customizable field today). Future phases will
-                               ;; reset Fallback fields too.
-                               (when (not= current-shape :circle)
-                                 (set-shape! :circle)))]
+                set-fallback-letters! (fn []
+                                        (on-chosen nil
+                                                   (-> preview-icon
+                                                       (assoc-in [:data :fallback-type] :letters)
+                                                       (update :data dissoc :fallback-icon))
+                                                   true))
+                set-fallback-icon! (fn [icon-name]
+                                     (on-chosen nil
+                                                (-> preview-icon
+                                                    (assoc-in [:data :fallback-type] :icon)
+                                                    (assoc-in [:data :fallback-icon] icon-name))
+                                                true))
+                reset-style! (fn []
+                               ;; Phase 1+2: Reset clears any divergence from
+                               ;; the system defaults — shape back to :circle
+                               ;; and fallback back to :letters (no icon).
+                               (when (or (not= current-shape :circle)
+                                         (not= current-fb-type :letters))
+                                 (on-chosen nil
+                                            (-> preview-icon
+                                                (assoc-in [:data :shape] :circle)
+                                                (assoc-in [:data :fallback-type] :letters)
+                                                (update :data dissoc :fallback-icon))
+                                            true)))
+                style-dirty? (or (not= current-shape :circle)
+                                 (not= current-fb-type :letters))
+                ;; Open the constrained icon sub-picker. Anchored on the
+                ;; click event so it appears near the dropdown menu item.
+                ;; `:allowed-tabs [:icon]` strips the tab strip down to
+                ;; just Icons — emojis and the Custom tab don't make sense
+                ;; as fallback content for an avatar.
+                open-icon-sub-picker!
+                (fn [^js e]
+                  (shui/popup-show!
+                   e
+                   (fn [{:keys [id]}]
+                     (icon-search
+                      {:on-chosen (fn [_e icon & _rest]
+                                    (let [icon-name (or (get-in icon [:data :value])
+                                                        (:id icon))]
+                                      (when icon-name (set-fallback-icon! icon-name))
+                                      (shui/popup-hide! id)))
+                       :allowed-tabs [:icon]
+                       :icon-value (when (and (= current-fb-type :icon) current-fb-icon)
+                                     {:type :icon :data {:value current-fb-icon}})
+                       :page-title page-title
+                       :preview-target-db-id preview-target-db-id
+                       :del-btn? false}))
+                   {:id :fallback-icon-picker
+                    :align :end
+                    :content-props {:class "ls-icon-picker"
+                                    :onEscapeKeyDown #(.preventDefault %)}}))]
             ;; All inner blocks always render so CSS transitions can run on
             ;; visibility/height changes — the band's gradient, the rail's
             ;; height, and the meta-vs-rows swap all interpolate cleanly. A
@@ -3541,14 +3653,50 @@
                     "Circle")
                    (shui/dropdown-menu-item
                     {:on-click #(set-shape! :rounded-rect)}
-                    "Rectangle")))]]]]
+                    "Rectangle")))]
+                [:div.cb-row
+                 [:span.cb-label "Fallback"]
+                 (shui/dropdown-menu
+                  (shui/dropdown-menu-trigger
+                   {:as-child true}
+                   [:button.cb-chip
+                    {:type "button"
+                     :data-topbar-stop "fallback"
+                     :aria-label "Avatar fallback"}
+                    ;; Glyph reflects current fallback. Letters → "Aa";
+                    ;; Icon → the actual chosen tabler icon at the chip's
+                    ;; small size for an at-a-glance match against the
+                    ;; rendered avatar.
+                    [:span.cb-chip-glyph
+                     (if (= current-fb-type :icon)
+                       (when current-fb-icon
+                         (shui/tabler-icon current-fb-icon {:size 11}))
+                       [:span.glyph-letters "Aa"])]
+                    [:span.cb-chip-label
+                     (cond
+                       (and (= current-fb-type :icon) current-fb-icon)
+                       (or (some-> current-fb-icon
+                                   (string/replace #"-" " ")
+                                   string/capitalize)
+                           "Icon")
+                       :else
+                       "Letters")]
+                    (shui/tabler-icon "chevron-down" {:size 11 :class "cb-chip-chevron"})])
+                  (shui/dropdown-menu-content
+                   {:align "end"}
+                   (shui/dropdown-menu-item
+                    {:on-click set-fallback-letters!}
+                    "Letters")
+                   (shui/dropdown-menu-item
+                    {:on-click open-icon-sub-picker!}
+                    "Icon…")))]]]]
              [:div.cb-rail-wrap
               [:div.cb-rail
                [:button.lx-toolbar-action.lx-toolbar-reset-link
                 {:type "button"
-                 :on-click reset-shape!
+                 :on-click reset-style!
                  :data-topbar-stop "reset"
-                 :disabled (= current-shape :circle)
+                 :disabled (not style-dirty?)
                  :aria-label "Reset to default"
                  :tab-index (if expanded? 0 -1)}
                 (shui/tabler-icon "rotate" {:size 12})
@@ -5365,19 +5513,29 @@
                        icon-value (:icon-value opts)
                        normalized (normalize-icon icon-value)
                        *view (::view s)
+                       *tab (::tab s)
                        ;; Prefer current icon's color; fall back to last-used preset.
                        ;; "inherit" is a CSS-layer sentinel (--ls-color-icon-preset),
                        ;; not a real color — drop it before it reaches React state.
                        denull #(when (and % (not= % "inherit")) %)
                        icon-color (denull (get-in normalized [:data :color]))
-                       stored (denull (storage/get :ls-icon-color-preset))]
+                       stored (denull (storage/get :ls-icon-color-preset))
+                       ;; If the caller restricts the available tabs (e.g.
+                       ;; the avatar customize band's icon-fallback sub-picker
+                       ;; passes `:allowed-tabs [:all :emoji :icon]` to drop
+                       ;; the Custom tab), seed `*tab` to the first allowed
+                       ;; entry so we don't land on a hidden tab.
+                       allowed (some-> (:allowed-tabs opts) set)]
                    ;; Avatar/image icons open asset picker, text icons open text-picker
                    (when (contains? #{:avatar :image :text} (:type normalized))
                      (reset! *view (if (= :text (:type normalized)) :text-picker :asset-picker)))
+                   (when (and allowed (not (allowed @*tab)))
+                     (reset! *tab (first allowed)))
                    (assoc s ::color (atom (or icon-color stored))
                           ::input-ref (rum/create-ref)
                           ::result-ref (rum/create-ref))))}
-  [state {:keys [on-chosen del-btn? icon-value page-title preview-target-db-id preview-target-db-ids] :as opts}]
+  [state {:keys [on-chosen del-btn? icon-value page-title preview-target-db-id preview-target-db-ids
+                 allowed-tabs] :as opts}]
   (let [*q (::q state)
         *result (::result state)
         *tab (::tab state)
@@ -5699,7 +5857,11 @@
            :*virtuoso-ref      *virtuoso-ref
            :topbar-selector    ".cp__emoji-icon-picker .tabs-section [data-topbar-stop]"})
          (ui/tab-items
-          {:tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"] [:custom "Custom"]]
+          {:tabs (let [all-tabs [[:all "All"] [:emoji "Emojis"]
+                                 [:icon "Icons"] [:custom "Custom"]]]
+                   (if-let [allowed (some-> allowed-tabs set)]
+                     (filterv (fn [[id _]] (allowed id)) all-tabs)
+                     all-tabs))
            :active @*tab
            :on-change (fn [id ^js e]
                         (reset! *tab id)
