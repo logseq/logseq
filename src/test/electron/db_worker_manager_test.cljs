@@ -41,6 +41,29 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
+(deftest ensure-started-reuses-prefix-equivalent-runtime
+  (async done
+    (let [start-calls (atom [])
+          stop-calls (atom [])
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo]
+                                     (swap! start-calls conj repo)
+                                     (p/resolved (runtime repo)))
+                    :stop-daemon! (fn [rt]
+                                    (swap! stop-calls conj (:repo rt))
+                                    (p/resolved true))})]
+      (-> (p/let [first-runtime (db-worker/ensure-started! manager "demo" :window-1)
+                  second-runtime (db-worker/ensure-started! manager "logseq_db_demo" :window-1)
+                  manager-state @(:state manager)]
+            (is (= first-runtime second-runtime))
+            (is (= ["demo"] @start-calls))
+            (is (empty? @stop-calls))
+            (is (= "demo" (get-in manager-state [:window->repo :window-1])))
+            (is (= #{:window-1} (get-in manager-state [:repos "demo" :windows]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
 (deftest ensure-started-switches-window-repo-and-stops-previous-daemon
   (async done
     (let [start-calls (atom [])
