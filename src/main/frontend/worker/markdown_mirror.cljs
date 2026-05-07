@@ -242,6 +242,87 @@
   [blocks idx line]
   (update-in blocks [idx :title] #(str % "\n" line)))
 
+(defn- front-matter-boundary?
+  [line]
+  (= "---" (string/trim (or line ""))))
+
+(defn- closing-front-matter-index
+  [lines start-idx]
+  (loop [idx (inc start-idx)]
+    (cond
+      (<= (count lines) idx)
+      nil
+
+      (front-matter-boundary? (nth lines idx))
+      idx
+
+      :else
+      (recur (inc idx)))))
+
+(defn- remove-leading-front-matter
+  [lines]
+  (let [lines (vec lines)
+        start-idx (first (keep-indexed
+                          (fn [idx line]
+                            (when-not (string/blank? line)
+                              idx))
+                          lines))]
+    (if (and start-idx
+             (front-matter-boundary? (nth lines start-idx)))
+      (if-let [end-idx (closing-front-matter-index lines start-idx)]
+        (vec (concat (subvec lines 0 start-idx)
+                     (subvec lines (inc end-idx))))
+        lines)
+      lines)))
+
+(defn- page-id-line?
+  [line]
+  (when-let [[_ spaces _id-str] (re-matches id-property-re line)]
+    (zero? (count spaces))))
+
+(defn- first-body-line-index
+  [lines]
+  (loop [idx 0
+         property-indent nil]
+    (when (< idx (count lines))
+      (let [line (nth lines idx)]
+        (cond
+          (property-value-line? line property-indent)
+          (recur (inc idx) property-indent)
+
+          (string/blank? line)
+          (recur (inc idx) nil)
+
+          (page-id-line? line)
+          (recur (inc idx) nil)
+
+          :else
+          (if-let [property-indent' (property-line-indent line)]
+            (recur (inc idx) property-indent')
+            idx))))))
+
+(defn- wrap-body-lines-as-block
+  [lines body-idx]
+  (string/join
+   "\n"
+   (concat
+    (subvec lines 0 body-idx)
+    (map-indexed
+     (fn [idx line]
+       (if (zero? idx)
+         (str "- " (string/triml line))
+         (str "  " line)))
+     (subvec lines body-idx)))))
+
+(defn- normalize-import-content
+  [content]
+  (let [lines (remove-leading-front-matter (string/split-lines (or content "")))]
+    (if-let [body-idx (first-body-line-index lines)]
+      (if (re-matches markdown-block-re (nth lines body-idx))
+        (string/join "\n" lines)
+        (wrap-body-lines-as-block lines body-idx))
+      (string/join "\n" lines))))
+
 (defn- continuation-line
   [line continuation-indent]
   (let [prefix (apply str (repeat continuation-indent " "))]
@@ -1502,7 +1583,8 @@
       (p/resolved {:status :skipped
                    :reason :file-too-large
                    :max-import-bytes max-import-bytes})
-      (let [parsed (parse-mirror-content content)
+      (let [content (normalize-import-content content)
+            parsed (parse-mirror-content content)
             page (existing-page-for-path @conn relative-path (:page-uuid parsed))]
         (if (:error parsed)
           (p/resolved {:status :error

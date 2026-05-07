@@ -2193,9 +2193,8 @@
                        "> top-level quote")]
       (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Top Level Markdown.md" content {})
           (p/then (fn [result]
-                    (is (= :error (:status result)))
-                    (is (= :unsupported-top-level-markdown (:reason result)))
-                    (is (= "existing" (:block/title (d/entity @conn [:block/uuid block-uuid]))))))
+                    (is (= :imported (:status result)))
+                    (is (= "> top-level quote" (:block/title (d/entity @conn [:block/uuid block-uuid]))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -2441,6 +2440,50 @@
                     (is (= :imported (:status result)))
                     (is (some? (db-test/find-page-by-title @conn "test something")))
                     (is (nil? (db-test/find-page-by-title @conn "test_something")))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-new-page-file-wraps-plain-markdown-in-block-test
+  (async done
+    (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})]
+      (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Plain Markdown.md" "plain text" {})
+          (p/then (fn [result]
+                    (is (= :imported (:status result)))
+                    (is (some? (db-test/find-page-by-title @conn "Plain Markdown")))
+                    (is (some? (block-by-title @conn "plain text")))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-existing-page-file-wraps-plain-markdown-in-block-test
+  (async done
+    (let [page-uuid #uuid "99999999-9999-4999-8999-999999999956"
+          block-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa56"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Plain Edit"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "before"
+                                               :block/uuid block-uuid}]}]})
+          content (str (page-marker page-uuid) "\nplain edit")]
+      (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Plain Edit.md" content {})
+          (p/then (fn [result]
+                    (is (= :imported (:status result)))
+                    (is (= "plain edit" (:block/title (d/entity @conn [:block/uuid block-uuid]))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-new-page-file-wraps-plain-markdown-after-front-matter-test
+  (async done
+    (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})
+          content (str "---\n"
+                       "title: Front Matter\n"
+                       "---\n"
+                       "front matter body")]
+      (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Front Matter.md" content {})
+          (p/then (fn [result]
+                    (is (= :imported (:status result)))
+                    (is (some? (db-test/find-page-by-title @conn "Front Matter")))
+                    (is (some? (block-by-title @conn "front matter body")))
+                    (is (nil? (block-by-title @conn "title: Front Matter")))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
