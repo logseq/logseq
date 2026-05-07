@@ -330,7 +330,8 @@
                date-time-util/default-journal-title-formatter)
        :uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)})
     (when-let [[_ stem] (re-matches page-relative-path-re relative-path)]
-      (when-let [title (normalize-file-stem stem)]
+      (when-let [title (some-> (normalize-file-stem stem)
+                               (string/replace "_" " "))]
         {:type :page
          :title title
          :uuid (random-uuid)}))))

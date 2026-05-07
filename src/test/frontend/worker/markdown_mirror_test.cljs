@@ -2433,6 +2433,17 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest two-way-new-page-file-replaces-stem-underscores-with-spaces-test
+  (async done
+    (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})]
+      (-> (markdown-mirror/<import-file-content! test-repo conn "pages/test_something.md" "- hello" {})
+          (p/then (fn [result]
+                    (is (= :imported (:status result)))
+                    (is (some? (db-test/find-page-by-title @conn "test something")))
+                    (is (nil? (db-test/find-page-by-title @conn "test_something")))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest two-way-new-journal-file-creates-journal-test
   (async done
     (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})]
