@@ -415,7 +415,8 @@
         title' (cond-> title
                  existing-block
                  (strip-existing-tag-suffixes existing-block))]
-    (cond-> (assoc block :title title')
+    (cond-> (assoc block :title title'
+                   :ref-title title)
       status-ident
       (assoc :status-ident status-ident))))
 
@@ -459,12 +460,13 @@
                    (cond-> tag-refs tag? (conj planned-page))
                    page-txs'))
           (if-let [page (ldb/get-page db page-title)]
-            (let [ref {:block/title (:block/title page)
+            (let [tag-page? (some #(= :logseq.class/Tag (:db/ident %)) (:block/tags page))
+                  ref {:block/title (:block/title page)
                        :block/uuid (:block/uuid page)
                        :tag? (or tag?
-                                 (some #(= :logseq.class/Tag (:db/ident %)) (:block/tags page)))}
+                                 tag-page?)}
                   page-txs' (cond-> page-txs
-                              tag?
+                              (and tag? (not tag-page?))
                               (into (ensure-tag-txs db (:db/id page) page-title page)))]
               (recur more
                      (assoc planned-pages page-name ref)
@@ -503,17 +505,21 @@
       {:blocks blocks'
        :page-txs page-txs}
       (let [{planned-pages' :planned-pages
-             refs :refs
+             _refs :refs
              tag-refs :tag-refs
              new-page-txs :page-txs
-             db-title :db-title} (page-ref-plan db (:title block) planned-pages now)]
+             _db-title :db-title} (page-ref-plan db (or (:ref-title block) (:title block)) planned-pages now)
+            {planned-pages'' :planned-pages
+             content-refs :refs
+             content-page-txs :page-txs
+             db-title :db-title} (page-ref-plan db (:title block) planned-pages' now)]
         (recur more
-               planned-pages'
+               planned-pages''
                (conj blocks' (assoc block
                                     :db-title db-title
-                                    :content-ref-uuids (set (map :block/uuid refs))
+                                    :content-ref-uuids (set (map :block/uuid content-refs))
                                     :tag-ref-uuids (set (map :block/uuid tag-refs))))
-               (into page-txs new-page-txs))))))
+               (into page-txs (concat new-page-txs content-page-txs)))))))
 
 (defn- page-root-blocks
   [page]
@@ -1066,7 +1072,8 @@
         old-tag-uuids (->> (:block/tags block)
                            (keep (fn [tag]
                                    (let [tag-uuid (:block/uuid tag)]
-                                     (when (contains? old-content-ref-uuids tag-uuid)
+                                     (when (or (contains? old-content-ref-uuids tag-uuid)
+                                               (not (built-in-tag? tag)))
                                        tag-uuid))))
                            set)
         new-tag-uuids (:tag-ref-uuids parsed-block)

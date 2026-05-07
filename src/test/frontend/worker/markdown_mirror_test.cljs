@@ -1128,6 +1128,50 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest two-way-delete-consecutive-child-blocks-from-md-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "99999999-9999-4999-8999-999999999976"
+          parent-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaacb"
+          child-2-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaacc"
+          child-3-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaacd"
+          child-4-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaace"
+          child-5-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaacf"
+          sibling-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaad0"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Delete Consecutive Children"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "1"
+                                               :block/uuid parent-uuid
+                                               :build/children [{:block/title "2"
+                                                                 :block/uuid child-2-uuid}
+                                                                {:block/title "3"
+                                                                 :block/uuid child-3-uuid}
+                                                                {:block/title "4"
+                                                                 :block/uuid child-4-uuid}
+                                                                {:block/title "5"
+                                                                 :block/uuid child-5-uuid}]}
+                                              {:block/title "6"
+                                               :block/uuid sibling-uuid}]}]})
+          page (db-test/find-page-by-title @conn "Delete Consecutive Children")
+          relative-path "pages/Delete Consecutive Children.md"
+          storage-path (page-path relative-path)
+          content (str (page-marker page-uuid) "\n\n"
+                       "- 1\n"
+                       "  - 4\n"
+                       "  - 5\n"
+                       "- 6")]
+      (-> (p/let [_ (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+                  _ (swap! files assoc storage-path content)
+                  result (markdown-mirror/<import-file-content! test-repo conn relative-path content {:platform platform})]
+            (is (= :imported (:status result)))
+            (is (nil? (d/entity @conn [:block/uuid child-2-uuid])))
+            (is (nil? (d/entity @conn [:block/uuid child-3-uuid])))
+            (is (= ["4" "5"] (child-block-titles @conn parent-uuid)))
+            (is (= ["1" "6"] (page-block-titles @conn "Delete Consecutive Children"))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest two-way-delete-parent-block-with-surviving-child-marker-is-rejected-test
   (async done
     (let [page-uuid #uuid "99999999-9999-4999-8999-999999999974"
@@ -1863,6 +1907,31 @@
                       (is (block-title-includes? @conn block-uuid "#tag1"))
                       (is (= #{(:db/id tag)} (set (map :db/id (:block/tags block)))))
                       (is (= #{(:db/id tag)} block-content-ref-ids)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-adding-hashtag-block-preserves-previous-hashtag-block-tag-test
+  (async done
+    (let [page-uuid #uuid "99999999-9999-4999-8999-999999999977"
+          block1-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaafb"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Tag Append"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "block 1"
+                                               :block/uuid block1-uuid}]}]})
+          first-content (str (page-marker page-uuid) "\n"
+                             "- block 1 #tag1")
+          second-content (str (page-marker page-uuid) "\n"
+                              "- block 1 #tag1\n"
+                              "- block 2 #tag2")]
+      (-> (p/let [first-result (markdown-mirror/<import-file-content! test-repo conn "pages/Tag Append.md" first-content {})
+                  second-result (markdown-mirror/<import-file-content! test-repo conn "pages/Tag Append.md" second-content {})]
+            (let [block1 (d/entity @conn [:block/uuid block1-uuid])
+                  page-titles (page-block-titles @conn "Tag Append")]
+              (is (= :imported (:status first-result)))
+              (is (= :imported (:status second-result)))
+              (is (contains? (set (map :block/title (:block/tags block1))) "tag1"))
+              (is (= ["block 1" "block 2 #tag2"] page-titles))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
