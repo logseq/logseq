@@ -162,7 +162,6 @@
     "emoji-mart": "^5.6.0",
     "fs": "0.0.1-security",
     "fs-extra": "^11.3.4",
-    "fuse.js": "7.1.0",
     "graphology": "0.20.0",
     "html2canvas": "^1.4.1",
     "inter-ui": "^4.1.1",

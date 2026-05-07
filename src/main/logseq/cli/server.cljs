@@ -226,7 +226,7 @@
 
 (defn- repo-server
   [config servers repo]
-  (first (filter #(= repo (:repo %))
+  (first (filter #(graph-dir/same-repo? repo (:repo %))
                  (servers-for-config config servers))))
 
 (defn discover-servers
@@ -247,9 +247,12 @@
                                                       (update :owner-source normalize-owner-source))}))
                                (p/catch (fn [_]
                                           {:entry entry :retain? true})))))))
-            retained-results (filter :retain? results)
-            cleaned-entries (mapv :entry retained-results)
-            _ (server-list/rewrite-entries! path cleaned-entries)]
+            retained-results (filterv :retain? results)
+            stale-entries (->> results
+                               (remove :retain?)
+                               (mapv :entry))
+            _ (when (seq stale-entries)
+                (server-list/remove-entries! path stale-entries))]
       (->> retained-results
            (keep :server)
            vec))))

@@ -13,7 +13,7 @@
    [frontend.worker.sync.large-title :as sync-large-title]
    [frontend.worker.sync.presence :as sync-presence]
    [frontend.worker.sync.transport :as sync-transport]
-   [frontend.worker.sync.util :refer [fail-fast]]
+   [frontend.worker.sync.util :as sync-util :refer [fail-fast]]
    [frontend.worker.undo-redo :as worker-undo-redo]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
@@ -373,6 +373,7 @@
                 (when-not (upload-stopped? repo)
                   (let [{:keys [tx-entries drop-tx-ids]} (prepare-upload-tx-entries conn batch)]
                     (when (seq drop-tx-ids)
+                      (log/info :db-sync/drop-tx-ids {:tx-ids drop-tx-ids})
                       (mark-pending-txs-false! repo drop-tx-ids))
                     (when (seq tx-entries)
                       (-> (p/let [aes-key (when (sync-crypt/graph-e2ee? repo)
@@ -404,7 +405,10 @@
                                        :t-before local-tx
                                        :txs payload}))
                           (p/catch (fn [error]
-                                     (js/console.error error)))))))))))))))
+                                     (sync-util/set-last-sync-error! client error)
+                                     (log/error :db-sync/flush-pending-failed
+                                                {:repo repo
+                                                 :error error})))))))))))))))
 
 (defn enqueue-flush-pending!
   [repo client]
