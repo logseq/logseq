@@ -3110,7 +3110,9 @@
      3. empty block (nil text, no custom icon) → point-filled placeholder
      4. regular page/block with text and no custom icon → no icon"
   [seg entity]
-  (let [text (:text seg)
+  (let [*label-ref (hooks/use-ref nil)
+        [truncated? set-truncated!] (hooks/use-state false)
+        text (:text seg)
         seg-type (:type seg)
         has-custom-icon? (some? (:icon seg))
         ;; Structural type icons — always present for code/query/note/quote
@@ -3127,22 +3129,43 @@
         empty-placeholder (when (and (nil? structural-icon) (nil? node-icon) (nil? text))
                             (shui/tabler-icon "point-filled" {:size "12" :class "opacity-70"}))
         icon-node (or structural-icon node-icon empty-placeholder)
-        full-label (or (:full-text seg)
-                       text
-                       (case seg-type
-                         :code (t :class.built-in/code-block)
-                         :query (t :class.built-in/query)
-                         :note (t :breadcrumb/note-block)
-                         :quote (t :class.built-in/quote-block)
-                         :math (t :class.built-in/math-block)
-                         (t :breadcrumb/empty-block)))]
-    [:span.breadcrumb__segment.inline-flex.items-center.min-w-0
-     {:title full-label
-      :aria-label (when-not text full-label)}
-     (when icon-node
-       [:span.breadcrumb__segment-icon.mr-0.5.shrink-0 icon-node])
-     (when text
-       [:span.breadcrumb__label text])]))
+        non-blank (fn [s] (when-not (string/blank? s) s))
+        full-label (or (non-blank (:full-text seg))
+                       (non-blank text))
+        set-label-ref! (hooks/use-callback (fn [el] (hooks/set-ref! *label-ref el)) [])]
+    (hooks/use-effect!
+     (fn []
+       (if (or (string/blank? text) (string/blank? full-label))
+         (do
+           (set-truncated! false)
+           nil)
+         (let [check! (fn []
+                        (if-let [^js el (hooks/deref *label-ref)]
+                          (set-truncated! (> (.-scrollWidth el) (.-clientWidth el)))
+                          (set-truncated! false)))
+               resize-observer (when (some? (.-ResizeObserver js/window))
+                                 (js/ResizeObserver. check!))]
+           (check!)
+           (when-let [^js el (hooks/deref *label-ref)]
+             (when resize-observer
+               (.observe resize-observer el)
+               (when-let [parent (.-parentElement el)]
+                 (.observe resize-observer parent))))
+           (.addEventListener js/window "resize" check!)
+           (fn []
+             (.removeEventListener js/window "resize" check!)
+             (when resize-observer
+               (.disconnect resize-observer))))))
+     [text full-label])
+    (let [inner [:span.breadcrumb__segment.inline-flex.items-center.min-w-0
+                 {:aria-label (when-not text full-label)}
+                 (when icon-node
+                   [:span.breadcrumb__segment-icon.mr-0.5.shrink-0 icon-node])
+                 (when text
+                   [:span.breadcrumb__label {:ref set-label-ref!} text])]]
+      (if (and (not (string/blank? full-label)) truncated?)
+        (ui/tooltip inner full-label {:trigger-props {:as-child true}})
+        inner))))
 
 (defn- breadcrumb-segments
   [target-entity parents]
@@ -3183,12 +3206,14 @@
       :on-open-change (fn [open]
                         (reset! open? open)
                         (when open (load-full-hidden!)))}
-     (shui/dropdown-menu-trigger
-      {:as-child true}
-      [:button.breadcrumb__overflow.opacity-60.hover:opacity-100.px-0.5.text-xs
-       {:aria-label (t :breadcrumb/more-ancestors)
-        :title (t :breadcrumb/more-ancestors)}
-       "···"])
+     (ui/tooltip
+      (shui/dropdown-menu-trigger
+       {:as-child true}
+       [:button.breadcrumb__overflow.opacity-60.hover:opacity-100.px-0.5.text-xs
+        {:aria-label (t :breadcrumb/more-ancestors)}
+        "···"])
+      (t :breadcrumb/more-ancestors)
+      {:trigger-props {:as-child true}})
      (when @open?
        (shui/dropdown-menu-content
         {:class "max-h-[min(50vh,420px)] overflow-y-auto"}
@@ -3250,8 +3275,7 @@
       [:div.breadcrumb.block-parents
        {:class (str " breadcrumb--" (name effective-variant)
                     (when-not (or (:search? config) (:list-view? config)) " my-2")
-                    (when indent? " ml-4"))
-        :title full-title}
+                    (when indent? " ml-4"))}
        (when (and (false? (:top-level? config)) (seq parents))
          (breadcrumb-separator))
        ;; visible prefix (page + early ancestors)
@@ -3261,7 +3285,7 @@
          (list
           (breadcrumb-separator)
           (if (= effective-variant :search-result)
-            [:span.opacity-40.px-0.5.text-xs {:title full-title} "···"]
+            (ui/tooltip [:span.opacity-40.px-0.5.text-xs "···"] full-title {:trigger-props {:as-child true}})
             (breadcrumb-overflow-dropdown
              config repo target-entity from-property hidden entities opts vopts show-page?))))
        ;; visible suffix (nearest parents)
