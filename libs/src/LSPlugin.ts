@@ -4,7 +4,7 @@ import EventEmitter from 'eventemitter3'
 import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
-import { LSPluginRequest } from './modules/LSPlugin.Request'
+import { LSPluginNet } from './modules/LSPlugin.Net'
 
 export type WithOptional<T, K extends keyof T> = Omit<T, K> &
   Partial<Pick<T, K>>
@@ -123,6 +123,7 @@ export type IUserConditionSlotHook<C = any, E = any> = (
 export type EntityID = number
 export type BlockUUID = string
 export type BlockUUIDTuple = ['uuid', BlockUUID]
+export type RendererKey = string
 
 export type IEntityID = { id: EntityID; [key: string]: any }
 export type IBatchBlock = {
@@ -250,6 +251,32 @@ export type SimpleCommandCallback<E = any> = (e: IHookEvent & E) => void
 export type BlockCommandCallback = (
   e: IHookEvent & { uuid: BlockUUID }
 ) => Promise<void>
+export type CommandPlacement =
+  | 'palette'
+  | 'shortcut'
+  | 'slash'
+  | 'block-context-menu'
+  | 'highlight-context-menu'
+  | 'page-menu'
+  | 'simple'
+export type CommandContext<E = any> = IHookEvent & E & Record<string, any>
+export type CommandCallback<E = any> = (e: CommandContext<E>) => unknown
+export type CommandUnregister = () => void
+export type CommandWhen = string | Array<string>
+export type CommandRegisterOptions = {
+  key?: string
+  title?: string
+  label?: string
+  desc?: string
+  handler?: CommandCallback | BlockCommandCallback | Array<SlashCommandAction>
+  when?: CommandWhen
+  placement?: CommandPlacement
+  placements?: Array<CommandPlacement>
+  keybinding?: SimpleCommandKeybinding | string
+  extras?: Record<string, any>
+  type?: string
+  palette?: boolean
+}
 export type BlockCursorPosition = {
   left: number
   top: number
@@ -315,7 +342,7 @@ export type ExternalCommandType =
   | 'logseq.ui/toggle-theme'
   | 'logseq.ui/toggle-wide-mode'
 
-export type UserProxyNSTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets' | 'utils'
+export type UserProxyNSTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets' | 'utils' | 'commands'
 
 export type SearchIndiceInitStatus = boolean
 export type SearchBlockItem = {
@@ -389,7 +416,7 @@ export interface IAppProxy {
       keybinding?: SimpleCommandKeybinding
     },
     action: SimpleCommandCallback
-  ) => void
+  ) => CommandUnregister | false
 
   registerCommandPalette: (
     opts: {
@@ -398,7 +425,7 @@ export interface IAppProxy {
       keybinding?: SimpleCommandKeybinding
     },
     action: SimpleCommandCallback
-  ) => void
+  ) => CommandUnregister | false
 
   /**
    * Supported key names
@@ -415,7 +442,7 @@ export interface IAppProxy {
       desc: string
       extras: Record<string, any>
     }>
-  ) => void
+  ) => CommandUnregister | false
 
   /**
    * Supported all registered palette commands
@@ -518,7 +545,7 @@ export interface IAppProxy {
   registerPageMenuItem: (
     tag: string,
     action: (e: IHookEvent & { page: string }) => void
-  ) => void
+  ) => CommandUnregister | false
 
   // hook events
   onCurrentGraphChanged: IUserHook
@@ -574,6 +601,33 @@ export interface IAppProxy {
 }
 
 /**
+ * Unified command bus APIs.
+ */
+export interface ICommandsProxy {
+  /**
+   * Register a plugin command with one or more placements.
+   *
+   * v1 keeps compatibility with the existing command APIs by mapping placements
+   * to palette commands, shortcuts, slash commands, and context-menu entries.
+   * `when` is stored as command metadata for future host-side evaluation.
+   */
+  register: (
+    id: string,
+    options: CommandRegisterOptions,
+    action?: CommandCallback | BlockCommandCallback | Array<SlashCommandAction>
+  ) => CommandUnregister | false
+
+  /**
+   * Execute a built-in or plugin command.
+   *
+   * Built-in commands use the existing `logseq.*` ids. Plugin commands can be
+   * addressed as `plugin-id/key`, `plugin-id.commands.key`, or a local command
+   * key registered by the current plugin.
+   */
+  execute: (id: string, ...args: Array<any>) => Promise<unknown>
+}
+
+/**
  * Editor related APIs
  */
 export interface IEditorProxy extends Record<string, any> {
@@ -603,7 +657,7 @@ export interface IEditorProxy extends Record<string, any> {
   registerSlashCommand: (
     tag: string,
     action: BlockCommandCallback | Array<SlashCommandAction>
-  ) => unknown
+  ) => CommandUnregister | false
 
   /**
    * register a custom command in the block context menu (triggered by right-clicking the block dot)
@@ -613,7 +667,7 @@ export interface IEditorProxy extends Record<string, any> {
   registerBlockContextMenuItem: (
     label: string,
     action: BlockCommandCallback
-  ) => unknown
+  ) => CommandUnregister | false
 
   /**
    * Current it's only available for pdf viewer
@@ -627,7 +681,7 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: {
       clearSelection: boolean
     }
-  ) => unknown
+  ) => CommandUnregister | false
 
   // block related APIs
 
@@ -866,7 +920,7 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: { replaceState: boolean }
   ) => void
 
-  openInRightSidebar: (id: BlockUUID | EntityID) => void
+  openInRightSidebar: (idOrKey: BlockUUID | EntityID | RendererKey) => void
   openPDFViewer: (assetBlockIdOrFileUrl: string | EntityID) => Promise<void>
 
   /**
@@ -1185,13 +1239,14 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   resolveResourceFullUrl(filePath: string): string
 
   App: IAppProxy
+  Commands: ICommandsProxy
   Editor: IEditorProxy
   DB: IDBProxy
   Git: IGitProxy
   UI: IUIProxy
   Assets: IAssetsProxy
 
-  Request: LSPluginRequest
+  Net: LSPluginNet
   FileStorage: LSPluginFileStorage
   Experiments: LSPluginExperiments
 }
