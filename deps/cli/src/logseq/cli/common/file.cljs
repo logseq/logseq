@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
@@ -42,16 +43,23 @@
           (entity-content [x]
             (let [m (entity-map x)]
               (or (:block/title m)
-                  (:logseq.property/value m))))]
+                  (:logseq.property/value m))))
+          (node-ref-content [content]
+            (if (and (:export-node-property-values-as-page-refs? context)
+                     (= :node (:logseq.property/type property))
+                     (string? content)
+                     (not (string/blank? content)))
+              (page-ref/->page-ref content)
+              content))]
     (cond
       (some? (entity-content v))
-      (str (entity-content v))
+      (str (node-ref-content (entity-content v)))
 
       (some? (:db/id (entity-map v)))
       (let [entity (d/entity db (:db/id (entity-map v)))]
-        (str (or (entity-content entity)
-                 (entity-content v)
-                 "")))
+        (str (node-ref-content (or (entity-content entity)
+                                   (entity-content v)
+                                   ""))))
 
       (set? v)
       (->> v
@@ -78,6 +86,63 @@
       (some? v)
       (str v))))
 
+(declare block-properties-content)
+
+(defn- property-values->seq
+  [db property v context]
+  (if (set? v)
+    (->> v
+         (sort-by (fn [item]
+                    [(if (:block/order item) 0 1)
+                     (str (or (:block/order item)
+                              (property-value->string db property item context)))])))
+    [v]))
+
+(defn- property-value-block-title
+  [db property v context]
+  (letfn [(entity-map [x]
+            (cond
+              (map? x) x
+              (de/entity? x) (into {} x)))]
+    (if-let [id (:db/id (entity-map v))]
+      (db-content/recur-replace-uuid-in-block-title
+       (d/entity db id)
+       10
+       {:replace-block-refs? (not (:preserve-block-refs? context))})
+      (property-value->string db property v context))))
+
+(defn- default-property-value-block-content
+  [db property v spaces-tabs context]
+  (let [line (str spaces-tabs "- " (property-value-block-title db property v context))
+        properties-content (when-let [id (:db/id v)]
+                             (block-properties-content db (d/entity db id) (str spaces-tabs "  ") context))]
+    (cond-> line
+      properties-content
+      (str "\n" properties-content))))
+
+(defn- property-value-blocks-content
+  [db property v spaces-tabs context]
+  (->> (property-values->seq db property v context)
+       (map #(default-property-value-block-content db property % spaces-tabs context))
+       (string/join "\n")))
+
+(defn- property-line-content
+  [property-title value spaces-tabs context]
+  (str spaces-tabs
+       (when (:export-properties-as-list-items? context) "* ")
+       property-title
+       "::"
+       (when (some? value)
+         (str " " value))))
+
+(defn- default-property-values-as-blocks?
+  [property value context]
+  (and (:export-default-property-values-as-blocks? context)
+       (= :default (:logseq.property/type property))
+       (not (if (set? value)
+              (some :block/closed-value-property value)
+              (:block/closed-value-property value)))))
+
 (defn- block-properties-content
   [db block spaces-tabs context]
   (let [block (or (when-let [id (:db/id block)]
@@ -101,12 +166,19 @@
              (keep (fn [property]
                      (let [property-ident (:db/ident property)]
                        (when (contains? properties property-ident)
-                       (str spaces-tabs
-                            (or (:block/title property)
-                                (:block/raw-title property)
-                                (name property-ident))
-                            ":: "
-                            (property-value->string db property (get properties property-ident) context))))))
+                         (let [property-title (or (:block/title property)
+                                                  (:block/raw-title property)
+                                                  (name property-ident))
+                               value (get properties property-ident)]
+                           (if (default-property-values-as-blocks? property value context)
+                             (str (property-line-content property-title nil spaces-tabs context)
+                                  "\n"
+                                  (property-value-blocks-content db property value (str spaces-tabs "  ") context))
+                             (property-line-content
+                              property-title
+                              (property-value->string db property value context)
+                              spaces-tabs
+                              context)))))))
              (string/join "\n"))))))
 
 (defn- property-value-block-content
@@ -121,7 +193,7 @@
                                               (:logseq.property/value raw-block))
                                           context)]
         (when property-title
-          (str property-title ":: " value))))))
+          (property-line-content property-title value "" context))))))
 
 (defn- block-title-content
   [db b context]

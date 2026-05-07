@@ -80,6 +80,19 @@
   (:db/ident (:logseq.property/status
               (d/pull db [{:logseq.property/status [:db/ident]}] [:block/uuid block-uuid]))))
 
+(defn- block-priority-ident
+  [db block-uuid]
+  (:db/ident (:logseq.property/priority
+              (d/pull db [{:logseq.property/priority [:db/ident]}] [:block/uuid block-uuid]))))
+
+(defn- block-property-value-content
+  [db block-uuid property-ident]
+  (let [block (d/entity db [:block/uuid block-uuid])
+        value (get block property-ident)]
+    (cond
+      (set? value) (set (map #(or (:block/title %) (:logseq.property/value %)) value))
+      value (or (:block/title value) (:logseq.property/value value)))))
+
 (defn- block-tag-idents
   [db block-uuid]
   (set (map :db/ident (:block/tags (d/entity db [:block/uuid block-uuid])))))
@@ -437,10 +450,116 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Issue.md"))]
                       (is (= (str (page-marker page-uuid) "\n"
-                                  "reproducible-steps:: Open settings\n\n"
-                                  "- TODO body\n"
-                                  "  reproducible-steps:: Click mirror\n"
-                                  "  rating:: 5")
+                                  "* reproducible-steps::\n"
+                                  "  - Open settings\n\n"
+                                  "- TODO ## TODO body\n"
+                                  "  * reproducible-steps::\n"
+                                  "    - Click mirror\n"
+                                  "  * rating:: 5")
+                             content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-exports-node-property-values-as-page-refs-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "22222222-2222-4222-8222-222222222225"
+          block-uuid #uuid "22222222-2222-4222-8222-222222222226"
+          bob-uuid #uuid "22222222-2222-4222-8222-222222222227"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/owner {:logseq.property/type :node}}
+                 :pages-and-blocks [{:page {:block/title "Node Props"
+                                             :block/uuid page-uuid
+                                             :build/properties {:user.property/owner [:build/page {:block/title "Bob"
+                                                                                                  :block/uuid bob-uuid}]}}
+                                     :blocks [{:block/title "body"
+                                               :block/uuid block-uuid
+                                               :build/properties {:user.property/owner [:build/page {:block/title "Bob"
+                                                                                                    :block/uuid bob-uuid}]}}]}]})
+          page (db-test/find-page-by-title @conn "Node Props")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Node Props.md"))]
+                      (is (= (str (page-marker page-uuid) "\n"
+                                  "* owner:: [[Bob]]\n\n"
+                                  (block-line block-uuid "body") "\n"
+                                  "  * owner:: [[Bob]]")
+                             content))
+                      (is (not (string/includes? content "(("))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-exports-default-property-values-as-value-blocks-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "22222222-2222-4222-8222-222222222228"
+          block-uuid #uuid "22222222-2222-4222-8222-222222222229"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/description {:logseq.property/type :default}
+                              :user.property/books {:logseq.property/type :default
+                                                    :db/cardinality :db.cardinality/many}
+                              :user.property/year {:logseq.property/type :number}}
+                 :pages-and-blocks [{:page {:block/title "Default Props"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "Oscar Wilde"
+                                               :block/uuid block-uuid
+                                               :build/properties
+                                               {:user.property/description "Irish poet and playwright"
+                                                :user.property/books
+                                                #{{:build/property-value :block
+                                                   :block/title "The Picture of Dorian Gray"
+                                                   :build/properties {:user.property/year 1891}}
+                                                  {:build/property-value :block
+                                                   :block/title "The Importance of Being Earnest"
+                                                   :build/properties {:user.property/year 1895}}}}}]}]})
+          page (db-test/find-page-by-title @conn "Default Props")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Default Props.md"))]
+                      (is (string/includes?
+                           content
+                           (str "- Oscar Wilde\n"
+                                "  * description::\n"
+                                "    - Irish poet and playwright")))
+                      (is (string/includes?
+                           content
+                           (str "  * books::\n")))
+                      (is (string/includes?
+                           content
+                           (str "    - The Picture of Dorian Gray\n"
+                                "      * year:: 1891")))
+                      (is (string/includes?
+                           content
+                           (str "    - The Importance of Being Earnest\n"
+                                "      * year:: 1895"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-exports-closed-default-property-values-inline-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "22222222-2222-4222-8222-22222222222a"
+          block-uuid #uuid "22222222-2222-4222-8222-22222222222b"
+          joy-uuid #uuid "22222222-2222-4222-8222-22222222222c"
+          sad-uuid #uuid "22222222-2222-4222-8222-22222222222d"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/mood {:logseq.property/type :default
+                                                   :db/cardinality :db.cardinality/many
+                                                   :build/closed-values [{:value "joy" :uuid joy-uuid}
+                                                                         {:value "sad" :uuid sad-uuid}]}}
+                 :pages-and-blocks [{:page {:block/title "Closed Defaults"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "entry"
+                                               :block/uuid block-uuid
+                                               :build/properties {:user.property/mood #{[:block/uuid joy-uuid]
+                                                                                       [:block/uuid sad-uuid]}}}]}]})
+          page (db-test/find-page-by-title @conn "Closed Defaults")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Closed Defaults.md"))]
+                      (is (= (str (page-marker page-uuid) "\n\n"
+                                  "- entry\n"
+                                  "  * mood:: joy, sad")
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -466,9 +585,11 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Page Props.md"))]
                       (is (= (str (page-marker page-uuid) "\n"
-                                  "p1:: hello\n"
-                                  "p2:: 1\n"
-                                  "p3:: Author 1\n\n"
+                                  "* p1::\n"
+                                  "  - hello\n"
+                                  "* p2:: 1\n"
+                                  "* p3::\n"
+                                  "  - Author 1\n\n"
                                   (block-line block-uuid "body"))
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -500,11 +621,14 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "journals/2026_05_05.md"))]
                       (is (= (str (page-marker page-uuid) "\n"
-                                  "p1:: hey\n\n"
+                                  "* p1::\n"
+                                  "  - hey\n\n"
                                   "- TODO hello great test\n"
-                                  "  p1:: hello\n"
-                                  "  p2:: 1\n"
-                                  "  p3:: Author 1")
+                                  "  * p1::\n"
+                                  "    - hello\n"
+                                  "  * p2:: 1\n"
+                                  "  * p3::\n"
+                                  "    - Author 1")
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -2019,6 +2143,133 @@
                     (is (= :skipped (:status result)))
                     (is (= 5 (:logseq.property/value
                               (:user.property/rating (d/entity @conn [:block/uuid block-uuid])))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-markdown-property-lines-and-values-are-ignored-test
+  (async done
+    (let [page-uuid #uuid "99999999-9999-4999-8999-99999999996b"
+          parent-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaae9"
+          child-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaea"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/rating {:logseq.property/type :number}}
+                 :pages-and-blocks [{:page {:block/title "Markdown Property Ignore"
+                                             :block/uuid page-uuid
+                                             :build/properties {:user.property/rating 5}}
+                                     :blocks [{:block/title "parent"
+                                               :block/uuid parent-uuid
+                                               :build/properties {:user.property/rating 6}
+                                               :build/children [{:block/title "child"
+                                                                 :block/uuid child-uuid}]}]}]})
+          content (str (page-marker page-uuid) "\n"
+                       "* rating:: 10\n"
+                       "* references::\n"
+                       "  - page property value block\n\n"
+                       "- parent\n"
+                       "  * rating:: 11\n"
+                       "  * references::\n"
+                       "    - block property value block\n"
+                       "  - child")]
+      (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Markdown Property Ignore.md" content {})
+          (p/then (fn [result]
+                    (is (= :skipped (:status result)))
+                    (is (= 5 (:logseq.property/value
+                              (:user.property/rating (d/entity @conn [:block/uuid page-uuid])))))
+                    (is (= 6 (:logseq.property/value
+                              (:user.property/rating (d/entity @conn [:block/uuid parent-uuid])))))
+                    (is (= ["parent"] (page-block-titles @conn "Markdown Property Ignore")))
+                    (is (= ["child"] (child-block-titles @conn parent-uuid)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-markdown-content-edit-preserves-db-properties-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "99999999-9999-4999-8999-99999999996a"
+          block-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaec"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/description {:logseq.property/type :default}
+                              :user.property/rating {:logseq.property/type :number}}
+                 :pages-and-blocks [{:page {:block/title "Property Preserve"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "before"
+                                               :block/uuid block-uuid
+                                               :build/properties {:user.property/description "keep me"
+                                                                  :user.property/rating 5}}]}]})
+          page (db-test/find-page-by-title @conn "Property Preserve")
+          relative-path "pages/Property Preserve.md"
+          storage-path (page-path relative-path)]
+      (-> (p/let [_ (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+                  generated (get @files storage-path)
+                  sidecar-before (parse-json (get @files (sidecar-page-path page-uuid)))
+                  edited (string/replace generated "- before" "- after")
+                  result (markdown-mirror/<import-file-content! test-repo conn relative-path edited {:platform platform})]
+            (let [block (d/entity @conn [:block/uuid block-uuid])]
+              (is (= [(str block-uuid)] (mapv :uuid (:blocks sidecar-before))))
+              (is (= :imported (:status result)))
+              (is (= "after" (:block/title block)))
+              (is (= "keep me" (:block/title (:user.property/description block))))
+              (is (= 5 (:logseq.property/value (:user.property/rating block))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-task-title-edit-preserves-priority-property-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "99999999-9999-4999-8999-999999999969"
+          block-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaed"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Priority Preserve"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "Fix a bug"
+                                               :block/uuid block-uuid
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/status.todo
+                                                                  :logseq.property/priority :logseq.property/priority.urgent}}]}]})
+          page (db-test/find-page-by-title @conn "Priority Preserve")
+          relative-path "pages/Priority Preserve.md"
+          storage-path (page-path relative-path)]
+      (-> (p/let [_ (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+                  generated (get @files storage-path)
+                  _ (is (string/includes? generated "* Priority:: Urgent"))
+                  edited (string/replace generated "- TODO Fix a bug" "- TODO Fix another bug")
+                  result (markdown-mirror/<import-file-content! test-repo conn relative-path edited {:platform platform})]
+            (is (= :imported (:status result)))
+            (is (= "Fix another bug" (:block/title (d/entity @conn [:block/uuid block-uuid]))))
+            (is (= :logseq.property/status.todo (block-status-ident @conn block-uuid)))
+            (is (= :logseq.property/priority.urgent (block-priority-ident @conn block-uuid))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-task-title-edit-preserves-custom-closed-priority-property-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "99999999-9999-4999-8999-999999999968"
+          block-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaee"
+          urgent-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaef"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/priority {:block/title "Priority"
+                                                       :logseq.property/type :default
+                                                       :build/closed-values [{:value "Urgent" :uuid urgent-uuid}]}}
+                 :pages-and-blocks [{:page {:block/title "Custom Priority Preserve"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "Fix a bug"
+                                               :block/uuid block-uuid
+                                               :build/tags [:logseq.class/Task]
+                                               :build/properties {:logseq.property/status :logseq.property/status.todo
+                                                                  :user.property/priority [:block/uuid urgent-uuid]}}]}]})
+          page (db-test/find-page-by-title @conn "Custom Priority Preserve")
+          relative-path "pages/Custom Priority Preserve.md"
+          storage-path (page-path relative-path)]
+      (-> (p/let [_ (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+                  generated (get @files storage-path)
+                  _ (is (string/includes? generated "* Priority:: Urgent"))
+                  edited (string/replace generated "- TODO Fix a bug" "- TODO Fix another bug")
+                  result (markdown-mirror/<import-file-content! test-repo conn relative-path edited {:platform platform})]
+            (is (= :imported (:status result)))
+            (is (= "Fix another bug" (:block/title (d/entity @conn [:block/uuid block-uuid]))))
+            (is (= :logseq.property/status.todo (block-status-ident @conn block-uuid)))
+            (is (= "Urgent" (block-property-value-content @conn block-uuid :user.property/priority))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
