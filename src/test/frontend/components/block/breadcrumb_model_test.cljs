@@ -87,10 +87,10 @@
     (is (nil? (model/detect-block-type nil false)))))
 
 ;; ---------------------------------------------------------------------------
-;; block->breadcrumb-segment
+;; block->breadcrumb-segment — basic shape
 ;; ---------------------------------------------------------------------------
 
-(deftest block->breadcrumb-segment-test
+(deftest block->breadcrumb-segment-basic-test
   (testing "returns nil for nil entity"
     (is (nil? (model/block->breadcrumb-segment nil))))
 
@@ -113,6 +113,34 @@
       (is (false? (:page? seg)))
       (is (= "Hello world" (:text seg)))))
 
+  (testing "empty block has nil :text but non-nil full-text empty string"
+    (let [seg (model/block->breadcrumb-segment
+               {:db/id 1
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
+                :block/raw-title ""})]
+      (is (nil? (:text seg)))
+      (is (= "" (:full-text seg)))))
+
+  (testing "block with icon preserves icon value"
+    (let [seg (model/block->breadcrumb-segment
+               {:db/id 1
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
+                :block/raw-title "Decorated"
+                :logseq.property/icon {:type :emoji :id "🌟"}})]
+      (is (= {:type :emoji :id "🌟"} (:icon seg)))))
+
+  (testing "block with nil :block/refs does no substitution"
+    (let [seg (model/block->breadcrumb-segment
+               {:db/id 1
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
+                :block/raw-title "plain text no refs"})]
+      (is (= "plain text no refs" (:text seg))))))
+
+;; ---------------------------------------------------------------------------
+;; block->breadcrumb-segment — structural type detection
+;; ---------------------------------------------------------------------------
+
+(deftest ^:large-vars/cleanup-todo block->breadcrumb-segment-type-test
   (testing "code block entity has :type :code via raw-title fence"
     (let [seg (model/block->breadcrumb-segment
                {:db/id 1
@@ -146,7 +174,6 @@
       (is (= "e=mc^2" (:text seg)))))
 
   (testing "display-type takes precedence over raw-title pattern"
-    ;; content looks like a query, but DB says it's a code block
     (let [seg (model/block->breadcrumb-segment
                {:db/id 1
                 :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
@@ -202,22 +229,6 @@
       (is (= :code (:type seg)))
       (is (= "Parse breadcrumbs" (:text seg)))))
 
-  (testing "empty block has nil :text but non-nil full-text empty string"
-    (let [seg (model/block->breadcrumb-segment
-               {:db/id 1
-                :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
-                :block/raw-title ""})]
-      (is (nil? (:text seg)))
-      (is (= "" (:full-text seg)))))
-
-  (testing "block with icon preserves icon value"
-    (let [seg (model/block->breadcrumb-segment
-               {:db/id 1
-                :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
-                :block/raw-title "Decorated"
-                :logseq.property/icon {:type :emoji :id "🌟"}})]
-      (is (= {:type :emoji :id "🌟"} (:icon seg)))))
-
   (testing "DB query block detected via :logseq.class/Query tag"
     (let [seg (model/block->breadcrumb-segment
                {:db/id 1
@@ -234,15 +245,20 @@
                 :block/tags [{:db/ident :logseq.class/Cards}]})]
       (is (= :query (:type seg)))))
 
-  (testing "tag-type is overridden by display-type (display-type takes precedence)"
+  (testing "tag-type is overridden by display-type"
     (let [seg (model/block->breadcrumb-segment
                {:db/id 1
                 :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
                 :block/raw-title "some content"
                 :logseq.property.node/display-type :code
                 :block/tags [{:db/ident :logseq.class/Query}]})]
-      (is (= :code (:type seg)))))
+      (is (= :code (:type seg))))))
 
+;; ---------------------------------------------------------------------------
+;; resolve-segment-refs
+;; ---------------------------------------------------------------------------
+
+(deftest resolve-segment-refs-test
   (testing "block->breadcrumb-segment leaves [[uuid]] refs unresolved"
     (let [page-uuid #uuid "00000001-2026-0506-0000-000000000000"
           seg (model/block->breadcrumb-segment
@@ -252,7 +268,7 @@
                 :block/refs [{:block/uuid page-uuid :block/title "May 6th, 2026"}]})]
       (is (= (str "[[" page-uuid "]]") (:text seg)))))
 
-  (testing "resolve-segment-refs resolves [[uuid]] to [[title]] preserving brackets"
+  (testing "resolves [[uuid]] to [[title]] preserving brackets"
     (let [page-uuid #uuid "00000001-2026-0506-0000-000000000000"
           entity {:db/id 1
                   :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
@@ -263,7 +279,7 @@
                   (model/resolve-segment-refs entity))]
       (is (= "[[May 6th, 2026]]" (:text seg)))))
 
-  (testing "[[uuid]] ref that is NOT in :block/refs keeps original text"
+  (testing "unknown uuid not in :block/refs keeps original text"
     (let [unknown-uuid "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
           entity {:db/id 1
                   :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
@@ -284,13 +300,6 @@
                   model/block->breadcrumb-segment
                   (model/resolve-segment-refs entity))]
       (is (= "see [[My Page]] for details" (:text seg)))))
-
-  (testing "block with nil :block/refs does no substitution"
-    (let [seg (model/block->breadcrumb-segment
-               {:db/id 1
-                :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
-                :block/raw-title "plain text no refs"})]
-      (is (= "plain text no refs" (:text seg)))))
 
   (testing "resolved ref text is truncated after title substitution"
     (let [page-uuid #uuid "00000000-0000-0000-0000-000000000002"
