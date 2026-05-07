@@ -75,6 +75,14 @@
         (is (thrown-with-msg? js/Error #"Built-in nodes can't be deleted"
                               (db-test/silence-stderr (outliner-core/delete-blocks! conn [file] {}))))))
 
+    (testing "page with file path is not treated as a built-in file entity"
+      (let [conn2 (db-test/create-conn-with-blocks
+                   [{:page {:block/title "file backed"
+                            :file/path "pages/file backed.md"}
+                     :blocks []}])
+            page (ldb/get-page @conn2 "file backed")]
+        (is (map? (outliner-core/delete-blocks @conn2 [page] {})))))
+
     (testing "KV entity is rejected"
       (let [kv (d/entity @conn :logseq.kv/db-type)]
         (is (some? (:db/id kv)))

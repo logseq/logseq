@@ -28,9 +28,12 @@ builds do not have the same graph-directory filesystem guarantees.
 4. For a graph at `~/logseq/graphs/graph-xxx`, mirror files are written under:
    - `~/logseq/graphs/graph-xxx/mirror/markdown/journals/`
    - `~/logseq/graphs/graph-xxx/mirror/markdown/pages/`
-5. Markdown Mirror is derived output. The DB remains the source of truth.
-6. Files under `mirror/markdown/**` must be ignored by graph import, file
-   watchers, and graph parsing so the mirror never feeds back into the graph.
+5. Markdown Mirror is derived output. The DB remains the source of truth for
+   unsupported or ambiguous edits.
+6. Files under `mirror/markdown/**` must be ignored by the normal graph import,
+   file watchers, and graph parsing. The only path from mirror files back into
+   the graph is the dedicated two-way Markdown Mirror watcher, and that watcher
+   is disabled by default.
 7. The feature is not available in browser or mobile builds, even if a stale
    setting value exists.
 8. Settings exposes an explicit "Regenerate full mirror" action that asks the
@@ -196,24 +199,42 @@ builds do not have the same graph-directory filesystem guarantees.
 8. Full regeneration is an explicit Settings action. The renderer only sends a
    worker request; page selection, rendering, and filesystem writes stay in the
    DB worker.
-9. Enabling the setting starts incremental mirroring for subsequent page edits.
-   It does not implicitly run full regeneration.
+9. Enabling the setting runs a full regeneration so external editors have
+   current files immediately.
 
 ## Markdown Content
 1. Reuse the existing page-to-Markdown export pipeline used by worker export
    APIs instead of introducing a separate renderer-side serializer.
 2. The mirror output should match normal Markdown export semantics for page
    content.
-3. Mirror files do not include Logseq-internal mirror metadata in the Markdown
-   body.
-4. Mirror files include block and page property drawers, including user
+3. Mirror files always include a page `id:: <uuid>` property line. Blocks do
+   not include visible `id::` identity lines; block identity is preserved by the
+   hidden sidecar snapshot and by block references that use `[[uuid]]` when a
+   non-page block must be linked from Markdown content.
+4. When page properties are present, including the page `id::` line, write one
+   empty line between the page property section and the first block.
+5. The mirror writes a hidden sidecar snapshot under
+   `mirror/markdown/.logseq/pages/<page-uuid>.json`. It records the last
+   rendered sibling order, titles, and UUIDs for each block so Markdown can
+   stay readable while file edits still match stable DB identity. The sidecar
+   uses JSON rather than EDN to keep watcher read/parse overhead low.
+6. Mirror files include block and page property drawers, including user
    properties, with rendered property values.
-5. Assets are referenced as normal exported Markdown references. This ADR does
+7. Assets are referenced as normal exported Markdown references. This ADR does
    not copy assets into `mirror/markdown/`.
-6. Page references remain in Logseq wiki-link form, for example `[[Foo]]`.
-7. Ambiguous page references caused by duplicate page titles are an accepted
+8. Page references remain in Logseq wiki-link form, for example `[[Foo]]`.
+9. Ambiguous page references caused by duplicate page titles are an accepted
    limitation of Markdown Mirror. Do not rewrite page references to uuid-based
    links or relative Markdown links in this ADR.
+
+## File-to-DB Import Contract
+1. The mirror supports a constrained two-way sync path for DB graphs on Electron,
+   but it is disabled by default and requires explicit user activation.
+2. Enabling two-way mode must show a warning because file-origin imports can
+   interact with Logseq Sync and can add watcher/importer work on large graphs.
+3. Two-way mode must not be enabled for multi-user collaborated graphs.
+4. The two-way path is not a general Markdown importer; it is limited to the
+   supported contract in ADR 0017.
 
 ## Failure Handling
 1. Filesystem and path errors fail the mirror job for the affected page.
@@ -226,8 +247,10 @@ builds do not have the same graph-directory filesystem guarantees.
    that graph until the graph is reopened with a valid directory.
 
 ## Non-goals
-1. Markdown Mirror is not bidirectional sync.
-2. Editing files in `mirror/markdown/` does not update the graph.
+1. Markdown Mirror is not a general bidirectional Markdown sync engine.
+2. Editing files in `mirror/markdown/` updates the graph only when the separate
+   two-way setting is enabled and the edit is within the constrained import
+   contract.
 3. The mirror is not a backup format with guaranteed import fidelity.
 4. The mirror does not replace existing graph export features.
 5. The mirror does not support browser or mobile runtimes in this ADR.
@@ -243,6 +266,8 @@ builds do not have the same graph-directory filesystem guarantees.
 - Page file names remain readable and practical in external Markdown tools.
 - Ignoring `mirror/markdown/**` prevents mirror-generated files from becoming
   graph input.
+- Keeping two-way mode disabled by default avoids extra importer work on app
+  startup and avoids creating local txs for users who only need a mirror.
 
 ### Tradeoffs
 - The mirror can lag slightly behind the latest edit because writes are
@@ -251,7 +276,9 @@ builds do not have the same graph-directory filesystem guarantees.
 - Duplicate page references such as `[[Foo]]` remain ambiguous in mirror output.
 - The first version does not backfill every existing page automatically when the
   setting is enabled; users run full regeneration explicitly.
-- External edits to mirror files are overwritten by later Logseq edits.
+- External edits are ignored unless two-way mode is explicitly enabled. When
+  enabled, unsupported external edits are rejected or overwritten by later
+  Logseq edits.
 - Property pages are intentionally absent from the mirror, so the output is not
   a complete DB export even though page and block property drawers are included.
 
@@ -273,6 +300,9 @@ bb dev:test -v frontend.worker.markdown-mirror-test/full-regeneration-writes-exi
 bb dev:test -v frontend.worker.markdown-mirror-test/invalid-filename-characters-are-normalized-test
 bb dev:test -v frontend.worker.markdown-mirror-test/windows-reserved-filename-fails-with-diagnostic-test
 bb dev:test -v frontend.worker.markdown-mirror-test/mirror-path-collision-fails-without-overwrite-test
+bb dev:test -v frontend.worker.db-core-test/markdown-mirror-enable-does-not-start-two-way-file-import-watcher-test
+bb dev:test -v frontend.worker.db-core-test/markdown-mirror-two-way-enable-starts-file-import-watcher-test
+bb dev:test -v frontend.worker.db-core-test/markdown-mirror-two-way-enable-rejects-collaborated-graph-test
 ```
 
 Additional checks:

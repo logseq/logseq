@@ -14,8 +14,10 @@
 
 (defn- repo-config-set-key-value
   [path k v]
-  (when (state/get-current-repo)
-    (when-let [content (db/get-file path)]
+  (when-let [repo (state/get-current-repo)]
+    (let [content (or (db/get-file path)
+                      (some-> (state/get-graph-config repo) pr-str)
+                      "{}")]
       (repo-config-handler/read-repo-config content)
       (let [result (parse-repo-config (if (string/blank? content) "{}" content))
             ks (if (vector? k) k [k])
@@ -24,7 +26,9 @@
                 (reduce-kv (fn [a k v] (rewrite/assoc a k v)) (rewrite/parse-string "{}")))
             new-result (rewrite/assoc-in result ks v)
             new-content (str new-result)]
-        (db-editor-handler/save-file! path new-content) nil))))
+        (db-editor-handler/save-file! path new-content)
+        (repo-config-handler/set-repo-config-state! repo new-content)
+        nil))))
 
 (defn set-config!
   [k v]

@@ -262,7 +262,8 @@
   - entities whose :db/ident belongs to an internal namespace  (KV entries, empty-placeholder)"
   [ent]
   (or (:logseq.property/built-in? ent)
-      (:file/path ent)
+      (and (:file/path ent)
+           (not (ldb/page? ent)))
       (some-> (:db/ident ent) db-malli-schema/internal-ident?)))
 
 (defn- disallow-tagging-a-built-in-entity

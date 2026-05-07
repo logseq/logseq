@@ -667,5 +667,3 @@ export class LSPluginNet {
     return this._ctx
   }
 }
-
-

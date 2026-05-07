@@ -629,6 +629,7 @@
  :file/format-not-supported "格式 .{1} 目前不支持。"
  :file/label "文件"
  :file/last-modified-at "最后更改于"
+ :file/markdown-mirror-import-error "导入 Markdown 文件到图谱失败：{1}"
  :file/name "文件名"
  :file/no-data "没有数据"
  :file/title "文件 {1}"
@@ -1616,6 +1617,7 @@
  :settings.editor/spell-checker "单词拼写检查"
  :settings.editor/wide-mode "宽屏模式"
 
+ :settings.features/alpha-features "Alpha 功能"
  :settings.features/enable-flashcards "记忆卡片"
  :settings.features/enable-journals "开启日记"
  :settings.features/home-default-page "设置首页默认页面"
@@ -1627,6 +1629,10 @@
  :settings.features/markdown-mirror-regenerate "重新生成完整镜像"
  :settings.features/markdown-mirror-regenerate-error "重新生成 Markdown 镜像失败：{1}"
  :settings.features/markdown-mirror-regenerate-success "Markdown 镜像已重新生成"
+ :settings.features/markdown-mirror-two-way "双向 Markdown 同步"
+ :settings.features/markdown-mirror-two-way-collaboration-disabled "双向 Markdown 同步不适用于与多个协作者共享的图谱。"
+ :settings.features/markdown-mirror-two-way-desc "将 mirror/markdown 中受支持的编辑导入回图谱。默认关闭。"
+ :settings.features/markdown-mirror-two-way-warning "双向 Markdown 同步会将本地文件编辑导入此图谱。它可能与 Logseq Sync 冲突，并可能拖慢大型图谱。是否继续？"
  :settings.features/page-not-found "页面“{1}”尚不存在。请先创建该页面，然后再试一次。"
  :settings.features/plugin-system "插件系统"
 
