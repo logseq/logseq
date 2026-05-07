@@ -384,6 +384,50 @@
   []
   (commands/restore-state))
 
+(defn- start-pending-new-block!
+  []
+  (state/set-state! :editor/pending-new-block {:typed-text ""}))
+
+(defn- pending-new-block
+  []
+  @(:editor/pending-new-block @state/state))
+
+(defn- pending-new-block?
+  []
+  (some? (pending-new-block)))
+
+(defn- append-pending-new-block-text!
+  [text]
+  (when (pending-new-block?)
+    (state/update-state! :editor/pending-new-block
+                         #(update % :typed-text str text))))
+
+(defn- queue-pending-new-block-tab!
+  [indent?]
+  (when (pending-new-block?)
+    (state/update-state! :editor/pending-new-block
+                         #(assoc % :tab-indent? indent?))))
+
+(defn- clear-pending-new-block!
+  []
+  (state/set-state! :editor/pending-new-block nil))
+
+(declare get-new-container-id)
+
+(defn- edit-pending-new-block!
+  [next-block sibling?]
+  (let [pending (pending-new-block)
+        next-block' (db/entity [:block/uuid (:block/uuid next-block)])
+        {:keys [typed-text tab-indent?]} pending
+        container-id (get-new-container-id :insert {:sibling? sibling?})]
+    (p/do!
+     (when (some? tab-indent?)
+       (block-handler/indent-outdent-blocks! [next-block'] tab-indent? nil))
+     (edit-block! next-block' (count typed-text)
+                  {:container-id container-id
+                   :custom-content (str typed-text (:block/title next-block'))})
+     (clear-pending-new-block!))))
+
 (defn get-state
   []
   (let [[{:keys [on-hide block block-id block-parent-id format sidebar?]} id config] (state/get-editor-args)
@@ -476,7 +520,7 @@
    (->
     (when (not config/publishing?)
       (when-let [state (get-state)]
-        (state/set-state! :editor/async-unsaved-chars "")
+        (start-pending-new-block!)
         (let [{:keys [block value config]} state
               value (if (string? block-value) block-value value)
               block-id (:block/uuid block)
@@ -509,20 +553,14 @@
                           :else
                           insert-new-block-aux!)
               [result-promise sibling? next-block] (insert-fn (assoc config :right-sibling right-sibling) block'' value)
-              edit-block-f (fn []
-                             (let [next-block' (db/entity [:block/uuid (:block/uuid next-block)])
-                                   pos 0
-                                   unsaved-chars @(:editor/async-unsaved-chars @state/state)
-                                   container-id (get-new-container-id :insert {:sibling? sibling?})]
-                               (edit-block! next-block' (+ pos (count unsaved-chars))
-                                            {:container-id container-id
-                                             :custom-content (str unsaved-chars (:block/title next-block'))})))]
+              edit-block-f #(edit-pending-new-block! next-block sibling?)]
           (p/do!
            (state/set-state! :editor/edit-block-fn edit-block-f)
            result-promise
            (clear-when-saved!)))))
-    (p/finally (fn []
-                 (state/set-state! :editor/async-unsaved-chars nil))))))
+    (p/catch (fn [e]
+               (clear-pending-new-block!)
+               (throw e))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid
@@ -2537,6 +2575,11 @@
   [direction]
   (fn [e]
     (cond
+      (pending-new-block?)
+      (do
+        (util/stop e)
+        (queue-pending-new-block-tab! (not (= :left direction))))
+
       (state/editing?)
       (when-not (state/get-editor-action)
         (util/stop e)
@@ -2584,12 +2627,10 @@
           (util/stop e)
           (notification/show! (t :page.validation/name-no-hash) :warning))
         ;; stop accepting edits if the new block is not created yet
-        (some? @(:editor/async-unsaved-chars @state/state))
+        (pending-new-block?)
         (do
           (when (= 1 (count (str key)))
-            (state/update-state! :editor/async-unsaved-chars
-                                 (fn [s]
-                                   (str s key))))
+            (append-pending-new-block-text! key))
           (util/stop e))
 
         (contains? #{"ArrowLeft" "ArrowRight"} key)
