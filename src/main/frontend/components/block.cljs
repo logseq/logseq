@@ -3201,7 +3201,10 @@
      [raw-title])
     (ui/tooltip
      [:span.opacity-40.px-0.5.text-xs
-      {:on-pointer-enter resolve-title!
+      {:role "button"
+       :tab-index 0
+       :aria-label (t :breadcrumb/more-ancestors)
+       :on-pointer-enter resolve-title!
        :on-focus resolve-title!}
       "···"]
      (or resolved-title raw-title)
