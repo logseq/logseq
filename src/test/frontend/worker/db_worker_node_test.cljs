@@ -669,6 +669,7 @@
             :error {:code :missing-repo
                     :message "repo is required"}}
            (repo-error :thread-api/create-or-open-db [:public-key] bound-repo)))
+    (is (nil? (repo-error :thread-api/create-or-open-db ["bound"] bound-repo)))
     (is (= {:status 409
             :error {:code :repo-mismatch
                     :message "repo does not match bound repo"
@@ -1067,6 +1068,28 @@
 
                                 :else
                                 (done)))))))))
+
+(deftest db-worker-node-accepts-prefix-equivalent-repo-test
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-prefix-equivalent")
+               bound-repo "demo"
+               requested-repo "logseq_db_demo"]
+           (-> (p/let [{:keys [host port stop!]}
+                       (start-daemon! {:root-dir data-dir
+                                       :repo bound-repo
+                                       :create-empty-db? true})
+                       _ (reset! daemon {:host host :port port :stop! stop!})
+                       {:keys [status body]} (invoke-raw host port "thread-api/create-or-open-db" [requested-repo {}])
+                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
+                 (is (= 200 status))
+                 (is (= true (:ok parsed))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
 
 (deftest db-worker-node-repo-mismatch-test
   (async done

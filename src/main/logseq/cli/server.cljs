@@ -226,7 +226,7 @@
 
 (defn- repo-server
   [config servers repo]
-  (first (filter #(= repo (:repo %))
+  (first (filter #(graph-dir/same-repo? repo (:repo %))
                  (servers-for-config config servers))))
 
 (defn discover-servers

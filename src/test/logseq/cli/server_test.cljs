@@ -129,6 +129,40 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest ensure-server-reuses-prefix-free-discovered-server
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-server-prefix-free-reuse")
+               requested-repo "logseq_db_demo"
+               _lock-file (write-test-lock! root-dir requested-repo :cli)
+               spawn-calls (atom 0)
+               server (revision-test-server {:repo "demo"
+                                             :port 9420
+                                             :owner-source :cli
+                                             :revision "expected-revision"
+                                             :root-dir root-dir})]
+           (-> (p/with-redefs [daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/spawn-server! (fn [_]
+                                                      (swap! spawn-calls inc)
+                                                      nil)
+                               cli-server/discover-servers (fn [_]
+                                                            (p/resolved [server]))
+                               daemon/wait-for (fn [pred-fn _opts]
+                                                 (p/let [matched? (pred-fn)]
+                                                   (if matched?
+                                                     true
+                                                     (throw (ex-info "timed out" {:code :timeout})))))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:root-dir root-dir
+                                             :owner-source :cli
+                                             :expected-revision "expected-revision"}
+                                            requested-repo))
+               (p/then (fn [config]
+                         (is (= "http://127.0.0.1:9420" (:base-url config)))
+                         (is (= 0 @spawn-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest ensure-server-restarts-cli-owned-mismatched-revision
   (async done
          (let [root-dir (node-helper/create-tmp-dir "cli-server-revision-restart-cli")

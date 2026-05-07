@@ -271,7 +271,6 @@
   (swap! *client-ops-conns dissoc repo)
   (swap! client-op/*repo->pending-local-tx-count dissoc repo)
   (swap! *search-index-build-ids dissoc repo)
-  (search/clear-fuzzy-search-indice! repo)
   (when db (.close db))
   (when search (.close search))
   (when client-ops (.close client-ops))
@@ -283,7 +282,7 @@
 (defn- close-other-dbs!
   [repo]
   (doseq [[r {:keys [db search client-ops]}] @*sqlite-conns]
-    (when-not (= repo r)
+    (when-not (graph-dir/same-repo? repo r)
       (close-db-aux! r db search client-ops))))
 
 (defn close-db!
@@ -636,7 +635,7 @@
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
-  (when-not (= repo (worker-state/get-current-repo)) ; graph switched
+  (when-not (graph-dir/same-repo? repo (worker-state/get-current-repo)) ; graph switched
     (reset! worker-state/*deleted-block-uuid->db-id {}))
   (start-db! repo opts))
 
@@ -704,7 +703,7 @@
   [repo q option]
   (let [search-db (get-search-db repo)
         conn (worker-state/get-datascript-conn repo)]
-    (search/search-blocks repo conn search-db q option)))
+    (search/search-blocks conn search-db q option)))
 
 (def-thread-api :thread-api/block-refs-check
   [repo id {:keys [unlinked?]}]
@@ -954,7 +953,7 @@
 (def-thread-api :thread-api/search-build-blocks-indice
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (search/build-blocks-indice repo @conn)))
+    (search/build-blocks-indice @conn)))
 
 (defn- take-block-datoms-batch
   [datoms batch-size time-budget-ms]
@@ -1051,8 +1050,6 @@
         (if (and (= version search-db-version) (not force?))
           version
           (when-let [conn (worker-state/get-datascript-conn repo)]
-            (when force?
-              (search/build-fuzzy-search-indice repo @conn))
             (let [build-id (start-search-index-build! repo)]
               (-> (<build-blocks-fts! repo search-db conn build-id)
                   (p/catch (fn [error]
