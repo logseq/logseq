@@ -1631,6 +1631,11 @@
  :settings.features/home-default-page-update-success "Home default page updated successfully!"
  :settings.features/journals-enable-success "Journals enabled"
  :settings.features/login-prompt "To access new features before anyone else you must be an Open Collective Sponsor or Backer of Logseq and therefore log in first."
+ :settings.features/markdown-mirror "Markdown Mirror"
+ :settings.features/markdown-mirror-desc "Write a derived Markdown copy of edited pages to the graph's mirror/markdown folder. Desktop only."
+ :settings.features/markdown-mirror-regenerate "Regenerate full mirror"
+ :settings.features/markdown-mirror-regenerate-error "Failed to regenerate Markdown Mirror: {1}"
+ :settings.features/markdown-mirror-regenerate-success "Markdown Mirror regenerated"
  :settings.features/page-not-found "The page \"{1}\" doesn't exist yet. Please create that page first, and then try again."
  :settings.features/plugin-system "Plugins"
 
