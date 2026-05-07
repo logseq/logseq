@@ -57,30 +57,55 @@
 (declare normalize-icon derive-initials derive-avatar-initials
          <search-wikipedia-image <save-url-asset! open-image-asset-picker!)
 
-(defn- convert-bg-color-to-rgba
-  "Convert background color to rgba format with opacity ~0.314.
-   Handles hex colors, CSS variables, and rgba colors."
-  [backgroundColor]
-  (cond
-   ;; Hex color - convert to rgba with opacity
-    (and (string? backgroundColor)
-         (string/starts-with? backgroundColor "#")
-         (= (count (string/replace backgroundColor #"^#" "")) 6))
-    (let [hex (string/replace backgroundColor #"^#" "")
-          r (js/parseInt (subs hex 0 2) 16)
-          g (js/parseInt (subs hex 2 4) 16)
-          b (js/parseInt (subs hex 4 6) 16)]
-      (str "rgba(" r "," g "," b ",0.314)"))
-   ;; Already rgba - update opacity to 0.314
-    (and (string? backgroundColor)
-         (string/includes? backgroundColor "rgba"))
-    (string/replace backgroundColor #",\s*[\d.]+\)$" ",0.314)")
-   ;; CSS variable - use color-mix to apply opacity
-    (and (string? backgroundColor)
-         (string/starts-with? backgroundColor "var("))
-    (str "color-mix(in srgb, " backgroundColor " 31.4%, transparent)")
-   ;; Default: use as-is (might be a color name or other format)
-    :else backgroundColor))
+(defn- avatar-fallback-style
+  "Build the inline :style map for an avatar fallback chip (the colored
+   circle holding initials).
+
+   Design intent: a muted, hue-preserving tint behind crisp picked-color
+   text — so the picked hue shows through on the initials, with the bg
+   acting as atmospheric framing rather than competing for attention.
+
+   - bg gets `muted-tint`: same hue as picked, low chroma, L bisected to
+     ~1.5:1 contrast vs the page surface. Always visibly distinct from
+     the surface, never as saturated as the picked color itself.
+   - text uses the picked color directly when it reads against the muted
+     bg; falls back to `adjust-for-contrast … 3.0` to lift L only when
+     needed (e.g. dark picks on a dark surface where the picked color
+     would still be invisible against its own muted tint).
+
+   The 3.0 target — rather than 4.5:1 body-text — treats avatar initials
+   as decorative identifiers (Slack/Linear/GitHub all do similar). With
+   4.5 the lift triggered for hues like tomato/red whose picked color
+   sits at ~3.5:1 against their own muted bg, and OKLCh L bisection
+   toward white desaturates as it climbs — turning vivid red into dusty
+   pink. 3.0 lets those hues pass through as-is while still safely
+   lifting truly-dark picks (#1a3d60 etc.) into legibility.
+
+   `bg` and `color` may be hex literals OR theme tokens (`var(--rx-...)`),
+   since the picker offers both a custom hex picker and a Radix-token
+   palette. Both are resolved to current-theme hex via `colors/->hex` so
+   they hit the same OKLCh pipeline; otherwise preset picks would skip
+   muting and render as flat saturated discs (bg = text = same token).
+
+   Earlier iteration used a 31.4% alpha treatment, which silently rendered
+   dark picks at ~1.1:1 vs surface — invisible. The next iteration went
+   solid bg + auto-lifted text, which inverted the hierarchy and made
+   vivid picks read as a single solid disc. This version restores the
+   original intent with deterministic OKLCh math."
+  [{:keys [font-size bg color]}]
+  (let [bg-hex (colors/->hex bg)
+        color-hex (colors/->hex (or color bg))
+        page-bg (when bg-hex
+                  (colors/read-bg-var "--ls-primary-background-color"))
+        bg' (if (and bg-hex page-bg)
+              (colors/muted-tint bg-hex page-bg 1.5)
+              bg)
+        color' (if (and color-hex bg-hex page-bg)
+                 (colors/adjust-for-contrast color-hex bg' 3.0)
+                 (or color bg))]
+    (cond-> {:font-size font-size :font-weight "500"}
+      bg' (assoc :background-color bg')
+      color' (assoc :color color'))))
 
 (defn- get-asset-type-from-db
   "Get asset type from DB using a direct Datalog query.
@@ -319,12 +344,9 @@
                            :style {:object-fit "cover"}}))
      ;; Fallback (shows while loading or on error)
      (shui/avatar-fallback
-      {:style (cond-> {:font-size font-size
-                       :font-weight "500"}
-                explicit-bg
-                (assoc :background-color (convert-bg-color-to-rgba explicit-bg))
-                explicit-color
-                (assoc :color explicit-color))}
+      {:style (avatar-fallback-style {:font-size font-size
+                                      :bg explicit-bg
+                                      :color explicit-color})}
       display-text))))
 
 (defn measure-text-width
@@ -509,12 +531,9 @@
                      (shui/avatar
                       {:style {:width size :height size}}
                       (shui/avatar-fallback
-                       {:style (cond-> {:font-size font-size
-                                        :font-weight "500"}
-                                 explicit-bg
-                                 (assoc :background-color (convert-bg-color-to-rgba explicit-bg))
-                                 explicit-color
-                                 (assoc :color explicit-color))}
+                       {:style (avatar-fallback-style {:font-size font-size
+                                                       :bg explicit-bg
+                                                       :color explicit-color})}
                        display-text)))))
 
                ;; Image with asset — let image-icon-cp resolve via the filesystem
@@ -1663,7 +1682,6 @@
                   (colors/variable :gray :09))
         my-id (:id icon-item)
         display-text (subs avatar-value 0 (min 3 (count avatar-value)))
-        bg-color-rgba (convert-bg-color-to-rgba backgroundColor)
         item-shape {:type :avatar
                     :data {:value avatar-value
                            :backgroundColor backgroundColor
@@ -1685,10 +1703,9 @@
      (shui/avatar
       {:class "w-7 h-7"}
       (shui/avatar-fallback
-       {:style {:background-color bg-color-rgba
-                :font-size "12px"
-                :font-weight "500"
-                :color color}}
+       {:style (avatar-fallback-style {:font-size "12px"
+                                       :bg backgroundColor
+                                       :color color})}
        display-text))]))
 
 (defn render-item
@@ -2067,6 +2084,10 @@
         on-chosen (:on-chosen opts)
         highlighted-id (:highlighted-id opts)
         on-tile-hover! (:on-tile-hover! opts)
+        ;; In default-icon mode (used by tag class default-icon row), Text and
+        ;; Image tiles commit immediately rather than drilling into sub-pickers.
+        ;; Avatar still opens the asset-picker since avatars need an image.
+        default-icon? (:default-icon? opts)
         ;; Mouse-hover preview broadcast: pass the synthesized preview item
         ;; the page-icon should render for each button. Keyboard hover
         ;; broadcasts `:custom-*` markers and relies on icon-search's
@@ -2079,27 +2100,31 @@
         {:data-item-id "custom-text"
          :tabIndex "-1"
          :class (when (= "custom-text" highlighted-id) "is-highlighted")
-         :on-click #(reset! *view :text-picker)
+         :on-click (if default-icon?
+                     #(when on-chosen (on-chosen % text-item))
+                     #(reset! *view :text-picker))
          :on-mouse-over (fn [] (some-> on-tile-hover! (apply [text-item])))}
         [:div.custom-tab-item-preview {:aria-hidden "true"}
          (icon text-item {:size 32})]
         [:span.custom-tab-item-label "Text"]])
 
-     ;; Avatar option — commits the synthesized initials avatar immediately
-     ;; (`keep-popup? true` keeps the icon-picker mounted) and lands on the
-     ;; asset-picker's Avatar tab. The user can then pick / upload an image
-     ;; to use as the avatar background, or back out and the initials avatar
-     ;; stays as the committed icon. Mirrors the visual continuity the user
-     ;; gets from the hover preview.
+     ;; Avatar option. In page-icon context: commits the synthesized initials
+     ;; avatar immediately and lands on the asset-picker's Avatar tab so the
+     ;; user can pick a face image. In default-icon (class) context: commits
+     ;; only the type-without-image; each instance auto-derives its own
+     ;; initials from its own title via get-node-icon, so binding a specific
+     ;; face would be the wrong shape for the class default.
      (when avatar-item
        [:button.custom-tab-item
         {:data-item-id "custom-avatar"
          :tabIndex "-1"
          :class (when (= "custom-avatar" highlighted-id) "is-highlighted")
-         :on-click (fn [e]
-                     (when on-chosen (on-chosen e avatar-item true))
-                     (reset! *asset-picker-initial-mode :avatar)
-                     (reset! *view :asset-picker))
+         :on-click (if default-icon?
+                     #(when on-chosen (on-chosen % avatar-item))
+                     (fn [e]
+                       (when on-chosen (on-chosen e avatar-item true))
+                       (reset! *asset-picker-initial-mode :avatar)
+                       (reset! *view :asset-picker)))
          :on-mouse-over (fn [] (some-> on-tile-hover! (apply [avatar-item])))}
         [:div.custom-tab-item-preview {:aria-hidden "true"}
          (icon avatar-item {:size 32})]
@@ -2113,10 +2138,14 @@
       {:data-item-id "custom-image"
        :tabIndex "-1"
        :class (when (= "custom-image" highlighted-id) "is-highlighted")
-       :on-click (fn [e]
-                   (when on-chosen (on-chosen e image-placeholder-item true))
-                   (reset! *asset-picker-initial-mode :image)
-                   (reset! *view :asset-picker))
+       :on-click (if default-icon?
+                   ;; Default-icon context: commit placeholder and close.
+                   ;; Per-instance images are auto-derived elsewhere.
+                   (fn [e] (when on-chosen (on-chosen e image-placeholder-item)))
+                   (fn [e]
+                     (when on-chosen (on-chosen e image-placeholder-item true))
+                     (reset! *asset-picker-initial-mode :image)
+                     (reset! *view :asset-picker)))
        :on-mouse-over (fn [] (some-> on-tile-hover! (apply [image-placeholder-item])))}
       [:div.custom-tab-item-preview {:aria-hidden "true"}
        [:span.image-tile-placeholder
@@ -5750,7 +5779,7 @@
     (icon effective-icon-value (merge {:color? true} icon-props))))
 
 (rum/defc icon-picker
-  [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts page-title preview-target-db-id]}]
+  [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts page-title preview-target-db-id default-icon?]}]
   (let [*trigger-ref (rum/use-ref nil)
         ;; Optimistic post-commit override. Holds the just-committed
         ;; icon-value during the ~15ms SharedWorker round-trip between
@@ -5789,7 +5818,8 @@
               :icon-value normalized-icon-value
               :page-title page-title
               :del-btn? del-btn?
-              :preview-target-db-id preview-target-db-id})))]
+              :preview-target-db-id preview-target-db-id
+              :default-icon? default-icon?})))]
     (hooks/use-effect!
      (fn []
        (when initial-open?

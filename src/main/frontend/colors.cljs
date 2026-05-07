@@ -56,6 +56,24 @@
                 (pick js/document.documentElement))
             parse-css-color->hex)))
 
+(defn ->hex
+  "Resolve any inline CSS color string to its current-theme hex value:
+   - hex strings pass through unchanged
+   - `var(--name)` references are looked up via the cascade on body
+     (so theme tokens like Radix `--rx-orange-10` resolve to whichever
+     light/dark hex is active right now)
+   - rgb(...)/hsl(...) literals are parsed
+   Returns nil for blank/unresolvable input."
+  [css-color]
+  (when (string? css-color)
+    (let [v (string/trim css-color)]
+      (cond
+        (string/blank? v) nil
+        (string/starts-with? v "#") v
+        (string/starts-with? v "var(")
+        (some-> (re-find #"var\(\s*(--[\w-]+)" v) second read-bg-var)
+        :else (parse-css-color->hex v)))))
+
 (defn get-accent-color
   []
   (when-let [color (some-> js/document.documentElement
@@ -300,6 +318,77 @@
   Memoized via a 256-entry LRU cache keyed on [picked surface target]."}
   adjust-for-contrast
   (bounded-memoize adjust-for-contrast* 256))
+
+;; Chroma envelope for muted tints. Picked hue is preserved; chroma is
+;; clamped low so the tint reads as "atmospheric hint of hue" rather than
+;; a saturated chip. Floor keeps near-grayscale picks from collapsing to
+;; pure gray (so a black/white pick still tints the badge differently
+;; than an unset one).
+(def ^:private muted-tint-max-chroma 0.05)
+(def ^:private muted-tint-min-chroma 0.02)
+
+(defn- muted-tint*
+  [picked-hex surface-hex target-vs-surface]
+  (let [picked-rgb (hex->rgb picked-hex)
+        surface-rgb (hex->rgb surface-hex)]
+    (if (or (nil? picked-rgb) (nil? surface-rgb))
+      picked-hex
+      (let [[_ pC pH] (oklab->oklch (rgb->oklab picked-rgb))
+            ;; Near-grayscale picks (white, black, neutrals) carry no
+            ;; meaningful hue — atan2(0,0) returns 0 (red-ish), which
+            ;; would otherwise paint every gray pick the same warm tint.
+            ;; Skip the chroma floor in that case so the bg stays
+            ;; neutral. Threshold is generous; anything visibly chromatic
+            ;; sits well above 0.01.
+            achromatic? (< pC 0.01)
+            chroma (if achromatic?
+                     0.0
+                     (-> pC
+                         (min muted-tint-max-chroma)
+                         (max muted-tint-min-chroma)))
+            surface-dark? (< (relative-luminance surface-rgb) 0.5)
+            target-L (if surface-dark? 1.0 0.0)
+            [surface-L _ _] (oklab->oklch (rgb->oklab surface-rgb))]
+        (loop [lo (min surface-L target-L)
+               hi (max surface-L target-L)
+               best-hex picked-hex
+               i 0]
+          (if (>= i 12)
+            best-hex
+            (let [mid (/ (+ lo hi) 2)
+                  candidate-hex (oklch->hex [mid chroma pH])
+                  candidate-rgb (hex->rgb candidate-hex)
+                  ratio (if candidate-rgb
+                          (contrast-ratio candidate-rgb surface-rgb)
+                          1.0)]
+              (cond
+                (>= ratio target-vs-surface)
+                ;; meets target — pull L back toward surface so the tint
+                ;; stays as subtle as it can while still being visible
+                (let [[new-lo new-hi]
+                      (if surface-dark?
+                        [lo mid]
+                        [mid hi])]
+                  (recur new-lo new-hi candidate-hex (inc i)))
+
+                surface-dark?
+                (recur mid hi best-hex (inc i))
+                :else
+                (recur lo mid best-hex (inc i))))))))))
+
+(def ^{:doc "Mute `picked-hex` into a subtle, hue-preserving tint that sits
+  just above `surface-hex` in contrast. Hue is taken from picked, chroma
+  is clamped low (atmospheric, not saturated), and L is bisected toward
+  the surface to land at exactly `target-vs-surface` (default ~1.5:1).
+
+  Use for the bg of a colored badge whose foreground will display the
+  picked color itself — the muted bg gives the badge presence without
+  competing with the foreground's hue. For text on top, run the picked
+  color through `adjust-for-contrast` against the muted bg.
+
+  Memoized via a 256-entry LRU cache keyed on [picked surface target]."}
+  muted-tint
+  (bounded-memoize muted-tint* 256))
 
 ;; Canonical light/dark page surfaces. Used by `adjust-for-both-themes`
 ;; to derive both rendering hexes regardless of the active theme — so

@@ -3212,12 +3212,35 @@
                                                                        (db-property-handler/set-block-property!
                                                                         (:db/id block)
                                                                         :logseq.property/icon
-                                                                        icon-data))
+                                                                        icon-data)
+                                                                       ;; For classes, auto-sync the page-icon into
+                                                                       ;; default-icon when default-icon is empty so
+                                                                       ;; instances inherit it. If default-icon is already
+                                                                       ;; set we leave it alone to avoid clobbering a
+                                                                       ;; carefully configured tag default.
+                                                                       (when (and (ldb/class? block)
+                                                                                  (nil? (:logseq.property.class/default-icon block)))
+                                                                         (db-property-handler/set-block-property!
+                                                                          (:db/id block)
+                                                                          :logseq.property.class/default-icon
+                                                                          icon-data)))
                                                                      ;; del — set :none to override inheritance (prevents auto-fetch re-trigger)
-                                                                     (db-property-handler/set-block-property!
-                                                                      (:db/id block)
-                                                                      :logseq.property/icon
-                                                                      {:type :none})))
+                                                                     (do
+                                                                       (db-property-handler/set-block-property!
+                                                                        (:db/id block)
+                                                                        :logseq.property/icon
+                                                                        {:type :none})
+                                                                       ;; For classes, only clear default-icon if it
+                                                                       ;; matches the page-icon being removed — i.e. the
+                                                                       ;; two were synced. If default-icon was set
+                                                                       ;; independently, preserve it.
+                                                                       (let [default-icon (:logseq.property.class/default-icon block)]
+                                                                         (when (and (ldb/class? block)
+                                                                                    default-icon
+                                                                                    (= default-icon icon'))
+                                                                           (db-property-handler/remove-block-property!
+                                                                            (:db/id block)
+                                                                            :logseq.property.class/default-icon))))))
                                                       :del-btn? (boolean (and icon' (not= (:type icon') :none)))
                                                       :page-title (:block/title block)
                                                       :preview-target-db-id (:db/id block)

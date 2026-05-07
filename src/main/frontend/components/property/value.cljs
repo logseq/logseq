@@ -141,6 +141,68 @@
                                     :del-btn? (some? icon-value)
                                     :on-chosen on-chosen!})])))
 
+(rum/defc default-icon-row < rum/reactive
+  "Renders the Default Icon property for classes.
+   Uses a single icon-picker button that opens the universal icon search popup
+   supporting all icon types (icon, emoji, avatar, text, image)."
+  [block _editing?]
+  (let [block (or (model/sub-block (:db/id block)) block)
+        own-value (:logseq.property.class/default-icon block)
+        inherited-value (when-not own-value
+                          (some :logseq.property.class/default-icon
+                                (ldb/get-class-extends block)))
+        ;; Subscribe to parent entities for reactivity when inheriting
+        _ (when-not own-value
+            (doseq [parent (ldb/get-class-extends block)]
+              (model/sub-block (:db/id parent))))
+        current-value (or own-value inherited-value)
+        page-title (:block/title block)
+        ;; Enrich type-only values for display preview.
+        ;; Without this, normalize-icon produces {:data {:value nil}} for
+        ;; type-only maps like {:type :avatar}, causing invisible buttons.
+        display-value (when current-value
+                        (case (:type current-value)
+                          :avatar (if (get-in current-value [:data :value])
+                                    current-value
+                                    (assoc current-value :data
+                                           {:value (icon-component/derive-avatar-initials (or page-title ""))}))
+                          :text (if (get-in current-value [:data :value])
+                                  current-value
+                                  (assoc current-value :data
+                                         {:value (icon-component/derive-initials (or page-title ""))}))
+                          :image (if (get-in current-value [:data :asset-uuid])
+                                   current-value
+                                   (assoc current-value :data {:empty? true}))
+                          current-value))
+        on-chosen (fn [_e icon]
+                    (if icon
+                      (let [icon-data (cond
+                                        (= :text (:type icon)) {:type :text :data (:data icon)}
+                                        (= :avatar (:type icon)) {:type :avatar :data (:data icon)}
+                                        (= :image (:type icon)) {:type :image :data (:data icon)}
+                                        :else (select-keys icon [:type :id :color]))]
+                        (property-handler/set-block-property!
+                         (:db/id block)
+                         :logseq.property.class/default-icon
+                         icon-data))
+                      (property-handler/remove-block-property!
+                       (:db/id block)
+                       :logseq.property.class/default-icon)))]
+    [:div.flex.flex-row.items-center.gap-2.w-full.cursor-pointer
+     {:on-click (fn [^js e]
+                  ;; Delegate clicks on the surrounding row to the icon-picker
+                  ;; button, but skip if the button itself was clicked
+                  (when-not (some-> (.-target e) (.closest "button"))
+                    (when-let [btn (some-> (.-currentTarget e) (.querySelector "button"))]
+                      (.click btn))))}
+     (icon-component/icon-picker display-value
+                                 {:disabled? config/publishing?
+                                  :del-btn? (some? current-value)
+                                  :on-chosen on-chosen
+                                  :page-title page-title
+                                  :default-icon? true
+                                  :icon-props {:size 20}})]))
+
 (defn select-type?
   [block property]
   (let [type (:logseq.property/type property)]
@@ -1441,6 +1503,9 @@
     (cond
       (= :logseq.property/icon (:db/ident property))
       (icon-row block editing?)
+
+      (= :logseq.property.class/default-icon (:db/ident property))
+      (default-icon-row block editing?)
 
       (and (= type :number) (not editing?) (not closed-values?))
       (single-number-input block property value (:table-view? opts))
