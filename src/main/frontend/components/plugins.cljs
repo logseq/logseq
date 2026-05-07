@@ -13,7 +13,6 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.mixins :as mixins]
             [frontend.rum :as rum-utils]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -29,6 +28,28 @@
 (defonce PER-PAGE-SIZE 15)
 
 (def *dirties-toggle-items (atom {}))
+
+(defn- handle-installed-themes-key-down
+  [*cursor *total ^js target ^js e]
+  (case (.-keyCode e)
+    38                                           ;; up
+    (do
+      (util/stop e)
+      (reset! *cursor
+              (if (zero? @*cursor)
+                (dec @*total) (dec @*cursor))))
+    40                                           ;; down
+    (do
+      (util/stop e)
+      (reset! *cursor
+              (if (= @*cursor (dec @*total))
+                0 (inc @*cursor))))
+    13                                           ;; enter
+    (do
+      (util/stop e)
+      (when-let [^js active (.querySelector target ".is-active")]
+        (.click active)))
+    nil))
 
 (defn- clear-dirties-states!
   []
@@ -86,32 +107,16 @@
                   (reset! *themes themes)
                   (reset! *total (count themes))
                   state))}
-  (mixins/event-mixin
-   (fn [state]
-     (let [*cursor    (::cursor state)
-           *total     (::total state)
-           ^js target (rum/dom-node state)]
-       (.focus target)
-       (mixins/on-key-down
-        state {38                                           ;; up
-               (fn [^js _e]
-                 (reset! *cursor
-                         (if (zero? @*cursor)
-                           (dec @*total) (dec @*cursor))))
-               40                                           ;; down
-               (fn [^js _e]
-                 (reset! *cursor
-                         (if (= @*cursor (dec @*total))
-                           0 (inc @*cursor))))
-
-               13                                           ;; enter
-               #(when-let [^js active (.querySelector target ".is-active")]
-                  (.click active))}))))
+  {:did-mount (fn [state]
+                (some-> (rum/dom-node state) (.focus))
+                state)}
   [state]
   (let [*cursor (::cursor state)
-        *themes (::themes state)]
+        *themes (::themes state)
+        *total (::total state)]
     [:div.cp__themes-installed
-     {:tab-index -1}
+     {:tab-index -1
+      :on-key-down #(handle-installed-themes-key-down *cursor *total (.-currentTarget %) %)}
      [:h1.mb-4.text-2xl.p-1 (t :nav/themes)]
      (map-indexed
       (fn [idx opt]
