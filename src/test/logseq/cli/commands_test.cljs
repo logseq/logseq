@@ -641,6 +641,21 @@
                   "1000 └── Child B")
              (strip-ansi output))))))
 
+(deftest test-tree->text-linked-display-marker-keeps-id-alignment
+  (testing "show tree text renders link display marker after the db/id and tree glyph prefix"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 42
+                            :block/title "Target"
+                            :show/linked-display? true
+                            :block/children [{:db/id 7
+                                              :block/title "Child"}]}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (string/includes? output (style/dim "→ ")))
+      (is (= (str "42 → Target\n"
+                  "7  └── Child")
+             (strip-ansi output))))))
+
 (deftest test-tree->text-multiline
   (testing "show tree text renders multiline blocks under glyph column"
     (let [tree->text #'show-command/tree->text
@@ -2167,12 +2182,41 @@
              (get-in result [:options :query])))
       (is (= "[\"Hello\"]" (get-in result [:options :inputs]))))))
 
-(deftest test-verb-subcommand-parse-graph-import-export
+(deftest test-verb-subcommand-parse-graph-create-enable-sync
   (testing "graph create requires --graph even with positional args"
     (let [result (commands/parse-args ["graph" "create" "demo"])]
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
+  (testing "graph create parses enable-sync"
+    (let [result (commands/parse-args ["graph" "create"
+                                       "--graph" "demo"
+                                       "--enable-sync"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-create (:command result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= true (get-in result [:options :enable-sync])))))
+
+  (testing "graph create parses enable-sync e2ee password"
+    (let [result (commands/parse-args ["graph" "create"
+                                       "--graph" "demo"
+                                       "--enable-sync"
+                                       "--e2ee-password" "pw"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-create (:command result)))
+      (is (= true (get-in result [:options :enable-sync])))
+      (is (= "pw" (get-in result [:options :e2ee-password])))))
+
+  (testing "graph create rejects e2ee password without enable-sync"
+    (let [result (commands/parse-args ["graph" "create"
+                                       "--graph" "demo"
+                                       "--e2ee-password" "pw"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? (strip-ansi (get-in result [:error :message]))
+                            "--e2ee-password requires --enable-sync")))))
+
+(deftest test-verb-subcommand-parse-graph-import-export
   (testing "graph export parses with type and file"
     (let [result (commands/parse-args ["graph" "export"
                                        "--type" "edn"
@@ -2369,6 +2413,49 @@
           result (commands/build-action parsed {})]
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
+
+  (testing "plain graph-create requires a missing local graph"
+    (let [parsed {:ok? true :command :graph-create :options {:graph "demo"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :invoke (get-in result [:action :type])))
+      (is (= :thread-api/create-or-open-db (get-in result [:action :method])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= "demo" (get-in result [:action :graph])))
+      (is (= true (get-in result [:action :allow-missing-graph])))
+      (is (= true (get-in result [:action :require-missing-graph])))
+      (is (= "demo" (get-in result [:action :persist-repo])))))
+
+  (testing "graph-create enable-sync builds orchestration action"
+    (let [parsed {:ok? true
+                  :command :graph-create
+                  :options {:graph "demo"
+                            :enable-sync true}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= {:type :graph-create-enable-sync
+              :command :graph-create
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :method :thread-api/create-or-open-db
+              :args ["logseq_db_demo" {}]
+              :allow-missing-graph true
+              :require-missing-graph true
+              :persist-repo "demo"
+              :enable-sync true
+              :e2ee-password nil}
+             (:action result)))))
+
+  (testing "graph-create enable-sync forwards e2ee password without printing fields"
+    (let [parsed {:ok? true
+                  :command :graph-create
+                  :options {:graph "demo"
+                            :enable-sync true
+                            :e2ee-password "pw"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :graph-create-enable-sync (get-in result [:action :type])))
+      (is (= "pw" (get-in result [:action :e2ee-password])))))
 
   (testing "graph-switch uses graph name"
     (let [parsed {:ok? true :command :graph-switch :options {:graph "demo"}}
@@ -4063,9 +4150,9 @@
                    (is (= "sqlite" (get-in sqlite-result [:context :export-type])))
                    (is (= "/tmp/export.sqlite" (get-in sqlite-result [:context :file])))
                    (is (= [[:thread-api/export-edn ["logseq_db_demo" {:export-type :graph
-                                                                            :graph-options {:include-timestamps? true
-                                                                                            :exclude-built-in-pages? true
-                                                                                            :exclude-namespaces #{:user :project}}}]]
+                                                                      :graph-options {:include-timestamps? true
+                                                                                      :exclude-built-in-pages? true
+                                                                                      :exclude-namespaces #{:user :project}}}]]
                            [:thread-api/backup-db-sqlite ["logseq_db_demo" "/tmp/export.sqlite"]]]
                           @invoke-calls))
                    (is (= 1 (count @write-calls)))

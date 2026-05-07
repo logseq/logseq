@@ -87,37 +87,49 @@
               {:close! (fn []
                          (.close es))})
             {:close! (fn [] nil)}))]
-  (assoc opts
-         :fetch-fn (or fetch-fn default-fetch-fn)
-         :open-sse-fn (or open-sse-fn default-open-sse-fn)
-         :schedule-fn (or schedule-fn (fn [f delay-ms]
-                                        (js/setTimeout f delay-ms)))
-         :reconnect-delay-ms (or reconnect-delay-ms 1000))))
+    (assoc opts
+           :fetch-fn (or fetch-fn default-fetch-fn)
+           :open-sse-fn (or open-sse-fn default-open-sse-fn)
+           :schedule-fn (or schedule-fn (fn [f delay-ms]
+                                          (js/setTimeout f delay-ms)))
+           :reconnect-delay-ms (or reconnect-delay-ms 1000))))
 
 (defn invoke!
-  [{:keys [base-url auth-token fetch-fn]} method args]
+  [{:keys [base-url auth-token fetch-fn on-invoke-success on-invoke-failure]} method args]
   (let [payload (js/JSON.stringify
                  (clj->js {:method method
                            :argsTransit (ldb/write-transit-str args)}))]
-    (p/let [{:keys [status body]}
-            (fetch-fn {:method "POST"
-                       :url (invoke-url base-url)
-                       :headers (base-headers auth-token)
-                       :body payload})
-            parsed (parse-response-body body)]
-      (if (<= 200 status 299)
-        (ldb/read-transit-str (:resultTransit parsed))
-        (let [error (:error parsed)]
-          (throw (ex-info (or (:message error) "db-worker invoke failed")
-                          (cond-> {:status status
-                                   :code (normalize-code (:code error))}
-                            error (assoc :error error)))))))))
+    (->
+     (p/let [{:keys [status body]}
+             (fetch-fn {:method "POST"
+                        :url (invoke-url base-url)
+                        :headers (base-headers auth-token)
+                        :body payload})
+             parsed (parse-response-body body)]
+       (if (<= 200 status 299)
+         (let [result (ldb/read-transit-str (:resultTransit parsed))]
+           (when on-invoke-success
+             (on-invoke-success method args result))
+           result)
+         (let [error (:error parsed)]
+           (throw (ex-info (or (:message error) "db-worker invoke failed")
+                           (cond-> {:status status
+                                    :code (normalize-code (:code error))}
+                             error (assoc :error error)))))))
+     (p/catch (fn [error]
+                (when on-invoke-failure
+                  (on-invoke-failure method args error))
+                (throw error))))))
 
 (defn connect-events!
-  [{:keys [base-url auth-token event-handler open-sse-fn schedule-fn reconnect-delay-ms]} wrapped-worker]
+  [{:keys [base-url auth-token event-handler open-sse-fn schedule-fn reconnect-delay-ms on-event-error]} wrapped-worker]
   (let [connected? (atom true)
         buffer (atom "")
         subscription (atom nil)
+        close-subscription! (fn []
+                              (when-let [close! (:close! @subscription)]
+                                (close!))
+                              (reset! subscription nil))
         dispatch! (fn [event-str]
                     (when-let [line (data-line event-str)]
                       (let [event (parse-response-body line)
@@ -140,14 +152,17 @@
                                                 (reset! buffer next-buffer)
                                                 (dispatch! event-str)
                                                 (recur))))))
-                          :on-error (fn [_error]
+                          :on-error (fn [error]
                                       (when @connected?
-                                        (schedule-fn open! reconnect-delay-ms)))}))))]
+                                        (close-subscription!)
+                                        (when on-event-error
+                                          (on-event-error error))
+                                        (when @connected?
+                                          (schedule-fn open! reconnect-delay-ms))))}))))]
       (open!)
       {:disconnect! (fn []
                       (reset! connected? false)
-                      (when-let [close! (:close! @subscription)]
-                        (close!))
+                      (close-subscription!)
                       nil)})))
 
 (defn- method->str

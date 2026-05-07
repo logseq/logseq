@@ -30,6 +30,7 @@
             [frontend.version :as fv]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
+            [logseq.common.version :as build-version]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -79,18 +80,19 @@
                :else
                nil)]
 
-       [:div.text-sm.cursor
-        {:title (t :settings.general/revision config/revision)
-         :on-click (fn []
-                     (notification/show! [:div
-                                          [:span (t :settings.general/current-revision-label)]
-                                          [:a {:target "_blank"
-                                               :style {:margin-inline-start "0.25rem"}
-                                               :href (str "https://github.com/logseq/logseq/commit/" config/revision)}
-                                           config/revision]]
-                                         :info
-                                         false))}
-        version]
+       (let [revision (build-version/revision)]
+         [:div.text-sm.cursor
+          {:title (t :settings.general/revision revision)
+           :on-click (fn []
+                       (notification/show! [:div
+                                            [:span (t :settings.general/current-revision-label)]
+                                            [:a {:target "_blank"
+                                                 :style {:margin-inline-start "0.25rem"}
+                                                 :href (str "https://github.com/logseq/logseq/commit/" revision)}
+                                             revision]]
+                                           :info
+                                           false))}
+          version])
 
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"

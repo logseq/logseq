@@ -12,7 +12,8 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [promesa.core :as p]))
 
 (rum/defc references-aux
   [page-entity config]
@@ -77,11 +78,10 @@
   (when-let [id (:db/id entity)]
     (let [[has-references? set-has-references!] (hooks/use-state nil)]
       (hooks/use-effect!
-       #(c.m/run-task*
-         (m/sp
-           (let [result (c.m/<? (state/<invoke-db-worker :thread-api/block-refs-check
-                                                         (state/get-current-repo) id {:unlinked? true}))]
-             (set-has-references! result))))
+       (fn []
+         (p/let [result (state/<invoke-db-worker :thread-api/block-refs-check
+                                                 (state/get-current-repo) id {:unlinked? true})]
+           (set-has-references! result)))
        [])
       (when has-references?
         (let [config (assoc config :highlight-query (:block/title entity))]

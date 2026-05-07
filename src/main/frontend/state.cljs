@@ -162,7 +162,7 @@
       :block/component-editing-mode?         false
       :editor/op                             (atom nil)
       :editor/start-pos                      (atom nil)
-      :editor/async-unsaved-chars            (atom nil)
+      :editor/pending-new-block              (atom nil)
       :editor/hidden-editors                 #{} ;; page names
 
       :editor/action                         (atom nil)

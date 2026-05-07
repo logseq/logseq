@@ -5,6 +5,7 @@
             [logseq.cli.commands :as commands]
             [logseq.cli.main :as cli-main]
             [logseq.cli.test-helper :as test-helper]
+            [logseq.common.version :as version]
             [promesa.core :as p]
             ["fs" :as fs]
             ["path" :as node-path]))
@@ -13,8 +14,10 @@
   (async done
     (-> (p/let [result (cli-main/run! ["--version"] {:exit? false})]
           (is (= 0 (:exit-code result)))
-          (is (string/includes? (:output result) "Build time: test-build-time"))
-          (is (string/includes? (:output result) "Revision: test-revision"))
+          (is (string/includes? (:output result)
+                                (str "Build time: " (version/build-time))))
+          (is (string/includes? (:output result)
+                                (str "Revision: " (version/revision))))
           (done))
         (p/catch (fn [e]
                    (is false (str "unexpected error: " e))
@@ -76,7 +79,8 @@
     (-> (p/let [result (cli-main/run! ["--profile" "--version"] {:exit? false})
                 profile-lines (:profile-lines result)]
           (is (= 0 (:exit-code result)))
-          (is (string/includes? (:output result) "Build time: test-build-time"))
+          (is (string/includes? (:output result)
+                                (str "Build time: " (version/build-time))))
           (is (vector? profile-lines))
           (is (seq profile-lines))
           (when (seq profile-lines)

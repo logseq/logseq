@@ -122,11 +122,15 @@
 
 (deftest test-graph-spec-metadata
   (let [entries graph-command/entries
+        create-entry (first (filter #(= :graph-create (:command %)) entries))
         export-entry (first (filter #(= :graph-export (:command %)) entries))
         import-entry (first (filter #(= :graph-import (:command %)) entries))
         backup-create-entry (first (filter #(= :graph-backup-create (:command %)) entries))
         backup-restore-entry (first (filter #(= :graph-backup-restore (:command %)) entries))
         backup-remove-entry (first (filter #(= :graph-backup-remove (:command %)) entries))]
+    (testing "create-spec includes sync enablement options"
+      (is (= :boolean (get-in create-entry [:spec :enable-sync :coerce])))
+      (is (= :string (get-in create-entry [:spec :e2ee-password :coerce]))))
     (testing "export-spec :type has :validate set"
       (is (= #{"edn" "sqlite"} (get-in export-entry [:spec :type :validate]))))
     (testing "export-spec :file has :complete :file"
@@ -292,6 +296,9 @@
       (is (re-find #"(?s)_logseq_graph_export\(\).*--include-timestamps" output))
       (is (re-find #"(?s)_logseq_graph_export\(\).*--exclude-built-in-pages" output))
       (is (re-find #"(?s)_logseq_graph_export\(\).*--exclude-namespaces" output)))
+    (testing "graph create completion includes sync enablement options"
+      (is (re-find #"(?s)_logseq_graph_create\(\).*--enable-sync" output))
+      (is (re-find #"(?s)_logseq_graph_create\(\).*--e2ee-password" output)))
     (testing "boolean flags emit alias grouping"
       (is (string/includes? output "'{-v,--verbose}'[")))
     (testing "global profile flag is present in zsh completion"

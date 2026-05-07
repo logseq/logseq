@@ -855,6 +855,35 @@
                           (is (zero? @clear-user-rsa-cache-calls*))
                           (done)))))))
 
+(deftest user-rsa-key-pair-cache-is-scoped-by-server-test
+  (async done
+         (let [kv-store (atom {})
+               platform-map {:env {:runtime :node :owner-source :electron}}]
+           (-> (p/with-redefs [platform/current (fn [] platform-map)
+                               platform/kv-get (fn [_ k] (p/resolved (get @kv-store k)))
+                               platform/kv-set! (fn [_ k v]
+                                                  (if (nil? v)
+                                                    (swap! kv-store dissoc k)
+                                                    (swap! kv-store assoc k v))
+                                                  (p/resolved nil))]
+                 (p/let [pair-a {:public-key "pk-a" :encrypted-private-key "enc-a"}
+                         pair-b {:public-key "pk-b" :encrypted-private-key "enc-b"}
+                         _ (#'sync-crypt/<set-user-rsa-key-pair-to-idb! "https://server-a.example" "user-1" pair-a)
+                         _ (#'sync-crypt/<set-user-rsa-key-pair-to-idb! "https://server-b.example" "user-1" pair-b)
+                         cached-a (#'sync-crypt/<get-user-rsa-key-pair-from-idb "https://server-a.example" "user-1")
+                         cached-b (#'sync-crypt/<get-user-rsa-key-pair-from-idb "https://server-b.example" "user-1")
+                         cached-c (#'sync-crypt/<get-user-rsa-key-pair-from-idb "https://server-c.example" "user-1")]
+                   (is (= "pk-a" (:public-key cached-a)) "returns server-a's key for server-a")
+                   (is (= "pk-b" (:public-key cached-b)) "returns server-b's key for server-b")
+                   (is (nil? cached-c) "cache miss for unknown server")
+                   (p/let [_ (#'sync-crypt/<clear-user-rsa-key-pair-cache! "https://server-a.example" "user-1")
+                           cleared (#'sync-crypt/<get-user-rsa-key-pair-from-idb "https://server-a.example" "user-1")
+                           intact (#'sync-crypt/<get-user-rsa-key-pair-from-idb "https://server-b.example" "user-1")]
+                     (is (nil? cleared) "server-a cleared")
+                     (is (= "pk-b" (:public-key intact)) "server-b untouched"))))
+               (p/catch (fn [e] (is false (str e))))
+               (p/finally (fn [] (done)))))))
+
 (deftest decrypt-text-value-legacy-plaintext-test
   (async done
          (-> (p/let [aes-key (crypt/<generate-aes-key)

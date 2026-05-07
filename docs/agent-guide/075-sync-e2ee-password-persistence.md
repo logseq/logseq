@@ -61,7 +61,7 @@ I will add worker unit tests in `src/test/frontend/worker/sync/crypt_test.cljs` 
 
 I will add CLI command tests in `src/test/logseq/cli/command/sync_test.cljs` for `sync start --e2ee-password`, `sync download --e2ee-password`, deprecation of config key handling, and missing-password reporting in `sync start/sync download/sync status` paths.
 
-I will add CLI config tests in `src/test/logseq/cli/integration_test.cljs` and `src/test/logseq/cli/format_test.cljs` to verify `:e2ee-password` is no longer treated as file config and to verify updated user-facing output.
+I will add CLI config tests in `src/test/logseq/cli/command/sync_test.cljs` and `src/test/logseq/cli/format_test.cljs` to verify `:e2ee-password` is no longer treated as file config and to verify updated user-facing output.
 
 I will add desktop UI request tests in `src/test/frontend/handler/db_based/sync_test.cljs` or nearby handler tests to verify missing-password UI roundtrip invokes the shared worker verify-and-persist API instead of bespoke flow-only logic.
 
@@ -111,7 +111,7 @@ NOTE: I will write all tests before I add any implementation behavior.
 
 1. Add failing CLI tests in `src/test/logseq/cli/command/sync_test.cljs` that reject `sync config set|get|unset e2ee-password`.
 
-2. Add failing config tests in `src/test/logseq/cli/integration_test.cljs` showing `:e2ee-password` in old `cli.edn` is ignored and sanitized out without any deprecation warning.
+2. Add failing config tests in `src/test/logseq/cli/command/sync_test.cljs` showing `:e2ee-password` in old `cli.edn` is ignored and sanitized out without any deprecation warning.
 
 3. Remove `e2ee-password` from `config-key-map` and sync config command examples in `src/main/logseq/cli/command/sync.cljs`.
 
@@ -129,7 +129,7 @@ NOTE: I will write all tests before I add any implementation behavior.
 
 2. Add failing execute tests that both commands invoke worker verify-and-persist before start or download work begins.
 
-3. Add CLI auth helper test coverage in `src/test/logseq/cli/integration_test.cljs` for resolving refresh-token from `auth.json` in runtime command execution path.
+3. Add CLI auth helper test coverage in `src/test/logseq/cli/command/sync_test.cljs` for resolving refresh-token from `auth.json` in runtime command execution path.
 
 4. Extend `src/main/logseq/cli/command/sync.cljs` command spec to include `--e2ee-password` for `sync start` and `sync download`.
 
@@ -207,9 +207,9 @@ Run CLI format tests.
 
 `bb dev:test -v logseq.cli.format-test`
 
-Run CLI integration tests around sync/auth/config behavior.
+Run CLI command tests around sync/auth/config behavior.
 
-`bb dev:test -v logseq.cli.integration-test`
+`bb dev:test -v logseq.cli.command.sync-test`
 
 Run full lint and test suite before merge.
 

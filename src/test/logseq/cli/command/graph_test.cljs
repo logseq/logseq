@@ -6,6 +6,7 @@
             [frontend.test.node-helper :as node-helper]
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.commands :as commands]
+            [logseq.cli.config :as cli-config]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.graph-dir :as graph-dir]
@@ -53,6 +54,203 @@
                      (is (= "demo-repo" repo))
                      (is (= 1 (count query-args)))
                      (is (string/includes? (pr-str (first query-args)) "logseq.kv")))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(defn- create-enable-sync-action
+  ([]
+   (create-enable-sync-action nil))
+  ([e2ee-password]
+   {:type :graph-create-enable-sync
+    :command :graph-create
+    :repo "logseq_db_demo"
+    :graph "demo"
+    :method :thread-api/create-or-open-db
+    :args ["logseq_db_demo" {}]
+    :allow-missing-graph true
+    :require-missing-graph true
+    :persist-repo "demo"
+    :enable-sync true
+    :e2ee-password e2ee-password}))
+
+(deftest test-execute-graph-create-enable-sync-orchestrates-create-upload-start
+  (async done
+         (let [events* (atom [])
+               action (create-enable-sync-action "pw")
+               config {:base-url "http://example"
+                       :refresh-token "refresh-token"
+                       :http-base "http://sync.example"
+                       :ws-url "ws://sync.example/sync/%s"}
+               event-index (fn [needle]
+                             (first (keep-indexed (fn [idx event]
+                                                    (when (= needle event)
+                                                      idx))
+                                                  @events*)))]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] [])
+                               cli-server/ensure-server! (fn [cfg repo]
+                                                           (swap! events* conj [:ensure-server repo])
+                                                           (p/resolved cfg))
+                               cli-config/update-config! (fn [_ updates]
+                                                           (swap! events* conj [:persist updates])
+                                                           nil)
+                               transport/invoke (fn [_ method args]
+                                                  (swap! events* conj [method args])
+                                                  (case method
+                                                    :thread-api/create-or-open-db
+                                                    (p/resolved {:created? true})
+
+                                                    :thread-api/sync-app-state
+                                                    (p/resolved {:ok true})
+
+                                                    :thread-api/set-db-sync-config
+                                                    (p/resolved {:ok true})
+
+                                                    :thread-api/verify-and-save-e2ee-password
+                                                    (p/resolved {:ok true})
+
+                                                    :thread-api/db-sync-upload-graph
+                                                    (p/resolved {:graph-id "graph-uuid"})
+
+                                                    :thread-api/q
+                                                    (p/resolved false)
+
+                                                    :thread-api/db-sync-start
+                                                    (p/resolved {:started? true})
+
+                                                    :thread-api/db-sync-status
+                                                    (p/resolved {:repo "logseq_db_demo"
+                                                                 :graph-id "graph-uuid"
+                                                                 :ws-state :open
+                                                                 :pending-local 0
+                                                                 :pending-asset 0
+                                                                 :pending-server 0})
+
+                                                    (throw (ex-info "unexpected invoke method" {:method method
+                                                                                                :args args}))))]
+                 (p/let [result (commands/execute action config)
+                         worker-methods (->> @events*
+                                             (keep (fn [[event-type _args]]
+                                                     (when (and (keyword? event-type)
+                                                                (= "thread-api" (namespace event-type))
+                                                                (not= :thread-api/sync-app-state event-type))
+                                                       event-type)))
+                                             vec)]
+                   (is (= :ok (:status result)))
+                   (is (= {:graph "demo"
+                           :repo "logseq_db_demo"
+                           :stages {:create {:result {:created? true}}
+                                    :upload {:graph-id "graph-uuid"}
+                                    :start {:repo "logseq_db_demo"
+                                            :graph-id "graph-uuid"
+                                            :ws-state :open
+                                            :pending-local 0
+                                            :pending-asset 0
+                                            :pending-server 0}}}
+                          (:data result)))
+                   (is (= [:thread-api/create-or-open-db
+                           :thread-api/set-db-sync-config
+                           :thread-api/verify-and-save-e2ee-password
+                           :thread-api/db-sync-upload-graph
+                           :thread-api/set-db-sync-config
+                           :thread-api/q
+                           :thread-api/db-sync-start
+                           :thread-api/set-db-sync-config
+                           :thread-api/db-sync-status]
+                          worker-methods))
+                   (let [persist-index (event-index [:persist {:graph "demo"}])
+                         upload-index (event-index [:thread-api/db-sync-upload-graph ["logseq_db_demo"]])]
+                     (is (and (number? persist-index)
+                              (number? upload-index)
+                              (< persist-index upload-index))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-graph-create-enable-sync-fails-before-create-when-graph-exists
+  (async done
+         (let [invoke-calls* (atom [])]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [cfg _] (p/resolved cfg))
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls* conj [method args])
+                                                  (p/resolved {:ok true}))]
+                 (p/let [result (commands/execute (create-enable-sync-action) {})]
+                   (is (= :error (:status result)))
+                   (is (= :graph-exists (get-in result [:error :code])))
+                   (is (= [] @invoke-calls*))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-graph-create-enable-sync-stops-before-start-when-upload-fails
+  (async done
+         (let [events* (atom [])
+               config {:base-url "http://example"
+                       :refresh-token "refresh-token"
+                       :http-base "http://sync.example"
+                       :ws-url "ws://sync.example/sync/%s"}]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] [])
+                               cli-server/ensure-server! (fn [cfg _] (p/resolved cfg))
+                               cli-config/update-config! (fn [_ updates]
+                                                           (swap! events* conj [:persist updates])
+                                                           nil)
+                               transport/invoke (fn [_ method args]
+                                                  (swap! events* conj [method args])
+                                                  (case method
+                                                    :thread-api/create-or-open-db
+                                                    (p/resolved {:created? true})
+                                                    :thread-api/sync-app-state
+                                                    (p/resolved {:ok true})
+                                                    :thread-api/set-db-sync-config
+                                                    (p/resolved {:ok true})
+                                                    :thread-api/db-sync-upload-graph
+                                                    (p/rejected (ex-info "remote graph already exists"
+                                                                         {:code :graph-already-exists}))
+                                                    (p/resolved nil)))]
+                 (p/let [result (commands/execute (create-enable-sync-action) config)]
+                   (is (= :error (:status result)))
+                   (is (= :graph-already-exists (get-in result [:error :code])))
+                   (is (some #(= [:thread-api/db-sync-upload-graph ["logseq_db_demo"]] %) @events*))
+                   (is (not-any? #(= :thread-api/db-sync-start (first %)) @events*))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-graph-create-enable-sync-returns-sync-start-error
+  (async done
+         (let [events* (atom [])
+               config {:base-url "http://example"
+                       :refresh-token "refresh-token"
+                       :http-base "http://sync.example"
+                       :ws-url "ws://sync.example/sync/%s"}]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] [])
+                               cli-server/ensure-server! (fn [cfg _] (p/resolved cfg))
+                               cli-config/update-config! (fn [_ updates]
+                                                           (swap! events* conj [:persist updates])
+                                                           nil)
+                               transport/invoke (fn [_ method args]
+                                                  (swap! events* conj [method args])
+                                                  (case method
+                                                    :thread-api/create-or-open-db
+                                                    (p/resolved {:created? true})
+                                                    :thread-api/sync-app-state
+                                                    (p/resolved {:ok true})
+                                                    :thread-api/set-db-sync-config
+                                                    (p/resolved {:ok true})
+                                                    :thread-api/db-sync-upload-graph
+                                                    (p/resolved {:graph-id "graph-uuid"})
+                                                    :thread-api/q
+                                                    (p/resolved false)
+                                                    :thread-api/db-sync-start
+                                                    (p/rejected (ex-info "sync start failed"
+                                                                         {:code :sync-start-failed}))
+                                                    (p/resolved nil)))]
+                 (p/let [result (commands/execute (create-enable-sync-action) config)]
+                   (is (= :error (:status result)))
+                   (is (= :sync-start-failed (get-in result [:error :code])))
+                   (is (some #(= [:thread-api/db-sync-upload-graph ["logseq_db_demo"]] %) @events*))
+                   (is (some #(= [:thread-api/db-sync-start ["logseq_db_demo"]] %) @events*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

@@ -7,6 +7,7 @@
 
 (def default-sync-port "18080")
 (def default-e2ee-password "11111")
+(def default-user-keys-graph "sync-e2e-user-keys-bootstrap")
 
 (def ^:private heavy-setup-patterns
   [#"^mkdir -p '\{\{tmp-dir\}\}/home/logseq'$"
@@ -53,7 +54,7 @@
                  "while ! mkdir \"$LOCK_DIR\" 2>/dev/null; do [ -f \"$DONE_FILE\" ] && exit 0; sleep 0.1; done; "
                  "trap 'rmdir \"$LOCK_DIR\" 2>/dev/null || true' EXIT; "
                  "if [ ! -f \"$DONE_FILE\" ]; then "
-                 "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password {{e2ee-password-arg}} --upload-keys >/dev/null && touch \"$DONE_FILE\"; "
+                 "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{user-keys-graph-arg}} --e2ee-password {{e2ee-password-arg}} --upload-keys >/dev/null && touch \"$DONE_FILE\"; "
                  "fi")
             lock-dir
             done-file)))
@@ -91,6 +92,8 @@
 (defn prepare-case
   [case {:keys [suite-tmp-dir sync-port sync-http-base sync-ws-url e2ee-password]}]
   (let [e2ee-password (or e2ee-password default-e2ee-password)
+        user-keys-graph (or (get-in case [:vars :user-keys-graph])
+                            default-user-keys-graph)
         setup-commands (vec (:setup case))
         insertion-point? (fn [command]
                            (or (heavy-command? command heavy-setup-patterns)
@@ -112,7 +115,8 @@
                              :sync-http-base sync-http-base
                              :sync-ws-url sync-ws-url
                              :e2ee-password e2ee-password
-                             :e2ee-password-arg (shell-quote e2ee-password)})
+                             :e2ee-password-arg (shell-quote e2ee-password)
+                             :user-keys-graph-arg (shell-quote user-keys-graph)})
         (assoc :setup (vec (concat leading-setup
                                    (case-local-setup-prefix)
                                    bootstrap-setup

@@ -734,6 +734,8 @@
  :graph.page/title "Page graph"
 
  :graph.switch/add-graph-action "Yes, add another graph"
+ :graph.switch/db-worker-unavailable-no-fallback-warning "The database worker for graph \"{1}\" is unavailable, and no other graph is available."
+ :graph.switch/db-worker-unavailable-switching-warning "The database worker for graph \"{1}\" is unavailable. Switching to graph \"{2}\"."
  :graph.switch/empty-desc "No matched graphs. Do you want to add another one?"
  :graph.switch/prompt "Switch to:"
  :graph.switch/select-prompt "Select a graph"
@@ -1716,7 +1718,9 @@
  :storage.recycle/retention-desc "Deleted pages and blocks stay here until restored or automatically garbage collected after 30 days."
  :storage.recycle/title "Recycle"
 
+ :sync/assets-downloading "downloading assets"
  :sync/assets-downloading-count "Downloading assets ({1})"
+ :sync/assets-uploading "uploading assets"
  :sync/assets-uploading-count "Uploading assets ({1})"
  :sync/conflicts-description "These server versions conflicted with local edits. Copy the text you want and edit the block manually."
  :sync/conflicts-title "Sync conflicts"
@@ -1730,6 +1734,7 @@
  :sync/more-debug-info "More debug info"
  :sync/offline "Offline"
  :sync/online "Online"
+ :sync/pending-asset-uploads "pending asset uploads"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
  :sync/show-conflicts "Show sync conflicts"

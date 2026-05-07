@@ -158,7 +158,7 @@
                        :path path
                        :lock lock}))
 
-      (not= repo (:repo lock))
+      (not (graph-dir/same-repo? repo (:repo lock)))
       (throw (ex-info "graph lock repo mismatch"
                       {:code :repo-locked
                        :path path

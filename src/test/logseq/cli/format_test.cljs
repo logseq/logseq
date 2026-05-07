@@ -769,7 +769,43 @@
                                                   :input "/tmp/import.sqlite"}
                                         :data {:message "Imported sqlite from /tmp/import.sqlite"}}
                                        {:output-format nil})]
-      (is (= "Imported sqlite from /tmp/import.sqlite" result)))))
+      (is (= "Imported sqlite from /tmp/import.sqlite" result))))
+
+  (testing "graph create enable-sync renders a multi-line stage summary"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-create
+                                        :context {:graph "demo"
+                                                  :repo "logseq_db_demo"
+                                                  :enable-sync true
+                                                  :e2ee-password "pw"}
+                                        :data {:graph "demo"
+                                               :repo "logseq_db_demo"
+                                               :stages {:create {:result {:created? true}}
+                                                        :upload {:graph-id "graph-uuid"}
+                                                        :start {:ws-state :open}}}}
+                                       {:output-format nil})]
+      (is (= "Graph created and sync enabled\n  Graph: demo\n  Create: ok\n  Sync upload: ok\n  Sync start: ok"
+             result))
+      (is (not (string/includes? result "pw")))))
+
+  (testing "graph create enable-sync JSON exposes structured stage data without password"
+    (let [token "secret-password"
+          output (format/format-result {:status :ok
+                                        :command :graph-create
+                                        :context {:graph "demo"
+                                                  :repo "logseq_db_demo"
+                                                  :enable-sync true
+                                                  :e2ee-password token}
+                                        :data {:graph "demo"
+                                               :repo "logseq_db_demo"
+                                               :stages {:create {:result {:created? true}}
+                                                        :upload {:graph-id "graph-uuid"}
+                                                        :start {:ws-state :open}}}}
+                                       {:output-format :json})
+          parsed (js->clj (js/JSON.parse output) :keywordize-keys true)]
+      (is (= "demo" (get-in parsed [:data :graph])))
+      (is (= "graph-uuid" (get-in parsed [:data :stages :upload :graph-id])))
+      (is (not (string/includes? output token))))))
 
 (deftest test-human-output-graph-backup
   (testing "graph backup list renders metadata table"
@@ -1392,6 +1428,55 @@
       (is (string/includes? result "2"))
       (is (string/includes? result "Quote"))
       (is (string/includes? result "QUOTE")))))
+
+(deftest test-server-revision-mismatch-error-formatting
+  (testing "revision mismatch restart failure includes recovery hint"
+    (let [result (format/format-result {:status :error
+                                        :command :server-start
+                                        :error {:code :server-revision-mismatch-restart-failed
+                                                :message "db-worker-node revision mismatch and restart failed"
+                                                :repo "logseq_db_demo"
+                                                :expected-revision "expected-rev"
+                                                :actual-revision "old-rev"
+                                                :owner-source :electron}}
+                                       {:output-format nil})]
+      (is (= (str "Error (server-revision-mismatch-restart-failed): db-worker-node revision mismatch and restart failed\n"
+                  "Hint: Logseq tried to restart a revision-mismatched db-worker-node server and failed. Stop the server manually, then retry")
+             result))))
+
+  (testing "revision mismatch after restart includes fail-fast hint"
+    (let [result (format/format-result {:status :error
+                                        :command :server-start
+                                        :error {:code :server-revision-mismatch-after-restart
+                                                :message "db-worker-node revision still does not match after restart"
+                                                :repo "logseq_db_demo"
+                                                :expected-revision "expected-rev"
+                                                :actual-revision "wrong-rev"
+                                                :owner-source :cli}}
+                                       {:output-format nil})]
+      (is (= (str "Error (server-revision-mismatch-after-restart): db-worker-node revision still does not match after restart\n"
+                  "Hint: Logseq restarted db-worker-node, but the replacement still reports a different revision. Check the installed Logseq build and retry")
+             result))))
+
+  (testing "revision mismatch structured output preserves revision fields"
+    (let [payload {:status :error
+                   :command :server-start
+                   :error {:code :server-revision-mismatch-after-restart
+                           :message "db-worker-node revision still does not match after restart"
+                           :repo "logseq_db_demo"
+                           :expected-revision "expected-rev"
+                           :actual-revision "wrong-rev"
+                           :owner-source :cli}}
+          json-result (format/format-result payload {:output-format :json})
+          edn-result (format/format-result payload {:output-format :edn})
+          json-parsed (js->clj (js/JSON.parse json-result) :keywordize-keys true)
+          edn-parsed (reader/read-string edn-result)]
+      (is (= "expected-rev" (get-in json-parsed [:error :expected-revision])))
+      (is (= "wrong-rev" (get-in json-parsed [:error :actual-revision])))
+      (is (= "cli" (get-in json-parsed [:error :owner-source])))
+      (is (= "expected-rev" (get-in edn-parsed [:error :expected-revision])))
+      (is (= "wrong-rev" (get-in edn-parsed [:error :actual-revision])))
+      (is (= :cli (get-in edn-parsed [:error :owner-source]))))))
 
 (deftest test-human-output-doctor
   (testing "doctor renders concise check summary"
