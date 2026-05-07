@@ -934,14 +934,6 @@
   "Maximum allowed size for URL assets (10MB)"
   (* 10 1024 1024))
 
-(defn- valid-url?
-  "Check if string is a valid HTTP/HTTPS URL"
-  [url]
-  (and (string? url)
-       (not (string/blank? url))
-       (or (string/starts-with? url "http://")
-           (string/starts-with? url "https://"))))
-
 (defn- valid-image-content-type?
   "Check if content-type header indicates an image"
   [content-type]
@@ -1090,37 +1082,6 @@
                                       {:kind :url :url trimmed}
                                       nil)))))
                     (p/resolved nil)))))))))))
-
-(declare <download-url-asset-via-ipc)
-
-(defn- <validate-url-asset
-  "Validate URL. Returns promise with {:content-type :size :url} or rejects."
-  [url]
-  (if (util/electron?)
-    ;; Electron: we can't get just headers via :httpRequest, so do a full GET
-    ;; (cached by the renderer anyway) and synthesize from sniff results.
-    (-> (<download-url-asset-via-ipc url)
-        (p/then (fn [{:keys [content-type size]}]
-                  {:content-type content-type :size size :url url})))
-    ;; Browser: keep current HEAD implementation.
-    (p/create
-     (fn [resolve reject]
-       (-> (js/fetch url #js {:method "HEAD"
-                              :mode "cors"
-                              :credentials "omit"})
-           (.then (fn [^js response]
-                    (if (.-ok response)
-                      (let [content-type (.get (.-headers response) "content-type")
-                            content-length (.get (.-headers response) "content-length")
-                            size (when content-length (js/parseInt content-length 10))]
-                        (resolve {:content-type content-type
-                                  :size size
-                                  :url url}))
-                      (reject (ex-info "Failed to fetch URL"
-                                       {:kind :http :status (.-status response)})))))
-           (.catch (fn [err]
-                     (reject (ex-info "Network error"
-                                      {:kind :network :error (.-message err)})))))))))
 
 (defn- <download-url-asset-via-fetch
   "Browser path: uses js/fetch. Subject to CORS."
@@ -2507,7 +2468,9 @@
             (shui/tabler-icon "info-circle" {:size 14})])
           (shui/tooltip-content
            {:side "top" :show-arrow true}
-           [:span "Images from Wikipedia Commons. Check licensing before commercial use."])))]
+           [:div
+            [:div.text-sm.font-medium "Images from Wikipedia Commons"]
+            [:div.text-xs.opacity-70.mt-1 "Check licensing before commercial use."]])))]
 
        ;; Image grid (or inline network-error message)
        (when web-expanded?
@@ -2551,7 +2514,7 @@
                   web-id)))]))])))
 
 ;; ============================================================================
-;; URL Asset Pane (Popover content for "Add asset via URL")
+;; URL Asset Save Error Copy
 ;; ============================================================================
 
 (defn- url-save-error-copy
@@ -2595,122 +2558,6 @@
 
       ;; Default — preserve ex-message for unclassified errors
       (or (ex-message err) "Failed to download image."))))
-
-(rum/defcs url-asset-pane < rum/reactive
-  (rum/local "" ::url)
-  (rum/local "" ::name)
-  (rum/local nil ::error)
-  (rum/local false ::loading?)
-  (rum/local nil ::validated?)
-  [state {:keys [on-close on-asset-added]}]
-  (let [*url (::url state)
-        *name (::name state)
-        *error (::error state)
-        *loading? (::loading? state)
-        *validated? (::validated? state)
-        url @*url
-        asset-name @*name
-        error @*error
-        loading? @*loading?
-        validated? @*validated?
-        url-valid? (valid-url? url)
-        can-save? (and url-valid?
-                       (not (string/blank? asset-name))
-                       (not loading?))
-
-        ;; Validate URL on blur
-        validate-url!
-        (fn []
-          (when (valid-url? url)
-            (reset! *loading? true)
-            (reset! *error nil)
-            (-> (<validate-url-asset url)
-                (p/then (fn [{:keys [content-type size]}]
-                          (cond
-                            (not (valid-image-content-type? content-type))
-                            (reset! *error "URL does not point to a supported image format")
-
-                            (and size (> size max-url-asset-size))
-                            (reset! *error (str "Image exceeds " (/ max-url-asset-size 1024 1024) "MB size limit"))
-
-                            :else
-                            (do
-                              (reset! *validated? true)
-                              ;; Auto-extract filename if empty
-                              (when (string/blank? @*name)
-                                (reset! *name (extract-filename-from-url url)))))))
-                (p/catch (fn [err] (reset! *error (url-save-error-copy err))))
-                (p/finally #(reset! *loading? false)))))
-
-        ;; Save handler
-        handle-save!
-        (fn []
-          (reset! *loading? true)
-          (reset! *error nil)
-          (let [repo (state/get-current-repo)]
-            (-> (<save-url-asset! repo url asset-name)
-                (p/then (fn [asset-entity]
-                          (when asset-entity
-                            (on-asset-added asset-entity))
-                          (on-close)))
-                (p/catch (fn [err]
-                           (let [copy (url-save-error-copy err)]
-                             (reset! *error nil)
-                             (shui/toast! copy :error))))
-                (p/finally #(reset! *loading? false)))))]
-
-    [:div.url-asset-pane
-     ;; URL input
-     [:div.form-group
-      [:label "URL"]
-      (shui/input
-       {:placeholder "https://example.com/image.png"
-        :value url
-        :auto-focus true
-        :on-change (fn [e]
-                     (reset! *url (util/evalue e))
-                     (reset! *validated? false)
-                     (reset! *error nil))
-        :on-blur validate-url!
-        :on-key-down (fn [^js e]
-                       (when (= 13 (.-keyCode e))
-                         (validate-url!)))})]
-
-     ;; Name input
-     [:div.form-group
-      [:label "Name"]
-      (shui/input
-       {:placeholder "image"
-        :value asset-name
-        :on-change #(reset! *name (util/evalue %))})]
-
-     ;; Format note
-     [:div.format-note
-      "Supported: PNG, JPG, GIF, WebP, SVG, BMP"
-      [:br]
-      "Max size: 10MB"]
-
-     ;; Error display
-     (when error
-       [:div.error-message error])
-
-     ;; Action buttons
-     [:div.pane-footer
-      (shui/button
-       {:variant :outline
-        :size :sm
-        :on-click on-close}
-       "Cancel")
-      (shui/button
-       {:variant :default
-        :size :sm
-        :disabled (not can-save?)
-        :on-click handle-save!}
-       (if loading?
-         [:span.flex.items-center.gap-1
-          [:span.animate-spin (shui/tabler-icon "loader-2" {:size 14})]
-          "Saving..."]
-         "Save"))]]))
 
 ;; ============================================================================
 ;; Multi-File Upload Preview
@@ -2819,7 +2666,6 @@
   (rum/local true ::loading?) ;; Start with loading state
   (rum/local nil ::loaded-assets) ;; Cached assets loaded async
   (rum/local nil ::web-query-debounced) ;; Debounced web search query
-  (rum/local false ::popover-open?) ;; Track if any popover is open
   (rum/local :avatar ::mode) ;; :avatar | :image — live tab state, seeded in :will-mount
   (rum/local nil ::paste-handler) ;; Holds latest clipboard-paste closure for the DOM listener
   ;; Keyboard-nav state, parallels the icon-picker's model.
@@ -2919,7 +2765,6 @@
         *loading? (::loading? state)
         *loaded-assets (::loaded-assets state)
         *web-query-debounced (::web-query-debounced state)
-        *popover-open? (::popover-open? state)
         ;; Keyboard-nav state
         *focus-region      (::focus-region state)
         *highlighted-index (::highlighted-index state)
@@ -2929,7 +2774,6 @@
         web-images         (rum/react *web-images-result)
         highlighted-idx    (rum/react *highlighted-index)
         loading? (rum/react *loading?)
-        popover-open? (rum/react *popover-open?)
         ;; Use cached assets if available, otherwise try to get them
         assets (or (rum/react *loaded-assets) [])
         search-q @*search-q
@@ -3227,24 +3071,6 @@
                           :label (or (:block/title asset-entity) "")
                           :data image-data}))))
 
-        ;; Open the URL-paste popover anchored to the clicked element.
-        open-url-pane!
-        (fn [^js e]
-          (reset! *popover-open? true)
-          (shui/popup-show!
-           (.-target e)
-           (fn [{:keys [id]}]
-             (url-asset-pane
-              {:on-close (fn []
-                           (reset! *popover-open? false)
-                           (shui/popup-hide! id))
-               :on-asset-added on-url-asset-entity-added}))
-           {:align :end
-            :side "top"
-            :content-props {:class "url-asset-pane-popup"
-                            :sideOffset 8}
-            :on-after-hide (fn [] (reset! *popover-open? false))}))
-
         ;; Read the system clipboard and route to upload / URL-save / toast.
         handle-clipboard-paste
         (fn self
@@ -3261,7 +3087,7 @@
                    :url
                    (let [repo (state/get-current-repo)
                          url (:url result)
-                         asset-name (str "clipboard-" (.now js/Date))]
+                         asset-name (extract-filename-from-url url)]
                      (-> (<save-url-asset! repo url asset-name)
                          (p/then (fn [asset-entity]
                                    (when asset-entity
@@ -3364,11 +3190,6 @@
        ;; only) and the trash button. Bundling them under one grid slot
        ;; keeps the topbar's three-column layout (back / segment / actions)
        ;; intact when the color trigger appears or disappears.
-       ;; Class name is intentionally NOT `.asset-picker-actions` — that
-       ;; class is already used for the floating bottom action bar
-       ;; ("Add image via URL" / "Upload image", icon.css:1000) which
-       ;; sets `position: absolute; bottom: 0`. Reusing it here would
-       ;; punt the topbar group off-screen.
        [:div.asset-picker-topbar-actions
         ;; Color trigger — Avatar mode only. Mirrors the icon-picker's
         ;; topbar trigger (same component, same `*color` atom) so backing
@@ -3686,10 +3507,9 @@
                    [:div.row-subtitle "Browse or drop a file in"]]
                   [:div.row-chevron (shui/tabler-icon "chevron-right" {:size 16})]]]))])]])
 
-     ;; Hidden file input lives at the top level so both the floating Upload
-     ;; button and the empty-state "Upload from computer" row reference it via
-     ;; <label for="asset-upload-input">, regardless of whether the floating
-     ;; actions bar is rendered.
+     ;; Hidden file input lives at the top level so both the empty-state
+     ;; "Add from your computer" row and the footer-hint "browse" link can
+     ;; reference it via <label for="asset-upload-input">.
      [:input#asset-upload-input.hidden
       {:type "file"
        :accept "image/*"
@@ -3698,40 +3518,43 @@
                     (let [files (array-seq (.-files (.-target e)))]
                       (handle-upload files)))}]
 
-     ;; Action buttons (floating at bottom) - only when we have assets or are
-     ;; loading. Zero-state replaces this bar with the empty-state rows above.
+     ;; Footer hint — only when we have assets or are loading. Zero-state
+     ;; replaces this bar with the empty-state rows above.
      (when (or loading? (seq @*loaded-assets))
-       [:div.asset-picker-actions
-        (shui/button
-         {:variant :outline
-          :size :sm
-          :on-click (fn [^js e] (open-url-pane! e))}
-         (shui/tabler-icon "link" {:size 16})
-         [:span "Add image via URL"])
-        (shui/button
-         {:variant (if popover-open? :secondary :default)
-          :size :sm
-          :as-child true}
-         [:label {:for "asset-upload-input"}
-          [:span "Upload image"]])
-
-        ;; Mobile camera button
-        (when (util/mobile?)
-          (shui/button
-           {:variant :secondary
-            :size :sm
-            :as-child true}
-           [:label
-            [:input.hidden
-             {:type "file"
-              :accept "image/*"
-              :capture "environment"
-              :on-change (fn [e]
-                           (let [files (array-seq (.-files (.-target e)))]
-                             (handle-upload files)))}]
-            [:div.flex.items-center.gap-2
-             (shui/tabler-icon "camera" {:size 16})
-             [:span "Take photo"]]]))])]))
+       [:div.asset-picker-footer-hint
+        [:span.tip-label "Tip:"]
+        [:span.tip-body
+         (if (util/mobile?)
+           ;; Phone: every verb is a real control. iOS Safari won't deliver
+           ;; paste events to the popover root reliably, so paste-a-link is
+           ;; a button that calls handle-clipboard-paste directly (mirrors
+           ;; the empty-state clipboard-row).
+           [:<>
+            [:button.tip-link
+             {:type "button"
+              :on-click (fn [_] (handle-clipboard-paste))}
+             "Paste a link"]
+            ", "
+            [:label.tip-link {:for "asset-upload-input" :tab-index 0} "browse"]
+            ", or "
+            [:label.tip-link {:tab-index 0}
+             [:input.hidden
+              {:type "file"
+               :accept "image/*"
+               :capture "environment"
+               :on-change (fn [e]
+                            (let [files (array-seq (.. e -target -files))]
+                              (handle-upload files)))}]
+             "take a picture"]]
+           ;; Desktop / iPad: passive hint. Drop + paste rely on the
+           ;; existing global handlers attached to the picker root.
+           [:<>
+            "Drop an image, paste a link, or "
+            [:label.tip-link {:for "asset-upload-input" :tab-index 0} "browse"]
+            " "
+            [:span.tip-sep "·"]
+            " "
+            (shui/shortcut "mod+v" {:style :combo})])]])]))
 
 (defn open-image-asset-picker!
   "Opens the asset picker popup for selecting an image icon.

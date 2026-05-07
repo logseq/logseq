@@ -823,12 +823,7 @@
   /* Right-side group: holds the (avatar-mode-only) color trigger and the
      trash button. Flex-row aligns them on a single baseline; the gap
      mirrors the icon-picker's `.tab-actions gap-1` so the two topbars
-     read as the same chrome at different drill levels.
-
-     Distinct class from `.asset-picker-actions` (the floating bottom bar
-     in this same picker). Sharing the class clobbered both — the bottom
-     bar's `position: absolute; bottom: 0;` flung this topbar group off
-     to the picker's footer. */
+     read as the same chrome at different drill levels. */
   @apply flex items-center gap-1;
 
   /* Delete button - matching icon picker styling */
@@ -906,15 +901,12 @@
   grid-template-columns: repeat(5, 1fr);
   min-height: 120px;
   align-content: start;
-  /* Add padding at bottom for floating action buttons */
-  padding-bottom: 56px;
 
   /* Recently used row - single row, no extra padding */
   &.recently-used-row,
   &.web-images-row {
     @apply flex-none overflow-visible;
     min-height: auto;
-    padding-bottom: 12px;
   }
 }
 
@@ -1001,37 +993,49 @@
   }
 }
 
-/* Action buttons - floating at bottom with fade effect */
-.asset-picker-actions {
-  @apply flex items-center justify-end gap-2;
-  @apply absolute bottom-0 left-0 right-0;
-  @apply py-3 pr-3;
-  @apply transition-opacity duration-200;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    color-mix(in srgb, var(--lx-gray-03) 30%, transparent) 30%,
-    color-mix(in srgb, var(--lx-gray-03) 70%, transparent) 60%,
-    var(--lx-gray-03) 100%
-  );
+/* Footer hint - thin static row at bottom when assets exist.
+   Mirrors the cmdk dropdown's .hints pattern: bg-gray-03 with a
+   border-top divider, "Tip:" label in font-medium gray-12, prose
+   in gray-11, inline links in accent-11. */
+.asset-picker-footer-hint {
+  @apply flex w-full items-center px-3 py-2 gap-1.5 text-sm;
+  border-top: 1px solid var(--lx-gray-05);
+  background-color: var(--lx-gray-03);
 
-  /* Style shui buttons inside action bar */
-  .ui__button {
-    @apply gap-1.5 transition-colors duration-150;
+  .tip-label {
+    @apply font-medium;
+    color: var(--lx-gray-12);
+  }
 
-    /* Make label inside upload button flex */
-    > label {
-      @apply flex items-center gap-1.5 cursor-pointer;
-    }
+  .tip-body {
+    @apply flex flex-row flex-wrap items-center gap-1;
+    color: var(--lx-gray-11);
+  }
 
-    /* Override button variant transparency */
-    &.as-secondary {
-      @apply bg-secondary;
-    }
+  .tip-link,
+  button.tip-link {
+    cursor: pointer;
+    color: var(--lx-accent-11);
+    background: transparent;
+    border: 0;
+    padding: 0;
+    font: inherit;
+  }
 
-    &.as-classic {
-      @apply bg-primary;
-    }
+  .tip-link:hover,
+  button.tip-link:hover {
+    color: var(--lx-accent-12);
+    text-decoration: underline;
+  }
+
+  .tip-link:focus-visible {
+    outline: 2px solid var(--lx-accent-09);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .tip-sep {
+    opacity: 0.5;
   }
 }
 
@@ -1124,45 +1128,6 @@
 
   &.no-subtitle .row-title {
     line-height: 1.4;
-  }
-}
-
-/* URL Asset Pane - popover for adding images from URL */
-.url-asset-pane-popup {
-  @apply overflow-visible;
-}
-
-.url-asset-pane {
-  @apply flex flex-col gap-3 p-3;
-  width: 320px;
-  background-color: var(--lx-gray-02);
-
-  .form-group {
-    @apply flex flex-col gap-1;
-
-    label {
-      @apply text-xs font-medium;
-      color: var(--rx-gray-11);
-    }
-
-    .ui__input {
-      @apply text-sm;
-    }
-  }
-
-  .format-note {
-    @apply text-xs leading-relaxed;
-    color: var(--rx-gray-09);
-  }
-
-  .error-message {
-    @apply text-xs px-2 py-1.5 rounded;
-    color: var(--rx-red-11);
-    background-color: var(--rx-red-03);
-  }
-
-  .pane-footer {
-    @apply flex justify-end gap-2 pt-1;
   }
 }
 
