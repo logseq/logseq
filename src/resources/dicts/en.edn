@@ -705,6 +705,7 @@
  :graph/n-hops-from-selected-nodes "N hops from selected nodes"
  :graph/name-placeholder "your graph name"
  :graph/nodes "Nodes"
+ :graph/open-folder-action "Open graph folder"
  :graph/orphan-pages "Orphan pages"
  :graph/page-count (fn [n] (str n " " (if (= 1 n) "page" "pages")))
  :graph/pause-simulation "Pause simulation"
