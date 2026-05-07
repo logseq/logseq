@@ -11,12 +11,20 @@
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
+(defonce ^:private *previous-state (atom nil))
+
 (use-fixtures :each
   {:before (fn []
+             (reset! *previous-state @state/state)
              (async done
                     (test-helper/start-test-db!)
                     (done)))
-   :after test-helper/destroy-test-db!})
+   :after (fn []
+            (let [previous-state @*previous-state]
+              (test-helper/destroy-test-db!)
+              (state/set-current-repo! (:git/current-repo previous-state))
+              (reset! state/state previous-state)
+              (reset! *previous-state nil)))})
 
 (defn- fake-key-event
   []
@@ -29,34 +37,39 @@
   [db block {:keys [embed? on-delete]}]
   (let [sibling-block (ldb/get-left-sibling (d/entity db (:db/id block)))
         first-block (ldb/get-left-sibling sibling-block)
-        block-dom-id "ls-block-block-to-delete"]
-    (p/with-redefs
-     [editor/get-state (constantly {:block-id (:block/uuid block)
-                                    :block-parent-id block-dom-id
-                                    :config {:embed? embed?}})
+        block-dom-id "ls-block-block-to-delete"
+        previous-repo (:git/current-repo @state/state)]
+    (swap! state/state assoc :git/current-repo test-helper/test-db)
+    (-> (p/with-redefs
+         [editor/get-state (constantly {:block-id (:block/uuid block)
+                                        :block-parent-id block-dom-id
+                                        :config {:embed? embed?}})
                   ;; stub for delete-block
-      gdom/getElement (constantly #js {:id block-dom-id})
+          gdom/getElement (constantly #js {:id block-dom-id})
                   ;; stub since not testing moving
-      editor/edit-block! (constantly nil)
-      state/get-edit-content (constantly "")
+          editor/edit-block! (constantly nil)
+          state/get-edit-content (constantly "")
                   ;; stub b/c of js/document
-      state/get-selection-blocks (constantly [])
-      util/get-blocks-noncollapse (constantly (mapv
-                                               (fn [m]
-                                                 #js {:id (:id m)
+          state/get-selection-blocks (constantly [])
+          util/get-blocks-noncollapse (constantly (mapv
+                                                   (fn [m]
+                                                     #js {:id (:id m)
                                                                   ;; for dom/attr
-                                                      :getAttribute #({"blockid" (str (:block-uuid m))
-                                                                       "data-embed" (if embed? "true" "false")} %)})
-                                               [{:id "ls-block-first-block"
-                                                 :block-uuid (:block/uuid first-block)}
-                                                {:id "ls-block-sibling-block"
-                                                 :block-uuid (:block/uuid sibling-block)}
-                                                {:id block-dom-id
-                                                 :block-uuid (:block/uuid block)}]))]
-      (p/do!
-       (editor/delete-block! test-helper/test-db)
-       (when (fn? on-delete)
-         (on-delete))))))
+                                                          :getAttribute #({"blockid" (str (:block-uuid m))
+                                                                           "data-embed" (if embed? "true" "false")} %)})
+                                                   [{:id "ls-block-first-block"
+                                                     :block-uuid (:block/uuid first-block)}
+                                                    {:id "ls-block-sibling-block"
+                                                     :block-uuid (:block/uuid sibling-block)}
+                                                    {:id block-dom-id
+                                                     :block-uuid (:block/uuid block)}]))]
+          (p/do!
+           (editor/delete-block! test-helper/test-db)
+           (when (fn? on-delete)
+             (on-delete))))
+        (p/finally
+          (fn []
+            (swap! state/state assoc :git/current-repo previous-repo))))))
 
 (deftest-async delete-block-async!
   (testing "backspace deletes empty block"
