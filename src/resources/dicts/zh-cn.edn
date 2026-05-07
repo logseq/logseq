@@ -629,6 +629,7 @@
  :file/format-not-supported "格式 .{1} 目前不支持。"
  :file/label "文件"
  :file/last-modified-at "最后更改于"
+ :file/markdown-mirror-import-error "导入 Markdown 文件到图谱失败：{1}"
  :file/name "文件名"
  :file/no-data "没有数据"
  :file/title "文件 {1}"

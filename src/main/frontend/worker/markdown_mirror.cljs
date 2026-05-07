@@ -1596,6 +1596,16 @@
               (import-existing-file! repo conn relative-path parsed page opts)
               (import-new-file! repo conn relative-path content parsed opts))))))))
 
+(defn- notify-file-import-error!
+  [platform* relative-path]
+  (when platform*
+    (platform/post-message!
+     platform*
+     :notification
+     [nil :error nil nil nil
+      {:i18n-key :file/markdown-mirror-import-error
+       :i18n-args [relative-path]}])))
+
 (defn <handle-file-event!
   [repo conn {:keys [type relative-path content]} {:keys [platform] :as opts}]
   (case type
@@ -1613,7 +1623,10 @@
                        (when platform
                          (<read-text platform (mirror-path repo relative-path))))]
       (if (some? content*)
-        (<import-file-content! repo conn relative-path content* opts)
+        (p/let [result (<import-file-content! repo conn relative-path content* opts)]
+          (when (= :error (:status result))
+            (notify-file-import-error! platform relative-path))
+          result)
         {:status :skipped
          :reason :missing-file-content}))
 

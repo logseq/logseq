@@ -16,7 +16,8 @@
   []
   (let [files (atom {})
         writes (atom [])
-        deletes (atom [])]
+        deletes (atom [])
+        broadcasts (atom [])]
     {:platform {:env {:runtime :node}
                 :storage {:read-text! (fn [path]
                                         (p/resolved (get @files path)))
@@ -30,18 +31,16 @@
                                           (swap! deletes conj path)
                                           (swap! files dissoc path)
                                           (p/resolved nil))}
-                :broadcast {:post-message! (fn [& _] nil)}}
+                :broadcast {:post-message! (fn [type payload]
+                                             (swap! broadcasts conj [type payload]))}}
      :files files
      :writes writes
-     :deletes deletes}))
+     :deletes deletes
+     :broadcasts broadcasts}))
 
 (defn- page-path
   [path]
   (str (markdown-mirror/repo-mirror-dir test-repo) "/" path))
-
-(defn- sidecar-page-path
-  [page-uuid]
-  (page-path (str ".logseq/pages/" page-uuid ".json")))
 
 (defn- page-marker
   [uuid]
@@ -406,9 +405,9 @@
                  (p/catch (fn [e] (is false (str "unexpected error: " e))))
                  (p/finally done))))))
 
-(deftest two-way-unsupported-top-level-markdown-does-not-queue-logseq-sync-tx-test
+(deftest two-way-top-level-markdown-wraps-block-and-queues-logseq-sync-tx-test
   (async done
-         (testing "Unsupported top-level Markdown must fail before any db-sync tx is queued."
+         (testing "Top-level Markdown from disk must be wrapped as a Logseq block and synced."
            (let [page-uuid #uuid "99999999-9999-4999-8999-999999990010"
                  block-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0012"
                  conn (db-test/create-conn-with-blocks
@@ -421,10 +420,42 @@
                    conn
                    (fn [_]
                      (p/let [result (import-file! conn "pages/Sync Top Level.md" content)]
+                       (is (= :imported (:status result)))
+                       (is (= "> quote" (block-title @conn block-uuid)))
+                       (is (= 1 (count (pending-txs)))))))
+                 (p/catch (fn [e] (is false (str "unexpected error: " e))))
+                 (p/finally done))))))
+
+(deftest two-way-file-event-import-error-broadcasts-notification-test
+  (async done
+         (testing "A watcher import error must be visible to users instead of only returning an error map."
+           (let [{:keys [platform broadcasts]} (fake-platform)
+                 page-uuid #uuid "99999999-9999-4999-8999-999999990110"
+                 block-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0110"
+                 stale-id #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaa0111"
+                 conn (db-test/create-conn-with-blocks
+                       {:pages-and-blocks [{:page {:block/title "Sync Notice Error"
+                                                   :block/uuid page-uuid}
+                                            :blocks [{:block/title "before"
+                                                      :block/uuid block-uuid}]}]})
+                 content (str (page-marker page-uuid) "\n- after\n  id:: " stale-id)]
+             (-> (with-two-way-sync-env
+                   conn
+                   platform
+                   (fn [_]
+                     (p/let [result (markdown-mirror/<handle-file-event! test-repo conn
+                                                                         {:type :changed
+                                                                          :relative-path "pages/Sync Notice Error.md"
+                                                                          :content content}
+                                                                         {:platform platform})]
                        (is (= :error (:status result)))
-                       (is (= :unsupported-top-level-markdown (:reason result)))
-                       (is (= "existing" (block-title @conn block-uuid)))
-                       (is (empty? (pending-txs))))))
+                       (is (= :block-id-marker-not-supported (:reason result)))
+                       (is (= "before" (block-title @conn block-uuid)))
+                       (is (= [[:notification
+                                [nil :error nil nil nil
+                                 {:i18n-key :file/markdown-mirror-import-error
+                                  :i18n-args ["pages/Sync Notice Error.md"]}]]]
+                              @broadcasts)))))
                  (p/catch (fn [e] (is false (str "unexpected error: " e))))
                  (p/finally done))))))
 

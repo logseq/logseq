@@ -632,6 +632,7 @@
  :file/format-not-supported "Format .{1} is not supported."
  :file/label "File"
  :file/last-modified-at "Last modified at"
+ :file/markdown-mirror-import-error "Failed to import Markdown file into the graph: {1}"
  :file/name "File name"
  :file/no-data "No data"
  :file/title "File {1}"

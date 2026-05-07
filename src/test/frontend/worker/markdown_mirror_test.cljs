@@ -465,12 +465,15 @@
           page (db-test/find-page-by-title @conn "Page A")]
       (-> (markdown-mirror/<mirror-page!
            test-repo @conn (:db/id page)
-           {:platform (assoc-in platform [:storage :read-text!]
+          {:platform (assoc-in platform [:storage :read-text!]
                                 (fn [_path] (p/rejected missing-error)))})
           (p/then (fn [_]
-                    (let [path (page-path "pages/Page A.md")]
-                      (is (= "- hello" (get @files path)))
-                      (is (= [[path "- hello"]] @writes)))))
+                    (let [path (page-path "pages/Page A.md")
+                          block (first-block page)
+                          content (str (page-marker (:block/uuid page)) "\n\n"
+                                       (block-line (:block/uuid block) "hello"))]
+                      (is (= content (get @files path)))
+                      (is (= [[path content]] (markdown-writes writes))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
