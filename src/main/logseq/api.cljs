@@ -51,6 +51,7 @@
 (def ^:export unlink_installed_web_plugin api-plugin/unlink_installed_web_plugin)
 (def ^:export unlink_plugin_user_settings api-plugin/unlink_plugin_user_settings)
 (def ^:export register_plugin_slash_command api-plugin/register_plugin_slash_command)
+(def ^:export unregister_plugin_slash_command api-plugin/unregister_plugin_slash_command)
 (def ^:export register_plugin_simple_command api-plugin/register_plugin_simple_command)
 (def ^:export unregister_plugin_simple_command api-plugin/unregister_plugin_simple_command)
 (def ^:export register_search_service api-plugin/register_search_service)
