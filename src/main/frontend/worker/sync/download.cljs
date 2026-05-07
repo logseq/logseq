@@ -533,7 +533,9 @@
                                    :stage @stage*
                                    :error error
                                    :error-stack (when (instance? js/Error error)
-                                                  (.-stack error))})
+                                                  (.-stack error))
+                                   :error-cause (when (instance? js/Error error)
+                                                  (some-> (.-cause error) (.-message)))})
                        (throw (ex-info "db-sync download failed"
                                       {:repo repo
                                        :graph-id graph-id
@@ -541,7 +543,9 @@
                                        :stage @stage*
                                        :error-message (or (ex-message error)
                                                            (when (instance? js/Error error)
-                                                             (.-message error)))}
+                                                             (.-message error)))
+                                       :error-cause (when (instance? js/Error error)
+                                                      (some-> (.-cause error) (.-message)))}
                                        error))))))
       (p/rejected (ex-info "db-sync missing graph download info"
                            {:repo repo

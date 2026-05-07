@@ -1,5 +1,6 @@
 (ns logseq.e2e.outliner-basic-test
   (:require
+   [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
@@ -7,8 +8,7 @@
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
-   [wally.main :as w]
-   [wally.repl :as repl]))
+   [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
 (use-fixtures :each
@@ -75,6 +75,48 @@
   (util/repeat-keyboard 2 (str (if util/mac? "Meta" "Alt") "+Shift+ArrowDown"))
   (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b1" "b2" "b3" "b4"]))))
+
+(defn- zoom-in-shortcut []
+  (k/press (if util/mac? "Meta+Shift+." "Alt+ArrowRight")))
+
+(defn- current-location-hash []
+  (w/eval-js "window.location.hash"))
+
+(defn- current-editing-block-id []
+  (w/eval-js
+   "(() => {
+      const editor = document.querySelector('.editor-wrapper textarea');
+      return editor?.closest('[blockid]')?.getAttribute('blockid') ?? null;
+    })();"))
+
+(deftest focused-root-block-cannot-indent-or-move-test
+  (testing "Focused root block ignores indent/outdent/move-up/move-down commands"
+    (b/new-blocks ["focused-root" "focused-child"])
+    (k/arrow-up)
+    (let [root-id (current-editing-block-id)]
+      (is (string? root-id))
+      (zoom-in-shortcut)
+      (util/wait-timeout 400)
+      ;; Retry once in case the first key event gets swallowed by the editor.
+      (when-not (string/includes? (or (current-location-hash) "") root-id)
+        (zoom-in-shortcut)
+        (util/wait-timeout 400))
+      (is (string/includes? (or (current-location-hash) "") root-id))
+      (util/wait-editor-visible)
+      (is (= "focused-root" (util/get-edit-content)))
+      (let [before-hash (current-location-hash)
+            before-block-contents (util/get-page-blocks-contents)]
+        (k/tab)
+        (util/wait-timeout 100)
+        (k/shift+tab)
+        (util/wait-timeout 100)
+        (k/meta+shift+arrow-up)
+        (util/wait-timeout 100)
+        (k/meta+shift+arrow-down)
+        (util/wait-timeout 100)
+        (is (= "focused-root" (util/get-edit-content)))
+        (is (= before-hash (current-location-hash)))
+        (is (= before-block-contents (util/get-page-blocks-contents)))))))
 
 (defn delete []
   (testing "Delete blocks case 1"

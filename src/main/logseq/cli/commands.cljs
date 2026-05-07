@@ -314,7 +314,7 @@
          remove-invalid-options-message)
     (command-core/invalid-options-result summary remove-invalid-options-message)
 
-    (and (= command :graph-export) graph-invalid-options-message)
+    graph-invalid-options-message
     (command-core/invalid-options-result summary graph-invalid-options-message)
 
     (and (= command :show) show-invalid-options-message)
@@ -401,12 +401,12 @@
                                      (list-command/invalid-options? command opts))
      :remove-invalid-options-message (when (remove-validation-commands command)
                                        (remove-command/invalid-options? command opts))
-     :graph-invalid-options-message (when (= command :graph-export)
-                                      (graph-command/invalid-options? command opts))
      :show-invalid-options-message (when (= command :show)
                                      (show-command/invalid-options? opts))
      :debug-invalid-options-message (when (= command :debug-pull)
                                       (debug-command/invalid-options? opts))
+     :graph-invalid-options-message (when (contains? #{:graph-create :graph-export} command)
+                                      (graph-command/invalid-options? command opts))
      :import-export-type (graph-command/normalize-import-export-type (:type opts))
      :completion-shell-error (when (= command :completion)
                                (completion-shell-error-message completion-shell))}))
@@ -696,6 +696,7 @@
                          :graph-backup-restore (graph-command/execute-graph-backup-restore action config)
                          :graph-backup-remove (graph-command/execute-graph-backup-remove action config)
                          :invoke (graph-command/execute-invoke action config)
+                         :graph-create-enable-sync (graph-command/execute-graph-create-enable-sync action config)
                          :graph-remove (graph-command/execute-graph-remove action config)
                          :graph-switch (graph-command/execute-graph-switch action config)
                          :graph-info (graph-command/execute-graph-info action config)
@@ -756,4 +757,5 @@
                                              :status :priority
                                              :src :dst :backup-name
                                              :export-type :file :import-type :input
+                                             :enable-sync
                                              :graph-id :email :config-key :config-value])))))
