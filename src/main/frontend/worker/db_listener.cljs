@@ -3,6 +3,7 @@
   (:require [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
@@ -59,6 +60,10 @@
 (defmethod listen-db-changes :db-sync
   [_ {:keys [repo]} tx-report]
   (db-sync/handle-local-tx! repo tx-report))
+
+(defmethod listen-db-changes :markdown-mirror
+  [_ {:keys [repo]} tx-report]
+  (markdown-mirror/<handle-tx-report! repo nil tx-report {:defer? true}))
 
 (defn listen-db-changes!
   [repo conn & {:keys [handler-keys]}]

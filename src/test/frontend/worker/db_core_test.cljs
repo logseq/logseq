@@ -52,6 +52,7 @@
           :thread-api/import-db-base64 :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
           :thread-api/search-truncate-tables :thread-api/search-build-blocks-indice :thread-api/search-build-blocks-indice-in-worker
           :thread-api/search-build-pages-indice :thread-api/apply-outliner-ops :thread-api/sync-app-state
+          :thread-api/markdown-mirror-set-enabled :thread-api/markdown-mirror-flush :thread-api/markdown-mirror-regenerate
           :thread-api/export-get-debug-datoms :thread-api/export-get-all-page->content :thread-api/validate-db
           :thread-api/recompute-checksum-diagnostics :thread-api/export-edn :thread-api/import-edn :thread-api/get-view-data
           :thread-api/get-class-objects :thread-api/get-property-values :thread-api/get-bidirectional-properties
