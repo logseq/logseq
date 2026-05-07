@@ -1,10 +1,13 @@
 (ns frontend.worker.markdown-mirror-test
-  (:require [clojure.string :as string]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [clojure.string :as string]
             [cljs.test :refer [async deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.platform :as worker-platform]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
@@ -432,9 +435,15 @@
     (let [{:keys [platform files]} (fake-platform)
           page-uuid #uuid "22222222-2222-4222-8222-222222222221"
           block-uuid #uuid "22222222-2222-4222-8222-222222222222"
+          datetime-ms (tc/to-long (t/date-time 2026 5 14 9 30))
+          expected-datetime (date-time-util/format
+                             (t/to-default-time-zone (tc/from-long datetime-ms))
+                             "MMM do, yyyy HH:mm")
           conn (db-test/create-conn-with-blocks
                 {:properties {:user.property/reproducible-steps {:logseq.property/type :default}
-                              :user.property/rating {:logseq.property/type :number}}
+                              :user.property/rating {:logseq.property/type :number}
+                              :user.property/date-time {:block/title "DateTime"
+                                                        :logseq.property/type :datetime}}
                  :pages-and-blocks [{:page {:block/title "Issue"
                                              :block/uuid page-uuid
                                              :build/properties {:user.property/reproducible-steps "Open settings"
@@ -444,6 +453,7 @@
                                                :build/properties {:logseq.property/status :logseq.property/status.todo
                                                                   :user.property/reproducible-steps "Click mirror"
                                                                   :user.property/rating 5
+                                                                  :user.property/date-time datetime-ms
                                                                   :logseq.property/heading 2}}]}]})
           page (db-test/find-page-by-title @conn "Issue")]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
@@ -455,7 +465,8 @@
                                   "- TODO ## TODO body\n"
                                   "  * reproducible-steps::\n"
                                   "    - Click mirror\n"
-                                  "  * rating:: 5")
+                                  "  * rating:: 5\n"
+                                  "  * DateTime:: " expected-datetime)
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))

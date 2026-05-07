@@ -1,6 +1,8 @@
 (ns logseq.cli.common.file
   "Convert blocks to file content. Used for frontend exports and CLI"
-  (:require [clojure.string :as string]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.util.date-time :as date-time-util]
@@ -16,23 +18,26 @@
   (let [lines (string/split-lines content)]
     (string/join (str "\n" spaces-tabs) lines)))
 
-(defn- datetime-journal-title
+(defn- journal-day-title
+  [journal-day context]
+  (date-time-util/int->journal-title
+   journal-day
+   (or (:date-formatter context)
+       date-time-util/default-journal-title-formatter)))
+
+(defn- datetime-value->string
   [v context]
   (when (integer? v)
-    (let [journal-day (cond
-                        (<= 10000101 v 99991231)
-                        v
+    (cond
+      (<= 10000101 v 99991231)
+      (journal-day-title v context)
 
-                        (>= v 100000000000)
-                        (date-time-util/ms->journal-day v)
-
-                        :else
-                        nil)]
-      (when journal-day
-        (date-time-util/int->journal-title
-         journal-day
-         (or (:date-formatter context)
-             date-time-util/default-journal-title-formatter))))))
+      (>= v 100000000000)
+      (date-time-util/format
+       (t/to-default-time-zone (tc/from-long v))
+       (str (or (:date-formatter context)
+                date-time-util/default-journal-title-formatter)
+            " HH:mm")))))
 
 (defn- property-value->string
   [db property v context]
@@ -80,7 +85,7 @@
 
       (and (= :datetime (:logseq.property/type property))
            (integer? v))
-      (or (datetime-journal-title v context)
+      (or (datetime-value->string v context)
           (str v))
 
       (some? v)
