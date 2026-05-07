@@ -3185,6 +3185,28 @@
                    (when (:db/id seg) (db/entity (:db/id seg))))]
     [(breadcrumb-model/resolve-segment-refs seg entity) entity]))
 
+(rum/defc breadcrumb-search-overflow-tooltip
+  [entities visible-prefix hidden visible-suffix raw-title]
+  (let [[resolved-title set-resolved-title!] (hooks/use-state nil)
+        resolve-title! (fn [_]
+                         (when (nil? resolved-title)
+                           (let [resolved-hidden (mapv #(first (resolve-breadcrumb-segment entities %)) hidden)
+                                 title (breadcrumb-model/segments->full-title
+                                        (concat visible-prefix resolved-hidden visible-suffix))]
+                             (set-resolved-title! title))))]
+    (hooks/use-effect!
+     (fn []
+       (set-resolved-title! nil)
+       nil)
+     [raw-title])
+    (ui/tooltip
+     [:span.opacity-40.px-0.5.text-xs
+      {:on-pointer-enter resolve-title!
+       :on-focus resolve-title!}
+      "···"]
+     (or resolved-title raw-title)
+     {:trigger-props {:as-child true}})))
+
 (rum/defcs breadcrumb-overflow-dropdown < (rum/local false ::open?)
   (rum/local nil ::full-hidden)
   "Renders an ellipsis button that exposes hidden ancestor segments in a dropdown."
@@ -3285,7 +3307,8 @@
          (list
           (breadcrumb-separator)
           (if (= effective-variant :search-result)
-            (ui/tooltip [:span.opacity-40.px-0.5.text-xs "···"] full-title {:trigger-props {:as-child true}})
+            (breadcrumb-search-overflow-tooltip
+             entities visible-prefix hidden visible-suffix full-title)
             (breadcrumb-overflow-dropdown
              config repo target-entity from-property hidden entities opts vopts show-page?))))
        ;; visible suffix (nearest parents)
