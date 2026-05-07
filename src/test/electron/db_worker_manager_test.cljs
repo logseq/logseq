@@ -41,6 +41,29 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
+(deftest ensure-started-reuses-prefix-equivalent-runtime
+  (async done
+    (let [start-calls (atom [])
+          stop-calls (atom [])
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo]
+                                     (swap! start-calls conj repo)
+                                     (p/resolved (runtime repo)))
+                    :stop-daemon! (fn [rt]
+                                    (swap! stop-calls conj (:repo rt))
+                                    (p/resolved true))})]
+      (-> (p/let [first-runtime (db-worker/ensure-started! manager "demo" :window-1)
+                  second-runtime (db-worker/ensure-started! manager "logseq_db_demo" :window-1)
+                  manager-state @(:state manager)]
+            (is (= first-runtime second-runtime))
+            (is (= ["demo"] @start-calls))
+            (is (empty? @stop-calls))
+            (is (= "demo" (get-in manager-state [:window->repo :window-1])))
+            (is (= #{:window-1} (get-in manager-state [:repos "demo" :windows]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
 (deftest ensure-started-switches-window-repo-and-stops-previous-daemon
   (async done
     (let [start-calls (atom [])
@@ -74,6 +97,26 @@
                   _ (is (empty? @stop-calls))
                   _ (db-worker/ensure-stopped! manager "graph-a" :window-2)]
             (is (= ["graph-a"] @stop-calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest release-runtime-detaches-only-requested-window-repo-association
+  (async done
+    (let [stop-calls (atom [])
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo] (p/resolved (runtime repo)))
+                    :stop-daemon! (fn [rt]
+                                    (swap! stop-calls conj (:repo rt))
+                                    (p/resolved true))})]
+      (-> (p/let [_ (db-worker/ensure-started! manager "graph-a" :window-1)
+                  _ (db-worker/ensure-started! manager "graph-a" :window-2)
+                  _ (db-worker/release-runtime! manager "graph-a" :window-1)
+                  state @(:state manager)]
+            (is (empty? @stop-calls))
+            (is (nil? (get-in state [:window->repo :window-1])))
+            (is (= "graph-a" (get-in state [:window->repo :window-2])))
+            (is (= #{:window-2} (get-in state [:repos "graph-a" :windows]))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))

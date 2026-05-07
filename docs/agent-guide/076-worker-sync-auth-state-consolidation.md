@@ -124,10 +124,7 @@ Proposed worker auth keys in `*state`:
    - Resolve auth via `cli-auth/resolve-auth!` / `resolve-auth-token!`.
    - Send auth into worker via `:thread-api/sync-app-state` as `:auth/*` fields.
 3. Keep `sync config set|get|unset` as non-auth config only (`ws-url`, `http-base`).
-4. Update CLI tests in:
-   - `src/test/logseq/cli/command/sync_test.cljs`
-   - `src/test/logseq/cli/integration_test.cljs`
-   to validate new invoke sequence (`sync-app-state` + `set-db-sync-config` non-auth payload).
+4. Update CLI tests in `src/test/logseq/cli/command/sync_test.cljs` to validate new invoke sequence (`sync-app-state` + `set-db-sync-config` non-auth payload).
 
 ### Phase 4 — db-worker-node API contract alignment
 
@@ -155,7 +152,6 @@ Proposed worker auth keys in `*state`:
 - `bb dev:test -v frontend.handler.db-based.sync-test`
 - `bb dev:test -v frontend.components.repo-test`
 - `bb dev:test -v logseq.cli.command.sync-test`
-- `bb dev:test -v logseq.cli.integration-test`
 
 ### Final verification
 

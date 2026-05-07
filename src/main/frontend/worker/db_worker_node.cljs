@@ -8,8 +8,9 @@
             [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.platform.node :as platform-node]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.version :as worker-version]
             [lambdaisland.glogi :as log]
+            [logseq.common.graph-dir :as graph-dir]
+            [logseq.common.version :as build-version]
             [logseq.cli.root-dir :as root-dir]
             [logseq.cli.style :as style]
             [logseq.db :as ldb]
@@ -221,7 +222,7 @@
            :error {:code :missing-repo
                    :message "repo is required"}}
 
-          (not= repo bound-repo)
+          (not (graph-dir/same-repo? repo bound-repo))
           {:status 409
            :error {:code :repo-mismatch
                    :message "repo does not match bound repo"
@@ -278,7 +279,7 @@
    :pid (.-pid js/process)
    :owner-source (name (normalize-owner-source owner-source))
    :root-dir root-dir
-   :revision (worker-version/revision)})
+   :revision (build-version/revision)})
 
 (defn- make-server
   [proxy {:keys [bound-repo stop-fn host port owner-source root-dir]}]
@@ -437,7 +438,7 @@
                               {:code :repo-locked
                                :repo target-repo})))
           _ (when (and (seq target-repo)
-                       (not= target-repo (:repo lock)))
+                       (not (graph-dir/same-repo? target-repo (:repo lock))))
               (throw (ex-info "graph lock repo mismatch"
                               {:code :repo-locked
                                :repo target-repo
@@ -598,7 +599,7 @@
       (show-help!)
       (.exit js/process 0))
     (when version?
-      (println (worker-version/format-version))
+      (println (build-version/format-version))
       (.exit js/process 0))
     (when-not (seq root-dir)
       (.error js/console "root-dir is required")
