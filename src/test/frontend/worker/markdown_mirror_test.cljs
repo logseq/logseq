@@ -149,7 +149,30 @@
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Issue.md"))]
-                      (is (= "reproducible-steps:: Open settings\n- TODO body\n  Status:: Todo\n  reproducible-steps:: Click mirror\n  rating:: 5"
+                      (is (= "reproducible-steps:: Open settings\n- ## TODO body\n  Status:: Todo\n  reproducible-steps:: Click mirror\n  rating:: 5"
+                             content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-preserves-markdown-semantic-block-formatting-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Formats"}
+                                     :blocks [{:block/title "Heading block"
+                                               :build/properties {:logseq.property/heading 2}}
+                                              {:block/title "quote line 1\nquote line 2"
+                                               :build/tags [:logseq.class/Quote-block]
+                                               :build/properties {:logseq.property.node/display-type :quote}}
+                                              {:block/title "(println \"hi\")\n(+ 1 2)"
+                                               :build/tags [:logseq.class/Code-block]
+                                               :build/properties {:logseq.property.node/display-type :code
+                                                                  :logseq.property.code/lang "clojure"}}]}]})
+          page (db-test/find-page-by-title @conn "Formats")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Formats.md"))]
+                      (is (= "- ## Heading block\n- > quote line 1\n  > quote line 2\n- ```clojure\n  (println \"hi\")\n  (+ 1 2)\n  ```"
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
