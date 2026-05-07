@@ -241,7 +241,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo block-title < rum/static
   "Used on table view"
-  [block* {:keys [create-new-block width row property]}]
+  [block* {:keys [create-new-block width row property property-ident]}]
   (let [*ref (hooks/use-ref nil)
         [opacity set-opacity!] (hooks/use-state 0)
         [focus-timeout set-focus-timeout!] (hooks/use-state nil)
@@ -303,9 +303,45 @@
                                               (save-block-and-focus *ref set-focus-timeout! false))})
                            (editor-handler/edit-block! block :max {:container-id :unknown-container})))))))}
      (if block
-       [:div.flex.flex-row
+       [:div.flex.flex-row.items-center.gap-2.min-w-0
+        (when (and (= property-ident :block/title) (not many?))
+          (when-let [icon-el (icon-component/get-node-icon-cp block* {:size 16 :color? true})]
+            [:div.table-row-icon.flex-shrink-0.flex.items-center.justify-center
+             {:style {:width 20 :height 20}
+              :on-click (fn [^js e]
+                          (util/stop-propagation e)
+                          (let [own-icon (:logseq.property/icon block*)]
+                            (shui/popup-show!
+                             (.-currentTarget e)
+                             (fn [{:keys [id]}]
+                               (icon-component/icon-search
+                                {:on-chosen (fn [_e icon-value keep-popup?]
+                                              (let [icon-data (when icon-value
+                                                                (cond
+                                                                  (= :text (:type icon-value))   {:type :text   :data (:data icon-value)}
+                                                                  (= :avatar (:type icon-value)) {:type :avatar :data (:data icon-value)}
+                                                                  (= :image (:type icon-value))  {:type :image  :data (:data icon-value)}
+                                                                  :else (select-keys icon-value [:type :id :color])))]
+                                                (if icon-data
+                                                  (property-handler/set-block-property!
+                                                   (:db/id block*)
+                                                   :logseq.property/icon
+                                                   icon-data)
+                                                  (property-handler/remove-block-property!
+                                                   (:db/id block*)
+                                                   :logseq.property/icon)))
+                                              (when-not (true? keep-popup?)
+                                                (shui/popup-hide! id)))
+                                 :icon-value own-icon
+                                 :page-title (:block/title block*)
+                                 :del-btn? (some? own-icon)}))
+                             {:align :start
+                              :id :ls-icon-picker
+                              :content-props {:class "ls-icon-picker"
+                                              :onEscapeKeyDown #(.preventDefault %)}})))}
+             icon-el]))
         (let [render (fn [block]
-                       [:div
+                       [:div.min-w-0
                         (inline-title
                          {:table? true
                           :block/uuid (:block/uuid block)}
