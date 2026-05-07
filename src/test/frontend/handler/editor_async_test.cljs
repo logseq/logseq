@@ -38,6 +38,7 @@
       gdom/getElement (constantly #js {:id block-dom-id})
                   ;; stub since not testing moving
       editor/edit-block! (constantly nil)
+      state/get-edit-content (constantly "")
                   ;; stub b/c of js/document
       state/get-selection-blocks (constantly [])
       util/get-blocks-noncollapse (constantly (mapv
