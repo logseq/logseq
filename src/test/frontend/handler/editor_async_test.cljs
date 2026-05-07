@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [is testing async use-fixtures]]
             [datascript.core :as d]
             [frontend.db :as db]
+            [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async load-test-files]]
@@ -17,6 +18,13 @@
                     (done)))
    :after test-helper/destroy-test-db!})
 
+(defn- fake-key-event
+  []
+  (let [stopped? (atom false)]
+    {:event #js {:preventDefault #(reset! stopped? true)
+                 :stopPropagation #(reset! stopped? true)}
+     :stopped? stopped?}))
+
 (defn- delete-block
   [db block {:keys [embed? on-delete]}]
   (let [sibling-block (ldb/get-left-sibling (d/entity db (:db/id block)))
@@ -30,6 +38,7 @@
       gdom/getElement (constantly #js {:id block-dom-id})
                   ;; stub since not testing moving
       editor/edit-block! (constantly nil)
+      state/get-edit-content (constantly "")
                   ;; stub b/c of js/document
       state/get-selection-blocks (constantly [])
       util/get-blocks-noncollapse (constantly (mapv
@@ -110,3 +119,71 @@
                                                             (map first))]
                                     (is (= ["b1" "b2"] updated-blocks) "Visible page blocks stay on the page")
                                     (is (empty? deleted-blocks) "Deleted block is removed from page db")))}))))
+
+(deftest-async rapid-tab-after-new-block-indents-pending-block
+  (let [current-block {:db/id 1
+                       :block/uuid (random-uuid)
+                       :block/title "first"}
+        next-block {:db/id 2
+                    :block/uuid (random-uuid)
+                    :block/title ""}
+        input #js {:value "first"}
+        current-block-indents (atom [])
+        pending-block-indents (atom [])
+        edit-calls (atom [])
+        {:keys [event stopped?]} (fake-key-event)
+        previous-document (.-document js/globalThis)]
+    (state/set-editing-block-id! [:unknown-container (:block/uuid current-block)])
+    (set! (.-document js/globalThis)
+          #js {:activeElement input
+               :getElementById (fn [_id] input)})
+    (-> (p/with-redefs [state/get-edit-input-id (constantly "edit-block-current")
+                        gdom/getElement (constantly input)
+                        util/get-selection-start (constantly 5)
+                        util/get-selection-end (constantly 5)
+                        db/entity (fn [lookup-ref]
+                                    (case lookup-ref
+                                      [:block/uuid (:block/uuid current-block)] current-block
+                                      [:block/uuid (:block/uuid next-block)] next-block
+                                      current-block))
+                        editor/get-state (constantly {:block current-block
+                                                      :value "first"
+                                                      :config {}
+                                                      :block-container #js {}})
+                        editor/insert-new-block-aux! (fn [_config _block _value]
+                                                       [(p/resolved true) true next-block])
+                        editor/get-new-container-id (constantly nil)
+                        editor/indent-outdent (fn [indent?]
+                                                (swap! current-block-indents conj indent?))
+                        editor/edit-block! (fn [block pos opts]
+                                             (swap! edit-calls conj {:block block
+                                                                     :pos pos
+                                                                     :opts opts})
+                                             (p/resolved nil))
+                        block-handler/indent-outdent-blocks! (fn [blocks indent? save-current-block]
+                                                               (swap! pending-block-indents conj
+                                                                      {:blocks blocks
+                                                                       :indent? indent?
+                                                                       :save-current-block save-current-block})
+                                                               (p/resolved nil))]
+          (editor/insert-new-block! nil nil)
+          ((editor/keydown-tab-handler :right) event)
+          (p/let [_ (when-let [edit-block-f @(:editor/edit-block-fn @state/state)]
+                       (edit-block-f))]
+            (is @stopped? "Tab should still be consumed while the new block is pending")
+            (is (empty? @current-block-indents) "Tab must not indent the block that was split by Enter")
+            (is (= [{:blocks [next-block]
+                     :indent? true
+                     :save-current-block nil}]
+                   @pending-block-indents)
+                "Tab should apply to the newly inserted block once it exists")
+            (is (= [{:block next-block
+                     :pos 0
+                     :opts {:container-id nil
+                            :custom-content ""}}]
+                   @edit-calls)
+                "The pending block should still enter edit mode after applying queued Tab")))
+        (p/finally (fn []
+                     (state/set-state! :editor/edit-block-fn nil)
+                     (state/set-state! :editor/pending-new-block nil)
+                     (set! (.-document js/globalThis) previous-document))))))

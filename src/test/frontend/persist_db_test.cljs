@@ -261,6 +261,84 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
+(deftest electron-ensure-remote-reuses-prefix-equivalent-runtime
+  (async done
+    (let [ipc-calls (atom [])
+          start-calls (atom [])
+          stop-calls (atom [])
+          ensure-remote! #'persist-db/<ensure-remote!
+          original-ipc ipc/ipc
+          original-start! remote/start!
+          original-stop! remote/stop!]
+      (reset-runtime-state!)
+      (set! ipc/ipc (fn [channel repo]
+                      (swap! ipc-calls conj [channel repo])
+                      (p/resolved {:base-url "http://127.0.0.1:9101"
+                                   :auth-token nil
+                                   :repo repo})))
+      (set! remote/start! (fn [{:keys [repo]}]
+                            (swap! start-calls conj repo)
+                            (->FakeRemote repo (fn [& _] nil))))
+      (set! remote/stop! (fn [client]
+                           (swap! stop-calls conj (:repo client))
+                           (p/resolved true)))
+      (-> (p/let [first-client (ensure-remote! "demo")
+                  second-client (ensure-remote! "logseq_db_demo")]
+            (is (= first-client second-client))
+            (is (= [["db-worker-runtime" "demo"]] @ipc-calls))
+            (is (= ["demo"] @start-calls))
+            (is (empty? @stop-calls))
+            (is (= "demo" @persist-db/remote-repo)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! ipc/ipc original-ipc)
+                       (set! remote/start! original-start!)
+                       (set! remote/stop! original-stop!)
+                       (done)))))))
+
+(deftest electron-graph-switch-fetch-init-data-reuses-prefix-equivalent-runtime
+  (async done
+    (let [ipc-calls (atom [])
+          start-calls (atom [])
+          stop-calls (atom [])
+          original-electron? util/electron?
+          original-ipc ipc/ipc
+          original-start! remote/start!
+          original-stop! remote/stop!]
+      (reset-runtime-state!)
+      (set! util/electron? (constantly true))
+      (set! ipc/ipc (fn [channel repo]
+                      (swap! ipc-calls conj [channel repo])
+                      (p/resolved {:base-url "http://127.0.0.1:9101"
+                                   :auth-token nil
+                                   :repo repo})))
+      (set! remote/start! (fn [{:keys [repo]}]
+                            (swap! start-calls conj repo)
+                            (->FakeRemote repo (fn [& _] nil))))
+      (set! remote/stop! (fn [client]
+                           (swap! stop-calls conj (:repo client))
+                           (p/resolved true)))
+      (-> (p/let [first-result (persist-db/<fetch-init-data "demo" {})
+                  second-result (persist-db/<fetch-init-data "logseq_db_demo" {})]
+            (is (= {:schema {:repo "demo"}
+                    :initial-data []}
+                   first-result))
+            (is (= {:schema {:repo "logseq_db_demo"}
+                    :initial-data []}
+                   second-result))
+            (is (= [["db-worker-runtime" "demo"]] @ipc-calls))
+            (is (= ["demo"] @start-calls))
+            (is (empty? @stop-calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! util/electron? original-electron?)
+                       (set! ipc/ipc original-ipc)
+                       (set! remote/start! original-start!)
+                       (set! remote/stop! original-stop!)
+                       (done)))))))
+
 (deftest electron-fetch-init-data-then-set-current-repo-does-not-rebind-runtime
   (async done
     (let [ipc-calls (atom [])

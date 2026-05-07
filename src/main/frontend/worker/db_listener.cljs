@@ -43,7 +43,7 @@
         (when-not from-disk?
           (p/do!
            ;; Sync SQLite search
-           (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')]
+           (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice tx-report')]
              (when (seq blocks-to-remove-set)
                ((@thread-api/*thread-apis :thread-api/search-delete-blocks) repo blocks-to-remove-set))
              (when (seq blocks-to-add)
