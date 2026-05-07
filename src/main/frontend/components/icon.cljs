@@ -49,10 +49,13 @@
 (defonce *upload-status (atom ""))
 (defonce *uploading-files (atom {}))
 
-;; Offscreen canvas for measuring text width (never attached to DOM)
+;; Offscreen canvas for measuring text width (never attached to DOM).
+;; Lazily constructed so the namespace can load in environments without a DOM
+;; (e.g. the :node-test build).
 (defonce *text-measure-ctx
-  (let [canvas (js/document.createElement "canvas")]
-    (.getContext canvas "2d")))
+  (delay
+    (let [canvas (js/document.createElement "canvas")]
+      (.getContext canvas "2d"))))
 
 (declare normalize-icon derive-initials derive-avatar-initials
          <search-wikipedia-image <save-url-asset! open-image-asset-picker!)
@@ -329,6 +332,7 @@
         avatar-value (get avatar-data :value "")
         explicit-bg (get avatar-data :backgroundColor)
         explicit-color (get avatar-data :color)
+        shape (or (get avatar-data :shape) :circle)
         display-text (subs avatar-value 0 (min 3 (count avatar-value)))
         ;; Scale font-size with avatar size
         font-size (cond
@@ -337,24 +341,28 @@
                     (<= size 32) "12px"
                     :else "14px")]
     (shui/avatar
-     {:style {:width size :height size}}
+     {:style {:width size :height size}
+      :data-shape (name shape)}
      ;; Image (shows when loaded, circular with cover fit)
      (when url
        (shui/avatar-image {:src url
-                           :style {:object-fit "cover"}}))
+                           :style {:object-fit "cover"}
+                           :data-shape (name shape)}))
      ;; Fallback (shows while loading or on error)
      (shui/avatar-fallback
       {:style (avatar-fallback-style {:font-size font-size
                                       :bg explicit-bg
-                                      :color explicit-color})}
+                                      :color explicit-color})
+       :data-shape (name shape)}
       display-text))))
 
 (defn measure-text-width
   "Measure pixel width of text at given font-size using offscreen canvas."
   [text font-size-px]
-  (set! (.-font *text-measure-ctx)
-        (str "500 " font-size-px "px Inter, sans-serif"))
-  (.-width (.measureText *text-measure-ctx text)))
+  (let [ctx @*text-measure-ctx]
+    (set! (.-font ctx)
+          (str "500 " font-size-px "px Inter, sans-serif"))
+    (.-width (.measureText ctx text))))
 
 (defn svg-text-font-size
   "Compute font-size in viewBox coords (0-100) that makes text fill ~85% width.
@@ -521,6 +529,7 @@
                          avatar-value (get avatar-data :value)
                          explicit-bg (get avatar-data :backgroundColor)
                          explicit-color (get avatar-data :color)
+                         shape (or (get avatar-data :shape) :circle)
                          display-text (subs avatar-value 0 (min 3 (count avatar-value)))
                          ;; Scale font-size with avatar size
                          font-size (cond
@@ -529,11 +538,13 @@
                                      (<= size 32) "12px"
                                      :else "14px")]
                      (shui/avatar
-                      {:style {:width size :height size}}
+                      {:style {:width size :height size}
+                       :data-shape (name shape)}
                       (shui/avatar-fallback
                        {:style (avatar-fallback-style {:font-size font-size
                                                        :bg explicit-bg
-                                                       :color explicit-color})}
+                                                       :color explicit-color})
+                        :data-shape (name shape)}
                        display-text)))))
 
                ;; Image with asset — let image-icon-cp resolve via the filesystem
@@ -601,11 +612,13 @@
       default-icon
       (case (:type default-icon)
         :avatar (when (:block/title node-entity)
-                  (let [colors (select-keys (:data default-icon) [:backgroundColor :color])]
+                  ;; Inherit color + shape from the class default. New :shape
+                  ;; field defaults via normalize-icon when missing.
+                  (let [inherited (select-keys (:data default-icon) [:backgroundColor :color :shape])]
                     (cond-> {:type :avatar
-                             :data (merge colors
+                             :data (merge inherited
                                           {:value (derive-avatar-initials (:block/title node-entity))})}
-                      (:color colors) (assoc :color (:color colors)))))
+                      (:color inherited) (assoc :color (:color inherited)))))
         :text (when (:block/title node-entity)
                 (let [colors (select-keys (:data default-icon) [:color])]
                   (cond-> {:type :text
@@ -659,7 +672,9 @@
         ;; can carry `:icon` (full normalized item override), `:color`
         ;; (color override), or both.
         preview (state/sub :ui/icon-hover-preview)
-        preview-active? (and preview (= (:db-id preview) (:db/id entity)))
+        preview-active? (and preview
+                             (or (= (:db-id preview) (:db/id entity))
+                                 (contains? (:db-ids preview) (:db/id entity))))
         preview-icon (when preview-active? (:icon preview))
         effective-color (cond
                           preview-active? (or (:color preview) "inherit")
@@ -737,7 +752,16 @@
   [v]
   (cond
     ;; Already unified shape? (has :data key)
-    (and (map? v) (keyword? (:type v)) (contains? v :data)) v
+    ;; Avatars get a small post-pass to ensure new fields (:shape) have
+    ;; defaults applied — legacy data stored before those fields existed
+    ;; would otherwise bypass the normalization branch below entirely.
+    (and (map? v) (keyword? (:type v)) (contains? v :data))
+    (if (= :avatar (:type v))
+      (let [explicit-shape (or (get-in v [:data :shape]) (:shape v))]
+        (cond-> v
+          (nil? explicit-shape) (assoc-in [:data :shape] :circle)
+          (some? explicit-shape) (assoc-in [:data :shape] explicit-shape)))
+      v)
 
     ;; Legacy map with :type
     (map? v)
@@ -779,13 +803,17 @@
                                 (colors/variable :gray :09))
                       ;; Preserve image data if present
                       asset-uuid (or (get-in v [:data :asset-uuid]) (:asset-uuid v))
-                      asset-type (or (get-in v [:data :asset-type]) (:asset-type v))]
+                      asset-type (or (get-in v [:data :asset-type]) (:asset-type v))
+                      ;; Shape: defaults to :circle for backward compat with avatars
+                      ;; saved before the shape field existed.
+                      shape (or (get-in v [:data :shape]) (:shape v) :circle)]
                   {:type :avatar
                    :id (or id (str "avatar-" value))
                    :label (or label value)
                    :data (cond-> {:value value
                                   :backgroundColor backgroundColor
-                                  :color color}
+                                  :color color
+                                  :shape shape}
                            asset-uuid (assoc :asset-uuid asset-uuid)
                            asset-type (assoc :asset-type asset-type))})
         :image (let [;; Extract asset-uuid, stripping "image-" prefix if present (from :id fallback)
@@ -2696,6 +2724,7 @@
   (rum/local nil ::loaded-assets) ;; Cached assets loaded async
   (rum/local nil ::web-query-debounced) ;; Debounced web search query
   (rum/local :avatar ::mode) ;; :avatar | :image — live tab state, seeded in :will-mount
+  (rum/local false ::customize-expanded?) ;; Avatar customize band open/closed
   (rum/local nil ::paste-handler) ;; Holds latest clipboard-paste closure for the DOM listener
   ;; Keyboard-nav state, parallels the icon-picker's model.
   (rum/local :search ::focus-region)    ;; :search | :grid
@@ -2789,7 +2818,7 @@
 
                    state)}
   [state {:keys [on-chosen on-back on-delete del-btn? current-icon avatar-context page-title
-                 *color preview-target-db-id]}]
+                 *color preview-target-db-id preview-target-db-ids]}]
   (let [*search-q (::search-q state)
         *loading? (::loading? state)
         *loaded-assets (::loaded-assets state)
@@ -3243,12 +3272,13 @@
                                            (assoc-in [:data :color] c)
                                            (assoc-in [:data :backgroundColor] c))
                                        true)))
-                        :on-hover! (when preview-target-db-id
+                        :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
                                      (fn [c]
                                        (state/set-state! :ui/icon-hover-preview
-                                                         {:db-id preview-target-db-id
-                                                          :color c})))
-                        :on-hover-end! (when preview-target-db-id
+                                                         (cond-> {:color c}
+                                                           preview-target-db-id (assoc :db-id preview-target-db-id)
+                                                           (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids))))))
+                        :on-hover-end! (when (or preview-target-db-id (seq preview-target-db-ids))
                                          (fn []
                                            (state/set-state! :ui/icon-hover-preview nil)))
                         :button-attrs {:data-topbar-stop "color"}
@@ -3427,6 +3457,110 @@
                                 (if (string/blank? @*search-q)
                                   (shui/popup-hide!)
                                   (reset! *search-q "")))})
+
+        ;; Avatar customize zone — preview tile + (when expanded) Shape/
+        ;; Fallback dropdowns + Reset/Done rail. Avatar-mode only; image-mode
+        ;; doesn't have a notion of shape (object-fit: contain shows the full
+        ;; image with no shape clipping).
+        ;;
+        ;; Layout intent (matches design artboard 99K-1):
+        ;;
+        ;;   Resting   — [JK]  Jakob Kühn / Tap to customize…
+        ;;   Expanded  — [JK]  Shape    [Circle ⌄]
+        ;;                     Fallback [Letters ⌄]      ← future phase
+        ;;               -------------------------------
+        ;;               ↩ Reset                  Done
+        ;;
+        ;; Avatar stays anchored on the left in both states; the right column
+        ;; swaps between the meta line (resting) and the toggle rows
+        ;; (expanded). The avatar itself is the only click target — tapping
+        ;; it toggles the expanded state.
+        (when avatar-mode?
+          (let [expanded? (rum/react (::customize-expanded? state))
+                preview-icon (or (when (= :avatar (:type current-icon)) current-icon)
+                                 synthesized-avatar-context)
+                current-shape (or (get-in preview-icon [:data :shape]) :circle)
+                set-shape! (fn [new-shape]
+                             (on-chosen nil
+                                        (assoc-in preview-icon [:data :shape] new-shape)
+                                        true))
+                reset-shape! (fn []
+                               ;; Phase 1: Reset only resets shape (the only
+                               ;; customizable field today). Future phases will
+                               ;; reset Fallback fields too.
+                               (when (not= current-shape :circle)
+                                 (set-shape! :circle)))]
+            ;; All inner blocks always render so CSS transitions can run on
+            ;; visibility/height changes — the band's gradient, the rail's
+            ;; height, and the meta-vs-rows swap all interpolate cleanly. A
+            ;; conditional render would mount/unmount on toggle and CSS would
+            ;; have nothing to interpolate from.
+            [:div.avatar-customize-zone {:data-expanded (when expanded? "true")}
+             [:div.cb-content
+              [:button.cb-avatar-trigger
+               {:type "button"
+                :on-click #(swap! (::customize-expanded? state) not)
+                :aria-label "Customize avatar"
+                :aria-expanded expanded?}
+               [:div.preview-avatar
+                (icon preview-icon {:size 56})
+                [:div.preview-cue
+                 ;; Both glyphs always rendered, stacked; CSS shows the
+                 ;; active one (and crossfades) based on data-expanded.
+                 [:span.preview-cue-glyph.preview-cue-pencil
+                  (shui/tabler-icon "pencil" {:size 11})]
+                 [:span.preview-cue-glyph.preview-cue-check
+                  (shui/tabler-icon "check" {:size 11})]]]]
+              [:div.cb-meta-stage
+               [:div.preview-meta
+                [:div.preview-title (or page-title "")]
+                [:div.preview-subtitle "Tap avatar to customize"]]
+               [:div.cb-rows
+                [:div.cb-row
+                 [:span.cb-label "Shape"]
+                 (shui/dropdown-menu
+                  (shui/dropdown-menu-trigger
+                   {:as-child true}
+                   [:button.cb-chip
+                    {:type "button"
+                     :data-topbar-stop "shape"
+                     :aria-label "Avatar shape"}
+                    [:span.cb-chip-glyph
+                     (case current-shape
+                       :rounded-rect [:span.glyph.glyph-rect]
+                       [:span.glyph.glyph-circle])]
+                    [:span.cb-chip-label
+                     (case current-shape
+                       :rounded-rect "Rectangle"
+                       "Circle")]
+                    (shui/tabler-icon "chevron-down" {:size 11 :class "cb-chip-chevron"})])
+                  (shui/dropdown-menu-content
+                   {:align "end"}
+                   (shui/dropdown-menu-item
+                    {:on-click #(set-shape! :circle)}
+                    "Circle")
+                   (shui/dropdown-menu-item
+                    {:on-click #(set-shape! :rounded-rect)}
+                    "Rectangle")))]]]]
+             [:div.cb-rail-wrap
+              [:div.cb-rail
+               [:button.lx-toolbar-action.lx-toolbar-reset-link
+                {:type "button"
+                 :on-click reset-shape!
+                 :data-topbar-stop "reset"
+                 :disabled (= current-shape :circle)
+                 :aria-label "Reset to default"
+                 :tab-index (if expanded? 0 -1)}
+                (shui/tabler-icon "rotate" {:size 12})
+                [:span "Reset"]]
+               [:button.lx-toolbar-action.cb-done
+                {:type "button"
+                 :on-click #(reset! (::customize-expanded? state) false)
+                 :data-topbar-stop "done"
+                 :aria-label "Close customize panel"
+                 :tab-index (if expanded? 0 -1)}
+                [:span "Done"]]]]]))
+
         ;; "Recently used" section - shows current + recently used in one row (only when not searching)
         (when (and (seq recently-used-row) (string/blank? search-q))
           [:div.pane-section
@@ -5243,7 +5377,7 @@
                    (assoc s ::color (atom (or icon-color stored))
                           ::input-ref (rum/create-ref)
                           ::result-ref (rum/create-ref))))}
-  [state {:keys [on-chosen del-btn? icon-value page-title preview-target-db-id] :as opts}]
+  [state {:keys [on-chosen del-btn? icon-value page-title preview-target-db-id preview-target-db-ids] :as opts}]
   (let [*q (::q state)
         *result (::result state)
         *tab (::tab state)
@@ -5303,14 +5437,20 @@
          ;; square. Avoids reading as a committed photo-themed icon.
          :custom-image  {:type :image-placeholder
                          :id "image-placeholder"}}
+        preview-targets-set? (or preview-target-db-id (seq preview-target-db-ids))
+        preview-base-target (cond-> {}
+                              preview-target-db-id (assoc :db-id preview-target-db-id)
+                              (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids)))
         clear-tile-hover!
         (fn []
-          (when preview-target-db-id
+          (when preview-targets-set?
             ;; Stale-db-id guard: if a different picker has since taken over
             ;; the slot, don't clear its preview. Prevents cleanup-races
             ;; between pickers opening on different blocks back-to-back.
-            (let [current (:ui/icon-hover-preview @state/state)]
-              (when (or (nil? current) (= preview-target-db-id (:db-id current)))
+            (let [current (:ui/icon-hover-preview @state/state)
+                  mine? (or (= preview-target-db-id (:db-id current))
+                            (= (set preview-target-db-ids) (:db-ids current)))]
+              (when (or (nil? current) mine?)
                 (state/set-state! :ui/icon-hover-preview nil)))))
         broadcast-tile-hover!
         (fn [item]
@@ -5322,10 +5462,10 @@
               (not (previewable-tile-type? (:type resolved)))
               (clear-tile-hover!)
 
-              preview-target-db-id
+              preview-targets-set?
               (let [normalized (normalize-icon resolved)]
                 (state/set-state! :ui/icon-hover-preview
-                                  (cond-> {:db-id preview-target-db-id}
+                                  (cond-> preview-base-target
                                     normalized (assoc :icon normalized)
                                     (not (string/blank? @*color)) (assoc :color @*color)))))))
         ;; When the picker is opened against an entity, derive del-btn? reactively
@@ -5337,6 +5477,20 @@
                    (let [icon (some-> (model/sub-block preview-target-db-id) :logseq.property/icon)]
                      (and icon (not= (:type icon) :none)))
                    del-btn?)
+        ;; Same staleness problem applies to icon-value itself. shui's popup
+        ;; stores the content-fn in a global atom and never replaces it after
+        ;; popup-show! — so any data this component would have *received as a
+        ;; prop* is frozen at popup-open time. In-popup writes (color picker,
+        ;; shape dropdown, fallback toggle, etc.) update the entity but never
+        ;; flow back into this picker until the popup closes. Reading via
+        ;; model/sub-block here subscribes to the entity reactively, so each
+        ;; entity update triggers a re-render of icon-search and refreshes the
+        ;; downstream asset-picker's preview tile + Shape chip + body grid.
+        icon-value (if preview-target-db-id
+                     (or (some-> (model/sub-block preview-target-db-id)
+                                 :logseq.property/icon)
+                         icon-value)
+                     icon-value)
         normalized-icon-value (normalize-icon icon-value)
         opts (assoc opts
                     :input-focused? @*input-focused?
@@ -5400,7 +5554,14 @@
       :asset-picker
       ;; Level 2: Asset Picker view
       (asset-picker {:on-chosen (fn [e icon-data & [keep-popup?]]
-                                  ((:on-chosen opts) e icon-data)
+                                  ;; Forward keep-popup? upstream so non-final
+                                  ;; commits (color picker, shape dropdown,
+                                  ;; future fallback toggle) don't auto-close
+                                  ;; the popover. Without this, every dropdown
+                                  ;; selection in the customize band would
+                                  ;; dismiss the picker — actively user-hostile
+                                  ;; when comparing options.
+                                  ((:on-chosen opts) e icon-data keep-popup?)
                                   (when-not keep-popup?
                                     (reset! *view :icon-picker)))
                      :on-back #(reset! *view :icon-picker)
@@ -5424,7 +5585,8 @@
                      ;; preview of icon/color on the page-icon. Threading it
                      ;; here lets the asset-picker's color trigger drive the
                      ;; same preview state.
-                     :preview-target-db-id preview-target-db-id})
+                     :preview-target-db-id preview-target-db-id
+                     :preview-target-db-ids preview-target-db-ids})
 
       :text-picker
       ;; Level 2: Text Picker view
@@ -5611,12 +5773,13 @@
                                             cnt
                                             (do (reset! *focus-region :search)
                                                 (some-> (rum/deref *input-ref) (.focus))))))
-                        :on-hover! (when preview-target-db-id
+                        :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
                                      (fn [c]
                                        (state/set-state! :ui/icon-hover-preview
-                                                         {:db-id preview-target-db-id
-                                                          :color c})))
-                        :on-hover-end! (when preview-target-db-id
+                                                         (cond-> {:color c}
+                                                           preview-target-db-id (assoc :db-id preview-target-db-id)
+                                                           (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids))))))
+                        :on-hover-end! (when (or preview-target-db-id (seq preview-target-db-ids))
                                          (fn []
                                            (state/set-state! :ui/icon-hover-preview nil)))
                         :button-attrs {:data-topbar-stop "color"})

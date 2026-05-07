@@ -1833,3 +1833,362 @@
     outline: 2px solid Highlight;
   }
 }
+
+/* ============================================================
+   Avatar shape — `data-shape` attribute on the Radix Avatar
+   chain (root + image + fallback). The TSX component always
+   emits `rounded-full` as the default; this rule overrides it
+   for the rounded-rect variant.
+
+   We use a percentage radius (22%) so the corner softness scales
+   with the avatar's size — at 56px this lands ~12px (visually
+   rich without looking like a tile), and at 16px sidebar avatars
+   it drops to ~3.5px (still reads as a square but with chamfered
+   corners).
+
+   The selector matches both the root (.ui__avatar) and any
+   descendant carrying the same data-shape (the Radix
+   AvatarFallback inherits the attribute via React props
+   pass-through), so initials chips and image clips both adopt
+   the rectangular silhouette.
+   ============================================================ */
+[data-shape="rounded-rect"].ui__avatar,
+.ui__avatar [data-shape="rounded-rect"] {
+  border-radius: 22%;
+}
+
+/* ============================================================
+   Generic toolbar / footer-rail link utility.
+   Mirrors the pattern from Settings → Keymap shortcut popover
+   (see shortcut.css :490-503). Extracted here so the asset-
+   picker's customize-band Reset/Done rail and the keymap
+   shortcut popover stay in lockstep — same hit-state, same
+   color rest/hover, same focus-visible outline.
+   ============================================================ */
+.lx-toolbar-action {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+
+  &:hover {
+    color: var(--lx-gray-12, var(--rx-gray-12));
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--lx-accent-09, var(--rx-accent-09));
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  &[disabled],
+  &:disabled {
+    cursor: default;
+    opacity: 0.4;
+    pointer-events: none;
+  }
+}
+
+.lx-toolbar-reset-link {
+  color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary) / 0.8)));
+
+  &:hover {
+    color: var(--lx-accent-12, var(--ls-link-text-hover-color, hsl(var(--primary))));
+  }
+}
+
+/* ============================================================
+   Avatar customize zone — preview tile + (when expanded) inline
+   Shape/Fallback dropdowns + Reset/Done rail.
+
+   Layout: avatar always sits on the left. The right column swaps
+   between the meta text (resting) and a stack of dropdown rows
+   (expanded). The Reset/Done rail appears only when expanded,
+   separated from the rows by a 1px divider.
+   ============================================================ */
+.avatar-customize-zone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Pull up by .bd's 4px top padding so the gradient (when expanded) sits
+     flush against the topbar's bottom border. Without this, a thin band of
+     body color shows above the gradient, breaking the visual continuity
+     between the elevated topbar and the customize panel. */
+  margin-top: -4px;
+  /* 18px horizontal padding on the wrapper. Both the content row and the
+     rail are siblings of this padding, so the rail's border-top is
+     inset 18px on each side — matches the Paper design (344px-wide
+     inner content inside the 380px band). */
+  padding: 0 18px;
+  background: var(--lx-gray-02, var(--rx-gray-02));
+  border-bottom: 1px solid var(--lx-gray-05, var(--rx-gray-05));
+  isolation: isolate;
+}
+
+/* Gradient lives on a pseudo-element so opacity can crossfade independently
+   of the wrapper's solid base background. transform: translateZ(0) promotes
+   the layer to its own compositor row so the fade can't repaint the
+   sibling sections (Recently used / Web images / Tip) underneath. */
+.avatar-customize-zone::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    var(--lx-gray-03, var(--rx-gray-03)) 0%,
+    var(--lx-gray-02, var(--rx-gray-02)) 100%
+  );
+  opacity: 0;
+  transition: opacity 130ms ease-out;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.avatar-customize-zone[data-expanded="true"]::before {
+  opacity: 1;
+}
+
+.avatar-customize-zone .cb-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 0;
+  /* Keep alignment fixed to top in both states; CSS handles the meta-vs-
+     rows swap via display, so the avatar doesn't visually drift between
+     center (resting) and flex-start (expanded) on toggle. */
+}
+
+/* Avatar trigger — the only click target that toggles expand/collapse.
+   Resets the native button chrome so the avatar reads as a plain tile. */
+.cb-avatar-trigger {
+  all: unset;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &:focus-visible {
+    outline: 2px solid var(--lx-accent-09, var(--rx-accent-09));
+    outline-offset: 2px;
+    border-radius: 12px;
+  }
+
+  .preview-avatar {
+    position: relative;
+  }
+
+  .preview-cue {
+    position: absolute;
+    bottom: -3px;
+    right: -3px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--lx-gray-02, var(--rx-gray-02));
+    border: 1px solid var(--lx-gray-05, var(--rx-gray-05));
+    color: var(--lx-gray-11, var(--rx-gray-11));
+    transition: background-color 130ms ease-out,
+                border-color 130ms ease-out,
+                color 130ms ease-out;
+  }
+
+  &:hover .preview-cue {
+    border-color: var(--lx-gray-07, var(--rx-gray-07));
+  }
+
+  /* Both glyphs (pencil + check) overlap in the cue badge. Each crossfades
+     based on the parent zone's data-expanded attribute. transform pops them
+     onto their own layer so they don't repaint the avatar tile during the
+     swap. */
+  .preview-cue-glyph {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 120ms ease-out;
+  }
+
+  .preview-cue-pencil { opacity: 1; }
+  .preview-cue-check  { opacity: 0; }
+}
+
+.avatar-customize-zone[data-expanded="true"] .preview-cue {
+  background: var(--lx-accent-09, var(--rx-accent-09));
+  border-color: var(--lx-gray-02, var(--rx-gray-02));
+  color: white;
+}
+
+.avatar-customize-zone[data-expanded="true"] .preview-cue-pencil { opacity: 0; }
+.avatar-customize-zone[data-expanded="true"] .preview-cue-check  { opacity: 1; }
+
+/* The right column hosts both preview-meta (resting) and cb-rows (expanded)
+   stacked. CSS swaps them via display + opacity so we don't conditionally
+   mount/unmount on toggle (mount/unmount kills CSS transitions). */
+.avatar-customize-zone .cb-meta-stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  /* Height grows from preview-meta's natural height to cb-rows'. We let
+     content drive the height; the cb-rail's max-height transition handles
+     the visible "growth" of the band. */
+}
+
+/* Resting meta — title + subtitle to the right of the avatar. */
+.avatar-customize-zone .preview-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 1;
+  transition: opacity 120ms ease-out;
+}
+
+.avatar-customize-zone[data-expanded="true"] .preview-meta {
+  /* Pulled out of flow when expanded so cb-rows takes its place without
+     stacking. opacity → 0 first then display:none kicks in via the
+     transitionend isn't needed here because the stage-stage swap is fast
+     enough that overlapping for 160ms reads as a clean crossfade. */
+  display: none;
+}
+
+.avatar-customize-zone .preview-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--lx-gray-12, var(--rx-gray-12));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.avatar-customize-zone .preview-subtitle {
+  font-size: 12px;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+}
+
+/* Expanded rows — Shape (and future Fallback) stacked to the right of
+   the avatar in a flex column, with each row showing label + dropdown.
+   Hidden in resting state via display:none. */
+.avatar-customize-zone .cb-rows {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.avatar-customize-zone[data-expanded="true"] .cb-rows {
+  display: flex;
+}
+
+.avatar-customize-zone .cb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 28px;
+}
+
+.avatar-customize-zone .cb-label {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+}
+
+/* Dropdown chip — matches design: small button with leading mini-glyph,
+   label, trailing chevron. */
+.avatar-customize-zone .cb-chip {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--lx-gray-02, var(--rx-gray-02));
+  border: 1px solid var(--lx-gray-05, var(--rx-gray-05));
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--lx-gray-12, var(--rx-gray-12));
+  line-height: 18px;
+
+  &:hover {
+    border-color: var(--lx-gray-07, var(--rx-gray-07));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--lx-accent-09, var(--rx-accent-09));
+    outline-offset: 1px;
+  }
+
+  .cb-chip-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 11px;
+    height: 11px;
+  }
+
+  .cb-chip-glyph .glyph {
+    display: block;
+    width: 11px;
+    height: 11px;
+    border: 1.5px solid var(--lx-gray-12, var(--rx-gray-12));
+  }
+
+  .cb-chip-glyph .glyph-circle {
+    border-radius: 50%;
+  }
+
+  .cb-chip-glyph .glyph-rect {
+    border-radius: 3px;
+  }
+
+  .cb-chip-label {
+    font-weight: 500;
+  }
+
+  .cb-chip-chevron {
+    color: var(--lx-gray-11, var(--rx-gray-11));
+    margin-left: 2px;
+  }
+}
+
+/* Reset/Done rail — only shown when expanded; sits below the row stack
+   separated by a 1px divider that runs the band's full width. */
+/* Rail wrapper — height collapses to 0 in resting state, transitions to its
+   content's natural height when expanded. overflow:hidden clips the rail's
+   content (which is always rendered) so the band looks shorter when
+   collapsed. opacity also fades to give the rail a soft entrance. */
+.avatar-customize-zone .cb-rail-wrap {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 150ms ease-out, opacity 120ms ease-out;
+}
+
+.avatar-customize-zone[data-expanded="true"] .cb-rail-wrap {
+  /* Anything ≥ rail height (~46px) works; 80px is generous headroom. */
+  max-height: 80px;
+  opacity: 1;
+}
+
+.avatar-customize-zone .cb-rail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* Horizontal padding lives on the wrapper now; only vertical padding
+     here. The border-top therefore spans the inner 344px (band's 380px
+     minus 2 × 18px wrapper padding) instead of bleeding to the band
+     edges, matching the Paper design. */
+  padding: 10px 0 12px;
+  margin-top: 6px;
+  border-top: 1px solid var(--lx-gray-05, var(--rx-gray-05));
+}
+

@@ -99,17 +99,24 @@
     (or (> (count selected-blocks) 1)
         (seq view-selected-blocks))))
 
-(rum/defc icon-row
+(rum/defc icon-row < rum/reactive db-mixins/query
   [block editing?]
   (hooks/use-effect!
    (fn []
      (fn []
        (when editing?
          (editor-handler/restore-last-saved-cursor!)))))
-  (let [icon-value (:logseq.property/icon block)
+  ;; Subscribe to a fresh entity reference. Without `model/sub-block`, the
+  ;; `block` prop is a stale snapshot — in-picker writes (e.g. shape changes
+  ;; from the customize band) update the entity but the snapshot held by this
+  ;; component never refreshes, so `icon-value` keeps yielding the
+  ;; pre-write data and downstream pickers (icon-search → asset-picker) render
+  ;; the original avatar. Compare default-icon-row below for the same pattern.
+  (let [block (or (model/sub-block (:db/id block)) block)
+        icon-value (:logseq.property/icon block)
         clear-overlay! (fn []
                          (shui/popup-hide-all!))
-        on-chosen! (fn [_e icon]
+        on-chosen! (fn [_e icon & [keep-popup?]]
                      (let [blocks (get-operating-blocks block)
                            ;; Handle text/avatar icons with :data nested structure
                            icon-data (when icon
@@ -126,9 +133,14 @@
                         (map :db/id blocks)
                         :logseq.property/icon
                         icon-data))
-                     (clear-overlay!)
-                     (when editing?
-                       (editor-handler/restore-last-saved-cursor!)))
+                     ;; keep-popup? is the in-picker partial-commit flag (set
+                     ;; by the customize band's Shape/Fallback dropdowns + the
+                     ;; color picker). Final picks dismiss the popover; partial
+                     ;; tweaks keep it open so the user can keep iterating.
+                     (when-not keep-popup?
+                       (clear-overlay!)
+                       (when editing?
+                         (editor-handler/restore-last-saved-cursor!))))
         icon (get block :logseq.property/icon)]
     (if editing?
       (icon-component/icon-search
