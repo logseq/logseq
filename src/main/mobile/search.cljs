@@ -53,9 +53,12 @@
   [block]
   (let [page-name (block->page-name block)
         parent-text (block->nearest-parent-text block)
-        subtitle (if (and parent-text (not (string/blank? parent-text)))
+        subtitle (cond
+                   (and (not (string/blank? page-name))
+                        (not (string/blank? parent-text)))
                    (str page-name " / " parent-text)
-                   page-name)]
+                   (not (string/blank? page-name)) page-name
+                   :else parent-text)]
     (when-not (string/blank? subtitle)
       (if (> (count subtitle) native-subtitle-max-length)
         (str (subs subtitle 0 native-subtitle-max-length) "…")
