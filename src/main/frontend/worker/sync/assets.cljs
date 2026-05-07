@@ -350,13 +350,6 @@
                           _ (when missing-local?
                               (download-remote-asset! repo graph-id asset-uuid asset-type))
                           _ (when missing-local?
-                              (when-let [target-ent (d/entity @conn [:block/uuid asset-uuid])]
-                                (ldb/transact!
-                                 conn
-                                 [[:db/retract (:db/id target-ent)
-                                   :logseq.property.asset/remote-metadata]]
-                                 {:persist-op? true})))
-                          _ (when missing-local?
                               (client-op/remove-asset-op repo asset-uuid))
                           _ (when missing-local?
                               (broadcast-rtc-state!-f client))]
