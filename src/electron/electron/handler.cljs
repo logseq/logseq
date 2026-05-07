@@ -315,7 +315,8 @@
         (do (cfgs/set-item! k v)
             (when (= k :spell-check)
               (spell-check/apply-window-spellcheck! window (spell-check/session-spellcheck-enabled? v)))
-            (state/set-state! [:config k] v))
+            (state/set-state! [:config k] v)
+            nil)
         (cfgs/get-item k))
       config)))
 

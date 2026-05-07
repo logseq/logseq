@@ -15,7 +15,11 @@
         uuid-5 #uuid "708f7836-c1e2-4212-bd26-b53c7e9f1449"
         uuid-6 #uuid "de7724d5-b045-453d-a643-31b81d310071"
         uuid-p3 #uuid "de13830f-9691-4074-a0d6-cc8ab9cf9074"
-        uuid-7 #uuid "f81f4f64-578a-42ff-8741-19adac45f42a"]
+        uuid-7 #uuid "f81f4f64-578a-42ff-8741-19adac45f42a"
+        uuid-p5 #uuid "9dfeae55-c426-4957-8de9-40ff71c622f0"
+        uuid-8 #uuid "c370c72d-97b8-45f1-8a87-184e1a77792c"
+        uuid-9 #uuid "253c84fb-bf6f-4936-8370-4662930c8e6d"
+        uuid-10 #uuid "e6741341-2426-4c46-b09f-6aec73a4357b"]
     [{:page {:block/title "page1"}
       :blocks
       [{:block/title "1"
@@ -57,7 +61,25 @@
       [{:block/title "issue"
         :build/keep-uuid? true
         :block/uuid uuid-7
-        :build/properties {:user.property/reproducible-steps "Switch to a password protected graph"}}]}]))
+        :build/properties {:user.property/reproducible-steps "Switch to a password protected graph"}}]}
+      {:page {:block/title "page5"
+              :block/uuid uuid-p5}
+       :blocks
+       [{:block/title "Heading block"
+         :build/keep-uuid? true
+         :block/uuid uuid-8
+         :build/properties {:logseq.property/heading 2}}
+        {:block/title "quote line 1\nquote line 2"
+         :build/keep-uuid? true
+         :block/uuid uuid-9
+         :build/tags [:logseq.class/Quote-block]
+         :build/properties {:logseq.property.node/display-type :quote}}
+        {:block/title "(println \"hi\")\n(+ 1 2)"
+         :build/keep-uuid? true
+         :block/uuid uuid-10
+         :build/tags [:logseq.class/Code-block]
+         :build/properties {:logseq.property.node/display-type :code
+                            :logseq.property.code/lang "clojure"}}]}]))
 
 (use-fixtures :once
   {:before (fn []
@@ -106,6 +128,21 @@
           (export-text/export-blocks-as-markdown
            (state/get-current-repo)
            [(uuid "f81f4f64-578a-42ff-8741-19adac45f42a")]
+           {:remove-options #{:property}})))))
+
+(deftest export-page-as-markdown-preserves-semantic-block-formatting
+  (is (= (string/trim "
+- ## Heading block
+- > quote line 1
+  > quote line 2
+- ```clojure
+  (println \"hi\")
+  (+ 1 2)
+  ```")
+         (string/trim
+          (export-text/export-blocks-as-markdown
+           (state/get-current-repo)
+           [(uuid "9dfeae55-c426-4957-8de9-40ff71c622f0")]
            {:remove-options #{:property}})))))
 
 (deftest export-blocks-as-markdown-level<N

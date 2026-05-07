@@ -21,8 +21,8 @@
 (declare inline-ast->simple-ast
          block-ast->simple-ast)
 
-(defn- block-heading
-  [{:keys [title _tags marker level _numbering priority _anchor _meta _unordered size]}]
+(defn- block-heading-prefix
+  [{:keys [marker level priority size]}]
   (let [indent-style (get-in *state* [:export-options :indent-style])
         priority* (and priority (raw-text (cli-export-common/priority->string priority)))
         heading* (if (= indent-style "dashes")
@@ -31,23 +31,80 @@
         size* (and size [space (raw-text (reduce str (repeat size "#")))])
         marker* (and marker (raw-text marker))]
     (set! *state* (assoc *state* :current-level level))
-    (let [simple-asts
-          (removev nil? (concatv
-                         (when (and (get-in *state* [:export-options :newline-after-block])
-                                    (not (get-in *state* [:newline-after-block :current-block-is-first-heading-block?])))
-                           [(newline* 2)])
-                         heading* size*
-                         [space marker* space priority* space]
-                         (mapcatv inline-ast->simple-ast title)
-                         [(newline* 1)]))]
+    (removev nil? (concatv heading* size*
+                           [space marker* space priority* space]))))
+
+(defn- heading-continuation-indent
+  [{:keys [level]}]
+  (case (get-in *state* [:export-options :indent-style])
+    "dashes" (indent (dec level) 2)
+    ("spaces" "no-indent") (indent (dec level) 0)
+    (assert false (print-str "unknown indent-style:" (get-in *state* [:export-options :indent-style])))))
+
+(defn- block-heading
+  [{:keys [title] :as heading}]
+  (let [simple-asts
+        (removev nil? (concatv
+                       (when (and (get-in *state* [:export-options :newline-after-block])
+                                  (not (get-in *state* [:newline-after-block :current-block-is-first-heading-block?])))
+                         [(newline* 2)])
+                       (block-heading-prefix heading)
+                       (mapcatv inline-ast->simple-ast title)
+                       [(newline* 1)]))]
       (set! *state* (assoc-in *state* [:newline-after-block :current-block-is-first-heading-block?] false))
-      simple-asts)))
+      simple-asts))
 
 (declare block-list)
+
+(defn- list-continuation-indent
+  [current-level]
+  (indent-with-2-spaces (dec current-level)))
+
+(defn- src-in-list-item
+  [{:keys [lines language]} continuation-indent]
+  (concatv [(raw-text "```")]
+           (when language [(raw-text language)])
+           [(newline* 1)]
+           (mapv raw-text lines)
+           [continuation-indent (raw-text "```") (newline* 1)]))
+
+(defn- quote-line
+  [line]
+  (let [line (string/trimr line)]
+    (if (string/blank? line)
+      ">"
+      (str "> " line))))
+
+(defn- quote-in-list-item
+  [block-coll continuation-indent]
+  (let [lines (->> block-coll
+                   (mapcatv block-ast->simple-ast)
+                   simple-asts->string
+                   string/split-lines)
+        lines (if (seq lines) lines [""])]
+    (mapcatv (fn [idx line]
+               (concatv (when (pos? idx) [continuation-indent])
+                        [(raw-text (quote-line line))
+                         (newline* 1)]))
+             (range)
+             lines)))
+
+(defn- block-level-content-in-list-item
+  [content continuation-indent]
+  (when (= 1 (count content))
+    (let [[ast-type ast-content] (first content)]
+      (case ast-type
+        "Src"
+        (src-in-list-item ast-content continuation-indent)
+
+        "Quote"
+        (quote-in-list-item ast-content continuation-indent)
+
+        nil))))
+
 (defn- block-list-item
   [{:keys [content items number _name checkbox]}]
-  (let [content* (mapcatv block-ast->simple-ast content)
-        number* (raw-text
+  (let [number* (raw-text
                  (if number
                    (str number ". ")
                    "* "))
@@ -59,6 +116,9 @@
         current-level (get *state* :current-level 1)
         indent' (when (> current-level 1)
                   (indent (dec current-level) 0))
+        continuation-indent (list-continuation-indent current-level)
+        content* (or (block-level-content-in-list-item content continuation-indent)
+                     (mapcatv block-ast->simple-ast content))
         items* (block-list items :in-list? true)]
     (concatv [indent' number* checkbox* space]
              content*
@@ -114,29 +174,59 @@
     (mapv (fn [line] (string/replace-first line pattern "")) lines)))
 
 (defn- block-src
-  [{:keys [lines language]}]
+  [{:keys [lines language]} {:keys [heading-prefix]}]
   (let [level (dec (get *state* :current-level 1))
         lines* (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
                  (remove-max-prefix-spaces lines)
                  lines)]
-    (concatv
-     [(indent-with-2-spaces level) (raw-text "```")]
-     (when language [(raw-text language)])
-     [(newline* 1)]
-     (mapv raw-text lines*)
-     [(indent-with-2-spaces level) (raw-text "```") (newline* 1)])))
+    (if heading-prefix
+      (concatv
+       (block-heading-prefix heading-prefix)
+       [(raw-text "```")]
+       (when language [(raw-text language)])
+       [(newline* 1)]
+       (mapv raw-text lines*)
+       [(heading-continuation-indent heading-prefix) (raw-text "```") (newline* 1)])
+      (concatv
+       [(indent-with-2-spaces level) (raw-text "```")]
+       (when language [(raw-text language)])
+       [(newline* 1)]
+       (mapv raw-text lines*)
+       [(indent-with-2-spaces level) (raw-text "```") (newline* 1)]))))
+
+(defn- quote-block-lines
+  [block-coll]
+  (let [lines (->> block-coll
+                   (mapcatv block-ast->simple-ast)
+                   simple-asts->string
+                   string/split-lines)]
+    (if (seq lines) lines [""])))
+
+(defn- quote-lines-with-prefix
+  [lines prefix continuation-indent]
+  (mapcatv (fn [idx line]
+             (concatv (if (zero? idx) prefix [continuation-indent])
+                      [(raw-text (quote-line line))
+                       (newline* 1)]))
+           (range)
+           lines))
 
 (defn- block-quote
-  [block-coll]
+  [block-coll {:keys [heading-prefix]}]
   (let [level (dec (get *state* :current-level 1))]
-    (binding [*state* (assoc *state* :indent-after-break-line? true)]
-      (concatv (mapcatv (fn [block]
-                          (let [block-simple-ast (block-ast->simple-ast block)]
-                            (when (seq block-simple-ast)
-                              (concatv [(indent-with-2-spaces level) (raw-text ">") space]
-                                       block-simple-ast))))
-                        block-coll)
-               [(newline* 2)]))))
+    (if heading-prefix
+      (binding [*state* (assoc *state* :indent-after-break-line? true)]
+        (quote-lines-with-prefix (quote-block-lines block-coll)
+                                 (block-heading-prefix heading-prefix)
+                                 (heading-continuation-indent heading-prefix)))
+      (binding [*state* (assoc *state* :indent-after-break-line? true)]
+        (concatv (mapcatv (fn [block]
+                            (let [block-simple-ast (block-ast->simple-ast block)]
+                              (when (seq block-simple-ast)
+                                (concatv [(indent-with-2-spaces level) (raw-text ">") space]
+                                         block-simple-ast))))
+                          block-coll)
+                 [(newline* 2)])))))
 
 (declare inline-latex-fragment)
 (defn- block-latex-fragment
@@ -369,9 +459,9 @@
          "Example"
          (block-example ast-content)
          "Src"
-         (block-src ast-content)
+         (block-src ast-content (meta block))
          "Quote"
-         (block-quote ast-content)
+         (block-quote ast-content (meta block))
          "Latex_Fragment"
          (block-latex-fragment ast-content)
          "Latex_Environment"
@@ -489,5 +579,19 @@
             ast*** (if-not (empty? config-for-walk-block-ast)
                      (mapv (partial cli-export-common/walk-block-ast config-for-walk-block-ast) ast**)
                      ast**)
-            simple-asts (mapcatv block-ast->simple-ast ast***)]
+            ast**** (loop [remaining ast***
+                           result []]
+                      (if-let [block (first remaining)]
+                        (let [[ast-type ast-content] block
+                              next-block (second remaining)
+                              [next-ast-type] next-block]
+                          (if (and (= "Heading" ast-type)
+                                   (empty? (:title ast-content))
+                                   (contains? #{"Quote" "Src"} next-ast-type))
+                            (recur (nnext remaining)
+                                   (conj result (with-meta next-block (assoc (meta next-block) :heading-prefix ast-content))))
+                            (recur (rest remaining)
+                                   (conj result block))))
+                        result))
+            simple-asts (mapcatv block-ast->simple-ast ast****)]
         (simple-asts->string simple-asts)))))

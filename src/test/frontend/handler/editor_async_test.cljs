@@ -1,5 +1,5 @@
 (ns frontend.handler.editor-async-test
-  (:require [clojure.test :refer [is testing async use-fixtures]]
+  (:require [cljs.test :refer [is testing async use-fixtures]]
             [datascript.core :as d]
             [frontend.db :as db]
             [frontend.handler.block :as block-handler]
