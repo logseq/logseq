@@ -749,7 +749,8 @@
       (-> (p/let [_ (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
                   content (get @files storage-path)
                   result (markdown-mirror/<import-file-content! test-repo conn relative-path content {:platform platform})]
-            (is (= :skipped (:status result)))
+            (is (= :imported (:status result)))
+            (is (= relative-path (:file/path (d/entity @conn [:block/uuid page-uuid]))))
             (is (= "ship it" (:block/title (d/entity @conn [:block/uuid block-uuid]))))
             (is (= :logseq.property/status.todo (block-status-ident @conn block-uuid)))
             (is (contains? (block-tag-idents @conn block-uuid) :user.class/tag-alpha))
@@ -2216,7 +2217,9 @@
                        "  rating:: 10")]
       (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Property Ignore.md" content {})
           (p/then (fn [result]
-                    (is (= :skipped (:status result)))
+                    (is (= :imported (:status result)))
+                    (is (= "pages/Property Ignore.md"
+                           (:file/path (db-test/find-page-by-title @conn "Property Ignore"))))
                     (is (= 5 (:logseq.property/value
                               (:user.property/rating (d/entity @conn [:block/uuid block-uuid])))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -2248,7 +2251,9 @@
                        "  - child")]
       (-> (markdown-mirror/<import-file-content! test-repo conn "pages/Markdown Property Ignore.md" content {})
           (p/then (fn [result]
-                    (is (= :skipped (:status result)))
+                    (is (= :imported (:status result)))
+                    (is (= "pages/Markdown Property Ignore.md"
+                           (:file/path (d/entity @conn [:block/uuid page-uuid]))))
                     (is (= 5 (:logseq.property/value
                               (:user.property/rating (d/entity @conn [:block/uuid page-uuid])))))
                     (is (= 6 (:logseq.property/value
@@ -2441,8 +2446,30 @@
       (-> (markdown-mirror/<import-file-content! test-repo conn "pages/test_something.md" "- hello" {})
           (p/then (fn [result]
                     (is (= :imported (:status result)))
-                    (is (some? (db-test/find-page-by-title @conn "test something")))
+                    (is (= "pages/test_something.md"
+                           (:file/path (db-test/find-page-by-title @conn "test something"))))
                     (is (nil? (db-test/find-page-by-title @conn "test_something")))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest two-way-underscore-path-updates-existing-space-title-page-test
+  (async done
+    (let [page-uuid #uuid "99999999-9999-4999-8999-999999999957"
+          block-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa57"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "test another"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "before"
+                                               :block/uuid block-uuid}]}]})]
+      (-> (markdown-mirror/<import-file-content! test-repo conn "pages/test_another.md" "- after" {})
+          (p/then (fn [result]
+                    (is (= :imported (:status result)))
+                    (is (= "after" (:block/title (d/entity @conn [:block/uuid block-uuid]))))
+                    (is (= "pages/test_another.md"
+                           (:file/path (d/entity @conn [:block/uuid page-uuid]))))
+                    (is (= 1 (count (filter ldb/page?
+                                            (map #(d/entity @conn (:e %))
+                                                 (d/datoms @conn :avet :block/title "test another"))))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 

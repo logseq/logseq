@@ -400,6 +400,11 @@
                                current-block-idx continuation-indent nil (fenced-code-boundary? line')))
                       {:error :unsupported-top-level-markdown})))))))))))
 
+(defn- file-stem->page-title
+  [stem]
+  (some-> (normalize-file-stem stem)
+          (string/replace "_" " ")))
+
 (defn- relative-path->new-page
   [relative-path]
   (if-let [[_ y m d] (re-matches journal-relative-path-re relative-path)]
@@ -411,20 +416,23 @@
                date-time-util/default-journal-title-formatter)
        :uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)})
     (when-let [[_ stem] (re-matches page-relative-path-re relative-path)]
-      (when-let [title (some-> (normalize-file-stem stem)
-                               (string/replace "_" " "))]
+      (when-let [title (file-stem->page-title stem)]
         {:type :page
          :title title
          :uuid (random-uuid)}))))
 
 (defn- existing-page-for-path
   [db relative-path parsed-page-uuid]
-  (or (when-let [[_ y m d] (re-matches journal-relative-path-re relative-path)]
+  (or (when-let [page (d/entity db [:file/path relative-path])]
+        (when (ldb/page? page)
+          page))
+      (when-let [[_ y m d] (re-matches journal-relative-path-re relative-path)]
         (let [journal-day (parse-long (str y m d))]
           (first (map #(d/entity db (:e %))
                       (d/datoms db :avet :block/journal-day journal-day)))))
       (when-let [[_ stem] (re-matches page-relative-path-re relative-path)]
-        (ldb/get-page db stem))
+        (when-let [title (file-stem->page-title stem)]
+          (ldb/get-page db title)))
       (when-let [page (and parsed-page-uuid
                            (d/entity db [:block/uuid parsed-page-uuid]))]
         (when (= relative-path (page-relative-path db page))
@@ -1374,6 +1382,7 @@
             page-tx (cond-> {:block/title (:title page-plan)
                              :block/name (common-util/page-name-sanity-lc (:title page-plan))
                              :block/uuid page-uuid
+                             :file/path relative-path
                              :block/tags :logseq.class/Page
                              :block/created-at now
                              :block/updated-at now}
@@ -1484,8 +1493,10 @@
        delete-uuids))
 
 (defn- existing-file-tx-plan
-  [db page page-block-by-uuid parsed-blocks ref-page-txs new-uuids delete-uuids top-level-delete-uuids' now]
+  [db page relative-path page-block-by-uuid parsed-blocks ref-page-txs new-uuids delete-uuids top-level-delete-uuids' now]
   (let [save-txs (existing-block-save-txs page-block-by-uuid parsed-blocks now)
+        page-file-path-txs (when (not= relative-path (:file/path page))
+                             [[:db/add (:db/id page) :file/path relative-path]])
         save-status-txs (existing-block-status-import-txs db page-block-by-uuid parsed-blocks)
         save-ref-txs (existing-block-content-ref-import-txs db page-block-by-uuid parsed-blocks)
         save-tag-txs (existing-block-tag-ref-import-txs db page-block-by-uuid parsed-blocks)
@@ -1493,7 +1504,8 @@
         new-block-ref-txs (new-existing-file-block-ref-txs new-uuids parsed-blocks)
         new-block-tag-txs (new-existing-file-block-tag-txs new-uuids parsed-blocks)
         delete-txs (deleted-existing-file-block-txs page-block-by-uuid delete-uuids)
-        tx-data (vec (concat ref-page-txs
+        tx-data (vec (concat page-file-path-txs
+                             ref-page-txs
                              save-txs
                              save-status-txs
                              save-ref-txs
@@ -1517,7 +1529,8 @@
   (let [db @conn
         page-block-by-uuid (page-blocks-by-uuid db page)]
     (cond
-      (not= (:block/uuid page) (:page-uuid parsed))
+      (and (:page-uuid parsed)
+           (not= (:block/uuid page) (:page-uuid parsed)))
       (p/resolved {:status :error
                    :reason :page-marker-mismatch})
 
@@ -1553,6 +1566,7 @@
                       {:keys [tx-data outliner-ops]} (existing-file-tx-plan
                                                        db
                                                        page
+                                                       relative-path
                                                        page-block-by-uuid
                                                        parsed-blocks
                                                        ref-page-txs
