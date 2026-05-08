@@ -98,6 +98,24 @@
     (is (= {:type :emoji :id "rocket"}
            (:icon (by-label tags-result "icon object"))))))
 
+(deftest tags-and-objects-graph-allows-non-core-built-in-tags
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Built-in Tags"}
+                 :blocks [{:block/title "task object"
+                           :build/tags [:logseq.class/Task]}
+                          {:block/title "asset object"
+                           :build/tags [:logseq.class/Asset]}]}]})
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :tags-and-objects})
+        labels (node-labels result)]
+    (testing "Non-core built-in tags can be selected and rendered"
+      (is (contains? labels "Task"))
+      (is (contains? labels "task object")))
+    (testing "Core built-in tags stay hidden from displayed tags"
+      (is (not (contains? labels "Asset")))
+      (is (not (contains? labels "asset object"))))))
+
 (deftest tags-and-objects-graph-skips-large-unrelated-page-set-quickly
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks

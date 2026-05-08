@@ -22,6 +22,13 @@
     :tags-and-objects))
 
 (def ^:private large-all-pages-fast-threshold 10000)
+(def ^:private hidden-built-in-tag-idents
+  #{:logseq.class/Root
+    :logseq.class/Tag
+    :logseq.class/Property
+    :logseq.class/Page
+    :logseq.class/Whiteboard
+    :logseq.class/Asset})
 
 (defn- datoms-for
   ([db index attr]
@@ -115,6 +122,11 @@
                     (contains? property-ids %)))
        set))
 
+(defn- built-in-class-ident?
+  [ident]
+  (and (keyword? ident)
+       (= "logseq.class" (namespace ident))))
+
 (defn- build-tags-and-objects-graph
   [db]
   (let [tag-datoms (vec (datoms-for db :avet :block/tags))
@@ -122,22 +134,43 @@
         property-ids (entity-ids-with db :block/tags :logseq.class/Property)
         hidden-ids (entity-id-set-with-true db :logseq.property/hide?)
         deleted-ids (entity-ids-with db :logseq.property/deleted-at)
-        built-in-ids (entity-id-set-with-true db :logseq.property/built-in?)
-        tag-id-set (->> class-ids
-                        (remove #(or (contains? hidden-ids %)
-                                     (contains? deleted-ids %)
-                                     (contains? built-in-ids %)
-                                     (contains? property-ids %)))
-                        set)]
+        ident-by-class-id (into {}
+                                (keep (fn [id]
+                                        (when-let [ident (:db/ident (d/entity db id))]
+                                          [id ident])))
+                                class-ids)
+        allowed-tag-id? (fn [id]
+                          (not (or (contains? hidden-ids id)
+                                   (contains? deleted-ids id)
+                                   (contains? property-ids id)
+                                   (contains? hidden-built-in-tag-idents (get ident-by-class-id id)))))
+        user-tag-id-set (->> class-ids
+                             (filter allowed-tag-id?)
+                             (remove #(built-in-class-ident? (get ident-by-class-id %)))
+                             set)
+        allowed-built-in-tag-id-set (->> class-ids
+                                         (filter allowed-tag-id?)
+                                         (filter #(built-in-class-ident? (get ident-by-class-id %)))
+                                         set)
+        candidate-tag-id-set (set/union user-tag-id-set allowed-built-in-tag-id-set)
+        candidate-tag-links (->> tag-datoms
+                                 (keep (fn [{from-id :e tag-id :v}]
+                                         (when (and (contains? candidate-tag-id-set tag-id)
+                                                    (not (contains? candidate-tag-id-set from-id)))
+                                           [from-id tag-id])))
+                                 distinct
+                                 vec)
+        used-built-in-tag-id-set (->> candidate-tag-links
+                                      (map second)
+                                      (filter allowed-built-in-tag-id-set)
+                                      set)
+        tag-id-set (set/union user-tag-id-set used-built-in-tag-id-set)]
     (if (empty? tag-id-set)
       {:nodes []
        :links []}
-      (let [tag-links (->> tag-datoms
-                           (keep (fn [{from-id :e tag-id :v}]
-                                   (when (and (contains? tag-id-set tag-id)
-                                              (not (contains? tag-id-set from-id)))
-                                     [from-id tag-id])))
-                           distinct
+      (let [tag-links (->> candidate-tag-links
+                           (filter (fn [[_from-id tag-id]]
+                                     (contains? tag-id-set tag-id)))
                            vec)
             object-ids (set (map first tag-links))
             object-id-set (visible-object-id-set hidden-ids deleted-ids class-ids property-ids object-ids)

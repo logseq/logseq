@@ -64,6 +64,76 @@
     (catch :default _e
       nil)))
 
+(defn- parse-hex-color
+  [value]
+  (when-let [[_ r g b] (re-matches #"(?i)#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})" value)]
+    [(js/parseInt r 16)
+     (js/parseInt g 16)
+     (js/parseInt b 16)]))
+
+(defn- parse-short-hex-color
+  [value]
+  (when-let [[_ r g b] (re-matches #"(?i)#([0-9a-f])([0-9a-f])([0-9a-f])" value)]
+    [(js/parseInt (str r r) 16)
+     (js/parseInt (str g g) 16)
+     (js/parseInt (str b b) 16)]))
+
+(defn- parse-rgb-color
+  [value]
+  (when-let [[_ r g b] (re-find #"rgba?\(\s*([0-9.]+)[,\s]+([0-9.]+)[,\s]+([0-9.]+)" value)]
+    [(js/parseFloat r)
+     (js/parseFloat g)
+     (js/parseFloat b)]))
+
+(defn- parse-css-color
+  [value]
+  (let [value (string/trim (or value ""))]
+    (or (parse-hex-color value)
+        (parse-short-hex-color value)
+        (parse-rgb-color value))))
+
+(defn- color-dark?
+  [[r g b]]
+  (< (+ (* 0.2126 r) (* 0.7152 g) (* 0.0722 b)) 128))
+
+(defn- css-var-value
+  [^js el var-name]
+  (when el
+    (some-> (js/getComputedStyle el)
+            (.getPropertyValue var-name)
+            string/trim
+            not-empty)))
+
+(defn- effective-dark-theme?
+  [theme _theme-token]
+  (let [doc-el (.-documentElement js/document)
+        body (.-body js/document)
+        bg-color (or (css-var-value body "--ls-primary-background-color")
+                     (css-var-value doc-el "--ls-primary-background-color"))]
+    (if-let [rgb (parse-css-color bg-color)]
+      (color-dark? rgb)
+      (= "dark" (or (some-> doc-el .-dataset .-theme)
+                    theme)))))
+
+(defn- use-theme-token
+  []
+  (let [[token set-token!] (hooks/use-state 0)]
+    (hooks/use-effect!
+     (fn []
+       (when (exists? js/MutationObserver)
+         (let [observer (js/MutationObserver.
+                         (fn [_mutations _observer]
+                           (set-token! (.now js/Date))))
+               opts #js {:attributes true
+                         :attributeFilter #js ["class" "style" "data-theme" "data-color"]}]
+           (when-let [doc-el (.-documentElement js/document)]
+             (.observe observer doc-el opts))
+           (when-let [body (.-body js/document)]
+             (.observe observer body opts))
+           #(.disconnect observer))))
+     [])
+    token))
+
 (defn tag-options
   [graph-data]
   (let [tag-ids (->> (:nodes graph-data)
@@ -110,12 +180,6 @@
                        vec)
            :links selected-links)))
 
-(defn- tag-color
-  [id]
-  (let [colors ["#5eead4" "#60a5fa" "#a78bfa" "#fbbf24" "#fb7185" "#34d399"]
-        idx (mod (js/Math.abs (hash id)) (count colors))]
-    (nth colors idx)))
-
 (defn- settings-toggle
   [settings group-id]
   (update settings :open-groups
@@ -135,23 +199,13 @@
        :aria-expanded (str open?)
        :on-click #(set-settings! (settings-toggle settings id))}
       [:span.graph-v2-settings-group-title
-       (ui/icon (if open? "chevron-down" "chevron-right") {:size 16})
+       [:span.graph-v2-settings-group-chevron
+        (ui/icon "chevron-right" {:size 16})]
        [:span title]]
       (when meta
         [:span.graph-v2-settings-group-meta meta])]
-     (when open?
-       [:div.graph-v2-settings-group-body children])]))
-
-(defn- mode-button
-  [current-mode set-view-mode! mode]
-  (let [active? (= current-mode mode)]
-    (ui/button
-     (if (= mode :all-pages)
-       (t :graph/view-mode-all-pages)
-       (t :graph/view-mode-tags))
-     :on-click #(set-view-mode! mode)
-     :variant (if active? :default :outline)
-     :class (str "graph-v2-mode-button" (when active? " is-active")))))
+     [:div.graph-v2-settings-group-body
+      [:div.graph-v2-settings-group-body-inner children]]]))
 
 (defn- view-mode-group
   [settings set-settings! view-mode set-view-mode!]
@@ -160,9 +214,21 @@
     :set-settings! set-settings!
     :id :view-mode
     :title (t :graph/view-mode)
-    :children [:div.graph-v2-mode-segment
-               (mode-button view-mode set-view-mode! :tags-and-objects)
-               (mode-button view-mode set-view-mode! :all-pages)]}))
+    :children
+    (shui/tabs
+     {:value (name view-mode)
+      :on-value-change #(set-view-mode! (keyword %))
+      :class "graph-v2-mode-tabs"}
+     (shui/tabs-list
+      {:class "graph-v2-mode-tabs-list"}
+      (shui/tabs-trigger
+       {:value "tags-and-objects"
+        :class "graph-v2-mode-tab"}
+       (t :graph/view-mode-tags))
+      (shui/tabs-trigger
+       {:value "all-pages"
+        :class "graph-v2-mode-tab"}
+       (t :graph/view-mode-all-pages))))}))
 
 (defn- tags-group
   [settings set-settings! tag-options selected-tag-ids tag-query set-tag-query!]
@@ -207,28 +273,25 @@
                                              (vec (if checked?
                                                     (disj selected-tag-ids id)
                                                     (conj selected-tag-ids id)))))})
-           [:span.graph-v2-tag-dot {:style {:background-color (tag-color id)}}]
-           [:span.graph-v2-tag-name label]
-           [:span.graph-v2-tag-count count]])]]})))
+           [:span.graph-v2-tag-content
+            [:span.graph-v2-tag-name label]
+            [:span.graph-v2-tag-count count]]])]]})))
 
 (defn- layout-group
-  [settings set-settings! graph-data metrics]
-  (let [render-ms (some-> metrics :render-ms js/Math.round)]
-    (settings-group
-     {:settings settings
-      :set-settings! set-settings!
-      :id :layout
-      :title (t :graph/layout)
-      :meta (t :graph/layout-force)
-      :children [:div.graph-v2-layout-stats
-                 [:span [:i {:style {:background-color "#60a5fa"}}] (t :graph/node-count (count (:nodes graph-data)))]
-                 [:span [:i {:style {:background-color "#5eead4"}}] (t :graph/link-count (count (:links graph-data)))]
-                 (when render-ms
-                   [:span [:i {:style {:background-color "#fbbf24"}}] (t :graph/render-time render-ms)])]})))
+  [settings set-settings! graph-data]
+  (settings-group
+   {:settings settings
+    :set-settings! set-settings!
+    :id :layout
+    :title (t :graph/layout)
+    :meta (t :graph/layout-force)
+    :children [:div.graph-v2-layout-stats
+               [:span (t :graph/node-count (count (:nodes graph-data)))]
+               [:span (t :graph/link-count (count (:links graph-data)))]]}))
 
 (defn- settings-panel
   [settings-open? set-settings-open! settings set-settings! view-mode set-view-mode!
-   graph-data filtered-graph-data metrics tag-options selected-tag-ids tag-query set-tag-query!]
+   filtered-graph-data tag-options selected-tag-ids tag-query set-tag-query!]
     [:div.graph-v2-settings
      {:class (when settings-open? "is-open")}
      [:button.graph-v2-settings-dot
@@ -250,18 +313,18 @@
         (view-mode-group settings set-settings! view-mode set-view-mode!)
         (when (= view-mode :tags-and-objects)
           (tags-group settings set-settings! tag-options selected-tag-ids tag-query set-tag-query!))
-        (layout-group settings set-settings! filtered-graph-data metrics)])])
+        (layout-group settings set-settings! filtered-graph-data)])])
 
 (rum/defc global-graph
   []
   (let [repo (state/get-current-repo)
         theme (state/sub :ui/theme)
-        dark? (= theme "dark")
+        theme-token (use-theme-token)
+        dark? (effective-dark-theme? theme theme-token)
         [settings-state set-settings-state!] (hooks/use-state {:repo repo
                                                                :settings (load-graph-settings repo)})
         [settings-open? set-settings-open!] (hooks/use-state false)
         [tag-query set-tag-query!] (hooks/use-state "")
-        [metrics set-metrics!] (hooks/use-state nil)
         [graph-data set-graph-data!] (hooks/use-state nil)
         [loading? set-loading!] (hooks/use-state true)
         settings (:settings settings-state)
@@ -271,7 +334,6 @@
         view-mode (:view-mode settings)
         switch-view-mode! (fn [mode]
                             (when (not= mode view-mode)
-                              (set-metrics! nil)
                               (set-graph-data! nil)
                               (set-loading! true)
                               (set-settings! (assoc settings :view-mode mode))))]
@@ -286,7 +348,6 @@
     (hooks/use-effect!
      (fn []
        (let [cancelled? (atom false)]
-         (set-metrics! nil)
          (set-graph-data! nil)
          (set-loading! true)
          (-> (state/<invoke-db-worker :thread-api/build-graph repo {:type :global
@@ -317,9 +378,7 @@
                        set-settings!
                        view-mode
                        switch-view-mode!
-                       (when-not loading? graph-data)
                        (when-not loading? filtered-graph-data)
-                       (when-not loading? metrics)
                        tag-options
                        selected-tag-ids
                        tag-query
@@ -331,5 +390,4 @@
                           :links (:links filtered-graph-data)
                           :dark? dark?
                           :view-mode view-mode
-                          :on-rendered set-metrics!
                           :on-node-activate graph-actions/activate-node!}))])))

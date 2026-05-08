@@ -28,7 +28,9 @@
   (let [container-ref (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
-       (pixi/render-container! (hooks/deref container-ref) opts))
+       (pixi/render-container! (hooks/deref container-ref) opts)
+       (fn []
+         (pixi/destroy-instance!)))
      [(:nodes opts)
       (:links opts)
       (:dark? opts)
@@ -37,11 +39,6 @@
       (:height opts)
       (:on-node-activate opts)
       (:on-rendered opts)])
-    (hooks/use-effect!
-     (fn []
-       (fn []
-         (pixi/destroy-instance!)))
-     [])
     [:div.graph-v2-canvas
      {:ref container-ref
       :style (canvas-style opts)}]))

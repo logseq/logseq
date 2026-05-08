@@ -715,7 +715,7 @@
  :graph/orphan-pages "Orphan pages"
  :graph/page-count (fn [n] (str n " " (if (= 1 n) "page" "pages")))
  :graph/pause-simulation "Pause simulation"
- :graph/preparing "preparing"
+ :graph/preparing "Preparing"
  :graph/refresh-remote-graphs "Refresh remote graphs"
  :graph/remote-graphs "Remote graphs:"
  :graph/removed "Removed graph \"{1}\""

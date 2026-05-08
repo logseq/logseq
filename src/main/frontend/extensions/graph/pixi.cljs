@@ -20,6 +20,7 @@
 
 (defn destroy-instance!
   []
+  (swap! *render-token inc)
   (when-let [{:keys [cleanup app]} @*graph-instance]
     (when (fn? cleanup)
       (cleanup))
@@ -448,7 +449,7 @@
 (defn- icon-display-spec
   [node]
   (if-let [text (logic/icon-display-text (:icon node))]
-    {:kind "icon"
+    {:kind "emoji"
      :style :emoji
      :text text}
     (when-let [icon-spec (tabler-icon-spec (:icon node))]
@@ -468,11 +469,11 @@
 
 (defn- create-node-display!
   [^js circle-texture icon-styles node]
-  (if-let [{:keys [style text]} (icon-display-spec node)]
+  (if-let [{:keys [kind style text]} (icon-display-spec node)]
     (let [^js text (new (.-Text PIXI)
                         #js {:text text
                              :style (get icon-styles style)})]
-      (gobj/set text "logseqGraphNodeDisplay" "icon")
+      (gobj/set text "logseqGraphNodeDisplay" kind)
       text)
     (let [^js sprite (new (.-Sprite PIXI) circle-texture)]
       (gobj/set sprite "logseqGraphNodeDisplay" "circle")
@@ -484,13 +485,15 @@
 
 (defn- node-display-kind
   [node]
-  (if (icon-display-spec node)
-    "icon"
+  (if-let [{:keys [kind]} (icon-display-spec node)]
+    kind
     "circle"))
 
 (defn- configure-node-display!
   [^js display node emphasis]
-  (let [icon? (= "icon" (display-kind display))
+  (let [display-kind (display-kind display)
+        icon? (contains? #{"emoji" "icon"} display-kind)
+        emoji? (= "emoji" display-kind)
         scale (/ (* 2 (:radius node)) (if icon? icon-texture-font-size 96))
         emphasis-scale (case emphasis
                          :selected 1.55
@@ -506,7 +509,7 @@
       (set! (.-y anchor) 0.5))
     (set! (.-x display) (:x node))
     (set! (.-y display) (:y node))
-    (set! (.-tint display) (:color-int node))
+    (set! (.-tint display) (if emoji? 0xFFFFFF (:color-int node)))
     (set! (.-alpha display) alpha)
     (set! (.. display -scale -x) (* scale emphasis-scale))
     (set! (.. display -scale -y) (* scale emphasis-scale))
@@ -563,7 +566,7 @@
                                   display)
                                 (new (.-Sprite PIXI) texture)))
             acquire-display! (fn [node]
-                               (if (= "icon" (node-display-kind node))
+                               (if (contains? #{"emoji" "icon"} (node-display-kind node))
                                  (create-node-display! texture icon-styles node)
                                  (let [^js display (acquire-sprite!)]
                                    (gobj/set display "logseqGraphNodeDisplay" "circle")
@@ -1137,10 +1140,10 @@
 (defn render-container!
   [^js container {:keys [nodes links dark? on-node-activate on-rendered view-mode]}]
   (when container
-    (let [token (swap! *render-token inc)
+    (destroy-instance!)
+    (let [token @*render-token
           render-start (.now js/performance)
           app (new (.-Application PIXI))]
-      (destroy-instance!)
       (-> (.init app #js {:backgroundAlpha 0
                           :antialias false
                           :autoDensity true

@@ -711,7 +711,7 @@
  :graph/orphan-pages "孤立页面"
  :graph/page-count "{1} 个页面"
  :graph/pause-simulation "暂停模拟"
- :graph/preparing "准备中"
+ :graph/preparing "加载中"
  :graph/refresh-remote-graphs "刷新远程知识库"
  :graph/remote-graphs "远程图谱"
  :graph/removed "已移除图谱“{1}”"
