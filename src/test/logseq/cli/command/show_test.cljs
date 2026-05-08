@@ -245,7 +245,8 @@
          :logseq.property/built-in? true))
 
 (declare contains-block-uuid?
-         contains-show-internal-key?)
+         contains-show-internal-key?
+         contains-string?)
 
 (defn- library-show-mock
   []
@@ -286,6 +287,68 @@
                                 :block/order 0
                                 :block/parent {:db/id 200}
                                 :block/page {:db/id 200}}]}}))
+
+(def ^:private foo-page-uuid "22222222-2222-2222-2222-222222222222")
+
+(defn- page-hierarchy-show-mock
+  []
+  (let [foo (assoc (page-entity 300 "Foo")
+                   :block/uuid (uuid foo-page-uuid))
+        bar (assoc (page-entity 301 "Bar")
+                   :block/order 1
+                   :block/parent {:db/id 300})
+        baz (assoc (page-entity 302 "Baz")
+                   :block/order 1
+                   :block/parent {:db/id 301})
+        root-block {:db/id 500
+                    :block/title "Root block"
+                    :block/order 2
+                    :block/page {:db/id 300}
+                    :block/parent {:db/id 300}}
+        root-block-child {:db/id 501
+                          :block/title "Root block child"
+                          :block/order 0
+                          :block/page {:db/id 300}
+                          :block/parent {:db/id 500}}]
+    (make-show-invoke-mock
+     {:entities-by-page-name {"Foo" foo}
+      :entities-by-id {300 foo
+                       500 root-block}
+      :uuid-entities {(string/lower-case foo-page-uuid) foo}
+      :children-by-parent-id {300 [bar
+                                   {:db/id 303
+                                    :block/title "Hidden Class"
+                                    :block/order 2
+                                    :block/parent {:db/id 300}
+                                    :block/tags [page-tag class-tag]}
+                                   {:db/id 304
+                                    :block/title "Hidden Property"
+                                    :block/order 3
+                                    :block/parent {:db/id 300}
+                                    :block/tags [page-tag property-tag]}
+                                   {:db/id 305
+                                    :block/title "Loose block"
+                                    :block/order 4
+                                    :block/parent {:db/id 300}}]
+                              301 [baz]
+                              302 []}
+      :children-by-page-id {300 [{:db/id 400
+                                  :block/title "Foo content"
+                                  :block/order 0
+                                  :block/parent {:db/id 300}
+                                  :block/page {:db/id 300}}
+                                 {:db/id 401
+                                  :block/title "Bar content"
+                                  :block/order 0
+                                  :block/parent {:db/id 301}
+                                  :block/page {:db/id 301}}
+                                 root-block
+                                 root-block-child]
+                            301 [{:db/id 402
+                                  :block/title "Nested page content"
+                                  :block/order 0
+                                  :block/parent {:db/id 301}
+                                  :block/page {:db/id 301}}]}})))
 
 (deftest test-execute-show-library-page-renders-page-hierarchy
   (async done
@@ -402,6 +465,207 @@
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-execute-show-normal-page-page-hierarchy-false-keeps-page-content-path
+  (async done
+         (let [queries (atom [])
+               base-invoke (page-hierarchy-show-mock)
+               invoke-mock (fn [config method args]
+                             (when (= method :thread-api/q)
+                               (let [[_repo [query & inputs]] args]
+                                 (swap! queries conj {:query query :inputs inputs})))
+                             (base-invoke config method args))]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [result (show-command/execute-show {:type :show
+                                                           :repo "demo"
+                                                           :page "Foo"
+                                                           :page-hierarchy? false
+                                                           :linked-references? false
+                                                           :ref-id-footer? false}
+                                                          {:output-format nil})
+                         plain (-> result :data :message style/strip-ansi)]
+                   (is (= :ok (:status result)))
+                   (is (string/includes? plain "Foo content"))
+                   (is (not (string/includes? plain "Bar")))
+                   (is (some #(and (= [300] (:inputs %))
+                                   (query-uses-attr? (:query %) :block/page))
+                             @queries))
+                   (is (not (some #(and (= [300] (:inputs %))
+                                        (query-uses-attr? (:query %) :block/parent))
+                                  @queries)))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-normal-page-page-hierarchy-true-renders-child-pages
+  (async done
+         (let [queries (atom [])
+               base-invoke (page-hierarchy-show-mock)
+               invoke-mock (fn [config method args]
+                             (when (= method :thread-api/q)
+                               (let [[_repo [query & inputs]] args]
+                                 (swap! queries conj {:query query :inputs inputs})))
+                             (base-invoke config method args))]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [result (show-command/execute-show {:type :show
+                                                           :repo "demo"
+                                                           :page "Foo"
+                                                           :page-hierarchy? true
+                                                           :level 3
+                                                           :linked-references? false
+                                                           :ref-id-footer? false}
+                                                          {:output-format nil})
+                         plain (-> result :data :message style/strip-ansi)]
+                   (is (= :ok (:status result)))
+                   (is (string/includes? plain "Foo"))
+                   (is (re-find #"(?m)^301\s+└── Bar$" plain))
+                   (is (re-find #"(?m)^302\s+    └── Baz$" plain))
+                   (is (not (string/includes? plain "Foo content")))
+                   (is (not (string/includes? plain "Bar content")))
+                   (is (not (string/includes? plain "Nested page content")))
+                   (is (not (string/includes? plain "Hidden Class")))
+                   (is (not (string/includes? plain "Hidden Property")))
+                   (is (not (string/includes? plain "Loose block")))
+                   (is (some #(and (= [300] (:inputs %))
+                                   (query-uses-attr? (:query %) :block/parent))
+                             @queries))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-normal-page-page-hierarchy-respects-level
+  (async done
+         (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                             transport/invoke (page-hierarchy-show-mock)]
+               (p/let [result (show-command/execute-show {:type :show
+                                                         :repo "demo"
+                                                         :page "Foo"
+                                                         :page-hierarchy? true
+                                                         :level 2
+                                                         :linked-references? false
+                                                         :ref-id-footer? false}
+                                                        {:output-format nil})
+                       plain (-> result :data :message style/strip-ansi)]
+                 (is (= :ok (:status result)))
+                 (is (string/includes? plain "Bar"))
+                 (is (not (string/includes? plain "Baz")))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
+(deftest test-execute-show-normal-page-page-hierarchy-structured-output
+  (async done
+         (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                             transport/invoke (page-hierarchy-show-mock)]
+               (p/let [result (show-command/execute-show {:type :show
+                                                         :repo "demo"
+                                                         :page "Foo"
+                                                         :page-hierarchy? true
+                                                         :level 3
+                                                         :linked-references? false}
+                                                        {:output-format :json})]
+                 (is (= :ok (:status result)))
+                 (is (= "Foo" (get-in result [:data :root :block/title])))
+                 (is (= ["Bar"]
+                        (mapv :block/title (get-in result [:data :root :block/children]))))
+                 (is (= ["Baz"]
+                        (mapv :block/title (get-in result [:data :root :block/children 0 :block/children]))))
+                 (is (not (contains-string? (:data result) "Foo content")))
+                 (is (not (contains-block-uuid? (:data result))))
+                 (is (not (contains-show-internal-key? (:data result))))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
+(deftest test-execute-show-page-id-and-uuid-page-hierarchy
+  (async done
+         (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                             transport/invoke (page-hierarchy-show-mock)]
+               (p/let [by-id (show-command/execute-show {:type :show
+                                                        :repo "demo"
+                                                        :id 300
+                                                        :page-hierarchy? true
+                                                        :linked-references? false
+                                                        :ref-id-footer? false}
+                                                       {:output-format nil})
+                       by-uuid (show-command/execute-show {:type :show
+                                                          :repo "demo"
+                                                          :uuid foo-page-uuid
+                                                          :page-hierarchy? true
+                                                          :linked-references? false
+                                                          :ref-id-footer? false}
+                                                         {:output-format nil})]
+                 (doseq [result [by-id by-uuid]]
+                   (let [plain (-> result :data :message style/strip-ansi)]
+                     (is (= :ok (:status result)))
+                     (is (string/includes? plain "Bar"))
+                     (is (not (string/includes? plain "Foo content")))))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
+(deftest test-execute-show-block-target-ignores-page-hierarchy-flag
+  (async done
+         (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                             transport/invoke (page-hierarchy-show-mock)]
+               (p/let [result (show-command/execute-show {:type :show
+                                                         :repo "demo"
+                                                         :id 500
+                                                         :page-hierarchy? true
+                                                         :linked-references? false
+                                                         :ref-id-footer? false}
+                                                        {:output-format nil})
+                       plain (-> result :data :message style/strip-ansi)]
+                 (is (= :ok (:status result)))
+                 (is (string/includes? plain "Root block"))
+                 (is (string/includes? plain "Root block child"))
+                 (is (not (string/includes? plain "Bar")))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
+(deftest test-execute-show-normal-page-page-hierarchy-uses-existing-thread-apis
+  (async done
+         (let [called-methods (atom [])
+               base-invoke (page-hierarchy-show-mock)
+               invoke-mock (fn [config method args]
+                             (swap! called-methods conj method)
+                             (base-invoke config method args))]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [result (show-command/execute-show {:type :show
+                                                           :repo "demo"
+                                                           :page "Foo"
+                                                           :page-hierarchy? true
+                                                           :linked-references? false
+                                                           :ref-id-footer? false}
+                                                          {:output-format nil})]
+                   (is (= :ok (:status result)))
+                   (is (every? #{:thread-api/pull :thread-api/q} @called-methods))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-normal-page-page-hierarchy-parent-cycle-fails-fast
+  (async done
+         (let [foo (page-entity 300 "Foo")
+               invoke-mock (make-show-invoke-mock
+                            {:entities-by-page-name {"Foo" foo}
+                             :children-by-parent-id {300 [(assoc (page-entity 301 "Bar")
+                                                                 :block/parent {:db/id 300})]
+                                                    301 [(assoc (page-entity 302 "Baz")
+                                                                 :block/parent {:db/id 301})]
+                                                    302 [(assoc (page-entity 301 "Bar")
+                                                                 :block/parent {:db/id 302})]}})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (show-command/execute-show {:type :show
+                                            :repo "demo"
+                                            :page "Foo"
+                                            :page-hierarchy? true
+                                            :level 10
+                                            :linked-references? false}
+                                           {:output-format :json}))
+               (p/then (fn [_]
+                         (is false "expected execute-show to reject for a page hierarchy parent cycle")))
+               (p/catch (fn [error]
+                          (is (= :page-hierarchy-parent-cycle (-> error ex-data :code)))))
+               (p/finally done)))))
+
 (deftest test-execute-show-library-uses-existing-thread-apis
   (async done
          (let [called-methods (atom [])
@@ -444,7 +708,7 @@
                (p/then (fn [_]
                          (is false "expected execute-show to reject for a Library parent cycle")))
                (p/catch (fn [error]
-                          (is (= :library-parent-cycle (-> error ex-data :code)))))
+                          (is (= :page-hierarchy-parent-cycle (-> error ex-data :code)))))
                (p/finally done)))))
 
 (deftest test-tree->text-renders-block-refs-inside-string-property-values
@@ -857,6 +1121,20 @@
                                             "logseq_db_demo")]
       (is (true? (:ok? result)))
       (is (false? (get-in result [:action :ref-id-footer?]))))))
+
+(deftest test-build-action-page-hierarchy
+  (testing "page-hierarchy defaults to false"
+    (let [result (show-command/build-action {:page "Foo"}
+                                            "logseq_db_demo")]
+      (is (true? (:ok? result)))
+      (is (false? (get-in result [:action :page-hierarchy?])))))
+
+  (testing "page-hierarchy true is threaded into action"
+    (let [result (show-command/build-action {:page "Foo"
+                                             :page-hierarchy true}
+                                            "logseq_db_demo")]
+      (is (true? (:ok? result)))
+      (is (true? (get-in result [:action :page-hierarchy?]))))))
 
 (deftest test-execute-show-human-ref-id-footer-default-enabled
   (async done
