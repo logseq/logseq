@@ -1,4 +1,4 @@
-(ns frontend.common.graph-view-v2-test
+(ns frontend.common.graph-view-test
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.common.graph-view :as graph-view]
             [logseq.db.test.helper :as db-test]))
@@ -10,6 +10,10 @@
 (defn- link-endpoints
   [result]
   (set (mapcat (juxt :source :target) (:links result))))
+
+(defn- node-by-label
+  [result label]
+  (some #(when (= label (:label %)) %) (:nodes result)))
 
 (deftest global-graph-defaults-to-tags-and-objects
   (let [conn (db-test/create-conn-with-blocks
@@ -115,6 +119,63 @@
     (testing "Core built-in tags stay hidden from displayed tags"
       (is (not (contains? labels "Asset")))
       (is (not (contains? labels "asset object"))))))
+
+(deftest tags-and-objects-graph-respects-hidden-recycled-and-excluded-visibility
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Visible Page"}
+                 :blocks [{:block/title "visible object"
+                           :build/tags [:Topic]}]}
+                {:page {:block/title "Hidden Page"
+                        :build/properties {:logseq.property/hide? true}}
+                 :blocks [{:block/title "hidden page object"
+                           :build/tags [:Topic]}]}
+                {:page {:block/title "Recycled Page"
+                        :build/properties {:logseq.property/deleted-at 1712000000000}}
+                 :blocks [{:block/title "recycled page object"
+                           :build/tags [:Topic]}]}
+                {:page {:block/title "Excluded Page"
+                        :build/properties {:logseq.property/exclude-from-graph-view true}}
+                 :blocks [{:block/title "excluded page object"
+                           :build/tags [:Topic]}]}
+                {:page {:block/title "Hidden Parent"}
+                 :blocks [{:block/title "hidden parent block"
+                           :build/properties {:logseq.property/hide? true}
+                           :build/children [{:block/title "hidden child object"
+                                             :build/tags [:Topic]}]}]}
+                {:page {:block/title "Excluded Tagged Page"
+                        :build/tags [:Topic]
+                        :build/properties {:logseq.property/exclude-from-graph-view true}}}]
+               :classes {:Topic {}}})
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :tags-and-objects})
+        labels (node-labels result)]
+    (is (contains? labels "Topic"))
+    (is (contains? labels "visible object"))
+    (is (not (contains? labels "hidden page object")))
+    (is (not (contains? labels "recycled page object")))
+    (is (not (contains? labels "excluded page object")))
+    (is (not (contains? labels "hidden child object")))
+    (is (not (contains? labels "Excluded Tagged Page")))))
+
+(deftest large-all-pages-graph-keeps-bounded-visible-links
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               (into
+                [{:page {:block/title "Hub"}
+                  :blocks [{:block/title "See [[Page 1]]"}]}]
+                (mapv (fn [idx]
+                        {:page {:block/title (str "Page " idx)}})
+                      (range 10050)))})
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :all-pages
+                                              :orphan-pages? true})
+        hub-id (:id (node-by-label result "Hub"))
+        page-id (:id (node-by-label result "Page 1"))]
+    (is (some? hub-id))
+    (is (some? page-id))
+    (is (contains? (set (:links result))
+                   {:source hub-id :target page-id}))))
 
 (deftest tags-and-objects-graph-skips-large-unrelated-page-set-quickly
   (let [conn (db-test/create-conn-with-blocks

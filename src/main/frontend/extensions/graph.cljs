@@ -28,8 +28,13 @@
       (:view-mode opts)
       (:width opts)
       (:height opts)
+      (:aria-label opts)
       (:on-node-activate opts)
+      (:on-selection-change opts)
       (:on-rendered opts)])
-    [:div.graph-v2-canvas
+    [:div.graph-canvas
      {:ref container-ref
-      :style (canvas-style opts)}]))
+      :style (canvas-style opts)
+      :role "application"
+      :tabIndex 0
+      :aria-label (:aria-label opts)}]))

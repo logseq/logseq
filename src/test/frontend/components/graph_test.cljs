@@ -23,6 +23,24 @@
   (is (= #{"1" "2" "3"}
          (graph/selected-tag-id-set {} (graph/tag-options graph-data)))))
 
+(deftest settings-roundtrip-keeps-all-tags-sentinel
+  (let [settings {:view-mode :tags-and-objects
+                  :selected-tag-ids nil
+                  :open-groups #{:view-mode :displayed-tags}}
+        encoded (graph/encode-settings settings)
+        data (js->clj (js/JSON.parse (js/JSON.stringify encoded)) :keywordize-keys true)
+        decoded (graph/decode-settings data)]
+    (is (not (contains? data :selectedTagIds)))
+    (is (nil? (:selected-tag-ids decoded)))
+    (is (= #{"1" "2" "3"}
+           (graph/selected-tag-id-set decoded (graph/tag-options graph-data))))))
+
+(deftest tag-selection-toggle-materializes-custom-selection-from-all
+  (let [available-tags (graph/tag-options graph-data)
+        settings (graph/toggle-selected-tag-id {:selected-tag-ids nil} available-tags "2")]
+    (is (= #{"1" "3"}
+           (set (:selected-tag-ids settings))))))
+
 (deftest graph-data-is-filtered-by-selected-tags
   (let [filtered (graph/filter-tags-and-objects-graph
                   graph-data

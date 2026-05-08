@@ -620,12 +620,14 @@
                     :width 600
                     :height 600
                     :dark? dark?
+                    :view-mode :page
+                    :aria-label (t :graph/canvas-label)
                     :on-node-activate graph-actions/activate-node!})])
 
 (rum/defc page-graph-aux
   [page opts]
   (let [[graph set-graph!] (hooks/use-state nil)
-        dark? (= (:theme opts) "dark")]
+        dark? (contains? #{"dark" :dark} (:theme opts))]
     (hooks/use-effect!
      (fn []
        (p/let [result (state/<invoke-db-worker :thread-api/build-graph (state/get-current-repo) opts)]

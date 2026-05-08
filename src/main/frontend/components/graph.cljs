@@ -5,6 +5,7 @@
             [frontend.extensions.graph :as graph]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [lambdaisland.glogi :as log]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -17,7 +18,7 @@
 
 (defn- storage-key
   [repo]
-  (str "logseq.graph-v2.settings." repo))
+  (str "logseq.graph.settings." repo))
 
 (defn- valid-view-mode
   [view-mode]
@@ -25,13 +26,15 @@
     :all-pages
     :tags-and-objects))
 
-(defn- encode-settings
+(defn encode-settings
   [{:keys [view-mode selected-tag-ids open-groups]}]
-  #js {:viewMode (name (valid-view-mode view-mode))
-       :selectedTagIds (when selected-tag-ids (clj->js (vec selected-tag-ids)))
-       :openGroups (clj->js (mapv name (or open-groups default-open-groups)))})
+  (clj->js
+   (cond-> {:viewMode (name (valid-view-mode view-mode))
+            :openGroups (mapv name (or open-groups default-open-groups))}
+     (some? selected-tag-ids)
+     (assoc :selectedTagIds (vec selected-tag-ids)))))
 
-(defn- decode-settings
+(defn decode-settings
   [data]
   (merge default-settings
          (when (map? data)
@@ -40,7 +43,8 @@
              (contains? data :viewMode)
              (assoc :view-mode (valid-view-mode (keyword (:viewMode data))))
 
-             (contains? data :selectedTagIds)
+             (and (contains? data :selectedTagIds)
+                  (some? (:selectedTagIds data)))
              (assoc :selected-tag-ids (vec (:selectedTagIds data)))
 
              (contains? data :openGroups)
@@ -112,8 +116,8 @@
                      (css-var-value doc-el "--ls-primary-background-color"))]
     (if-let [rgb (parse-css-color bg-color)]
       (color-dark? rgb)
-      (= "dark" (or (some-> doc-el .-dataset .-theme)
-                    theme)))))
+      (contains? #{"dark" :dark} (or (some-> doc-el .-dataset .-theme)
+                                      theme)))))
 
 (defn- use-theme-token
   []
@@ -160,9 +164,41 @@
 (defn selected-tag-id-set
   [settings available-tags]
   (let [available-ids (set (map :id available-tags))]
-    (if-let [selected-tag-ids (:selected-tag-ids settings)]
-      (set (filter available-ids selected-tag-ids))
+    (if (some? (:selected-tag-ids settings))
+      (let [selected-tag-ids (:selected-tag-ids settings)]
+        (set (filter available-ids selected-tag-ids)))
       available-ids)))
+
+(defn toggle-selected-tag-id
+  [settings available-tags tag-id]
+  (let [selected-tag-ids (selected-tag-id-set settings available-tags)]
+    (assoc settings
+           :selected-tag-ids
+           (vec (if (contains? selected-tag-ids tag-id)
+                  (disj selected-tag-ids tag-id)
+                  (conj selected-tag-ids tag-id))))))
+
+(defn- selected-node-status
+  [selected-nodes]
+  (let [labels (->> selected-nodes
+                    (keep :label)
+                    (take 5)
+                    (string/join ", "))]
+    [:div.graph-a11y-panel
+     {:aria-live "polite"}
+     [:p (if (seq selected-nodes)
+           (t :graph/selected-nodes-status (count selected-nodes) labels)
+           (t :graph/no-selected-node))]
+     (when (seq selected-nodes)
+       (into
+        [:ul]
+        (map (fn [{:keys [id label] :as node}]
+               [:li {:key id}
+                [:button
+                 {:type "button"
+                  :on-click #(graph-actions/redirect-to-node! node)}
+                 (t :graph/open-selected-node label)]]))
+        selected-nodes))]))
 
 (defn filter-tags-and-objects-graph
   [graph-data selected-tag-ids]
@@ -192,20 +228,20 @@
 (defn- settings-group
   [{:keys [settings set-settings! id title meta children]}]
   (let [open? (contains? (:open-groups settings) id)]
-    [:section.graph-v2-settings-group
+    [:section.graph-settings-group
      {:class (when open? "is-open")}
-     [:button.graph-v2-settings-group-header
+     [:button.graph-settings-group-header
       {:type "button"
        :aria-expanded (str open?)
        :on-click #(set-settings! (settings-toggle settings id))}
-      [:span.graph-v2-settings-group-title
-       [:span.graph-v2-settings-group-chevron
+      [:span.graph-settings-group-title
+       [:span.graph-settings-group-chevron
         (ui/icon "chevron-right" {:size 16})]
        [:span title]]
       (when meta
-        [:span.graph-v2-settings-group-meta meta])]
-     [:div.graph-v2-settings-group-body
-      [:div.graph-v2-settings-group-body-inner children]]]))
+        [:span.graph-settings-group-meta meta])]
+     [:div.graph-settings-group-body
+      [:div.graph-settings-group-body-inner children]]]))
 
 (defn- view-mode-group
   [settings set-settings! view-mode set-view-mode!]
@@ -218,16 +254,16 @@
     (shui/tabs
      {:value (name view-mode)
       :on-value-change #(set-view-mode! (keyword %))
-      :class "graph-v2-mode-tabs"}
+      :class "graph-mode-tabs"}
      (shui/tabs-list
-      {:class "graph-v2-mode-tabs-list"}
+      {:class "graph-mode-tabs-list"}
       (shui/tabs-trigger
        {:value "tags-and-objects"
-        :class "graph-v2-mode-tab"}
+        :class "graph-mode-tab"}
        (t :graph/view-mode-tags))
       (shui/tabs-trigger
        {:value "all-pages"
-        :class "graph-v2-mode-tab"}
+        :class "graph-mode-tab"}
        (t :graph/view-mode-all-pages))))}))
 
 (defn- tags-group
@@ -236,7 +272,6 @@
         shown-tags (cond->> available-tags
                      (seq query)
                      (filter #(string/includes? (string/lower-case (:label %)) query)))
-        all-tag-ids (mapv :id available-tags)
         selected-count (count selected-tag-ids)]
     (settings-group
      {:settings settings
@@ -245,37 +280,46 @@
       :title (t :graph/displayed-tags)
       :meta (t :graph/displayed-tags-count selected-count (count available-tags))
       :children
-      [:div.graph-v2-tags-control
-       [:div.graph-v2-tag-search
+      [:div.graph-tags-control
+       [:div.graph-tag-search
         (ui/icon "search" {:size 16})
         (shui/input {:value tag-query
                      :placeholder (t :graph/search-tags)
                      :on-change #(set-tag-query! (.. % -target -value))})]
-       [:div.graph-v2-tag-actions
+       [:div.graph-tag-actions
         (ui/button (t :graph/select-all-tags)
-                   :on-click #(set-settings! (assoc settings :selected-tag-ids all-tag-ids))
+                   :on-click #(set-settings! (assoc settings :selected-tag-ids nil))
                    :variant :outline
                    :size :xs)
         (ui/button (t :graph/clear-tags)
                    :on-click #(set-settings! (assoc settings :selected-tag-ids []))
                    :variant :outline
                    :size :xs)]
-       [:div.graph-v2-tag-list
-        (for [{:keys [id label count]} shown-tags
-              :let [checked? (contains? selected-tag-ids id)]]
-          [:label.graph-v2-tag-row
-           {:key id
-            :class (when checked? "is-selected")}
-           (ui/checkbox {:checked checked?
-                         :on-change #(set-settings!
-                                      (assoc settings
-                                             :selected-tag-ids
-                                             (vec (if checked?
-                                                    (disj selected-tag-ids id)
-                                                    (conj selected-tag-ids id)))))})
-           [:span.graph-v2-tag-content
-            [:span.graph-v2-tag-name label]
-            [:span.graph-v2-tag-count count]]])]]})))
+       (into
+        [:div.graph-tag-list]
+        (map
+         (fn [{:keys [id label count]}]
+           (let [checked? (contains? selected-tag-ids id)]
+             [:label.graph-tag-row
+              {:key id
+               :class (when checked? "is-selected")}
+              (ui/checkbox {:checked checked?
+                            :aria-label (t :graph/toggle-tag label)
+                            :on-change #(set-settings!
+                                         (toggle-selected-tag-id settings available-tags id))})
+              [:span.graph-tag-content
+               [:span.graph-tag-name label]
+               [:span.graph-tag-count count]]])))
+        shown-tags)]})))
+
+(defn- graph-error
+  [retry!]
+  [:div.graph-error
+   [:div.graph-error-title (t :graph/build-error)]
+   (ui/button (t :graph/retry)
+              :on-click retry!
+              :variant :outline
+              :size :sm)])
 
 (defn- layout-group
   [settings set-settings! graph-data]
@@ -285,27 +329,27 @@
     :id :layout
     :title (t :graph/layout)
     :meta (t :graph/layout-force)
-    :children [:div.graph-v2-layout-stats
+    :children [:div.graph-layout-stats
                [:span (t :graph/node-count (count (:nodes graph-data)))]
                [:span (t :graph/link-count (count (:links graph-data)))]]}))
 
 (defn- settings-panel
   [settings-open? set-settings-open! settings set-settings! view-mode set-view-mode!
    filtered-graph-data available-tags selected-tag-ids tag-query set-tag-query!]
-    [:div.graph-v2-settings
+    [:div.graph-settings
      {:class (when settings-open? "is-open")}
-     [:button.graph-v2-settings-dot
+     [:button.graph-settings-dot
       {:aria-label (t :graph/settings)
        :title (t :graph/settings)
        :on-click #(set-settings-open! (not settings-open?))}
-      [:span.graph-v2-settings-dot-core]]
+      [:span.graph-settings-dot-core]]
      (when settings-open?
-       [:div.graph-v2-settings-panel
-        [:div.graph-v2-settings-panel-header
+       [:div.graph-settings-panel
+        [:div.graph-settings-panel-header
          [:div
-          [:div.graph-v2-settings-title (t :graph/settings)]
-          [:div.graph-v2-settings-subtitle (t :graph/settings-saved-per-graph)]]
-         [:button.graph-v2-settings-close
+          [:div.graph-settings-title (t :graph/settings)]
+          [:div.graph-settings-subtitle (t :graph/settings-saved-per-graph)]]
+         [:button.graph-settings-close
           {:type "button"
            :aria-label (t :ui/close)
            :on-click #(set-settings-open! false)}
@@ -327,6 +371,9 @@
         [tag-query set-tag-query!] (hooks/use-state "")
         [graph-data set-graph-data!] (hooks/use-state nil)
         [loading? set-loading!] (hooks/use-state true)
+        [build-error set-build-error!] (hooks/use-state nil)
+        [retry-token set-retry-token!] (hooks/use-state 0)
+        [selected-nodes set-selected-nodes!] (hooks/use-state [])
         settings (:settings settings-state)
         set-settings! (fn [settings]
                         (set-settings-state! {:repo repo
@@ -336,6 +383,8 @@
                             (when (not= mode view-mode)
                               (set-graph-data! nil)
                               (set-loading! true)
+                              (set-build-error! nil)
+                              (set-selected-nodes! [])
                               (set-settings! (assoc settings :view-mode mode))))]
     (hooks/use-effect!
      #(set-settings-state! {:repo repo
@@ -350,6 +399,8 @@
        (let [cancelled? (atom false)]
          (set-graph-data! nil)
          (set-loading! true)
+         (set-build-error! nil)
+         (set-selected-nodes! [])
          (-> (state/<invoke-db-worker :thread-api/build-graph repo {:type :global
                                                                     :theme theme
                                                                     :view-mode view-mode})
@@ -358,12 +409,13 @@
                          (set-graph-data! result)
                          (set-loading! false))))
              (p/catch (fn [error]
-                        (js/console.error "Failed to build graph" error)
+                        (log/error :graph/build-failed {:error error})
                         (when-not @cancelled?
+                          (set-build-error! error)
                           (set-loading! false)))))
          (fn []
            (reset! cancelled? true))))
-     [repo theme view-mode])
+     [repo theme view-mode retry-token])
 
     (let [available-tags (when graph-data (tag-options graph-data))
           selected-tag-ids (selected-tag-id-set settings available-tags)
@@ -371,7 +423,8 @@
                                 (if (= view-mode :tags-and-objects)
                                   (filter-tags-and-objects-graph graph-data selected-tag-ids)
                                   graph-data))]
-      [:div#global-graph.graph-v2-root
+      [:div#global-graph.graph-root
+       (selected-node-status selected-nodes)
        (settings-panel settings-open?
                        set-settings-open!
                        settings
@@ -384,10 +437,21 @@
                        tag-query
                        set-tag-query!)
 
-       (if (or loading? (nil? filtered-graph-data))
-         [:div.graph-v2-loading (t :graph/preparing)]
+       (cond
+         loading?
+         [:div.graph-loading (t :graph/preparing)]
+
+         build-error
+         (graph-error #(set-retry-token! (inc retry-token)))
+
+         (nil? filtered-graph-data)
+         [:div.graph-loading (t :graph/preparing)]
+
+         :else
          (graph/graph-2d {:nodes (:nodes filtered-graph-data)
                           :links (:links filtered-graph-data)
                           :dark? dark?
                           :view-mode view-mode
+                          :aria-label (t :graph/canvas-label)
+                          :on-selection-change set-selected-nodes!
                           :on-node-activate graph-actions/activate-node!}))])))

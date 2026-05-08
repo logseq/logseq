@@ -285,8 +285,9 @@
 
 (defn- normalize-view-mode
   [view-mode]
-  (if (= view-mode :all-pages)
-    :all-pages
+  (case view-mode
+    :all-pages :all-pages
+    :page :page
     :tags-and-objects))
 
 (defn- color->int
@@ -365,6 +366,8 @@
 
 (def large-graph-fast-layout-threshold 10000)
 
+(def all-pages-fast-layout-threshold 2500)
+
 (def large-graph-draw-edge-limit 8000)
 
 (def large-graph-render-node-limit 12000)
@@ -372,10 +375,14 @@
 (def regular-graph-draw-edge-limit 28000)
 
 (defn layout-mode
-  [node-count _view-mode]
-  (if (>= node-count large-graph-fast-layout-threshold)
-    :fast
-    :force))
+  [node-count view-mode]
+  (let [view-mode (normalize-view-mode view-mode)
+        threshold (if (= view-mode :all-pages)
+                    all-pages-fast-layout-threshold
+                    large-graph-fast-layout-threshold)]
+    (if (>= node-count threshold)
+      :fast
+      :force)))
 
 (defn draw-edge-limit
   [node-count link-count _view-mode]
@@ -503,9 +510,10 @@
 
 (defn- force-seed-nodes
   [nodes links view-mode degree dark?]
-  (if (and (= view-mode :tags-and-objects)
+  (if (and (or (= view-mode :tags-and-objects)
+               (= view-mode :all-pages))
            (> (count nodes) 900)
-           (< (count nodes) large-graph-fast-layout-threshold))
+           (= :force (layout-mode (count nodes) view-mode)))
     (fast-layout-nodes nodes links view-mode degree dark?)
     nodes))
 

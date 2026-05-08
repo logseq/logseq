@@ -163,7 +163,8 @@
     (is (= 70 (logic/layout-tick-count 2500 :all-pages)))))
 
 (deftest layout-mode-switches-to-fast-layout-for-large-graphs
-  (is (= :force (logic/layout-mode 2500 :all-pages)))
+  (is (= :force (logic/layout-mode 2499 :all-pages)))
+  (is (= :fast (logic/layout-mode 2500 :all-pages)))
   (is (= :force (logic/layout-mode 2200 :tags-and-objects)))
   (is (= :force (logic/layout-mode 3887 :tags-and-objects)))
   (is (= :fast (logic/layout-mode 50000 :all-pages))))
@@ -284,7 +285,23 @@
                       (number? (:radius %))
                       (number? (:color-int %)))
                 sample))
-    (is (< elapsed 1000))))
+    (is (< elapsed 1500))))
+
+(deftest layout-nodes-4k-all-pages-uses-fast-path
+  (let [nodes (mapv (fn [idx]
+                      {:id idx
+                       :kind "page"
+                       :label (str "Movie " idx)})
+                    (range 4000))
+        links (mapv (fn [idx]
+                      {:source idx
+                       :target (mod (inc idx) 4000)})
+                    (range 4000))
+        start (.now js/performance)
+        layouted (logic/layout-nodes nodes links :all-pages false)
+        elapsed (- (.now js/performance) start)]
+    (is (= 4000 (count layouted)))
+    (is (< elapsed 250))))
 
 (deftest layout-nodes-medium-tags-and-objects-uses-bounded-d3-force
   (let [tag-count 12

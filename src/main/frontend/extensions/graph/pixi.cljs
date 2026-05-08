@@ -2,7 +2,8 @@
   (:require ["pixi.js" :as PIXI]
             [clojure.string :as string]
             [frontend.extensions.graph.pixi.logic :as logic]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [lambdaisland.glogi :as log]))
 
 (defonce ^:private *graph-instances (atom {}))
 (defonce ^:private *render-tokens (atom {}))
@@ -34,8 +35,9 @@
 
 (defn- normalize-view-mode
   [view-mode]
-  (if (= view-mode :all-pages)
-    :all-pages
+  (case view-mode
+    :all-pages :all-pages
+    :page :page
     :tags-and-objects))
 
 (defn- color->int
@@ -847,7 +849,7 @@
         (.removeEventListener canvas "wheel" on-wheel)))))
 
 (defn- ^:large-vars/cleanup-todo setup-scene!
-  [^js app ^js container {:keys [nodes links dark? on-node-activate on-rendered view-mode]} render-start]
+  [^js app ^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode]} render-start]
   (set! (.-innerHTML container) "")
   (let [^js canvas (or (.-canvas app) (.-view app))
         ^js stage (.-stage app)
@@ -913,6 +915,12 @@
                     :hide-label-scale hide-label-scale}
         mark-transform! (fn []
                           (reset! transform-dirty? true))
+        emit-selection! (fn []
+                          (when (fn? on-selection-change)
+                            (on-selection-change
+                             (->> @highlighted-node-ids*
+                                  (keep #(get @layout-by-id* %))
+                                  vec))))
         resize-to-container! (fn []
                                (let [width (.-clientWidth container)
                                      height (.-clientHeight container)
@@ -944,10 +952,12 @@
                                    logic/update-highlighted-node-ids
                                    (:id node)
                                    remove?)
+                            (emit-selection!)
                             (sync-highlight!))
         clear-highlight! (fn []
                            (when (seq @highlighted-node-ids*)
                              (reset! highlighted-node-ids* #{})
+                             (emit-selection!)
                              (sync-highlight!)))
         ensure-drag-session! (fn [root-node]
                                (let [root-id (:id root-node)]
@@ -1138,7 +1148,7 @@
      :canvas canvas}))
 
 (defn render-container!
-  [^js container {:keys [nodes links dark? on-node-activate on-rendered view-mode]}]
+  [^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode]}]
   (when container
     (destroy-instance! container)
     (let [token (get (swap! *render-tokens update container (fnil inc 0)) container)
@@ -1160,11 +1170,12 @@
                                                    :links links
                                                    :dark? dark?
                                                    :on-node-activate on-node-activate
+                                                   :on-selection-change on-selection-change
                                                    :on-rendered on-rendered
                                                    :view-mode view-mode}
                                     render-start))
                (.destroy ^js app))))
           (.catch
            (fn [error]
-             (js/console.error "Graph render failed" error))))))
+             (log/error :graph/render-failed {:error error}))))))
   nil)
