@@ -57,3 +57,16 @@
     (is (not (contains? (node-labels result) "Excluded Page")))
     (is (contains? (node-labels result) "Kept Page"))
     (is (every? node-ids (link-endpoints result)))))
+
+(deftest tags-and-objects-graph-skips-large-unrelated-page-set-quickly
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               (mapv (fn [idx]
+                       {:page {:block/title (str "Page " idx)}})
+                     (range 12000))})
+        start (.now js/performance)
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :tags-and-objects})
+        elapsed (- (.now js/performance) start)]
+    (is (empty? (:nodes result)))
+    (is (< elapsed 1000))))

@@ -46,48 +46,51 @@
    :kind kind
    :block/created-at (:block/created-at entity)})
 
+(defn- visible-graph-tag?
+  [entity]
+  (and (visible-entity? entity)
+       (not (ldb/built-in? entity))
+       (not (ldb/property? entity))))
+
+(defn- visible-graph-object?
+  [entity]
+  (and (visible-entity? entity)
+       (not (ldb/class? entity))
+       (not (ldb/property? entity))))
+
+(defn- tag-ids
+  [db]
+  (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
+       (keep (fn [{id :e}]
+               (let [entity (d/entity db id)]
+                 (when (visible-graph-tag? entity)
+                   id))))
+       set))
+
 (defn- build-tags-and-objects-graph
   [db]
-  (let [tags (->> (d/q
-                   '[:find [?e ...]
-                     :where
-                     [?e :block/tags :logseq.class/Tag]]
-                   db)
-                  (map #(d/entity db %))
-                  (filter visible-entity?)
-                  (remove ldb/built-in?)
-                  (remove ldb/property?)
-                  vec)
-        tag-id-set (set (map :db/id tags))
-        objects (->> (d/q
-                      '[:find [?e ...]
-                        :where
-                        [?e :block/tags ?tag]]
-                      db)
-                     (map #(d/entity db %))
-                     (filter visible-entity?)
-                     (remove ldb/class?)
-                     (remove ldb/property?)
-                     (filter
-                      (fn [entity]
-                        (some (fn [tag]
-                                (contains? tag-id-set (:db/id tag)))
-                              (:block/tags entity))))
-                     (common-util/distinct-by :db/id)
+  (let [tag-id-set (tag-ids db)
+        tags (mapv #(d/entity db %) tag-id-set)
+        tag-links (->> (d/datoms db :avet :block/tags)
+                       (keep (fn [{from-id :e tag-id :v}]
+                               (when (and (contains? tag-id-set tag-id)
+                                          (not (contains? tag-id-set from-id)))
+                                 [from-id tag-id])))
+                       distinct
+                       vec)
+        object-ids (set (map first tag-links))
+        objects (->> object-ids
+                     (keep (fn [id]
+                             (let [entity (d/entity db id)]
+                               (when (visible-graph-object? entity)
+                                 entity))))
                      vec)
-        nodes (concat
-               (map #(entity->node % "tag") tags)
-               (map #(entity->node % "object") objects))
-        links (->> objects
-                   (mapcat
-                    (fn [entity]
-                      (let [from-id (:db/id entity)]
-                        (keep (fn [tag]
-                                (let [to-id (:db/id tag)]
-                                  (when (contains? tag-id-set to-id)
-                                    [from-id to-id])))
-                              (:block/tags entity)))))
-                   (distinct)
+        object-id-set (set (map :db/id objects))
+        nodes (into (mapv #(entity->node % "tag") tags)
+                    (map #(entity->node % "object") objects))
+        links (->> tag-links
+                   (filter (fn [[from-id _tag-id]]
+                             (contains? object-id-set from-id)))
                    (build-links)
                    vec)]
     {:nodes (vec nodes)
