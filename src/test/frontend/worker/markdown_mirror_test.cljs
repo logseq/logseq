@@ -35,6 +35,9 @@
 (defn- page-path [path]
   (str (markdown-mirror/repo-mirror-dir test-repo) "/" path))
 
+(defn- page-marker [uuid]
+  (str "id:: " uuid))
+
 (defn- js-error
   [message data]
   (let [error (js/Error. message)]
@@ -122,7 +125,8 @@
           page (db-test/find-page-by-title @conn "Source")]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
-                    (is (= "- See [[Foo]]"
+                    (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                "- See [[Foo]]")
                            (get @files (page-path "pages/Source.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -150,9 +154,11 @@
           page (db-test/find-page-by-title @conn "Page A")]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
-                    (let [path (page-path "pages/Page A.md")]
-                      (is (= "- hello\n- world" (get @files path)))
-                      (is (= [[path "- hello\n- world"]] @writes)))))
+                    (let [path (page-path "pages/Page A.md")
+                          content (str (page-marker page-uuid) "\n\n"
+                                       "- hello\n- world")]
+                      (is (= content (get @files path)))
+                      (is (= [[path content]] @writes)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -169,9 +175,11 @@
            {:platform (assoc-in platform [:storage :read-text!]
                                 (fn [_path] (p/rejected missing-error)))})
           (p/then (fn [_]
-                    (let [path (page-path "pages/Page A.md")]
-                      (is (= "- hello" (get @files path)))
-                      (is (= [[path "- hello"]] @writes)))))
+                    (let [path (page-path "pages/Page A.md")
+                          content (str (page-marker (:block/uuid page)) "\n\n"
+                                       "- hello")]
+                      (is (= content (get @files path)))
+                      (is (= [[path content]] @writes)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -212,7 +220,13 @@
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Issue.md"))]
-                      (is (= "reproducible-steps:: Open settings\n- ## TODO body\n  Status:: Todo\n  reproducible-steps:: Click mirror\n  rating:: 5"
+                      (is (= (str (page-marker (:block/uuid page)) "\n"
+                                  "* reproducible-steps::\n"
+                                  "  - Open settings\n\n"
+                                  "- TODO ## TODO body\n"
+                                  "  * reproducible-steps::\n"
+                                  "    - Click mirror\n"
+                                  "  * rating:: 5")
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -235,7 +249,14 @@
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Formats.md"))]
-                      (is (= "- ## Heading block\n- > quote line 1\n  > quote line 2\n- ```clojure\n  (println \"hi\")\n  (+ 1 2)\n  ```"
+                      (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                  "- ## Heading block\n"
+                                  "- > quote line 1\n"
+                                  "  > quote line 2\n"
+                                  "- ```clojure\n"
+                                  "  (println \"hi\")\n"
+                                  "  (+ 1 2)\n"
+                                  "  ```")
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -256,8 +277,33 @@
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Page Props.md"))]
-                      (is (= "p1:: hello\np2:: 1\np3:: Author 1\n- body"
+                      (is (= (str (page-marker (:block/uuid page)) "\n"
+                                  "* p1::\n"
+                                  "  - hello\n"
+                                  "* p2:: 1\n"
+                                  "* p3::\n"
+                                  "  - Author 1\n\n"
+                                  "- body")
                              content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-exports-node-property-values-as-page-refs-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:friend {:logseq.property/type :node}}
+                 :pages-and-blocks [{:page {:block/title "Alice"
+                                             :build/properties {:friend [:build/page {:block/title "Bob"}]}}
+                                     :blocks [{:block/title "knows"}]}
+                                    {:page {:block/title "Bob"}}]})
+          page (db-test/find-page-by-title @conn "Alice")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker (:block/uuid page)) "\n"
+                                "* friend:: [[Bob]]\n\n"
+                                "- knows")
+                           (get @files (page-path "pages/Alice.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -282,7 +328,15 @@
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id journal) {:platform platform})
           (p/then (fn [_]
                     (let [content (get @files (page-path "journals/2026_05_05.md"))]
-                      (is (= "p1:: hey\n- TODO hello great test\n  Status:: Todo\n  p1:: hello\n  p2:: 1\n  p3:: Author 1"
+                      (is (= (str (page-marker (:block/uuid journal)) "\n"
+                                  "* p1::\n"
+                                  "  - hey\n\n"
+                                  "- TODO hello great test\n"
+                                  "  * p1::\n"
+                                  "    - hello\n"
+                                  "  * p2:: 1\n"
+                                  "  * p3::\n"
+                                  "    - Author 1")
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -312,12 +366,18 @@
       (-> (<mirror-repo! test-repo @conn {:platform platform})
           (p/then (fn [result]
                     (is (not= ::missing-mirror-repo-fn result))
-                    (is (= "- alpha"
-                           (get @files (page-path "pages/Page A.md"))))
-                    (is (= "- journal"
-                           (get @files (page-path "journals/2024_05_08.md"))))
-                    (is (= "- class"
-                           (get @files (page-path "pages/Project.md"))))
+                    (let [page-a (db-test/find-page-by-title @conn "Page A")
+                          journal (db-test/find-journal-by-journal-day @conn 20240508)
+                          project (db-test/find-page-by-title @conn "Project")]
+                      (is (= (str (page-marker (:block/uuid page-a)) "\n\n"
+                                  "- alpha")
+                             (get @files (page-path "pages/Page A.md"))))
+                      (is (= (str (page-marker (:block/uuid journal)) "\n\n"
+                                  "- journal")
+                             (get @files (page-path "journals/2024_05_08.md"))))
+                      (is (= (str (page-marker (:block/uuid project)) "\n\n"
+                                  "- class")
+                             (get @files (page-path "pages/Project.md")))))
                     (is (nil? (get @files (page-path "pages/Built In.md"))))
                     (is (nil? (get @files (page-path "pages/rating.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -335,7 +395,8 @@
           page (db-test/find-page-by-title @conn "Page A")]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
-                    (is (= "- desktop"
+                    (is (= (str (page-marker page-uuid) "\n\n"
+                                "- desktop")
                            (get @files (page-path "pages/Page A.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -365,7 +426,8 @@
           journal (db-test/find-journal-by-journal-day @conn 20240506)]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id journal) {:platform platform})
           (p/then (fn [_]
-                    (is (= "- journal item"
+                    (is (= (str (page-marker (:block/uuid journal)) "\n\n"
+                                "- journal item")
                            (get @files (page-path "journals/2024_05_06.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -406,7 +468,8 @@
                                             :block/title "after"}] {:outliner-op :save-block}))
                     (markdown-mirror/<flush-repo! test-repo {:platform platform})))
           (p/then (fn [_]
-                    (is (= "- after"
+                    (is (= (str (page-marker page-uuid) "\n\n"
+                                "- after")
                            (get @files (page-path "pages/Page A.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -451,7 +514,9 @@
                   _ (markdown-mirror/<handle-tx-report! test-repo conn tx-report-2 {:platform platform
                                                                                      :defer? true})
                   _ (markdown-mirror/<flush-repo! test-repo {:platform platform})]
-            (is (= [[(page-path "pages/Page A.md") "- latest"]]
+            (is (= [[(page-path "pages/Page A.md")
+                     (str (page-marker page-uuid) "\n\n"
+                          "- latest")]]
                    @writes)))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -466,7 +531,8 @@
                                      :blocks [{:block/title "body"}]}]})
           page (db-test/find-page-by-title @conn "Old Name")
           old-path (page-path "pages/Old Name.md")
-          _ (swap! files assoc old-path "- body")
+          _ (swap! files assoc old-path (str (page-marker page-uuid) "\n\n"
+                                             "- body"))
           tx-report (d/with @conn [{:db/id (:db/id page)
                                     :block/title "New Name"
                                     :block/name "new name"}])
@@ -475,7 +541,8 @@
       (-> (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform})
           (p/then (fn [_]
                     (is (= [old-path] @deletes))
-                    (is (= "- body"
+                    (is (= (str (page-marker page-uuid) "\n\n"
+                                "- body")
                            (get @files (page-path "pages/New Name.md"))))
                     (is (nil? (get @files old-path)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -492,9 +559,11 @@
           page (db-test/find-page-by-title @conn "Old Name2")
           old-path (page-path "pages/Old Name2.md")
           new-path (page-path "pages/New Name2.md")
+          content (str (page-marker page-uuid) "\n\n"
+                       "- body")
           ;; pre-populate both old and new paths with same content
-          _ (swap! files assoc old-path "- body")
-          _ (swap! files assoc new-path "- body")
+          _ (swap! files assoc old-path content)
+          _ (swap! files assoc new-path content)
           tx-report (d/with @conn [{:db/id (:db/id page)
                                     :block/title "New Name2"
                                     :block/name "new name2"}])
@@ -518,7 +587,8 @@
                                      :blocks [{:block/title "body"}]}]})
           page (db-test/find-page-by-title @conn "Delete Me")
           old-path (page-path "pages/Delete Me.md")
-          _ (swap! files assoc old-path "- body")
+          _ (swap! files assoc old-path (str (page-marker page-uuid) "\n\n"
+                                             "- body"))
           tx-report (d/with @conn [[:db/retractEntity (:db/id page)]])
           _ (d/reset-conn! conn (:db-after tx-report))]
       (markdown-mirror/set-enabled! test-repo true)
@@ -540,11 +610,14 @@
                                      :blocks [{:block/title "same"}]}]})
           page (db-test/find-page-by-title @conn "Page A")
           path (page-path "pages/Page A.md")
-          _ (swap! files assoc path "- same")]
+          _ (swap! files assoc path (str (page-marker page-uuid) "\n\n"
+                                         "- same"))]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
                     (is (empty? @writes))
-                    (is (= "- same" (get @files path)))))
+                    (is (= (str (page-marker page-uuid) "\n\n"
+                                "- same")
+                           (get @files path)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
