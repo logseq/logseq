@@ -333,10 +333,18 @@
                                 (show! (cp-content/block-ref-custom-context-menu-content block block-ref))
                                 (state/set-state! :block-ref/context nil))
 
-                                ;; block selection
+                              ;; block selection
                               (and (state/selection?) (not (d/has-class? target "bullet")))
-                              (show! (cp-content/custom-context-menu-content)
-                                     {:id :blocks-selection-context-menu})
+                              (let [selection-blocks (state/get-selection-blocks)]
+                                (if (= 1 (count selection-blocks))
+                                  (when-let [sel-block-id (some-> (first selection-blocks)
+                                                                  (.getAttribute "blockid")
+                                                                  (parse-uuid))]
+                                    (p/do!
+                                     (db-async/<get-block (state/get-current-repo) sel-block-id {:children? false})
+                                     (show! (cp-content/block-context-menu-content target sel-block-id false))))
+                                  (show! (cp-content/custom-context-menu-content)
+                                         {:id :blocks-selection-context-menu})))
 
                                 ;; block bullet
                               (and block-id (parse-uuid block-id))
