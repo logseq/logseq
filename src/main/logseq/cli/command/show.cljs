@@ -25,6 +25,8 @@
                      :ex-msg (constantly "Option uuid must be a valid UUID string")}}
    :page {:desc "Page name"
           :complete :pages}
+   :page-hierarchy {:desc "Show child page hierarchy for page targets (default false)"
+                    :coerce :boolean}
    :linked-references {:desc "Include linked references (default true)"
                        :coerce :boolean}
    :ref-id-footer {:desc "Show referenced entity id footer (default true)"
@@ -35,6 +37,7 @@
 (def entries
   [(core/command-entry ["show"] :show "Show tree" show-spec
                        {:examples ["logseq show --graph my-graph --page Home"
+                                   "logseq show --graph my-graph --page Foo --page-hierarchy true"
                                    "logseq show --graph my-graph --page \"Meeting Notes\" --level 2"
                                    "logseq show --graph my-graph --id 123 --level 3"
                                    "logseq show --graph my-graph --id '[123,456,789]'"
@@ -203,6 +206,9 @@
    :block/name
    :block/uuid
    :block/title
+   :block/order
+   :logseq.property/built-in?
+   :logseq.property/deleted-at
    :logseq.property/created-from-property
    {:logseq.property/status [:db/ident :block/title]}
    {:block/page [:db/id :block/title :block/name :block/uuid]}
@@ -225,7 +231,20 @@
    {:logseq.property/status [:db/ident :block/title]}
    :block/order
    {:block/parent [:db/id]}
-   {:block/tags [:db/id :block/name :block/title :block/uuid]}
+   {:block/tags [:db/id :db/ident :block/name :block/title :block/uuid]}
+   {:block/link link-target-selector}])
+
+(def ^:private page-hierarchy-child-selector
+  [:db/id
+   :db/ident
+   :block/name
+   :block/uuid
+   :block/title
+   :block/order
+   :logseq.property/built-in?
+   {:logseq.property/status [:db/ident :block/title]}
+   {:block/parent [:db/id :block/name :block/title :block/uuid]}
+   {:block/tags [:db/id :db/ident :block/name :block/title :block/uuid]}
    {:block/link link-target-selector}])
 
 (def ^:private linked-ref-selector
@@ -792,6 +811,53 @@
                         (sort-children (get parent->children parent-id)))))]
     (build root-id 1)))
 
+(defn- library-page?
+  [entity]
+  (ldb/library? entity))
+
+(defn- page-hierarchy-display-page?
+  [entity]
+  (and (ldb/page? entity)
+       (not (or (ldb/class? entity)
+                (ldb/property? entity)))))
+
+(defn- page-hierarchy-target-page?
+  [entity]
+  (and (page-hierarchy-display-page? entity)
+       (not (some? (get-in entity [:block/page :db/id])))))
+
+(defn- fetch-page-hierarchy-children
+  [config repo parent-id]
+  (let [query [:find (list 'pull '?child page-hierarchy-child-selector)
+               :in '$ '?parent-id
+               :where ['?child :block/parent '?parent-id]]]
+    (p/let [rows (transport/invoke config :thread-api/q [repo [query parent-id]])
+            children (->> rows
+                          (map first)
+                          (filter page-hierarchy-display-page?)
+                          (sort-by :block/order)
+                          vec)
+            children (attach-user-properties config repo children)]
+      children)))
+
+(defn- fetch-page-hierarchy-tree-for-entity
+  [config repo entity max-depth]
+  (letfn [(build-node [node depth visited]
+            (let [node-id (:db/id node)]
+              (when (and node-id (contains? visited node-id))
+                (throw (ex-info "page hierarchy parent cycle detected"
+                                {:code :page-hierarchy-parent-cycle
+                                 :node-id node-id})))
+              (let [visited* (cond-> visited node-id (conj node-id))
+                    node* (dissoc node :block/children)]
+                (if (and max-depth (>= depth max-depth))
+                  (p/resolved node*)
+                  (p/let [children (fetch-page-hierarchy-children config repo node-id)
+                          children* (p/all (map #(build-node % (inc depth) visited*) children))]
+                    (cond-> node*
+                      (seq children*) (assoc :block/children (vec children*))))))))]
+    (build-node entity 1 #{})))
+
 (defn- link-target-key
   [link]
   (cond
@@ -834,7 +900,7 @@
     (max 1 (inc (- max-depth depth)))))
 
 (defn- resolve-linked-target-node
-  [config repo source-node max-depth depth visited]
+  [config repo source-node max-depth depth visited page-hierarchy?]
   (let [source-id (:db/id source-node)
         link (:block/link source-node)
         target-id (link-target-id link)]
@@ -852,43 +918,55 @@
                          :target-id target-id})))
       (let [visited* (cond-> (conj visited target-id)
                        source-id (conj source-id))]
-        (p/let [target-root (fetch-tree-for-entity config repo target (remaining-linked-depth max-depth depth))
-                resolved-target (resolve-linked-blocks-in-node config repo target-root max-depth depth visited*)]
+        (p/let [target-root (fetch-tree-for-entity config repo target (remaining-linked-depth max-depth depth) page-hierarchy?)
+                resolved-target (resolve-linked-blocks-in-node config repo target-root max-depth depth visited* page-hierarchy?)]
           (assoc resolved-target
                  :show/linked-display? true
                  :show/link-source-id source-id
                  :show/link-source-uuid (:block/uuid source-node)))))))
 
 (defn- resolve-linked-blocks-in-node
-  [config repo node max-depth depth visited]
+  [config repo node max-depth depth visited page-hierarchy?]
   (if (:block/link node)
-    (resolve-linked-target-node config repo node max-depth depth visited)
+    (resolve-linked-target-node config repo node max-depth depth visited page-hierarchy?)
     (let [children (:block/children node)]
       (if (seq children)
         (p/let [children* (p/all (map (fn [child]
-                                        (resolve-linked-blocks-in-node config repo child max-depth (inc depth) visited))
+                                        (resolve-linked-blocks-in-node config repo child max-depth (inc depth) visited page-hierarchy?))
                                       children))]
           (assoc node :block/children (vec children*)))
         (p/resolved node)))))
 
 (defn- fetch-tree-for-entity
-  [config repo entity max-depth]
+  [config repo entity max-depth page-hierarchy?]
   (let [entity-id (:db/id entity)]
-    (if-let [page-id (get-in entity [:block/page :db/id])]
-      (p/let [blocks (fetch-blocks-for-page config repo page-id)
+    (cond
+      (library-page? entity)
+      (fetch-page-hierarchy-tree-for-entity config repo entity max-depth)
+
+      (and page-hierarchy?
+           (page-hierarchy-target-page? entity))
+      (fetch-page-hierarchy-tree-for-entity config repo entity max-depth)
+
+      (get-in entity [:block/page :db/id])
+      (let [page-id (get-in entity [:block/page :db/id])]
+        (p/let [blocks (fetch-blocks-for-page config repo page-id)
+                children (build-tree blocks entity-id max-depth)]
+          (assoc entity :block/children children)))
+
+      entity-id
+      (p/let [blocks (fetch-blocks-for-page config repo entity-id)
               children (build-tree blocks entity-id max-depth)]
         (assoc entity :block/children children))
-      (if entity-id
-        (p/let [blocks (fetch-blocks-for-page config repo entity-id)
-                children (build-tree blocks entity-id max-depth)]
-          (assoc entity :block/children children))
-        (throw (ex-info "block link target not found"
-                        {:code :block-link-target-not-found}))))))
+
+      :else
+      (throw (ex-info "block link target not found"
+                      {:code :block-link-target-not-found})))))
 
 (defn- resolve-linked-blocks-in-tree-data
   [config action tree-data]
   (let [max-depth (or (:level action) 10)]
-    (p/let [root (resolve-linked-blocks-in-node config (:repo action) (:root tree-data) max-depth 1 #{})]
+    (p/let [root (resolve-linked-blocks-in-node config (:repo action) (:root tree-data) max-depth 1 #{} (:page-hierarchy? action))]
       (assoc tree-data :root root))))
 
 (defn- resolve-linked-blocks-in-linked-references
@@ -897,7 +975,7 @@
         blocks (:blocks linked-refs)]
     (if (seq blocks)
       (p/let [blocks* (p/all (map (fn [block]
-                                    (resolve-linked-blocks-in-node config (:repo action) block max-depth 1 #{}))
+                                    (resolve-linked-blocks-in-node config (:repo action) block max-depth 1 #{} (:page-hierarchy? action)))
                                   blocks))]
         (assoc linked-refs :blocks (vec blocks*)))
       (p/resolved linked-refs))))
@@ -914,7 +992,7 @@
       (entity-id-only? entity)))
 
 (defn- fetch-tree
-  [config {:keys [repo id page level] :as opts}]
+  [config {:keys [repo id page level page-hierarchy?] :as opts}]
   (let [max-depth (or level 10)
         uuid-str (:uuid opts)]
     (cond
@@ -924,7 +1002,7 @@
         (p/let [entity (attach-user-properties-to-entity config repo entity)]
           (if (missing-show-entity? entity)
             (throw (ex-info "entity not found" {:code :entity-not-found}))
-            (p/let [root (fetch-tree-for-entity config repo entity max-depth)]
+            (p/let [root (fetch-tree-for-entity config repo entity max-depth page-hierarchy?)]
               {:root root}))))
 
       (seq uuid-str)
@@ -939,20 +1017,16 @@
         (p/let [entity (attach-user-properties-to-entity config repo entity)]
           (if (missing-show-entity? entity)
             (throw (ex-info "entity not found" {:code :entity-not-found}))
-            (p/let [root (fetch-tree-for-entity config repo entity max-depth)]
+            (p/let [root (fetch-tree-for-entity config repo entity max-depth page-hierarchy?)]
               {:root root}))))
 
       (seq page)
       (p/let [page-entity (transport/invoke config :thread-api/pull
-                                            [repo [:db/id :db/ident :block/uuid :block/title
-                                                   :logseq.property/deleted-at
-                                                   {:logseq.property/status [:db/ident :block/title]}
-                                                   {:block/tags [:db/id :block/name :block/title :block/uuid]}]
-                                             [:block/name page]])]
+                                            [repo show-root-selector [:block/name page]])]
         (p/let [page-entity (attach-user-properties-to-entity config repo page-entity)]
           (if (and (not (ldb/recycled? page-entity))
                    (:db/id page-entity))
-            (p/let [root (fetch-tree-for-entity config repo page-entity max-depth)]
+            (p/let [root (fetch-tree-for-entity config repo page-entity max-depth page-hierarchy?)]
               {:root (dissoc root :logseq.property/deleted-at)})
             (throw (ex-info "page not found" {:code :page-not-found})))))
 
@@ -1075,6 +1149,9 @@
                     :ref-id-footer? (if (contains? options :ref-id-footer)
                                       (:ref-id-footer options)
                                       true)
+                    :page-hierarchy? (if (contains? options :page-hierarchy)
+                                       (:page-hierarchy options)
+                                       false)
                     :uuid (:uuid options)
                     :page (:page options)
                     :level (:level options)}})))))

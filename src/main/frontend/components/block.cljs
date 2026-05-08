@@ -10,6 +10,7 @@
             [datascript.impl.entity :as e]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.block.macros :as block-macros]
             [frontend.components.icon :as icon-component]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -3064,33 +3065,36 @@
        (not (dom/has-class? (gobj/get e "target") "bullet"))
        (not @*dragging?)))
 
+(defn- handle-breadcrumb-activate!
+  [config block opts e]
+  (cond
+    (gobj/get e "shiftKey")
+    (do
+      (util/stop e)
+      (state/sidebar-add-block!
+       (state/get-current-repo)
+       (:db/id block)
+       :block-ref))
+
+    (util/atom? (:navigating-block opts))
+    (do
+      (util/stop e)
+      (reset! (:navigating-block opts) (:block/uuid block)))
+
+    (some? (:sidebar-key config))
+    nil
+
+    :else
+    (when-let [uuid (:block/uuid block)]
+      (-> (or (:on-redirect-to-page config) route-handler/redirect-to-page!)
+          (apply [(str uuid)])))))
+
 (rum/defc breadcrumb-fragment
   [config block label opts]
   [:a {:on-pointer-down (fn [e]
                           (when (some? (:sidebar-key config)) (util/stop e)))
-       :on-pointer-up
-       (fn [e]
-         (cond
-           (gobj/get e "shiftKey")
-           (do
-             (util/stop e)
-             (state/sidebar-add-block!
-              (state/get-current-repo)
-              (:db/id block)
-              :block-ref))
-
-           (util/atom? (:navigating-block opts))
-           (do
-             (util/stop e)
-             (reset! (:navigating-block opts) (:block/uuid block)))
-
-           (some? (:sidebar-key config))
-           nil
-
-           :else
-           (when-let [uuid (:block/uuid block)]
-             (-> (or (:on-redirect-to-page config) route-handler/redirect-to-page!)
-                 (apply [(str uuid)])))))}
+       :on-pointer-up (fn [e]
+                        (handle-breadcrumb-activate! config block opts e))}
    label])
 
 (rum/defc breadcrumb-separator
@@ -3098,69 +3102,217 @@
   [:span.opacity-50.px-1
    "/"])
 
+(rum/defc breadcrumb-segment-label
+  "Renders the visual label (icon + text) for a breadcrumb segment.
+   Icon priority:
+     1. code/query/note/quote/math → always show their fixed structural icon
+     2. page/block with custom icon → get-node-icon-cp (shows custom icon)
+     3. empty block (nil text, no custom icon) → point-filled placeholder
+     4. regular page/block with text and no custom icon → no icon"
+  [seg entity]
+  (let [*label-ref (hooks/use-ref nil)
+        [truncated? set-truncated!] (hooks/use-state false)
+        text (:text seg)
+        seg-type (:type seg)
+        has-custom-icon? (some? (:icon seg))
+        ;; Structural type icons — always present for code/query/note/quote
+        structural-icon (case seg-type
+                          :code  (shui/tabler-icon "code" {:size "12" :class "opacity-70"})
+                          :query (shui/tabler-icon "search" {:size "12" :class "opacity-70"})
+                          :note  (shui/tabler-icon "notes" {:size "12" :class "opacity-70"})
+                          :quote (shui/tabler-icon "quote" {:size "12" :class "opacity-70"})
+                          :math  (shui/tabler-icon "math-function" {:size "12" :class "opacity-70"})
+                          nil)
+        node-icon (when (and (nil? structural-icon) entity has-custom-icon?)
+                    (icon-component/get-node-icon-cp entity {}))
+        ;; Placeholder for empty/untitled blocks with no text and no other icon
+        empty-placeholder (when (and (nil? structural-icon) (nil? node-icon) (nil? text))
+                            (shui/tabler-icon "point-filled" {:size "12" :class "opacity-70"}))
+        icon-node (or structural-icon node-icon empty-placeholder)
+        non-blank (fn [s] (when-not (string/blank? s) s))
+        full-label (or (non-blank (:full-text seg))
+                       (non-blank text))
+        set-label-ref! (hooks/use-callback (fn [el] (hooks/set-ref! *label-ref el)) [])]
+    (hooks/use-effect!
+     (fn []
+       (if (or (string/blank? text) (string/blank? full-label))
+         (do
+           (set-truncated! false)
+           nil)
+         (let [check! (fn []
+                        (if-let [^js el (hooks/deref *label-ref)]
+                          (set-truncated! (> (.-scrollWidth el) (.-clientWidth el)))
+                          (set-truncated! false)))
+               resize-observer (when (some? (.-ResizeObserver js/window))
+                                 (js/ResizeObserver. check!))]
+           (check!)
+           (when-let [^js el (hooks/deref *label-ref)]
+             (when resize-observer
+               (.observe resize-observer el)
+               (when-let [parent (.-parentElement el)]
+                 (.observe resize-observer parent))))
+           (.addEventListener js/window "resize" check!)
+           (fn []
+             (.removeEventListener js/window "resize" check!)
+             (when resize-observer
+               (.disconnect resize-observer))))))
+     [text full-label])
+    (let [inner [:span.breadcrumb__segment.inline-flex.items-center.min-w-0
+                 {:aria-label (when-not text full-label)}
+                 (when icon-node
+                   [:span.breadcrumb__segment-icon.mr-0.5.shrink-0 icon-node])
+                 (when text
+                   [:span.breadcrumb__label {:ref set-label-ref!} text])]]
+      (if (and (not (string/blank? full-label)) truncated?)
+        (ui/tooltip inner full-label {:trigger-props {:as-child true}})
+        inner))))
+
+(defn- breadcrumb-segments
+  [target-entity parents]
+  (let [raw-segments (mapv breadcrumb-model/block->breadcrumb-segment parents)
+        page-entity (when (and target-entity
+                               (not (:page? (first raw-segments))))
+                      (:block/page target-entity))
+        page-seg (when page-entity
+                   (breadcrumb-model/block->breadcrumb-segment page-entity))]
+    (if page-seg
+      (into [page-seg] raw-segments)
+      raw-segments)))
+
+(defn- breadcrumb-segment-entity
+  [seg]
+  (when (:db/id seg)
+    (db/entity (:db/id seg))))
+
+(rum/defc breadcrumb-search-overflow-tooltip
+  [title]
+  (ui/tooltip
+   [:span.opacity-40.px-0.5.text-xs
+    {:role "button"
+     :tab-index 0
+     :aria-label (t :breadcrumb/more-ancestors)}
+    "···"]
+   title
+   {:trigger-props {:as-child true}}))
+
+(rum/defcs breadcrumb-overflow-dropdown < (rum/local false ::open?)
+  (rum/local nil ::full-hidden)
+  "Renders an ellipsis button that exposes hidden ancestor segments in a dropdown."
+  [{open? ::open? full-hidden ::full-hidden}
+   config repo target-entity from-property hidden-segs opts vopts show-page?]
+  (let [hidden-segs' (or @full-hidden hidden-segs)
+        target-db-id (:db/id target-entity)
+        load-full-hidden! (fn []
+                            (when (and target-db-id (nil? @full-hidden))
+                              (p/let [parents (db-async/<get-block-parents repo target-db-id 1000)]
+                                (let [parents (remove nil? (concat parents [from-property]))
+                                      segments (breadcrumb-segments target-entity parents)
+                                      view (breadcrumb-model/build-breadcrumb-view
+                                            segments
+                                            (assoc vopts :show-page? show-page?))]
+                                  (reset! full-hidden (:hidden view))))))]
+    (shui/dropdown-menu
+     {:open @open?
+      :on-open-change (fn [open]
+                        (reset! open? open)
+                        (when open (load-full-hidden!)))}
+     (ui/tooltip
+      (shui/dropdown-menu-trigger
+       {:as-child true}
+       [:button.breadcrumb__overflow.opacity-60.hover:opacity-100.px-0.5.text-xs
+        {:aria-label (t :breadcrumb/more-ancestors)}
+        "···"])
+      (t :breadcrumb/more-ancestors)
+      {:trigger-props {:as-child true}})
+     (when @open?
+       (shui/dropdown-menu-content
+        {:class "max-h-[min(50vh,420px)] overflow-y-auto"}
+        (for [seg hidden-segs']
+          (let [entity (breadcrumb-segment-entity seg)
+                label (breadcrumb-segment-label seg entity)
+                nav-block (or entity
+                              {:db/id (:db/id seg)
+                               :block/uuid (:block/uuid seg)})]
+            (shui/dropdown-menu-item
+             {:key (str (:block/uuid seg))
+              :on-click (when-not (:disabled? opts)
+                          #(handle-breadcrumb-activate! config nav-block opts %))}
+             label))))))))
+
 ;; "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
 (rum/defc breadcrumb-aux < rum/reactive
-  [config repo block-id {:keys [show-page? indent? end-separator? _navigating-block disabled?]
+  [config repo block-id {:keys [show-page? indent? end-separator? _navigating-block disabled? variant header?]
                          :or {show-page? true}
                          :as opts}]
-  (let [from-property (when block-id
-                        (:logseq.property/created-from-property (db/entity [:block/uuid block-id])))
-        parents (db/get-block-parents repo block-id {:depth 1000})
-        parents (cond-> (remove nil? (concat parents [from-property]))
-                  (not show-page?)
-                  rest)
+  (let [;; Derive effective variant from explicit :variant opt or legacy config flags
+        effective-variant (or variant
+                              (cond
+                                header?           :app-header
+                                (:search? config) :search-result
+                                (:list-view? config) :inline
+                                :else :block-page))
+        vopts (breadcrumb-model/variant-options effective-variant)
+        load-depth (:load-depth vopts)
+        target-entity (when block-id (db/entity [:block/uuid block-id]))
+        from-property (when block-id
+                        (:logseq.property/created-from-property target-entity))
+        parents (db/get-block-parents repo block-id {:depth load-depth})
+        parents (remove nil? (concat parents [from-property]))
+        segments (breadcrumb-segments target-entity parents)
+        view (breadcrumb-model/build-breadcrumb-view segments (assoc vopts :show-page? show-page?))
+        {visible-prefix-raw :visible-prefix hidden :hidden visible-suffix-raw :visible-suffix overflow? :overflow?} view
+        full-title (breadcrumb-model/segments->full-title
+                    (concat visible-prefix-raw hidden visible-suffix-raw))
         config (assoc config
                       :breadcrumb? true
-                      :disable-preview? true)]
-    (when (seq parents)
-      (let [parents-props (doall
-                           (for [{:block/keys [uuid name] :as block} parents]
-                             (if name
-                               [block (page-cp (cond-> {:disable-preview? true}
-                                                 disabled?
-                                                 (assoc :disable-click? true))
-                                               block) true]
-                               (let [result (block/parse-title-and-body
-                                             uuid
-                                             (get block :block/format :markdown)
-                                             (:block/raw-title block))
-                                     ast-body (:block.temp/ast-body result)
-                                     ast-title (:block.temp/ast-title result)
-                                     config (assoc config :block/uuid uuid)]
-                                 [block
-                                  (when ast-title
-                                    (if (seq ast-title)
-                                      (->elem :span (map-inline config ast-title))
-                                      (->elem :div (markup-elements-cp config ast-body))))
-                                  false]))))
-            breadcrumbs (->> parents-props
-                             (map (fn [x]
-                                    (let [[block label page?] x
-                                          label' (if page?
-                                                   label
-                                                   (breadcrumb-fragment config block label opts))]
-                                      (if (:disabled? opts)
-                                        label
-                                        (rum/with-key label' (str (:block/uuid block)))))))
-                             (interpose (breadcrumb-separator)))]
-        (when (seq breadcrumbs)
-          [:div.breadcrumb.block-parents
-           {:class (when (seq breadcrumbs)
-                     (str (when-not (or (:search? config) (:list-view? config))
-                            " my-2")
-                          (when indent?
-                            " ml-4")))}
-           (when (and (false? (:top-level? config))
-                      (seq parents))
-             (breadcrumb-separator))
-           breadcrumbs
-           (when end-separator? (breadcrumb-separator))])))))
+                      :disable-preview? true)
+        render-seg (fn [seg]
+                     (let [entity (breadcrumb-segment-entity seg)
+                           label (breadcrumb-segment-label seg entity)
+                           nav-block (or entity
+                                         {:db/id (:db/id seg)
+                                          :block/uuid (:block/uuid seg)})]
+                       (rum/with-key
+                         (if (or disabled? (= effective-variant :search-result))
+                           label
+                           (breadcrumb-fragment config nav-block label opts))
+                         (str (:block/uuid seg)))))]
+    (when (or (seq visible-prefix-raw) (seq visible-suffix-raw))
+      [:div.breadcrumb.block-parents
+       {:class (str " breadcrumb--" (name effective-variant)
+                    (when-not (or (:search? config) (:list-view? config)) " my-2")
+                    (when indent? " ml-4"))}
+       (when (and (false? (:top-level? config)) (seq parents))
+         (breadcrumb-separator))
+       ;; visible prefix (page + early ancestors)
+       (interpose (breadcrumb-separator) (map render-seg visible-prefix-raw))
+       ;; overflow indicator
+       (when overflow?
+         (list
+          (breadcrumb-separator)
+          (if (= effective-variant :search-result)
+            (breadcrumb-search-overflow-tooltip full-title)
+            (breadcrumb-overflow-dropdown
+             config repo target-entity from-property hidden opts vopts show-page?))))
+       ;; visible suffix (nearest parents)
+       (when (seq visible-suffix-raw)
+         (list
+          (breadcrumb-separator)
+          (interpose (breadcrumb-separator) (map render-seg visible-suffix-raw))))
+       (when end-separator? (breadcrumb-separator))])))
 
 (rum/defc breadcrumb
-  [config repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block _disabled?]
+  [config repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block _disabled? variant header?]
                          :as opts}]
   (let [[block set-block!] (hooks/use-state (when (uuid? block-id)
-                                              (db/entity [:block/uuid block-id])))]
+                                              (db/entity [:block/uuid block-id])))
+        effective-variant (or variant
+                              (cond
+                                header? :app-header
+                                (:search? config) :search-result
+                                (:list-view? config) :inline
+                                :else :block-page))
+        load-depth (:load-depth (breadcrumb-model/variant-options effective-variant))]
     (hooks/use-effect!
      (fn []
        (p/let [block (db-async/<get-block (state/get-current-repo)
@@ -3168,7 +3320,7 @@
                                           {:children? false
                                            :skip-refresh? true})
                _ (when-let [id (:db/id block)]
-                   (db-async/<get-block-parents (state/get-current-repo) id 9))]
+                   (db-async/<get-block-parents (state/get-current-repo) id load-depth))]
          (set-block! block)))
      [])
     (when block

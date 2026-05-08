@@ -54,7 +54,11 @@
                  "while ! mkdir \"$LOCK_DIR\" 2>/dev/null; do [ -f \"$DONE_FILE\" ] && exit 0; sleep 0.1; done; "
                  "trap 'rmdir \"$LOCK_DIR\" 2>/dev/null || true' EXIT; "
                  "if [ ! -f \"$DONE_FILE\" ]; then "
-                 "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{user-keys-graph-arg}} --e2ee-password {{e2ee-password-arg}} --upload-keys >/dev/null && touch \"$DONE_FILE\"; "
+                 "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{user-keys-graph-arg}} >/dev/null 2>/dev/null || true; "
+                 "if {{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{user-keys-graph-arg}} --e2ee-password {{e2ee-password-arg}} --upload-keys >/dev/null; then "
+                 "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{user-keys-graph-arg}} >/dev/null 2>/dev/null || true; "
+                 "touch \"$DONE_FILE\"; "
+                 "else exit 1; fi; "
                  "fi")
             lock-dir
             done-file)))

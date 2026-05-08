@@ -111,6 +111,8 @@
  :block.reaction/emoji-required-warning "请先选择一个表情回应。"
  :block.reaction/unsupported-emoji-warning "不支持该表情回应。"
 
+ :breadcrumb/more-ancestors "显示更多上级节点"
+
  :bug-report/desc "你可以帮助我们提交一个错误报告吗？我们会尽快解决。"
  :bug-report/title "BUG 上报"
 
