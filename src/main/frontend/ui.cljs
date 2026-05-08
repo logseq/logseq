@@ -931,38 +931,34 @@
   ([add-heading-fn auto-heading-fn rm-heading-fn]
    (menu-heading nil add-heading-fn auto-heading-fn rm-heading-fn))
   ([heading add-heading-fn auto-heading-fn rm-heading-fn]
-   (let [h-auto-class (str "to-heading-button" (when (true? heading) " is-active"))
-         h-auto-intent (when-not (true? heading) "link")
-         h-off-class (str "to-heading-button" (when (false? heading) " is-active"))
-         h-off-intent (when-not (false? heading) "link")]
-     [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
-      [:div.flex.flex-row.justify-between.flex-1.px-1
-       (for [i (range 1 7)]
-         (rum/with-key (button
-                        ""
-                        :icon (str "h-" i)
-                        :title (t :editor/heading i)
-                        :class (str "to-heading-button" (when (= heading i) " is-active"))
-                        :on-click #(add-heading-fn i)
-                        :intent (when-not (= heading i) "link")
-                        :small? true)
-           (str "key-h-" i)))
-       (button
-        ""
-        :icon "h-auto"
-        :class h-auto-class
-        :title (t :editor/auto-heading)
-        :on-click auto-heading-fn
-        :intent h-auto-intent
-        :small? true)
-       (button
-        ""
-        :icon "heading-off"
-        :class h-off-class
-        :title (t :editor/remove-heading)
-        :on-click rm-heading-fn
-        :intent h-off-intent
-        :small? true)]])))
+   [:div.flex.flex-row.justify-between.pb-2.pt-1.px-2.items-center
+    [:div.flex.flex-row.justify-between.flex-1.px-1
+     (for [i (range 1 7)]
+       (rum/with-key (button
+                      ""
+                      :icon (str "h-" i)
+                      :title (t :editor/heading i)
+                      :class (str "to-heading-button" (when (= heading i) " is-active"))
+                      :on-click #(add-heading-fn i)
+                      :intent (when-not (= heading i) "link")
+                      :small? true)
+         (str "key-h-" i)))
+     (button
+      ""
+      :icon "h-auto"
+      :class (str "to-heading-button" (when (true? heading) " is-active"))
+      :title (t :editor/auto-heading)
+      :on-click auto-heading-fn
+      :intent (when-not (true? heading) "link")
+      :small? true)
+     (button
+      ""
+      :icon "heading-off"
+      :class (str "to-heading-button" (when (false? heading) " is-active"))
+      :title (t :editor/remove-heading)
+      :on-click rm-heading-fn
+      :intent (when-not (false? heading) "link")
+      :small? true)]]))
 
 (rum/defc tooltip
   [trigger tooltip-content & {:keys [portal? root-props trigger-props content-props]}]
