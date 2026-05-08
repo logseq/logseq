@@ -205,6 +205,34 @@
   #js {:source source
        :target target})
 
+(def large-graph-fast-layout-threshold 10000)
+
+(def large-graph-draw-edge-limit 8000)
+
+(def large-graph-render-node-limit 12000)
+
+(def regular-graph-draw-edge-limit 28000)
+
+(defn layout-mode
+  [node-count _view-mode]
+  (if (>= node-count large-graph-fast-layout-threshold)
+    :fast
+    :force))
+
+(defn draw-edge-limit
+  [node-count link-count _view-mode]
+  (min link-count
+       (if (>= node-count large-graph-fast-layout-threshold)
+         large-graph-draw-edge-limit
+         regular-graph-draw-edge-limit)))
+
+(defn render-node-limit
+  [node-count _view-mode]
+  (min node-count
+       (if (>= node-count large-graph-fast-layout-threshold)
+         large-graph-render-node-limit
+         node-count)))
+
 (defn- link-distance
   [view-mode]
   (if (= view-mode :tags-and-objects) 58 72))
@@ -233,12 +261,37 @@
       :else
       (if (= view-mode :tags-and-objects) 90 70))))
 
+(defn- fast-layout-nodes
+  [nodes degree dark?]
+  (let [golden-angle (* js/Math.PI (- 3 (js/Math.sqrt 5)))
+        spacing 18
+        [linked unlinked] (reduce
+                           (fn [[linked unlinked] node]
+                             (if (pos? (get degree (:id node) 0))
+                               [(conj linked node) unlinked]
+                               [linked (conj unlinked node)]))
+                           [[] []]
+                           nodes)]
+    (->> (into linked unlinked)
+         (map-indexed
+          (fn [idx node]
+            (let [rank (inc idx)
+                  angle (* idx golden-angle)
+                  radius (* spacing (js/Math.sqrt rank))
+                  x (* radius (js/Math.cos angle))
+                  y (* radius (js/Math.sin angle))]
+              (decorate-node node degree dark? x y))))
+         vec)))
+
 (defn layout-nodes
   [nodes links view-mode dark?]
   (let [view-mode (normalize-view-mode view-mode)
         node-id-set (set (map :id nodes))
         links (keep-links-with-nodes links node-id-set)
-        degree (build-degree-map links)
+        degree (build-degree-map links)]
+    (if (= :fast (layout-mode (count nodes) view-mode))
+      (fast-layout-nodes nodes degree dark?)
+      (let [
         simulation-nodes (->> nodes
                               (map-indexed #(simulation-node %2 degree %1))
                               (into-array))
@@ -256,7 +309,7 @@
                           (.iterations 2))
         y-force (d3-force/forceY 0)
         _ (.strength y-force (y-strength view-mode))
-        simulation (-> (d3-force/forceSimulation simulation-nodes)
+            simulation (-> (d3-force/forceSimulation simulation-nodes)
                        (.force "link" link-force)
                        (.force "charge" (-> (d3-force/forceManyBody)
                                              (.strength (charge-strength view-mode))
@@ -265,11 +318,11 @@
                        (.force "collision" collide-force)
                        (.force "y" y-force)
                        (.stop))
-        ticks (layout-tick-count (count nodes) view-mode)]
-    (dotimes [_ ticks]
-      (.tick simulation))
-    (->> simulation-nodes
-         (map (fn [^js simulation-node]
-                (let [node (nth nodes (.-idx simulation-node))]
-                  (decorate-node node degree dark? (.-x simulation-node) (.-y simulation-node)))))
-         vec)))
+            ticks (layout-tick-count (count nodes) view-mode)]
+        (dotimes [_ ticks]
+          (.tick simulation))
+        (->> simulation-nodes
+             (map (fn [^js simulation-node]
+                    (let [node (nth nodes (.-idx simulation-node))]
+                      (decorate-node node degree dark? (.-x simulation-node) (.-y simulation-node)))))
+             vec)))))

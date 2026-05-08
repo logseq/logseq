@@ -4,8 +4,8 @@
 
 (defn redirect-to-node!
   [node]
-  (when-let [node-uuid (:uuid node)]
-    (route-handler/redirect-to-page! node-uuid)))
+  (when-let [node-ref (or (:uuid node) (:label node))]
+    (route-handler/redirect-to-page! node-ref)))
 
 (defn open-node-in-sidebar!
   [node]

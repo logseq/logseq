@@ -119,6 +119,18 @@
   (testing "Large graphs stay bounded"
     (is (= 70 (logic/layout-tick-count 2500 :all-pages)))))
 
+(deftest layout-mode-switches-to-fast-layout-for-large-graphs
+  (is (= :force (logic/layout-mode 2500 :all-pages)))
+  (is (= :fast (logic/layout-mode 50000 :all-pages))))
+
+(deftest draw-edge-limit-is-bounded-for-large-graphs
+  (is (= 712 (logic/draw-edge-limit 643 712 :all-pages)))
+  (is (= 8000 (logic/draw-edge-limit 50000 120000 :all-pages))))
+
+(deftest render-node-limit-is-bounded-for-large-graphs
+  (is (= 643 (logic/render-node-limit 643 :all-pages)))
+  (is (= 12000 (logic/render-node-limit 50000 :all-pages))))
+
 (deftest label-render-state-does-not-expand-labels-while-fading-out
   (testing "Zoomed-in labels are shown without hover"
     (is (= {:target-alpha 1.0
@@ -169,3 +181,26 @@
     (is (= #{168 169} (set (map :id layouted))))
     (is (= 1 (:degree (get by-id 168))))
     (is (= 1 (:degree (get by-id 169))))))
+
+(deftest layout-nodes-large-graph-uses-fast-path
+  (let [nodes (mapv (fn [idx]
+                      {:id idx
+                       :kind "page"
+                       :label (str "Page " idx)})
+                    (range 50000))
+        links (mapv (fn [idx]
+                      {:source idx
+                       :target (mod (inc idx) 50000)})
+                    (range 50000))
+        start (.now js/performance)
+        layouted (logic/layout-nodes nodes links :all-pages false)
+        elapsed (- (.now js/performance) start)
+        sample (take 100 layouted)]
+    (is (= 50000 (count layouted)))
+    (is (every? #(and (number? (:x %))
+                      (number? (:y %))
+                      (number? (:degree %))
+                      (number? (:radius %))
+                      (number? (:color-int %)))
+                sample))
+    (is (< elapsed 1000))))

@@ -125,6 +125,21 @@
      :max-x (+ (/ (- width x) scale) padding)
      :max-y (+ (/ (- height y) scale) padding)}))
 
+(defn- expand-viewport
+  [{:keys [min-x min-y max-x max-y]} amount]
+  {:min-x (- min-x amount)
+   :min-y (- min-y amount)
+   :max-x (+ max-x amount)
+   :max-y (+ max-y amount)})
+
+(defn- node-in-viewport?
+  [{:keys [min-x min-y max-x max-y]} {:keys [x y radius]}]
+  (let [radius (or radius 0)]
+    (and (<= min-x (+ x radius))
+         (<= (- x radius) max-x)
+         (<= min-y (+ y radius))
+         (<= (- y radius) max-y))))
+
 (defn- screen-point
   [^js world x y]
   (let [scale (.. world -scale -x)]
@@ -257,8 +272,10 @@
                  (reset! visible-ids* #{}))}))
 
 (defn- draw-edges!
-  [^js graphics layout-by-id links dark?]
-  (let [max-edges 28000
+  [^js graphics layout-by-id links dark? view-mode]
+  (let [max-edges (logic/draw-edge-limit (count layout-by-id)
+                                          (count links)
+                                          view-mode)
         links* (if (> (count links) max-edges)
                  (take max-edges links)
                  links)
@@ -277,39 +294,112 @@
     (count links*)))
 
 (defn- render-edges!
-  [^js container layout-by-id links dark?]
+  [^js container layout-by-id links dark? view-mode]
   (let [^js graphics (new (.-Graphics PIXI))
-        drawn-links (draw-edges! graphics layout-by-id links dark?)]
+        drawn-links (draw-edges! graphics layout-by-id links dark? view-mode)]
     (.addChild container graphics)
     {:graphics graphics
      :drawn-links drawn-links}))
 
+(defn- configure-node-sprite!
+  [^js sprite node]
+  (let [scale (/ (* 2 (:radius node)) 96)]
+    (set! (.. sprite -anchor -x) 0.5)
+    (set! (.. sprite -anchor -y) 0.5)
+    (set! (.-x sprite) (:x node))
+    (set! (.-y sprite) (:y node))
+    (set! (.-tint sprite) (:color-int node))
+    (set! (.. sprite -scale -x) scale)
+    (set! (.. sprite -scale -y) scale)
+    (set! (.-visible sprite) true)))
+
+(defn- remove-sprite-from-parent!
+  [^js sprite]
+  (when-let [^js parent (.-parent sprite)]
+    (.removeChild parent sprite)))
+
 (defn- render-nodes!
-  [^js tag-container ^js detail-container layouted-nodes]
+  [^js tag-container ^js detail-container layouted-nodes* view-mode]
   (let [^js container (new (.-Container PIXI))
         texture (create-circle-texture)
-        sprites (reduce
-                 (fn [acc node]
-                   (let [^js sprite (new (.-Sprite PIXI) texture)
-                         scale (/ (* 2 (:radius node)) 96)
-                         ^js sprite-container (if (= "tag" (:kind node))
-                                                tag-container
-                                                container)]
-                     (set! (.. sprite -anchor -x) 0.5)
-                     (set! (.. sprite -anchor -y) 0.5)
-                     (set! (.-x sprite) (:x node))
-                     (set! (.-y sprite) (:y node))
-                     (set! (.-tint sprite) (:color-int node))
-                     (set! (.. sprite -scale -x) scale)
-                     (set! (.. sprite -scale -y) scale)
-                     (.addChild sprite-container sprite)
-                     (assoc acc (:id node) sprite)))
-                 {}
-                 layouted-nodes)]
+        node-count (count @layouted-nodes*)
+        max-nodes (logic/render-node-limit node-count view-mode)
+        virtual? (< max-nodes node-count)]
     (.addChild detail-container container)
-    {:container container
-     :texture texture
-     :sprites sprites}))
+    (if-not virtual?
+      (let [sprites (reduce
+                     (fn [acc node]
+                       (let [^js sprite (new (.-Sprite PIXI) texture)
+                             ^js sprite-container (if (= "tag" (:kind node))
+                                                    tag-container
+                                                    container)]
+                         (configure-node-sprite! sprite node)
+                         (.addChild sprite-container sprite)
+                         (assoc acc (:id node) sprite)))
+                     {}
+                     @layouted-nodes*)]
+        {:container container
+         :texture texture
+         :sprites sprites
+         :drawn-node-count (count sprites)
+         :sync! (fn [_world _width _height _hovered-node-id] nil)})
+      (let [sprites* (atom {})
+            pool* (atom [])
+            drawn-node-count* (atom 0)
+            acquire-sprite! (fn []
+                              (if-let [^js sprite (peek @pool*)]
+                                (do
+                                  (swap! pool* pop)
+                                  sprite)
+                                (new (.-Sprite PIXI) texture)))
+            release-sprite! (fn [id]
+                              (when-let [^js sprite (get @sprites* id)]
+                                (remove-sprite-from-parent! sprite)
+                                (set! (.-visible sprite) false)
+                                (swap! sprites* dissoc id)
+                                (swap! pool* conj sprite)))
+            mount-sprite! (fn [node]
+                            (let [id (:id node)
+                                  ^js sprite (or (get @sprites* id)
+                                                 (let [sprite (acquire-sprite!)]
+                                                   (swap! sprites* assoc id sprite)
+                                                   sprite))
+                                  ^js sprite-container (if (= "tag" (:kind node))
+                                                         tag-container
+                                                         container)]
+                              (configure-node-sprite! sprite node)
+                              (when-not (identical? (.-parent sprite) sprite-container)
+                                (remove-sprite-from-parent! sprite)
+                                (.addChild sprite-container sprite))))]
+        {:container container
+         :texture texture
+         :sprites* sprites*
+         :drawn-node-count drawn-node-count*
+         :sync! (fn [^js world width height hovered-node-id]
+                  (let [scale (.. world -scale -x)
+                        viewport (expand-viewport
+                                  (world-viewport-rect world width height)
+                                  (/ 220 (max scale 0.5)))
+                        visible-nodes (->> @layouted-nodes*
+                                           (filter #(node-in-viewport? viewport %))
+                                           (take max-nodes)
+                                           vec)
+                        visible-nodes (if hovered-node-id
+                                        (if-let [hovered-node (some (fn [node]
+                                                                      (when (= hovered-node-id (:id node))
+                                                                        node))
+                                                                    @layouted-nodes*)]
+                                          (vec (cons hovered-node
+                                                     (remove #(= hovered-node-id (:id %)) visible-nodes)))
+                                          visible-nodes)
+                                        visible-nodes)
+                        selected-id-set (set (map :id visible-nodes))]
+                    (doseq [node visible-nodes]
+                      (mount-sprite! node))
+                    (doseq [id (keys @sprites*)]
+                      (when-not (contains? selected-id-set id)
+                        (release-sprite! id)))
+                    (reset! drawn-node-count* (count selected-id-set))))}))))
 
 (defn- build-neighbor-map
   [links]
@@ -320,6 +410,12 @@
          (update target (fnil conj []) source)))
    {}
    links))
+
+(defn- rendered-sprite
+  [node-render-info node-id]
+  (if-let [sprites* (:sprites* node-render-info)]
+    (get @sprites* node-id)
+    (get (:sprites node-render-info) node-id)))
 
 (defn- draw-drag-neighbor-edges!
   [^js graphics layout-by-id neighbor-ids x y dark?]
@@ -509,14 +605,18 @@
         node-index-by-id (into {} (map-indexed (fn [idx node] [(:id node) idx]) @layouted-nodes*))
         layout-by-id* (atom (into {} (map (fn [node] [(:id node) node]) @layouted-nodes*)))
         preview-layout-by-id* (atom nil)
-        edge-render-info (render-edges! detail-layer @layout-by-id* links dark?)
+        _ (set! (.-x world) (/ width 2))
+        _ (set! (.-y world) (/ height 2))
+        _ (set! (.. world -scale -x) 1)
+        _ (set! (.. world -scale -y) 1)
+        edge-render-info (render-edges! detail-layer @layout-by-id* links dark? normalized-view-mode)
         _ (.addChild detail-layer drag-edge-layer)
-        node-render-info (render-nodes! tag-layer detail-layer @layouted-nodes*)
+        node-render-info (render-nodes! tag-layer detail-layer layouted-nodes* normalized-view-mode)
+        _ ((:sync! node-render-info) world width height nil)
         all-node-index* (atom (index-layouted-nodes @layouted-nodes*))
         tag-node-index* (atom (index-layouted-nodes (filter #(= "tag" (:kind %)) @layouted-nodes*)))
         neighbor-map (build-neighbor-map links)
-        large-graph? (and (= normalized-view-mode :tags-and-objects)
-                          (> (count @layouted-nodes*) 2800))
+        large-graph? (>= (count @layouted-nodes*) logic/large-graph-fast-layout-threshold)
         label-candidate-ids (vec (map :id (build-label-candidates
                                            @layouted-nodes*
                                            normalized-view-mode
@@ -591,7 +691,7 @@
                                             (:weights session))]
                              (reset! drag-session* (assoc session :positions positions))
                              (doseq [[node-id {:keys [x y]}] positions]
-                               (when-let [sprite (get (:sprites node-render-info) node-id)]
+                               (when-let [sprite (rendered-sprite node-render-info node-id)]
                                  (set! (.-x sprite) x)
                                  (set! (.-y sprite) y)))
                              (let [preview-layout-by-id (logic/merge-node-positions
@@ -601,7 +701,8 @@
                                (draw-edges! (:graphics edge-render-info)
                                             preview-layout-by-id
                                             links
-                                            dark?)
+                                            dark?
+                                            normalized-view-mode)
                                (draw-drag-neighbor-edges! drag-edge-layer
                                                           preview-layout-by-id
                                                           (get neighbor-map root-id)
@@ -624,7 +725,8 @@
                               (draw-edges! (:graphics edge-render-info)
                                            @layout-by-id*
                                            links
-                                           dark?)
+                                           dark?
+                                           normalized-view-mode)
                               (reset! preview-layout-by-id* nil)
                               (.clear drag-edge-layer)
                               (reset! drag-session* nil)
@@ -641,24 +743,28 @@
                         (set! (.-visible layer) (> next 0.01))))
         animate-layer (fn []
                         (ticker-step detail-layer detail-target-alpha)
-                        (when-let [label-layer (:container label-manager)]
-                          (let [{:keys [target-alpha update? hovered-only?]}
-                                (logic/label-render-state
+                        (let [dirty? @transform-dirty?]
+                          (when dirty?
+                            ((:sync! node-render-info) world width height @hovered-node-id*))
+                          (when-let [label-layer (:container label-manager)]
+                            (let [{:keys [target-alpha update? hovered-only?]}
+                                  (logic/label-render-state
+                                   @hovered-node-id*
+                                   @visibility-state*
+                                   (.-alpha label-layer))]
+                              (ticker-step label-layer target-alpha)
+                              (when (and dirty? update?)
+                                ((:update! label-manager)
+                                 world
+                                 width
+                                 height
                                  @hovered-node-id*
-                                 @visibility-state*
-                                 (.-alpha label-layer))]
-                            (ticker-step label-layer target-alpha)
-                            (when (and @transform-dirty? update?)
-                              ((:update! label-manager)
-                               world
-                               width
-                               height
-                               @hovered-node-id*
-                               {:node-visible? (if (:detail-expanded? @visibility-state*)
-                                                 (constantly true)
-                                                 #(= "tag" (:kind %)))
-                                :hovered-only? hovered-only?})
-                              (reset! transform-dirty? false)))))
+                                 {:node-visible? (if (:detail-expanded? @visibility-state*)
+                                                   (constantly true)
+                                                   #(= "tag" (:kind %)))
+                                  :hovered-only? hovered-only?}))))
+                          (when dirty?
+                            (reset! transform-dirty? false))))
         update-detail-visibility! (fn [scale]
                                     (let [prev @visibility-state*
                                           next (logic/next-visibility-state prev scale thresholds)]
@@ -686,16 +792,16 @@
                         :on-node-drag apply-node-drag!
                         :on-node-drag-end commit-node-drag!})
         render-elapsed (- (.now js/performance) render-start)]
-    (set! (.-x world) (/ width 2))
-    (set! (.-y world) (/ height 2))
-    (set! (.. world -scale -x) 1)
-    (set! (.. world -scale -y) 1)
     (.add (.-ticker app) animate-layer)
     (mark-transform!)
     (update-detail-visibility! 1)
     (when (fn? on-rendered)
       (on-rendered {:render-ms render-elapsed
                     :drawn-nodes (count @layouted-nodes*)
+                    :visible-nodes (let [drawn-node-count (:drawn-node-count node-render-info)]
+                                     (if (number? drawn-node-count)
+                                       drawn-node-count
+                                       @drawn-node-count))
                     :drawn-links (:drawn-links edge-render-info)
                     :auto-collapse? large-graph?}))
     {:app app
