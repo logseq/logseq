@@ -207,6 +207,8 @@ Sync commands:
 - `sync stop --graph <name>` - stop db-sync client on a graph daemon
 - `sync upload --graph <name>` - upload local graph snapshot to remote
 - `sync download --graph <name> [--progress true|false] [--e2ee-password <password>]` - download remote graph `<name>` into a same-name local graph directory
+- `sync asset download --graph <name> --id <asset-db-id>` - request one remote asset download by the `ID` shown by `list asset`
+- `sync asset download --graph <name> --uuid <asset-uuid>` - request one remote asset download by asset block UUID
 - `sync remote-graphs [--graph <name>]` - list remote graphs visible to the current login context
 - `sync ensure-keys [--graph <name>]` - ensure user RSA keys for sync/e2ee
 - `sync grant-access --graph <name> --graph-id <uuid> --email <email>` - grant encrypted graph access to a user
@@ -244,6 +246,17 @@ Sync download behavior:
 - If the target graph DB is not empty at download time, the CLI returns `graph-db-not-empty` and aborts before import.
 - For e2ee remote graphs, provide `--e2ee-password` on `sync download` (or persist once via `sync start --e2ee-password`).
 - If e2ee password is required but missing, `sync start`, `sync download`, and `sync status` return `e2ee-password-not-found` with a hint to provide `--e2ee-password`.
+
+Sync asset download behavior:
+- `sync asset download` requires `--graph` and exactly one of `--id` or `--uuid`.
+- `--id` selects the asset node by the Datascript db/id shown as `ID` in `list asset` human output.
+- `--uuid` selects the asset block UUID for scripts that already track UUIDs.
+- The command requires sync to already be running for the graph. If the graph's sync client is not active, it returns `sync-not-started` with a hint to run `logseq sync start --graph <name>` first.
+- The command uses the existing worker asset request API (`:thread-api/db-sync-request-asset-download`) and returns immediately after the worker accepts the enqueue request.
+- Before enqueueing, the CLI checks the local `assets/<asset-uuid>.<asset-type>` file. If the file exists and its checksum matches asset metadata, the command reports `download-requested? false` and skips the request.
+- If the local file exists but its checksum mismatches, the command reports `checksum-status mismatch`, prints a mismatch hint in human output, and requests a re-download.
+- The first version does not accept `--e2ee-password`; persist E2EE password state with existing `sync start` or `sync download` flows before requesting asset download.
+- Structured output includes asset identity and status fields such as `asset-id`, `asset-uuid`, `asset-type`, `download-requested?`, `checksum-status`, `skipped-reason`, and `hint` when applicable. It intentionally omits local filesystem paths.
 
 Sync config persistence:
 - `sync config set/unset` writes non-auth sync config to the CLI config file selected by `--config`.

@@ -44,12 +44,14 @@
 (rum/defc home-button
   < {:key-fn #(identity "home-button")}
   []
-  (shui/button-ghost-icon :home
-                          {:title (t :nav/home)
-                           :on-click #(do
-                                        (when (mobile-util/native-iphone?)
-                                          (state/set-left-sidebar-open! false))
-                                        (route-handler/redirect-to-home!))}))
+  (ui/tooltip
+   (shui/button-ghost-icon :home
+                           {:on-click #(do
+                                         (when (mobile-util/native-iphone?)
+                                           (state/set-left-sidebar-open! false))
+                                         (route-handler/redirect-to-home!))})
+   (t :nav/home)
+   {:trigger-props {:as-child true}}))
 
 (rum/defcs rtc-collaborators <
   rum/reactive

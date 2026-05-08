@@ -2304,6 +2304,48 @@
       (is (true? (:ok? enabled)))
       (is (= true (get-in enabled [:options :progress])))))
 
+  (testing "sync asset download parses db id selector"
+    (let [result (commands/parse-args ["sync" "asset" "download" "--graph" "demo" "--id" "123"])]
+      (is (true? (:ok? result)))
+      (is (= :sync-asset-download (:command result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= 123 (get-in result [:options :id])))))
+
+  (testing "sync asset download parses uuid selector"
+    (let [asset-uuid "11111111-1111-1111-1111-111111111111"
+          result (commands/parse-args ["sync" "asset" "download" "--graph" "demo" "--uuid" asset-uuid])]
+      (is (true? (:ok? result)))
+      (is (= :sync-asset-download (:command result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= asset-uuid (get-in result [:options :uuid])))))
+
+  (testing "sync asset download rejects invalid uuid selector"
+    (let [result (commands/parse-args ["sync" "asset" "download" "--graph" "demo" "--uuid" "asset-uuid"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "sync asset download can use current graph"
+    (let [parsed (commands/parse-args ["sync" "asset" "download" "--id" "123"])
+          result (when (:ok? parsed)
+                   (commands/build-action parsed {:graph "demo"}))]
+      (is (true? (:ok? parsed)))
+      (is (true? (:ok? result)))
+      (is (= {:type :sync-asset-download
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :id 123}
+             (:action result)))))
+
+  (testing "sync asset download requires one selector"
+    (let [missing-selector (commands/parse-args ["sync" "asset" "download" "--graph" "demo"])
+          conflicting-selectors (commands/parse-args ["sync" "asset" "download" "--graph" "demo"
+                                                      "--id" "123"
+                                                      "--uuid" "11111111-1111-1111-1111-111111111111"])]
+      (is (false? (:ok? missing-selector)))
+      (is (= :invalid-options (get-in missing-selector [:error :code])))
+      (is (false? (:ok? conflicting-selectors)))
+      (is (= :invalid-options (get-in conflicting-selectors [:error :code])))))
+
   (testing "sync ensure-keys accepts e2ee-password option"
     (let [result (commands/parse-args ["sync" "ensure-keys" "--e2ee-password" "pw"])]
       (is (true? (:ok? result)))

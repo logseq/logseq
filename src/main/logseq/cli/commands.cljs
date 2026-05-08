@@ -357,9 +357,14 @@
          (not (seq (:graph opts))))
     (missing-graph-result summary)
 
-    (and (= command :sync-download)
+    (and (= :sync-download command)
          (not (seq (:graph opts))))
     (missing-graph-result summary)
+
+    (and (= command :sync-asset-download)
+         (not= 1 (count (filter true? [(some? (:id opts))
+                                       (boolean (seq (some-> (:uuid opts) string/trim)))]))))
+    (command-core/invalid-options-result summary "exactly one of --id or --uuid is required")
 
     (and (= command :completion)
          completion-shell-error)
@@ -650,7 +655,7 @@
         (doctor-command/build-action options)
 
         (:sync-status :sync-start :sync-stop :sync-upload :sync-download
-         :sync-remote-graphs :sync-ensure-keys :sync-grant-access
+         :sync-asset-download :sync-remote-graphs :sync-ensure-keys :sync-grant-access
          :sync-config-set :sync-config-get :sync-config-unset)
         (sync-command/build-action command options args repo)
 
@@ -740,7 +745,7 @@
                          :server-stop (server-command/execute-stop action config)
                          :server-restart (server-command/execute-restart action config)
                          (:sync-status :sync-start :sync-stop :sync-upload :sync-download
-                          :sync-remote-graphs :sync-ensure-keys :sync-grant-access
+                          :sync-asset-download :sync-remote-graphs :sync-ensure-keys :sync-grant-access
                           :sync-config-set :sync-config-get :sync-config-unset)
                          (sync-command/execute action config)
                          (:login :logout)

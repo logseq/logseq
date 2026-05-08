@@ -330,6 +330,13 @@
                             :base base
                             :graph-id graph-id})))))
 
+(defn log-request-asset-download-failed!
+  [repo asset-uuid error]
+  (log/error :db-sync/request-asset-download-failed
+             {:repo repo
+              :asset-uuid asset-uuid
+              :error error}))
+
 (defn request-asset-download!
   [repo asset-uuid {:keys [current-client-f enqueue-asset-task-f broadcast-rtc-state!-f]}]
   (when-let [client (current-client-f repo)]
@@ -355,4 +362,5 @@
                               (broadcast-rtc-state!-f client))]
                     nil)
                   (p/catch (fn [e]
-                             (js/console.error e)))))))))))
+                             (log-request-asset-download-failed! repo asset-uuid e)
+                             (p/rejected e)))))))))))

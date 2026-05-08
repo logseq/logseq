@@ -950,7 +950,72 @@
                                         :context {:repo "demo-graph"}}
                                        {:output-format nil})]
       (is (string/includes? result "Sync download"))
-      (is (string/includes? result "demo-graph")))))
+      (is (string/includes? result "demo-graph"))))
+
+  (testing "sync asset download renders requested output"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-asset-download
+                                        :context {:repo "demo-graph"}
+                                        :data {:asset-id 123
+                                               :asset-uuid "asset-uuid"
+                                               :asset-type "png"
+                                               :download-requested? true
+                                               :checksum-status :missing}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Sync asset download requested"))
+      (is (string/includes? result "asset-uuid"))
+      (is (string/includes? result "demo-graph"))
+      (is (not (string/includes? result "local-path")))))
+
+  (testing "sync asset download renders checksum mismatch hint"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-asset-download
+                                        :context {:repo "demo-graph"}
+                                        :data {:asset-id 123
+                                               :asset-uuid "asset-uuid"
+                                               :asset-type "png"
+                                               :download-requested? true
+                                               :checksum-status :mismatch
+                                               :hint "Local asset checksum mismatched; requested re-download."}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Local asset checksum mismatched"))
+      (is (string/includes? result "asset-uuid"))
+      (is (not (string/includes? result "local-path")))))
+
+  (testing "sync asset download renders skipped output"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-asset-download
+                                        :context {:repo "demo-graph"}
+                                        :data {:asset-id 123
+                                               :asset-uuid "asset-uuid"
+                                               :asset-type "png"
+                                               :download-requested? false
+                                               :checksum-status :match
+                                               :skipped-reason :already-downloaded}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Sync asset already downloaded"))
+      (is (string/includes? result "asset-uuid"))
+      (is (not (string/includes? result "local-path")))))
+
+  (testing "sync asset download structured output keeps raw data"
+    (let [data {:asset-id 123
+                :asset-uuid "asset-uuid"
+                :asset-type "png"
+                :download-requested? false
+                :checksum-status :match
+                :skipped-reason :already-downloaded}
+          json-result (format/format-result {:status :ok
+                                             :command :sync-asset-download
+                                             :data data}
+                                            {:output-format :json})
+          edn-result (format/format-result {:status :ok
+                                            :command :sync-asset-download
+                                            :data data}
+                                           {:output-format :edn})]
+      (is (string/includes? json-result "download-requested?"))
+      (is (string/includes? edn-result ":download-requested?"))
+      (is (not (string/includes? json-result "local-path")))
+      (is (not (string/includes? edn-result "local-path"))))))
 
 (deftest test-human-output-sync-config-get-ws-url
   (testing "sync config get ws-url renders value in human output"
