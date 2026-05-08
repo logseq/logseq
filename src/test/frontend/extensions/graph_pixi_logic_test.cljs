@@ -116,13 +116,15 @@
     (is (= 160 (logic/layout-tick-count 80 :all-pages))))
   (testing "Medium all-pages graphs avoid the old fixed 220 tick cost"
     (is (= 90 (logic/layout-tick-count 643 :all-pages))))
+  (testing "Large tags-and-objects graphs keep d3 force under the first-render budget"
+    (is (= 24 (logic/layout-tick-count 3887 :tags-and-objects))))
   (testing "Large graphs stay bounded"
     (is (= 70 (logic/layout-tick-count 2500 :all-pages)))))
 
 (deftest layout-mode-switches-to-fast-layout-for-large-graphs
   (is (= :force (logic/layout-mode 2500 :all-pages)))
   (is (= :force (logic/layout-mode 2200 :tags-and-objects)))
-  (is (= :fast (logic/layout-mode 3887 :tags-and-objects)))
+  (is (= :force (logic/layout-mode 3887 :tags-and-objects)))
   (is (= :fast (logic/layout-mode 50000 :all-pages))))
 
 (deftest draw-edge-limit-is-bounded-for-large-graphs
@@ -207,7 +209,7 @@
                 sample))
     (is (< elapsed 1000))))
 
-(deftest layout-nodes-medium-tags-and-objects-uses-fast-clustered-path
+(deftest layout-nodes-medium-tags-and-objects-uses-bounded-d3-force
   (let [tag-count 12
         object-count 3875
         tags (mapv (fn [idx]

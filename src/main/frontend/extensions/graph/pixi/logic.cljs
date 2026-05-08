@@ -207,8 +207,6 @@
 
 (def large-graph-fast-layout-threshold 10000)
 
-(def tags-and-objects-fast-layout-threshold 2600)
-
 (def large-graph-draw-edge-limit 8000)
 
 (def large-graph-render-node-limit 12000)
@@ -216,14 +214,10 @@
 (def regular-graph-draw-edge-limit 28000)
 
 (defn layout-mode
-  [node-count view-mode]
-  (let [view-mode (normalize-view-mode view-mode)
-        threshold (if (= view-mode :tags-and-objects)
-                    tags-and-objects-fast-layout-threshold
-                    large-graph-fast-layout-threshold)]
-    (if (>= node-count threshold)
-      :fast
-      :force)))
+  [node-count _view-mode]
+  (if (>= node-count large-graph-fast-layout-threshold)
+    :fast
+    :force))
 
 (defn draw-edge-limit
   [node-count link-count _view-mode]
@@ -263,6 +257,10 @@
 
       (<= node-count 900)
       (if (= view-mode :tags-and-objects) 110 90)
+
+      (and (= view-mode :tags-and-objects)
+           (< node-count large-graph-fast-layout-threshold))
+      24
 
       :else
       (if (= view-mode :tags-and-objects) 90 70))))
