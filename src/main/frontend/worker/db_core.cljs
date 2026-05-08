@@ -725,7 +725,10 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [block-id (:block/uuid (d/entity @conn id))]
       (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
-           (map (fn [b] (d/pull @conn '[*] (:db/id b))))))))
+           (map (fn [b]
+                  (-> (into {} b)
+                      (assoc :db/id (:db/id b)
+                             :block/title (:block/title b)))))))))
 
 (def-thread-api :thread-api/set-context
   [context]

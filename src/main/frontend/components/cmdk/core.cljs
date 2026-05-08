@@ -362,7 +362,7 @@
               :header (when (:block/parent entity)
                         (block/breadcrumb {:disable-preview? true
                                            :search? true} repo (:block/uuid page)
-                                          {:disabled? true}))
+                                          {:disabled? true :variant :search-result}))
               :result-type :page
               :current-page? current-page?
               :alias (:alias page)
@@ -378,7 +378,7 @@
      :text (highlight-content-query text input)
      :header (block/breadcrumb {:disable-preview? true
                                 :search? true} repo id
-                               {:disabled? true})
+                               {:disabled? true :variant :search-result})
      :result-type :block
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id current-page-uuid))
@@ -515,7 +515,8 @@
                              {:icon "node"
                               :icon-theme :gray
                               :text (highlight-content-query (:block/title block) @!input)
-                              :header (block/breadcrumb {:search? true} repo id {:disabled? true})
+                              :header (block/breadcrumb {:search? true} repo id
+                                                        {:disabled? true :variant :search-result})
                               :result-type (if (:page? block) :page :block)
                               :current-page? true
                               :source-block block})) blocks)]

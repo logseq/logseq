@@ -1,6 +1,7 @@
 (ns mobile.search
   "Mobile search"
   (:require [clojure.string :as string]
+            [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.db :as db]
             [frontend.search :as search]
@@ -33,6 +34,36 @@
                      :else nil)]
     (:block/title page-block)))
 
+(defn- block->nearest-parent-text
+  "Returns the text of the nearest non-page parent block, or nil."
+  [block]
+  (let [parent (:block/parent block)
+        parent-entity (cond
+                        (map? parent) parent
+                        (number? parent) (db/entity parent)
+                        :else nil)]
+    (when (and parent-entity (not (:block/name parent-entity)))
+      (:text (breadcrumb-model/block->breadcrumb-segment parent-entity)))))
+
+(def ^:private native-subtitle-max-length 96)
+
+(defn- build-native-subtitle
+  "Builds a subtitle string of the form 'Page' or 'Page / Parent' for native search.
+   Safely truncated to native-subtitle-max-length."
+  [block]
+  (let [page-name (block->page-name block)
+        parent-text (block->nearest-parent-text block)
+        subtitle (cond
+                   (and (not (string/blank? page-name))
+                        (not (string/blank? parent-text)))
+                   (str page-name " / " parent-text)
+                   (not (string/blank? page-name)) page-name
+                   :else parent-text)]
+    (when-not (string/blank? subtitle)
+      (if (> (count subtitle) native-subtitle-max-length)
+        (str (subs subtitle 0 native-subtitle-max-length) "…")
+        subtitle))))
+
 (defn safe-truncate [s]
   (if (<= (count s) 256)
     s
@@ -43,7 +74,7 @@
   (let [block (:source-block item)
         id (:block/uuid block)
         title (some-> block :block.temp/original-title string/trim)
-        subtitle (some-> block block->page-name string/trim)]
+        subtitle (build-native-subtitle block)]
     (when (and id (not (string/blank? title)))
       (let [short-title (when title (safe-truncate title))]
         {:id (str id)
