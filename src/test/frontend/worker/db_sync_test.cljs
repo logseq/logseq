@@ -510,7 +510,8 @@
                 :ws-state (atom :open)}
         broadcasts (atom [])]
     (with-redefs [shared-service/broadcast-to-clients! (fn [topic payload]
-                                                         (swap! broadcasts conj {:topic topic :payload payload}))]
+                                                         (swap! broadcasts conj {:topic topic :payload payload}))
+                  db-sync/status (constantly {})]
       (#'db-sync/update-online-users! client [{:user-id "u1" :username "Alice"}])
       (#'db-sync/update-online-users! client [{:user-id "u1" :username "Alice"}])
       (is (= 1 (count @broadcasts)))
@@ -774,7 +775,8 @@
                   :inflight (atom [])
                   :online-users (atom [])
                   :ws-state (atom :open)}]
-      (with-redefs [client-op/get-local-tx (constantly 0)]
+      (with-redefs [client-op/get-local-tx (constantly 0)
+                    sync-handle-message/sync-counts (constantly {})]
         (with-redefs [sync-log-state/rtc-log (fn [type payload]
                                                (reset! *captured {:type type
                                                                   :payload payload}))]
@@ -4880,6 +4882,55 @@
                        (is (= [{:asset-uuid "title-1" :asset-type "txt"}] @download-calls))
                        (is (= "rehydrated-title" (:block/title block))))
                      (p/finally done))))))))
+
+(deftest rehydrate-large-title-tempid-test
+  (testing "rehydrate resolves remote tx tempids to the applied entity"
+    (async done
+           (let [conn (db-test/create-conn-with-blocks
+                       {:pages-and-blocks
+                        [{:page {:block/title "tempid-rehydrate-page"}}]})
+                 page (db-test/find-page-by-title @conn "tempid-rehydrate-page")
+                 page-id (:db/id page)
+                 block-uuid (random-uuid)
+                 tempid (str block-uuid)
+                 obj {:asset-uuid "title-tempid" :asset-type "txt"}
+                 tx-data [[:db/add tempid :block/uuid block-uuid]
+                          [:db/add tempid :block/title ""]
+                          [:db/add tempid :block/page page-id]
+                          [:db/add tempid :block/parent page-id]
+                          [:db/add tempid :block/order "a0"]
+                          [:db/add tempid :block/created-at 1]
+                          [:db/add tempid :block/updated-at 1]
+                          [:db/add tempid :logseq.property.sync/large-title-object obj]]
+                 download-calls (atom [])
+                 download-fn (fn [_repo _graph-id obj* _aes-key]
+                               (swap! download-calls conj obj*)
+                               (p/resolved "rehydrated tempid title"))]
+             (with-datascript-conns conn nil
+               (fn []
+                 (d/transact! conn tx-data)
+                 (let [block-id (:db/id (d/entity @conn [:block/uuid block-uuid]))]
+                   (is (int? block-id))
+                   (-> (p/let [_ (sync-large-title/rehydrate-large-titles!
+                                  test-repo
+                                  {:tx-data tx-data
+                                   :conn conn
+                                   :graph-id "graph-1"
+                                   :download-fn download-fn
+                                   :aes-key nil
+                                   :get-conn-f worker-state/get-datascript-conn
+                                   :graph-e2ee?-f sync-crypt/graph-e2ee?
+                                   :ensure-graph-aes-key-f sync-crypt/<ensure-graph-aes-key
+                                   :fail-fast-f db-sync/fail-fast})
+                               block (d/entity @conn [:block/uuid block-uuid])
+                               tempid-ent (d/entity @conn tempid)]
+                         (is (= [obj] @download-calls))
+                         (is (= block-id (:db/id block)))
+                         (is (= "rehydrated tempid title" (:block/title block)))
+                         (is (nil? tempid-ent)))
+                       (p/catch (fn [e]
+                                  (is false (str e))))
+                       (p/finally done)))))))))
 
 (defn- apply-template-to-empty-target!
   [conn template-root-uuid empty-target-uuid]
