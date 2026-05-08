@@ -207,6 +207,8 @@
 
 (def large-graph-fast-layout-threshold 10000)
 
+(def tags-and-objects-fast-layout-threshold 2600)
+
 (def large-graph-draw-edge-limit 8000)
 
 (def large-graph-render-node-limit 12000)
@@ -214,10 +216,14 @@
 (def regular-graph-draw-edge-limit 28000)
 
 (defn layout-mode
-  [node-count _view-mode]
-  (if (>= node-count large-graph-fast-layout-threshold)
-    :fast
-    :force))
+  [node-count view-mode]
+  (let [view-mode (normalize-view-mode view-mode)
+        threshold (if (= view-mode :tags-and-objects)
+                    tags-and-objects-fast-layout-threshold
+                    large-graph-fast-layout-threshold)]
+    (if (>= node-count threshold)
+      :fast
+      :force)))
 
 (defn draw-edge-limit
   [node-count link-count _view-mode]
@@ -261,7 +267,7 @@
       :else
       (if (= view-mode :tags-and-objects) 90 70))))
 
-(defn- fast-layout-nodes
+(defn- phyllotaxis-layout-nodes
   [nodes degree dark?]
   (let [golden-angle (* js/Math.PI (- 3 (js/Math.sqrt 5)))
         spacing 18
@@ -283,6 +289,62 @@
               (decorate-node node degree dark? x y))))
          vec)))
 
+(defn- links-by-object-id
+  [links]
+  (reduce
+   (fn [m {:keys [source target]}]
+     (update m source (fnil conj []) target))
+   {}
+   links))
+
+(defn- clustered-tags-layout-nodes
+  [nodes links degree dark?]
+  (let [tag-ids (->> nodes
+                     (filter #(= "tag" (:kind %)))
+                     (map :id)
+                     set)
+        tags (filter #(contains? tag-ids (:id %)) nodes)
+        objects (remove #(contains? tag-ids (:id %)) nodes)
+        object-links (links-by-object-id links)
+        tag-count (max 1 (count tags))
+        cluster-radius (max 360 (* 72 (js/Math.sqrt tag-count)))
+        golden-angle (* js/Math.PI (- 3 (js/Math.sqrt 5)))
+        tag-position-by-id (into {}
+                                 (map-indexed
+                                  (fn [idx tag]
+                                    (let [angle (/ (* idx 2 js/Math.PI) tag-count)
+                                          x (* cluster-radius (js/Math.cos angle))
+                                          y (* cluster-radius (js/Math.sin angle))]
+                                      [(:id tag) [x y]])))
+                                 tags)
+        counters* (atom {})]
+    (vec
+     (concat
+      (map (fn [tag]
+             (let [[x y] (get tag-position-by-id (:id tag) [0 0])]
+               (decorate-node tag degree dark? x y)))
+           tags)
+      (map-indexed
+       (fn [idx object]
+         (let [linked-tag-id (some tag-ids (get object-links (:id object)))
+               linked-tag-id (or linked-tag-id (first tag-ids))
+               cluster-idx (get @counters* linked-tag-id 0)
+               _ (swap! counters* update linked-tag-id (fnil inc 0))
+               [cx cy] (get tag-position-by-id linked-tag-id [0 0])
+               angle (+ (* idx 0.11) (* cluster-idx golden-angle))
+               radius (+ 58 (* 10 (js/Math.sqrt (inc cluster-idx))))
+               x (+ cx (* radius (js/Math.cos angle)))
+               y (+ cy (* radius (js/Math.sin angle)))]
+           (decorate-node object degree dark? x y)))
+       objects)))))
+
+(defn- fast-layout-nodes
+  [nodes links view-mode degree dark?]
+  (if (and (= view-mode :tags-and-objects)
+           (some #(= "tag" (:kind %)) nodes))
+    (clustered-tags-layout-nodes nodes links degree dark?)
+    (phyllotaxis-layout-nodes nodes degree dark?)))
+
 (defn layout-nodes
   [nodes links view-mode dark?]
   (let [view-mode (normalize-view-mode view-mode)
@@ -290,34 +352,33 @@
         links (keep-links-with-nodes links node-id-set)
         degree (build-degree-map links)]
     (if (= :fast (layout-mode (count nodes) view-mode))
-      (fast-layout-nodes nodes degree dark?)
-      (let [
-        simulation-nodes (->> nodes
-                              (map-indexed #(simulation-node %2 degree %1))
-                              (into-array))
-        simulation-links (->> links
-                              (map simulation-link)
-                              (into-array))
-        link-force (-> (d3-force/forceLink simulation-links)
-                       (.id (fn [^js node] (.-id node)))
-                       (.distance (link-distance view-mode))
-                       (.strength 0.82))
-        collide-force (-> (d3-force/forceCollide)
-                          (.radius (fn [^js node]
-                                     (+ 10 (.-radius node))))
-                          (.strength 0.86)
-                          (.iterations 2))
-        y-force (d3-force/forceY 0)
-        _ (.strength y-force (y-strength view-mode))
+      (fast-layout-nodes nodes links view-mode degree dark?)
+      (let [simulation-nodes (->> nodes
+                                  (map-indexed #(simulation-node %2 degree %1))
+                                  (into-array))
+            simulation-links (->> links
+                                  (map simulation-link)
+                                  (into-array))
+            link-force (-> (d3-force/forceLink simulation-links)
+                           (.id (fn [^js node] (.-id node)))
+                           (.distance (link-distance view-mode))
+                           (.strength 0.82))
+            collide-force (-> (d3-force/forceCollide)
+                              (.radius (fn [^js node]
+                                         (+ 10 (.-radius node))))
+                              (.strength 0.86)
+                              (.iterations 2))
+            y-force (d3-force/forceY 0)
+            _ (.strength y-force (y-strength view-mode))
             simulation (-> (d3-force/forceSimulation simulation-nodes)
-                       (.force "link" link-force)
-                       (.force "charge" (-> (d3-force/forceManyBody)
-                                             (.strength (charge-strength view-mode))
-                                             (.distanceMax 420)))
-                       (.force "center" (d3-force/forceCenter 0 0))
-                       (.force "collision" collide-force)
-                       (.force "y" y-force)
-                       (.stop))
+                           (.force "link" link-force)
+                           (.force "charge" (-> (d3-force/forceManyBody)
+                                                 (.strength (charge-strength view-mode))
+                                                 (.distanceMax 420)))
+                           (.force "center" (d3-force/forceCenter 0 0))
+                           (.force "collision" collide-force)
+                           (.force "y" y-force)
+                           (.stop))
             ticks (layout-tick-count (count nodes) view-mode)]
         (dotimes [_ ticks]
           (.tick simulation))

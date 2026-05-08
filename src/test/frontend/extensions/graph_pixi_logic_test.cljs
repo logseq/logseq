@@ -121,6 +121,8 @@
 
 (deftest layout-mode-switches-to-fast-layout-for-large-graphs
   (is (= :force (logic/layout-mode 2500 :all-pages)))
+  (is (= :force (logic/layout-mode 2200 :tags-and-objects)))
+  (is (= :fast (logic/layout-mode 3887 :tags-and-objects)))
   (is (= :fast (logic/layout-mode 50000 :all-pages))))
 
 (deftest draw-edge-limit-is-bounded-for-large-graphs
@@ -204,3 +206,36 @@
                       (number? (:color-int %)))
                 sample))
     (is (< elapsed 1000))))
+
+(deftest layout-nodes-medium-tags-and-objects-uses-fast-clustered-path
+  (let [tag-count 12
+        object-count 3875
+        tags (mapv (fn [idx]
+                     {:id (str "tag-" idx)
+                      :kind "tag"
+                      :label (str "Tag " idx)})
+                   (range tag-count))
+        objects (mapv (fn [idx]
+                        {:id (str "obj-" idx)
+                         :kind "object"
+                         :label (str "Object " idx)})
+                      (range object-count))
+        nodes (into tags objects)
+        links (mapv (fn [idx]
+                      {:source (str "obj-" idx)
+                       :target (str "tag-" (mod idx tag-count))})
+                    (range object-count))
+        start (.now js/performance)
+        layouted (logic/layout-nodes nodes links :tags-and-objects false)
+        elapsed (- (.now js/performance) start)
+        by-id (into {} (map (juxt :id identity) layouted))]
+    (is (= (+ tag-count object-count) (count layouted)))
+    (is (every? #(and (number? (:x %))
+                      (number? (:y %))
+                      (number? (:degree %))
+                      (number? (:radius %))
+                      (number? (:color-int %)))
+                (take 200 layouted)))
+    (is (< elapsed 1000))
+    (is (< (js/Math.abs (:x (get by-id "tag-0"))) 900))
+    (is (< (js/Math.abs (:y (get by-id "tag-0"))) 900))))
