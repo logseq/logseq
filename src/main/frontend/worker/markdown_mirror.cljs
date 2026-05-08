@@ -6,7 +6,9 @@
             [frontend.worker.platform :as platform]
             [lambdaisland.glogi :as log]
             [logseq.cli.common.file :as common-file]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
 
 (defn repo-mirror-dir
@@ -28,6 +30,11 @@
                 (map #(str "LPT" %) (range 1 10)))))
 
 (def ^:private max-file-stem-length 160)
+(def ^:private markdown-block-re #"^(\s*)-\s?(.*)$")
+(def ^:private markdown-property-line-re #"^(\s*)\*\s+[^:\s][^:]*::\s?.*$")
+(def ^:private property-line-re #"^(\s*)[^:\s][^:]*::\s?.*$")
+(def ^:private ref-or-tag-re #"(#?)\[\[([^\[\]]+)\]\]")
+(def ^:private simple-hashtag-re #"(?i)(^|\s)#([^\s#\[\]\(\),.;:'\"`]+)")
 
 (defonce ^:private *repo->enabled? (atom {}))
 (defonce ^:private *repo->queued-page-jobs (atom {}))
@@ -188,14 +195,202 @@
   (when journal-day
     (< 1 (count (d/datoms db :avet :block/journal-day journal-day)))))
 
+(defn- leading-space-count
+  [line]
+  (count (or (second (re-matches #"^(\s*).*$" line)) "")))
+
+(defn- property-line-indent
+  [line]
+  (or (some-> (re-matches markdown-property-line-re line) second count)
+      (some-> (re-matches property-line-re line) second count)))
+
+(defn- property-value-line?
+  [line property-indent]
+  (and (some? property-indent)
+       (not (string/blank? line))
+       (< property-indent (leading-space-count line))))
+
+(defn- content-ref-targets
+  [title]
+  (let [title (or title "")
+        page-ref-targets (keep (fn [[_ prefix page-title]]
+                                 (when-not (common-util/uuid-string? page-title)
+                                   {:title page-title
+                                    :tag? (= "#" prefix)}))
+                               (re-seq ref-or-tag-re title))
+        simple-tag-targets (keep (fn [[_ _ tag-title]]
+                                   (when-not (common-util/uuid-string? tag-title)
+                                     {:title tag-title
+                                      :tag? true}))
+                                 (re-seq simple-hashtag-re title))]
+    (distinct (concat page-ref-targets simple-tag-targets))))
+
+(defn- status-marker
+  [status]
+  (when-let [content (some-> (cond
+                               (keyword? status) (name status)
+                               :else (or (db-property/closed-value-content status)
+                                         (:block/title status)
+                                         (:logseq.property/value status)))
+                             str
+                             string/trim)]
+    (when-not (string/blank? content)
+      (-> content
+          string/upper-case
+          (string/replace #"\s+" "-")))))
+
+(defn- simple-tag-token?
+  [title]
+  (boolean
+   (re-matches #"[^\s#\[\]\(\),.;:'\"`]+" (or title ""))))
+
+(defn- tag-token
+  [tag]
+  (let [title (or (:block/title tag) (:block/name tag))]
+    (when-not (string/blank? title)
+      (if (simple-tag-token? title)
+        (str "#" title)
+        (str "#[[" title "]]")))))
+
+(defn- built-in-tag?
+  [tag]
+  (or (ldb/built-in? tag)
+      (some-> tag :db/ident namespace (= "logseq.class"))))
+
+(defn- mirror-tag-tokens
+  [block]
+  (->> (:block/tags block)
+       (remove built-in-tag?)
+       (keep tag-token)
+       sort
+       vec))
+
+(defn- id-property-line
+  [block-uuid]
+  (str "id:: " block-uuid))
+
+(defn- content-has-status-marker?
+  [content marker]
+  (or (= content marker)
+      (string/starts-with? content (str marker " "))))
+
+(defn- content-tag-titles
+  [content]
+  (->> (content-ref-targets content)
+       (keep (fn [{:keys [title tag?]}]
+               (when tag? (string/lower-case title))))
+       set))
+
+(defn- token-title
+  [token]
+  (if (string/starts-with? token "#[[")
+    (subs token 3 (- (count token) 2))
+    (subs token 1)))
+
+(defn- decorate-block-content
+  [{:keys [tag-tokens] :as block-info} content]
+  (let [content (or content "")
+        status-marker' (:status-marker block-info)
+        content (if (and status-marker'
+                         (not (content-has-status-marker? content status-marker')))
+                  (if (string/blank? content)
+                    status-marker'
+                    (str status-marker' " " content))
+                  content)
+        existing-tag-titles (content-tag-titles content)
+        tag-tokens' (remove (fn [token]
+                              (contains? existing-tag-titles
+                                         (string/lower-case (token-title token))))
+                            tag-tokens)]
+    (if (seq tag-tokens')
+      (str content " " (string/join " " tag-tokens'))
+      content)))
+
+(defn- decorate-block-line
+  [block-info line]
+  (if-let [[_ spaces title] (re-matches markdown-block-re line)]
+    (str spaces "- " (decorate-block-content block-info title))
+    line))
+
+(defn- block-line-info
+  [db block]
+  {:status-marker (when (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
+                    (some-> (:logseq.property/status block) status-marker))
+   :tag-tokens (mirror-tag-tokens block)})
+
+(defn- property-derived-block?
+  [block]
+  (or (:logseq.property/created-from-property block)
+      (:block/closed-value-property block)))
+
+(defn- outline-children
+  [block]
+  (->> (:block/_parent block)
+       (remove property-derived-block?)
+       (sort-by :block/order)))
+
+(defn- page-root-blocks
+  [page]
+  (outline-children page))
+
+(defn- outline-block-and-children
+  [block]
+  (cons block (mapcat outline-block-and-children (outline-children block))))
+
+(defn- rendered-block-line-infos
+  [db page]
+  (->> (mapcat outline-block-and-children (page-root-blocks page))
+       (map (fn [block]
+              (block-line-info db block)))))
+
+(defn- add-page-id-to-rendered-content
+  [db page content]
+  (let [block-line-infos (rendered-block-line-infos db page)]
+    (loop [[line & more] (string/split-lines (or content ""))
+           [block-line-info' & more-block-line-infos] block-line-infos
+           lines [(id-property-line (:block/uuid page))]
+           seen-block? false
+           property-indent nil]
+      (if (nil? line)
+        (string/join "\n" lines)
+        (if (property-value-line? line property-indent)
+          (recur more
+                 (cons block-line-info' more-block-line-infos)
+                 (conj lines line)
+                 seen-block?
+                 property-indent)
+          (if (re-matches markdown-block-re line)
+            (let [lines' (cond-> lines
+                           (not seen-block?) (conj "")
+                           true (conj (decorate-block-line block-line-info' line)))]
+              (recur more
+                     more-block-line-infos
+                     lines'
+                     true
+                     nil))
+            (let [property-indent' (property-line-indent line)]
+              (recur more
+                     (cons block-line-info' more-block-line-infos)
+                     (conj lines line)
+                     seen-block?
+                     property-indent'))))))))
+
 (defn- render-page-content
   [db page options]
-  (common-file/block->content
+  (add-page-id-to-rendered-content
    db
-   (:block/uuid page)
-   {:include-page-properties? true}
-   {:export-bullet-indentation (or (:export-bullet-indentation options) "  ")
-    :date-formatter (:date-formatter options)}))
+   page
+   (common-file/block->content
+    db
+    (:block/uuid page)
+    {:include-page-properties? true}
+    {:export-bullet-indentation (or (:export-bullet-indentation options) "  ")
+     :excluded-properties #{:logseq.property/status}
+     :export-properties-as-list-items? true
+     :export-node-property-values-as-page-refs? true
+     :export-default-property-values-as-blocks? true
+     :preserve-block-refs? true
+     :date-formatter (:date-formatter options)})))
 
 (defn- mirrorable-page?
   [page]
