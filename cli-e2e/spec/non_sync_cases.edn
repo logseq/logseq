@@ -394,6 +394,57 @@
      :show ["--page" "--level" "--linked-references"]}},
    :tags [:upsert :show :smoke],
    :extends :non-sync/graph-json-env}
+  {:id "show-page-default-content-json",
+   :setup
+   ["printf '%s' '{:pages-and-blocks [{:page {:block/title \"Foo\"} :blocks [{:block/title \"Foo normal content\"}]}]}' > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "FOO_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Foo\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Hierarchy Bar Page\\\" :block/parent {:db/id $FOO_ID}} :blocks [{:block/title \\\"Bar normal content\\\"}]}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "BAR_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Hierarchy Bar Page\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Hierarchy Baz Page\\\" :block/parent {:db/id $BAR_ID}}}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json show --graph {{graph-arg}} --page Foo --linked-references false"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :root :block/title] "Foo",
+     [:data :root :block/children 0 :block/title] "Foo normal content"},
+    :stdout-not-contains ["Hierarchy Bar Page" "Hierarchy Baz Page"]},
+   :covers
+   {:commands ["graph import" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--input"],
+     :show ["--page" "--linked-references"]}},
+   :tags [:graph :show],
+   :extends :non-sync/graph-json-env}
+  {:id "show-page-hierarchy-json",
+   :setup
+   ["printf '%s' '{:pages-and-blocks [{:page {:block/title \"Foo\"} :blocks [{:block/title \"Foo normal content\"}]}]}' > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "FOO_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Foo\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Hierarchy Bar Page\\\" :block/parent {:db/id $FOO_ID}} :blocks [{:block/title \\\"Bar normal content\\\"}]}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "BAR_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Hierarchy Bar Page\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Hierarchy Baz Page\\\" :block/parent {:db/id $BAR_ID}}}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json show --graph {{graph-arg}} --page Foo --page-hierarchy true --level 3 --linked-references false"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :root :block/title] "Foo",
+     [:data :root :block/children 0 :block/title] "Hierarchy Bar Page",
+     [:data :root :block/children 0 :block/children 0 :block/title] "Hierarchy Baz Page"},
+    :stdout-not-contains ["Foo normal content" "Bar normal content"]},
+   :covers
+   {:commands ["graph import" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--input"],
+     :show ["--page" "--page-hierarchy" "--level" "--linked-references"]}},
+   :tags [:graph :show],
+   :extends :non-sync/graph-json-env}
   {:id "show-library-page-human",
    :setup
    ["LIB_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Library\"] [?e :logseq.property/built-in? true]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Project Alpha\\\" :block/parent {:db/id $LIB_ID}} :blocks [{:block/title \\\"Project page content\\\"}]}]}\" > {{export-path-arg}}"
