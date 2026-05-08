@@ -1017,6 +1017,9 @@
               [(get node 4)]
               (and (vector? node) (= (first node) "Code"))
               ["`" (second node) "`"]
+              (and (vector? node) (= (first node) "Email"))
+              (let [{:keys [local_part domain]} (second node)]
+                [(str "<" local_part "@" domain ">")])
               (and (vector? node) (= "Macro" (first node)) (= "query" (:name (second node))))
               (:arguments (second node))
               (and (vector? node) (= (first node) "Example"))

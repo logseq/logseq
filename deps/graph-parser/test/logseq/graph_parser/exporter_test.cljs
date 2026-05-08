@@ -208,6 +208,19 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-quote-with-email-address
+  (p/let [file (write-temp-graph-file
+                 "pages/email.md"
+                 "- > \"CachyOS <admin@cachyos.org>\"\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (is (= "\"CachyOS <admin@cachyos.org>\""
+           (:block/title (db-test/find-block-by-content @conn #"CachyOS")))
+        "Email addresses inside quotes are preserved during import")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest update-asset-links-in-block-title
   (are [x y]
        (= y (@#'gp-exporter/update-asset-links-in-block-title (first x) {(second x) "UUID"} (atom {})))

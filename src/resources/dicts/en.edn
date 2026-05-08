@@ -706,6 +706,7 @@
  :graph/name-placeholder "your graph name"
  :graph/node-count (fn [n] (str n " " (if (= 1 n) "node" "nodes")))
  :graph/nodes "Nodes"
+ :graph/open-folder-action "Open graph folder"
  :graph/orphan-pages "Orphan pages"
  :graph/page-count (fn [n] (str n " " (if (= 1 n) "page" "pages")))
  :graph/pause-simulation "Pause simulation"
@@ -1636,6 +1637,11 @@
  :settings.features/home-default-page-update-success "Home default page updated successfully!"
  :settings.features/journals-enable-success "Journals enabled"
  :settings.features/login-prompt "To access new features before anyone else you must be an Open Collective Sponsor or Backer of Logseq and therefore log in first."
+ :settings.features/markdown-mirror "Markdown Mirror"
+ :settings.features/markdown-mirror-desc "Write a derived Markdown copy of edited pages to the graph's mirror/markdown folder. Desktop only."
+ :settings.features/markdown-mirror-regenerate "Regenerate full mirror"
+ :settings.features/markdown-mirror-regenerate-error "Failed to regenerate Markdown Mirror: {1}"
+ :settings.features/markdown-mirror-regenerate-success "Markdown Mirror regenerated"
  :settings.features/page-not-found "The page \"{1}\" doesn't exist yet. Please create that page first, and then try again."
  :settings.features/plugin-system "Plugins"
 
@@ -1724,7 +1730,9 @@
  :storage.recycle/retention-desc "Deleted pages and blocks stay here until restored or automatically garbage collected after 30 days."
  :storage.recycle/title "Recycle"
 
+ :sync/assets-downloading "downloading assets"
  :sync/assets-downloading-count "Downloading assets ({1})"
+ :sync/assets-uploading "uploading assets"
  :sync/assets-uploading-count "Uploading assets ({1})"
  :sync/conflicts-description "These server versions conflicted with local edits. Copy the text you want and edit the block manually."
  :sync/conflicts-title "Sync conflicts"
@@ -1738,6 +1746,7 @@
  :sync/more-debug-info "More debug info"
  :sync/offline "Offline"
  :sync/online "Online"
+ :sync/pending-asset-uploads "pending asset uploads"
  :sync/pending-local-changes "pending local changes"
  :sync/pending-server-changes "pending server changes"
  :sync/show-conflicts "Show sync conflicts"

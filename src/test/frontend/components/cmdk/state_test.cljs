@@ -87,33 +87,43 @@
 
 (deftest cmdk-block-search-options-default-and-nodes
   (testing "default and nodes options keep snippet enabled and include expected base params"
-    (is (= {:limit 100 :dev? false :built-in? true :enable-snippet? true}
+    (is (= {:limit 10 :search-limit 100 :dev? false :built-in? true :enable-snippet? true
+            :include-matched-count? true}
            (state/cmdk-block-search-options {:dev? false})))
-    (is (= {:limit 100 :dev? true :built-in? true :enable-snippet? true}
-           (state/cmdk-block-search-options {:filter-group :nodes :dev? true})))))
+    (is (= {:limit 10 :search-limit 100 :dev? true :built-in? true :enable-snippet? true
+            :include-matched-count? true}
+           (state/cmdk-block-search-options {:filter-group :nodes :dev? true})))
+    (is (= {:limit 100 :search-limit 100 :dev? true :built-in? true :enable-snippet? true
+            :include-matched-count? true}
+           (state/cmdk-block-search-options {:filter-group :nodes :dev? true :expanded? true})))))
 
 (deftest cmdk-block-search-options-code
   (testing "code filter options include larger search limit and code-only flag"
-    (is (= {:limit 100
+    (is (= {:limit 20
             :search-limit 300
             :dev? true
             :built-in? true
             :enable-snippet? true
+            :include-matched-count? true
             :code-only? true}
            (state/cmdk-block-search-options {:filter-group :code :dev? true})))))
 
 (deftest cmdk-block-search-options-current-page-and-move-blocks
   (testing "current-page adds page and move-blocks adds page-only flag"
-    (is (= {:limit 100
+    (is (= {:limit 10
+            :search-limit 100
             :enable-snippet? true
+            :include-matched-count? true
             :page "00000000-0000-0000-0000-000000000111"}
            (state/cmdk-block-search-options {:filter-group :current-page
                                              :dev? false
                                              :page-uuid #uuid "00000000-0000-0000-0000-000000000111"})))
-    (is (= {:limit 100
+    (is (= {:limit 10
+            :search-limit 100
             :dev? true
             :built-in? true
             :enable-snippet? true
+            :include-matched-count? true
             :page-only? true}
            (state/cmdk-block-search-options {:filter-group :nodes
                                              :dev? true

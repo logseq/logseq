@@ -247,6 +247,12 @@
        pid [cmd (mapv #(into [(keyword (first %))]
                              (rest %)) actions)]))))
 
+(defn unregister_plugin_slash_command
+  ([pid]
+   (plugin-handler/unregister-plugin-slash-command pid))
+  ([pid cmd]
+   (plugin-handler/unregister-plugin-slash-command pid cmd)))
+
 (def register_plugin_simple_command
   (fn [pid ^js cmd-action palette?]
     (when-let [[cmd action] (bean/->clj cmd-action)]
@@ -282,21 +288,42 @@
                 (println :shortcut/register-shortcut [mode-id id shortcut-map])
                 (st/register-shortcut! mode-id id shortcut-map)))))))))
 
-(defn unregister_plugin_simple_command
-  [pid]
-  ;; remove simple commands
-  (plugin-handler/unregister-plugin-simple-command pid)
+(defn- plugin-command-id
+  [pid-name key]
+  (keyword (str "plugin." pid-name "/" key)))
 
-  ;; remove palette commands
-  (let [cmds-matched (->> (vals @shortcut-config/*shortcut-cmds)
-                          (filter #(string/includes? (str (:id %)) (str "plugin." pid))))]
-    (when (seq cmds-matched)
-      (doseq [cmd cmds-matched]
-        (palette-handler/unregister (:id cmd))
-        ;; remove keybinding commands
-        (when (seq (:shortcut cmd))
-          (println :shortcut/unregister-shortcut cmd)
-          (st/unregister-shortcut! (:handler-id cmd) (:id cmd)))))))
+(defn- unregister-plugin-command-entry!
+  [id]
+  (palette-handler/unregister id)
+  (when-let [cmd (get @shortcut-config/*shortcut-cmds id)]
+    (when (seq (:shortcut cmd))
+      (println :shortcut/unregister-shortcut cmd)
+      (st/unregister-shortcut! (:handler-id cmd) (:id cmd)))))
+
+(defn unregister_plugin_simple_command
+  ([pid]
+   (let [pid-key (keyword pid)
+         pid-name (name pid-key)
+         command-ids (->> (get-in @state/state [:plugin/simple-commands pid-key])
+                          (keep (fn [[_type {:keys [key]} _action _pid]]
+                                  (when key
+                                    (plugin-command-id pid-name key))))
+                          distinct)]
+     ;; remove simple commands
+     (plugin-handler/unregister-plugin-simple-command pid-key)
+
+     ;; remove palette and keybinding commands
+     (doseq [id command-ids]
+       (unregister-plugin-command-entry! id))))
+  ([pid key]
+   (let [pid-key (keyword pid)
+         pid-name (name pid-key)
+         key (-> key str string/trim (string/replace ":" "-") (string/replace #"^([0-9])" "_$1"))]
+     ;; remove simple command
+     (plugin-handler/unregister-plugin-simple-command pid-key key)
+
+     ;; remove palette and keybinding command
+     (unregister-plugin-command-entry! (plugin-command-id pid-name key)))))
 
 (defn register_search_service
   [pid name ^js opts]

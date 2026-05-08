@@ -12,9 +12,9 @@
             [frontend.handler.notification :as notification]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
+            [logseq.shui.ui :as shui]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
@@ -48,8 +48,9 @@
       [:pre.code (str "ID: " (:db/id result) "\n"
                       pull-data)]
       [:br]
-      (ui/button (t :ui/copy-to-clipboard)
-                 :on-click #(.writeText js/navigator.clipboard pull-data))]
+      (shui/button {:size :sm
+                    :on-click #(.writeText js/navigator.clipboard pull-data)}
+                   (t :ui/copy-to-clipboard))]
      :success
      false)))
 
@@ -62,8 +63,9 @@
     (notification/show!
      [:div.ls-wrap-widen
       ;; Show clipboard at top since content is really long for pages
-      (ui/button (t :ui/copy-to-clipboard)
-                 :on-click #(.writeText js/navigator.clipboard ast-data))
+      (shui/button {:size :sm
+                    :on-click #(.writeText js/navigator.clipboard ast-data)}
+                   (t :ui/copy-to-clipboard))
       [:br]
       [:pre.code ast-data]]
      :success
