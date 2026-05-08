@@ -189,6 +189,21 @@
    {:random-seed "424242",
     :random-page "SyncRandomOpsHome",
     :rounds-per-client "40"}}
+  {:tags [:happy-path :asset-download :a-to-b],
+   :extends :sync/common,
+   :setup
+   ["printf '{{asset-payload}}' > '{{tmp-dir}}/sync-asset-download.txt'"
+    "{{cli-home}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert asset --graph {{graph-arg}} --path '{{tmp-dir}}/sync-asset-download.txt' --content '{{asset-title}}' --target-page Home >/dev/null"],
+   :cmds
+   ["HOME='{{tmp-dir}}/home' python3 '{{repo-root}}/cli-e2e/scripts/sync_asset_download.py' --cli '{{repo-root}}/static/logseq-cli.js' --graph '{{graph}}' --asset-title '{{asset-title}}' --config-b '{{tmp-dir}}/cli-b.edn' --root-dir-b '{{tmp-dir}}/graphs-b'"],
+   :id "sync-asset-download-a-to-b",
+   :graph "sync-e2e-asset-download-a-to-b",
+   :vars
+   {:asset-title "Sync Asset Download Asset"
+    :asset-payload "sync-asset-download-payload"},
+   :covers
+   {:commands ["upsert asset" "query" "sync asset download"],
+    :options {:sync ["--id" "--uuid"]}}}
   {:tags [:stress :offline :bidirectional :random :block-ops],
    :extends :sync/common,
    :setup
