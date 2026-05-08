@@ -1929,12 +1929,32 @@
   background: var(--lx-gray-02, var(--rx-gray-02));
   border-bottom: 1px solid var(--lx-gray-05, var(--rx-gray-05));
   isolation: isolate;
+  /* Isolate the band's layout from siblings: when the rail expands or
+     collapses, the browser can compute layout for the band without
+     reflowing "Recently used" / "Web images" beneath it. This kills the
+     mid-animation overlap glitch where the rail and the section header
+     briefly stomped on each other while neighboring boxes were still
+     resolving their new positions. */
+  contain: layout;
+
+  /* Avatar size variable — drives the avatar's width/height and
+     proportional badge cue. Compact = 20px (identical to the left
+     sidebar's `.page-icon` so the same icon reads the same in both
+     places). Expanded = 56px tile. Animated by transitions on the
+     consuming elements. */
+  --avatar-size: 20px;
+}
+
+.avatar-customize-zone[data-expanded="true"] {
+  --avatar-size: 56px;
 }
 
 /* Gradient lives on a pseudo-element so opacity can crossfade independently
-   of the wrapper's solid base background. transform: translateZ(0) promotes
-   the layer to its own compositor row so the fade can't repaint the
-   sibling sections (Recently used / Web images / Tip) underneath. */
+   of the wrapper's solid base background. translateZ(0) promotes the layer
+   to its own compositor row so the fade composes on the GPU and doesn't
+   repaint the sibling sections (Recently used / Web images / Tip)
+   underneath. Single easing curve shared with the rail-wrap so all band
+   motion reads as one event. */
 .avatar-customize-zone::before {
   content: '';
   position: absolute;
@@ -1945,8 +1965,9 @@
     var(--lx-gray-02, var(--rx-gray-02)) 100%
   );
   opacity: 0;
-  transition: opacity 130ms ease-out;
+  transition: opacity 200ms cubic-bezier(0.32, 0.72, 0, 1);
   pointer-events: none;
+  transform: translateZ(0);
   z-index: -1;
 }
 
@@ -1957,19 +1978,37 @@
 .avatar-customize-zone .cb-content {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 10px;
+  padding: 0;
+  min-height: 32px;
+  transition: padding 200ms cubic-bezier(0.32, 0.72, 0, 1),
+              gap 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.avatar-customize-zone[data-expanded="true"] .cb-content {
   padding: 14px 0;
-  /* Keep alignment fixed to top in both states; CSS handles the meta-vs-
-     rows swap via display, so the avatar doesn't visually drift between
-     center (resting) and flex-start (expanded) on toggle. */
+  gap: 14px;
 }
 
 /* Avatar trigger — the only click target that toggles expand/collapse.
-   Resets the native button chrome so the avatar reads as a plain tile. */
+   Resets the native button chrome so the avatar reads as a plain tile.
+   The trigger animates width/height in lock with --avatar-size so the
+   avatar morphs from 18px (compact banner) to 56px (expanded tile)
+   inside `contain: layout`. */
 .cb-avatar-trigger {
   all: unset;
   cursor: pointer;
   flex-shrink: 0;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  /* Compact state: vertically center the 20px avatar inside the 32px
+     banner row → (32 - 20) / 2 = 6px. In expanded state the cb-content
+     applies its own padding-top, so we drop this margin to 0 to avoid
+     double-spacing. */
+  margin-top: 6px;
+  transition: width 200ms cubic-bezier(0.32, 0.72, 0, 1),
+              height 200ms cubic-bezier(0.32, 0.72, 0, 1),
+              margin-top 200ms cubic-bezier(0.32, 0.72, 0, 1);
 
   &:focus-visible {
     outline: 2px solid var(--lx-accent-09, var(--rx-accent-09));
@@ -1979,6 +2018,15 @@
 
   .preview-avatar {
     position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Override the inline width/height that `(icon ...)` applies via
+     :style, so the rendered avatar fills its CSS-controlled wrapper. */
+  .preview-avatar .ui__avatar {
+    width: 100% !important;
+    height: 100% !important;
   }
 
   .preview-cue {
@@ -1994,9 +2042,15 @@
     background: var(--lx-gray-02, var(--rx-gray-02));
     border: 1px solid var(--lx-gray-05, var(--rx-gray-05));
     color: var(--lx-gray-11, var(--rx-gray-11));
-    transition: background-color 130ms ease-out,
-                border-color 130ms ease-out,
-                color 130ms ease-out;
+    /* Hide the cue in compact state — at 18px the cue would crowd the
+       small avatar and add no information (the "Use icon" CTA on the
+       right is the affordance for compact state). It fades back in as
+       the avatar grows on expand. */
+    opacity: 0;
+    transition: opacity 200ms cubic-bezier(0.32, 0.72, 0, 1),
+                background-color 160ms cubic-bezier(0.32, 0.72, 0, 1),
+                border-color 160ms cubic-bezier(0.32, 0.72, 0, 1),
+                color 160ms cubic-bezier(0.32, 0.72, 0, 1);
   }
 
   &:hover .preview-cue {
@@ -2013,56 +2067,154 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: opacity 120ms ease-out;
+    transition: opacity 160ms cubic-bezier(0.32, 0.72, 0, 1);
   }
 
   .preview-cue-pencil { opacity: 1; }
   .preview-cue-check  { opacity: 0; }
 }
 
+/* Expanded state: drop the compact-state margin-top so the 56px avatar
+   sits at the natural top of `.cb-content` (which already applies its
+   own 14px padding-top). Otherwise the avatar would inherit the 6px
+   compact offset and read as crowding the search bar above. */
+.avatar-customize-zone[data-expanded="true"] .cb-avatar-trigger {
+  margin-top: 0;
+}
+
+/* Compact-state font-size override: the avatar in the resting banner
+   should read identically to the sidebar's `.page-icon` (20×20 / 10px /
+   500), since they show the *same* icon for the *same* page. The icon
+   function inlines a 22px font (and a ~30px tabler icon) when called
+   with `:size 56`, so we override both back down here. Scoped to the
+   resting state so the expanded 56px preview keeps its natural 22px /
+   30px sizes.
+   Selector targets `.ui__avatar > span` instead of `.avatar-fallback`
+   because AvatarFallback in `packages/ui/@/components/ui/avatar.tsx`
+   doesn't yet emit the `avatar-fallback` class in the built bundle.
+   `> span` is unambiguous — AvatarImage renders an <img>, so the only
+   span child is the fallback. */
+.avatar-customize-zone:not([data-expanded="true"]) .cb-avatar-trigger
+.preview-avatar .ui__avatar > span {
+  font-size: 10px !important;
+  font-weight: 500 !important;
+}
+
+.avatar-customize-zone:not([data-expanded="true"]) .cb-avatar-trigger
+.preview-avatar .ui__avatar > span svg {
+  width: 11px !important;
+  height: 11px !important;
+}
+
 .avatar-customize-zone[data-expanded="true"] .preview-cue {
   background: var(--lx-accent-09, var(--rx-accent-09));
   border-color: var(--lx-gray-02, var(--rx-gray-02));
   color: white;
+  opacity: 1;
 }
 
 .avatar-customize-zone[data-expanded="true"] .preview-cue-pencil { opacity: 0; }
 .avatar-customize-zone[data-expanded="true"] .preview-cue-check  { opacity: 1; }
 
-/* The right column hosts both preview-meta (resting) and cb-rows (expanded)
-   stacked. CSS swaps them via display + opacity so we don't conditionally
-   mount/unmount on toggle (mount/unmount kills CSS transitions). */
+/* The right column hosts both .cb-banner (resting) and .cb-rows (expanded)
+   on top of each other. Only the "active" child claims layout space —
+   the other is `position: absolute` so it sits over the active one
+   without contributing to the meta-stage's height, then opacity-fades.
+   The banner's 32px height drives the resting cb-content height; the
+   rows' natural ~56px height drives the expanded one. */
 .avatar-customize-zone .cb-meta-stage {
   position: relative;
   flex: 1;
   min-width: 0;
-  /* Height grows from preview-meta's natural height to cb-rows'. We let
-     content drive the height; the cb-rail's max-height transition handles
-     the visible "growth" of the band. */
 }
 
-/* Resting meta — title + subtitle to the right of the avatar. min-height
-   matches the avatar's 56px tile so the text centers vertically against
-   the avatar via `justify-content: center` — without this the meta sat
-   at the top of the row, visually misaligned with the avatar's
-   midpoint. The expanded state (cb-rows) is naturally taller than the
-   avatar, so it doesn't need the same anchor. */
-.avatar-customize-zone .preview-meta {
+/* Compact banner — resting state. 32px-tall row, the *entire row* is a
+   single click target (`<button>`) that toggles the expanded customize
+   panel. Layout: state-as-label on the left (`Default · Letters,
+   circle`), decorative chevron-down on the right (rotates 180° on
+   expand). Avatar tile is a parallel click target with the same toggle
+   behavior — both routes converge on `aria-expanded`. */
+.avatar-customize-zone .cb-banner {
+  all: unset;
+  cursor: pointer;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 1;
+  min-height: 32px;
+  /* Banner content fades out early in the expand sequence (Linear
+     pattern: right-side fades first, then the rest follows). The 0ms
+     delay on collapse is intentional — content reappears in lock with
+     the avatar shrinking. */
   opacity: 1;
-  transition: opacity 120ms ease-out;
+  transition: opacity 80ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.avatar-customize-zone[data-expanded="true"] .preview-meta {
-  /* Pulled out of flow when expanded so cb-rows takes its place without
-     stacking. opacity → 0 first then display:none kicks in via the
-     transitionend isn't needed here because the stage-stage swap is fast
-     enough that overlapping for 160ms reads as a clean crossfade. */
-  display: none;
+.avatar-customize-zone .cb-banner:focus-visible {
+  outline: 2px solid var(--lx-accent-09, var(--rx-accent-09));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.avatar-customize-zone[data-expanded="true"] .cb-banner {
+  opacity: 0;
+  pointer-events: none;
+  /* Collapse the banner to zero so it doesn't reserve space inside the
+     expanded `.cb-meta-stage`. The cb-rows below take its place. */
+  position: absolute;
+  visibility: hidden;
+}
+
+/* Banner text container: holds scope, separator, descriptor inline.
+   Truncation rules apply here (single line, ellipsis on overflow) so
+   long humanized icon names like "3D cube sphere" degrade gracefully. */
+.avatar-customize-zone .cb-banner .banner-text {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Scope word — "Default" / "Custom" / "From #Class". Higher contrast
+   and medium weight so it reads as the headline of the descriptor. */
+.avatar-customize-zone .cb-banner .banner-scope {
+  color: var(--lx-gray-12, var(--rx-gray-12));
+  font-weight: 500;
+}
+
+/* Middle dot separator between scope and descriptor. Slightly more
+   muted than the descriptor itself so the eye reads it as punctuation,
+   not content. */
+.avatar-customize-zone .cb-banner .banner-sep {
+  color: var(--lx-gray-09, var(--rx-gray-09));
+  margin: 0 6px;
+}
+
+/* Style descriptor — "Letters, circle" / "Briefcase, rounded". Muted
+   regular weight so it sits one rung below the scope word. */
+.avatar-customize-zone .cb-banner .banner-descriptor {
+  color: var(--lx-gray-11, var(--rx-gray-11));
+  font-weight: 400;
+}
+
+/* Chevron — decorative cue that the row expands. Rotates 180° on
+   expand. Not a separate click target; the parent `<button>` owns the
+   action. */
+.avatar-customize-zone .cb-banner .banner-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+  transition: transform 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.avatar-customize-zone[data-expanded="true"] .cb-banner .banner-chevron {
+  transform: rotate(180deg);
 }
 
 .avatar-customize-zone .preview-title {
@@ -2079,20 +2231,31 @@
   color: var(--lx-gray-11, var(--rx-gray-11));
 }
 
-/* Expanded rows — Shape (and future Fallback) stacked to the right of
-   the avatar in a flex column, with each row showing label + dropdown.
-   Hidden in resting state via display:none. */
+/* Expanded rows — Shape + Fallback stacked to the right of the avatar
+   in a flex column. Always rendered; visibility/layout-claim controlled
+   by [data-expanded]. In compact state the rows sit absolutely-
+   positioned (no layout claim) at zero opacity; in expanded state they
+   become flow content and fade in. Crossfades smoothly with .cb-banner
+   on the same spot. */
 .avatar-customize-zone .cb-rows {
-  display: none;
+  display: flex;
   flex-direction: column;
   /* 4px gap × 2× 26px row = 56px total — pixel-perfect match against the
      56px avatar tile to its left, no overflow tail under the avatar. */
   gap: 4px;
   min-width: 0;
+  /* Resting default: out of flow, invisible, late-fade-in stagger */
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms cubic-bezier(0.32, 0.72, 0, 1) 80ms;
 }
 
 .avatar-customize-zone[data-expanded="true"] .cb-rows {
-  display: flex;
+  position: relative;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .avatar-customize-zone .cb-row {
@@ -2114,6 +2277,15 @@
   line-height: 20px;
   color: var(--lx-gray-12, var(--rx-gray-12));
   opacity: 0.7;
+  /* Hard rule: the label is structural — "Shape" / "Fallback" must
+     always display in full. `flex-shrink: 0` keeps it at its natural
+     width regardless of how long the chip's value is, and
+     `white-space: nowrap` belt-and-braces against any future style
+     that would otherwise wrap "Fallback" into "Fall / bac / k" when
+     the chip pushes back. The chip is the one that shrinks/ellipsizes
+     (see `.cb-chip` and `.cb-chip-label` below). */
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* Dropdown chip — Linear/Notion ghost-chip aesthetic. The chip looks like
@@ -2140,6 +2312,13 @@
   color: var(--lx-gray-12, var(--rx-gray-12));
   line-height: 18px;
   transition: background-color 120ms ease-out, border-color 120ms ease-out;
+  /* The chip is the shrinkable side of the row — when an icon name like
+     "Align box bottom left filled" exceeds the available width, the
+     chip's flex `min-width: auto` (default) would resolve to the full
+     min-content of its kids and push the structural label out. Setting
+     `min-width: 0` here lets the inner `.cb-chip-label`'s own
+     `min-width: 0 + ellipsis` actually take effect. */
+  min-width: 0;
 
   &:hover {
     background: var(--lx-gray-02, var(--rx-gray-02));
@@ -2212,9 +2391,14 @@
 
   .cb-chip-label {
     font-weight: 500;
-    /* Cap label width so a long icon name (e.g. "alert-circle-filled")
-       doesn't push the chevron off-edge. */
-    max-width: 96px;
+    /* No fixed max-width — let the chip grow into the available row
+       space (band is ~344px, label "Fallback" + glyph + chevron + gap
+       leave ~210px for the label). `min-width: 0` lets the label
+       actually shrink under a truly long icon name (e.g. "Brand
+       deviantart"); ellipsis then kicks in inside the row's natural
+       constraint, instead of an arbitrary 96px cap that truncated
+       common names like "Briefcase filled". */
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2228,20 +2412,45 @@
 
 /* Reset/Done rail — only shown when expanded; sits below the row stack
    separated by a 1px divider that runs the band's full width. */
-/* Rail wrapper — height collapses to 0 in resting state, transitions to its
-   content's natural height when expanded. overflow:hidden clips the rail's
-   content (which is always rendered) so the band looks shorter when
-   collapsed. opacity also fades to give the rail a soft entrance. */
+/* Rail wrapper — height collapses to 0 in resting state, transitions to
+   its content's natural height when expanded.
+
+   Earlier this used `max-height: 0 → 80px` with `overflow: hidden`, which
+   made the click feel sluggish for two compounding reasons:
+   (1) browsers interpolate linearly between two pixel values, so when
+   the real content height was only ~46px the easing curve "stalled"
+   visibly across the unused 34px headroom; and (2) `max-height`
+   triggers paint+layout on every frame, never composes on the GPU.
+
+   `display: grid` with `grid-template-rows: 0fr → 1fr` is the
+   modern, content-fit interpolation pattern (works back to Chrome 117 /
+   Safari 17.4). The browser interpolates the row track to the child's
+   natural height — no phantom pixels, no easing stall.
+
+   Single easing curve everywhere on the band (cubic-bezier(0.32, 0.72,
+   0, 1) — the "Linear-style" decelerate-out-expo) keeps perceived
+   motion light. Opacity is staggered 40ms behind the height so content
+   fades in *into* an already-opening container, not concurrently —
+   reads as one motion instead of two competing ones. */
 .avatar-customize-zone .cb-rail-wrap {
-  max-height: 0;
-  overflow: hidden;
+  /* Explicit height transition. We tried `grid-template-rows: 0fr → 1fr`
+     here, but in this layout — the wrap sits inside an auto-height flex
+     column — fr units resolve to their item's max-content (the cb-rail's
+     padding+border, ~30px) rather than 0px, so the wrap kept claiming
+     ~30px of layout in compact state.
+     The rail is fixed-height content (2 buttons in a single flex row),
+     so a fixed pixel target is honest: 39px = 1px border-top + 10px top
+     padding + 16px button line-height + 12px bottom padding. */
+  height: 0;
   opacity: 0;
-  transition: max-height 150ms ease-out, opacity 120ms ease-out;
+  overflow: hidden;
+  transition:
+    height 200ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 160ms cubic-bezier(0.32, 0.72, 0, 1) 40ms;
 }
 
 .avatar-customize-zone[data-expanded="true"] .cb-rail-wrap {
-  /* Anything ≥ rail height (~46px) works; 80px is generous headroom. */
-  max-height: 80px;
+  height: 39px;
   opacity: 1;
 }
 
@@ -2254,7 +2463,6 @@
      minus 2 × 18px wrapper padding) instead of bleeding to the band
      edges, matching the Paper design. */
   padding: 10px 0 12px;
-  margin-top: 6px;
   border-top: 1px solid var(--lx-gray-05, var(--rx-gray-05));
 }
 

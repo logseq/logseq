@@ -60,6 +60,45 @@
 (declare normalize-icon derive-initials derive-avatar-initials
          <search-wikipedia-image <save-url-asset! open-image-asset-picker!)
 
+(def ^:private icon-name-acronyms
+  "All-caps tokens that should stay uppercase when humanizing tabler icon
+   names — without this allowlist `TvOff` would render as `Tv off` instead
+   of `TV off`. Keep this small; only well-known global acronyms qualify."
+  #{"3D" "2D" "TV" "AI" "URL" "PDF" "USB" "AM" "PM" "GPS" "ID"
+    "HTML" "CSS" "JS" "API" "QR" "AC" "DC" "PC" "CPU" "GPU" "RSS"
+    "SQL" "XML" "JSON" "SVG" "PNG" "JPG" "GIF" "MP3" "MP4" "WIFI"})
+
+(defn humanize-icon-name
+  "Turn a tabler component name into user-facing copy.
+     '3dCubeSphere' -> '3D cube sphere'
+     'BrandSlack'   -> 'Slack'
+     'TvOff'        -> 'TV off'
+     'briefcase'    -> 'Briefcase'
+   `Brand` is dropped because the brand-name suffix is the meaningful
+   token (`BrandSlack` -> `Slack`). Returns an empty string for blank
+   input so the caller can string/concat without a nil guard."
+  [s]
+  (if (string/blank? s)
+    ""
+    (let [spaced (-> s
+                     (string/replace #"([a-z])([A-Z])" "$1 $2")
+                     (string/replace #"([A-Z])([A-Z][a-z])" "$1 $2")
+                     (string/replace #"([a-zA-Z])(\d)" "$1 $2")
+                     (string/replace #"-" " "))
+          stripped (string/replace spaced #"(?i)^brand\s+" "")
+          tokens (string/split stripped #"\s+")
+          normalized (map (fn [t]
+                            (let [up (string/upper-case t)]
+                              (cond
+                                (contains? icon-name-acronyms up) up
+                                (re-matches #"\d+[a-zA-Z]+" t) (string/upper-case t)
+                                :else (string/lower-case t))))
+                          tokens)
+          joined (string/join " " normalized)]
+      (if (seq joined)
+        (str (string/upper-case (subs joined 0 1)) (subs joined 1))
+        ""))))
+
 (defn- avatar-fallback-style
   "Build the inline :style map for an avatar fallback chip (the colored
    circle holding initials).
@@ -355,14 +394,22 @@
                            :style {:object-fit "cover"}
                            :data-shape (name shape)}))
      ;; Fallback (shows while loading, on error, OR when there's no image
-     ;; but the avatar still wants to render — Letters or Icon.
+     ;; but the avatar still wants to render — Letters, Icon, or Emoji.
      (shui/avatar-fallback
       {:style fallback-style
        :data-shape (name shape)}
-      (if (and (= fb-type :icon) (not (string/blank? fb-icon)))
+      (cond
+        (and (= fb-type :icon) (not (string/blank? fb-icon)))
         (shui/tabler-icon fb-icon
                           {:size icon-size
                            :style {:color (:color fallback-style)}})
+
+        (and (= fb-type :emoji) (not (string/blank? fb-icon)))
+        [:em-emoji {:id fb-icon
+                    :size icon-size
+                    :style {:line-height 1}}]
+
+        :else
         display-text)))))
 
 (defn measure-text-width
@@ -568,13 +615,28 @@
                       (shui/avatar-fallback
                        {:style fallback-style
                         :data-shape (name shape)}
-                       (if (and (= fb-type :icon) (not (string/blank? fb-icon)))
+                       (cond
+                         (and (= fb-type :icon) (not (string/blank? fb-icon)))
                          ;; Icon fallback inherits the foreground color from
                          ;; avatar-fallback-style (which has already been
                          ;; contrast-adjusted against the muted background).
                          (shui/tabler-icon fb-icon
                                            {:size icon-size
                                             :style {:color (:color fallback-style)}})
+
+                         (and (= fb-type :emoji) (not (string/blank? fb-icon)))
+                         ;; Emoji fallback: emoji glyphs aren't tintable
+                         ;; (they're full-color SVGs), so we don't pass
+                         ;; the muted color through. `em-emoji` accepts
+                         ;; `:size` directly (same prop emoji-mart's
+                         ;; web component reads); matches the icon tier
+                         ;; so emoji and tabler glyphs occupy the same
+                         ;; footprint inside the avatar.
+                         [:em-emoji {:id fb-icon
+                                     :size icon-size
+                                     :style {:line-height 1}}]
+
+                         :else
                          display-text))))))
 
                ;; Image with asset — let image-icon-cp resolve via the filesystem
@@ -794,19 +856,22 @@
       (let [explicit-shape (or (get-in v [:data :shape]) (:shape v))
             fb-type (or (get-in v [:data :fallback-type]) (:fallback-type v))
             fb-icon (or (get-in v [:data :fallback-icon]) (:fallback-icon v))
-            ;; A nil fb-type defaults to :letters. A :icon fb-type with no
-            ;; fb-icon set degrades back to :letters so the renderer always
-            ;; has a usable invariant: :fallback-type :icon implies a
-            ;; non-blank :fallback-icon present.
+            ;; A nil fb-type defaults to :letters. `:icon` and `:emoji`
+            ;; both store their value in `:fallback-icon` (tabler name or
+            ;; emoji shortcode) — without a non-blank value the fb is
+            ;; unrenderable, so degrade back to `:letters` and let the
+            ;; renderer rely on the invariant that `:icon`/`:emoji`
+            ;; always carries a non-blank `:fallback-icon`.
             effective-fb-type (cond
                                 (nil? fb-type) :letters
-                                (and (= fb-type :icon) (string/blank? fb-icon)) :letters
+                                (and (#{:icon :emoji} fb-type)
+                                     (string/blank? fb-icon)) :letters
                                 :else fb-type)]
         (cond-> v
           (nil? explicit-shape) (assoc-in [:data :shape] :circle)
           (some? explicit-shape) (assoc-in [:data :shape] explicit-shape)
           true (assoc-in [:data :fallback-type] effective-fb-type)
-          (and (= effective-fb-type :icon)
+          (and (#{:icon :emoji} effective-fb-type)
                (not (string/blank? fb-icon)))
           (assoc-in [:data :fallback-icon] fb-icon)))
       v)
@@ -858,14 +923,16 @@
                       ;; Fallback layer: rendered when no image is set.
                       ;; :letters → render the auto-derived initials.
                       ;; :icon    → render :fallback-icon (a tabler icon name).
-                      ;; Default :letters; an :icon type with no icon set
-                      ;; degrades to :letters so the renderer never has to
-                      ;; render an empty avatar.
+                      ;; :emoji   → render :fallback-icon (an emoji shortcode).
+                      ;; Default :letters; :icon/:emoji without a non-blank
+                      ;; :fallback-icon degrade to :letters so the renderer
+                      ;; never has to render an empty avatar.
                       fb-type (or (get-in v [:data :fallback-type]) (:fallback-type v))
                       fb-icon (or (get-in v [:data :fallback-icon]) (:fallback-icon v))
                       effective-fb-type (cond
                                           (nil? fb-type) :letters
-                                          (and (= fb-type :icon) (string/blank? fb-icon)) :letters
+                                          (and (#{:icon :emoji} fb-type)
+                                               (string/blank? fb-icon)) :letters
                                           :else fb-type)]
                   {:type :avatar
                    :id (or id (str "avatar-" value))
@@ -877,7 +944,7 @@
                                   :fallback-type effective-fb-type}
                            asset-uuid (assoc :asset-uuid asset-uuid)
                            asset-type (assoc :asset-type asset-type)
-                           (and (= effective-fb-type :icon)
+                           (and (#{:icon :emoji} effective-fb-type)
                                 (not (string/blank? fb-icon)))
                            (assoc :fallback-icon fb-icon))})
         :image (let [;; Extract asset-uuid, stripping "image-" prefix if present (from :id fallback)
@@ -3541,7 +3608,18 @@
         ;; it toggles the expanded state.
         (when avatar-mode?
           (let [expanded? (rum/react (::customize-expanded? state))
-                preview-icon (or (when (= :avatar (:type current-icon)) current-icon)
+                ;; Hover preview from a child sub-picker (Fallback → Icon…
+                ;; broadcasts a fully-wrapped avatar via icon-search's
+                ;; hover-wrap-fn). When the preview targets *this* page
+                ;; and is itself an avatar, overlay it so the band's tile
+                ;; mirrors what the page-title shows in lockstep.
+                hover-preview (state/sub :ui/icon-hover-preview)
+                hover-icon (when (and hover-preview
+                                      (= preview-target-db-id (:db-id hover-preview))
+                                      (= :avatar (get-in hover-preview [:icon :type])))
+                             (:icon hover-preview))
+                preview-icon (or hover-icon
+                                 (when (= :avatar (:type current-icon)) current-icon)
                                  synthesized-avatar-context)
                 current-shape (or (get-in preview-icon [:data :shape]) :circle)
                 current-fb-type (or (get-in preview-icon [:data :fallback-type]) :letters)
@@ -3562,6 +3640,12 @@
                                                     (assoc-in [:data :fallback-type] :icon)
                                                     (assoc-in [:data :fallback-icon] icon-name))
                                                 true))
+                set-fallback-emoji! (fn [emoji-id]
+                                      (on-chosen nil
+                                                 (-> preview-icon
+                                                     (assoc-in [:data :fallback-type] :emoji)
+                                                     (assoc-in [:data :fallback-icon] emoji-id))
+                                                 true))
                 reset-style! (fn []
                                ;; Phase 1+2: Reset clears any divergence from
                                ;; the system defaults — shape back to :circle
@@ -3576,32 +3660,50 @@
                                             true)))
                 style-dirty? (or (not= current-shape :circle)
                                  (not= current-fb-type :letters))
-                ;; Open the constrained icon sub-picker. Anchored on the
-                ;; click event so it appears near the dropdown menu item.
-                ;; `:allowed-tabs [:icon]` strips the tab strip down to
-                ;; just Icons — emojis and the Custom tab don't make sense
-                ;; as fallback content for an avatar.
-                open-icon-sub-picker!
-                (fn [^js e]
-                  (shui/popup-show!
-                   e
-                   (fn [{:keys [id]}]
-                     (icon-search
-                      {:on-chosen (fn [_e icon & _rest]
-                                    (let [icon-name (or (get-in icon [:data :value])
-                                                        (:id icon))]
-                                      (when icon-name (set-fallback-icon! icon-name))
-                                      (shui/popup-hide! id)))
-                       :allowed-tabs [:icon]
-                       :icon-value (when (and (= current-fb-type :icon) current-fb-icon)
-                                     {:type :icon :data {:value current-fb-icon}})
-                       :page-title page-title
-                       :preview-target-db-id preview-target-db-id
-                       :del-btn? false}))
-                   {:id :fallback-icon-picker
-                    :align :end
-                    :content-props {:class "ls-icon-picker"
-                                    :onEscapeKeyDown #(.preventDefault %)}}))]
+                ;; Resting-banner copy: scope on the left ("Default" /
+                ;; "Custom"), style descriptor on the right ("Letters,
+                ;; circle"). State-as-label per IA design — the avatar
+                ;; tile renders the *visual*, the banner answers "where
+                ;; does this come from?".
+                ;; TODO future: detect class-default inheritance to
+                ;; surface "From #Company" as a third scope value.
+                has-image? (some? (get-in preview-icon [:data :asset-uuid]))
+                scope-label (if (or has-image? style-dirty?)
+                              "Custom"
+                              "Default")
+                descriptor-fb (cond
+                                has-image? "Image"
+                                (and (= current-fb-type :icon) current-fb-icon)
+                                (or (not-empty (humanize-icon-name current-fb-icon))
+                                    "Icon")
+                                (and (= current-fb-type :emoji) current-fb-icon)
+                                (or (not-empty
+                                     (humanize-icon-name
+                                      (string/replace current-fb-icon "_" "-")))
+                                    "Emoji")
+                                :else "Letters")
+                descriptor-shape (case current-shape
+                                   :rounded-rect "rounded"
+                                   "circle")
+                descriptor (str descriptor-fb ", " descriptor-shape)
+                ;; Wrap-fn shared by the Icon… sub-menu's icon-search.
+                ;; Each hovered tile broadcasts as an avatar with the
+                ;; parent's shape/color/initials so page-icon readers
+                ;; render the wrapped avatar during hover, not the bare
+                ;; tile. Dispatches on tile :type so emojis also wrap
+                ;; with `:fallback-type :emoji` rather than falling back
+                ;; to letters.
+                fallback-hover-wrap-fn
+                (fn [item]
+                  (let [glyph-id (or (get-in item [:data :value])
+                                     (:id item))
+                        kind (cond
+                               (= :emoji (:type item)) :emoji
+                               (#{:icon :tabler-icon} (:type item)) :icon)]
+                    (when (and glyph-id kind)
+                      (-> preview-icon
+                          (assoc-in [:data :fallback-type] kind)
+                          (assoc-in [:data :fallback-icon] glyph-id)))))]
             ;; All inner blocks always render so CSS transitions can run on
             ;; visibility/height changes — the band's gradient, the rail's
             ;; height, and the meta-vs-rows swap all interpolate cleanly. A
@@ -3624,9 +3726,25 @@
                  [:span.preview-cue-glyph.preview-cue-check
                   (shui/tabler-icon "check" {:size 11})]]]]
               [:div.cb-meta-stage
-               [:div.preview-meta
-                [:div.preview-title (or page-title "")]
-                [:div.preview-subtitle "Tap avatar to customize"]]
+               ;; Resting state: the entire banner is one click target
+               ;; that toggles the expanded customize panel. Layout:
+               ;;   [scope · descriptor]               [chevron-down]
+               ;; State-as-label — `Default · Letters, circle` /
+               ;; `Custom · Briefcase, rounded`. Avatar tile remains a
+               ;; second click target with the same toggle behavior; the
+               ;; chevron rotates 180° on expand.
+               [:button.cb-banner
+                {:type "button"
+                 :on-click #(swap! (::customize-expanded? state) not)
+                 :aria-label "Customize avatar"
+                 :aria-expanded expanded?
+                 :tab-index (if expanded? -1 0)}
+                [:div.banner-text
+                 [:span.banner-scope scope-label]
+                 [:span.banner-sep "·"]
+                 [:span.banner-descriptor descriptor]]
+                [:span.banner-chevron
+                 (shui/tabler-icon "chevron-down" {:size 12})]]
                [:div.cb-rows
                 [:div.cb-row
                  [:span.cb-label "Shape"]
@@ -3664,21 +3782,38 @@
                      :data-topbar-stop "fallback"
                      :aria-label "Avatar fallback"}
                     ;; Glyph reflects current fallback. Letters → "Aa";
-                    ;; Icon → the actual chosen tabler icon at the chip's
-                    ;; small size for an at-a-glance match against the
-                    ;; rendered avatar.
+                    ;; Icon → the actual chosen tabler icon; Emoji →
+                    ;; the chosen emoji glyph. All sized at 11px for
+                    ;; an at-a-glance match against the rendered avatar.
                     [:span.cb-chip-glyph
-                     (if (= current-fb-type :icon)
-                       (when current-fb-icon
-                         (shui/tabler-icon current-fb-icon {:size 11}))
+                     (cond
+                       (and (= current-fb-type :icon) current-fb-icon)
+                       (shui/tabler-icon current-fb-icon {:size 11})
+
+                       (and (= current-fb-type :emoji) current-fb-icon)
+                       [:em-emoji {:id current-fb-icon
+                                   :size 11
+                                   :style {:line-height 1}}]
+
+                       :else
                        [:span.glyph-letters "Aa"])]
                     [:span.cb-chip-label
                      (cond
                        (and (= current-fb-type :icon) current-fb-icon)
-                       (or (some-> current-fb-icon
-                                   (string/replace #"-" " ")
-                                   string/capitalize)
+                       (or (not-empty (humanize-icon-name current-fb-icon))
                            "Icon")
+
+                       (and (= current-fb-type :emoji) current-fb-icon)
+                       ;; Emoji shortcodes are typically `snake_case`;
+                       ;; humanize-icon-name handles dashes but not
+                       ;; underscores — replace underscores with spaces
+                       ;; first so `white_check_mark` reads as "White
+                       ;; check mark", not "White_check_mark".
+                       (or (not-empty
+                            (humanize-icon-name
+                             (string/replace current-fb-icon "_" "-")))
+                           "Emoji")
+
                        :else
                        "Letters")]
                     (shui/tabler-icon "chevron-down" {:size 11 :class "cb-chip-chevron"})])
@@ -3687,9 +3822,89 @@
                    (shui/dropdown-menu-item
                     {:on-click set-fallback-letters!}
                     "Letters")
-                   (shui/dropdown-menu-item
-                    {:on-click open-icon-sub-picker!}
-                    "Icon…")))]]]]
+                   ;; Sub-menu pattern (matches content.cljs's "Add reaction"
+                   ;; → emoji picker): "Icon…" expands to the side instead
+                   ;; of dismissing the parent menu and re-opening a popup
+                   ;; underneath. Keeps the user's mental thread on
+                   ;; "configuring the fallback" instead of dropping them
+                   ;; into a context-less floater.
+                   (shui/dropdown-menu-sub
+                    (shui/dropdown-menu-sub-trigger "Icon…")
+                    ;; `dropdown-menu-sub-content` ships with `p-1` baked
+                    ;; into shui's popup-core defaults, AND content.cljs's
+                    ;; "Add reaction" pattern wraps its picker in another
+                    ;; `[:div.p-1]` — stacking the two yields 8px of total
+                    ;; gutter. Override the outer one to 0 with `!p-0`
+                    ;; (the popup's own border/shadow already separates
+                    ;; the surface from the page) and keep the inner
+                    ;; `[:div.p-1]` so the picker's chrome doesn't read
+                    ;; cramped against the rounded popup edge.
+                    (shui/dropdown-menu-sub-content
+                     {:class "!p-0"
+                      ;; Radix's FocusScope runs its auto-focus pass
+                      ;; *synchronously* inside `onOpenAutoFocus`. Calling
+                      ;; `preventDefault` alone leaves focus on whatever
+                      ;; the browser's autoFocus pass picked (a tab
+                      ;; button — the first focusable in our DOM order),
+                      ;; not the search input. The cleanest fix is to
+                      ;; ride Radix's own focus-management window:
+                      ;; preventDefault to stop the container auto-aim,
+                      ;; then synchronously focus the search input from
+                      ;; the same handler. We're still inside FocusScope's
+                      ;; mount tick, so this lands as the canonical
+                      ;; initial-focus and no later pass overrides it.
+                      ;; (Researched in Radix's react-focus-scope source —
+                      ;; `focusFirst` runs inline, no internal setTimeout
+                      ;; or rAF, so a `setTimeout 0` from a `:did-mount`
+                      ;; can't reliably win the race.)
+                      :onOpenAutoFocus (fn [^js e]
+                                         (.preventDefault e)
+                                         (when-let [^js content (.-currentTarget e)]
+                                           (when-let [^js input (.querySelector content
+                                                                                "input.icon-search-input")]
+                                             (.focus input))))}
+                     [:div.p-1
+                      (icon-search
+                       {:on-chosen (fn [_e icon & _rest]
+                                     ;; Dispatch on the tile's :type so
+                                     ;; emojis route to set-fallback-emoji!
+                                     ;; (which writes :fallback-type :emoji)
+                                     ;; and tabler icons route to the
+                                     ;; existing :icon path. `(:type item)`
+                                     ;; is `:icon` or `:tabler-icon` for
+                                     ;; tabler tiles and `:emoji` for emoji
+                                     ;; tiles after normalization.
+                                     (let [glyph-id (or (get-in icon [:data :value])
+                                                        (:id icon))]
+                                       (cond
+                                         (and (= :emoji (:type icon)) glyph-id)
+                                         (set-fallback-emoji! glyph-id)
+
+                                         (and (#{:icon :tabler-icon} (:type icon)) glyph-id)
+                                         (set-fallback-icon! glyph-id))))
+                        ;; "All" lets the user start typing and search
+                        ;; emojis + icons together — common case where
+                        ;; the user knows the keyword (e.g. "smile") but
+                        ;; doesn't care which kind of glyph it lands on.
+                        ;; Non-icon/non-emoji tiles inside the All tab
+                        ;; (text/avatar/image) are silently ignored by
+                        ;; the on-chosen dispatch above — they don't
+                        ;; map to a meaningful avatar fallback.
+                        :allowed-tabs [:all :icon :emoji]
+                        :icon-value (when (and (#{:icon :emoji} current-fb-type) current-fb-icon)
+                                      {:type (if (= :emoji current-fb-type) :emoji :icon)
+                                       :data {:value current-fb-icon}})
+                        :page-title page-title
+                        :preview-target-db-id preview-target-db-id
+                        :hover-wrap-fn fallback-hover-wrap-fn
+                        ;; Suppress the picker's own color swatch and
+                        ;; delete button — the parent asset-picker
+                        ;; already owns both for the whole avatar, and
+                        ;; duplicates here can drift / cause bad states
+                        ;; (e.g. deleting the avatar from a sub-picker
+                        ;; that's only configuring its fallback).
+                        :color-btn? false
+                        :del-btn? false})]))))]]]]
              [:div.cb-rail-wrap
               [:div.cb-rail
                [:button.lx-toolbar-action.lx-toolbar-reset-link
@@ -5533,9 +5748,32 @@
                      (reset! *tab (first allowed)))
                    (assoc s ::color (atom (or icon-color stored))
                           ::input-ref (rum/create-ref)
-                          ::result-ref (rum/create-ref))))}
+                          ::result-ref (rum/create-ref))))
+   :did-mount (fn [s]
+                ;; Belt-and-braces for non-Radix call sites where the
+                ;; picker is opened as a free-floating popup (`shui/popup-show!`
+                ;; rather than `dropdown-menu-sub-content`). The Radix
+                ;; sub-menu path now focuses synchronously via
+                ;; `onOpenAutoFocus` (see avatar fallback wiring at
+                ;; icon.cljs:~3850), which is more reliable than racing
+                ;; FocusScope on a `setTimeout 0`. This `:did-mount` is a
+                ;; safety net so existing call sites that don't pass
+                ;; their own focus handoff still get the input focused.
+                (js/setTimeout
+                 (fn []
+                   (when-let [^js input (rum/deref (::input-ref s))]
+                     (when (not= js/document.activeElement input)
+                       (.focus input))))
+                 0)
+                s)}
   [state {:keys [on-chosen del-btn? icon-value page-title preview-target-db-id preview-target-db-ids
-                 allowed-tabs] :as opts}]
+                 allowed-tabs hover-wrap-fn color-btn?]
+          :or {color-btn? true}
+          :as opts}]
+  ;; `color-btn?` defaults to true so existing call sites are unchanged;
+  ;; the avatar fallback sub-picker passes `:color-btn? false` because
+  ;; the parent asset-picker already exposes a color swatch for the
+  ;; whole avatar (and `del-btn?` is similarly suppressed).
   (let [*q (::q state)
         *result (::result state)
         *tab (::tab state)
@@ -5615,13 +5853,22 @@
           ;; Custom-tab navigational markers (:custom-text/:custom-avatar/
           ;; :custom-image) map to the synthesized preview items above.
           ;; Everything else falls through with its own type.
-          (let [resolved (or (get custom-preview-items (:type item)) item)]
+          ;; When `hover-wrap-fn` is set (sub-picker context, e.g. avatar
+          ;; fallback), it transforms each tile into the shape the
+          ;; *parent* picker wants to preview — so a bare tabler-icon
+          ;; tile broadcasts as a fully-wrapped avatar with the parent's
+          ;; shape/color/initials. Without the wrap, page-icon readers
+          ;; would render the bare icon during hover, defeating the
+          ;; live-preview affordance.
+          (let [resolved (or (get custom-preview-items (:type item)) item)
+                wrapped (or (when hover-wrap-fn (hover-wrap-fn resolved))
+                            resolved)]
             (cond
-              (not (previewable-tile-type? (:type resolved)))
+              (not (previewable-tile-type? (:type wrapped)))
               (clear-tile-hover!)
 
               preview-targets-set?
-              (let [normalized (normalize-icon resolved)]
+              (let [normalized (normalize-icon wrapped)]
                 (state/set-state! :ui/icon-hover-preview
                                   (cond-> preview-base-target
                                     normalized (assoc :icon normalized)
@@ -5883,8 +6130,12 @@
                           (some-> (rum/deref *input-ref) (.focus))))
            :button-attrs {:data-topbar-stop "tab"}})
          [:div.tab-actions
-          ;; color picker (always visible)
-          (color-picker *color (fn [c]
+          ;; Color picker — gated by `color-btn?` so sub-picker call
+          ;; sites (e.g. avatar fallback) can suppress it. The parent
+          ;; picker already owns the avatar's color, and a duplicate
+          ;; here can drift from the parent's value.
+          (when color-btn?
+            (color-picker *color (fn [c]
                                  ;; Synchronously update *color before calling
                                  ;; on-chosen. The on-chosen wrapper above re-applies
                                  ;; @*color over `m`, so without this it would over-
@@ -5892,37 +6143,37 @@
                                  ;; one (color-picker's React state hasn't propagated
                                  ;; to the *color atom yet — its useEffect runs after
                                  ;; this synchronous callback).
-                                 (reset! *color c)
-                                 (cond
-                                   (or (= :icon (:type normalized-icon-value))
-                                       (= :text (:type normalized-icon-value)))
-                                   (on-chosen nil (-> normalized-icon-value
-                                                      (assoc :color c)
-                                                      (assoc-in [:data :color] c)) true)
+                                   (reset! *color c)
+                                   (cond
+                                     (or (= :icon (:type normalized-icon-value))
+                                         (= :text (:type normalized-icon-value)))
+                                     (on-chosen nil (-> normalized-icon-value
+                                                        (assoc :color c)
+                                                        (assoc-in [:data :color] c)) true)
 
-                                   (= :avatar (:type normalized-icon-value))
-                                   (on-chosen nil (-> normalized-icon-value
-                                                      (assoc :color c)
-                                                      (assoc-in [:data :color] c)
-                                                      (assoc-in [:data :backgroundColor] c)) true)))
+                                     (= :avatar (:type normalized-icon-value))
+                                     (on-chosen nil (-> normalized-icon-value
+                                                        (assoc :color c)
+                                                        (assoc-in [:data :color] c)
+                                                        (assoc-in [:data :backgroundColor] c)) true)))
                         ;; After Radix's FocusScope unmounts (the popover
                         ;; close), restore focus to the highlighted tile so
                         ;; activeElement matches `.is-highlighted`. Running
                         ;; in :after-close! (not on-select!) bypasses
                         ;; Radix's FocusScope trap which would otherwise
                         ;; undo the focus while the popover is mounted.
-                        :after-close! (fn []
-                                        (let [^js cnt (some-> (rum/deref *input-ref) (.closest ".cp__emoji-icon-picker"))
-                                              idx @*highlighted-index
-                                              btn (when (and idx cnt)
-                                                    (.querySelector cnt "button.is-highlighted"))]
-                                          (cond
+                          :after-close! (fn []
+                                          (let [^js cnt (some-> (rum/deref *input-ref) (.closest ".cp__emoji-icon-picker"))
+                                                idx @*highlighted-index
+                                                btn (when (and idx cnt)
+                                                      (.querySelector cnt "button.is-highlighted"))]
+                                            (cond
                                             ;; Highlighted icon present — restore focus to
                                             ;; the tile so the user resumes where they left
                                             ;; off in the grid.
-                                            btn
-                                            (do (reset! *focus-region :grid)
-                                                (.focus btn))
+                                              btn
+                                              (do (reset! *focus-region :grid)
+                                                  (.focus btn))
 
                                             ;; No highlight to return to (e.g. user opened
                                             ;; the color picker without first navigating to
@@ -5932,19 +6183,19 @@
                                             ;; for keys whose target is in the subtree, so
                                             ;; without this fallback the picker would appear
                                             ;; visually open but reject all keys.
-                                            cnt
-                                            (do (reset! *focus-region :search)
-                                                (some-> (rum/deref *input-ref) (.focus))))))
-                        :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
-                                     (fn [c]
-                                       (state/set-state! :ui/icon-hover-preview
-                                                         (cond-> {:color c}
-                                                           preview-target-db-id (assoc :db-id preview-target-db-id)
-                                                           (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids))))))
-                        :on-hover-end! (when (or preview-target-db-id (seq preview-target-db-ids))
-                                         (fn []
-                                           (state/set-state! :ui/icon-hover-preview nil)))
-                        :button-attrs {:data-topbar-stop "color"})
+                                              cnt
+                                              (do (reset! *focus-region :search)
+                                                  (some-> (rum/deref *input-ref) (.focus))))))
+                          :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
+                                       (fn [c]
+                                         (state/set-state! :ui/icon-hover-preview
+                                                           (cond-> {:color c}
+                                                             preview-target-db-id (assoc :db-id preview-target-db-id)
+                                                             (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids))))))
+                          :on-hover-end! (when (or preview-target-db-id (seq preview-target-db-ids))
+                                           (fn []
+                                             (state/set-state! :ui/icon-hover-preview nil)))
+                          :button-attrs {:data-topbar-stop "color"}))
           ;; delete button
           (when del-btn?
             (shui/button {:variant :outline :size :sm :data-action "del"
@@ -5959,6 +6210,7 @@
           (shui/tabler-icon "search" {:size 16})
           [(shui/input
             {:auto-focus true
+             :class "icon-search-input"
              :ref *input-ref
              :placeholder "Search emojis, icons, assets..."
              :default-value ""

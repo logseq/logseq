@@ -3178,9 +3178,40 @@
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
         page-icon (when (:page-title? config)
-                    (let [icon' (get block :logseq.property/icon)]
+                    (let [icon' (get block :logseq.property/icon)
+                          ;; Class-default-icon inheritance. The previous
+                          ;; fallback used `:logseq.property/icon` on the
+                          ;; tag, which returns the tag's *own* page-header
+                          ;; icon (a bare tabler-icon), not the inheritance
+                          ;; default the user configured for instances of
+                          ;; the class. For an avatar default-icon, build
+                          ;; a per-instance avatar by merging the class's
+                          ;; shape/fallback/color with the page's own
+                          ;; initials — same shape `get-node-icon` does
+                          ;; for the sidebar.
+                          inherited-default-icon
+                          (when-not icon'
+                            (let [d (some :logseq.property.class/default-icon
+                                          (sort-by :db/id (:block/tags block)))]
+                              (cond
+                                (= :avatar (:type d))
+                                {:type :avatar
+                                 :data (merge (select-keys (:data d)
+                                                           [:backgroundColor :color
+                                                            :shape :fallback-type :fallback-icon])
+                                              {:value (icon-component/derive-avatar-initials
+                                                       (:block/title block))})}
+
+                                (= :text (:type d))
+                                {:type :text
+                                 :data (merge (select-keys (:data d) [:color])
+                                              {:value (icon-component/derive-avatar-initials
+                                                       (:block/title block))})}
+
+                                :else d)))]
                       (when-let [icon (and (ldb/page? block)
                                            (or icon'
+                                               inherited-default-icon
                                                (some :logseq.property/icon (:block/tags block))
                                                (when (ldb/class? block)
                                                  {:type :tabler-icon

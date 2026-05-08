@@ -98,7 +98,8 @@
                                                          (state/pub-event! [:editor/hide-action-bar])))
                                           :icon-value nil
                                           :page-title first-title
-                                          :del-btn? false}))
+                                          :del-btn? false
+                                          :preview-target-db-ids (set (map :db/id selected-blocks))}))
                                       {:align :start
                                        :id :ls-icon-picker
                                        :content-props {:class "ls-icon-picker"

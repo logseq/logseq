@@ -115,3 +115,27 @@
       (is (= "briefcase"   (get-in normalized [:data :fallback-icon])))
       (is (= "#5B6CFF"     (get-in normalized [:data :color])))
       (is (= "uuid-1"      (get-in normalized [:data :asset-uuid]))))))
+
+(deftest humanize-icon-name-test
+  (testing "camelCase splits on word boundaries"
+    (is (= "Briefcase"        (icon/humanize-icon-name "briefcase")))
+    (is (= "Timeline event"   (icon/humanize-icon-name "TimelineEvent")))
+    (is (= "Arrows maximize"  (icon/humanize-icon-name "ArrowsMaximize"))))
+
+  (testing "Brand prefix is stripped (BrandSlack -> Slack)"
+    ;; The brand-name suffix is the meaningful token; rendering 'Brand
+    ;; slack' would be redundant when the icon glyph is already a Slack
+    ;; logo.
+    (is (= "Slack" (icon/humanize-icon-name "BrandSlack"))))
+
+  (testing "well-known acronyms preserve their uppercase form"
+    (is (= "TV off"      (icon/humanize-icon-name "TvOff")))
+    (is (= "3D cube sphere" (icon/humanize-icon-name "3dCubeSphere")))
+    (is (= "2FA lock"    (icon/humanize-icon-name "2faLock"))))
+
+  (testing "kebab-case input is normalized the same way"
+    (is (= "3D cube sphere" (icon/humanize-icon-name "3d-cube-sphere"))))
+
+  (testing "blank input returns empty string (caller-friendly)"
+    (is (= "" (icon/humanize-icon-name nil)))
+    (is (= "" (icon/humanize-icon-name "")))))
