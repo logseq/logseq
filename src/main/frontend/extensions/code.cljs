@@ -436,7 +436,9 @@
                              :cursorBlinkRate -1})
                           (when config-edit?
                             {:hintOptions {}})
-                          user-options)
+                          user-options
+                          (when (= mode "calc")
+                            {:viewportMargin js/Infinity}))
         editor (when textarea
                  (from-textarea textarea (clj->js cm-options)))
         _ (when (and editor *editor-ref)
@@ -589,6 +591,9 @@
                  state)}
   [state _config id attr code _theme _options]
   [:div.extensions__code.flex.flex-1
+   (cond-> {}
+     (= (:data-lang attr) "calc")
+     (assoc :data-lang "calc"))
    (when-let [mode (:data-lang attr)]
      (when-not (= mode "calc")
        [:div.extensions__code-lang
