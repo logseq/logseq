@@ -771,8 +771,13 @@
                              (or (= (:db-id preview) (:db/id entity))
                                  (contains? (:db-ids preview) (:db/id entity))))
         preview-icon (when preview-active? (:icon preview))
+        ;; Preview color is only applied when the hover-preview state
+        ;; carries an explicit `:color`. Without that guard, a shape- or
+        ;; fallback-only hover (which omits `:color`) would clobber the
+        ;; avatar's `:backgroundColor` to "inherit" and kill the chip.
+        preview-color (when preview-active? (:color preview))
         effective-color (cond
-                          preview-active? (or (:color preview) "inherit")
+                          preview-color preview-color
                           :else (or (:color node-icon) "inherit"))
         ;; Source icon for the preview overlay: either the previewed icon
         ;; (cross-type swap) or the committed node-icon. Then layer the
@@ -784,15 +789,19 @@
         ;; circle's bg-color is inline and doesn't inherit from `color`.
         base-icon (or preview-icon node-icon)
         effective-node-icon (cond-> base-icon
-                              (and preview-active? (map? base-icon))
+                              ;; Only mutate when there's an *explicit*
+                              ;; preview color — non-color previews
+                              ;; (shape, fallback) leave the icon's own
+                              ;; colors intact.
+                              (and preview-color (map? base-icon))
                               (-> (normalize-icon)
-                                  (assoc :color effective-color)
-                                  (assoc-in [:data :color] effective-color))
+                                  (assoc :color preview-color)
+                                  (assoc-in [:data :color] preview-color))
 
-                              (and preview-active?
+                              (and preview-color
                                    (map? base-icon)
                                    (= :avatar (:type (normalize-icon base-icon))))
-                              (assoc-in [:data :backgroundColor] effective-color))
+                              (assoc-in [:data :backgroundColor] preview-color))
         ;; Lift contrast vs the page background to WCAG 3:1 (non-text UI
         ;; threshold) — same logic the inner `icon` fn applies when called
         ;; with `:color? true`. This wrapper is used by sidebar / right
@@ -3618,9 +3627,14 @@
                                       (= preview-target-db-id (:db-id hover-preview))
                                       (= :avatar (get-in hover-preview [:icon :type])))
                              (:icon hover-preview))
-                preview-icon (or hover-icon
-                                 (when (= :avatar (:type current-icon)) current-icon)
-                                 synthesized-avatar-context)
+                ;; Committed (hover-free) base: what the avatar would
+                ;; render if no preview were active. Used as the input
+                ;; to dropdown-row hover broadcasts so we don't feedback-
+                ;; loop a hover-preview onto itself when the user moves
+                ;; between Shape / Fallback rows.
+                committed-icon (or (when (= :avatar (:type current-icon)) current-icon)
+                                   synthesized-avatar-context)
+                preview-icon (or hover-icon committed-icon)
                 current-shape (or (get-in preview-icon [:data :shape]) :circle)
                 current-fb-type (or (get-in preview-icon [:data :fallback-type]) :letters)
                 current-fb-icon (get-in preview-icon [:data :fallback-icon])
@@ -3646,6 +3660,55 @@
                                                      (assoc-in [:data :fallback-type] :emoji)
                                                      (assoc-in [:data :fallback-icon] emoji-id))
                                                  true))
+                ;; Live preview while hovering Shape / Fallback dropdown
+                ;; rows. Broadcast a synthetic avatar (committed config
+                ;; with the hovered field changed) into
+                ;; `:ui/icon-hover-preview` so the band's tile and the
+                ;; page-title trigger render the previewed result without
+                ;; committing it. Mouse-leave clears so the avatar
+                ;; reverts to the committed state. Same channel the
+                ;; fallback sub-picker uses on tile hover.
+                preview-shape-on-hover!
+                (fn [shape]
+                  (js/console.log "[DEBUG band shape-hover] FIRED shape=" (pr-str shape)
+                                  "preview-target-db-id=" preview-target-db-id)
+                  (when preview-target-db-id
+                    (state/set-state! :ui/icon-hover-preview
+                                      {:db-id preview-target-db-id
+                                       :icon (assoc-in committed-icon [:data :shape] shape)})
+                    (js/console.log "[DEBUG band shape-hover] AFTER set-state, value="
+                                    (pr-str (:ui/icon-hover-preview @state/state)))))
+                preview-fallback-on-hover!
+                (fn [fb-type]
+                  (js/console.log "[DEBUG band fallback-hover] FIRED fb-type=" (pr-str fb-type)
+                                  "preview-target-db-id=" preview-target-db-id)
+                  (when preview-target-db-id
+                    (let [base committed-icon
+                          ;; For Letters: drop fallback-icon so the avatar
+                          ;; shows initials. For Icon: prefer the user's
+                          ;; previously-picked icon (if any) so hovering
+                          ;; "Icon…" previews their actual choice; fall
+                          ;; back to a `circle-dashed` placeholder when
+                          ;; nothing has been picked yet, signalling
+                          ;; "an icon will go here".
+                          next-icon (cond
+                                      (= fb-type :letters)
+                                      (-> base
+                                          (assoc-in [:data :fallback-type] :letters)
+                                          (update :data dissoc :fallback-icon))
+
+                                      (= fb-type :icon)
+                                      (-> base
+                                          (assoc-in [:data :fallback-type] :icon)
+                                          (assoc-in [:data :fallback-icon]
+                                                    (or current-fb-icon "circle-dashed"))))]
+                      (state/set-state! :ui/icon-hover-preview
+                                        {:db-id preview-target-db-id
+                                         :icon next-icon}))))
+                clear-preview-on-leave!
+                (fn []
+                  (when preview-target-db-id
+                    (state/set-state! :ui/icon-hover-preview nil)))
                 reset-style! (fn []
                                ;; Phase 1+2: Reset clears any divergence from
                                ;; the system defaults — shape back to :circle
@@ -3765,12 +3828,28 @@
                        "Circle")]
                     (shui/tabler-icon "chevron-down" {:size 11 :class "cb-chip-chevron"})])
                   (shui/dropdown-menu-content
-                   {:align "end"}
+                   {:align "end"
+                    ;; Whole-content mouse-leave clears the preview so
+                    ;; closing the dropdown without picking reverts the
+                    ;; avatar to its committed state. Per-item leave
+                    ;; would briefly flash baseline as the cursor moves
+                    ;; between rows.
+                    :on-mouse-leave clear-preview-on-leave!}
+                   ;; `:on-focus` (not `:on-mouse-enter`) — Radix
+                   ;; DropdownMenuItem programmatically focuses the
+                   ;; highlighted item via `pointermove → item.focus()`
+                   ;; (and arrow-key nav does the same), so onFocus
+                   ;; fires reliably for both keyboard and mouse. Plain
+                   ;; mouseenter is suppressed for the item already
+                   ;; under the cursor at open time, which made the
+                   ;; first hover silently no-op.
                    (shui/dropdown-menu-item
-                    {:on-click #(set-shape! :circle)}
+                    {:on-click #(set-shape! :circle)
+                     :on-focus #(preview-shape-on-hover! :circle)}
                     "Circle")
                    (shui/dropdown-menu-item
-                    {:on-click #(set-shape! :rounded-rect)}
+                    {:on-click #(set-shape! :rounded-rect)
+                     :on-focus #(preview-shape-on-hover! :rounded-rect)}
                     "Rectangle")))]
                 [:div.cb-row
                  [:span.cb-label "Fallback"]
@@ -3818,9 +3897,11 @@
                        "Letters")]
                     (shui/tabler-icon "chevron-down" {:size 11 :class "cb-chip-chevron"})])
                   (shui/dropdown-menu-content
-                   {:align "end"}
+                   {:align "end"
+                    :on-mouse-leave clear-preview-on-leave!}
                    (shui/dropdown-menu-item
-                    {:on-click set-fallback-letters!}
+                    {:on-click set-fallback-letters!
+                     :on-focus #(preview-fallback-on-hover! :letters)}
                     "Letters")
                    ;; Sub-menu pattern (matches content.cljs's "Add reaction"
                    ;; → emoji picker): "Icon…" expands to the side instead
@@ -3829,7 +3910,9 @@
                    ;; "configuring the fallback" instead of dropping them
                    ;; into a context-less floater.
                    (shui/dropdown-menu-sub
-                    (shui/dropdown-menu-sub-trigger "Icon…")
+                    (shui/dropdown-menu-sub-trigger
+                     {:on-focus #(preview-fallback-on-hover! :icon)}
+                     "Icon…")
                     ;; `dropdown-menu-sub-content` ships with `p-1` baked
                     ;; into shui's popup-core defaults, AND content.cljs's
                     ;; "Add reaction" pattern wraps its picker in another
@@ -3894,6 +3977,18 @@
                         :icon-value (when (and (#{:icon :emoji} current-fb-type) current-fb-icon)
                                       {:type (if (= :emoji current-fb-type) :emoji :icon)
                                        :data {:value current-fb-icon}})
+                        ;; Mirror the parent avatar's color into the sub-
+                        ;; picker so the icon grid tints match the avatar
+                        ;; the user is configuring. `@*color` is the
+                        ;; *in-flight* color from the asset-picker's color
+                        ;; swatch (set the moment the user picks a swatch,
+                        ;; before any commit hits the avatar's `:data`).
+                        ;; Falls back to the avatar's stored color and
+                        ;; lets icon-search's own preset/storage logic win
+                        ;; only if both are blank.
+                        :initial-color (or (some-> *color deref
+                                                   (#(when (and % (not= % "inherit")) %)))
+                                           (get-in preview-icon [:data :color]))
                         :page-title page-title
                         :preview-target-db-id preview-target-db-id
                         :hover-wrap-fn fallback-hover-wrap-fn
@@ -5734,6 +5829,14 @@
                        ;; not a real color — drop it before it reaches React state.
                        denull #(when (and % (not= % "inherit")) %)
                        icon-color (denull (get-in normalized [:data :color]))
+                       ;; `initial-color` lets a parent (e.g. the avatar
+                       ;; customize band's "Icon…" sub-picker) seed the
+                       ;; color atom so the picker grid renders in the
+                       ;; parent's chosen tint instead of the last-used
+                       ;; preset. Takes precedence over icon-value's
+                       ;; color so a sub-picker for an icon-less avatar
+                       ;; still inherits the avatar's color.
+                       initial-color (denull (:initial-color opts))
                        stored (denull (storage/get :ls-icon-color-preset))
                        ;; If the caller restricts the available tabs (e.g.
                        ;; the avatar customize band's icon-fallback sub-picker
@@ -5746,7 +5849,7 @@
                      (reset! *view (if (= :text (:type normalized)) :text-picker :asset-picker)))
                    (when (and allowed (not (allowed @*tab)))
                      (reset! *tab (first allowed)))
-                   (assoc s ::color (atom (or icon-color stored))
+                   (assoc s ::color (atom (or initial-color icon-color stored))
                           ::input-ref (rum/create-ref)
                           ::result-ref (rum/create-ref))))
    :did-mount (fn [s]
@@ -5765,6 +5868,25 @@
                      (when (not= js/document.activeElement input)
                        (.focus input))))
                  0)
+                ;; Apply the initial color tint to the picker root so the
+                ;; icon grid renders in the parent's color even when the
+                ;; color-picker swatch is suppressed (e.g. the avatar
+                ;; fallback sub-picker passes `:color-btn? false`). The
+                ;; visible tint is driven by the `--ls-color-icon-preset`
+                ;; CSS variable + the `icon-colored` class — both are
+                ;; normally set by the color-picker swatch's use-effect
+                ;; (icon.cljs:~5530); replicate that here on first paint
+                ;; so a `:color-btn? false` picker still picks up the
+                ;; caller's `:initial-color`.
+                (let [c @(::color s)]
+                  (when (and c (not (string/blank? c)) (not= c "inherit"))
+                    (js/setTimeout
+                     (fn []
+                       (when-let [^js input (rum/deref (::input-ref s))]
+                         (when-let [^js picker (.closest input ".cp__emoji-icon-picker")]
+                           (.setProperty (.-style picker) "--ls-color-icon-preset" c)
+                           (.add (.-classList picker) "icon-colored"))))
+                     0)))
                 s)}
   [state {:keys [on-chosen del-btn? icon-value page-title preview-target-db-id preview-target-db-ids
                  allowed-tabs hover-wrap-fn color-btn?]
@@ -6343,15 +6465,21 @@
         ;; early-exits when :data is present, so adding [:data :color] to a non-
         ;; unified shape (e.g. {:type :icon :id "house"} with no :data :value)
         ;; bypasses normalization and the render cond fails → icon disappears.
+        ;; Only apply the color override when the preview state carries
+        ;; an *explicit* `:color`. Earlier this branch fell back to
+        ;; "inherit" whenever any preview was active, which clobbered an
+        ;; avatar's `:backgroundColor` to "inherit" — killing the
+        ;; visible chip — even for shape/fallback-only previews that
+        ;; don't intend to change color. Now: a non-color preview keeps
+        ;; the avatar's own `:backgroundColor`/`:color` from `:data`.
+        preview-color (when preview-active? (:color preview))
         effective-icon-value (if (and preview-active? (map? base-value))
-                               (let [c (or (:color preview) "inherit")
-                                     normalized (normalize-icon base-value)
+                               (let [normalized (normalize-icon base-value)
                                      avatar? (= :avatar (:type normalized))]
                                  (cond-> normalized
-                                   true    (assoc-in [:data :color] c)
-                                   ;; Mirror :data :color into :backgroundColor for
-                                   ;; avatars so the circle previews along with text.
-                                   avatar? (assoc-in [:data :backgroundColor] c)))
+                                   preview-color (assoc-in [:data :color] preview-color)
+                                   (and preview-color avatar?)
+                                   (assoc-in [:data :backgroundColor] preview-color)))
                                base-value)]
     (icon effective-icon-value (merge {:color? true} icon-props))))
 
