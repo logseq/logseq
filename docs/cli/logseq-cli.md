@@ -309,7 +309,8 @@ Inspect and edit commands:
 - `query --query <edn> [--inputs <edn-vector>]` - run a Datascript query against the graph
 - `query --name <query-name> [--inputs <edn-vector>]` - run a named query (built-in or from `cli.edn`)
 - `query list` - list available named queries
-- `show --page <name> [--level <n>]` - show page tree
+- `show --page <name> [--level <n>]` - show page content tree
+  - Use `--page-hierarchy true` to display child pages connected through page hierarchy instead of normal page content blocks.
 - `show --uuid <uuid> [--level <n>]` - show block tree
 - `show --id <id> [--level <n>]` - show block tree by db/id
 
@@ -451,6 +452,7 @@ node ./dist/logseq.js upsert block --target-page TestPage --content "hello world
 node ./dist/logseq.js move --uuid <uuid> --target-page TargetPage
 node ./dist/logseq.js search block --content "hello"
 node ./dist/logseq.js show --page TestPage --output json
+node ./dist/logseq.js show --page Foo --page-hierarchy true
 node ./dist/logseq.js debug pull --graph demo --ident :logseq.class/Tag --output json
 node ./dist/logseq.js server list
 node ./dist/logseq.js doctor

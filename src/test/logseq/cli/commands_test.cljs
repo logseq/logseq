@@ -2093,11 +2093,17 @@
       (is (true? (:ok? result)))
       (is (= false (get-in result [:options :ref-id-footer])))))
 
-  (testing "show help lists linked references and ref-id-footer options"
+  (testing "show parses page-hierarchy option"
+    (let [result (commands/parse-args ["show" "--page" "Home" "--page-hierarchy" "true"])]
+      (is (true? (:ok? result)))
+      (is (= true (get-in result [:options :page-hierarchy])))))
+
+  (testing "show help lists linked references, ref-id-footer, and page-hierarchy options"
     (let [summary (:summary (binding [style/*color-enabled?* true]
                               (commands/parse-args ["show" "--help"])))]
       (is (string/includes? (strip-ansi summary) "--linked-references"))
-      (is (string/includes? (strip-ansi summary) "--ref-id-footer")))))
+      (is (string/includes? (strip-ansi summary) "--ref-id-footer"))
+      (is (string/includes? (strip-ansi summary) "--page-hierarchy")))))
 
 (deftest test-verb-subcommand-parse-debug
   (testing "debug pull parses with id"
