@@ -7,6 +7,10 @@
   [result]
   (set (map :label (:nodes result))))
 
+(defn- link-endpoints
+  [result]
+  (set (mapcat (juxt :source :target) (:links result))))
+
 (deftest global-graph-defaults-to-tags-and-objects
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -39,3 +43,17 @@
       (is (contains? labels "Plain Page")))
     (is (= :all-pages (get-in result [:meta :view-mode])))))
 
+(deftest global-all-pages-graph-keeps-links-within-rendered-nodes
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Visible Page"}
+                 :blocks [{:block/title "See [[Excluded Page]] and [[Kept Page]]"}]}
+                {:page {:block/title "Excluded Page"
+                        :build/properties {:logseq.property/exclude-from-graph-view true}}}
+                {:page {:block/title "Kept Page"}}]})
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :all-pages})
+        node-ids (set (map :id (:nodes result)))]
+    (is (not (contains? (node-labels result) "Excluded Page")))
+    (is (contains? (node-labels result) "Kept Page"))
+    (is (every? node-ids (link-endpoints result)))))

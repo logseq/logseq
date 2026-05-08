@@ -94,6 +94,48 @@
     (is (= 0.25 (get weights "d")))
     (is (nil? (get weights "e")))))
 
+(deftest merge-node-positions-updates-drag-preview-layout
+  (let [layout-by-id {"a" {:id "a" :x 0 :y 0}
+                      "b" {:id "b" :x 10 :y 10}}
+        result (logic/merge-node-positions
+                layout-by-id
+                {"a" {:x 25 :y 30}
+                 "missing" {:x 5 :y 6}})]
+    (is (= {:id "a" :x 25 :y 30} (get result "a")))
+    (is (= {:id "b" :x 10 :y 10} (get result "b")))
+    (is (not (contains? result "missing")))))
+
+(deftest current-layout-prefers-drag-preview-for-label-positioning
+  (let [committed {"a" {:id "a" :x 0 :y 0}}
+        preview {"a" {:id "a" :x 50 :y 60}}]
+    (is (= preview (logic/current-layout-by-id committed preview)))
+    (is (= committed (logic/current-layout-by-id committed nil)))))
+
+(deftest layout-tick-count-scales-with-graph-size
+  (testing "Small graphs still get enough settling passes"
+    (is (= 160 (logic/layout-tick-count 80 :all-pages))))
+  (testing "Medium all-pages graphs avoid the old fixed 220 tick cost"
+    (is (= 90 (logic/layout-tick-count 643 :all-pages))))
+  (testing "Large graphs stay bounded"
+    (is (= 70 (logic/layout-tick-count 2500 :all-pages)))))
+
+(deftest label-render-state-does-not-expand-labels-while-fading-out
+  (testing "Zoomed-in labels are shown without hover"
+    (is (= {:target-alpha 1.0
+            :update? true
+            :hovered-only? false}
+           (logic/label-render-state nil {:label-visible? true} 0.0))))
+  (testing "Nearby hover shows only the focused label while zoom labels are hidden"
+    (is (= {:target-alpha 1.0
+            :update? true
+            :hovered-only? true}
+           (logic/label-render-state "node-a" {:label-visible? false} 0.0))))
+  (testing "Fading alpha without hover does not recalculate normal label candidates"
+    (is (= {:target-alpha 0.0
+            :update? false
+            :hovered-only? true}
+           (logic/label-render-state nil {:label-visible? false} 0.35)))))
+
 (deftest layout-nodes-uses-link-forces
   (let [nodes [{:id "tag-a" :kind "tag" :label "Tag A"}
                {:id "obj-linked" :kind "object" :label "Linked object"}
@@ -116,3 +158,14 @@
                 layouted))
     (is (< (distance "tag-a" "obj-linked")
            (distance "tag-a" "obj-island")))))
+
+(deftest layout-nodes-ignores-links-with-missing-nodes
+  (let [nodes [{:id 168 :kind "page" :label "Existing page"}
+               {:id 169 :kind "page" :label "Linked page"}]
+        links [{:source 168 :target 169}
+               {:source 168 :target 170}]
+        layouted (logic/layout-nodes nodes links :all-pages false)
+        by-id (into {} (map (juxt :id identity) layouted))]
+    (is (= #{168 169} (set (map :id layouted))))
+    (is (= 1 (:degree (get by-id 168))))
+    (is (= 1 (:degree (get by-id 169))))))

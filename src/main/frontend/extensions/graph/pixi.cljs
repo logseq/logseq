@@ -71,7 +71,7 @@
                     dy [-1 0 1]]
                 (str (+ cx dx) ":" (+ cy dy)))
         candidates (mapcat #(get grid % []) cells)
-        max-dist (/ 11 (max scale 0.5))]
+        max-dist (/ 24 (max scale 0.5))]
     (reduce
      (fn [best node]
        (let [dx (- world-x (:x node))
@@ -115,7 +115,7 @@
     (take max-labels ranked)))
 
 (defn- world-viewport-rect
-  [world width height]
+  [^js world width height]
   (let [scale (.. world -scale -x)
         x (.-x world)
         y (.-y world)
@@ -126,15 +126,15 @@
      :max-y (+ (/ (- height y) scale) padding)}))
 
 (defn- screen-point
-  [world x y]
+  [^js world x y]
   (let [scale (.. world -scale -x)]
     {:x (+ (* x scale) (.-x world))
      :y (+ (* y scale) (.-y world))
      :scale scale}))
 
 (defn- create-label-manager!
-  [overlay-container dark? candidate-node-ids get-node-by-id]
-  (let [label-layer (new (.-Container PIXI))
+  [^js overlay-container dark? candidate-node-ids get-node-by-id]
+  (let [^js label-layer (new (.-Container PIXI))
         style (new (.-TextStyle PIXI)
                    #js {:fontFamily "Avenir Next, Inter, system-ui, sans-serif"
                         :fontSize 11
@@ -148,8 +148,8 @@
     (set! (.-visible label-layer) false)
     (.addChild overlay-container label-layer)
     {:container label-layer
-     :update! (fn [world width height hovered-node-id {:keys [node-visible? hovered-only?]
-                                                       :or {hovered-only? false}}]
+     :update! (fn [^js world width height hovered-node-id {:keys [node-visible? hovered-only?]
+                                                           :or {hovered-only? false}}]
                 (let [node-visible? (or node-visible? (constantly true))
                       scale (.. world -scale -x)
                       viewport (world-viewport-rect world width height)
@@ -193,11 +193,11 @@
                   (doseq [id selected-ids]
                     (when-let [{:keys [x y label radius]} (get-node-by-id id)]
                       (let [entry (or (get @entry-by-id* id)
-                                      (let [entry-container (new (.-Container PIXI))
-                                            bg (new (.-Graphics PIXI))
-                                            text (new (.-Text PIXI)
-                                                      #js {:text ""
-                                                           :style style})]
+                                      (let [^js entry-container (new (.-Container PIXI))
+                                            ^js bg (new (.-Graphics PIXI))
+                                            ^js text (new (.-Text PIXI)
+                                                          #js {:text ""
+                                                               :style style})]
                                         (.addChild entry-container bg)
                                         (.addChild entry-container text)
                                         (.addChild label-layer entry-container)
@@ -208,9 +208,9 @@
                                           (swap! entry-by-id* assoc id entry*)
                                           entry*)))
                             hovered? (= id hovered-node-id)
-                            text-node (:text entry)
-                            bg-node (:background entry)
-                            container-node (:container entry)
+                            ^js text-node (:text entry)
+                            ^js bg-node (:background entry)
+                            ^js container-node (:container entry)
                             display-text (logic/label-display-text label hovered?)
                             {sx :x sy :y scale :scale} (screen-point world x y)]
                         (when (or (not= display-text (.-text text-node))
@@ -251,13 +251,13 @@
                         (set! (.-visible (:container entry)) false))))
                   (reset! visible-ids* selected-id-set)))
      :destroy! (fn []
-                 (doseq [[_ {:keys [container]}] @entry-by-id*]
+                 (doseq [[_ {:keys [^js container]}] @entry-by-id*]
                    (.destroy container))
                  (reset! entry-by-id* {})
                  (reset! visible-ids* #{}))}))
 
 (defn- draw-edges!
-  [graphics layout-by-id links dark?]
+  [^js graphics layout-by-id links dark?]
   (let [max-edges 28000
         links* (if (> (count links) max-edges)
                  (take max-edges links)
@@ -277,21 +277,24 @@
     (count links*)))
 
 (defn- render-edges!
-  [container layout-by-id links dark?]
-  (let [graphics (new (.-Graphics PIXI))
+  [^js container layout-by-id links dark?]
+  (let [^js graphics (new (.-Graphics PIXI))
         drawn-links (draw-edges! graphics layout-by-id links dark?)]
     (.addChild container graphics)
     {:graphics graphics
      :drawn-links drawn-links}))
 
 (defn- render-nodes!
-  [tag-container detail-container layouted-nodes]
-  (let [container (new (.-Container PIXI))
+  [^js tag-container ^js detail-container layouted-nodes]
+  (let [^js container (new (.-Container PIXI))
         texture (create-circle-texture)
         sprites (reduce
                  (fn [acc node]
-                   (let [sprite (new (.-Sprite PIXI) texture)
-                         scale (/ (* 2 (:radius node)) 96)]
+                   (let [^js sprite (new (.-Sprite PIXI) texture)
+                         scale (/ (* 2 (:radius node)) 96)
+                         ^js sprite-container (if (= "tag" (:kind node))
+                                                tag-container
+                                                container)]
                      (set! (.. sprite -anchor -x) 0.5)
                      (set! (.. sprite -anchor -y) 0.5)
                      (set! (.-x sprite) (:x node))
@@ -299,10 +302,7 @@
                      (set! (.-tint sprite) (:color-int node))
                      (set! (.. sprite -scale -x) scale)
                      (set! (.. sprite -scale -y) scale)
-                     (.addChild (if (= "tag" (:kind node))
-                                  tag-container
-                                  container)
-                                sprite)
+                     (.addChild sprite-container sprite)
                      (assoc acc (:id node) sprite)))
                  {}
                  layouted-nodes)]
@@ -322,7 +322,7 @@
    links))
 
 (defn- draw-drag-neighbor-edges!
-  [graphics layout-by-id neighbor-ids x y dark?]
+  [^js graphics layout-by-id neighbor-ids x y dark?]
   (.clear graphics)
   (when (seq neighbor-ids)
     (.setStrokeStyle graphics
@@ -350,13 +350,13 @@
    positions-by-id))
 
 (defn- setup-pan-and-zoom!
-  [canvas world {:keys [get-node-index
-                        on-node-activate
-                        on-scale-change
-                        on-transform
-                        on-hover-node-change
-                        on-node-drag
-                        on-node-drag-end]}]
+  [^js canvas ^js world {:keys [get-node-index
+                                on-node-activate
+                                on-scale-change
+                                on-transform
+                                on-hover-node-change
+                                on-node-drag
+                                on-node-drag-end]}]
   (let [dragging-world? (atom false)
         drag-node* (atom nil)
         moved? (atom false)
@@ -488,25 +488,27 @@
         (.removeEventListener canvas "wheel" on-wheel)))))
 
 (defn- setup-scene!
-  [app container {:keys [nodes links dark? on-node-activate on-rendered view-mode]} render-start]
+  [^js app ^js container {:keys [nodes links dark? on-node-activate on-rendered view-mode]} render-start]
   (set! (.-innerHTML container) "")
-  (let [canvas (or (.-canvas app) (.-view app))
-        world (new (.-Container PIXI))
-        detail-layer (new (.-Container PIXI))
-        tag-layer (new (.-Container PIXI))
-        label-layer-wrapper (new (.-Container PIXI))
-        drag-edge-layer (new (.-Graphics PIXI))
+  (let [^js canvas (or (.-canvas app) (.-view app))
+        ^js stage (.-stage app)
+        ^js world (new (.-Container PIXI))
+        ^js detail-layer (new (.-Container PIXI))
+        ^js tag-layer (new (.-Container PIXI))
+        ^js label-layer-wrapper (new (.-Container PIXI))
+        ^js drag-edge-layer (new (.-Graphics PIXI))
         _ (.appendChild container canvas)
-        _ (.addChild (.-stage app) world)
+        _ (.addChild stage world)
         _ (.addChild world detail-layer)
         _ (.addChild world tag-layer)
-        _ (.addChild (.-stage app) label-layer-wrapper)
+        _ (.addChild stage label-layer-wrapper)
         width (.-clientWidth container)
         height (.-clientHeight container)
         normalized-view-mode (normalize-view-mode view-mode)
         layouted-nodes* (atom (layout-nodes nodes links view-mode dark?))
         node-index-by-id (into {} (map-indexed (fn [idx node] [(:id node) idx]) @layouted-nodes*))
         layout-by-id* (atom (into {} (map (fn [node] [(:id node) node]) @layouted-nodes*)))
+        preview-layout-by-id* (atom nil)
         edge-render-info (render-edges! detail-layer @layout-by-id* links dark?)
         _ (.addChild detail-layer drag-edge-layer)
         node-render-info (render-nodes! tag-layer detail-layer @layouted-nodes*)
@@ -522,7 +524,11 @@
         label-manager (create-label-manager! label-layer-wrapper
                                              dark?
                                              label-candidate-ids
-                                             (fn [id] (get @layout-by-id* id)))
+                                             (fn [id]
+                                               (get (logic/current-layout-by-id
+                                                     @layout-by-id*
+                                                     @preview-layout-by-id*)
+                                                    id)))
         hovered-node-id* (atom nil)
         drag-session* (atom nil)
         detail-target-alpha (atom 1.0)
@@ -588,12 +594,20 @@
                                (when-let [sprite (get (:sprites node-render-info) node-id)]
                                  (set! (.-x sprite) x)
                                  (set! (.-y sprite) y)))
-                             (draw-drag-neighbor-edges! drag-edge-layer
-                                                        @layout-by-id*
-                                                        (get neighbor-map root-id)
-                                                        next-x
-                                                        next-y
-                                                        dark?)
+                             (let [preview-layout-by-id (logic/merge-node-positions
+                                                         @layout-by-id*
+                                                         positions)]
+                               (reset! preview-layout-by-id* preview-layout-by-id)
+                               (draw-edges! (:graphics edge-render-info)
+                                            preview-layout-by-id
+                                            links
+                                            dark?)
+                               (draw-drag-neighbor-edges! drag-edge-layer
+                                                          preview-layout-by-id
+                                                          (get neighbor-map root-id)
+                                                          next-x
+                                                          next-y
+                                                          dark?))
                              (mark-transform!)))
         commit-node-drag! (fn [node next-x next-y]
                             (let [node-id (:id node)
@@ -611,6 +625,7 @@
                                            @layout-by-id*
                                            links
                                            dark?)
+                              (reset! preview-layout-by-id* nil)
                               (.clear drag-edge-layer)
                               (reset! drag-session* nil)
                               (reset! all-node-index* (index-layouted-nodes @layouted-nodes*))
@@ -625,17 +640,15 @@
                         (set! (.-alpha layer) next)
                         (set! (.-visible layer) (> next 0.01))))
         animate-layer (fn []
-                        (let [hover-label? (some? @hovered-node-id*)
-                              effective-label-target (if hover-label?
-                                                       1.0
-                                                       @label-target-alpha)]
                         (ticker-step detail-layer detail-target-alpha)
-                          (when-let [label-layer (:container label-manager)]
-                            (ticker-step label-layer effective-label-target)
-                            (when (and @transform-dirty?
-                                       (or hover-label?
-                                           (> (.-alpha label-layer) 0.02)
-                                           (> effective-label-target 0.02)))
+                        (when-let [label-layer (:container label-manager)]
+                          (let [{:keys [target-alpha update? hovered-only?]}
+                                (logic/label-render-state
+                                 @hovered-node-id*
+                                 @visibility-state*
+                                 (.-alpha label-layer))]
+                            (ticker-step label-layer target-alpha)
+                            (when (and @transform-dirty? update?)
                               ((:update! label-manager)
                                world
                                width
@@ -644,8 +657,7 @@
                                {:node-visible? (if (:detail-expanded? @visibility-state*)
                                                  (constantly true)
                                                  #(= "tag" (:kind %)))
-                                :hovered-only? (and hover-label?
-                                                    (<= @label-target-alpha 0.02))})
+                                :hovered-only? hovered-only?})
                               (reset! transform-dirty? false)))))
         update-detail-visibility! (fn [scale]
                                     (let [prev @visibility-state*
@@ -696,7 +708,7 @@
      :canvas canvas}))
 
 (defn render-container!
-  [container {:keys [nodes links dark? on-node-activate on-rendered view-mode]}]
+  [^js container {:keys [nodes links dark? on-node-activate on-rendered view-mode]}]
   (when container
     (let [token (swap! *render-token inc)
           render-start (.now js/performance)

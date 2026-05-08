@@ -98,6 +98,38 @@
                  (get neighbor-map node-id []))]
             (recur queue depths)))))))
 
+(defn merge-node-positions
+  [layout-by-id positions-by-id]
+  (reduce-kv
+   (fn [m node-id position]
+     (if-let [node (get m node-id)]
+       (assoc m node-id (merge node position))
+       m))
+   layout-by-id
+   positions-by-id))
+
+(defn current-layout-by-id
+  [layout-by-id preview-layout-by-id]
+  (or preview-layout-by-id layout-by-id))
+
+(defn label-render-state
+  [hovered-node-id {:keys [label-visible?]} _label-alpha]
+  (cond
+    hovered-node-id
+    {:target-alpha 1.0
+     :update? true
+     :hovered-only? (not label-visible?)}
+
+    label-visible?
+    {:target-alpha 1.0
+     :update? true
+     :hovered-only? false}
+
+    :else
+    {:target-alpha 0.0
+     :update? false
+     :hovered-only? true}))
+
 (defn- normalize-view-mode
   [view-mode]
   (if (= view-mode :all-pages)
@@ -126,6 +158,16 @@
          (update target (fnil inc 0))))
    {}
    links))
+
+(defn- keep-links-with-nodes
+  [links node-id-set]
+  (keep (fn [{:keys [source target] :as link}]
+          (when (and source
+                     target
+                     (contains? node-id-set source)
+                     (contains? node-id-set target))
+            link))
+        links))
 
 (defn- node-radius
   [kind degree]
@@ -175,17 +217,33 @@
   [view-mode]
   (if (= view-mode :tags-and-objects) 0.018 0.025))
 
+(defn layout-tick-count
+  [node-count view-mode]
+  (let [view-mode (normalize-view-mode view-mode)]
+    (cond
+      (<= node-count 120)
+      160
+
+      (<= node-count 400)
+      (if (= view-mode :tags-and-objects) 130 110)
+
+      (<= node-count 900)
+      (if (= view-mode :tags-and-objects) 110 90)
+
+      :else
+      (if (= view-mode :tags-and-objects) 90 70))))
+
 (defn layout-nodes
   [nodes links view-mode dark?]
   (let [view-mode (normalize-view-mode view-mode)
+        node-id-set (set (map :id nodes))
+        links (keep-links-with-nodes links node-id-set)
         degree (build-degree-map links)
         simulation-nodes (->> nodes
                               (map-indexed #(simulation-node %2 degree %1))
                               (into-array))
         simulation-links (->> links
-                              (keep (fn [{:keys [source target] :as link}]
-                                      (when (and source target)
-                                        (simulation-link link))))
+                              (map simulation-link)
                               (into-array))
         link-force (-> (d3-force/forceLink simulation-links)
                        (.id (fn [^js node] (.-id node)))
@@ -207,7 +265,7 @@
                        (.force "collision" collide-force)
                        (.force "y" y-force)
                        (.stop))
-        ticks (if (> (count nodes) 1200) 120 220)]
+        ticks (layout-tick-count (count nodes) view-mode)]
     (dotimes [_ ticks]
       (.tick simulation))
     (->> simulation-nodes

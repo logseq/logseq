@@ -149,13 +149,22 @@
    (fn [node] (uuid-or-asset? (:label node)))
    nodes))
 
+(defn- keep-links-with-nodes
+  [links node-id-set]
+  (filter (fn [{:keys [source target]}]
+            (and (contains? node-id-set source)
+                 (contains? node-id-set target)))
+          links))
+
 (defn- normalize-page-name
   [{:keys [nodes links]}]
   (let [nodes' (->> (remove-uuids-and-files! nodes)
                     (common-util/distinct-by (fn [node] (:id node)))
-                    (remove nil?))]
+                    (remove nil?))
+        node-id-set (set (map :id nodes'))
+        links' (keep-links-with-nodes links node-id-set)]
     {:nodes nodes'
-     :links links}))
+     :links links'}))
 
 (defn- build-all-pages-graph
   [db {:keys [theme journal? orphan-pages? builtin-pages? excluded-pages? created-at-filter]}]
