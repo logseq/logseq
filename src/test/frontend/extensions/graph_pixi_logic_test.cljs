@@ -117,7 +117,7 @@
   (testing "Medium all-pages graphs avoid the old fixed 220 tick cost"
     (is (= 90 (logic/layout-tick-count 643 :all-pages))))
   (testing "Large tags-and-objects graphs keep d3 force under the first-render budget"
-    (is (= 24 (logic/layout-tick-count 3887 :tags-and-objects))))
+    (is (= 3 (logic/layout-tick-count 3887 :tags-and-objects))))
   (testing "Large graphs stay bounded"
     (is (= 70 (logic/layout-tick-count 2500 :all-pages)))))
 
@@ -238,6 +238,6 @@
                       (number? (:radius %))
                       (number? (:color-int %)))
                 (take 200 layouted)))
-    (is (< elapsed 1000))
+    (is (< elapsed 500))
     (is (< (js/Math.abs (:x (get by-id "tag-0"))) 900))
     (is (< (js/Math.abs (:y (get by-id "tag-0"))) 900))))

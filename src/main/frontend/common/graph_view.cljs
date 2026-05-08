@@ -23,78 +23,133 @@
 
 (def ^:private large-all-pages-fast-threshold 10000)
 
-(defn- visible-entity?
-  [entity]
-  (and entity
-       (not (ldb/hidden? entity))
-       (not (ldb/recycled? entity))))
+(defn- datoms-for
+  ([db index attr]
+   (if (d/entid db attr)
+     (d/datoms db index attr)
+     []))
+  ([db index attr value]
+   (let [value (if (keyword? value)
+                 (d/entid db value)
+                 value)]
+     (if (and (d/entid db attr) value)
+       (d/datoms db index attr value)
+       []))))
 
-(defn- entity-label
-  [entity]
-  (or (:block/title entity)
-      (:block/name entity)
-      (some-> (:block/uuid entity) str)
-      (str (:db/id entity))))
+(defn- entity-ids-with
+  ([db attr]
+   (set (map :e (datoms-for db :avet attr))))
+  ([db attr value]
+   (set (map :e (datoms-for db :avet attr value)))))
 
-(defn- entity->node
-  [entity kind]
-  {:id (str (:db/id entity))
-   :db-id (:db/id entity)
-   :uuid (some-> (:block/uuid entity) str)
-   :page? (ldb/page? entity)
-   :label (entity-label entity)
-   :kind kind
-   :block/created-at (:block/created-at entity)})
+(defn- entity-value-map
+  [db attr ids]
+  (persistent!
+   (reduce (fn [m {id :e value :v}]
+             (if (contains? ids id)
+               (let [m (assoc! m id value)]
+                 (if (= (count m) (count ids))
+                   (reduced m)
+                   m))
+               m))
+           (transient {})
+           (datoms-for db :avet attr))))
 
-(defn- visible-graph-tag?
-  [entity]
-  (and (visible-entity? entity)
-       (not (ldb/built-in? entity))
-       (not (ldb/property? entity))))
+(defn- entity-id-subset-with
+  [db attr ids]
+  (persistent!
+   (reduce (fn [matches {id :e}]
+             (if (contains? ids id)
+               (conj! matches id)
+               matches))
+           (transient #{})
+           (datoms-for db :avet attr))))
 
-(defn- visible-graph-object?
-  [entity]
-  (and (visible-entity? entity)
-       (not (ldb/class? entity))
-       (not (ldb/property? entity))))
+(defn- entity-id-set-with-true
+  [db attr]
+  (persistent!
+   (reduce (fn [ids {id :e value :v}]
+             (if (true? value)
+               (conj! ids id)
+               ids))
+           (transient #{})
+           (datoms-for db :avet attr))))
 
-(defn- tag-ids
-  [db]
-  (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
-       (keep (fn [{id :e}]
-               (let [entity (d/entity db id)]
-                 (when (visible-graph-tag? entity)
-                   id))))
+(defn- scalar-node
+  [{:keys [title-by-id name-by-id uuid-by-id]} id kind page?]
+  (let [title (get title-by-id id)
+        name (get name-by-id id)
+        uuid (get uuid-by-id id)]
+    {:id (str id)
+     :db-id id
+     :uuid (some-> uuid str)
+     :page? page?
+     :label (or title name (some-> uuid str) (str id))
+     :kind kind}))
+
+(defn- build-node-context
+  [db node-ids]
+  (let [title-by-id (entity-value-map db :block/title node-ids)
+        title-missing-ids (set/difference node-ids (set (keys title-by-id)))
+        name-by-id (if (empty? title-missing-ids)
+                     {}
+                     (entity-value-map db :block/name title-missing-ids))
+        name-missing-ids (set/difference title-missing-ids (set (keys name-by-id)))]
+    {:title-by-id title-by-id
+     :name-by-id name-by-id
+     :uuid-by-id (if (empty? name-missing-ids)
+                   {}
+                   (entity-value-map db :block/uuid name-missing-ids))}))
+
+(defn- visible-object-id-set
+  [hidden-ids deleted-ids class-ids property-ids object-ids]
+  (->> object-ids
+       (remove #(or (contains? hidden-ids %)
+                    (contains? deleted-ids %)
+                    (contains? class-ids %)
+                    (contains? property-ids %)))
        set))
 
 (defn- build-tags-and-objects-graph
   [db]
-  (let [tag-id-set (tag-ids db)
-        tags (mapv #(d/entity db %) tag-id-set)
-        tag-links (->> (d/datoms db :avet :block/tags)
-                       (keep (fn [{from-id :e tag-id :v}]
-                               (when (and (contains? tag-id-set tag-id)
-                                          (not (contains? tag-id-set from-id)))
-                                 [from-id tag-id])))
-                       distinct
-                       vec)
-        object-ids (set (map first tag-links))
-        objects (->> object-ids
-                     (keep (fn [id]
-                             (let [entity (d/entity db id)]
-                               (when (visible-graph-object? entity)
-                                 entity))))
-                     vec)
-        object-id-set (set (map :db/id objects))
-        nodes (into (mapv #(entity->node % "tag") tags)
-                    (map #(entity->node % "object") objects))
-        links (->> tag-links
-                   (filter (fn [[from-id _tag-id]]
-                             (contains? object-id-set from-id)))
-                   (build-links)
-                   vec)]
-    {:nodes (vec nodes)
-     :links links}))
+  (let [tag-datoms (vec (datoms-for db :avet :block/tags))
+        class-ids (entity-ids-with db :block/tags :logseq.class/Tag)
+        property-ids (entity-ids-with db :block/tags :logseq.class/Property)
+        hidden-ids (entity-id-set-with-true db :logseq.property/hide?)
+        deleted-ids (entity-ids-with db :logseq.property/deleted-at)
+        built-in-ids (entity-id-set-with-true db :logseq.property/built-in?)
+        tag-id-set (->> class-ids
+                        (remove #(or (contains? hidden-ids %)
+                                     (contains? deleted-ids %)
+                                     (contains? built-in-ids %)
+                                     (contains? property-ids %)))
+                        set)]
+    (if (empty? tag-id-set)
+      {:nodes []
+       :links []}
+      (let [tag-links (->> tag-datoms
+                           (keep (fn [{from-id :e tag-id :v}]
+                                   (when (and (contains? tag-id-set tag-id)
+                                              (not (contains? tag-id-set from-id)))
+                                     [from-id tag-id])))
+                           distinct
+                           vec)
+            object-ids (set (map first tag-links))
+            object-id-set (visible-object-id-set hidden-ids deleted-ids class-ids property-ids object-ids)
+            node-ids (set/union tag-id-set object-id-set)
+            context (build-node-context db node-ids)
+            page-ids (entity-id-subset-with db :block/name object-id-set)
+            tags (mapv #(scalar-node context % "tag" true) tag-id-set)
+            objects (mapv #(scalar-node context % "object" (contains? page-ids %))
+                          object-id-set)
+            nodes (into tags objects)
+            links (->> tag-links
+                       (filter (fn [[from-id _tag-id]]
+                                 (contains? object-id-set from-id)))
+                       (build-links)
+                       vec)]
+        {:nodes (vec nodes)
+         :links links}))))
 
 (defn- build-nodes
   [dark? current-page page-links tags nodes namespaces]
@@ -119,10 +174,10 @@
                      n (get page-links page-title 1)
                      size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
                  (cond->
-                 {:id (str (:db/id p))
-                  :db-id (:db/id p)
-                  :uuid (some-> (:block/uuid p) str)
-                  :page? true
+                  {:id (str (:db/id p))
+                   :db-id (:db/id p)
+                   :uuid (some-> (:block/uuid p) str)
+                   :page? true
                    :label page-title
                    :kind (cond
                            (ldb/class? p) "tag"
@@ -351,12 +406,12 @@
                                     (not (contains? linked (:db/id page)))))
                          nodes
                          (if-let [node (build-page-node dark?
-                                                         nil
-                                                         page-links
-                                                         tags
-                                                         page-parents
-                                                         page
-                                                         tag-idents)]
+                                                        nil
+                                                        page-links
+                                                        tags
+                                                        page-parents
+                                                        page
+                                                        tag-idents)]
                            (conj nodes node)
                            nodes))))
                    []

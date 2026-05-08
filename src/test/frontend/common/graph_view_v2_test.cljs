@@ -70,3 +70,20 @@
         elapsed (- (.now js/performance) start)]
     (is (empty? (:nodes result)))
     (is (< elapsed 1000))))
+
+(deftest tags-and-objects-graph-builds-large-tagged-set-quickly
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Movies"}
+                 :blocks (mapv (fn [idx]
+                                  {:block/title (str "Movie " idx)
+                                   :build/tags [:Movie]})
+                                (range 3885))}]
+               :classes {:Movie {}}})
+        start (.now js/performance)
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :tags-and-objects})
+        elapsed (- (.now js/performance) start)]
+    (is (= 3886 (count (:nodes result))))
+    (is (= 3885 (count (:links result))))
+    (is (< elapsed 1000))))

@@ -193,12 +193,17 @@
 
 (defn- simulation-node
   [node degree idx]
-  (let [d (get degree (:id node) 0)]
-    #js {:id (:id node)
-         :idx idx
-         :kind (:kind node)
-         :degree d
-         :radius (node-radius (:kind node) d)}))
+  (let [d (get degree (:id node) 0)
+        result #js {:id (:id node)
+                    :idx idx
+                    :kind (:kind node)
+                    :degree d
+                    :radius (node-radius (:kind node) d)}]
+    (when (number? (:x node))
+      (set! (.-x ^js result) (:x node)))
+    (when (number? (:y node))
+      (set! (.-y ^js result) (:y node)))
+    result))
 
 (defn- simulation-link
   [{:keys [source target]}]
@@ -260,7 +265,7 @@
 
       (and (= view-mode :tags-and-objects)
            (< node-count large-graph-fast-layout-threshold))
-      24
+      3
 
       :else
       (if (= view-mode :tags-and-objects) 90 70))))
@@ -343,6 +348,14 @@
     (clustered-tags-layout-nodes nodes links degree dark?)
     (phyllotaxis-layout-nodes nodes degree dark?)))
 
+(defn- force-seed-nodes
+  [nodes links view-mode degree dark?]
+  (if (and (= view-mode :tags-and-objects)
+           (> (count nodes) 900)
+           (< (count nodes) large-graph-fast-layout-threshold))
+    (fast-layout-nodes nodes links view-mode degree dark?)
+    nodes))
+
 (defn layout-nodes
   [nodes links view-mode dark?]
   (let [view-mode (normalize-view-mode view-mode)
@@ -351,7 +364,8 @@
         degree (build-degree-map links)]
     (if (= :fast (layout-mode (count nodes) view-mode))
       (fast-layout-nodes nodes links view-mode degree dark?)
-      (let [simulation-nodes (->> nodes
+      (let [nodes (force-seed-nodes nodes links view-mode degree dark?)
+            simulation-nodes (->> nodes
                                   (map-indexed #(simulation-node %2 degree %1))
                                   (into-array))
             simulation-links (->> links
