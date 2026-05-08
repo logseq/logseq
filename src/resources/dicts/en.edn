@@ -1148,7 +1148,7 @@
  :plugin/all "All"
  :plugin/auto-update-check "Auto check for updates"
  :plugin/auto-update-check-feedback "Auto check for updates: {1}!"
- :plugin/bulk-remove-disabled "Bulk remove disabled plugins and themes"
+ :plugin/bulk-remove-disabled "Remove disabled plugins and themes"
  :plugin/bulk-remove-disabled-clear-selection "Clear selection"
  :plugin/bulk-remove-disabled-confirm "Remove selected ({1})"
  :plugin/bulk-remove-disabled-delete-alert "Are you sure you want to remove the selected disabled plugins and themes? ({1})"
