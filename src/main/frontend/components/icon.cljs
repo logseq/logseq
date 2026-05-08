@@ -58,7 +58,12 @@
       (.getContext canvas "2d"))))
 
 (declare normalize-icon derive-initials derive-avatar-initials
-         <search-wikipedia-image <save-url-asset! open-image-asset-picker!)
+         <search-wikipedia-image <save-url-asset! open-image-asset-picker!
+         ;; Used by `asset-picker`'s avatar fallback sub-picker — declared
+         ;; up front because `icon-search` itself is defined far below
+         ;; (after asset-picker), so the call site at the avatar fallback
+         ;; needs a forward declare to satisfy the cljs compiler.
+         icon-search)
 
 (def ^:private icon-name-acronyms
   "All-caps tokens that should stay uppercase when humanizing tabler icon
@@ -765,9 +770,15 @@
         ;; Hover preview from icon-picker — overrides node's icon and/or
         ;; color while the user is hovering tiles in the picker. The state
         ;; can carry `:icon` (full normalized item override), `:color`
-        ;; (color override), or both.
+        ;; (color override), or both. `:property` scopes the preview so a
+        ;; Default-Icon-scoped hover doesn't leak into surfaces that
+        ;; render the page-icon (sidebar, cmdk, breadcrumb, etc.).
+        ;; Defaults to `:logseq.property/icon` because that's what every
+        ;; existing caller of this fn renders.
+        preview-property (or (:property opts) :logseq.property/icon)
         preview (state/sub :ui/icon-hover-preview)
         preview-active? (and preview
+                             (= preview-property (:property preview))
                              (or (= (:db-id preview) (:db/id entity))
                                  (contains? (:db-ids preview) (:db/id entity))))
         preview-icon (when preview-active? (:icon preview))
@@ -2865,6 +2876,14 @@
   (rum/local nil ::web-query-debounced) ;; Debounced web search query
   (rum/local :avatar ::mode) ;; :avatar | :image — live tab state, seeded in :will-mount
   (rum/local false ::customize-expanded?) ;; Avatar customize band open/closed
+  ;; Controlled open state for the Fallback dropdown menu (the chip's
+  ;; menu that contains Letters / Icon… options). Controlled so we can
+  ;; programmatically close the whole menu chain after a sub-picker
+  ;; commit (Radix cascade-closes the sub-content when the parent
+  ;; closes). Without this, the user picks an icon in the sub-picker
+  ;; and the Fallback dropdown stays open until they manually click
+  ;; out — confusing and slow.
+  (rum/local false ::fallback-menu-open?)
   (rum/local nil ::paste-handler) ;; Holds latest clipboard-paste closure for the DOM listener
   ;; Keyboard-nav state, parallels the icon-picker's model.
   (rum/local :search ::focus-region)    ;; :search | :grid
@@ -2924,6 +2943,26 @@
                                  (when @*asset-picker-open?
                                    (reset! *loading? false))))))
 
+                ;; Pre-warm the customize-band's expanded layout. The
+                ;; first expand from compact dropped frames because the
+                ;; expanded layout (cb-rail-wrap visible at 39px, avatar
+                ;; at 56px, cb-content at 14px padding + 14px gap) had
+                ;; never been computed before the user clicked. We
+                ;; briefly set `data-expanded` (with a `data-prewarming`
+                ;; sibling that suppresses every transition under the
+                ;; zone — see icon.css), force a synchronous reflow via
+                ;; `offsetHeight`, then revert. The browser keeps the
+                ;; expanded layout's box geometry warm; the user's first
+                ;; real click hits a hot cache and the morph runs at 60fps.
+                (when-let [^js zone (some-> (rum/dom-node state)
+                                            (.querySelector ".avatar-customize-zone"))]
+                  (.setAttribute zone "data-prewarming" "")
+                  (.setAttribute zone "data-expanded" "true")
+                  (.-offsetHeight zone)
+                  (.removeAttribute zone "data-expanded")
+                  (.-offsetHeight zone)
+                  (.removeAttribute zone "data-prewarming"))
+
                 ;; Attach a paste listener to the picker root so ⌘V anywhere in
                 ;; the modal routes through the render-time clipboard handler.
                 (let [node (rum/dom-node state)
@@ -2958,7 +2997,8 @@
 
                    state)}
   [state {:keys [on-chosen on-back on-delete del-btn? current-icon avatar-context page-title
-                 *color preview-target-db-id preview-target-db-ids]}]
+                 *color preview-target-db-id preview-target-db-ids property]
+          :or {property :logseq.property/icon}}]
   (let [*search-q (::search-q state)
         *loading? (::loading? state)
         *loaded-assets (::loaded-assets state)
@@ -3415,7 +3455,7 @@
                         :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
                                      (fn [c]
                                        (state/set-state! :ui/icon-hover-preview
-                                                         (cond-> {:color c}
+                                                         (cond-> {:color c :property property}
                                                            preview-target-db-id (assoc :db-id preview-target-db-id)
                                                            (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids))))))
                         :on-hover-end! (when (or preview-target-db-id (seq preview-target-db-ids))
@@ -3625,6 +3665,14 @@
                 hover-preview (state/sub :ui/icon-hover-preview)
                 hover-icon (when (and hover-preview
                                       (= preview-target-db-id (:db-id hover-preview))
+                                      ;; Gate on property scope so the
+                                      ;; tile only reflects previews from
+                                      ;; the picker that's editing *this*
+                                      ;; field. Without it, opening the
+                                      ;; Default Icon picker would tint
+                                      ;; the page-title's separately-mounted
+                                      ;; asset-picker tile (and vice versa).
+                                      (= property (:property hover-preview))
                                       (= :avatar (get-in hover-preview [:icon :type])))
                              (:icon hover-preview))
                 ;; Committed (hover-free) base: what the avatar would
@@ -3642,24 +3690,39 @@
                              (on-chosen nil
                                         (assoc-in preview-icon [:data :shape] new-shape)
                                         true))
+                ;; All three commit fns clear `:ui/icon-hover-preview`
+                ;; (so the asset-picker tile stops reading a stale
+                ;; hover-icon and falls back to the freshly-committed
+                ;; value) and close the Fallback menu chain via the
+                ;; controlled `::fallback-menu-open?` atom. Closing the
+                ;; parent menu Radix-cascades the close into the
+                ;; sub-content too, so a tile-pick in the sub-picker
+                ;; dismisses the entire menu — matching the standard
+                ;; "click an item to commit and dismiss" pattern.
+                close-fallback-menu! (fn []
+                                       (state/set-state! :ui/icon-hover-preview nil)
+                                       (reset! (::fallback-menu-open? state) false))
                 set-fallback-letters! (fn []
                                         (on-chosen nil
                                                    (-> preview-icon
                                                        (assoc-in [:data :fallback-type] :letters)
                                                        (update :data dissoc :fallback-icon))
-                                                   true))
+                                                   true)
+                                        (close-fallback-menu!))
                 set-fallback-icon! (fn [icon-name]
                                      (on-chosen nil
                                                 (-> preview-icon
                                                     (assoc-in [:data :fallback-type] :icon)
                                                     (assoc-in [:data :fallback-icon] icon-name))
-                                                true))
+                                                true)
+                                     (close-fallback-menu!))
                 set-fallback-emoji! (fn [emoji-id]
                                       (on-chosen nil
                                                  (-> preview-icon
                                                      (assoc-in [:data :fallback-type] :emoji)
                                                      (assoc-in [:data :fallback-icon] emoji-id))
-                                                 true))
+                                                 true)
+                                      (close-fallback-menu!))
                 ;; Live preview while hovering Shape / Fallback dropdown
                 ;; rows. Broadcast a synthetic avatar (committed config
                 ;; with the hovered field changed) into
@@ -3670,18 +3733,13 @@
                 ;; fallback sub-picker uses on tile hover.
                 preview-shape-on-hover!
                 (fn [shape]
-                  (js/console.log "[DEBUG band shape-hover] FIRED shape=" (pr-str shape)
-                                  "preview-target-db-id=" preview-target-db-id)
                   (when preview-target-db-id
                     (state/set-state! :ui/icon-hover-preview
                                       {:db-id preview-target-db-id
-                                       :icon (assoc-in committed-icon [:data :shape] shape)})
-                    (js/console.log "[DEBUG band shape-hover] AFTER set-state, value="
-                                    (pr-str (:ui/icon-hover-preview @state/state)))))
+                                       :property property
+                                       :icon (assoc-in committed-icon [:data :shape] shape)})))
                 preview-fallback-on-hover!
                 (fn [fb-type]
-                  (js/console.log "[DEBUG band fallback-hover] FIRED fb-type=" (pr-str fb-type)
-                                  "preview-target-db-id=" preview-target-db-id)
                   (when preview-target-db-id
                     (let [base committed-icon
                           ;; For Letters: drop fallback-icon so the avatar
@@ -3704,6 +3762,7 @@
                                                     (or current-fb-icon "circle-dashed"))))]
                       (state/set-state! :ui/icon-hover-preview
                                         {:db-id preview-target-db-id
+                                         :property property
                                          :icon next-icon}))))
                 clear-preview-on-leave!
                 (fn []
@@ -3780,14 +3839,7 @@
                 :aria-label "Customize avatar"
                 :aria-expanded expanded?}
                [:div.preview-avatar
-                (icon preview-icon {:size 56})
-                [:div.preview-cue
-                 ;; Both glyphs always rendered, stacked; CSS shows the
-                 ;; active one (and crossfades) based on data-expanded.
-                 [:span.preview-cue-glyph.preview-cue-pencil
-                  (shui/tabler-icon "pencil" {:size 11})]
-                 [:span.preview-cue-glyph.preview-cue-check
-                  (shui/tabler-icon "check" {:size 11})]]]]
+                (icon preview-icon {:size 56})]]
               [:div.cb-meta-stage
                ;; Resting state: the entire banner is one click target
                ;; that toggles the expanded customize panel. Layout:
@@ -3843,17 +3895,30 @@
                    ;; mouseenter is suppressed for the item already
                    ;; under the cursor at open time, which made the
                    ;; first hover silently no-op.
+                   ;; Leading tabler icons follow the codebase's canonical
+                   ;; dropdown-menu-item pattern (see deps/shui/src/logseq/
+                   ;; shui/demo.cljs:18-50): tabler icon as the first
+                   ;; child with `scale-90 pr-1 opacity-80` so the icon
+                   ;; reads slightly smaller and dimmer than the label.
                    (shui/dropdown-menu-item
                     {:on-click #(set-shape! :circle)
                      :on-focus #(preview-shape-on-hover! :circle)}
+                    (shui/tabler-icon "circle" {:class "scale-90 pr-1 opacity-80"})
                     "Circle")
                    (shui/dropdown-menu-item
                     {:on-click #(set-shape! :rounded-rect)
                      :on-focus #(preview-shape-on-hover! :rounded-rect)}
+                    (shui/tabler-icon "square-rounded" {:class "scale-90 pr-1 opacity-80"})
                     "Rectangle")))]
                 [:div.cb-row
                  [:span.cb-label "Fallback"]
                  (shui/dropdown-menu
+                  ;; Controlled open state — see `::fallback-menu-open?`
+                  ;; comment above. The map of props goes as the first
+                  ;; arg to dropdown-menu, before the trigger/content
+                  ;; children.
+                  {:open @(::fallback-menu-open? state)
+                   :on-open-change #(reset! (::fallback-menu-open? state) %)}
                   (shui/dropdown-menu-trigger
                    {:as-child true}
                    [:button.cb-chip
@@ -3899,9 +3964,16 @@
                   (shui/dropdown-menu-content
                    {:align "end"
                     :on-mouse-leave clear-preview-on-leave!}
+                   ;; Same canonical pattern as Shape — tabler icon
+                   ;; first, label after. `letter-case` is the closest
+                   ;; tabler glyph to the chip's "Aa" cue. `circle-dashed`
+                   ;; on the sub-trigger matches the placeholder we
+                   ;; broadcast on hover when no fallback-icon has been
+                   ;; committed yet, so menu and live-preview agree.
                    (shui/dropdown-menu-item
                     {:on-click set-fallback-letters!
                      :on-focus #(preview-fallback-on-hover! :letters)}
+                    (shui/tabler-icon "letter-case" {:class "scale-90 pr-1 opacity-80"})
                     "Letters")
                    ;; Sub-menu pattern (matches content.cljs's "Add reaction"
                    ;; → emoji picker): "Icon…" expands to the side instead
@@ -3912,6 +3984,7 @@
                    (shui/dropdown-menu-sub
                     (shui/dropdown-menu-sub-trigger
                      {:on-focus #(preview-fallback-on-hover! :icon)}
+                     (shui/tabler-icon "circle-dashed" {:class "scale-90 pr-1 opacity-80"})
                      "Icon…")
                     ;; `dropdown-menu-sub-content` ships with `p-1` baked
                     ;; into shui's popup-core defaults, AND content.cljs's
@@ -3953,10 +4026,7 @@
                                      ;; emojis route to set-fallback-emoji!
                                      ;; (which writes :fallback-type :emoji)
                                      ;; and tabler icons route to the
-                                     ;; existing :icon path. `(:type item)`
-                                     ;; is `:icon` or `:tabler-icon` for
-                                     ;; tabler tiles and `:emoji` for emoji
-                                     ;; tiles after normalization.
+                                     ;; existing :icon path.
                                      (let [glyph-id (or (get-in icon [:data :value])
                                                         (:id icon))]
                                        (cond
@@ -3992,6 +4062,13 @@
                         :page-title page-title
                         :preview-target-db-id preview-target-db-id
                         :hover-wrap-fn fallback-hover-wrap-fn
+                        ;; Propagate the asset-picker's property scope to
+                        ;; the sub-picker so its hover broadcasts go to
+                        ;; the same surface (e.g. when editing the class
+                        ;; default-icon, the sub-picker's icon-grid hovers
+                        ;; reach only the Default Icon field, not the
+                        ;; page-title icon).
+                        :property property
                         ;; Suppress the picker's own color swatch and
                         ;; delete button — the parent asset-picker
                         ;; already owns both for the whole avatar, and
@@ -5889,8 +5966,16 @@
                      0)))
                 s)}
   [state {:keys [on-chosen del-btn? icon-value page-title preview-target-db-id preview-target-db-ids
-                 allowed-tabs hover-wrap-fn color-btn?]
-          :or {color-btn? true}
+                 allowed-tabs hover-wrap-fn color-btn? property]
+          :or {color-btn? true
+               ;; `property` scopes hover-preview broadcasts so two pickers
+               ;; on the same entity but different properties (e.g.
+               ;; page-title's `:logseq.property/icon` and class
+               ;; default-icon's `:logseq.property.class/default-icon`)
+               ;; don't leak previews into each other's surfaces. Default
+               ;; to `:logseq.property/icon` because that's the dominant
+               ;; case; callers editing other fields pass their own.
+               property :logseq.property/icon}
           :as opts}]
   ;; `color-btn?` defaults to true so existing call sites are unchanged;
   ;; the avatar fallback sub-picker passes `:color-btn? false` because
@@ -5956,18 +6041,28 @@
          :custom-image  {:type :image-placeholder
                          :id "image-placeholder"}}
         preview-targets-set? (or preview-target-db-id (seq preview-target-db-ids))
-        preview-base-target (cond-> {}
+        ;; Every preview write carries `:property` so readers in
+        ;; different fields editing the same entity (page-title icon vs
+        ;; class default-icon) can isolate by property. The default of
+        ;; `:logseq.property/icon` matches the existing implicit scope of
+        ;; sidebar / cmdk / page-title rendering — so unscoped callers
+        ;; keep working as before.
+        preview-base-target (cond-> {:property property}
                               preview-target-db-id (assoc :db-id preview-target-db-id)
                               (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids)))
         clear-tile-hover!
         (fn []
           (when preview-targets-set?
-            ;; Stale-db-id guard: if a different picker has since taken over
-            ;; the slot, don't clear its preview. Prevents cleanup-races
-            ;; between pickers opening on different blocks back-to-back.
+            ;; Stale-db-id-and-property guard: if a different picker has
+            ;; since taken over the slot, don't clear its preview.
+            ;; Prevents cleanup-races between pickers on different blocks
+            ;; or on the same block but different properties (e.g. opening
+            ;; the Default Icon picker right after the page-title picker
+            ;; on the same class).
             (let [current (:ui/icon-hover-preview @state/state)
-                  mine? (or (= preview-target-db-id (:db-id current))
-                            (= (set preview-target-db-ids) (:db-ids current)))]
+                  mine? (and (= property (:property current))
+                             (or (= preview-target-db-id (:db-id current))
+                                 (= (set preview-target-db-ids) (:db-ids current))))]
               (when (or (nil? current) mine?)
                 (state/set-state! :ui/icon-hover-preview nil)))))
         broadcast-tile-hover!
@@ -6000,8 +6095,12 @@
         ;; closure and goes stale across keep-popup? flows (e.g. picking a color
         ;; on an inherited icon, which writes the icon to the entity for the first
         ;; time). Treat the :none sentinel (set on delete) as "no icon".
+        ;; `property` selects the right entity attribute — `:logseq.property/icon`
+        ;; for page-icon pickers, `:logseq.property.class/default-icon` for the
+        ;; class default-icon picker. Without this, a default-icon picker would
+        ;; read the unrelated `:logseq.property/icon` and stay stale across commits.
         del-btn? (if preview-target-db-id
-                   (let [icon (some-> (model/sub-block preview-target-db-id) :logseq.property/icon)]
+                   (let [icon (some-> (model/sub-block preview-target-db-id) (get property))]
                      (and icon (not= (:type icon) :none)))
                    del-btn?)
         ;; Same staleness problem applies to icon-value itself. shui's popup
@@ -6015,7 +6114,18 @@
         ;; downstream asset-picker's preview tile + Shape chip + body grid.
         icon-value (if preview-target-db-id
                      (or (some-> (model/sub-block preview-target-db-id)
-                                 :logseq.property/icon)
+                                 ;; Pick the right entity attribute based on
+                                 ;; scope — `:logseq.property/icon` for the
+                                 ;; page-icon picker, `:logseq.property.class/
+                                 ;; default-icon` for the class default-icon
+                                 ;; picker. The Default Icon commit writes to
+                                 ;; the latter, so without this lookup the
+                                 ;; reactive override returned the unrelated
+                                 ;; `:logseq.property/icon` (often nil or the
+                                 ;; old page-icon value) and the asset-picker
+                                 ;; tile + Fallback chip stayed frozen at the
+                                 ;; pre-edit state.
+                                 (get property))
                          icon-value)
                      icon-value)
         normalized-icon-value (normalize-icon icon-value)
@@ -6045,16 +6155,26 @@
                                    (when (:type icon-item) (add-used-item! icon-item)))))
         *focus-region (::focus-region state)
         *highlighted-index (::highlighted-index state)
+        ;; Use `rum/react` (not bare deref) so changes to
+        ;; `*highlighted-index` from `keyboard-nav-controller` arrow-key
+        ;; handlers re-render icon-search. Without this, `highlighted-id`
+        ;; below was computed once at popup-show and never refreshed —
+        ;; the phantom `icon-hover-effects` component (which broadcasts
+        ;; the highlighted item to `:ui/icon-hover-preview`) never saw a
+        ;; fresh `current-id`, so keyboard nav silently no-op'd while
+        ;; mouse hover worked. One subscription is enough; the other
+        ;; reads can stay as bare derefs once the component is hooked up.
+        highlighted-idx (rum/react *highlighted-index)
         section-states @*section-states
         {flat-items :items sections :sections} (compute-flat-items @*tab result section-states)
-        highlighted-id (when-let [idx @*highlighted-index]
+        highlighted-id (when-let [idx highlighted-idx]
                          (when (< idx (count flat-items))
                            (:id (nth flat-items idx))))
-        highlighted-section (when-let [idx @*highlighted-index]
+        highlighted-section (when-let [idx highlighted-idx]
                               (when-let [si (section-for-index idx sections)]
                                 (:label (nth sections si))))
         ghost-highlighted-id (when (and (= @*focus-region :search)
-                                        (nil? @*highlighted-index)
+                                        (nil? highlighted-idx)
                                         (pos? (count flat-items)))
                                (:id (first flat-items)))
         ghost-highlighted-section (when ghost-highlighted-id
@@ -6113,7 +6233,12 @@
                      ;; here lets the asset-picker's color trigger drive the
                      ;; same preview state.
                      :preview-target-db-id preview-target-db-id
-                     :preview-target-db-ids preview-target-db-ids})
+                     :preview-target-db-ids preview-target-db-ids
+                     ;; Property scope for hover-preview isolation —
+                     ;; flows down so asset-picker's own preview writes
+                     ;; (Shape/Fallback hovers, color swatch) carry the
+                     ;; same scope and target only the right surfaces.
+                     :property property})
 
       :text-picker
       ;; Level 2: Text Picker view
@@ -6206,9 +6331,9 @@
        ;; host React hooks (class component via rum/reactive mixin).
        (icon-hover-effects
         {:current-id   highlighted-id
-         :current-item (when (and @*highlighted-index
-                                  (< @*highlighted-index (count flat-items)))
-                         (nth flat-items @*highlighted-index))
+         :current-item (when (and highlighted-idx
+                                  (< highlighted-idx (count flat-items)))
+                         (nth flat-items highlighted-idx))
          :broadcast!   broadcast-tile-hover!
          :clear!       clear-tile-hover!})
 
@@ -6311,7 +6436,7 @@
                           :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
                                        (fn [c]
                                          (state/set-state! :ui/icon-hover-preview
-                                                           (cond-> {:color c}
+                                                           (cond-> {:color c :property property}
                                                              preview-target-db-id (assoc :db-id preview-target-db-id)
                                                              (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids))))))
                           :on-hover-end! (when (or preview-target-db-id (seq preview-target-db-ids))
@@ -6453,10 +6578,17 @@
 
 (rum/defc icon-picker-trigger-icon < rum/reactive
   "Reactive sub-component so the trigger icon re-renders on hover-preview changes
-  without forcing the parent (which uses React hooks) into a class component."
-  [icon-value preview-target-db-id icon-props]
-  (let [preview (when preview-target-db-id (state/sub :ui/icon-hover-preview))
-        preview-active? (and preview (= (:db-id preview) preview-target-db-id))
+  without forcing the parent (which uses React hooks) into a class component.
+  `property` scopes the preview match — defaults to `:logseq.property/icon`
+  so existing callers keep their behavior; property/value.cljs's
+  `default-icon-row` passes `:logseq.property.class/default-icon` so its
+  trigger only reflects previews from a Default-Icon-scoped picker."
+  [icon-value preview-target-db-id icon-props & [property]]
+  (let [property (or property :logseq.property/icon)
+        preview (when preview-target-db-id (state/sub :ui/icon-hover-preview))
+        preview-active? (and preview
+                             (= (:db-id preview) preview-target-db-id)
+                             (= (:property preview) property))
         preview-icon (when preview-active? (:icon preview))
         ;; Source: previewed icon (cross-type swap) or the committed value.
         ;; Both go through the same color-overlay path below.
@@ -6484,7 +6616,8 @@
     (icon effective-icon-value (merge {:color? true} icon-props))))
 
 (rum/defc icon-picker
-  [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts page-title preview-target-db-id default-icon?]}]
+  [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts page-title preview-target-db-id default-icon? property]
+               :or {property :logseq.property/icon}}]
   (let [*trigger-ref (rum/use-ref nil)
         ;; Optimistic post-commit override. Holds the just-committed
         ;; icon-value during the ~15ms SharedWorker round-trip between
@@ -6524,7 +6657,8 @@
               :page-title page-title
               :del-btn? del-btn?
               :preview-target-db-id preview-target-db-id
-              :default-icon? default-icon?})))]
+              :default-icon? default-icon?
+              :property property})))]
     (hooks/use-effect!
      (fn []
        (when initial-open?
@@ -6564,5 +6698,5 @@
        (if has-icon?
          (if (vector? effective-icon-value) ; hiccup
            effective-icon-value
-           (icon-picker-trigger-icon effective-icon-value preview-target-db-id icon-props))
+           (icon-picker-trigger-icon effective-icon-value preview-target-db-id icon-props property))
          (or empty-label "Empty"))))))

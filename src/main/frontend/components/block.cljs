@@ -3275,6 +3275,12 @@
                                                       :del-btn? (boolean (and icon' (not= (:type icon') :none)))
                                                       :page-title (:block/title block)
                                                       :preview-target-db-id (:db/id block)
+                                                      ;; Page-title scope — explicit so it doesn't
+                                                      ;; rely on the icon-picker's default. Makes
+                                                      ;; the contract visible at the call site
+                                                      ;; alongside the parallel default-icon-row
+                                                      ;; in property/value.cljs.
+                                                      :property :logseq.property/icon
                                                       :button-opts (when (:page-title? config)
                                                                      ;; Drop shui's default sizing/padding so the
                                                                      ;; CSS rule on .ls-page-title .ls-page-icon

@@ -146,12 +146,18 @@
       (icon-component/icon-search
        {:on-chosen on-chosen!
         :icon-value icon
-        :del-btn? (some? icon)})
+        :del-btn? (some? icon)
+        :preview-target-db-id (:db/id block)
+        ;; This row edits `:logseq.property/icon` — the same scope the
+        ;; page-title icon uses. Hover broadcasts target both surfaces.
+        :property :logseq.property/icon})
       [:div.col-span-3.flex.flex-row.items-center.gap-2
        (icon-component/icon-picker icon-value
                                    {:disabled? config/publishing?
                                     :del-btn? (some? icon-value)
-                                    :on-chosen on-chosen!})])))
+                                    :on-chosen on-chosen!
+                                    :preview-target-db-id (:db/id block)
+                                    :property :logseq.property/icon})])))
 
 (rum/defc default-icon-row < rum/reactive
   "Renders the Default Icon property for classes.
@@ -213,6 +219,14 @@
                                   :on-chosen on-chosen
                                   :page-title page-title
                                   :default-icon? true
+                                  :preview-target-db-id (:db/id block)
+                                  ;; Scope the hover-preview to the
+                                  ;; default-icon property so this row's
+                                  ;; picker doesn't leak previews into
+                                  ;; the page-title icon (which subscribes
+                                  ;; to `:logseq.property/icon`-scoped
+                                  ;; previews on the same class entity).
+                                  :property :logseq.property.class/default-icon
                                   :icon-props {:size 20}})]))
 
 (defn select-type?

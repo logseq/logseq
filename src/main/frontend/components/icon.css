@@ -1981,8 +1981,15 @@
   gap: 10px;
   padding: 0;
   min-height: 32px;
-  transition: padding 200ms cubic-bezier(0.32, 0.72, 0, 1),
-              gap 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  /* Padding and gap snap rather than transition. Earlier this row
+     animated 2 layout properties concurrently with 4 more across
+     `.cb-avatar-trigger` and `.cb-rail-wrap` — six layout-triggering
+     properties on three nested elements per frame. Even on Chrome the
+     work is non-trivial; on browsers with weaker GPU acceleration
+     (Dia, etc.) it drops frames perceptibly. Snapping these two is a
+     ~14px height + 4px gap jump at t=0, which the avatar morph
+     immediately covers — effectively invisible during user testing,
+     but cuts ~33% of per-frame layout work. */
 }
 
 .avatar-customize-zone[data-expanded="true"] .cb-content {
@@ -2006,9 +2013,15 @@
      applies its own padding-top, so we drop this margin to 0 to avoid
      double-spacing. */
   margin-top: 6px;
+  /* Animate only width + height (the visible morph). The 6px → 0px
+     margin-top shift snaps because (a) on browsers that struggle with
+     layout-heavy per-frame work, every property dropped is one fewer
+     reflow, and (b) the snap happens at t=0 while the avatar starts
+     growing — the size morph hides the position snap. `will-change`
+     deliberately omitted: for layout properties it doesn't help and
+     can confuse some compositors into spurious layer creation. */
   transition: width 200ms cubic-bezier(0.32, 0.72, 0, 1),
-              height 200ms cubic-bezier(0.32, 0.72, 0, 1),
-              margin-top 200ms cubic-bezier(0.32, 0.72, 0, 1);
+              height 200ms cubic-bezier(0.32, 0.72, 0, 1);
 
   &:focus-visible {
     outline: 2px solid var(--lx-accent-09, var(--rx-accent-09));
@@ -2028,50 +2041,6 @@
     width: 100% !important;
     height: 100% !important;
   }
-
-  .preview-cue {
-    position: absolute;
-    bottom: -3px;
-    right: -3px;
-    width: 18px;
-    height: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: var(--lx-gray-02, var(--rx-gray-02));
-    border: 1px solid var(--lx-gray-05, var(--rx-gray-05));
-    color: var(--lx-gray-11, var(--rx-gray-11));
-    /* Hide the cue in compact state — at 18px the cue would crowd the
-       small avatar and add no information (the "Use icon" CTA on the
-       right is the affordance for compact state). It fades back in as
-       the avatar grows on expand. */
-    opacity: 0;
-    transition: opacity 200ms cubic-bezier(0.32, 0.72, 0, 1),
-                background-color 160ms cubic-bezier(0.32, 0.72, 0, 1),
-                border-color 160ms cubic-bezier(0.32, 0.72, 0, 1),
-                color 160ms cubic-bezier(0.32, 0.72, 0, 1);
-  }
-
-  &:hover .preview-cue {
-    border-color: var(--lx-gray-07, var(--rx-gray-07));
-  }
-
-  /* Both glyphs (pencil + check) overlap in the cue badge. Each crossfades
-     based on the parent zone's data-expanded attribute. transform pops them
-     onto their own layer so they don't repaint the avatar tile during the
-     swap. */
-  .preview-cue-glyph {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: opacity 160ms cubic-bezier(0.32, 0.72, 0, 1);
-  }
-
-  .preview-cue-pencil { opacity: 1; }
-  .preview-cue-check  { opacity: 0; }
 }
 
 /* Expanded state: drop the compact-state margin-top so the 56px avatar
@@ -2105,16 +2074,6 @@
   width: 11px !important;
   height: 11px !important;
 }
-
-.avatar-customize-zone[data-expanded="true"] .preview-cue {
-  background: var(--lx-accent-09, var(--rx-accent-09));
-  border-color: var(--lx-gray-02, var(--rx-gray-02));
-  color: white;
-  opacity: 1;
-}
-
-.avatar-customize-zone[data-expanded="true"] .preview-cue-pencil { opacity: 0; }
-.avatar-customize-zone[data-expanded="true"] .preview-cue-check  { opacity: 1; }
 
 /* The right column hosts both .cb-banner (resting) and .cb-rows (expanded)
    on top of each other. Only the "active" child claims layout space —
@@ -2410,6 +2369,7 @@
   }
 }
 
+
 /* Reset/Done rail — only shown when expanded; sits below the row stack
    separated by a 1px divider that runs the band's full width. */
 /* Rail wrapper — height collapses to 0 in resting state, transitions to
@@ -2452,6 +2412,21 @@
 .avatar-customize-zone[data-expanded="true"] .cb-rail-wrap {
   height: 39px;
   opacity: 1;
+}
+
+/* Pre-warming pass — see asset-picker `:did-mount` (icon.cljs ~2900).
+   On first mount we briefly set `data-expanded` so the browser computes
+   the expanded layout once (caching it for the user's first real
+   click); during that pass we suppress every transition under the zone
+   so the user doesn't see a flash. The `*::before` pseudo-element
+   (gradient backdrop) needs the same treatment so its opacity fade
+   doesn't run during the warm-up. */
+.avatar-customize-zone[data-prewarming],
+.avatar-customize-zone[data-prewarming] *,
+.avatar-customize-zone[data-prewarming] *::before,
+.avatar-customize-zone[data-prewarming] *::after {
+  transition: none !important;
+  animation: none !important;
 }
 
 .avatar-customize-zone .cb-rail {
