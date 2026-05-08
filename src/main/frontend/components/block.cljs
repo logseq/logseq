@@ -648,7 +648,8 @@
 (defn- block-heading-level
   [block level]
   (or (when-let [heading-level (:block/heading-level block)]
-        (when (<= 1 heading-level 6)
+        (when (and (integer? heading-level)
+                   (<= 1 heading-level 6))
           heading-level))
       (heading-value->level (pu/lookup block :logseq.property/heading) level)))
 
