@@ -230,10 +230,6 @@
                (js/console.error (str "Page doesn't have :block/title " p)))))
      vec)))
 
-(defn- tag-ident-set
-  [entity]
-  (set (keep :db/ident (:block/tags entity))))
-
 (defn- page-kind
   [tag-idents]
   (cond
@@ -280,10 +276,10 @@
         tag-ids))
 
 (defn- build-page-id->tag-idents
-  [tagged-pages tag-ident-by-id]
+  [tagged-pages tag-id->ident]
   (reduce
    (fn [m [page-id tag-id]]
-     (if-let [ident (get tag-ident-by-id tag-id)]
+     (if-let [ident (get tag-id->ident tag-id)]
        (update m page-id (fnil conj #{}) ident)
        m))
    {}

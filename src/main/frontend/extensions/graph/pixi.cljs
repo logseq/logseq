@@ -4,33 +4,33 @@
             [frontend.extensions.graph.pixi.logic :as logic]
             [goog.object :as gobj]))
 
-(defonce *graph-instance (atom nil))
-(defonce *simulation-paused? (atom false))
-(defonce ^:private *render-token (atom 0))
+(defonce ^:private *graph-instances (atom {}))
+(defonce ^:private *render-tokens (atom {}))
 (defonce ^:private *tabler-icon-codepoint-cache (atom {}))
 (def ^:private icon-texture-font-size 96)
 
-(defn stop-simulation!
-  []
-  (reset! *simulation-paused? true))
-
-(defn resume-simulation!
-  []
-  (reset! *simulation-paused? false))
+(defn- destroy-instance-data!
+  [{:keys [cleanup app]}]
+  (when (fn? cleanup)
+    (cleanup))
+  (when-let [^js app app]
+    (try
+      (.destroy app)
+      (catch :default _e
+        nil))))
 
 (defn destroy-instance!
-  []
-  (swap! *render-token inc)
-  (when-let [{:keys [cleanup app]} @*graph-instance]
-    (when (fn? cleanup)
-      (cleanup))
-    (when-let [^js app app]
-      (try
-        (.destroy app)
-        (catch :default _e
-          nil))))
-  (reset! *graph-instance nil)
-  (reset! *simulation-paused? false))
+  ([]
+   (doseq [instance (vals @*graph-instances)]
+     (destroy-instance-data! instance))
+   (reset! *graph-instances {})
+   (reset! *render-tokens {}))
+  ([container]
+   (when container
+     (swap! *render-tokens update container (fnil inc 0))
+     (when-let [instance (get @*graph-instances container)]
+       (destroy-instance-data! instance))
+     (swap! *graph-instances dissoc container))))
 
 (defn- normalize-view-mode
   [view-mode]
@@ -164,7 +164,7 @@
     [#{} []]
     nodes)))
 
-(defn- create-label-manager!
+(defn- ^:large-vars/cleanup-todo create-label-manager!
   [^js overlay-container dark? candidate-node-ids get-node-by-id]
   (let [^js label-layer (new (.-Container PIXI))
         style (new (.-TextStyle PIXI)
@@ -491,9 +491,9 @@
 
 (defn- configure-node-display!
   [^js display node emphasis]
-  (let [display-kind (display-kind display)
-        icon? (contains? #{"emoji" "icon"} display-kind)
-        emoji? (= "emoji" display-kind)
+  (let [kind (display-kind display)
+        icon? (contains? #{"emoji" "icon"} kind)
+        emoji? (= "emoji" kind)
         scale (/ (* 2 (:radius node)) (if icon? icon-texture-font-size 96))
         emphasis-scale (case emphasis
                          :selected 1.55
@@ -520,7 +520,7 @@
   (when-let [^js parent (.-parent display)]
     (.removeChild parent display)))
 
-(defn- render-nodes!
+(defn- ^:large-vars/cleanup-todo render-nodes!
   [^js tag-container ^js detail-container layouted-nodes* view-mode highlight-state*]
   (let [^js container (new (.-Container PIXI))
         texture (create-circle-texture)
@@ -681,7 +681,7 @@
    layouted-nodes
    positions-by-id))
 
-(defn- setup-pan-and-zoom!
+(defn- ^:large-vars/cleanup-todo setup-pan-and-zoom!
   [^js canvas ^js world {:keys [get-node-index
                                 on-node-activate
                                 on-node-select
@@ -846,7 +846,7 @@
         (.removeEventListener canvas "pointerleave" on-pointer-leave)
         (.removeEventListener canvas "wheel" on-wheel)))))
 
-(defn- setup-scene!
+(defn- ^:large-vars/cleanup-todo setup-scene!
   [^js app ^js container {:keys [nodes links dark? on-node-activate on-rendered view-mode]} render-start]
   (set! (.-innerHTML container) "")
   (let [^js canvas (or (.-canvas app) (.-view app))
@@ -1140,8 +1140,8 @@
 (defn render-container!
   [^js container {:keys [nodes links dark? on-node-activate on-rendered view-mode]}]
   (when container
-    (destroy-instance!)
-    (let [token @*render-token
+    (destroy-instance! container)
+    (let [token (get (swap! *render-tokens update container (fnil inc 0)) container)
           render-start (.now js/performance)
           app (new (.-Application PIXI))]
       (-> (.init app #js {:backgroundAlpha 0
@@ -1152,25 +1152,19 @@
                           :powerPreference "high-performance"})
           (.then
            (fn []
-             (if (= token @*render-token)
-               (reset! *graph-instance
-                       (setup-scene! app container {:nodes nodes
-                                                    :links links
-                                                    :dark? dark?
-                                                    :on-node-activate on-node-activate
-                                                    :on-rendered on-rendered
-                                                    :view-mode view-mode}
-                                     render-start))
+             (if (= token (get @*render-tokens container))
+               (swap! *graph-instances
+                      assoc
+                      container
+                      (setup-scene! app container {:nodes nodes
+                                                   :links links
+                                                   :dark? dark?
+                                                   :on-node-activate on-node-activate
+                                                   :on-rendered on-rendered
+                                                   :view-mode view-mode}
+                                    render-start))
                (.destroy ^js app))))
           (.catch
            (fn [error]
              (js/console.error "Graph render failed" error))))))
   nil)
-
-(defn render!
-  [state]
-  (let [container-ref (:ref state)
-        container @container-ref
-        opts (first (:rum/args state))]
-    (render-container! container opts))
-  state)

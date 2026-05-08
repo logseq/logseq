@@ -1,6 +1,6 @@
-(ns frontend.components.graph-v2-test
+(ns frontend.components.graph-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.components.graph-v2 :as graph-v2]))
+            [frontend.components.graph :as graph]))
 
 (def graph-data
   {:nodes [{:id "1" :label "Design" :kind "tag"}
@@ -17,14 +17,14 @@
   (is (= [{:id "3" :label "Archive" :count 1}
           {:id "1" :label "Design" :count 1}
           {:id "2" :label "Research" :count 1}]
-         (graph-v2/tag-options graph-data))))
+         (graph/tag-options graph-data))))
 
 (deftest settings-select-all-tags-by-default
   (is (= #{"1" "2" "3"}
-         (graph-v2/selected-tag-id-set {} (graph-v2/tag-options graph-data)))))
+         (graph/selected-tag-id-set {} (graph/tag-options graph-data)))))
 
 (deftest graph-data-is-filtered-by-selected-tags
-  (let [filtered (graph-v2/filter-tags-and-objects-graph
+  (let [filtered (graph/filter-tags-and-objects-graph
                   graph-data
                   #{"1" "2"})]
     (testing "keeps selected tags and their linked objects"

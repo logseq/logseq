@@ -1,4 +1,4 @@
-(ns frontend.components.graph-v2
+(ns frontend.components.graph
   (:require [clojure.string :as string]
             [frontend.components.graph-actions :as graph-actions]
             [frontend.context.i18n :refer [t]]
@@ -158,8 +158,8 @@
          vec)))
 
 (defn selected-tag-id-set
-  [settings tag-options]
-  (let [available-ids (set (map :id tag-options))]
+  [settings available-tags]
+  (let [available-ids (set (map :id available-tags))]
     (if-let [selected-tag-ids (:selected-tag-ids settings)]
       (set (filter available-ids selected-tag-ids))
       available-ids)))
@@ -231,19 +231,19 @@
        (t :graph/view-mode-all-pages))))}))
 
 (defn- tags-group
-  [settings set-settings! tag-options selected-tag-ids tag-query set-tag-query!]
+  [settings set-settings! available-tags selected-tag-ids tag-query set-tag-query!]
   (let [query (string/lower-case (string/trim (or tag-query "")))
-        shown-tags (cond->> tag-options
+        shown-tags (cond->> available-tags
                      (seq query)
                      (filter #(string/includes? (string/lower-case (:label %)) query)))
-        all-tag-ids (mapv :id tag-options)
+        all-tag-ids (mapv :id available-tags)
         selected-count (count selected-tag-ids)]
     (settings-group
      {:settings settings
       :set-settings! set-settings!
       :id :displayed-tags
       :title (t :graph/displayed-tags)
-      :meta (t :graph/displayed-tags-count selected-count (count tag-options))
+      :meta (t :graph/displayed-tags-count selected-count (count available-tags))
       :children
       [:div.graph-v2-tags-control
        [:div.graph-v2-tag-search
@@ -291,7 +291,7 @@
 
 (defn- settings-panel
   [settings-open? set-settings-open! settings set-settings! view-mode set-view-mode!
-   filtered-graph-data tag-options selected-tag-ids tag-query set-tag-query!]
+   filtered-graph-data available-tags selected-tag-ids tag-query set-tag-query!]
     [:div.graph-v2-settings
      {:class (when settings-open? "is-open")}
      [:button.graph-v2-settings-dot
@@ -312,7 +312,7 @@
           (ui/icon "x" {:size 18})]]
         (view-mode-group settings set-settings! view-mode set-view-mode!)
         (when (= view-mode :tags-and-objects)
-          (tags-group settings set-settings! tag-options selected-tag-ids tag-query set-tag-query!))
+          (tags-group settings set-settings! available-tags selected-tag-ids tag-query set-tag-query!))
         (layout-group settings set-settings! filtered-graph-data)])])
 
 (rum/defc global-graph
@@ -365,8 +365,8 @@
            (reset! cancelled? true))))
      [repo theme view-mode])
 
-    (let [tag-options (when graph-data (tag-options graph-data))
-          selected-tag-ids (selected-tag-id-set settings tag-options)
+    (let [available-tags (when graph-data (tag-options graph-data))
+          selected-tag-ids (selected-tag-id-set settings available-tags)
           filtered-graph-data (when graph-data
                                 (if (= view-mode :tags-and-objects)
                                   (filter-tags-and-objects-graph graph-data selected-tag-ids)
@@ -379,7 +379,7 @@
                        view-mode
                        switch-view-mode!
                        (when-not loading? filtered-graph-data)
-                       tag-options
+                       available-tags
                        selected-tag-ids
                        tag-query
                        set-tag-query!)

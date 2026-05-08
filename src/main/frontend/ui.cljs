@@ -783,25 +783,6 @@
           :checked selected}]
         label])]))
 
-(rum/defcs slider < rum/reactive
-  {:init (fn [state]
-           (assoc state ::value (atom (first (:rum/args state)))))}
-  [state _default-value {max' :max :keys [min on-change]}]
-  (let [*value (::value state)
-        value (rum/react *value)
-        value' (int value)]
-    (assert (int? value'))
-    [:input.cursor-pointer
-     {:type      "range"
-      :value     value'
-      :min       min
-      :max       max'
-      :style     {:width "100%"}
-      :on-change #(let [value (util/evalue %)]
-                    (reset! *value value))
-      :on-pointer-up #(let [value (util/evalue %)]
-                        (on-change value))}]))
-
 (rum/defcs tweet-embed < rum/reactive
   (rum/local true :loading?)
   [state id]

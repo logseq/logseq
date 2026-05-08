@@ -6,8 +6,8 @@
             [goog.object :as gobj]))
 
 (defn next-visibility-state
-  [{:keys [detail-expanded? label-visible?]} scale
-   {:keys [show-detail-scale hide-detail-scale show-label-scale hide-label-scale]}]
+  [{:keys [label-visible?]} scale
+   {:keys [show-label-scale hide-label-scale]}]
   (let [detail-expanded? true
         label-visible? (cond
                          (and (not label-visible?)
@@ -189,7 +189,8 @@
 
     selected?
     {:action :unhighlight
-     :next-click nil}
+     :next-click {:node-id node-id
+                  :time now}}
 
     :else
     {:action :highlight
@@ -199,11 +200,11 @@
 (defn label-render-state
   ([hovered-node-id visibility-state label-alpha]
    (label-render-state hovered-node-id #{} #{} visibility-state label-alpha false))
-  ([hovered-node-id active-node-ids {:keys [label-visible?]} _label-alpha]
-   (label-render-state hovered-node-id active-node-ids active-node-ids {:label-visible? label-visible?} _label-alpha true))
+  ([hovered-node-id active-node-ids {:keys [label-visible?]} label-alpha]
+   (label-render-state hovered-node-id active-node-ids active-node-ids {:label-visible? label-visible?} label-alpha true))
   ([hovered-node-id selected-node-ids active-node-ids visibility-state label-alpha]
    (label-render-state hovered-node-id selected-node-ids active-node-ids visibility-state label-alpha true))
-  ([hovered-node-id selected-node-ids active-node-ids {:keys [label-visible? linked-label-visible?]} _label-alpha include-select-scope?]
+  ([hovered-node-id selected-node-ids active-node-ids {:keys [label-visible? linked-label-visible?]} _ include-select-scope?]
    (let [linked-label-visible? (if (some? linked-label-visible?)
                                  linked-label-visible?
                                  label-visible?)
@@ -547,7 +548,7 @@
         (dotimes [_ ticks]
           (.tick simulation))
         (->> simulation-nodes
-             (map (fn [^js simulation-node]
-                    (let [node (nth nodes (.-idx simulation-node))]
-                      (decorate-node node degree dark? (.-x simulation-node) (.-y simulation-node)))))
+             (map (fn [^js sim-node]
+                    (let [node (nth nodes (.-idx sim-node))]
+                      (decorate-node node degree dark? (.-x sim-node) (.-y sim-node)))))
              vec)))))

@@ -3,7 +3,7 @@
   (:require [frontend.components.all-pages :as all-pages]
             [frontend.components.bug-report :as bug-report]
             [frontend.components.file :as file]
-            [frontend.components.graph-v2 :as graph-v2]
+            [frontend.components.graph :as graph]
             [frontend.components.home :as home]
             [frontend.components.imports :as imports]
             [frontend.components.journal :as journal]
@@ -40,7 +40,7 @@
 
    ["/graph"
     {:name :graph
-     :view graph-v2/global-graph}]
+     :view graph/global-graph}]
 
    ["/settings"
     {:name :settings

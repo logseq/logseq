@@ -97,10 +97,9 @@
       :db/restoring?           nil
 
       :search/q                              ""
-      :search/mode                           nil ; nil -> global mode, :graph -> add graph filter, etc.
+      :search/mode                           nil
       :search/args                           nil
       :search/result                         nil
-      :search/graph-filters                  []
       :search/engines                        {}
       :search/index-build                    {:running? false
                                               :repo nil
@@ -621,14 +620,6 @@ Similar to re-frame subscriptions"
    (enable-flashcards? (get-current-repo)))
   ([repo]
    (not (false? (:feature/enable-flashcards? (sub-config repo))))))
-
-(defn graph-settings
-  []
-  (:graph/settings (sub-config)))
-
-(defn graph-forcesettings
-  []
-  (:graph/forcesettings (sub-config)))
 
 ;; Enable by default
 (defn show-brackets?
@@ -1631,24 +1622,6 @@ Similar to re-frame subscriptions"
 (defn clear-search-result!
   []
   (set-search-result! nil))
-
-(defn add-graph-search-filter!
-  [q]
-  (when-not (string/blank? q)
-    (update-state! :search/graph-filters
-                   (fn [value]
-                     (vec (distinct (conj value q)))))))
-
-(defn remove-search-filter!
-  [q]
-  (when-not (string/blank? q)
-    (update-state! :search/graph-filters
-                   (fn [value]
-                     (remove #{q} value)))))
-
-(defn clear-search-filters!
-  []
-  (set-state! :search/graph-filters []))
 
 (defn get-search-mode
   []

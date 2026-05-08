@@ -146,7 +146,7 @@
           :next-click {:node-id "b" :time 1210}}
          (logic/node-click-action {:node-id "a" :time 1000} "b" {:selected? false} 1210)))
   (is (= {:action :unhighlight
-          :next-click nil}
+          :next-click {:node-id "a" :time 1400}}
          (logic/node-click-action {:node-id "a" :time 1000} "a" {:selected? true} 1400)))
   (is (= {:action :open
           :next-click nil}
