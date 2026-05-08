@@ -726,9 +726,9 @@
     (let [block-id (:block/uuid (d/entity @conn id))]
       (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
            (map (fn [b]
-                  (d/pull @conn
-                          '[* {:block/refs [:db/id :block/uuid :block/title :block/name]}]
-                          (:db/id b))))))))
+                  (-> (into {} b)
+                      (assoc :db/id (:db/id b)
+                             :block/title (:block/title b)))))))))
 
 (def-thread-api :thread-api/set-context
   [context]
