@@ -132,16 +132,19 @@
 (deftest node-click-action-distinguishes-highlight-remove-and-open
   (is (= {:action :highlight
           :next-click {:node-id "a" :time 1000}}
-         (logic/node-click-action nil "a" false 1000)))
+         (logic/node-click-action nil "a" {:remove? false} 1000)))
   (is (= {:action :open
           :next-click nil}
-         (logic/node-click-action {:node-id "a" :time 1000} "a" false 1210)))
+         (logic/node-click-action {:node-id "a" :time 1000} "a" {:remove? false} 1210)))
   (is (= {:action :highlight
           :next-click {:node-id "b" :time 1210}}
-         (logic/node-click-action {:node-id "a" :time 1000} "b" false 1210)))
+         (logic/node-click-action {:node-id "a" :time 1000} "b" {:remove? false} 1210)))
   (is (= {:action :unhighlight
           :next-click nil}
-         (logic/node-click-action {:node-id "a" :time 1000} "a" true 1210))))
+         (logic/node-click-action {:node-id "a" :time 1000} "a" {:remove? true} 1210)))
+  (is (= {:action :open
+          :next-click nil}
+         (logic/node-click-action {:node-id "a" :time 1000} "a" {:open? true} 1210))))
 
 (deftest layout-tick-count-scales-with-graph-size
   (testing "Small graphs still get enough settling passes"
@@ -183,6 +186,31 @@
             :update? false
             :hovered-only? true}
            (logic/label-render-state nil {:label-visible? false} 0.35)))))
+
+(deftest label-render-state-shows-only-selected-labels-at-small-scale
+  (is (= {:target-alpha 1.0
+          :update? true
+          :hovered-only? false
+          :selected-only? true}
+         (logic/label-render-state nil #{"a" "b"} {:label-visible? false} 0.0)))
+  (is (= {:target-alpha 1.0
+          :update? true
+          :hovered-only? false
+          :selected-only? false}
+         (logic/label-render-state nil #{"a"} {:label-visible? true} 1.0))))
+
+(deftest fit-transform-scales-graph-into-viewport
+  (let [nodes [{:x -500 :y -250 :radius 10}
+               {:x 500 :y 250 :radius 10}]
+        transform (logic/fit-transform nodes 1000 500 {:padding 50})]
+    (is (= 0.7692307692307693 (:scale transform)))
+    (is (= 500 (:x transform)))
+    (is (= 250 (:y transform)))))
+
+(deftest zoom-scale-bounds-allow-farther-zoom-out
+  (is (= 0.05 logic/min-zoom-scale))
+  (is (= 0.05 (logic/clamp-zoom-scale 0.01)))
+  (is (= 3.6 (logic/clamp-zoom-scale 10))))
 
 (deftest layout-nodes-uses-link-forces
   (let [nodes [{:id "tag-a" :kind "tag" :label "Tag A"}

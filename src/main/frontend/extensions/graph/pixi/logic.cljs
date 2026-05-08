@@ -137,9 +137,23 @@
 
 (def double-click-ms 320)
 
+(def min-zoom-scale 0.05)
+
+(def max-zoom-scale 3.6)
+
+(defn clamp-zoom-scale
+  [scale]
+  (-> scale
+      (max min-zoom-scale)
+      (min max-zoom-scale)))
+
 (defn node-click-action
-  [previous-click node-id remove? now]
+  [previous-click node-id {:keys [remove? open?]} now]
   (cond
+    open?
+    {:action :open
+     :next-click nil}
+
     remove?
     {:action :unhighlight
      :next-click nil}
@@ -155,22 +169,79 @@
                   :time now}}))
 
 (defn label-render-state
-  [hovered-node-id {:keys [label-visible?]} _label-alpha]
-  (cond
-    hovered-node-id
-    {:target-alpha 1.0
-     :update? true
-     :hovered-only? (not label-visible?)}
+  ([hovered-node-id visibility-state label-alpha]
+   (label-render-state hovered-node-id #{} visibility-state label-alpha false))
+  ([hovered-node-id selected-node-ids {:keys [label-visible?]} _label-alpha]
+   (label-render-state hovered-node-id selected-node-ids {:label-visible? label-visible?} _label-alpha true))
+  ([hovered-node-id selected-node-ids {:keys [label-visible?]} _label-alpha include-selected-only?]
+   (let [selected? (seq selected-node-ids)]
+     (cond
+       hovered-node-id
+       (cond-> {:target-alpha 1.0
+                :update? true
+                :hovered-only? (not (or label-visible? selected?))}
+         include-selected-only?
+         (assoc :selected-only? (and selected? (not label-visible?))))
 
-    label-visible?
-    {:target-alpha 1.0
-     :update? true
-     :hovered-only? false}
+       label-visible?
+       (cond-> {:target-alpha 1.0
+                :update? true
+                :hovered-only? false}
+         include-selected-only?
+         (assoc :selected-only? false))
 
-    :else
-    {:target-alpha 0.0
-     :update? false
-     :hovered-only? true}))
+       selected?
+       (cond-> {:target-alpha 1.0
+                :update? true
+                :hovered-only? false}
+         include-selected-only?
+         (assoc :selected-only? true))
+
+       :else
+       (cond-> {:target-alpha 0.0
+                :update? false
+                :hovered-only? true}
+         include-selected-only?
+         (assoc :selected-only? false))))))
+
+(defn layout-bounds
+  [nodes]
+  (when (seq nodes)
+    (reduce
+     (fn [bounds {:keys [x y radius]}]
+       (let [radius (or radius 0)]
+         {:min-x (min (:min-x bounds) (- x radius))
+          :min-y (min (:min-y bounds) (- y radius))
+          :max-x (max (:max-x bounds) (+ x radius))
+          :max-y (max (:max-y bounds) (+ y radius))}))
+     (let [{:keys [x y radius]} (first nodes)
+           radius (or radius 0)]
+       {:min-x (- x radius)
+        :min-y (- y radius)
+        :max-x (+ x radius)
+        :max-y (+ y radius)})
+     (rest nodes))))
+
+(defn fit-transform
+  [nodes width height {:keys [padding max-scale]
+                       :or {padding 80
+                            max-scale 1.0}}]
+  (if-let [{:keys [min-x min-y max-x max-y]} (layout-bounds nodes)]
+    (let [graph-width (max 1 (- max-x min-x))
+          graph-height (max 1 (- max-y min-y))
+          available-width (max 1 (- width (* 2 padding)))
+          available-height (max 1 (- height (* 2 padding)))
+          scale (clamp-zoom-scale (min max-scale
+                                       (/ available-width graph-width)
+                                       (/ available-height graph-height)))
+          center-x (/ (+ min-x max-x) 2)
+          center-y (/ (+ min-y max-y) 2)]
+      {:scale scale
+       :x (- (/ width 2) (* center-x scale))
+       :y (- (/ height 2) (* center-y scale))})
+    {:scale 1.0
+     :x (/ width 2)
+     :y (/ height 2)}))
 
 (defn- normalize-view-mode
   [view-mode]

@@ -147,6 +147,18 @@
      :y (+ (* y scale) (.-y world))
      :scale scale}))
 
+(defn- distinct-nodes-by-id
+  [nodes]
+  (second
+   (reduce
+    (fn [[seen result] node]
+      (let [id (:id node)]
+        (if (contains? seen id)
+          [seen result]
+          [(conj seen id) (conj result node)])))
+    [#{} []]
+    nodes)))
+
 (defn- create-label-manager!
   [^js overlay-container dark? candidate-node-ids get-node-by-id]
   (let [^js label-layer (new (.-Container PIXI))
@@ -163,8 +175,13 @@
     (set! (.-visible label-layer) false)
     (.addChild overlay-container label-layer)
     {:container label-layer
-     :update! (fn [^js world width height hovered-node-id {:keys [node-visible? hovered-only?]
-                                                           :or {hovered-only? false}}]
+     :update! (fn [^js world width height hovered-node-id {:keys [node-visible?
+                                                                  hovered-only?
+                                                                  selected-node-ids
+                                                                  selected-only?]
+                                                           :or {hovered-only? false
+                                                                selected-node-ids #{}
+                                                                selected-only? false}}]
                 (let [node-visible? (or node-visible? (constantly true))
                       scale (.. world -scale -x)
                       viewport (world-viewport-rect world width height)
@@ -174,17 +191,22 @@
                       base-candidates (->> candidate-node-ids
                                            (keep get-node-by-id)
                                            (filter node-visible?))
+                      selected-nodes (->> selected-node-ids
+                                          (keep get-node-by-id)
+                                          (filter node-visible?))
                       hovered-node (when hovered-node-id
                                      (get-node-by-id hovered-node-id))
                       hovered-node (when (and hovered-node
                                               (node-visible? hovered-node))
                                      hovered-node)
-                      candidates (if (and hovered-node
-                                          (not (some #(= (:id hovered-node) (:id %))
-                                                     base-candidates)))
-                                   (conj (vec base-candidates) hovered-node)
-                                   base-candidates)
+                      candidates (distinct-nodes-by-id
+                                  (cond-> (vec (concat base-candidates selected-nodes))
+                                    hovered-node
+                                    (conj hovered-node)))
                       candidate-id-set (set (map :id candidates))
+                      selected-visible-ids (->> selected-nodes
+                                                (map :id)
+                                                (filter #(contains? candidate-id-set %)))
                       selected-base-ids (logic/select-label-node-ids
                                          candidates
                                          {:viewport viewport
@@ -193,6 +215,13 @@
                                           :screen-cell-height 26
                                           :max-labels (if (> scale 2.1) 240 170)})
                       selected-ids (cond
+                                     selected-only?
+                                     (cond-> (vec selected-visible-ids)
+                                       (and hovered-node-id
+                                            (contains? candidate-id-set hovered-node-id)
+                                            (not (some #(= hovered-node-id %) selected-visible-ids)))
+                                       (conj hovered-node-id))
+
                                      (and hovered-only?
                                           hovered-node-id
                                           (contains? candidate-id-set hovered-node-id))
@@ -520,7 +549,9 @@
               (let [{:keys [action next-click]}
                     (logic/node-click-action @last-click*
                                              (:id node)
-                                             (.-shiftKey e)
+                                             {:remove? (or (.-metaKey e)
+                                                           (.-ctrlKey e))
+                                              :open? (.-shiftKey e)}
                                              (.now js/performance))]
                 (reset! last-click* next-click)
                 (case action
@@ -625,9 +656,7 @@
                     [before-x before-y] (screen->world sx sy)
                     current-scale (.. world -scale -x)
                     factor (if (pos? (.-deltaY e)) 0.9 1.1)
-                    next-scale (-> (* current-scale factor)
-                                   (max 0.3)
-                                   (min 3.6))]
+                    next-scale (logic/clamp-zoom-scale (* current-scale factor))]
                 (set! (.. world -scale -x) next-scale)
                 (set! (.. world -scale -y) next-scale)
                 (set! (.-x world) (- sx (* before-x next-scale)))
@@ -674,10 +703,11 @@
         node-index-by-id (into {} (map-indexed (fn [idx node] [(:id node) idx]) @layouted-nodes*))
         layout-by-id* (atom (into {} (map (fn [node] [(:id node) node]) @layouted-nodes*)))
         preview-layout-by-id* (atom nil)
-        _ (set! (.-x world) (/ width 2))
-        _ (set! (.-y world) (/ height 2))
-        _ (set! (.. world -scale -x) 1)
-        _ (set! (.. world -scale -y) 1)
+        initial-transform (logic/fit-transform @layouted-nodes* width height {:padding 72})
+        _ (set! (.-x world) (:x initial-transform))
+        _ (set! (.-y world) (:y initial-transform))
+        _ (set! (.. world -scale -x) (:scale initial-transform))
+        _ (set! (.. world -scale -y) (:scale initial-transform))
         neighbor-map (build-neighbor-map links)
         highlighted-node-ids* (atom #{})
         highlight-state* (atom (logic/highlight-state @highlighted-node-ids* neighbor-map))
@@ -857,9 +887,10 @@
                             (let [{:keys [width height]} @size*]
                               ((:sync! node-render-info) world width height @hovered-node-id*)))
                           (when-let [label-layer (:container label-manager)]
-                            (let [{:keys [target-alpha update? hovered-only?]}
+                            (let [{:keys [target-alpha update? hovered-only? selected-only?]}
                                   (logic/label-render-state
                                    @hovered-node-id*
+                                   @highlighted-node-ids*
                                    @visibility-state*
                                    (.-alpha label-layer))]
                               (ticker-step label-layer target-alpha)
@@ -873,7 +904,9 @@
                                    {:node-visible? (if (:detail-expanded? @visibility-state*)
                                                      (constantly true)
                                                      #(= "tag" (:kind %)))
-                                    :hovered-only? hovered-only?})))))
+                                    :hovered-only? hovered-only?
+                                    :selected-node-ids @highlighted-node-ids*
+                                    :selected-only? selected-only?})))))
                           (when dirty?
                             (reset! transform-dirty? false))))
         update-detail-visibility! (fn [scale]
@@ -911,7 +944,7 @@
         render-elapsed (- (.now js/performance) render-start)]
     (.add (.-ticker app) animate-layer)
     (mark-transform!)
-    (update-detail-visibility! 1)
+    (update-detail-visibility! (:scale initial-transform))
     (when (fn? on-rendered)
       (on-rendered {:render-ms render-elapsed
                     :drawn-nodes (count @layouted-nodes*)
