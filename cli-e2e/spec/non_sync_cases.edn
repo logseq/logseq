@@ -394,6 +394,50 @@
      :show ["--page" "--level" "--linked-references"]}},
    :tags [:upsert :show :smoke],
    :extends :non-sync/graph-json-env}
+  {:id "show-library-page-human",
+   :setup
+   ["LIB_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Library\"] [?e :logseq.property/built-in? true]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Project Alpha\\\" :block/parent {:db/id $LIB_ID}} :blocks [{:block/title \\\"Project page content\\\"}]}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "PROJECT_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Project Alpha\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Nested Alpha\\\" :block/parent {:db/id $PROJECT_ID}}}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Library --level 3 --linked-references false"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["Library" "Project Alpha" "Nested Alpha"],
+    :stdout-not-contains ["Project page content"]},
+   :covers
+   {:commands ["graph import" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--input"],
+     :show ["--page" "--level" "--linked-references"]}},
+   :tags [:graph :show],
+   :extends :non-sync/graph-json-env}
+  {:id "show-library-page-json",
+   :setup
+   ["LIB_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Library\"] [?e :logseq.property/built-in? true]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Project Alpha\\\" :block/parent {:db/id $LIB_ID}} :blocks [{:block/title \\\"Project page content\\\"}]}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"
+    "PROJECT_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Project Alpha\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; printf '%s' \"{:pages-and-blocks [{:page {:block/title \\\"Nested Alpha\\\" :block/parent {:db/id $PROJECT_ID}}}]}\" > {{export-path-arg}}"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}} >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json show --graph {{graph-arg}} --page Library --level 3 --linked-references false"],
+   :expect
+   {:exit 0,
+    :stdout-json-paths
+    {[:status] "ok",
+     [:data :root :block/title] "Library",
+     [:data :root :block/children 0 :block/title] "Project Alpha",
+     [:data :root :block/children 0 :block/children 0 :block/title] "Nested Alpha"},
+    :stdout-not-contains ["Project page content"]},
+   :covers
+   {:commands ["graph import" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :graph ["--type" "--input"],
+     :show ["--page" "--level" "--linked-references"]}},
+   :tags [:graph :show],
+   :extends :non-sync/graph-json-env}
   {:id "tag-upsert-and-list-json",
    :cmds
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name TagOne >/dev/null"

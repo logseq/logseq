@@ -203,6 +203,9 @@
    :block/name
    :block/uuid
    :block/title
+   :block/order
+   :logseq.property/built-in?
+   :logseq.property/deleted-at
    :logseq.property/created-from-property
    {:logseq.property/status [:db/ident :block/title]}
    {:block/page [:db/id :block/title :block/name :block/uuid]}
@@ -225,7 +228,20 @@
    {:logseq.property/status [:db/ident :block/title]}
    :block/order
    {:block/parent [:db/id]}
-   {:block/tags [:db/id :block/name :block/title :block/uuid]}
+   {:block/tags [:db/id :db/ident :block/name :block/title :block/uuid]}
+   {:block/link link-target-selector}])
+
+(def ^:private library-child-selector
+  [:db/id
+   :db/ident
+   :block/name
+   :block/uuid
+   :block/title
+   :block/order
+   :logseq.property/built-in?
+   {:logseq.property/status [:db/ident :block/title]}
+   {:block/parent [:db/id :block/name :block/title :block/uuid]}
+   {:block/tags [:db/id :db/ident :block/name :block/title :block/uuid]}
    {:block/link link-target-selector}])
 
 (def ^:private linked-ref-selector
@@ -792,6 +808,48 @@
                         (sort-children (get parent->children parent-id)))))]
     (build root-id 1)))
 
+(defn- library-page?
+  [entity]
+  (ldb/library? entity))
+
+(defn- library-display-page?
+  [entity]
+  (and (ldb/page? entity)
+       (not (or (ldb/class? entity)
+                (ldb/property? entity)))))
+
+(defn- fetch-library-children
+  [config repo parent-id]
+  (let [query [:find (list 'pull '?child library-child-selector)
+               :in '$ '?parent-id
+               :where ['?child :block/parent '?parent-id]]]
+    (p/let [rows (transport/invoke config :thread-api/q [repo [query parent-id]])
+            children (->> rows
+                          (map first)
+                          (filter library-display-page?)
+                          (sort-by :block/order)
+                          vec)
+            children (attach-user-properties config repo children)]
+      children)))
+
+(defn- fetch-library-tree-for-entity
+  [config repo entity max-depth]
+  (letfn [(build-node [node depth visited]
+            (let [node-id (:db/id node)]
+              (when (and node-id (contains? visited node-id))
+                (throw (ex-info "library parent cycle detected"
+                                {:code :library-parent-cycle
+                                 :node-id node-id})))
+              (let [visited* (cond-> visited node-id (conj node-id))
+                    node* (dissoc node :block/children)]
+                (if (and max-depth (>= depth max-depth))
+                  (p/resolved node*)
+                  (p/let [children (fetch-library-children config repo node-id)
+                          children* (p/all (map #(build-node % (inc depth) visited*) children))]
+                    (cond-> node*
+                      (seq children*) (assoc :block/children (vec children*))))))))]
+    (build-node entity 1 #{})))
+
 (defn- link-target-key
   [link]
   (cond
@@ -874,16 +932,24 @@
 (defn- fetch-tree-for-entity
   [config repo entity max-depth]
   (let [entity-id (:db/id entity)]
-    (if-let [page-id (get-in entity [:block/page :db/id])]
-      (p/let [blocks (fetch-blocks-for-page config repo page-id)
+    (cond
+      (library-page? entity)
+      (fetch-library-tree-for-entity config repo entity max-depth)
+
+      (get-in entity [:block/page :db/id])
+      (let [page-id (get-in entity [:block/page :db/id])]
+        (p/let [blocks (fetch-blocks-for-page config repo page-id)
+                children (build-tree blocks entity-id max-depth)]
+          (assoc entity :block/children children)))
+
+      entity-id
+      (p/let [blocks (fetch-blocks-for-page config repo entity-id)
               children (build-tree blocks entity-id max-depth)]
         (assoc entity :block/children children))
-      (if entity-id
-        (p/let [blocks (fetch-blocks-for-page config repo entity-id)
-                children (build-tree blocks entity-id max-depth)]
-          (assoc entity :block/children children))
-        (throw (ex-info "block link target not found"
-                        {:code :block-link-target-not-found}))))))
+
+      :else
+      (throw (ex-info "block link target not found"
+                      {:code :block-link-target-not-found})))))
 
 (defn- resolve-linked-blocks-in-tree-data
   [config action tree-data]
@@ -944,11 +1010,7 @@
 
       (seq page)
       (p/let [page-entity (transport/invoke config :thread-api/pull
-                                            [repo [:db/id :db/ident :block/uuid :block/title
-                                                   :logseq.property/deleted-at
-                                                   {:logseq.property/status [:db/ident :block/title]}
-                                                   {:block/tags [:db/id :block/name :block/title :block/uuid]}]
-                                             [:block/name page]])]
+                                            [repo show-root-selector [:block/name page]])]
         (p/let [page-entity (attach-user-properties-to-entity config repo page-entity)]
           (if (and (not (ldb/recycled? page-entity))
                    (:db/id page-entity))
