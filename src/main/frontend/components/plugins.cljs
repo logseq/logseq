@@ -264,7 +264,7 @@
       (p/then (fn []
                 (when-let [^js settings (and disabled?
                                              (some-> (plugin-handler/get-plugin-inst id) (.-settings)))]
-                  (.set settings (bean/->js {:disabled-since (js/Date.now)})))))
+                  (.set settings "disabled-since" (js/Date.now)))))
       (p/catch #(js/console.error %))))
 
 (rum/defc card-ctls-of-installed < rum/static
