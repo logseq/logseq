@@ -797,6 +797,19 @@
     :sync-grant-access (str "Sync access granted: " email " (repo: " repo ")")
     "Sync updated"))
 
+(defn- format-sync-asset-download
+  [{:keys [repo]} {:keys [asset-uuid download-requested? checksum-status hint]}]
+  (cond
+    (= :mismatch checksum-status)
+    (str (or hint "Local asset checksum mismatched; requested re-download.")
+         " " asset-uuid)
+
+    (false? download-requested?)
+    (str "Sync asset already downloaded: " asset-uuid " (repo: " repo ")")
+
+    :else
+    (str "Sync asset download requested: " asset-uuid " (repo: " repo ")")))
+
 (defn- format-sync-config-get
   [{:keys [key value]}]
   (let [display-value (if (contains? #{:auth-token :e2ee-password} key)
@@ -1001,6 +1014,7 @@
         :sync-remote-graphs (format-sync-remote-graphs (:graphs data))
         (:sync-start :sync-stop :sync-upload :sync-download :sync-ensure-keys :sync-grant-access)
         (format-sync-action command context)
+        :sync-asset-download (format-sync-asset-download context data)
         :sync-config-get (format-sync-config-get data)
         :sync-config-set (format-sync-config-set data)
         :sync-config-unset (format-sync-config-unset data)
