@@ -2,7 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.extensions.graph.pixi.logic :as logic]))
 
-(deftest visibility-state-uses-hysteresis
+(deftest visibility-state-keeps-details-visible-and-uses-label-hysteresis
   (let [thresholds {:show-detail-scale 1.0
                     :hide-detail-scale 0.8
                     :show-label-scale 1.3
@@ -15,14 +15,14 @@
         labels-on (logic/next-visibility-state expanded 1.35 thresholds)
         labels-sticky (logic/next-visibility-state labels-on 1.2 thresholds)
         labels-off (logic/next-visibility-state labels-sticky 1.05 thresholds)]
-    (testing "Detail layer expands only after crossing show threshold"
+    (testing "Detail layer stays visible while zooming"
       (is (= {:detail-expanded? true :label-visible? false}
              expanded)))
-    (testing "Detail state stays expanded inside hysteresis window"
+    (testing "Detail layer does not collapse below the old hide threshold"
       (is (= {:detail-expanded? true :label-visible? false}
              sticky)))
-    (testing "Detail layer collapses after crossing hide threshold"
-      (is (= {:detail-expanded? false :label-visible? false}
+    (testing "Detail layer remains visible at small scale"
+      (is (= {:detail-expanded? true :label-visible? false}
              collapsed)))
     (testing "Labels also use hysteresis to avoid flicker"
       (is (= {:detail-expanded? true :label-visible? true}

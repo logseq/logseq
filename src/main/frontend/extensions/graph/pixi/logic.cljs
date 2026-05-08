@@ -5,12 +5,7 @@
 (defn next-visibility-state
   [{:keys [detail-expanded? label-visible?]} scale
    {:keys [show-detail-scale hide-detail-scale show-label-scale hide-label-scale]}]
-  (let [detail-expanded? (cond
-                           (and (not detail-expanded?)
-                                (>= scale show-detail-scale)) true
-                           (and detail-expanded?
-                                (<= scale hide-detail-scale)) false
-                           :else detail-expanded?)
+  (let [detail-expanded? true
         label-visible? (cond
                          (and (not label-visible?)
                               (>= scale show-label-scale)) true
