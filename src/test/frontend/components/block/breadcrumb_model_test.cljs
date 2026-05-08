@@ -129,12 +129,12 @@
                 :logseq.property/icon {:type :emoji :id "🌟"}})]
       (is (= {:type :emoji :id "🌟"} (:icon seg)))))
 
-  (testing "block with nil :block/refs does no substitution"
+  (testing "plain block text is unchanged"
     (let [seg (model/block->breadcrumb-segment
                {:db/id 1
                 :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
-                :block/raw-title "plain text no refs"})]
-      (is (= "plain text no refs" (:text seg))))))
+                :block/raw-title "plain text"})]
+      (is (= "plain text" (:text seg))))))
 
 ;; ---------------------------------------------------------------------------
 ;; block->breadcrumb-segment — structural type detection
@@ -253,81 +253,6 @@
                 :logseq.property.node/display-type :code
                 :block/tags [{:db/ident :logseq.class/Query}]})]
       (is (= :code (:type seg))))))
-
-;; ---------------------------------------------------------------------------
-;; resolve-segment-refs
-;; ---------------------------------------------------------------------------
-
-(deftest resolve-segment-refs-test
-  (testing "block->breadcrumb-segment leaves [[uuid]] refs unresolved"
-    (let [page-uuid #uuid "00000001-2026-0506-0000-000000000000"
-          seg (model/block->breadcrumb-segment
-               {:db/id 1
-                :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
-                :block/raw-title (str "[[" page-uuid "]]")
-                :block/refs [{:block/uuid page-uuid :block/title "May 6th, 2026"}]})]
-      (is (= (str "[[" page-uuid "]]") (:text seg)))))
-
-  (testing "resolves [[uuid]] to [[title]] preserving brackets"
-    (let [page-uuid #uuid "00000001-2026-0506-0000-000000000000"
-          entity {:db/id 1
-                  :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
-                  :block/raw-title (str "[[" page-uuid "]]")
-                  :block/refs [{:block/uuid page-uuid :block/title "May 6th, 2026"}]}
-          seg (-> entity
-                  model/block->breadcrumb-segment
-                  (model/resolve-segment-refs entity))]
-      (is (= "[[May 6th, 2026]]" (:text seg)))))
-
-  (testing "unknown uuid not in :block/refs keeps original text"
-    (let [unknown-uuid "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-          entity {:db/id 1
-                  :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
-                  :block/raw-title (str "note about [[" unknown-uuid "]]")
-                  :block/refs []}
-          seg (-> entity
-                  model/block->breadcrumb-segment
-                  (model/resolve-segment-refs entity))]
-      (is (string/includes? (:text seg) (str "[[" unknown-uuid "]]")))))
-
-  (testing "mixed text with resolved and unresolved refs"
-    (let [known-uuid #uuid "00000000-0000-0000-aaaa-000000000001"
-          entity {:db/id 1
-                  :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
-                  :block/raw-title (str "see [[" known-uuid "]] for details")
-                  :block/refs [{:block/uuid known-uuid :block/title "My Page"}]}
-          seg (-> entity
-                  model/block->breadcrumb-segment
-                  (model/resolve-segment-refs entity))]
-      (is (= "see [[My Page]] for details" (:text seg)))))
-
-  (testing "resolved ref text is truncated after title substitution"
-    (let [page-uuid #uuid "00000000-0000-0000-0000-000000000002"
-          long-title (apply str (repeat 220 "a"))
-          entity {:db/id 1
-                  :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
-                  :block/raw-title (str "see [[" page-uuid "]]")
-                  :block/refs [{:block/uuid page-uuid :block/title long-title}]}
-          seg (-> entity
-                  model/block->breadcrumb-segment
-                  (model/resolve-segment-refs entity))]
-      (is (= 161 (count (:text seg))))
-      (is (string/ends-with? (:text seg) "…"))))
-
-  (testing "nested uuid refs are resolved through nested :block/refs"
-    (let [uuid-a #uuid "00000000-0000-0000-0000-000000000002"
-          uuid-b #uuid "00000000-0000-0000-0000-000000000003"
-          entity {:db/id 1
-                  :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
-                  :block/raw-title (str "see [[" uuid-a "]]")
-                  :block/refs [{:block/uuid uuid-a
-                                :block/title (str "[[" uuid-b "]]")
-                                :block/refs [{:block/uuid uuid-b
-                                              :block/title "Leaf Page"}]}]}
-          seg (-> entity
-                  model/block->breadcrumb-segment
-                  (model/resolve-segment-refs entity))]
-      (is (= "see [[[[Leaf Page]]]]" (:text seg))))))
 
 ;; ---------------------------------------------------------------------------
 ;; segments->full-title

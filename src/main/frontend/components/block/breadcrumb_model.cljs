@@ -155,11 +155,6 @@
 ;; Segment model
 ;; ---------------------------------------------------------------------------
 
-;; Matches [[<uuid>]] page-refs as stored in DB version block titles.
-;; Pattern: 8-4-4-4-12 hex groups surrounded by [[]].
-(def ^:private id-ref-re
-  #"\[\[([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]\]")
-
 ;; DB Query class idents — standard Query plus Cards (which extends Query).
 (def ^:private query-class-idents
   #{:logseq.class/Query :logseq.class/Cards})
@@ -172,60 +167,6 @@
                 (query-class-idents (or (:db/ident t) t)))
               (:block/tags entity))
     :query))
-
-(defn- build-refs-map
-  "Builds a uuid-string -> display-title map from entity's :block/refs.
-   Only refs with a display title are included.
-   Used to resolve [[<uuid>]] inline refs to human-readable page titles."
-  ([refs]
-   (build-refs-map refs 10))
-  ([refs max-depth]
-   (loop [frontier (set refs)
-          seen-ids #{}
-          refs-map {}
-          depth 0]
-     (if (or (>= depth max-depth) (empty? frontier))
-       refs-map
-       (let [new-refs (remove (fn [ref]
-                                (contains? seen-ids (:block/uuid ref)))
-                              (filter map? frontier))
-             seen-ids' (into seen-ids (keep :block/uuid) new-refs)
-             refs-map' (reduce (fn [m ref]
-                                 (if-let [uuid (:block/uuid ref)]
-                                   (if-let [title (or (:block/title ref) (:block/name ref))]
-                                     (assoc m (str uuid) title)
-                                     m)
-                                   m))
-                               refs-map
-                               new-refs)
-             next-frontier (->> new-refs
-                                (mapcat :block/refs)
-                                (filter map?)
-                                set)]
-         (recur next-frontier seen-ids' refs-map' (inc depth)))))))
-
-(defn- resolve-id-refs
-  "Replaces [[<uuid>]] page-refs in text with [[<title>]].
-   The [[ ]] brackets are preserved so the result still reads as a reference.
-   Falls back to the original [[uuid]] when the ref is not in refs-map.
-   Operates on the already-normalized short text to minimise work."
-  ([text refs-map]
-   (resolve-id-refs text refs-map 10))
-  ([text refs-map max-depth]
-   (if (or (nil? text) (empty? refs-map))
-     text
-     (loop [result text
-            depth 0]
-       (if (>= depth max-depth)
-         result
-         (let [next-result (string/replace result id-ref-re
-                                           (fn [[full-match uuid-str]]
-                                             (if-let [title (get refs-map uuid-str)]
-                                               (str "[[" title "]]")
-                                               full-match)))]
-           (if (= result next-result)
-             result
-             (recur next-result (inc depth)))))))))
 
 (defn- display-type->block-type
   "Maps a DB :logseq.property.node/display-type keyword to a breadcrumb type.
@@ -273,20 +214,6 @@
        :full-text full-text
        :icon icon
        :page? page?})))
-
-(defn resolve-segment-refs
-  "Resolves [[uuid]] refs in a prepared breadcrumb segment using the segment
-   entity's refs. Call this only for segments that will be rendered."
-  [seg entity]
-  (if (or (:page? seg) (nil? (:text seg)))
-    seg
-    (let [refs-map (build-refs-map (:block/refs entity))
-          text (-> (:text seg)
-                   (resolve-id-refs refs-map)
-                   truncate-segment-text)]
-      (assoc seg
-             :text text
-             :full-text (or text "")))))
 
 (defn segments->full-title
   "Joins segment texts into a / separated path string for use in

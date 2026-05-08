@@ -3179,42 +3179,27 @@
       (into [page-seg] raw-segments)
       raw-segments)))
 
-(defn- resolve-breadcrumb-segment
-  [entities seg]
-  (let [entity (or (get entities (:db/id seg))
-                   (when (:db/id seg) (db/entity (:db/id seg))))]
-    [(breadcrumb-model/resolve-segment-refs seg entity) entity]))
+(defn- breadcrumb-segment-entity
+  [seg]
+  (when (:db/id seg)
+    (db/entity (:db/id seg))))
 
 (rum/defc breadcrumb-search-overflow-tooltip
-  [entities visible-prefix hidden visible-suffix raw-title]
-  (let [[resolved-title set-resolved-title!] (hooks/use-state nil)
-        resolve-title! (fn [_]
-                         (when (nil? resolved-title)
-                           (let [resolved-hidden (mapv #(first (resolve-breadcrumb-segment entities %)) hidden)
-                                 title (breadcrumb-model/segments->full-title
-                                        (concat visible-prefix resolved-hidden visible-suffix))]
-                             (set-resolved-title! title))))]
-    (hooks/use-effect!
-     (fn []
-       (set-resolved-title! nil)
-       nil)
-     [raw-title])
-    (ui/tooltip
-     [:span.opacity-40.px-0.5.text-xs
-      {:role "button"
-       :tab-index 0
-       :aria-label (t :breadcrumb/more-ancestors)
-       :on-pointer-enter resolve-title!
-       :on-focus resolve-title!}
-      "···"]
-     (or resolved-title raw-title)
-     {:trigger-props {:as-child true}})))
+  [title]
+  (ui/tooltip
+   [:span.opacity-40.px-0.5.text-xs
+    {:role "button"
+     :tab-index 0
+     :aria-label (t :breadcrumb/more-ancestors)}
+    "···"]
+   title
+   {:trigger-props {:as-child true}}))
 
 (rum/defcs breadcrumb-overflow-dropdown < (rum/local false ::open?)
   (rum/local nil ::full-hidden)
   "Renders an ellipsis button that exposes hidden ancestor segments in a dropdown."
   [{open? ::open? full-hidden ::full-hidden}
-   config repo target-entity from-property hidden-segs entities opts vopts show-page?]
+   config repo target-entity from-property hidden-segs opts vopts show-page?]
   (let [hidden-segs' (or @full-hidden hidden-segs)
         target-db-id (:db/id target-entity)
         load-full-hidden! (fn []
@@ -3243,12 +3228,15 @@
        (shui/dropdown-menu-content
         {:class "max-h-[min(50vh,420px)] overflow-y-auto"}
         (for [seg hidden-segs']
-          (let [[seg entity] (resolve-breadcrumb-segment entities seg)
-                label (breadcrumb-segment-label seg entity)]
+          (let [entity (breadcrumb-segment-entity seg)
+                label (breadcrumb-segment-label seg entity)
+                nav-block (or entity
+                              {:db/id (:db/id seg)
+                               :block/uuid (:block/uuid seg)})]
             (shui/dropdown-menu-item
              {:key (str (:block/uuid seg))
               :on-click (when-not (:disabled? opts)
-                          #(handle-breadcrumb-activate! config entity opts %))}
+                          #(handle-breadcrumb-activate! config nav-block opts %))}
              label))))))))
 
 ;; "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
@@ -3273,20 +3261,13 @@
         segments (breadcrumb-segments target-entity parents)
         view (breadcrumb-model/build-breadcrumb-view segments (assoc vopts :show-page? show-page?))
         {visible-prefix-raw :visible-prefix hidden :hidden visible-suffix-raw :visible-suffix overflow? :overflow?} view
-        all-segs (concat visible-prefix-raw hidden visible-suffix-raw)
-        entities (into {} (map (fn [seg]
-                                 [(:db/id seg)
-                                  (when (:db/id seg) (db/entity (:db/id seg)))])
-                               all-segs))
-        visible-prefix (mapv #(first (resolve-breadcrumb-segment entities %)) visible-prefix-raw)
-        visible-suffix (mapv #(first (resolve-breadcrumb-segment entities %)) visible-suffix-raw)
         full-title (breadcrumb-model/segments->full-title
-                    (concat visible-prefix hidden visible-suffix))
+                    (concat visible-prefix-raw hidden visible-suffix-raw))
         config (assoc config
                       :breadcrumb? true
                       :disable-preview? true)
         render-seg (fn [seg]
-                     (let [entity (get entities (:db/id seg))
+                     (let [entity (breadcrumb-segment-entity seg)
                            label (breadcrumb-segment-label seg entity)
                            nav-block (or entity
                                          {:db/id (:db/id seg)
@@ -3296,7 +3277,7 @@
                            label
                            (breadcrumb-fragment config nav-block label opts))
                          (str (:block/uuid seg)))))]
-    (when (or (seq visible-prefix) (seq visible-suffix))
+    (when (or (seq visible-prefix-raw) (seq visible-suffix-raw))
       [:div.breadcrumb.block-parents
        {:class (str " breadcrumb--" (name effective-variant)
                     (when-not (or (:search? config) (:list-view? config)) " my-2")
@@ -3304,21 +3285,20 @@
        (when (and (false? (:top-level? config)) (seq parents))
          (breadcrumb-separator))
        ;; visible prefix (page + early ancestors)
-       (interpose (breadcrumb-separator) (map render-seg visible-prefix))
+       (interpose (breadcrumb-separator) (map render-seg visible-prefix-raw))
        ;; overflow indicator
        (when overflow?
          (list
           (breadcrumb-separator)
           (if (= effective-variant :search-result)
-            (breadcrumb-search-overflow-tooltip
-             entities visible-prefix hidden visible-suffix full-title)
+            (breadcrumb-search-overflow-tooltip full-title)
             (breadcrumb-overflow-dropdown
-             config repo target-entity from-property hidden entities opts vopts show-page?))))
+             config repo target-entity from-property hidden opts vopts show-page?))))
        ;; visible suffix (nearest parents)
-       (when (seq visible-suffix)
+       (when (seq visible-suffix-raw)
          (list
           (breadcrumb-separator)
-          (interpose (breadcrumb-separator) (map render-seg visible-suffix))))
+          (interpose (breadcrumb-separator) (map render-seg visible-suffix-raw))))
        (when end-separator? (breadcrumb-separator))])))
 
 (rum/defc breadcrumb
