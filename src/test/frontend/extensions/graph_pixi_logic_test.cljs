@@ -135,19 +135,19 @@
     (is (= :dimmed (logic/node-emphasis state "a")))
     (is (= :normal (logic/node-emphasis (logic/highlight-state #{} neighbor-map) "a")))))
 
-(deftest node-click-action-distinguishes-highlight-remove-and-open
+(deftest node-click-action-distinguishes-highlight-unhighlight-and-open
   (is (= {:action :highlight
           :next-click {:node-id "a" :time 1000}}
-         (logic/node-click-action nil "a" {:remove? false} 1000)))
+         (logic/node-click-action nil "a" {:selected? false} 1000)))
   (is (= {:action :open
           :next-click nil}
-         (logic/node-click-action {:node-id "a" :time 1000} "a" {:remove? false} 1210)))
+         (logic/node-click-action {:node-id "a" :time 1000} "a" {:selected? true} 1210)))
   (is (= {:action :highlight
           :next-click {:node-id "b" :time 1210}}
-         (logic/node-click-action {:node-id "a" :time 1000} "b" {:remove? false} 1210)))
+         (logic/node-click-action {:node-id "a" :time 1000} "b" {:selected? false} 1210)))
   (is (= {:action :unhighlight
           :next-click nil}
-         (logic/node-click-action {:node-id "a" :time 1000} "a" {:remove? true} 1210)))
+         (logic/node-click-action {:node-id "a" :time 1000} "a" {:selected? true} 1400)))
   (is (= {:action :open
           :next-click nil}
          (logic/node-click-action {:node-id "a" :time 1000} "a" {:open? true} 1210))))
@@ -193,17 +193,28 @@
             :hovered-only? true}
            (logic/label-render-state nil {:label-visible? false} 0.35)))))
 
-(deftest label-render-state-shows-only-selected-labels-at-small-scale
+(deftest label-render-state-filters-labels-in-select-mode
   (is (= {:target-alpha 1.0
           :update? true
           :hovered-only? false
-          :selected-only? true}
-         (logic/label-render-state nil #{"a" "b"} {:label-visible? false} 0.0)))
+          :selected-only? true
+          :active-only? false}
+         (logic/label-render-state nil #{"a"} #{"a" "b"} {:label-visible? false
+                                                           :linked-label-visible? false} 0.0)))
   (is (= {:target-alpha 1.0
           :update? true
           :hovered-only? false
-          :selected-only? false}
-         (logic/label-render-state nil #{"a"} {:label-visible? true} 1.0))))
+          :selected-only? true
+          :active-only? false}
+         (logic/label-render-state nil #{"a"} #{"a" "b"} {:label-visible? true
+                                                           :linked-label-visible? false} 1.0)))
+  (is (= {:target-alpha 1.0
+          :update? true
+          :hovered-only? false
+          :selected-only? false
+          :active-only? true}
+         (logic/label-render-state nil #{"a"} #{"a" "b"} {:label-visible? true
+                                                           :linked-label-visible? true} 1.0))))
 
 (deftest fit-transform-scales-graph-into-viewport
   (let [nodes [{:x -500 :y -250 :radius 10}

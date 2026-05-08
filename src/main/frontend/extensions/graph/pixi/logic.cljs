@@ -167,6 +167,8 @@
 
 (def max-zoom-scale 3.6)
 
+(def linked-label-visible-scale 2.1)
+
 (defn clamp-zoom-scale
   [scale]
   (-> scale
@@ -174,19 +176,19 @@
       (min max-zoom-scale)))
 
 (defn node-click-action
-  [previous-click node-id {:keys [remove? open?]} now]
+  [previous-click node-id {:keys [selected? open?]} now]
   (cond
     open?
     {:action :open
      :next-click nil}
 
-    remove?
-    {:action :unhighlight
-     :next-click nil}
-
     (and (= node-id (:node-id previous-click))
          (<= (- now (:time previous-click)) double-click-ms))
     {:action :open
+     :next-click nil}
+
+    selected?
+    {:action :unhighlight
      :next-click nil}
 
     :else
@@ -196,39 +198,50 @@
 
 (defn label-render-state
   ([hovered-node-id visibility-state label-alpha]
-   (label-render-state hovered-node-id #{} visibility-state label-alpha false))
-  ([hovered-node-id selected-node-ids {:keys [label-visible?]} _label-alpha]
-   (label-render-state hovered-node-id selected-node-ids {:label-visible? label-visible?} _label-alpha true))
-  ([hovered-node-id selected-node-ids {:keys [label-visible?]} _label-alpha include-selected-only?]
-   (let [selected? (seq selected-node-ids)]
+   (label-render-state hovered-node-id #{} #{} visibility-state label-alpha false))
+  ([hovered-node-id active-node-ids {:keys [label-visible?]} _label-alpha]
+   (label-render-state hovered-node-id active-node-ids active-node-ids {:label-visible? label-visible?} _label-alpha true))
+  ([hovered-node-id selected-node-ids active-node-ids visibility-state label-alpha]
+   (label-render-state hovered-node-id selected-node-ids active-node-ids visibility-state label-alpha true))
+  ([hovered-node-id selected-node-ids active-node-ids {:keys [label-visible? linked-label-visible?]} _label-alpha include-select-scope?]
+   (let [linked-label-visible? (if (some? linked-label-visible?)
+                                 linked-label-visible?
+                                 label-visible?)
+         select-mode? (seq selected-node-ids)
+         active-mode? (seq active-node-ids)
+         selected-labels-only? (and select-mode? (not linked-label-visible?))]
      (cond
        hovered-node-id
        (cond-> {:target-alpha 1.0
                 :update? true
-                :hovered-only? (not (or label-visible? selected?))}
-         include-selected-only?
-         (assoc :selected-only? (and selected? (not label-visible?))))
+                :hovered-only? (not (or label-visible? active-mode?))}
+         include-select-scope?
+         (assoc :selected-only? selected-labels-only?
+                :active-only? (and active-mode? linked-label-visible?)))
 
        label-visible?
        (cond-> {:target-alpha 1.0
                 :update? true
                 :hovered-only? false}
-         include-selected-only?
-         (assoc :selected-only? false))
+         include-select-scope?
+         (assoc :selected-only? selected-labels-only?
+                :active-only? (and active-mode? linked-label-visible?)))
 
-       selected?
+       select-mode?
        (cond-> {:target-alpha 1.0
                 :update? true
                 :hovered-only? false}
-         include-selected-only?
-         (assoc :selected-only? true))
+         include-select-scope?
+         (assoc :selected-only? selected-labels-only?
+                :active-only? false))
 
        :else
        (cond-> {:target-alpha 0.0
                 :update? false
                 :hovered-only? true}
-         include-selected-only?
-         (assoc :selected-only? false))))))
+         include-select-scope?
+         (assoc :selected-only? false
+                :active-only? false))))))
 
 (defn layout-bounds
   [nodes]

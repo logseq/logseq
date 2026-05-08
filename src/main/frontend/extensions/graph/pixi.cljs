@@ -182,10 +182,14 @@
      :update! (fn [^js world width height hovered-node-id {:keys [node-visible?
                                                                   hovered-only?
                                                                   selected-node-ids
-                                                                  selected-only?]
+                                                                  active-node-ids
+                                                                  selected-only?
+                                                                  active-only?]
                                                            :or {hovered-only? false
                                                                 selected-node-ids #{}
-                                                                selected-only? false}}]
+                                                                active-node-ids #{}
+                                                                selected-only? false
+                                                                active-only? false}}]
                 (let [node-visible? (or node-visible? (constantly true))
                       scale (.. world -scale -x)
                       viewport (world-viewport-rect world width height)
@@ -195,6 +199,9 @@
                       base-candidates (->> candidate-node-ids
                                            (keep get-node-by-id)
                                            (filter node-visible?))
+                      active-nodes (->> active-node-ids
+                                        (keep get-node-by-id)
+                                        (filter node-visible?))
                       selected-nodes (->> selected-node-ids
                                           (keep get-node-by-id)
                                           (filter node-visible?))
@@ -204,41 +211,51 @@
                                               (node-visible? hovered-node))
                                      hovered-node)
                       candidates (distinct-nodes-by-id
-                                  (cond-> (vec (concat base-candidates selected-nodes))
+                                  (cond-> (vec (concat base-candidates active-nodes))
                                     hovered-node
                                     (conj hovered-node)))
                       candidate-id-set (set (map :id candidates))
+                      active-visible-ids (->> active-nodes
+                                              (map :id)
+                                              (filter #(contains? candidate-id-set %)))
                       selected-visible-ids (->> selected-nodes
                                                 (map :id)
                                                 (filter #(contains? candidate-id-set %)))
-                      selected-base-ids (logic/select-label-node-ids
-                                         candidates
-                                         {:viewport viewport
-                                          :transform transform
-                                          :screen-cell-width 140
-                                          :screen-cell-height 26
-                                          :max-labels (if (> scale 2.1) 240 170)})
-                      selected-ids (cond
-                                     selected-only?
-                                     (cond-> (vec selected-visible-ids)
-                                       (and hovered-node-id
-                                            (contains? candidate-id-set hovered-node-id)
-                                            (not (some #(= hovered-node-id %) selected-visible-ids)))
-                                       (conj hovered-node-id))
+                      base-label-ids (logic/select-label-node-ids
+                                      candidates
+                                      {:viewport viewport
+                                       :transform transform
+                                       :screen-cell-width 140
+                                       :screen-cell-height 26
+                                       :max-labels (if (> scale 2.1) 240 170)})
+                      label-ids (cond
+                                  selected-only?
+                                  (cond-> (vec selected-visible-ids)
+                                    (and hovered-node-id
+                                         (contains? candidate-id-set hovered-node-id)
+                                         (not (some #(= hovered-node-id %) selected-visible-ids)))
+                                    (conj hovered-node-id))
 
-                                     (and hovered-only?
-                                          hovered-node-id
-                                          (contains? candidate-id-set hovered-node-id))
-                                     [hovered-node-id]
+                                  active-only?
+                                  (cond-> (vec active-visible-ids)
+                                    (and hovered-node-id
+                                         (contains? candidate-id-set hovered-node-id)
+                                         (not (some #(= hovered-node-id %) active-visible-ids)))
+                                    (conj hovered-node-id))
 
-                                     (and hovered-node-id
-                                          (contains? candidate-id-set hovered-node-id))
-                                     (cons hovered-node-id
-                                           (remove #(= hovered-node-id %) selected-base-ids))
-                                     :else
-                                     selected-base-ids)
-                      selected-id-set (set selected-ids)]
-                  (doseq [id selected-ids]
+                                  (and hovered-only?
+                                       hovered-node-id
+                                       (contains? candidate-id-set hovered-node-id))
+                                  [hovered-node-id]
+
+                                  (and hovered-node-id
+                                       (contains? candidate-id-set hovered-node-id))
+                                  (cons hovered-node-id
+                                        (remove #(= hovered-node-id %) base-label-ids))
+                                  :else
+                                  base-label-ids)
+                      label-id-set (set label-ids)]
+                  (doseq [id label-ids]
                     (when-let [{:keys [x y label radius]} (get-node-by-id id)]
                       (let [entry (or (get @entry-by-id* id)
                                       (let [^js entry-container (new (.-Container PIXI))
@@ -294,10 +311,10 @@
                             (set! (.-alpha container-node) 1))
                           (set! (.-visible container-node) true)))))
                   (doseq [id @visible-ids*]
-                    (when-not (contains? selected-id-set id)
+                    (when-not (contains? label-id-set id)
                       (when-let [entry (get @entry-by-id* id)]
                         (set! (.-visible (:container entry)) false))))
-                  (reset! visible-ids* selected-id-set)))
+                  (reset! visible-ids* label-id-set)))
      :destroy! (fn []
                  (doseq [[_ {:keys [^js container]}] @entry-by-id*]
                    (.destroy container))
@@ -666,6 +683,7 @@
                                 on-node-activate
                                 on-node-select
                                 on-selection-clear
+                                node-selected?
                                 on-scale-change
                                 on-transform
                                 on-hover-node-change
@@ -694,8 +712,8 @@
               (let [{:keys [action next-click]}
                     (logic/node-click-action @last-click*
                                              (:id node)
-                                             {:remove? (or (.-metaKey e)
-                                                           (.-ctrlKey e))
+                                             {:selected? (and (fn? node-selected?)
+                                                              (node-selected? (:id node)))
                                               :open? (.-shiftKey e)}
                                              (.now js/performance))]
                 (reset! last-click* next-click)
@@ -1032,11 +1050,14 @@
                             (let [{:keys [width height]} @size*]
                               ((:sync! node-render-info) world width height @hovered-node-id*)))
                           (when-let [label-layer (:container label-manager)]
-                            (let [{:keys [target-alpha update? hovered-only? selected-only?]}
+                            (let [scale (.. world -scale -x)
+                                  {:keys [target-alpha update? hovered-only? selected-only? active-only?]}
                                   (logic/label-render-state
                                    @hovered-node-id*
                                    @highlighted-node-ids*
-                                   @visibility-state*
+                                   (:active-ids @highlight-state*)
+                                   (assoc @visibility-state*
+                                          :linked-label-visible? (>= scale logic/linked-label-visible-scale))
                                    (.-alpha label-layer))]
                               (ticker-step label-layer target-alpha)
                               (when (and dirty? update?)
@@ -1051,7 +1072,9 @@
                                                      #(= "tag" (:kind %)))
                                     :hovered-only? hovered-only?
                                     :selected-node-ids @highlighted-node-ids*
-                                    :selected-only? selected-only?})))))
+                                    :active-node-ids (:active-ids @highlight-state*)
+                                    :selected-only? selected-only?
+                                    :active-only? active-only?})))))
                           (when dirty?
                             (reset! transform-dirty? false))))
         update-detail-visibility! (fn [scale]
@@ -1075,6 +1098,7 @@
                         :on-node-activate on-node-activate
                         :on-node-select update-highlight!
                         :on-selection-clear clear-highlight!
+                        :node-selected? #(contains? @highlighted-node-ids* %)
                         :on-scale-change update-detail-visibility!
                         :on-transform mark-transform!
                         :on-hover-node-change (fn [node-id]
