@@ -1,7 +1,9 @@
 (ns frontend.extensions.graph.pixi.logic
-  (:require ["d3-force" :as d3-force]
+  (:require ["@emoji-mart/data" :as emoji-data]
+            ["d3-force" :as d3-force]
             [clojure.set :as set]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [goog.object :as gobj]))
 
 (defn next-visibility-state
   [{:keys [detail-expanded? label-visible?]} scale
@@ -63,6 +65,30 @@
     (if (> (count label) max-prefix-length)
       (str (subs label 0 max-prefix-length) "...")
       label)))
+
+(defn- emoji-native
+  [id]
+  (when (string? id)
+    (when-let [emoji (some-> (gobj/get emoji-data "emojis")
+                             (gobj/get id))]
+      (when-let [skins (gobj/get emoji "skins")]
+        (some-> (aget skins 0)
+                (gobj/get "native"))))))
+
+(defn icon-display-text
+  [icon]
+  (cond
+    (and (string? icon) (not (string/blank? icon)))
+    icon
+
+    (map? icon)
+    (let [type (or (:type icon) (get icon "type"))
+          id (or (:id icon) (get icon "id"))]
+      (when (contains? #{:emoji "emoji"} type)
+        (emoji-native id)))
+
+    :else
+    nil))
 
 (defn connected-drag-weights
   [neighbor-map start-id {:keys [max-depth max-nodes decay min-weight]

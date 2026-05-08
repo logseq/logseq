@@ -49,11 +49,18 @@
         [settings-open? set-settings-open!] (hooks/use-state false)
         [metrics set-metrics!] (hooks/use-state nil)
         [graph-data set-graph-data!] (hooks/use-state nil)
-        [loading? set-loading!] (hooks/use-state true)]
+        [loading? set-loading!] (hooks/use-state true)
+        switch-view-mode! (fn [mode]
+                            (when (not= mode view-mode)
+                              (set-metrics! nil)
+                              (set-graph-data! nil)
+                              (set-loading! true)
+                              (set-view-mode! mode)))]
     (hooks/use-effect!
      (fn []
        (let [cancelled? (atom false)]
          (set-metrics! nil)
+         (set-graph-data! nil)
          (set-loading! true)
          (-> (state/<invoke-db-worker :thread-api/build-graph repo {:type :global
                                                                     :theme theme
@@ -74,11 +81,11 @@
      (settings-panel settings-open?
                      set-settings-open!
                      view-mode
-                     set-view-mode!
-                     graph-data
-                     metrics)
+                     switch-view-mode!
+                     (when-not loading? graph-data)
+                     (when-not loading? metrics))
 
-     (if loading?
+     (if (or loading? (nil? graph-data))
        [:div.graph-v2-loading (t :graph/preparing)]
        (graph/graph-2d {:nodes (:nodes graph-data)
                         :links (:links graph-data)

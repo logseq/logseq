@@ -58,6 +58,46 @@
     (is (contains? (node-labels result) "Kept Page"))
     (is (every? node-ids (link-endpoints result)))))
 
+(deftest global-all-pages-graph-excludes-properties
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:rating {:logseq.property/type :default}}
+               :pages-and-blocks
+               [{:page {:block/title "Normal Page"}}
+                {:page {:block/title "rating"
+                        :block/tags #{:logseq.class/Property}
+                        :db/ident :user.property/rating}}]})
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :all-pages
+                                              :orphan-pages? true})
+        labels (node-labels result)]
+    (is (contains? labels "Normal Page"))
+    (is (not (contains? labels "rating")))
+    (is (every? #(not= "property" (:kind %)) (:nodes result)))))
+
+(deftest global-graph-nodes-include-icons
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Icon Page"
+                        :build/properties {:logseq.property/icon {:type :emoji
+                                                                   :id "star"}}}}
+                {:page {:block/title "Objects"}
+                 :blocks [{:block/title "icon object"
+                           :build/tags [:Topic]
+                           :build/properties {:logseq.property/icon {:type :emoji
+                                                                      :id "rocket"}}}]}]
+               :classes {:Topic {}}})
+        all-pages-result (graph-view/build-graph @conn {:type :global
+                                                        :view-mode :all-pages
+                                                        :orphan-pages? true})
+        tags-result (graph-view/build-graph @conn {:type :global
+                                                   :view-mode :tags-and-objects})
+        by-label (fn [result label]
+                   (some #(when (= label (:label %)) %) (:nodes result)))]
+    (is (= {:type :emoji :id "star"}
+           (:icon (by-label all-pages-result "Icon Page"))))
+    (is (= {:type :emoji :id "rocket"}
+           (:icon (by-label tags-result "icon object"))))))
+
 (deftest tags-and-objects-graph-skips-large-unrelated-page-set-quickly
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks

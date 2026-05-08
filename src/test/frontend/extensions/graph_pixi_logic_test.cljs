@@ -78,6 +78,12 @@
     (is (= label hover-text))
     (is (= "Short" (logic/label-display-text "Short" false)))))
 
+(deftest icon-display-text-renders-emoji-icons
+  (is (= "⭐" (logic/icon-display-text {:type :emoji :id "star"})))
+  (is (= "🚀" (logic/icon-display-text {:type "emoji" :id "rocket"})))
+  (is (= "★" (logic/icon-display-text "★")))
+  (is (nil? (logic/icon-display-text {:type :tabler-icon :id "star"}))))
+
 (deftest connected-drag-weights-attenuates-by-depth
   (let [neighbor-map {"a" ["b" "c"]
                       "b" ["a" "d"]

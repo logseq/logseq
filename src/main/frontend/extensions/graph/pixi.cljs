@@ -1,6 +1,7 @@
 (ns frontend.extensions.graph.pixi
   (:require ["pixi.js" :as PIXI]
-            [frontend.extensions.graph.pixi.logic :as logic]))
+            [frontend.extensions.graph.pixi.logic :as logic]
+            [goog.object :as gobj]))
 
 (defonce *graph-instance (atom nil))
 (defonce *simulation-paused? (atom false))
@@ -344,9 +345,39 @@
     {:graphics graphics
      :drawn-links drawn-links}))
 
-(defn- configure-node-sprite!
-  [^js sprite node emphasis]
-  (let [scale (/ (* 2 (:radius node)) 96)
+(defn- create-icon-text-style
+  []
+  (new (.-TextStyle PIXI)
+       #js {:fontFamily "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, system-ui, sans-serif"
+            :fontSize 18
+            :align "center"}))
+
+(defn- create-node-display!
+  [^js circle-texture ^js icon-style node]
+  (if-let [icon-text (logic/icon-display-text (:icon node))]
+    (let [^js text (new (.-Text PIXI)
+                        #js {:text icon-text
+                             :style icon-style})]
+      (gobj/set text "logseqGraphNodeDisplay" "icon")
+      text)
+    (let [^js sprite (new (.-Sprite PIXI) circle-texture)]
+      (gobj/set sprite "logseqGraphNodeDisplay" "circle")
+      sprite)))
+
+(defn- display-kind
+  [^js display]
+  (gobj/get display "logseqGraphNodeDisplay"))
+
+(defn- node-display-kind
+  [node]
+  (if (logic/icon-display-text (:icon node))
+    "icon"
+    "circle"))
+
+(defn- configure-node-display!
+  [^js display node emphasis]
+  (let [icon? (= "icon" (display-kind display))
+        scale (/ (* 2 (:radius node)) (if icon? 18 96))
         emphasis-scale (case emphasis
                          :selected 1.55
                          :connected 1.22
@@ -356,96 +387,113 @@
                 :connected 0.95
                 :dimmed 0.16
                 1.0)]
-    (set! (.. sprite -anchor -x) 0.5)
-    (set! (.. sprite -anchor -y) 0.5)
-    (set! (.-x sprite) (:x node))
-    (set! (.-y sprite) (:y node))
-    (set! (.-tint sprite) (:color-int node))
-    (set! (.-alpha sprite) alpha)
-    (set! (.. sprite -scale -x) (* scale emphasis-scale))
-    (set! (.. sprite -scale -y) (* scale emphasis-scale))
-    (set! (.-visible sprite) true)))
+    (when-let [^js anchor (.-anchor display)]
+      (set! (.-x anchor) 0.5)
+      (set! (.-y anchor) 0.5))
+    (set! (.-x display) (:x node))
+    (set! (.-y display) (:y node))
+    (set! (.-tint display) (:color-int node))
+    (set! (.-alpha display) alpha)
+    (set! (.. display -scale -x) (* scale emphasis-scale))
+    (set! (.. display -scale -y) (* scale emphasis-scale))
+    (set! (.-visible display) true)))
 
-(defn- remove-sprite-from-parent!
-  [^js sprite]
-  (when-let [^js parent (.-parent sprite)]
-    (.removeChild parent sprite)))
+(defn- remove-display-from-parent!
+  [^js display]
+  (when-let [^js parent (.-parent display)]
+    (.removeChild parent display)))
 
 (defn- render-nodes!
   [^js tag-container ^js detail-container layouted-nodes* view-mode highlight-state*]
   (let [^js container (new (.-Container PIXI))
         texture (create-circle-texture)
+        icon-style (create-icon-text-style)
         node-count (count @layouted-nodes*)
         max-nodes (logic/render-node-limit node-count view-mode)
         virtual? (< max-nodes node-count)]
     (.addChild detail-container container)
     (if-not virtual?
       (let [node-index-by-id (into {} (map-indexed (fn [idx node] [(:id node) idx]) @layouted-nodes*))
-            sprites (reduce
+            displays (reduce
                      (fn [acc node]
-                       (let [^js sprite (new (.-Sprite PIXI) texture)
-                             ^js sprite-container (if (= "tag" (:kind node))
-                                                    tag-container
-                                                    container)]
-                         (configure-node-sprite! sprite
-                                                 node
-                                                 (logic/node-emphasis @highlight-state* (:id node)))
-                         (.addChild sprite-container sprite)
-                         (assoc acc (:id node) sprite)))
+                       (let [^js display (create-node-display! texture icon-style node)
+                             ^js display-container (if (= "tag" (:kind node))
+                                                     tag-container
+                                                     container)]
+                         (configure-node-display! display
+                                                  node
+                                                  (logic/node-emphasis @highlight-state* (:id node)))
+                         (.addChild display-container display)
+                         (assoc acc (:id node) display)))
                      {}
                      @layouted-nodes*)]
         {:container container
          :texture texture
-         :sprites sprites
-         :drawn-node-count (count sprites)
+         :displays displays
+         :drawn-node-count (count displays)
          :sync! (fn [_world _width _height _hovered-node-id] nil)
          :sync-styles! (fn []
-                         (doseq [[id ^js sprite] sprites]
+                         (doseq [[id ^js display] displays]
                            (when-let [idx (get node-index-by-id id)]
                              (when-let [node (get @layouted-nodes* idx)]
-                               (configure-node-sprite! sprite
-                                                       node
-                                                       (logic/node-emphasis @highlight-state* id))))))})
-      (let [sprites* (atom {})
+                               (configure-node-display! display
+                                                        node
+                                                        (logic/node-emphasis @highlight-state* id))))))})
+      (let [displays* (atom {})
             pool* (atom [])
             drawn-node-count* (atom 0)
             acquire-sprite! (fn []
-                              (if-let [^js sprite (peek @pool*)]
+                              (if-let [^js display (peek @pool*)]
                                 (do
                                   (swap! pool* pop)
-                                  sprite)
+                                  display)
                                 (new (.-Sprite PIXI) texture)))
-            release-sprite! (fn [id]
-                              (when-let [^js sprite (get @sprites* id)]
-                                (remove-sprite-from-parent! sprite)
-                                (set! (.-visible sprite) false)
-                                (swap! sprites* dissoc id)
-                                (swap! pool* conj sprite)))
-            mount-sprite! (fn [node]
+            acquire-display! (fn [node]
+                               (if (= "icon" (node-display-kind node))
+                                 (create-node-display! texture icon-style node)
+                                 (let [^js display (acquire-sprite!)]
+                                   (gobj/set display "logseqGraphNodeDisplay" "circle")
+                                   display)))
+            release-display! (fn [id]
+                               (when-let [^js display (get @displays* id)]
+                                 (remove-display-from-parent! display)
+                                 (set! (.-visible display) false)
+                                 (swap! displays* dissoc id)
+                                 (if (= "circle" (display-kind display))
+                                   (swap! pool* conj display)
+                                   (.destroy display))))
+            mount-display! (fn [node]
                             (let [id (:id node)
-                                  ^js sprite (or (get @sprites* id)
-                                                 (let [sprite (acquire-sprite!)]
-                                                   (swap! sprites* assoc id sprite)
-                                                   sprite))
-                                  ^js sprite-container (if (= "tag" (:kind node))
-                                                         tag-container
-                                                         container)]
-                              (configure-node-sprite! sprite
-                                                      node
-                                                      (logic/node-emphasis @highlight-state* id))
-                              (when-not (identical? (.-parent sprite) sprite-container)
-                                (remove-sprite-from-parent! sprite)
-                                (.addChild sprite-container sprite))))]
+                                  kind (node-display-kind node)
+                                  existing (get @displays* id)
+                                  ^js display (if (and existing
+                                                       (= kind (display-kind existing)))
+                                                existing
+                                                (do
+                                                  (when existing
+                                                    (release-display! id))
+                                                  (let [display (acquire-display! node)]
+                                                    (swap! displays* assoc id display)
+                                                    display)))
+                                  ^js display-container (if (= "tag" (:kind node))
+                                                          tag-container
+                                                          container)]
+                              (configure-node-display! display
+                                                       node
+                                                       (logic/node-emphasis @highlight-state* id))
+                              (when-not (identical? (.-parent display) display-container)
+                                (remove-display-from-parent! display)
+                                (.addChild display-container display))))]
         {:container container
          :texture texture
-         :sprites* sprites*
+         :displays* displays*
          :drawn-node-count drawn-node-count*
          :sync-styles! (fn []
-                         (doseq [[id ^js sprite] @sprites*]
+                         (doseq [[id ^js display] @displays*]
                            (when-let [node (some #(when (= id (:id %)) %) @layouted-nodes*)]
-                             (configure-node-sprite! sprite
-                                                     node
-                                                     (logic/node-emphasis @highlight-state* id)))))
+                             (configure-node-display! display
+                                                      node
+                                                      (logic/node-emphasis @highlight-state* id)))))
          :sync! (fn [^js world width height hovered-node-id]
                   (let [scale (.. world -scale -x)
                         viewport (expand-viewport
@@ -466,10 +514,10 @@
                                         visible-nodes)
                         selected-id-set (set (map :id visible-nodes))]
                     (doseq [node visible-nodes]
-                      (mount-sprite! node))
-                    (doseq [id (keys @sprites*)]
+                      (mount-display! node))
+                    (doseq [id (keys @displays*)]
                       (when-not (contains? selected-id-set id)
-                        (release-sprite! id)))
+                        (release-display! id)))
                     (reset! drawn-node-count* (count selected-id-set))))}))))
 
 (defn- build-neighbor-map
@@ -484,9 +532,9 @@
 
 (defn- rendered-sprite
   [node-render-info node-id]
-  (if-let [sprites* (:sprites* node-render-info)]
-    (get @sprites* node-id)
-    (get (:sprites node-render-info) node-id)))
+  (if-let [displays* (:displays* node-render-info)]
+    (get @displays* node-id)
+    (get (:displays node-render-info) node-id)))
 
 (defn- draw-drag-neighbor-edges!
   [^js graphics layout-by-id neighbor-ids x y dark?]

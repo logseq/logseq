@@ -76,16 +76,20 @@
            (datoms-for db :avet attr))))
 
 (defn- scalar-node
-  [{:keys [title-by-id name-by-id uuid-by-id]} id kind page?]
+  [{:keys [title-by-id name-by-id uuid-by-id icon-by-id]} id kind page?]
   (let [title (get title-by-id id)
         name (get name-by-id id)
-        uuid (get uuid-by-id id)]
-    {:id (str id)
-     :db-id id
-     :uuid (some-> uuid str)
-     :page? page?
-     :label (or title name (some-> uuid str) (str id))
-     :kind kind}))
+        uuid (get uuid-by-id id)
+        icon (get icon-by-id id)]
+    (cond->
+     {:id (str id)
+      :db-id id
+      :uuid (some-> uuid str)
+      :page? page?
+      :label (or title name (some-> uuid str) (str id))
+      :kind kind}
+      (some? icon)
+      (assoc :icon icon))))
 
 (defn- build-node-context
   [db node-ids]
@@ -99,7 +103,8 @@
      :name-by-id name-by-id
      :uuid-by-id (if (empty? name-missing-ids)
                    {}
-                   (entity-value-map db :block/uuid name-missing-ids))}))
+                   (entity-value-map db :block/uuid name-missing-ids))
+     :icon-by-id (entity-value-map db :logseq.property/icon node-ids)}))
 
 (defn- visible-object-id-set
   [hidden-ids deleted-ids class-ids property-ids object-ids]
@@ -228,6 +233,8 @@
         :size size
         :color color
         :block/created-at (:block/created-at entity)}
+        (some? (:logseq.property/icon entity))
+        (assoc :icon (:logseq.property/icon entity))
         (contains? page-parents (:db/id entity))
         (assoc :parent true)))))
 
@@ -263,6 +270,10 @@
          [page-id ref-page-id])))
    (d/datoms db :avet :block/refs)))
 
+(defn- property-page?
+  [tag-idents]
+  (contains? tag-idents :logseq.class/Property))
+
 (defn- tagged-page-links
   [db]
   (map (fn [{from-id :e tag-id :v}]
@@ -283,6 +294,8 @@
         tagged-pages (vec (tagged-page-links db))
         tag-id->ident (tag-ident-by-id db (set (map second tagged-pages)))
         page-id->tag-idents (build-page-id->tag-idents tagged-pages tag-id->ident)
+        page-ids (set (map :e name-datoms))
+        icon-by-id (entity-value-map db :logseq.property/icon page-ids)
         tagged-page-ids (set (map first tagged-pages))
         build-in-pages (->> sqlite-create-graph/built-in-pages-names
                             (map string/lower-case)
@@ -295,6 +308,7 @@
                  (let [tag-idents (get page-id->tag-idents page-id #{})]
                    (if (or (contains? hidden-page-ids page-id)
                            (contains? deleted-page-ids page-id)
+                           (property-page? tag-idents)
                            (and (not journal?)
                                 (contains? tag-idents :logseq.class/Journal))
                            (and (not excluded-pages?)
@@ -307,13 +321,16 @@
                      (let [id (str page-id)
                            color (if dark? "#93a1a1" "#999")]
                        (conj nodes
-                             {:id id
-                              :db-id page-id
-                              :page? true
-                              :label page-name
-                              :kind (page-kind tag-idents)
-                              :size 8
-                              :color color})))))
+                             (cond->
+                              {:id id
+                               :db-id page-id
+                               :page? true
+                               :label page-name
+                               :kind (page-kind tag-idents)
+                               :size 8
+                               :color color}
+                               (contains? icon-by-id page-id)
+                               (assoc :icon (get icon-by-id page-id))))))))
                []
                name-datoms)]
     {:nodes (vec (remove-uuids-and-files! nodes))
@@ -395,7 +412,8 @@
                    (fn [nodes page]
                      (let [tag-idents (get page-id->tag-idents (:db/id page) #{})]
                        (if (or (and created-at-cutoff
-                                    (> (:block/created-at page) created-at-cutoff))
+                               (> (:block/created-at page) created-at-cutoff))
+                               (property-page? tag-idents)
                                (and (not journal?)
                                     (contains? tag-idents :logseq.class/Journal))
                                (and (not excluded-pages?)
