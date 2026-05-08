@@ -111,6 +111,38 @@
     (is (= preview (logic/current-layout-by-id committed preview)))
     (is (= committed (logic/current-layout-by-id committed nil)))))
 
+(deftest highlighted-node-selection-supports-add-remove-and-one-hop-state
+  (let [neighbor-map {"a" ["b" "c"]
+                      "b" ["a" "d"]
+                      "c" ["a"]
+                      "d" ["b"]}
+        selected (-> #{}
+                     (logic/update-highlighted-node-ids "a" false)
+                     (logic/update-highlighted-node-ids "d" false)
+                     (logic/update-highlighted-node-ids "a" true))
+        state (logic/highlight-state selected neighbor-map)]
+    (is (= #{"d"} selected))
+    (is (= #{"d"} (:selected-ids state)))
+    (is (= #{"b"} (:connected-ids state)))
+    (is (= :selected (logic/node-emphasis state "d")))
+    (is (= :connected (logic/node-emphasis state "b")))
+    (is (= :dimmed (logic/node-emphasis state "a")))
+    (is (= :normal (logic/node-emphasis (logic/highlight-state #{} neighbor-map) "a")))))
+
+(deftest node-click-action-distinguishes-highlight-remove-and-open
+  (is (= {:action :highlight
+          :next-click {:node-id "a" :time 1000}}
+         (logic/node-click-action nil "a" false 1000)))
+  (is (= {:action :open
+          :next-click nil}
+         (logic/node-click-action {:node-id "a" :time 1000} "a" false 1210)))
+  (is (= {:action :highlight
+          :next-click {:node-id "b" :time 1210}}
+         (logic/node-click-action {:node-id "a" :time 1000} "b" false 1210)))
+  (is (= {:action :unhighlight
+          :next-click nil}
+         (logic/node-click-action {:node-id "a" :time 1000} "a" true 1210))))
+
 (deftest layout-tick-count-scales-with-graph-size
   (testing "Small graphs still get enough settling passes"
     (is (= 160 (logic/layout-tick-count 80 :all-pages))))

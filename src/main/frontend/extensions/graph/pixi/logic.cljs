@@ -1,5 +1,6 @@
 (ns frontend.extensions.graph.pixi.logic
   (:require ["d3-force" :as d3-force]
+            [clojure.set :as set]
             [clojure.string :as string]))
 
 (defn next-visibility-state
@@ -106,6 +107,52 @@
 (defn current-layout-by-id
   [layout-by-id preview-layout-by-id]
   (or preview-layout-by-id layout-by-id))
+
+(defn update-highlighted-node-ids
+  [selected-ids node-id remove?]
+  (if remove?
+    (disj (set selected-ids) node-id)
+    (conj (set selected-ids) node-id)))
+
+(defn highlight-state
+  [selected-ids neighbor-map]
+  (let [selected-ids (set selected-ids)
+        connected-ids (reduce
+                       (fn [ids selected-id]
+                         (into ids (get neighbor-map selected-id [])))
+                       #{}
+                       selected-ids)]
+    {:selected-ids selected-ids
+     :connected-ids (set/difference connected-ids selected-ids)
+     :active-ids (into selected-ids connected-ids)
+     :select-mode? (seq selected-ids)}))
+
+(defn node-emphasis
+  [{:keys [selected-ids connected-ids select-mode?]} node-id]
+  (cond
+    (contains? selected-ids node-id) :selected
+    (contains? connected-ids node-id) :connected
+    select-mode? :dimmed
+    :else :normal))
+
+(def double-click-ms 320)
+
+(defn node-click-action
+  [previous-click node-id remove? now]
+  (cond
+    remove?
+    {:action :unhighlight
+     :next-click nil}
+
+    (and (= node-id (:node-id previous-click))
+         (<= (- now (:time previous-click)) double-click-ms))
+    {:action :open
+     :next-click nil}
+
+    :else
+    {:action :highlight
+     :next-click {:node-id node-id
+                  :time now}}))
 
 (defn label-render-state
   [hovered-node-id {:keys [label-visible?]} _label-alpha]
