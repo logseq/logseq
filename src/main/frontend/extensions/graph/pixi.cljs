@@ -1,11 +1,14 @@
 (ns frontend.extensions.graph.pixi
   (:require ["pixi.js" :as PIXI]
+            [clojure.string :as string]
             [frontend.extensions.graph.pixi.logic :as logic]
             [goog.object :as gobj]))
 
 (defonce *graph-instance (atom nil))
 (defonce *simulation-paused? (atom false))
 (defonce ^:private *render-token (atom 0))
+(defonce ^:private *tabler-icon-codepoint-cache (atom {}))
+(def ^:private icon-texture-font-size 96)
 
 (defn stop-simulation!
   []
@@ -346,18 +349,112 @@
      :drawn-links drawn-links}))
 
 (defn- create-icon-text-style
-  []
+  [font-family]
   (new (.-TextStyle PIXI)
-       #js {:fontFamily "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, system-ui, sans-serif"
-            :fontSize 18
+       #js {:fontFamily font-family
+            :fontSize icon-texture-font-size
             :align "center"}))
 
+(defn- icon-value
+  [icon k]
+  (or (get icon k)
+      (get icon (name k))))
+
+(defn- tabler-icon-spec
+  [icon]
+  (cond
+    (and (string? icon) (not (string/blank? icon)))
+    {:id icon
+     :class-prefix "ti"
+     :font-family "tabler-icons, system-ui, sans-serif"}
+
+    (map? icon)
+    (let [type (icon-value icon :type)
+          id (icon-value icon :id)]
+      (when (and (contains? #{:tabler-icon "tabler-icon"
+                              :tabler-ext-icon "tabler-ext-icon"} type)
+                 (string? id)
+                 (not (string/blank? id)))
+        (if (contains? #{:tabler-ext-icon "tabler-ext-icon"} type)
+          {:id id
+           :class-prefix "tie"
+           :font-family "tabler-icons-extension, system-ui, sans-serif"}
+          {:id id
+           :class-prefix "ti"
+           :font-family "tabler-icons, system-ui, sans-serif"})))
+
+    :else
+    nil))
+
+(defn- css-content->text
+  [content]
+  (when (and (string? content)
+             (not= content "none")
+             (not= content "normal"))
+    (let [content (string/trim content)
+          content (if (and (>= (count content) 2)
+                           (contains? #{\" \'} (first content))
+                           (= (first content) (last content)))
+                    (subs content 1 (dec (count content)))
+                    content)]
+      (string/replace content
+                      #"\\([0-9a-fA-F]{4,6}) ?"
+                      (fn [[_ hex]]
+                        (js/String.fromCodePoint (js/parseInt hex 16)))))))
+
+(defn- stylesheet-rules
+  [^js stylesheet]
+  (try
+    (some-> (.-cssRules stylesheet) array-seq)
+    (catch :default _e
+      nil)))
+
+(defn- tabler-icon-codepoint
+  [{:keys [id class-prefix]}]
+  (when (and (exists? js/document) id class-prefix)
+    (let [cache-key (str class-prefix ":" id)
+          cache @*tabler-icon-codepoint-cache]
+      (if (contains? cache cache-key)
+        (get cache cache-key)
+        (let [selector (str "." class-prefix "-" id ":before")
+              codepoint (some
+                         (fn [^js stylesheet]
+                           (some
+                            (fn [^js rule]
+                              (when (= selector (.-selectorText rule))
+                                (css-content->text (.. rule -style -content))))
+                            (stylesheet-rules stylesheet)))
+                         (array-seq (.-styleSheets js/document)))]
+          (swap! *tabler-icon-codepoint-cache assoc cache-key codepoint)
+          codepoint)))))
+
+(defn- icon-display-spec
+  [node]
+  (if-let [text (logic/icon-display-text (:icon node))]
+    {:kind "icon"
+     :style :emoji
+     :text text}
+    (when-let [icon-spec (tabler-icon-spec (:icon node))]
+      (when-let [text (tabler-icon-codepoint icon-spec)]
+        {:kind "icon"
+         :style (:font-family icon-spec)
+         :text text}))))
+
+(defn- create-icon-text-styles
+  []
+  {:emoji (create-icon-text-style
+           "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, system-ui, sans-serif")
+   "tabler-icons, system-ui, sans-serif" (create-icon-text-style
+                                          "tabler-icons, system-ui, sans-serif")
+   "tabler-icons-extension, system-ui, sans-serif" (create-icon-text-style
+                                                    "tabler-icons-extension, system-ui, sans-serif")})
+
 (defn- create-node-display!
-  [^js circle-texture ^js icon-style node]
-  (if-let [icon-text (logic/icon-display-text (:icon node))]
+  [^js circle-texture icon-styles node]
+  (if-let [{:keys [style text]} (icon-display-spec node)]
     (let [^js text (new (.-Text PIXI)
-                        #js {:text icon-text
-                             :style icon-style})]
+                        #js {:text text
+                             :style (get icon-styles style)})]
       (gobj/set text "logseqGraphNodeDisplay" "icon")
       text)
     (let [^js sprite (new (.-Sprite PIXI) circle-texture)]
@@ -370,14 +467,14 @@
 
 (defn- node-display-kind
   [node]
-  (if (logic/icon-display-text (:icon node))
+  (if (icon-display-spec node)
     "icon"
     "circle"))
 
 (defn- configure-node-display!
   [^js display node emphasis]
   (let [icon? (= "icon" (display-kind display))
-        scale (/ (* 2 (:radius node)) (if icon? 18 96))
+        scale (/ (* 2 (:radius node)) (if icon? icon-texture-font-size 96))
         emphasis-scale (case emphasis
                          :selected 1.55
                          :connected 1.22
@@ -407,7 +504,7 @@
   [^js tag-container ^js detail-container layouted-nodes* view-mode highlight-state*]
   (let [^js container (new (.-Container PIXI))
         texture (create-circle-texture)
-        icon-style (create-icon-text-style)
+        icon-styles (create-icon-text-styles)
         node-count (count @layouted-nodes*)
         max-nodes (logic/render-node-limit node-count view-mode)
         virtual? (< max-nodes node-count)]
@@ -416,7 +513,7 @@
       (let [node-index-by-id (into {} (map-indexed (fn [idx node] [(:id node) idx]) @layouted-nodes*))
             displays (reduce
                      (fn [acc node]
-                       (let [^js display (create-node-display! texture icon-style node)
+                       (let [^js display (create-node-display! texture icon-styles node)
                              ^js display-container (if (= "tag" (:kind node))
                                                      tag-container
                                                      container)]
@@ -450,7 +547,7 @@
                                 (new (.-Sprite PIXI) texture)))
             acquire-display! (fn [node]
                                (if (= "icon" (node-display-kind node))
-                                 (create-node-display! texture icon-style node)
+                                 (create-node-display! texture icon-styles node)
                                  (let [^js display (acquire-sprite!)]
                                    (gobj/set display "logseqGraphNodeDisplay" "circle")
                                    display)))
