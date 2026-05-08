@@ -1,15 +1,17 @@
 (ns frontend.handler.export-property-test
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [logseq.cli.common.file :as common-file]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.frontend.property :as db-property]))
 
-(deftest block-properties-content-uses-property-title-and-journal-title-for-datetime
-  (let [datetime-ms 1776441600000
-        expected-journal-title (date-time-util/int->journal-title
-                                (date-time-util/ms->journal-day datetime-ms)
-                                date-time-util/default-journal-title-formatter)
+(deftest block-properties-content-uses-property-title-and-time-for-datetime
+  (let [datetime-ms (tc/to-long (t/date-time 2026 5 14 9 30))
+        expected-datetime (date-time-util/format
+                           (t/to-default-time-zone (tc/from-long datetime-ms))
+                           "MMM do, yyyy HH:mm")
         properties (array-map
                     :logseq.property/deadline datetime-ms
                     :user.property/P1-MoCeM8Tf "hello")]
@@ -24,6 +26,6 @@
                                                            :block/title "P1"
                                                            :logseq.property/type :default}
                                nil))]
-      (is (= (str "  deadline:: " expected-journal-title "\n"
+      (is (= (str "  deadline:: " expected-datetime "\n"
                   "  P1:: hello")
              (@#'common-file/block-properties-content nil {} "  " {}))))))
