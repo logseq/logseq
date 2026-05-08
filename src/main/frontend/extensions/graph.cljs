@@ -13,6 +13,16 @@
   ;; Compatibility shim for older graph view code paths.
   nil)
 
+(defn canvas-style
+  [{:keys [width height]}]
+  (cond-> {:width "100%"
+           :height "100%"}
+    (number? width)
+    (assoc :width (str width "px"))
+
+    (number? height)
+    (assoc :height (str height "px"))))
+
 (rum/defc graph-2d
   [opts]
   (let [container-ref (hooks/use-ref nil)]
@@ -23,6 +33,8 @@
       (:links opts)
       (:dark? opts)
       (:view-mode opts)
+      (:width opts)
+      (:height opts)
       (:on-node-activate opts)
       (:on-rendered opts)])
     (hooks/use-effect!
@@ -31,4 +43,5 @@
          (pixi/destroy-instance!)))
      [])
     [:div.graph-v2-canvas
-     {:ref container-ref}]))
+     {:ref container-ref
+      :style (canvas-style opts)}]))

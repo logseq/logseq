@@ -19,7 +19,7 @@
   (when-let [{:keys [cleanup app]} @*graph-instance]
     (when (fn? cleanup)
       (cleanup))
-    (when app
+    (when-let [^js app app]
       (try
         (.destroy app)
         (catch :default _e
@@ -600,6 +600,7 @@
         _ (.addChild stage label-layer-wrapper)
         width (.-clientWidth container)
         height (.-clientHeight container)
+        size* (atom {:width width :height height})
         normalized-view-mode (normalize-view-mode view-mode)
         layouted-nodes* (atom (layout-nodes nodes links view-mode dark?))
         node-index-by-id (into {} (map-indexed (fn [idx node] [(:id node) idx]) @layouted-nodes*))
@@ -646,6 +647,16 @@
                     :hide-label-scale hide-label-scale}
         mark-transform! (fn []
                           (reset! transform-dirty? true))
+        resize-to-container! (fn []
+                               (let [width (.-clientWidth container)
+                                     height (.-clientHeight container)
+                                     size {:width width :height height}]
+                                 (when (and (pos? width)
+                                            (pos? height)
+                                            (not= size @size*))
+                                   (reset! size* size)
+                                   (.resize (.-renderer app) width height)
+                                   (mark-transform!))))
         ensure-drag-session! (fn [root-node]
                                (let [root-id (:id root-node)]
                                  (if (and @drag-session*
@@ -745,7 +756,8 @@
                         (ticker-step detail-layer detail-target-alpha)
                         (let [dirty? @transform-dirty?]
                           (when dirty?
-                            ((:sync! node-render-info) world width height @hovered-node-id*))
+                            (let [{:keys [width height]} @size*]
+                              ((:sync! node-render-info) world width height @hovered-node-id*)))
                           (when-let [label-layer (:container label-manager)]
                             (let [{:keys [target-alpha update? hovered-only?]}
                                   (logic/label-render-state
@@ -754,15 +766,16 @@
                                    (.-alpha label-layer))]
                               (ticker-step label-layer target-alpha)
                               (when (and dirty? update?)
-                                ((:update! label-manager)
-                                 world
-                                 width
-                                 height
-                                 @hovered-node-id*
-                                 {:node-visible? (if (:detail-expanded? @visibility-state*)
-                                                   (constantly true)
-                                                   #(= "tag" (:kind %)))
-                                  :hovered-only? hovered-only?}))))
+                                (let [{:keys [width height]} @size*]
+                                  ((:update! label-manager)
+                                   world
+                                   width
+                                   height
+                                   @hovered-node-id*
+                                   {:node-visible? (if (:detail-expanded? @visibility-state*)
+                                                     (constantly true)
+                                                     #(= "tag" (:kind %)))
+                                    :hovered-only? hovered-only?})))))
                           (when dirty?
                             (reset! transform-dirty? false))))
         update-detail-visibility! (fn [scale]
@@ -791,6 +804,10 @@
                                                 (mark-transform!))
                         :on-node-drag apply-node-drag!
                         :on-node-drag-end commit-node-drag!})
+        resize-observer (when (exists? js/ResizeObserver)
+                          (let [observer (js/ResizeObserver. resize-to-container!)]
+                            (.observe observer container)
+                            observer))
         render-elapsed (- (.now js/performance) render-start)]
     (.add (.-ticker app) animate-layer)
     (mark-transform!)
@@ -807,9 +824,11 @@
     {:app app
      :cleanup (fn []
                 (event-cleanup)
+                (when-let [^js observer resize-observer]
+                  (.disconnect observer))
                 (.remove (.-ticker app) animate-layer)
                 ((:destroy! label-manager))
-                (when-let [texture (:texture node-render-info)]
+                (when-let [^js texture (:texture node-render-info)]
                   (.destroy texture true)))
      :canvas canvas}))
 
@@ -837,7 +856,7 @@
                                                     :on-rendered on-rendered
                                                     :view-mode view-mode}
                                      render-start))
-               (.destroy app))))
+               (.destroy ^js app))))
           (.catch
            (fn [error]
              (js/console.error "Graph render failed" error))))))
