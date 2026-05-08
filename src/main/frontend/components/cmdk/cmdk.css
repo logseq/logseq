@@ -49,6 +49,21 @@
   margin-inline: 2px;
 }
 
+/* Cmd+K result row — header path is single-line, main text limited to 2 lines */
+[data-cmdk-item] .breadcrumb.block-parents {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+[data-cmdk-item] .cp__cmdk-item-main-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  flex-wrap: nowrap;
+}
+
 /* Keyboard navigation highlight */
 [data-cmdk-item][data-kb-highlighted] {
   background-color: var(--lx-gray-03, var(--ls-a-chosen-bg, var(--ls-tertiary-background-color, rgba(0, 0, 0, 0.10))));
