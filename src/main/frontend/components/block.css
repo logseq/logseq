@@ -644,12 +644,12 @@
     }
   }
 
-  &[data-has-heading="4"] {
+  &[data-has-heading="4"], &:has(textarea.h4) {
     --ls-heading-control-icon-size: 16px;
     align-items: center;
   }
 
-  &[data-has-heading="5"] {
+  &[data-has-heading="5"], &:has(textarea.h5) {
     --ls-heading-control-icon-size: 13px;
     align-items: center;
   }
