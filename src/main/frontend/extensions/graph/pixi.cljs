@@ -346,7 +346,7 @@
    (draw-edges! graphics layout-by-id links dark? view-mode (logic/highlight-state #{} {}) {}))
   ([^js graphics layout-by-id links dark? view-mode highlight-state]
    (draw-edges! graphics layout-by-id links dark? view-mode highlight-state {}))
-  ([^js graphics layout-by-id links dark? view-mode highlight-state {:keys [arrow-mode]}]
+  ([^js graphics layout-by-id links dark? view-mode highlight-state {:keys [show-arrows?]}]
    (let [max-edges (logic/draw-edge-limit (count layout-by-id)
                                            (count links)
                                            view-mode)
@@ -354,12 +354,9 @@
                   (take max-edges links)
                   links)
          stroke-color (color->int (edge-color dark?))
-         arrow-mode (case arrow-mode
-                      :forward :forward
-                      :both :both
-                      :none)]
+         runs (logic/edge-render-runs links* show-arrows?)]
      (.clear graphics)
-     (doseq [{:keys [source target]} links*]
+     (doseq [{:keys [source target show-arrow? parallel-offset]} runs]
        (when-let [from-node (get layout-by-id source)]
          (when-let [to-node (get layout-by-id target)]
            (let [dx (- (:x to-node) (:x from-node))
@@ -367,10 +364,21 @@
                  distance (max 1 (js/Math.sqrt (+ (* dx dx) (* dy dy))))
                  ux (/ dx distance)
                  uy (/ dy distance)
-                 start-x (+ (:x from-node) (* ux (+ (:radius from-node 0) 3)))
-                 start-y (+ (:y from-node) (* uy (+ (:radius from-node 0) 3)))
-                 end-x (- (:x to-node) (* ux (+ (:radius to-node 0) 5)))
-                 end-y (- (:y to-node) (* uy (+ (:radius to-node 0) 5)))
+                 normal-x (- uy)
+                 normal-y ux
+                 line-offset (* (or parallel-offset 0) 5)
+                 start-x (+ (:x from-node)
+                            (* ux (+ (:radius from-node 0) 3))
+                            (* normal-x line-offset))
+                 start-y (+ (:y from-node)
+                            (* uy (+ (:radius from-node 0) 3))
+                            (* normal-y line-offset))
+                 end-x (+ (- (:x to-node)
+                             (* ux (+ (:radius to-node 0) 5)))
+                          (* normal-x line-offset))
+                 end-y (+ (- (:y to-node)
+                             (* uy (+ (:radius to-node 0) 5)))
+                          (* normal-y line-offset))
                  alpha (edge-alpha highlight-state source target)
                  arrow! (fn [tip-x tip-y dir-x dir-y]
                           (let [length 6.8
@@ -398,10 +406,8 @@
              (.moveTo graphics start-x start-y)
              (.lineTo graphics end-x end-y)
              (.stroke graphics)
-             (when (contains? #{:forward :both} arrow-mode)
-               (arrow! end-x end-y ux uy))
-             (when (= :both arrow-mode)
-               (arrow! start-x start-y (- ux) (- uy)))))))
+             (when show-arrow?
+               (arrow! end-x end-y ux uy))))))
      (count links*))))
 
 (defn- render-edges!
@@ -1003,7 +1009,7 @@
         (.removeEventListener canvas "wheel" on-wheel)))))
 
 (defn- ^:large-vars/cleanup-todo setup-scene!
-  [^js app ^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids depth arrow-mode link-distance show-edge-labels?]} render-start]
+  [^js app ^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids depth show-arrows? link-distance show-edge-labels?]} render-start]
   (set! (.-innerHTML container) "")
   (let [^js canvas (or (.-canvas app) (.-view app))
         ^js stage (.-stage app)
@@ -1022,7 +1028,7 @@
         size* (atom {:width width :height height})
         normalized-view-mode (normalize-view-mode view-mode)
         depth* (atom (-> (or depth 1) (max 1) (min 5)))
-        render-opts {:arrow-mode arrow-mode}
+        render-opts {:show-arrows? show-arrows?}
         layouted-nodes* (atom (layout-nodes nodes links view-mode dark? {:link-distance link-distance}))
         all-node-id-set (set (map :id @layouted-nodes*))
         visible-node-ids* (atom (visible-node-id-set @layouted-nodes* visible-node-ids))
@@ -1408,7 +1414,7 @@
   nil)
 
 (defn render-container!
-  [^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids depth arrow-mode link-distance show-edge-labels?]}]
+  [^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids depth show-arrows? link-distance show-edge-labels?]}]
   (when container
     (destroy-instance! container)
     (let [token (get (swap! *render-tokens update container (fnil inc 0)) container)
@@ -1432,7 +1438,7 @@
                                                    :view-mode view-mode
                                                    :visible-node-ids visible-node-ids
                                                    :depth depth
-                                                   :arrow-mode arrow-mode
+                                                   :show-arrows? show-arrows?
                                                    :link-distance link-distance
                                                    :show-edge-labels? show-edge-labels?}
                                     render-start))

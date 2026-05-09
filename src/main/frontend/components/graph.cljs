@@ -13,15 +13,14 @@
 
 (def ^:private default-open-groups #{:view-mode :displayed-tags :layout})
 (def ^:private default-depth 1)
-(def ^:private default-arrow-mode :none)
+(def ^:private default-show-arrows? false)
 (def ^:private default-link-distance 72)
 (def ^:private default-show-edge-labels? true)
-(def ^:private arrow-modes #{:none :forward :both})
 (def ^:private default-settings {:view-mode :tags-and-objects
                                  :selected-tag-ids nil
                                  :created-at-filter nil
                                  :depth default-depth
-                                 :arrow-mode default-arrow-mode
+                                 :show-arrows? default-show-arrows?
                                  :link-distance default-link-distance
                                  :show-edge-labels? default-show-edge-labels?
                                  :open-groups default-open-groups})
@@ -52,19 +51,12 @@
   [value]
   (int (clamp-number value 36 180 default-link-distance)))
 
-(defn- valid-arrow-mode
-  [value]
-  (let [value (keyword value)]
-    (if (contains? arrow-modes value)
-      value
-      default-arrow-mode)))
-
 (defn encode-settings
-  [{:keys [view-mode selected-tag-ids created-at-filter depth arrow-mode link-distance show-edge-labels? open-groups]}]
+  [{:keys [view-mode selected-tag-ids created-at-filter depth show-arrows? link-distance show-edge-labels? open-groups]}]
   (clj->js
    (cond-> {:viewMode (name (valid-view-mode view-mode))
             :depth (valid-depth depth)
-            :arrowMode (name (valid-arrow-mode arrow-mode))
+            :showArrows (boolean show-arrows?)
             :linkDistance (valid-link-distance link-distance)
             :showEdgeLabels (boolean show-edge-labels?)
             :openGroups (mapv name (or open-groups default-open-groups))}
@@ -94,8 +86,8 @@
              (contains? data :depth)
              (assoc :depth (valid-depth (:depth data)))
 
-             (contains? data :arrowMode)
-             (assoc :arrow-mode (valid-arrow-mode (:arrowMode data)))
+             (contains? data :showArrows)
+             (assoc :show-arrows? (true? (:showArrows data)))
 
              (contains? data :linkDistance)
              (assoc :link-distance (valid-link-distance (:linkDistance data)))
@@ -411,7 +403,7 @@
   [settings set-settings! graph-data selected-nodes]
   (let [depth (valid-depth (:depth settings))
         link-distance (valid-link-distance (:link-distance settings))
-        arrow-mode (valid-arrow-mode (:arrow-mode settings))
+        show-arrows? (true? (:show-arrows? settings))
         depth-disabled? (depth-control-disabled? selected-nodes)]
     (settings-group
      {:settings settings
@@ -440,32 +432,11 @@
                    :step 6
                    :on-change #(set-settings! (fn [settings]
                                                  (assoc settings :link-distance (valid-link-distance %))))})
-                 [:div.graph-layout-control
-                  [:span.graph-layout-control-header
-                   [:span (t :graph/layout-arrows)]
-                   [:strong (case arrow-mode
-                              :both (t :graph/layout-arrows-both)
-                              :forward (t :graph/layout-arrows-forward)
-                              (t :graph/layout-arrows-none))]]
-                  (shui/tabs
-                   {:value (name arrow-mode)
-                    :on-value-change #(set-settings! (fn [settings]
-                                                       (assoc settings :arrow-mode (valid-arrow-mode %))))
-                    :class "graph-arrow-tabs"}
-                   (shui/tabs-list
-                    {:class "graph-arrow-tabs-list"}
-                    (shui/tabs-trigger
-                     {:value "none"
-                      :class "graph-arrow-tab"}
-                     (t :graph/layout-arrows-none))
-                    (shui/tabs-trigger
-                     {:value "forward"
-                      :class "graph-arrow-tab"}
-                     (t :graph/layout-arrows-forward))
-                    (shui/tabs-trigger
-                     {:value "both"
-                      :class "graph-arrow-tab"}
-                     (t :graph/layout-arrows-both))))]
+                 (layout-toggle
+                  (t :graph/layout-arrows)
+                  show-arrows?
+                  #(set-settings! (fn [settings]
+                                    (assoc settings :show-arrows? %))))
                  (layout-toggle
                   (t :graph/layout-edge-labels)
                   (true? (:show-edge-labels? settings))
@@ -752,7 +723,7 @@
                            :links (:links mode-graph-data)
                            :visible-node-ids visible-node-ids
                            :depth (valid-depth (:depth settings))
-                           :arrow-mode (valid-arrow-mode (:arrow-mode settings))
+                           :show-arrows? (true? (:show-arrows? settings))
                            :link-distance (valid-link-distance (:link-distance settings))
                            :show-edge-labels? (true? (:show-edge-labels? settings))
                            :dark? dark?

@@ -22,7 +22,7 @@
    (:width opts)
    (:height opts)
    (:aria-label opts)
-   (:arrow-mode opts)
+   (:show-arrows? opts)
    (:link-distance opts)
    (:show-edge-labels? opts)
    (:on-node-activate opts)
