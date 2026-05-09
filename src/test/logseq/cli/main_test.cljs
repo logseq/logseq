@@ -2,6 +2,7 @@
   (:require [cljs.reader :as reader]
             [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
+            [logseq.cli.command.skill :as skill-command]
             [logseq.cli.commands :as commands]
             [logseq.cli.main :as cli-main]
             [logseq.cli.test-helper :as test-helper]
@@ -9,6 +10,15 @@
             [promesa.core :as p]
             ["fs" :as fs]
             ["path" :as node-path]))
+
+(defn- with-no-installed-skill-warning
+  [f]
+  (p/with-redefs [skill-command/installed-skill-update-status
+                  (fn [_]
+                    {:installed? false
+                     :outdated? false
+                     :outdated-targets []})]
+    (f)))
 
 (deftest test-version-output
   (async done
@@ -25,10 +35,12 @@
 
 (deftest test-help-output-omits-command-list
   (async done
-    (-> (p/let [result (cli-main/run! ["--help"] {:exit? false})
-                output (:output result)]
-          (is (= 0 (:exit-code result)))
-          (is (not (string/includes? output "Commands: list page"))))
+    (-> (with-no-installed-skill-warning
+          (fn []
+            (p/let [result (cli-main/run! ["--help"] {:exit? false})
+                    output (:output result)]
+              (is (= 0 (:exit-code result)))
+              (is (not (string/includes? output "Commands: list page"))))))
         (p/catch (fn [e]
                    (is false (str "unexpected error: " e))
                    (done)))
@@ -36,20 +48,71 @@
 
 (deftest test-help-output-respects-structured-modes
   (async done
-    (-> (p/let [json-result (cli-main/run! ["--output" "json" "--help"] {:exit? false})
-                edn-result (cli-main/run! ["--output" "edn" "--help"] {:exit? false})
-                json-output (js->clj (js/JSON.parse (:output json-result)) :keywordize-keys true)
-                edn-output (reader/read-string (:output edn-result))]
-          (is (= 0 (:exit-code json-result)))
-          (is (= 0 (:exit-code edn-result)))
-          (is (= "ok" (:status json-output)))
-          (is (= :ok (:status edn-output)))
-          (is (string/includes? (get-in json-output [:data :message]) "Usage: logseq"))
-          (is (string/includes? (get-in edn-output [:data :message]) "Usage: logseq")))
+    (-> (with-no-installed-skill-warning
+          (fn []
+            (p/let [json-result (cli-main/run! ["--output" "json" "--help"] {:exit? false})
+                    edn-result (cli-main/run! ["--output" "edn" "--help"] {:exit? false})
+                    json-output (js->clj (js/JSON.parse (:output json-result)) :keywordize-keys true)
+                    edn-output (reader/read-string (:output edn-result))]
+              (is (= 0 (:exit-code json-result)))
+              (is (= 0 (:exit-code edn-result)))
+              (is (= "ok" (:status json-output)))
+              (is (= :ok (:status edn-output)))
+              (is (string/includes? (get-in json-output [:data :message]) "Usage: logseq"))
+              (is (string/includes? (get-in edn-output [:data :message]) "Usage: logseq")))))
         (p/catch (fn [e]
                    (is false (str "unexpected error: " e))
                    (done)))
         (p/finally done))))
+
+(deftest test-global-help-appends-stale-skill-warning
+  (async done
+    (let [warning "\n\nWarning: Installed logseq-cli skill is out of date. Run `logseq skill install` or `logseq skill install --global` to update it."
+          status {:installed? true
+                  :outdated? true
+                  :outdated-targets [{:scope :local
+                                      :path "/tmp/work/.agents/skills/logseq-cli/SKILL.md"
+                                      :update-command "logseq skill install"}]}]
+      (-> (p/with-redefs [skill-command/installed-skill-update-status (fn [_] status)]
+            (p/let [help-result (cli-main/run! ["--help"] {:exit? false})
+                    no-args-result (cli-main/run! [] {:exit? false})
+                    command-help-result (cli-main/run! ["show" "--help"] {:exit? false})
+                    group-help-result (cli-main/run! ["graph"] {:exit? false})
+                    version-result (cli-main/run! ["--version"] {:exit? false})]
+              (is (= 0 (:exit-code help-result)))
+              (is (string/ends-with? (:output help-result) warning))
+              (is (string/ends-with? (:output no-args-result) warning))
+              (is (not (string/includes? (:output command-help-result) warning)))
+              (is (not (string/includes? (:output group-help-result) warning)))
+              (is (not (string/includes? (:output version-result) warning)))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))
+          (p/finally done)))))
+
+(deftest test-global-help-skill-warning-structured-output
+  (async done
+    (let [warning "\n\nWarning: Installed logseq-cli skill is out of date. Run `logseq skill install` or `logseq skill install --global` to update it."
+          status {:installed? true
+                  :outdated? true
+                  :outdated-targets [{:scope :global
+                                      :path "/Users/demo/.agents/skills/logseq-cli/SKILL.md"
+                                      :update-command "logseq skill install --global"}]}]
+      (-> (p/with-redefs [skill-command/installed-skill-update-status (fn [_] status)]
+            (p/let [json-result (cli-main/run! ["--output" "json" "--help"] {:exit? false})
+                    edn-result (cli-main/run! ["--output" "edn" "--help"] {:exit? false})
+                    json-output (js->clj (js/JSON.parse (:output json-result)) :keywordize-keys true)
+                    edn-output (reader/read-string (:output edn-result))]
+              (is (= 0 (:exit-code json-result)))
+              (is (= 0 (:exit-code edn-result)))
+              (is (= "ok" (:status json-output)))
+              (is (= :ok (:status edn-output)))
+              (is (string/ends-with? (get-in json-output [:data :message]) warning))
+              (is (string/ends-with? (get-in edn-output [:data :message]) warning))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))
+          (p/finally done)))))
 
 (deftest test-parse-error-output-respects-structured-modes
   (async done
@@ -105,28 +168,32 @@
 
 (deftest test-run-profile-lines-enabled
   (async done
-    (-> (p/let [result (cli-main/run! ["--profile" "--help"] {:exit? false})
-                lines (:profile-lines result)]
-          (is (= 0 (:exit-code result)))
-          (is (seq lines))
-          (when (seq lines)
-            (is (re-find #"^\d+ms command=help status=ok$" (first lines))))
-          (is (some #(= "stages" (string/trim %)) lines))
-          (is (some #(string/includes? % "cli.parse-args") lines))
-          (is (some #(string/includes? % "cli.total") lines))
-          (is (not-any? #(string/includes? % "[profile]") lines))
-          (is (not-any? #(string/includes? % "count=") lines))
-          (done))
+    (-> (with-no-installed-skill-warning
+          (fn []
+            (p/let [result (cli-main/run! ["--profile" "--help"] {:exit? false})
+                    lines (:profile-lines result)]
+              (is (= 0 (:exit-code result)))
+              (is (seq lines))
+              (when (seq lines)
+                (is (re-find #"^\d+ms command=help status=ok$" (first lines))))
+              (is (some #(= "stages" (string/trim %)) lines))
+              (is (some #(string/includes? % "cli.parse-args") lines))
+              (is (some #(string/includes? % "cli.total") lines))
+              (is (not-any? #(string/includes? % "[profile]") lines))
+              (is (not-any? #(string/includes? % "count=") lines))
+              (done))))
         (p/catch (fn [e]
                    (is false (str "unexpected error: " e))
                    (done))))))
 
 (deftest test-run-profile-lines-disabled
   (async done
-    (-> (p/let [result (cli-main/run! ["--help"] {:exit? false})]
-          (is (= 0 (:exit-code result)))
-          (is (nil? (:profile-lines result)))
-          (done))
+    (-> (with-no-installed-skill-warning
+          (fn []
+            (p/let [result (cli-main/run! ["--help"] {:exit? false})]
+              (is (= 0 (:exit-code result)))
+              (is (nil? (:profile-lines result)))
+              (done))))
         (p/catch (fn [e]
                    (is false (str "unexpected error: " e))
                    (done))))))
