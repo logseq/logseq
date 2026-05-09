@@ -310,7 +310,22 @@
              {:style {:width 20 :height 20}
               :on-click (fn [^js e]
                           (util/stop-propagation e)
-                          (let [own-icon (:logseq.property/icon block*)]
+                          (let [own-icon (:logseq.property/icon block*)
+                                ;; Resolved icon includes class default-icon
+                                ;; inheritance — for instance rows of a class
+                                ;; whose default-icon is an avatar (e.g.
+                                ;; #Institution rows that don't have their own
+                                ;; `:logseq.property/icon` set), this returns
+                                ;; the inherited avatar config so icon-search's
+                                ;; `:will-mount` routes to the asset-picker
+                                ;; view (Avatar/Image tabs) rather than the
+                                ;; default emoji/icon grid. Falls back to
+                                ;; `own-icon` so existing rows with their own
+                                ;; icon are unaffected. The `:del-btn?` still
+                                ;; gates on `own-icon` since deletion only
+                                ;; makes sense for an explicitly-set icon.
+                                resolved-icon (or own-icon
+                                                  (icon-component/get-node-icon block*))]
                             (shui/popup-show!
                              (.-currentTarget e)
                              (fn [{:keys [id]}]
@@ -332,9 +347,11 @@
                                                    :logseq.property/icon)))
                                               (when-not (true? keep-popup?)
                                                 (shui/popup-hide! id)))
-                                 :icon-value own-icon
+                                 :icon-value resolved-icon
                                  :page-title (:block/title block*)
-                                 :del-btn? (some? own-icon)}))
+                                 :del-btn? (some? own-icon)
+                                 :preview-target-db-id (:db/id block*)
+                                 :property :logseq.property/icon}))
                              {:align :start
                               :id :ls-icon-picker
                               :content-props {:class "ls-icon-picker"

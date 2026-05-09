@@ -96,7 +96,21 @@
                                                        (when-not (true? keep-popup?)
                                                          (shui/popup-hide! id)
                                                          (state/pub-event! [:editor/hide-action-bar])))
-                                          :icon-value nil
+                                          ;; Seed the picker with the first selected block's
+                                          ;; *resolved* icon so icon-search's `:will-mount`
+                                          ;; auto-routes to the right view: blocks that inherit
+                                          ;; a class default-icon of type `:avatar` open the
+                                          ;; asset-picker (avatar/image tabs), preserving the
+                                          ;; existing shape so the user can just swap the
+                                          ;; fallback icon. `get-node-icon` includes class
+                                          ;; default-icon inheritance, so an instance row of
+                                          ;; e.g. #Institution comes through as the inherited
+                                          ;; avatar config rather than nil — which previously
+                                          ;; left the picker on its default :icon-picker view
+                                          ;; (the regular emoji/icon grid the user reported as
+                                          ;; the wrong affordance).
+                                          :icon-value (some-> selected-blocks first
+                                                              icon-component/get-node-icon)
                                           :page-title first-title
                                           :del-btn? false
                                           :preview-target-db-ids (set (map :db/id selected-blocks))}))

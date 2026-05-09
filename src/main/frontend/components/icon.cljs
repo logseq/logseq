@@ -2893,6 +2893,15 @@
   ;; latest captured id applies its on-chosen — so a quick A→B sequence ends
   ;; up showing B regardless of resolution order.
   (rum/local 0      ::web-image-save-id)
+  ;; Optimistic mirror of the just-committed icon. Set synchronously in the
+  ;; on-chosen* wrapper so the avatar tile renders the new value during the
+  ;; ~30-50ms window before the SharedWorker entity write lands and
+  ;; `current-icon` (a model/sub-block-derived prop) catches up. Without
+  ;; this, the tile briefly flashes the previous icon/color after Enter or
+  ;; click — same race the icon-picker solves with its `pending-icon`
+  ;; rum/use-state. Cleared in :will-remount when `current-icon` changes,
+  ;; matching icon-picker's `(use-effect! ... [icon-value])` semantics.
+  (rum/local nil    ::pending-icon)
   ;; Create a single stable debounced setter. Must live in state (not the
    ;; render `let`) so the debounce timer persists across renders — otherwise
    ;; every keystroke gets a fresh timer and no debouncing happens, causing
@@ -2985,6 +2994,17 @@
                                        (h e)))))]
                   (.addEventListener node "paste" listener)
                   (assoc state ::paste-listener listener)))
+   :will-remount (fn [old-state new-state]
+                   ;; Clear the optimistic ::pending-icon mirror once the
+                   ;; entity-derived `current-icon` prop changes — i.e., the
+                   ;; SharedWorker write has landed and model/sub-block
+                   ;; refreshed. Mirrors icon-picker's
+                   ;; `(use-effect! ... [icon-value])` reset.
+                   (let [old-icon (:current-icon (first (:rum/args old-state)))
+                         new-icon (:current-icon (first (:rum/args new-state)))]
+                     (when (not= old-icon new-icon)
+                       (reset! (::pending-icon new-state) nil)))
+                   new-state)
    :will-unmount (fn [state]
                    ;; Remove paste listener first (best-effort — node may be gone)
                    (when-let [listener (::paste-listener state)]
@@ -3003,6 +3023,16 @@
         *loading? (::loading? state)
         *loaded-assets (::loaded-assets state)
         *web-query-debounced (::web-query-debounced state)
+        ;; Optimistic local mirror — see ::pending-icon comment in mixins.
+        *pending-icon      (::pending-icon state)
+        pending-icon       (rum/react *pending-icon)
+        ;; Wrap on-chosen so every commit primes the optimistic mirror
+        ;; *before* the (async, ~30-50ms) entity write fires. The tile reads
+        ;; `pending-icon` ahead of the stale `current-icon` prop, so there's
+        ;; no flash of the previous value between commit and entity refresh.
+        on-chosen* (fn [e v & rest]
+                     (reset! *pending-icon v)
+                     (apply on-chosen e v rest))
         ;; Keyboard-nav state
         *focus-region      (::focus-region state)
         *highlighted-index (::highlighted-index state)
@@ -3082,7 +3112,7 @@
                                                     (:label synthesized-avatar-context))
                                          :data (merge (:data synthesized-avatar-context)
                                                       image-data)})]
-                (on-chosen nil next-icon true)))))
+                (on-chosen* nil next-icon true)))))
         ;; Stable debounced web-query setter (created once in :init)
         update-web-query! (::update-web-query! state)
         ;; SVG detection helper - checks if URL is an SVG file
@@ -3126,16 +3156,16 @@
                             ;; Select the new asset
                             (let [image-data {:asset-uuid (str (:block/uuid asset-entity))
                                               :asset-type (:logseq.property.asset/type asset-entity)}]
-                              (on-chosen nil
-                                         (if (= :avatar mode)
-                                           {:type :avatar
-                                            :id (:id synthesized-avatar-context)
-                                            :label (:label synthesized-avatar-context)
-                                            :data (merge (:data synthesized-avatar-context) image-data)}
-                                           {:type :image
-                                            :id (str "image-" (:block/uuid asset-entity))
-                                            :label (or (:block/title asset-entity) "")
-                                            :data image-data}))))))
+                              (on-chosen* nil
+                                          (if (= :avatar mode)
+                                            {:type :avatar
+                                             :id (:id synthesized-avatar-context)
+                                             :label (:label synthesized-avatar-context)
+                                             :data (merge (:data synthesized-avatar-context) image-data)}
+                                            {:type :image
+                                             :id (str "image-" (:block/uuid asset-entity))
+                                             :label (or (:block/title asset-entity) "")
+                                             :data image-data}))))))
                 (p/catch (fn [err]
                            ;; Only show error for the latest save attempt;
                            ;; superseded saves fail silently to avoid double
@@ -3165,16 +3195,16 @@
               (let [image-data {:asset-uuid (str (:block/uuid existing-asset))
                                 :asset-type (:logseq.property.asset/type existing-asset)}]
                 (add-used-asset! (:block/uuid existing-asset))
-                (on-chosen nil
-                           (if (= :avatar mode)
-                             {:type :avatar
-                              :id (:id synthesized-avatar-context)
-                              :label (:label synthesized-avatar-context)
-                              :data (merge (:data synthesized-avatar-context) image-data)}
-                             {:type :image
-                              :id (str "image-" (:block/uuid existing-asset))
-                              :label (or (:block/title existing-asset) "")
-                              :data image-data})))
+                (on-chosen* nil
+                            (if (= :avatar mode)
+                              {:type :avatar
+                               :id (:id synthesized-avatar-context)
+                               :label (:label synthesized-avatar-context)
+                               :data (merge (:data synthesized-avatar-context) image-data)}
+                              {:type :image
+                               :id (str "image-" (:block/uuid existing-asset))
+                               :label (or (:block/title existing-asset) "")
+                               :data image-data})))
               (handle-web-image-download repo url thumb-url title source license author source-url))))
 
         ;; Process upload (actual upload logic extracted for reuse)
@@ -3252,16 +3282,16 @@
                                  (when-let [first-asset (first entities)]
                                    (let [image-data {:asset-uuid (str (:block/uuid first-asset))
                                                      :asset-type (:logseq.property.asset/type first-asset)}]
-                                     (on-chosen nil
-                                                (if (= :avatar mode)
-                                                  {:type :avatar
-                                                   :id (:id synthesized-avatar-context)
-                                                   :label (:label synthesized-avatar-context)
-                                                   :data (merge (:data synthesized-avatar-context) image-data)}
-                                                  {:type :image
-                                                   :id (str "image-" (:block/uuid first-asset))
-                                                   :label (or (:block/title first-asset) "")
-                                                   :data image-data})))))))))
+                                     (on-chosen* nil
+                                                 (if (= :avatar mode)
+                                                   {:type :avatar
+                                                    :id (:id synthesized-avatar-context)
+                                                    :label (:label synthesized-avatar-context)
+                                                    :data (merge (:data synthesized-avatar-context) image-data)}
+                                                   {:type :image
+                                                    :id (str "image-" (:block/uuid first-asset))
+                                                    :label (or (:block/title first-asset) "")
+                                                    :data image-data})))))))))
 
         ;; Handle file upload with smart multi-file preview
         handle-upload (fn [files]
@@ -3298,16 +3328,16 @@
           ;; Select the new asset
           (let [image-data {:asset-uuid (str (:block/uuid asset-entity))
                             :asset-type (:logseq.property.asset/type asset-entity)}]
-            (on-chosen nil
-                       (if (= :avatar mode)
-                         {:type :avatar
-                          :id (:id synthesized-avatar-context)
-                          :label (:label synthesized-avatar-context)
-                          :data (merge (:data synthesized-avatar-context) image-data)}
-                         {:type :image
-                          :id (str "image-" (:block/uuid asset-entity))
-                          :label (or (:block/title asset-entity) "")
-                          :data image-data}))))
+            (on-chosen* nil
+                        (if (= :avatar mode)
+                          {:type :avatar
+                           :id (:id synthesized-avatar-context)
+                           :label (:label synthesized-avatar-context)
+                           :data (merge (:data synthesized-avatar-context) image-data)}
+                          {:type :image
+                           :id (str "image-" (:block/uuid asset-entity))
+                           :label (or (:block/title asset-entity) "")
+                           :data image-data}))))
 
         ;; Read the system clipboard and route to upload / URL-save / toast.
         handle-clipboard-paste
@@ -3446,12 +3476,12 @@
                           (reset! *color c)
                           (let [icon (or (when (= :avatar (:type current-icon)) current-icon)
                                          synthesized-avatar-context)]
-                            (on-chosen nil
-                                       (-> icon
-                                           (assoc :color c)
-                                           (assoc-in [:data :color] c)
-                                           (assoc-in [:data :backgroundColor] c))
-                                       true)))
+                            (on-chosen* nil
+                                        (-> icon
+                                            (assoc :color c)
+                                            (assoc-in [:data :color] c)
+                                            (assoc-in [:data :backgroundColor] c))
+                                        true)))
                         :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
                                      (fn [c]
                                        (state/set-state! :ui/icon-hover-preview
@@ -3663,33 +3693,56 @@
                 ;; and is itself an avatar, overlay it so the band's tile
                 ;; mirrors what the page-title shows in lockstep.
                 hover-preview (state/sub :ui/icon-hover-preview)
-                hover-icon (when (and hover-preview
-                                      (= preview-target-db-id (:db-id hover-preview))
-                                      ;; Gate on property scope so the
-                                      ;; tile only reflects previews from
-                                      ;; the picker that's editing *this*
-                                      ;; field. Without it, opening the
-                                      ;; Default Icon picker would tint
-                                      ;; the page-title's separately-mounted
-                                      ;; asset-picker tile (and vice versa).
-                                      (= property (:property hover-preview))
-                                      (= :avatar (get-in hover-preview [:icon :type])))
-                             (:icon hover-preview))
+                ;; Hover preview targets *this* picker when both the
+                ;; entity and the property scope match. Without the
+                ;; property gate, opening the Default Icon picker would
+                ;; tint the page-title's separately-mounted asset-picker
+                ;; tile (and vice versa).
+                hover-match? (and hover-preview
+                                  (= preview-target-db-id (:db-id hover-preview))
+                                  (= property (:property hover-preview)))
+                ;; Two flavors of preview to consume:
+                ;; 1. Full icon override — broadcast by tile hover/keyboard
+                ;;    nav in the fallback sub-picker (icon already wrapped
+                ;;    as an avatar via `hover-wrap-fn`).
+                ;; 2. Color-only preview — broadcast by color-swatch
+                ;;    hover (no `:icon`, only `:color`). For these we
+                ;;    overlay the color onto the committed avatar so the
+                ;;    tile flashes the previewed tint without losing the
+                ;;    current shape/fallback.
+                hover-icon-override (when (and hover-match?
+                                               (= :avatar (get-in hover-preview [:icon :type])))
+                                      (:icon hover-preview))
+                hover-color (when hover-match?
+                              (let [c (:color hover-preview)]
+                                (when (and c (not (string/blank? c)) (not= c "inherit"))
+                                  c)))
                 ;; Committed (hover-free) base: what the avatar would
                 ;; render if no preview were active. Used as the input
                 ;; to dropdown-row hover broadcasts so we don't feedback-
-                ;; loop a hover-preview onto itself when the user moves
-                ;; between Shape / Fallback rows.
-                committed-icon (or (when (= :avatar (:type current-icon)) current-icon)
+                ;; loop a hover-preview onto itself, and as the base for
+                ;; the color-only overlay above.
+                ;; Read the optimistic ::pending-icon mirror first so the
+                ;; tile renders the just-committed value during the brief
+                ;; window before the entity-write round-trip lands and
+                ;; `current-icon` refreshes. Cleared in :will-remount.
+                committed-icon (or (when (and pending-icon (= :avatar (:type pending-icon)))
+                                     pending-icon)
+                                   (when (= :avatar (:type current-icon)) current-icon)
                                    synthesized-avatar-context)
+                hover-icon (or hover-icon-override
+                               (when hover-color
+                                 (-> committed-icon
+                                     (assoc-in [:data :color] hover-color)
+                                     (assoc-in [:data :backgroundColor] hover-color))))
                 preview-icon (or hover-icon committed-icon)
                 current-shape (or (get-in preview-icon [:data :shape]) :circle)
                 current-fb-type (or (get-in preview-icon [:data :fallback-type]) :letters)
                 current-fb-icon (get-in preview-icon [:data :fallback-icon])
                 set-shape! (fn [new-shape]
-                             (on-chosen nil
-                                        (assoc-in preview-icon [:data :shape] new-shape)
-                                        true))
+                             (on-chosen* nil
+                                         (assoc-in preview-icon [:data :shape] new-shape)
+                                         true))
                 ;; All three commit fns clear `:ui/icon-hover-preview`
                 ;; (so the asset-picker tile stops reading a stale
                 ;; hover-icon and falls back to the freshly-committed
@@ -3703,25 +3756,25 @@
                                        (state/set-state! :ui/icon-hover-preview nil)
                                        (reset! (::fallback-menu-open? state) false))
                 set-fallback-letters! (fn []
-                                        (on-chosen nil
-                                                   (-> preview-icon
-                                                       (assoc-in [:data :fallback-type] :letters)
-                                                       (update :data dissoc :fallback-icon))
-                                                   true)
+                                        (on-chosen* nil
+                                                    (-> preview-icon
+                                                        (assoc-in [:data :fallback-type] :letters)
+                                                        (update :data dissoc :fallback-icon))
+                                                    true)
                                         (close-fallback-menu!))
                 set-fallback-icon! (fn [icon-name]
-                                     (on-chosen nil
-                                                (-> preview-icon
-                                                    (assoc-in [:data :fallback-type] :icon)
-                                                    (assoc-in [:data :fallback-icon] icon-name))
-                                                true)
+                                     (on-chosen* nil
+                                                 (-> preview-icon
+                                                     (assoc-in [:data :fallback-type] :icon)
+                                                     (assoc-in [:data :fallback-icon] icon-name))
+                                                 true)
                                      (close-fallback-menu!))
                 set-fallback-emoji! (fn [emoji-id]
-                                      (on-chosen nil
-                                                 (-> preview-icon
-                                                     (assoc-in [:data :fallback-type] :emoji)
-                                                     (assoc-in [:data :fallback-icon] emoji-id))
-                                                 true)
+                                      (on-chosen* nil
+                                                  (-> preview-icon
+                                                      (assoc-in [:data :fallback-type] :emoji)
+                                                      (assoc-in [:data :fallback-icon] emoji-id))
+                                                  true)
                                       (close-fallback-menu!))
                 ;; Live preview while hovering Shape / Fallback dropdown
                 ;; rows. Broadcast a synthetic avatar (committed config
@@ -3774,12 +3827,12 @@
                                ;; and fallback back to :letters (no icon).
                                (when (or (not= current-shape :circle)
                                          (not= current-fb-type :letters))
-                                 (on-chosen nil
-                                            (-> preview-icon
-                                                (assoc-in [:data :shape] :circle)
-                                                (assoc-in [:data :fallback-type] :letters)
-                                                (update :data dissoc :fallback-icon))
-                                            true)))
+                                 (on-chosen* nil
+                                             (-> preview-icon
+                                                 (assoc-in [:data :shape] :circle)
+                                                 (assoc-in [:data :fallback-type] :letters)
+                                                 (update :data dissoc :fallback-icon))
+                                             true)))
                 style-dirty? (or (not= current-shape :circle)
                                  (not= current-fb-type :letters))
                 ;; Resting-banner copy: scope on the left ("Default" /
