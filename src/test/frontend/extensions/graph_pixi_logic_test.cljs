@@ -350,6 +350,18 @@
                [{:id "tag-a" :kind "tag" :cluster-id "tag-a" :x 0 :y 0 :radius 10}]
                :all-pages)))))
 
+(deftest tag-cluster-background-colors-come-from-tag-title
+  (let [backgrounds (logic/tag-cluster-backgrounds
+                     [{:id "tag-a" :kind "tag" :label "Design" :cluster-id "tag-a" :x 0 :y 0 :radius 10}
+                      {:id "tag-b" :kind "tag" :label "Research" :cluster-id "tag-b" :x 180 :y 0 :radius 10}
+                      {:id "tag-c" :kind "tag" :label "Design" :cluster-id "tag-c" :x 360 :y 0 :radius 10}]
+                     :tags-and-objects)
+        color-by-id (into {} (map (juxt :id :color-int) backgrounds))]
+    (is (not= (get color-by-id "tag-a")
+              (get color-by-id "tag-b")))
+    (is (= (get color-by-id "tag-a")
+           (get color-by-id "tag-c")))))
+
 (deftest layout-nodes-ignores-links-with-missing-nodes
   (let [nodes [{:id 168 :kind "page" :label "Existing page"}
                {:id 169 :kind "page" :label "Linked page"}]
