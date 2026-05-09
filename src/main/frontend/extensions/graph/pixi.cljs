@@ -297,7 +297,7 @@
                                       (+ (.-height text-node) 4)
                                       4)
                           (.fill bg-node #js {:color bg-color
-                                              :alpha (if hovered? 0.94 0.82)})
+                                              :alpha (logic/label-surface-fill-alpha :node hovered?)})
                           (.setStrokeStyle bg-node
                                            #js {:width 1
                                                 :color border-color
@@ -431,7 +431,7 @@
                           :fill (edge-label-color dark?)
                           :alpha 0.9})
           accent-color (color->int (edge-label-color dark?))
-          bg-color accent-color
+          bg-color (color->int (if dark? "#0B1220" "#F8FAFC"))
           border-color accent-color
           labeled-links (->> links
                              (take max-edges)
@@ -469,7 +469,7 @@
                               (+ (.-height text) (* 2 padding-y))
                               3)
                   (.fill bg #js {:color bg-color
-                                  :alpha 0.12})
+                                  :alpha (logic/label-surface-fill-alpha :edge false)})
                   (.setStrokeStyle bg #js {:width 1
                                            :color border-color
                                            :alpha 0.52})

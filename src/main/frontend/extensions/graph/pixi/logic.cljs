@@ -67,10 +67,8 @@
       label)))
 
 (defn label-surface-fill-alpha
-  [label-kind active?]
-  (case label-kind
-    :node (if active? 0.94 0.82)
-    :edge 0.12))
+  [_label-kind _active?]
+  1.0)
 
 (defn readable-edge-label-angle
   [from-x from-y to-x to-y]
