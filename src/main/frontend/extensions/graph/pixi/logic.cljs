@@ -473,6 +473,10 @@
          large-graph-render-node-limit
          node-count)))
 
+(defn tag-cluster-backgrounds
+  [_nodes _view-mode]
+  [])
+
 (defn- link-distance
   [view-mode value]
   (if (number? value)

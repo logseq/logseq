@@ -323,6 +323,33 @@
     (is (< (distance "tag-a" "obj-linked")
            (distance "tag-a" "obj-island")))))
 
+(deftest layout-nodes-tags-mode-assigns-clusters
+  (let [nodes [{:id "tag-a" :kind "tag" :label "Tag A"}
+               {:id "tag-b" :kind "tag" :label "Tag B"}
+               {:id "obj-a" :kind "object" :label "Object A"}
+               {:id "obj-b" :kind "object" :label "Object B"}]
+        links [{:source "obj-a" :target "tag-a"}
+               {:source "obj-b" :target "tag-b"}]
+        layouted (logic/layout-nodes nodes links :tags-and-objects false)
+        by-id (into {} (map (juxt :id identity) layouted))]
+    (is (= "tag-a" (:cluster-id (get by-id "tag-a"))))
+    (is (= "tag-a" (:cluster-id (get by-id "obj-a"))))
+    (is (= "tag-b" (:cluster-id (get by-id "tag-b"))))
+    (is (= "tag-b" (:cluster-id (get by-id "obj-b"))))))
+
+(deftest tag-cluster-backgrounds-wrap-clustered-nodes
+  (let [backgrounds (logic/tag-cluster-backgrounds
+                     [{:id "tag-a" :kind "tag" :cluster-id "tag-a" :x 0 :y 0 :radius 10}
+                      {:id "obj-a" :kind "object" :cluster-id "tag-a" :x 60 :y 0 :radius 8}
+                      {:id "tag-b" :kind "tag" :cluster-id "tag-b" :x 300 :y 0 :radius 10}
+                      {:id "obj-b" :kind "object" :cluster-id "tag-b" :x 360 :y 0 :radius 8}]
+                     :tags-and-objects)]
+    (is (= #{"tag-a" "tag-b"} (set (map :id backgrounds))))
+    (is (every? #(>= (:radius %) 84) backgrounds))
+    (is (= [] (logic/tag-cluster-backgrounds
+               [{:id "tag-a" :kind "tag" :cluster-id "tag-a" :x 0 :y 0 :radius 10}]
+               :all-pages)))))
+
 (deftest layout-nodes-ignores-links-with-missing-nodes
   (let [nodes [{:id 168 :kind "page" :label "Existing page"}
                {:id 169 :kind "page" :label "Linked page"}]
