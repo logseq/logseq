@@ -16,6 +16,7 @@
 (def ^:private default-show-arrows? false)
 (def ^:private default-link-distance 72)
 (def ^:private default-show-edge-labels? true)
+(def ^:private default-grid-layout? true)
 (def ^:private default-settings {:view-mode :tags-and-objects
                                  :selected-tag-ids nil
                                  :created-at-filter nil
@@ -23,6 +24,7 @@
                                  :show-arrows? default-show-arrows?
                                  :link-distance default-link-distance
                                  :show-edge-labels? default-show-edge-labels?
+                                 :grid-layout? default-grid-layout?
                                  :open-groups default-open-groups})
 
 (defn- storage-key
@@ -52,13 +54,14 @@
   (int (clamp-number value 36 180 default-link-distance)))
 
 (defn encode-settings
-  [{:keys [view-mode selected-tag-ids created-at-filter depth show-arrows? link-distance show-edge-labels? open-groups]}]
+  [{:keys [view-mode selected-tag-ids created-at-filter depth show-arrows? link-distance show-edge-labels? grid-layout? open-groups]}]
   (clj->js
    (cond-> {:viewMode (name (valid-view-mode view-mode))
             :depth (valid-depth depth)
             :showArrows (boolean show-arrows?)
             :linkDistance (valid-link-distance link-distance)
             :showEdgeLabels (boolean show-edge-labels?)
+            :gridLayout (boolean grid-layout?)
             :openGroups (mapv name (or open-groups default-open-groups))}
      (some? selected-tag-ids)
      (assoc :selectedTagIds (vec selected-tag-ids))
@@ -94,6 +97,9 @@
 
              (contains? data :showEdgeLabels)
              (assoc :show-edge-labels? (true? (:showEdgeLabels data)))
+
+             (contains? data :gridLayout)
+             (assoc :grid-layout? (true? (:gridLayout data)))
 
              (contains? data :openGroups)
              (assoc :open-groups (set (map keyword (:openGroups data))))))))
@@ -400,10 +406,11 @@
    [:span label]])
 
 (defn- layout-group
-  [settings set-settings! graph-data selected-nodes]
+  [settings set-settings! graph-data selected-nodes view-mode]
   (let [depth (valid-depth (:depth settings))
         link-distance (valid-link-distance (:link-distance settings))
         show-arrows? (true? (:show-arrows? settings))
+        grid-layout? (true? (:grid-layout? settings))
         depth-disabled? (depth-control-disabled? selected-nodes)]
     (settings-group
      {:settings settings
@@ -441,7 +448,13 @@
                   (t :graph/layout-edge-labels)
                   (true? (:show-edge-labels? settings))
                   #(set-settings! (fn [settings]
-                                    (assoc settings :show-edge-labels? %))))]})))
+                                    (assoc settings :show-edge-labels? %))))
+                 (when (= view-mode :tags-and-objects)
+                   (layout-toggle
+                    (t :graph/layout-grid-layout)
+                    grid-layout?
+                    #(set-settings! (fn [settings]
+                                      (assoc settings :grid-layout? %)))))]})))
 
 (defn time-travel-range
   [graph-data]
@@ -602,7 +615,7 @@
         (view-mode-group settings set-settings! view-mode set-view-mode!)
         (when (= view-mode :tags-and-objects)
           (tags-group settings set-settings! available-tags selected-tag-ids tag-query set-tag-query!))
-        (layout-group settings set-settings! filtered-graph-data selected-nodes)])])
+        (layout-group settings set-settings! filtered-graph-data selected-nodes view-mode)])])
 
 (rum/defc global-graph
   []
@@ -726,6 +739,7 @@
                            :show-arrows? (true? (:show-arrows? settings))
                            :link-distance (valid-link-distance (:link-distance settings))
                            :show-edge-labels? (true? (:show-edge-labels? settings))
+                           :grid-layout? (true? (:grid-layout? settings))
                            :dark? dark?
                            :view-mode view-mode
                            :aria-label (t :graph/canvas-label)

@@ -17,7 +17,8 @@
               :height 480
               :aria-label "Graph"
               :depth 1
-              :show-arrows? true
+              :show-arrows? false
+              :grid-layout? true
               :link-distance 72
               :show-edge-labels? false
               :on-node-activate identity

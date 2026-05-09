@@ -23,6 +23,9 @@
   (is (= #{"1" "2" "3"}
          (graph/selected-tag-id-set {} (graph/tag-options graph-data)))))
 
+(deftest settings-use-grid-tags-layout-by-default
+  (is (true? (:grid-layout? (graph/decode-settings {})))))
+
 (deftest settings-roundtrip-keeps-all-tags-sentinel
   (let [settings {:view-mode :tags-and-objects
                   :selected-tag-ids nil
@@ -50,6 +53,7 @@
   (let [settings {:view-mode :tags-and-objects
                   :depth 4
                   :show-arrows? true
+                  :grid-layout? true
                   :link-distance 132
                   :show-edge-labels? false
                   :open-groups #{:layout}}
@@ -58,20 +62,24 @@
         decoded (graph/decode-settings data)]
     (is (= 4 (:depth data)))
     (is (true? (:showArrows data)))
+    (is (true? (:gridLayout data)))
     (is (= 132 (:linkDistance data)))
     (is (false? (:showEdgeLabels data)))
     (is (= 4 (:depth decoded)))
     (is (true? (:show-arrows? decoded)))
+    (is (true? (:grid-layout? decoded)))
     (is (= 132 (:link-distance decoded)))
     (is (false? (:show-edge-labels? decoded)))))
 
 (deftest layout-settings-are-clamped-when-decoded
   (let [decoded (graph/decode-settings {:depth 99
                                         :showArrows true
+                                        :gridLayout true
                                         :linkDistance 999
                                         :showEdgeLabels false})]
     (is (= 5 (:depth decoded)))
     (is (true? (:show-arrows? decoded)))
+    (is (true? (:grid-layout? decoded)))
     (is (= 180 (:link-distance decoded)))
     (is (false? (:show-edge-labels? decoded)))))
 

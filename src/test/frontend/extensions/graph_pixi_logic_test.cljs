@@ -302,15 +302,18 @@
 
 (deftest layout-nodes-uses-subdued-node-colors
   (let [nodes [{:id "tag-a" :kind "tag" :label "Tag A"}
-               {:id "obj-a" :kind "object" :label "Object A"}]
+               {:id "obj-a" :kind "object" :label "Object A"}
+               {:id "page-a" :kind "page" :label "Page A"}]
         light-by-id (into {} (map (juxt :id :color)
                                   (logic/layout-nodes nodes [] :all-pages false)))
         dark-by-id (into {} (map (juxt :id :color)
                                  (logic/layout-nodes nodes [] :all-pages true)))]
-    (is (= "#5F7F6D" (get light-by-id "tag-a")))
-    (is (= "#687A93" (get light-by-id "obj-a")))
-    (is (= "#7AA897" (get dark-by-id "tag-a")))
-    (is (= "#8EA0B8" (get dark-by-id "obj-a")))))
+    (is (= "#8B6CCB" (get light-by-id "tag-a")))
+    (is (= "#E6E6E6" (get light-by-id "obj-a")))
+    (is (= "#E6E6E6" (get light-by-id "page-a")))
+    (is (= "#B69AE8" (get dark-by-id "tag-a")))
+    (is (= "#858D98" (get dark-by-id "obj-a")))
+    (is (= "#858D98" (get dark-by-id "page-a")))))
 
 (deftest layout-nodes-uses-link-forces
   (let [nodes [{:id "tag-a" :kind "tag" :label "Tag A"}
@@ -349,6 +352,148 @@
     (is (= "tag-b" (:cluster-id (get by-id "tag-b"))))
     (is (= "tag-b" (:cluster-id (get by-id "obj-b"))))))
 
+(deftest layout-nodes-tags-mode-grid-layout-keeps-clusters-apart
+  (let [tag-count 18
+        object-count 12
+        tags (mapv (fn [idx]
+                     {:id (str "tag-" idx)
+                      :kind "tag"
+                      :label (str "Tag " idx)})
+                   (range tag-count))
+        objects (mapcat (fn [tag-idx]
+                          (mapv (fn [object-idx]
+                                  {:id (str "obj-" tag-idx "-" object-idx)
+                                   :kind "object"
+                                   :label (str "Object " tag-idx "-" object-idx)})
+                                (range object-count)))
+                        (range tag-count))
+        links (mapcat (fn [tag-idx]
+                        (mapv (fn [object-idx]
+                                {:source (str "obj-" tag-idx "-" object-idx)
+                                 :target (str "tag-" tag-idx)})
+                              (range object-count)))
+                      (range tag-count))
+        layouted (logic/layout-nodes (vec (concat tags objects))
+                                     (vec links)
+                                     :tags-and-objects
+                                     false
+                                     {:grid-layout? true})
+        backgrounds (logic/tag-cluster-backgrounds
+                     layouted
+                     :tags-and-objects
+                     {:grid-layout? true})
+        center-distance (fn [a b]
+                          (let [dx (- (:x a) (:x b))
+                                dy (- (:y a) (:y b))]
+                            (js/Math.sqrt (+ (* dx dx) (* dy dy)))))
+        width (- (apply max (map :x backgrounds))
+                 (apply min (map :x backgrounds)))
+        height (- (apply max (map :y backgrounds))
+                  (apply min (map :y backgrounds)))]
+    (is (= tag-count (count backgrounds)))
+    (is (< width 2200))
+    (is (< height 1800))
+    (is (every? (fn [[a b]]
+                  (> (center-distance a b)
+                     (+ (:radius a) (:radius b) 24)))
+                (for [a backgrounds
+                      b backgrounds
+                      :when (neg? (compare (:id a) (:id b)))]
+                  [a b])))))
+
+(deftest layout-nodes-tags-mode-can-use-relaxed-clusters
+  (let [tag-count 6
+        object-count 4
+        tags (mapv (fn [idx]
+                     {:id (str "tag-" idx)
+                      :kind "tag"
+                      :label (str "Tag " idx)})
+                   (range tag-count))
+        objects (mapcat (fn [tag-idx]
+                          (mapv (fn [object-idx]
+                                  {:id (str "obj-" tag-idx "-" object-idx)
+                                   :kind "object"
+                                   :label (str "Object " tag-idx "-" object-idx)})
+                                (range object-count)))
+                        (range tag-count))
+        links (mapcat (fn [tag-idx]
+                        (mapv (fn [object-idx]
+                                {:source (str "obj-" tag-idx "-" object-idx)
+                                 :target (str "tag-" tag-idx)})
+                              (range object-count)))
+                      (range tag-count))
+        relaxed (logic/layout-nodes (vec (concat tags objects))
+                                    (vec links)
+                                    :tags-and-objects
+                                    false
+                                    {:grid-layout? false})
+        by-id (into {} (map (juxt :id identity) relaxed))
+        origin-distance (fn [node]
+                          (js/Math.sqrt (+ (* (:x node) (:x node))
+                                           (* (:y node) (:y node)))))]
+    (is (some #(<= (origin-distance (get by-id (str "tag-" %))) 420)
+              (range tag-count)))))
+
+(deftest layout-nodes-tags-mode-grid-layout-duplicates-multi-tag-nodes
+  (let [nodes [{:id "tag-a" :kind "tag" :label "Tag A"}
+               {:id "tag-b" :kind "tag" :label "Tag B"}
+               {:id "obj-a" :kind "object" :label "Object A"}]
+        links [{:source "obj-a" :target "tag-a"}
+               {:source "obj-a" :target "tag-b"}]
+        layouted (logic/layout-nodes nodes links :tags-and-objects false {:grid-layout? true})
+        object-copies (filter #(= "obj-a" (logic/node-source-id %)) layouted)
+        display-links (logic/display-links links layouted)]
+    (is (= 4 (count layouted)))
+    (is (= #{"tag-a" "tag-b"} (set (map :cluster-id object-copies))))
+    (is (= 2 (count (set (map :id object-copies)))))
+    (is (= #{{:source (logic/visual-node-id "tag-a" "obj-a") :target "tag-a"}
+             {:source (logic/visual-node-id "tag-b" "obj-a") :target "tag-b"}}
+           (set (map #(select-keys % [:source :target]) display-links))))))
+
+(deftest layout-nodes-tags-mode-non-grid-keeps-single-multi-tag-node
+  (let [nodes [{:id "tag-a" :kind "tag" :label "Tag A"}
+               {:id "tag-b" :kind "tag" :label "Tag B"}
+               {:id "obj-a" :kind "object" :label "Object A"}]
+        links [{:source "obj-a" :target "tag-a"}
+               {:source "obj-a" :target "tag-b"}]
+        layouted (logic/layout-nodes nodes links :tags-and-objects false {:grid-layout? false})
+        object-nodes (filter #(= "obj-a" (logic/node-source-id %)) layouted)]
+    (is (= 3 (count layouted)))
+    (is (= 1 (count object-nodes)))
+    (is (= "obj-a" (:id (first object-nodes))))))
+
+(deftest layout-nodes-tags-mode-non-grid-keeps-old-seed-shape
+  (let [tag-count 8
+        object-count 120
+        tags (mapv (fn [idx]
+                     {:id (str "tag-" idx)
+                      :kind "tag"
+                      :label (str "Tag " idx)})
+                   (range tag-count))
+        objects (mapcat (fn [tag-idx]
+                          (mapv (fn [object-idx]
+                                  {:id (str "obj-" tag-idx "-" object-idx)
+                                   :kind "object"
+                                   :label (str "Object " tag-idx "-" object-idx)})
+                                (range object-count)))
+                        (range tag-count))
+        links (mapcat (fn [tag-idx]
+                        (mapv (fn [object-idx]
+                                {:source (str "obj-" tag-idx "-" object-idx)
+                                 :target (str "tag-" tag-idx)})
+                              (range object-count)))
+                      (range tag-count))
+        layouted (logic/layout-nodes (vec (concat tags objects))
+                                     (vec links)
+                                     :tags-and-objects
+                                     false
+                                     {:grid-layout? false})
+        tag-radius (fn [idx]
+                     (let [{:keys [x y]} (some #(when (= (str "tag-" idx) (:id %)) %) layouted)]
+                       (js/Math.round (js/Math.sqrt (+ (* x x) (* y y))))))]
+    (is (= 968 (count layouted)))
+    (is (every? #(<= 240 (tag-radius %) 760) (range tag-count)))))
+
 (deftest tag-cluster-backgrounds-wrap-clustered-nodes
   (let [backgrounds (logic/tag-cluster-backgrounds
                      [{:id "tag-a" :kind "tag" :cluster-id "tag-a" :x 0 :y 0 :radius 10}
@@ -361,6 +506,27 @@
     (is (= [] (logic/tag-cluster-backgrounds
                [{:id "tag-a" :kind "tag" :cluster-id "tag-a" :x 0 :y 0 :radius 10}]
                :all-pages)))))
+
+(deftest tag-cluster-backgrounds-are-centered-on-tag-node
+  (let [[background] (logic/tag-cluster-backgrounds
+                      [{:id "tag-a" :kind "tag" :label "Tag A" :cluster-id "tag-a" :x 100 :y 80 :radius 10}
+                       {:id "obj-a" :kind "object" :cluster-id "tag-a" :x 260 :y 80 :radius 8}
+                       {:id "obj-b" :kind "object" :cluster-id "tag-a" :x 100 :y 220 :radius 8}]
+                      :tags-and-objects
+                      {:grid-layout? true})]
+    (is (= 100 (:x background)))
+    (is (= 80 (:y background)))
+    (is (> (:radius background) 170))))
+
+(deftest tag-cluster-backgrounds-use-bounds-center-for-non-grid
+  (let [[background] (logic/tag-cluster-backgrounds
+                      [{:id "tag-a" :kind "tag" :label "Tag A" :cluster-id "tag-a" :x 100 :y 80 :radius 10}
+                       {:id "obj-a" :kind "object" :cluster-id "tag-a" :x 260 :y 80 :radius 8}
+                       {:id "obj-b" :kind "object" :cluster-id "tag-a" :x 100 :y 220 :radius 8}]
+                      :tags-and-objects
+                      {:grid-layout? false})]
+    (is (= 180 (:x background)))
+    (is (= 150 (:y background)))))
 
 (deftest tag-cluster-background-colors-come-from-tag-title
   (let [backgrounds (logic/tag-cluster-backgrounds

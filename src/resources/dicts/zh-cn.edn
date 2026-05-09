@@ -698,6 +698,7 @@
  :graph/layout-depth "深度"
  :graph/layout-edge-labels "边标签"
  :graph/layout-force "力导向图"
+ :graph/layout-grid-layout "网格布局"
  :graph/layout-link-distance "链接距离"
  :graph/leave-action "离开此图谱"
  :graph/leave-confirm-desc "确定要离开这个图谱吗？"

@@ -659,7 +659,11 @@
 (defn- visible-node-id-set
   [nodes visible-node-ids]
   (if (some? visible-node-ids)
-    (set visible-node-ids)
+    (let [source-id-set (set visible-node-ids)]
+      (->> nodes
+           (filter #(contains? source-id-set (logic/node-source-id %)))
+           (map :id)
+           set))
     (set (map :id nodes))))
 
 (defn- visible-node?
@@ -674,12 +678,13 @@
           links))
 
 (defn- draw-cluster-backgrounds!
-  [^js graphics nodes view-mode dark? visible-node-ids*]
+  [^js graphics nodes view-mode dark? visible-node-ids* grid-layout?]
   (.clear graphics)
   (doseq [{:keys [x y radius color-int]}
           (logic/tag-cluster-backgrounds
            (filter #(visible-node? visible-node-ids* %) nodes)
-           view-mode)]
+           view-mode
+           {:grid-layout? grid-layout?})]
     (.circle graphics x y radius)
     (.fill graphics #js {:color (or color-int (color->int (if dark? "#34D399" "#047857")))
                          :alpha (if dark? 0.10 0.08)})
@@ -1024,7 +1029,7 @@
         (.removeEventListener canvas "wheel" on-wheel)))))
 
 (defn- ^:large-vars/cleanup-todo setup-scene!
-  [^js app ^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids depth show-arrows? link-distance show-edge-labels?]} render-start]
+  [^js app ^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids depth show-arrows? link-distance show-edge-labels? grid-layout?]} render-start]
   (set! (.-innerHTML container) "")
   (let [^js canvas (or (.-canvas app) (.-view app))
         ^js stage (.-stage app)
@@ -1045,11 +1050,18 @@
         normalized-view-mode (normalize-view-mode view-mode)
         depth* (atom (-> (or depth 1) (max 1) (min 5)))
         render-opts {:show-arrows? show-arrows?}
-        layouted-nodes* (atom (layout-nodes nodes links view-mode dark? {:link-distance link-distance}))
+        grid-layout? (true? grid-layout?)
+        layouted-nodes* (atom (layout-nodes nodes
+                                             links
+                                             view-mode
+                                             dark?
+                                             {:link-distance link-distance
+                                              :grid-layout? grid-layout?}))
+        display-links (logic/display-links links @layouted-nodes*)
         all-node-id-set (set (map :id @layouted-nodes*))
         visible-node-ids* (atom (visible-node-id-set @layouted-nodes* visible-node-ids))
         base-visible-link-list (fn []
-                                 (visible-links links @visible-node-ids*))
+                                 (visible-links display-links @visible-node-ids*))
         node-index-by-id (into {} (map-indexed (fn [idx node] [(:id node) idx]) @layouted-nodes*))
         layout-by-id* (atom (into {} (map (fn [node] [(:id node) node]) @layouted-nodes*)))
         preview-layout-by-id* (atom nil)
@@ -1058,7 +1070,7 @@
         _ (set! (.-y world) (:y initial-transform))
         _ (set! (.. world -scale -x) (:scale initial-transform))
         _ (set! (.. world -scale -y) (:scale initial-transform))
-        neighbor-map (build-neighbor-map links)
+        neighbor-map (build-neighbor-map display-links)
         highlighted-node-ids* (atom #{})
         highlight-state* (atom (logic/highlight-state @highlighted-node-ids* neighbor-map @depth*))
         visible-link-list (fn []
@@ -1066,7 +1078,7 @@
                              (base-visible-link-list)
                              @highlight-state*))
         _ (.addChild detail-layer cluster-background-layer)
-        _ (draw-cluster-backgrounds! cluster-background-layer @layouted-nodes* normalized-view-mode dark? visible-node-ids*)
+        _ (draw-cluster-backgrounds! cluster-background-layer @layouted-nodes* normalized-view-mode dark? visible-node-ids* grid-layout?)
         current-layout-nodes (fn []
                                (vals (logic/current-layout-by-id
                                       @layout-by-id*
@@ -1076,7 +1088,8 @@
                                                                nodes
                                                                normalized-view-mode
                                                                dark?
-                                                               visible-node-ids*))
+                                                               visible-node-ids*
+                                                               grid-layout?))
         edge-render-info (render-edges! detail-layer @layout-by-id* (visible-link-list) dark? normalized-view-mode render-opts)
         edge-label-render-info (render-edge-labels! label-layer-wrapper world width height @layout-by-id* (visible-link-list) dark? normalized-view-mode show-edge-labels?)
         _ (.addChild detail-layer drag-edge-layer)
@@ -1336,7 +1349,9 @@
                             (reset! transform-dirty? false))))
         update-visibility! (fn [next-visible-node-ids]
                              (let [next-visible-node-ids (if (some? next-visible-node-ids)
-                                                           (set next-visible-node-ids)
+                                                           (visible-node-id-set
+                                                            @layouted-nodes*
+                                                            next-visible-node-ids)
                                                            all-node-id-set)]
                                (when (not= next-visible-node-ids @visible-node-ids*)
                                  (reset! visible-node-ids* next-visible-node-ids)
@@ -1446,7 +1461,7 @@
   nil)
 
 (defn render-container!
-  [^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids depth show-arrows? link-distance show-edge-labels?]}]
+  [^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids depth show-arrows? link-distance show-edge-labels? grid-layout?]}]
   (when container
     (destroy-instance! container)
     (let [token (get (swap! *render-tokens update container (fnil inc 0)) container)
@@ -1472,7 +1487,8 @@
                                                    :depth depth
                                                    :show-arrows? show-arrows?
                                                    :link-distance link-distance
-                                                   :show-edge-labels? show-edge-labels?}
+                                                   :show-edge-labels? show-edge-labels?
+                                                   :grid-layout? grid-layout?}
                                     render-start))
                (.destroy ^js app))))
           (.catch
