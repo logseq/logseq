@@ -809,11 +809,37 @@
                                           {:value (derive-avatar-initials (:block/title node-entity))})}
                       (:color inherited) (assoc :color (:color inherited)))))
         :text (when (:block/title node-entity)
-                (let [colors (select-keys (:data default-icon) [:color])]
+                ;; Inherit color + alignment + mode from the class
+                ;; default. `:mode` ("initials" | "abbreviated" |
+                ;; "custom") drives per-instance derivation:
+                ;;   initials   — derive 2-char initials from each
+                ;;                instance's title (e.g. "M2")
+                ;;   abbreviated— derive a short word-prefix per
+                ;;                instance ("Math" for "Math 201")
+                ;;   custom     — propagate the class's literal text
+                ;;                verbatim (a constant, not a fn)
+                ;; Without this, every inheriting row showed
+                ;; `derive-initials` regardless of the class's chosen
+                ;; style, making the Abbreviated/Custom options
+                ;; appear broken at the row level.
+                (let [inherited (select-keys (:data default-icon)
+                                             [:color :alignment :mode])
+                      mode (:mode inherited)
+                      title (:block/title node-entity)
+                      derived-value (cond
+                                      (= mode "abbreviated")
+                                      (or (derive-abbreviated title)
+                                          (derive-initials title))
+
+                                      (= mode "custom")
+                                      (or (get-in default-icon [:data :value])
+                                          (derive-initials title))
+
+                                      :else
+                                      (derive-initials title))]
                   (cond-> {:type :text
-                           :data (merge colors
-                                        {:value (derive-initials (:block/title node-entity))})}
-                    (:color colors) (assoc :color (:color colors)))))
+                           :data (merge inherited {:value derived-value})}
+                    (:color inherited) (assoc :color (:color inherited)))))
         ;; Image type: return marker indicating inherited image without asset yet
         :image {:type :image
                 :data {:empty? true}}
