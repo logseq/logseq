@@ -15,6 +15,16 @@
   [result label]
   (some #(when (= label (:label %)) %) (:nodes result)))
 
+(defn- link-between-labels
+  [result source-label target-label]
+  (let [id-by-label (into {} (map (juxt :label :id) (:nodes result)))
+        source-id (get id-by-label source-label)
+        target-id (get id-by-label target-label)]
+    (some #(when (and (= source-id (:source %))
+                      (= target-id (:target %)))
+             %)
+          (:links result))))
+
 (deftest global-graph-defaults-to-tags-and-objects
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -77,6 +87,49 @@
     (is (contains? labels "Normal Page"))
     (is (not (contains? labels "rating")))
     (is (every? #(not= "property" (:kind %)) (:nodes result)))))
+
+(deftest global-graph-labels-node-property-edges-with-property-title
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:influences {:block/title "Influences"
+                                          :logseq.property/type :node}}
+               :pages-and-blocks
+               [{:page {:block/title "Project A"
+                        :build/properties {:influences [:build/page {:block/title "Project B"}]}
+                        :build/tags [:Project]}}
+                {:page {:block/title "Project B"
+                        :build/tags [:Project]}}]
+               :classes {:Project {}}})
+        all-pages-result (graph-view/build-graph @conn {:type :global
+                                                        :view-mode :all-pages
+                                                        :orphan-pages? true})
+        tags-result (graph-view/build-graph @conn {:type :global
+                                                   :view-mode :tags-and-objects})]
+    (testing "All-pages mode carries the property title on relationship links"
+      (is (= "Influences"
+             (:label (link-between-labels all-pages-result "Project A" "Project B")))))
+    (testing "Tags-and-objects mode carries the same property relationship label"
+      (is (= "Influences"
+             (:label (link-between-labels tags-result "Project A" "Project B")))))))
+
+(deftest global-all-pages-time-filter-keeps-visible-node-links
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Early"
+                        :block/created-at 1000}
+                 :blocks [{:block/title "See [[Middle]] and [[Late]]"}]}
+                {:page {:block/title "Middle"
+                        :block/created-at 2000}}
+                {:page {:block/title "Late"
+                        :block/created-at 3000}}]})
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :all-pages
+                                              :orphan-pages? true
+                                              :created-at-filter 1000})]
+    (is (= #{"Early" "Middle"} (node-labels result)))
+    (is (some? (link-between-labels result "Early" "Middle")))
+    (is (nil? (link-between-labels result "Early" "Late")))
+    (is (= 1000 (get-in result [:all-pages :created-at-min])))
+    (is (<= 3000 (get-in result [:all-pages :created-at-max])))))
 
 (deftest global-graph-nodes-include-icons
   (let [conn (db-test/create-conn-with-blocks

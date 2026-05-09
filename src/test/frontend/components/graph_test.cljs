@@ -35,6 +35,17 @@
     (is (= #{"1" "2" "3"}
            (graph/selected-tag-id-set decoded (graph/tag-options graph-data))))))
 
+(deftest settings-roundtrip-keeps-time-travel-filter
+  (let [settings {:view-mode :all-pages
+                  :created-at-filter 86400000
+                  :open-groups #{:view-mode :time-travel}}
+        encoded (graph/encode-settings settings)
+        data (js->clj (js/JSON.parse (js/JSON.stringify encoded)) :keywordize-keys true)
+        decoded (graph/decode-settings data)]
+    (is (= 86400000 (:createdAtFilter data)))
+    (is (= 86400000 (:created-at-filter decoded)))
+    (is (contains? (:open-groups decoded) :time-travel))))
+
 (deftest tag-selection-toggle-materializes-custom-selection-from-all
   (let [available-tags (graph/tag-options graph-data)
         settings (graph/toggle-selected-tag-id {:selected-tag-ids nil} available-tags "2")]

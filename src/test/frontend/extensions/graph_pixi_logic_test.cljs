@@ -264,6 +264,24 @@
     (is (= 1 (:degree (get by-id 168))))
     (is (= 1 (:degree (get by-id 169))))))
 
+(deftest layout-nodes-sizes-hubs-by-edge-count
+  (let [nodes (mapv (fn [id]
+                      {:id id
+                       :kind "page"
+                       :label (str "Page " id)})
+                    ["hub" "leaf-1" "leaf-2" "leaf-3" "leaf-4" "leaf-5" "island"])
+        links (mapv (fn [target]
+                      {:source "hub"
+                       :target target})
+                    ["leaf-1" "leaf-2" "leaf-3" "leaf-4" "leaf-5"])
+        layouted (logic/layout-nodes nodes links :all-pages false)
+        by-id (into {} (map (juxt :id identity) layouted))]
+    (is (= 5 (:degree (get by-id "hub"))))
+    (is (<= (+ (:radius (get by-id "leaf-1")) 4.0)
+            (:radius (get by-id "hub"))))
+    (is (< (:radius (get by-id "island"))
+           (:radius (get by-id "leaf-1"))))))
+
 (deftest layout-nodes-large-graph-uses-fast-path
   (let [nodes (mapv (fn [idx]
                       {:id idx
