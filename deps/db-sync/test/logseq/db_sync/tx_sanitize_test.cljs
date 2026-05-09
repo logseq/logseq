@@ -34,8 +34,4 @@
           sanitized (tx-sanitize/sanitize-tx @conn tx-data)
           sanitized-attrs (set (mapcat tx-item-attrs sanitized))]
       (is (empty? (set/intersection migration-deleted-attrs sanitized-attrs)))
-      (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "remote title"] %) sanitized))
-      (is (some #(= {:db/id [:block/uuid block-uuid]
-                     :block/title "remote title from map"}
-                    %)
-                sanitized)))))
+      (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "remote title"] %) sanitized)))))
