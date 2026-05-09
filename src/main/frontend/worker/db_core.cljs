@@ -410,7 +410,9 @@
 (defn- <create-or-open-db!
   [repo {:keys [config datoms sync-download-graph? creating-remote-graph?] :as opts}]
   (when creating-remote-graph?
-    (client-op/update-local-tx repo 0))
+    (when (and (worker-state/get-sqlite-conn repo :client-ops)
+               (nil? (client-op/get-local-tx repo)))
+      (client-op/update-local-tx repo 0)))
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)]
@@ -454,6 +456,9 @@
         (swap! *client-ops-conns assoc repo client-ops-conn)
         (when-not @*publishing?
           (client-op/ensure-sqlite-schema! client-ops-db))
+        (when creating-remote-graph?
+          (when (nil? (client-op/get-local-tx repo))
+            (client-op/update-local-tx repo 0)))
         (ensure-client-ops-cleanup-timer! repo)
         (let [initial-tx-report (when-not (or initial-data-exists?
                                               (seq datoms)

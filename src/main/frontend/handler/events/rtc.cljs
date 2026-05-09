@@ -13,15 +13,20 @@
             [missionary.core :as m]
             [promesa.core :as p]))
 
-(defn rtc-collaborators-dialog?
+(defn- rtc-collaborators-dialog?
   []
   (= :rtc-collaborators (state/get-modal-id)))
+
+(defn- close-e2ee-blocking-ui!
+  []
+  (when-not (rtc-collaborators-dialog?)
+    (shui/dialog-close-all!))
+  (shui/popup-hide! :download-rtc-graph))
 
 (defmethod events/handle :rtc/decrypt-user-e2ee-private-key [[_ encrypted-private-key]]
   (let [private-key-promise (p/deferred)
         refresh-token (str (state/get-auth-refresh-token))]
-    (when-not (rtc-collaborators-dialog?)
-      (shui/dialog-close-all!))
+    (close-e2ee-blocking-ui!)
     (->
      (p/let [{:keys [password]} (state/<invoke-db-worker :thread-api/get-e2ee-password refresh-token)
              private-key (crypt/<decrypt-private-key password encrypted-private-key)]
@@ -41,8 +46,7 @@
 (defmethod events/handle :rtc/request-e2ee-password [[_ {:keys [reason]}]]
   (let [password-promise (p/deferred)
         decrypt-reason? (= :decrypt-user-rsa-private-key reason)]
-    (when-not (rtc-collaborators-dialog?)
-      (shui/dialog-close-all!))
+    (close-e2ee-blocking-ui!)
     (shui/dialog-open!
      #(if decrypt-reason?
         (e2ee/e2ee-request-password password-promise)
