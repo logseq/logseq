@@ -135,6 +135,19 @@
     (is (= :dimmed (logic/node-emphasis state "a")))
     (is (= :normal (logic/node-emphasis (logic/highlight-state #{} neighbor-map) "a")))))
 
+(deftest highlighted-node-selection-respects-depth
+  (let [neighbor-map {"a" ["b" "c"]
+                      "b" ["a" "d"]
+                      "c" ["a"]
+                      "d" ["b" "e"]
+                      "e" ["d"]}
+        one-hop (logic/highlight-state #{"a"} neighbor-map 1)
+        two-hop (logic/highlight-state #{"a"} neighbor-map 2)]
+    (is (= #{"a" "b" "c"} (:active-ids one-hop)))
+    (is (= #{"a" "b" "c" "d"} (:active-ids two-hop)))
+    (is (= :dimmed (logic/node-emphasis one-hop "d")))
+    (is (= :connected (logic/node-emphasis two-hop "d")))))
+
 (deftest node-click-action-distinguishes-highlight-unhighlight-and-open
   (is (= {:action :highlight
           :next-click {:node-id "a" :time 1000}}

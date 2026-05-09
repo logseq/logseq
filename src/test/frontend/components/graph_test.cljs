@@ -46,6 +46,35 @@
     (is (= 86400000 (:created-at-filter decoded)))
     (is (contains? (:open-groups decoded) :time-travel))))
 
+(deftest settings-roundtrip-keeps-layout-controls
+  (let [settings {:view-mode :tags-and-objects
+                  :depth 4
+                  :arrow-mode :both
+                  :link-distance 132
+                  :show-edge-labels? false
+                  :open-groups #{:layout}}
+        encoded (graph/encode-settings settings)
+        data (js->clj (js/JSON.parse (js/JSON.stringify encoded)) :keywordize-keys true)
+        decoded (graph/decode-settings data)]
+    (is (= 4 (:depth data)))
+    (is (= "both" (:arrowMode data)))
+    (is (= 132 (:linkDistance data)))
+    (is (false? (:showEdgeLabels data)))
+    (is (= 4 (:depth decoded)))
+    (is (= :both (:arrow-mode decoded)))
+    (is (= 132 (:link-distance decoded)))
+    (is (false? (:show-edge-labels? decoded)))))
+
+(deftest layout-settings-are-clamped-when-decoded
+  (let [decoded (graph/decode-settings {:depth 99
+                                        :arrowMode "invalid"
+                                        :linkDistance 999
+                                        :showEdgeLabels false})]
+    (is (= 5 (:depth decoded)))
+    (is (= :none (:arrow-mode decoded)))
+    (is (= 180 (:link-distance decoded)))
+    (is (false? (:show-edge-labels? decoded)))))
+
 (deftest tag-selection-toggle-materializes-custom-selection-from-all
   (let [available-tags (graph/tag-options graph-data)
         settings (graph/toggle-selected-tag-id {:selected-tag-ids nil} available-tags "2")]
