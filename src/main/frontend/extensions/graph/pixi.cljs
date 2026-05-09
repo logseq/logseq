@@ -474,16 +474,12 @@
                                            :color border-color
                                            :alpha 0.52})
                   (.stroke bg)
-                  (.setStrokeStyle bg #js {:width 1.4
-                                           :color accent-color
-                                           :alpha 0.65})
-                  (.moveTo bg (- (/ (.-width text) 2)) (+ (/ (.-height text) 2) 4))
-                  (.lineTo bg (/ (.-width text) 2) (+ (/ (.-height text) 2) 4))
-                  (.stroke bg)
                   (.addChild entry bg)
                   (.addChild entry text)
                   (set! (.-x entry) mid-x)
                   (set! (.-y entry) mid-y)
+                  (set! (.-rotation entry)
+                        (logic/readable-edge-label-angle from-x from-y to-x to-y))
                   (set! (.-alpha entry) 0.92)
                   (.addChild label-layer entry)))))))))
   nil)

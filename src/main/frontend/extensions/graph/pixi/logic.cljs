@@ -66,6 +66,19 @@
       (str (subs label 0 max-prefix-length) "...")
       label)))
 
+(defn readable-edge-label-angle
+  [from-x from-y to-x to-y]
+  (let [angle (js/Math.atan2 (- to-y from-y) (- to-x from-x))]
+    (cond
+      (> angle (/ js/Math.PI 2))
+      (- angle js/Math.PI)
+
+      (< angle (/ js/Math.PI -2))
+      (+ angle js/Math.PI)
+
+      :else
+      angle)))
+
 (defn- emoji-native
   [id]
   (when (string? id)
