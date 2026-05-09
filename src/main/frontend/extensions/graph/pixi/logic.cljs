@@ -372,11 +372,11 @@
 (defn- node-color
   [kind dark?]
   (case kind
-    "tag" (if dark? "#34D399" "#047857")
-    "object" (if dark? "#60A5FA" "#2563EB")
-    "journal" (if dark? "#FBBF24" "#B45309")
-    "property" (if dark? "#F59E0B" "#C2410C")
-    (if dark? "#94A3B8" "#475569")))
+    "tag" (if dark? "#7AA897" "#5F7F6D")
+    "object" (if dark? "#8EA0B8" "#687A93")
+    "journal" (if dark? "#C9A86A" "#8B7448")
+    "property" (if dark? "#C08D70" "#8B6654")
+    (if dark? "#94A3B8" "#64748B")))
 
 (defn- build-degree-map
   [links]
