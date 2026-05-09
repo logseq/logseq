@@ -26,6 +26,10 @@
 
 (declare open-waiting-updates-modal!)
 (defonce PER-PAGE-SIZE 15)
+(defonce DISABLED-PLUGINS-CLEANUP-THRESHOLD 100)
+(defonce DISABLED-PLUGINS-CLEANUP-SNOOZE-MS (* 1000 60 60 24 30))
+(defonce DISABLED-PLUGINS-CLEANUP-NOTIFICATION-ID :lsp-disabled-plugins-cleanup-warning)
+(defonce DISABLED-PLUGINS-CLEANUP-SNOOZED-AT-KEY :lsp-disabled-plugins-cleanup-snoozed-at)
 
 (def *dirties-toggle-items (atom {}))
 
@@ -254,6 +258,15 @@
           (t :plugin/installing)]
          (t :plugin/install)))]]])
 
+(defn- set-plugin-disabled!
+  [id disabled?]
+  (-> (js-invoke js/LSPluginCore (if disabled? "disable" "enable") id)
+      (p/then (fn []
+                (when-let [^js settings (and disabled?
+                                             (some-> (plugin-handler/get-plugin-inst id) (.-settings)))]
+                  (.set settings "disabled-since" (js/Date.now)))))
+      (p/catch #(js/console.error %))))
+
 (rum/defc card-ctls-of-installed < rum/static
   [id name url sponsors unpacked? disabled?
    installing-or-updating? has-other-pending?
@@ -312,7 +325,7 @@
 
     (ui/toggle (not disabled?)
                (fn []
-                 (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id)
+                 (set-plugin-disabled! id (not disabled?))
                  (when (nil? (get @*dirties-toggle-items (keyword id)))
                    (swap! *dirties-toggle-items assoc (keyword id) (not disabled?))))
                true)]])
@@ -594,6 +607,168 @@
      [:span.pr-3.opacity-80 text]
      (ui/toggle enabled #() true)]))
 
+(defn- disabled-plugin-sort-key
+  [{:keys [id name title settings]}]
+  (let [disabled-since (:disabled-since settings)
+        plugin-name (or title name id)]
+    [(if (number? disabled-since) 1 0)
+     (or disabled-since 0)
+     (util/safe-lower-case plugin-name)
+     id]))
+
+(defn- plugin-in-category?
+  [category plugin]
+  (case category
+    :all true
+    :plugins (not (:theme plugin))
+    :themes (:theme plugin)))
+
+(defn- get-disabled-plugins-for-removal
+  [category]
+  (->> (vals (state/sub [:plugin/installed-plugins]))
+       (filter #(and (plugin-in-category? category %)
+                     (get-in % [:settings :disabled])))
+       (sort-by disabled-plugin-sort-key)))
+
+(defn- unregister-plugins-sequentially!
+  [plugin-ids]
+  (reduce
+   (fn [chain id]
+     (p/then chain
+             (fn []
+               (p/let [_ (plugin-common-handler/unregister-plugin id)]
+                 (when (util/electron?)
+                   (plugin-config-handler/remove-plugin id))))))
+   (.resolve js/Promise nil)
+   plugin-ids))
+
+(rum/defc bulk-remove-disabled-plugins-container
+  [category]
+  (let [plugins (get-disabled-plugins-for-removal category)
+        plugin-ids (mapv :id plugins)
+        [selected-ids set-selected-ids!] (rum/use-state (set (take 20 plugin-ids)))
+        [pending? set-pending!] (rum/use-state false)
+        selected-plugin-ids (->> plugins
+                                 (map :id)
+                                 (filter selected-ids)
+                                 vec)
+        all-selected? (and (seq plugin-ids)
+                           (= (count selected-plugin-ids) (count plugin-ids)))
+        toggle-selected! (fn [id checked?]
+                           (set-selected-ids!
+                            ((if checked? conj disj) selected-ids id)))
+        remove-selected! (fn []
+                           (when (and (seq selected-plugin-ids)
+                                      (not pending?))
+                             (-> (shui/dialog-confirm!
+                                  [:b (t :plugin/bulk-remove-disabled-delete-alert (count selected-plugin-ids))]
+                                  {:cancel-label (t :ui/cancel)
+                                   :ok-label (t :ui/delete)})
+                                 (p/then (fn []
+                                           (set-pending! true)
+                                           (-> (unregister-plugins-sequentially! selected-plugin-ids)
+                                               (p/then (fn []
+                                                         (notification/show!
+                                                          (t :plugin/bulk-remove-disabled-success (count selected-plugin-ids))
+                                                          :success)
+                                                         (shui/dialog-close!)))
+                                               (p/catch (fn [e]
+                                                          (notification/show! (str e) :error)))
+                                               (p/finally #(set-pending! false))))))))]
+    [:div.p-4.flex.flex-col.gap-3
+     [:h1.text-xl.font-bold (t :plugin/bulk-remove-disabled-title)]
+     (if (seq plugins)
+       [:<>
+        [:p.opacity-70.text-sm (t :plugin/bulk-remove-disabled-desc)]
+        [:ul.max-h-96.overflow-y-auto.flex.flex-col.gap-2.ml-0
+         (for [{:keys [id name title version icon]} plugins
+               :let [selected? (contains? selected-ids id)]]
+           [:li.flex.items-center.gap-3.rounded-md.border.p-2.select-none
+            {:key id
+             :class (str "cursor-pointer "
+                         (if selected?
+                           "border-primary bg-base-3"
+                           "border-transparent bg-base-2 hover:bg-base-3"))
+             :on-click #(when-not pending?
+                          (toggle-selected! id (not selected?)))}
+            (shui/checkbox
+             {:checked selected?
+              :disabled pending?
+              :on-click #(.stopPropagation %)
+              :on-checked-change #(toggle-selected! id (true? %))})
+            [:span.flex.h-10.w-10.shrink-0.items-center.justify-center.overflow-hidden.rounded.bg-base-3
+             (if (and icon (not (string/blank? icon)))
+               [:img {:src icon
+                      :class "h-full w-full object-contain"}]
+               [:span.flex.h-6.w-6.items-center.justify-center.overflow-hidden
+                svg/folder])]
+            [:div.flex-1.overflow-hidden
+             [:div.font-medium.truncate (or title name id)]
+             [:div.text-xs.opacity-60.truncate (str "ID: " id)]]
+            (when version
+              [:small.opacity-50.shrink-0 version])])]
+        [:div.flex.items-center.justify-between.gap-2
+         [:div.flex.gap-2
+          (shui/button {:variant :ghost
+                        :disabled (or pending? all-selected?)
+                        :on-click #(set-selected-ids! (set plugin-ids))}
+                       (t :plugin/bulk-remove-disabled-select-all))
+          (shui/button {:variant :ghost
+                        :disabled (or pending? (empty? selected-plugin-ids))
+                        :on-click #(set-selected-ids! #{})}
+                       (t :plugin/bulk-remove-disabled-clear-selection))]
+         [:div.flex.gap-2
+          (shui/button {:variant :ghost
+                        :disabled pending?
+                        :on-click #(shui/dialog-close!)}
+                       (t :ui/cancel))
+          (shui/button {:disabled (or pending? (empty? selected-plugin-ids))
+                        :on-click remove-selected!}
+                       (if pending?
+                         (ui/loading (t :plugin/uninstall))
+                         (t :plugin/bulk-remove-disabled-confirm (count selected-plugin-ids))))]]]
+       [:div.flex.items-center.justify-center.py-8.opacity-50
+        (t :plugin/bulk-remove-disabled-empty)])]))
+
+(defn- disabled-plugins-cleanup-snoozed?
+  []
+  (let [snoozed-at (storage/get DISABLED-PLUGINS-CLEANUP-SNOOZED-AT-KEY)]
+    (and (number? snoozed-at)
+         (< (- (js/Date.now) snoozed-at) DISABLED-PLUGINS-CLEANUP-SNOOZE-MS))))
+
+(defn- open-bulk-remove-disabled-plugins-dialog!
+  [category]
+  (notification/clear! DISABLED-PLUGINS-CLEANUP-NOTIFICATION-ID)
+  (shui/dialog-open!
+   (fn []
+     (bulk-remove-disabled-plugins-container category))))
+
+(defn- snooze-disabled-plugins-cleanup-warning!
+  []
+  (storage/set DISABLED-PLUGINS-CLEANUP-SNOOZED-AT-KEY (js/Date.now))
+  (notification/clear! DISABLED-PLUGINS-CLEANUP-NOTIFICATION-ID))
+
+(defn- show-disabled-plugins-cleanup-warning!
+  []
+  (let [disabled-count (count (get-disabled-plugins-for-removal :all))]
+    (when (and (>= disabled-count DISABLED-PLUGINS-CLEANUP-THRESHOLD)
+               (not (disabled-plugins-cleanup-snoozed?)))
+      (notification/show!
+       [:div.flex.flex-col.gap-2
+        [:div (t :plugin/disabled-cleanup-warning-title disabled-count)]
+        [:div.opacity-70 (t :plugin/disabled-cleanup-warning-desc)]
+        [:div.flex.gap-2.pt-1
+         (ui/button (t :plugin/disabled-cleanup-warning-clean-now)
+                    :small? true
+                    :on-click #(open-bulk-remove-disabled-plugins-dialog! :all))
+         (ui/button (t :plugin/disabled-cleanup-warning-later)
+                    :small? true
+                    :variant :ghost
+                    :on-click snooze-disabled-plugins-cleanup-warning!)]]
+       :warning
+       false
+       DISABLED-PLUGINS-CLEANUP-NOTIFICATION-ID))))
+
 (rum/defc ^:large-vars/cleanup-todo panel-control-tabs < rum/static
   [search-key *search-key category *category
    sort-by *sort-by filter-by *filter-by total-nums
@@ -714,8 +889,12 @@
       (let [items (concat (if market?
                             [{:title [:span.flex.items-center.gap-1 (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
                               :options {:on-click #(reload-market-fn)}}]
-                            [{:title [:span.flex.items-center.gap-1 (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
-                              :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}])
+                             (concat
+                              [{:title [:span.flex.items-center.gap-1 (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
+                                :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}]
+                              (when (contains? #{:plugins :themes} category)
+                                [{:title [:span.flex.items-center.gap-1 (ui/icon "trash") (t :plugin/bulk-remove-disabled)]
+                                  :options {:on-click #(open-bulk-remove-disabled-plugins-dialog! category)}}])))
 
                           (when (util/electron?)
                             [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings.advanced/network-proxy)]
@@ -1438,6 +1617,7 @@
 (rum/defc updates-notifications-impl
   [check-pending? auto-checking? online?]
   (let [[uid, set-uid] (rum/use-state nil)
+        [cleanup-warning-pending? set-cleanup-warning-pending?!] (rum/use-state false)
         [sub-content, _set-sub-content!] (rum-utils/use-atom *updates-sub-content)
         notify! (fn [content status]
                   (if auto-checking?
@@ -1460,21 +1640,37 @@
      [check-pending? sub-content])
 
     (hooks/use-effect!
+     (fn []
+       (when (and cleanup-warning-pending?
+                  (not auto-checking?))
+         (set-cleanup-warning-pending?! false)
+         (show-disabled-plugins-cleanup-warning!)))
+     [cleanup-warning-pending? auto-checking?])
+
+    (hooks/use-effect!
       ;; scheduler for auto updates
      (fn []
        (when online?
-         (let [last-updates (storage/get :lsp-last-auto-updates)]
-           (when (and (not (false? last-updates))
-                      (or (true? last-updates)
-                          (not (number? last-updates))
-                           ;; interval 12 hours
-                          (> (- (js/Date.now) last-updates) (* 60 60 12 1000))))
-             (let [update-timer (js/setTimeout
-                                 (fn []
-                                   (plugin-handler/auto-check-enabled-for-updates!)
-                                   (storage/set :lsp-last-auto-updates (js/Date.now)))
-                                 (if (util/electron?) 3000 (* 60 1000)))]
-               #(js/clearTimeout update-timer))))))
+         (let [auto-update-delay (if (util/electron?) 3000 (* 60 1000))
+               last-updates (storage/get :lsp-last-auto-updates)
+               should-auto-update? (and (not (false? last-updates))
+                                        (or (true? last-updates)
+                                            (not (number? last-updates))
+                                             ;; interval 12 hours
+                                            (> (- (js/Date.now) last-updates) (* 60 60 12 1000))))
+               cleanup-warning-timer (when-not should-auto-update?
+                                       (js/setTimeout #(set-cleanup-warning-pending?! true)
+                                                      (+ auto-update-delay 1000)))
+               update-timer (when should-auto-update?
+                              (js/setTimeout
+                               (fn []
+                                 (plugin-handler/auto-check-enabled-for-updates!)
+                                 (storage/set :lsp-last-auto-updates (js/Date.now))
+                                 (set-cleanup-warning-pending?! true))
+                               auto-update-delay))]
+           #(do
+              (some-> update-timer (js/clearTimeout))
+              (some-> cleanup-warning-timer (js/clearTimeout))))))
      [online?])
 
     [:<>]))

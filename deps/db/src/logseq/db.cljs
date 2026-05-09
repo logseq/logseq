@@ -637,6 +637,7 @@
      (sort-by-order (:block/_parent parent)))))
 
 (defn get-block-parents
+  "Returns parents entities"
   [db block-id & {:keys [depth] :or {depth 100}}]
   (loop [block-id block-id
          parents' (list)
