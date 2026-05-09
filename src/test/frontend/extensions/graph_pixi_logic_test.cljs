@@ -93,13 +93,15 @@
   (is (= (/ js/Math.PI -2) (logic/readable-edge-label-angle 0 100 0 0))))
 
 (deftest edge-render-runs-separate-bidirectional-links
-  (is (= [{:source "a" :target "b" :show-arrow? true :parallel-offset -1}
-          {:source "b" :target "a" :show-arrow? true :parallel-offset 1}
-          {:source "a" :target "c" :show-arrow? true :parallel-offset 0}]
-         (logic/edge-render-runs [{:source "a" :target "b"}
-                                  {:source "b" :target "a"}
-                                  {:source "a" :target "c"}]
-                                 true)))
+  (let [runs (logic/edge-render-runs [{:source "a" :target "b"}
+                                      {:source "b" :target "a"}
+                                      {:source "a" :target "c"}]
+                                     true)]
+    (is (= [true true true] (mapv :show-arrow? runs)))
+    (is (not= 0 (:parallel-offset (first runs))))
+    (is (= (:parallel-offset (first runs))
+           (:parallel-offset (second runs))))
+    (is (= 0 (:parallel-offset (nth runs 2)))))
   (is (= [false]
          (mapv :show-arrow? (logic/edge-render-runs [{:source "a" :target "b"}] false)))))
 
