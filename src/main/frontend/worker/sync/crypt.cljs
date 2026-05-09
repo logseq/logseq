@@ -141,7 +141,7 @@
                  (log/warn :db-sync/read-e2ee-password-secret-failed {:error e})
                  nil))))
 
-(defn- <read-e2ee-password
+(defn- <read-e2ee-password-text
   [refresh-token]
   (ensure-refresh-token! refresh-token)
   (p/let [platform' (platform/current)
@@ -155,9 +155,13 @@
           text (if (:supported? native-result)
                  (:encrypted-text native-result)
                  (<read-platform-e2ee-password-text platform'))]
-    (when-not (seq text)
-      (throw-missing-e2ee-password! {:reason :missing-persisted-password
-                                     :hint "Provide --e2ee-password to persist it."}))
+    text))
+
+(defn- <decrypt-e2ee-password-text
+  [refresh-token text]
+  (if-not (seq text)
+    (p/rejected (missing-e2ee-password-ex {:reason :missing-persisted-password
+                                           :hint "Provide --e2ee-password to persist it."}))
     (let [data (try
                  (ldb/read-transit-str text)
                  (catch :default _
@@ -167,6 +171,11 @@
                    {:field :e2ee-password
                     :reason :invalid-transit-payload}))
       (crypt/<decrypt-text-by-text-password refresh-token data))))
+
+(defn- <read-e2ee-password
+  [refresh-token]
+  (p/let [text (<read-e2ee-password-text refresh-token)]
+    (<decrypt-e2ee-password-text refresh-token text)))
 
 (defn- <clear-e2ee-password!
   []
@@ -412,19 +421,23 @@
 
 (defn- <decrypt-private-key
   [encrypted-private-key-str]
-  (let [<decrypt-in-headless
-        (fn [encrypted-private-key]
-          (let [refresh-token (:auth/refresh-token @worker-state/*state)]
-            (p/let [password (<read-e2ee-password refresh-token)]
-              (when-not (seq password)
-                (fail-missing-e2ee-password! {:reason :headless-empty-password
-                                              :hint "Provide --e2ee-password to persist it."}))
-              (crypt/<decrypt-private-key password encrypted-private-key))))
-
-        <decrypt-with-ui-request
+  (let [<decrypt-with-ui-request
         (fn [encrypted-private-key]
           (p/let [password (<request-e2ee-password-from-ui {:reason :decrypt-user-rsa-private-key})]
-            (<verify-and-save-e2ee-password! password encrypted-private-key)))]
+            (<verify-and-save-e2ee-password! password encrypted-private-key)))
+
+        <decrypt-in-headless
+        (fn [encrypted-private-key]
+          (let [refresh-token (:auth/refresh-token @worker-state/*state)]
+            (p/let [text (<read-e2ee-password-text refresh-token)]
+              (if (seq text)
+                (p/let [password (<decrypt-e2ee-password-text refresh-token text)]
+                  (when-not (seq password)
+                    (fail-missing-e2ee-password! {:reason :headless-empty-password
+                                                  :hint "Provide --e2ee-password to persist it."}))
+                  (crypt/<decrypt-private-key password encrypted-private-key))
+                (p/rejected (missing-e2ee-password-ex {:reason :missing-persisted-password
+                                                       :hint "Provide --e2ee-password to persist it."}))))))]
     (p/let [encrypted-private-key (ldb/read-transit-str encrypted-private-key-str)]
       (-> (<decrypt-in-headless encrypted-private-key)
           (p/catch (fn [headless-error]
