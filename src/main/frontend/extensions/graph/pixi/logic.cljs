@@ -93,7 +93,15 @@
 
 (defn edge-render-runs
   [links show-arrows?]
-  (let [directed-endpoints (set (map (juxt :source :target) links))]
+  (let [links (second
+               (reduce (fn [[seen result] {:keys [source target] :as link}]
+                         (let [endpoint [source target]]
+                           (if (contains? seen endpoint)
+                             [seen result]
+                             [(conj seen endpoint) (conj result link)])))
+                       [#{} []]
+                       links))
+        directed-endpoints (set (map (juxt :source :target) links))]
     (mapv (fn [{:keys [source target] :as link}]
             (let [reciprocal? (contains? directed-endpoints [target source])
                   parallel-offset (if reciprocal? 1 0)]
