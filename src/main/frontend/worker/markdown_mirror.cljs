@@ -324,9 +324,28 @@
                (not (ldb/page? target)))
       target)))
 
+(defn- block-id-comment
+  [db-id]
+  (str "<!-- id: " db-id " -->"))
+
+(defn- append-block-id-comment
+  [content db-id]
+  (let [comment-text (block-id-comment db-id)]
+    (if (string/blank? content)
+      comment-text
+      (str content " " comment-text))))
+
+(defn- code-block?
+  [block]
+  (or (= :code (:logseq.property.node/display-type block))
+      (some #(= :logseq.class/Code-block (:db/ident %))
+            (:block/tags block))))
+
 (defn- block-line-info
   [db block marker]
-  {:status-marker (when (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
+  {:db/id (:db/id block)
+   :code-block? (code-block? block)
+   :status-marker (when (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
                     (some-> (:logseq.property/status block) status-marker))
    :tag-tokens (mirror-tag-tokens block)
    :marker marker
@@ -398,8 +417,13 @@
         options
         {:initial-lines []}))
       (let [content (decorate-block-content block-info title)
+            content (cond-> content
+                      (not (:code-block? block-info))
+                      (append-block-id-comment (:db/id block-info)))
             marker (or (:marker block-info) "-")]
-        [(str spaces marker (when-not (string/blank? content) " ") content)]))
+        [(str spaces marker
+              (when-not (string/blank? content) " ")
+              content)]))
     [line]))
 
 (defn- decorate-rendered-content
