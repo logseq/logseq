@@ -702,11 +702,11 @@
  :graph/link-count (fn [n] (str n " " (if (= 1 n) "link" "links")))
  :graph/local-graphs "Local graphs:"
  :graph/name-placeholder "your graph name"
+ :graph/no-selected-node "No graph node selected."
  :graph/node-count (fn [n] (str n " " (if (= 1 n) "node" "nodes")))
  :graph/open-folder-action "Open graph folder"
  :graph/open-selected-node "Open {1}"
  :graph/preparing "Preparing"
- :graph/no-selected-node "No graph node selected."
  :graph/refresh-remote-graphs "Refresh remote graphs"
  :graph/remote-graphs "Remote graphs:"
  :graph/removed "Removed graph \"{1}\""
@@ -719,6 +719,8 @@
  :graph/settings "Graph settings"
  :graph/settings-saved-per-graph "Saved per graph"
  :graph/shared-graphs "Shared by others:"
+ :graph/time-travel "Time travel"
+ :graph/time-travel-now "Now"
  :graph/toggle-tag "Toggle tag {1}"
  :graph/updated-switching "Graph updated! Switching to graph ..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"

@@ -10,11 +10,27 @@
 
 (defn- build-links
   [links]
-  (keep (fn [[from to]]
-          (when (and from to)
-            {:source (str from)
-             :target (str to)}))
-        links))
+  (first
+   (reduce
+    (fn [[result index-by-endpoints] [from to label]]
+      (if (and from to)
+        (let [link {:source (str from)
+                    :target (str to)}
+              endpoints [(:source link) (:target link)]
+              label? (and (string? label)
+                          (not (string/blank? label)))]
+          (if-let [idx (get index-by-endpoints endpoints)]
+            [(if label?
+               (assoc-in result [idx :label] label)
+               result)
+             index-by-endpoints]
+            [(conj result (cond-> link
+                            label?
+                            (assoc :label label)))
+             (assoc index-by-endpoints endpoints (count result))]))
+        [result index-by-endpoints]))
+    [[] {}]
+    links)))
 
 (defn- normalize-view-mode
   [view-mode]
@@ -191,6 +207,56 @@
          (remove #(contains? invalid-ids (get page-by-id %)))
          set)))
 
+(defn- graph-link-node-id
+  [db mode entity-id]
+  (case mode
+    :page
+    (let [entity (d/entity db entity-id)]
+      (some-> (if (ldb/page? entity)
+                entity
+                (:block/page entity))
+              :db/id))
+
+    :entity
+    entity-id))
+
+(defn- property-link-title
+  [db property-ident]
+  (or (some-> (d/entity db property-ident) :block/title)
+      (some-> property-ident name)))
+
+(defn- ref-property-idents
+  [db]
+  (keep (fn [[property-ident schema]]
+          (let [property (d/entity db property-ident)]
+            (when (and (keyword? property-ident)
+                       (= "user.property" (namespace property-ident))
+                       (= :db.type/ref (:db/valueType schema))
+                       (ldb/property? property))
+              property-ident)))
+        (d/schema db)))
+
+(defn- property-ref-link-tuples
+  [db node-id-set source-mode target-mode]
+  (let [node-id-set (set node-id-set)]
+    (->> (ref-property-idents db)
+         (mapcat
+          (fn [property-ident]
+            (let [label (property-link-title db property-ident)]
+              (keep
+               (fn [{source-entity-id :e target-entity-id :v}]
+                 (let [source-id (graph-link-node-id db source-mode source-entity-id)
+                       target-id (graph-link-node-id db target-mode target-entity-id)]
+                   (when (and source-id
+                              target-id
+                              (not= source-id target-id)
+                              (contains? node-id-set source-id)
+                              (contains? node-id-set target-id))
+                     [source-id target-id label])))
+               (datoms-for db :avet property-ident)))))
+         distinct
+         vec)))
+
 (defn- built-in-class-ident?
   [ident]
   (and (keyword? ident)
@@ -255,13 +321,19 @@
             objects (mapv #(scalar-node context % "object" (contains? page-ids %))
                           object-id-set)
             nodes (into tags objects)
+            node-id-set (set (map :id nodes))
             links (->> tag-links
                        (filter (fn [[from-id _tag-id]]
                                  (contains? object-id-set from-id)))
                        (build-links)
-                       vec)]
+                       vec)
+            property-links (->> (property-ref-link-tuples db node-ids :entity :entity)
+                                build-links
+                                (filter (fn [{:keys [source target]}]
+                                          (and (contains? node-id-set source)
+                                               (contains? node-id-set target)))))]
         {:nodes (vec nodes)
-         :links links}))))
+         :links (vec (distinct (concat links property-links)))}))))
 
 (defn- build-nodes
   [dark? current-page page-links tags nodes]
@@ -471,6 +543,9 @@
                                    set)
         {raw-links :links linked-page-ids :linked-page-ids}
         (bounded-visible-page-links db base-visible-page-ids tagged-pages)
+        property-link-tuples (property-ref-link-tuples db base-visible-page-ids :page :page)
+        raw-links (vec (distinct (concat raw-links property-link-tuples)))
+        linked-page-ids (set/union linked-page-ids (set (mapcat (juxt first second) property-link-tuples)))
         visible-page-ids (if orphan-pages?
                            base-visible-page-ids
                            (set/intersection base-visible-page-ids linked-page-ids))
@@ -563,17 +638,18 @@
             page-id-set (set (map :db/id full-pages))
             tagged-pages (vec (page-tag-links (tagged-page-links db) page-id-set))
             rendered-tagged-pages (vec (rendered-page-tag-links tagged-pages page-id-set))
+            property-link-tuples (property-ref-link-tuples db page-id-set :page :page)
             tag-id->ident (tag-ident-by-id db (set (map second tagged-pages)))
             page-id->tag-idents (build-page-id->tag-idents tagged-pages tag-id->ident)
             relation (page-relation-links db journal? page-id->tag-idents)
             tags (set (map second rendered-tagged-pages))
             created-ats (keep :block/created-at full-pages)
-            links (concat relation rendered-tagged-pages)
-            linked (set (mapcat identity links))
+            links (concat relation rendered-tagged-pages property-link-tuples)
+            linked (set (mapcat (juxt first second) links))
             build-in-pages (->> sqlite-create-graph/built-in-pages-names
                                 (map string/lower-case)
                                 set)
-            links (map (fn [[x y]] [(str x) (str y)]) links)
+            links (map (fn [[x y label]] [(str x) (str y) label]) links)
             page-links (reduce (fn [m [k v]] (-> (update m k inc)
                                                  (update v inc))) {} links)
             links (build-links links)

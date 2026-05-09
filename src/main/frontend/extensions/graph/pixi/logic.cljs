@@ -330,7 +330,7 @@
                "object" 4.4
                "journal" 4.4
                3.8)]
-    (+ base (min 4.2 (js/Math.sqrt (double degree))))))
+    (+ base (min 12.0 (* 3.4 (js/Math.sqrt (double degree)))))))
 
 (defn- decorate-node
   [node degree dark? x y]

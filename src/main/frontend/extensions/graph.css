@@ -412,6 +412,69 @@
     color: var(--ls-link-text-color);
 }
 
+.graph-time-travel {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    z-index: 5;
+    width: min(760px, calc(100vw - 48px));
+    min-height: 58px;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    padding: 10px 14px;
+    border: 1px solid color-mix(in srgb, var(--ls-link-text-color) 24%, var(--ls-border-color));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--ls-primary-background-color) 88%, transparent);
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(16px);
+    transform: translateX(-50%);
+}
+
+.graph-time-travel-reset {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--ls-link-text-color) 30%, var(--ls-border-color));
+    border-radius: 8px;
+    color: var(--ls-link-text-color);
+    background: color-mix(in srgb, var(--ls-secondary-background-color) 58%, transparent);
+}
+
+.graph-time-travel-body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.graph-time-travel-label,
+.graph-time-travel-ticks {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--ls-secondary-text-color);
+}
+
+.graph-time-travel-label strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 650;
+    color: var(--ls-primary-text-color);
+}
+
+.graph-time-travel-slider {
+    width: 100%;
+    accent-color: var(--ls-link-text-color);
+}
+
 .graph-canvas {
     flex: 1 1 auto;
     width: 100%;
@@ -441,5 +504,12 @@
 
     .graph-tag-list {
         max-height: min(220px, calc(100vh - 330px));
+    }
+
+    .graph-time-travel {
+        bottom: 12px;
+        width: min(420px, calc(100vw - 24px));
+        grid-template-columns: 36px minmax(0, 1fr);
+        padding: 9px 10px;
     }
 }

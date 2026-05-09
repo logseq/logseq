@@ -14,6 +14,7 @@
 (def ^:private default-open-groups #{:view-mode :displayed-tags :layout})
 (def ^:private default-settings {:view-mode :tags-and-objects
                                  :selected-tag-ids nil
+                                 :created-at-filter nil
                                  :open-groups default-open-groups})
 
 (defn- storage-key
@@ -27,12 +28,15 @@
     :tags-and-objects))
 
 (defn encode-settings
-  [{:keys [view-mode selected-tag-ids open-groups]}]
+  [{:keys [view-mode selected-tag-ids created-at-filter open-groups]}]
   (clj->js
    (cond-> {:viewMode (name (valid-view-mode view-mode))
             :openGroups (mapv name (or open-groups default-open-groups))}
      (some? selected-tag-ids)
-     (assoc :selectedTagIds (vec selected-tag-ids)))))
+     (assoc :selectedTagIds (vec selected-tag-ids))
+
+     (some? created-at-filter)
+     (assoc :createdAtFilter created-at-filter))))
 
 (defn decode-settings
   [data]
@@ -46,6 +50,10 @@
              (and (contains? data :selectedTagIds)
                   (some? (:selectedTagIds data)))
              (assoc :selected-tag-ids (vec (:selectedTagIds data)))
+
+             (and (contains? data :createdAtFilter)
+                  (number? (:createdAtFilter data)))
+             (assoc :created-at-filter (:createdAtFilter data))
 
              (contains? data :openGroups)
              (assoc :open-groups (set (map keyword (:openGroups data))))))))
@@ -333,6 +341,70 @@
                [:span (t :graph/node-count (count (:nodes graph-data)))]
                [:span (t :graph/link-count (count (:links graph-data)))]]}))
 
+(defn- time-travel-range
+  [graph-data]
+  (let [{:keys [created-at-min created-at-max]} (:all-pages graph-data)
+        duration (when (and (number? created-at-min)
+                            (number? created-at-max))
+                   (- created-at-max created-at-min))]
+    (when (and duration (pos? duration))
+      {:created-at-min created-at-min
+       :created-at-max created-at-max
+       :duration duration})))
+
+(defn time-travel-slider-value
+  [settings graph-data]
+  (when-let [{:keys [duration]} (time-travel-range graph-data)]
+    (-> (or (:created-at-filter settings) duration)
+        (max 0)
+        (min duration))))
+
+(defn- format-time-travel-date
+  [timestamp]
+  (when (number? timestamp)
+    (.toLocaleDateString (js/Date. timestamp)
+                         js/undefined
+                         #js {:year "numeric"
+                              :month "short"
+                              :day "numeric"})))
+
+(defn- time-travel-control
+  [settings set-settings! graph-data]
+  (when-let [{:keys [created-at-min created-at-max duration]} (time-travel-range graph-data)]
+    (let [value (time-travel-slider-value settings graph-data)
+          at-now? (= value duration)
+          current-timestamp (+ created-at-min value)]
+      [:div.graph-time-travel
+       [:button.graph-time-travel-reset
+        {:type "button"
+         :aria-label (t :graph/time-travel-now)
+         :title (t :graph/time-travel-now)
+         :on-click #(set-settings! (assoc settings :created-at-filter nil))}
+        (ui/icon "player-play" {:size 18})]
+       [:div.graph-time-travel-body
+        [:div.graph-time-travel-label
+         [:span (t :graph/time-travel)]
+         [:strong (if at-now?
+                    (t :graph/time-travel-now)
+                    (format-time-travel-date current-timestamp))]]
+        [:input.graph-time-travel-slider
+         {:type "range"
+          :min 0
+          :max duration
+          :step (max 1 (js/Math.floor (/ duration 240)))
+          :value value
+          :aria-label (t :graph/time-travel)
+          :on-change (fn [event]
+                       (let [next-value (js/parseFloat (.. event -target -value))]
+                         (set-settings!
+                          (assoc settings
+                                 :created-at-filter
+                                 (when (< next-value duration)
+                                   next-value)))))}]
+        [:div.graph-time-travel-ticks
+         [:span (format-time-travel-date created-at-min)]
+         [:span (format-time-travel-date created-at-max)]]]])))
+
 (defn- settings-panel
   [settings-open? set-settings-open! settings set-settings! view-mode set-view-mode!
    filtered-graph-data available-tags selected-tag-ids tag-query set-tag-query!]
@@ -379,6 +451,7 @@
                         (set-settings-state! {:repo repo
                                               :settings settings}))
         view-mode (:view-mode settings)
+        created-at-filter (:created-at-filter settings)
         switch-view-mode! (fn [mode]
                             (when (not= mode view-mode)
                               (set-graph-data! nil)
@@ -403,7 +476,9 @@
          (set-selected-nodes! [])
          (-> (state/<invoke-db-worker :thread-api/build-graph repo {:type :global
                                                                     :theme theme
-                                                                    :view-mode view-mode})
+                                                                    :view-mode view-mode
+                                                                    :created-at-filter (when (= view-mode :all-pages)
+                                                                                         created-at-filter)})
              (p/then (fn [result]
                        (when-not @cancelled?
                          (set-graph-data! result)
@@ -415,7 +490,7 @@
                           (set-loading! false)))))
          (fn []
            (reset! cancelled? true))))
-     [repo theme view-mode retry-token])
+     [repo theme view-mode created-at-filter retry-token])
 
     (let [available-tags (when graph-data (tag-options graph-data))
           selected-tag-ids (selected-tag-id-set settings available-tags)
@@ -448,10 +523,13 @@
          [:div.graph-loading (t :graph/preparing)]
 
          :else
-         (graph/graph-2d {:nodes (:nodes filtered-graph-data)
-                          :links (:links filtered-graph-data)
-                          :dark? dark?
-                          :view-mode view-mode
-                          :aria-label (t :graph/canvas-label)
-                          :on-selection-change set-selected-nodes!
-                          :on-node-activate graph-actions/activate-node!}))])))
+         [:<>
+          (graph/graph-2d {:nodes (:nodes filtered-graph-data)
+                           :links (:links filtered-graph-data)
+                           :dark? dark?
+                           :view-mode view-mode
+                           :aria-label (t :graph/canvas-label)
+                           :on-selection-change set-selected-nodes!
+                           :on-node-activate graph-actions/activate-node!})
+          (when (= view-mode :all-pages)
+            (time-travel-control settings set-settings! filtered-graph-data))])])))

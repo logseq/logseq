@@ -90,11 +90,11 @@
 
 (deftest global-graph-labels-node-property-edges-with-property-title
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:influences {:block/title "Influences"
-                                          :logseq.property/type :node}}
+              {:properties {:user.property/influences {:block/title "Influences"
+                                                        :logseq.property/type :node}}
                :pages-and-blocks
                [{:page {:block/title "Project A"
-                        :build/properties {:influences [:build/page {:block/title "Project B"}]}
+                        :build/properties {:user.property/influences [:build/page {:block/title "Project B"}]}
                         :build/tags [:Project]}}
                 {:page {:block/title "Project B"
                         :build/tags [:Project]}}]
