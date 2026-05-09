@@ -1126,6 +1126,17 @@
                        :remove disj)]
       (save-plugin-preferences! {:pinnedToolbarItems (op-fn pinned (name key))}))))
 
+(defn- remove-pinned-toolbar-items-of-plugin!
+  [pid]
+  (let [prefix (str (name pid) ":")
+        pinned (state/sub [:plugin/preferences :pinnedToolbarItems])
+        pinned (if (sequential? pinned) (vec pinned) [])
+        updated-pinned (->> pinned
+                            (remove #(and (string? %) (string/starts-with? % prefix)))
+                            vec)]
+    (when (not= pinned updated-pinned)
+      (save-plugin-preferences! {:pinnedToolbarItems updated-pinned}))))
+
 (defn hook-lifecycle-fn!
   [type f & args]
   (when (and type (fn? f))
@@ -1232,6 +1243,7 @@
                                         (let [pid (keyword pid)]
                                           ;; effects
                                           (unregister-plugin-themes pid)
+                                          (remove-pinned-toolbar-items-of-plugin! pid)
                                           ;; plugins
                                           (swap! state/state medley/dissoc-in [:plugin/installed-plugins pid])
                                           ;; commands
