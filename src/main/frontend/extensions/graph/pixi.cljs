@@ -392,7 +392,9 @@
              (.setStrokeStyle graphics
                               #js {:width (if (:select-mode? highlight-state) 1.25 1)
                                    :color stroke-color
-                                   :alpha alpha})
+                                   :alpha alpha
+                                   :cap "round"
+                                   :join "round"})
              (.moveTo graphics start-x start-y)
              (.lineTo graphics end-x end-y)
              (.stroke graphics)
@@ -1412,12 +1414,9 @@
     (let [token (get (swap! *render-tokens update container (fnil inc 0)) container)
           render-start (.now js/performance)
           app (new (.-Application PIXI))]
-      (-> (.init app #js {:backgroundAlpha 0
-                          :antialias false
-                          :autoDensity true
-                          :resolution (min 2 (or (.-devicePixelRatio js/window) 1))
-                          :resizeTo container
-                          :powerPreference "high-performance"})
+      (-> (.init app (clj->js
+                      (assoc (logic/renderer-init-options (.-devicePixelRatio js/window))
+                             :resizeTo container)))
           (.then
            (fn []
              (if (= token (get @*render-tokens container))

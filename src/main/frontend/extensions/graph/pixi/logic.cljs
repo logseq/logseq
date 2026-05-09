@@ -73,7 +73,7 @@
 (defn renderer-init-options
   [device-pixel-ratio]
   {:backgroundAlpha 0
-   :antialias false
+   :antialias true
    :autoDensity true
    :resolution (min 2 (or device-pixel-ratio 1))
    :powerPreference "high-performance"})
@@ -207,7 +207,7 @@
                 (and (contains? active-ids source)
                      (contains? active-ids target)))
               links))
-    links))
+    []))
 
 (defn node-emphasis
   [{:keys [selected-ids connected-ids select-mode?]} node-id]
