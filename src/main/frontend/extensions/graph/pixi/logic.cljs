@@ -188,8 +188,14 @@
       :select-mode? (seq selected-ids)})))
 
 (defn highlight-visible-links
-  [links _highlight-state]
-  links)
+  [links {:keys [active-ids select-mode?]}]
+  (if select-mode?
+    (let [active-ids (set active-ids)]
+      (filter (fn [{:keys [source target]}]
+                (and (contains? active-ids source)
+                     (contains? active-ids target)))
+              links))
+    links))
 
 (defn node-emphasis
   [{:keys [selected-ids connected-ids select-mode?]} node-id]

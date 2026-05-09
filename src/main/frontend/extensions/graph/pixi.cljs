@@ -373,8 +373,8 @@
                  end-y (- (:y to-node) (* uy (+ (:radius to-node 0) 5)))
                  alpha (edge-alpha highlight-state source target)
                  arrow! (fn [tip-x tip-y dir-x dir-y]
-                          (let [length 10
-                                width 4.8
+                          (let [length 6.8
+                                width 3.3
                                 base-x (- tip-x (* dir-x length))
                                 base-y (- tip-y (* dir-y length))
                                 normal-x (- dir-y)
