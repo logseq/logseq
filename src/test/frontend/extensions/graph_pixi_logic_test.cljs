@@ -78,6 +78,12 @@
     (is (= label hover-text))
     (is (= "Short" (logic/label-display-text "Short" false)))))
 
+(deftest edge-label-angle-stays-aligned-and-readable
+  (is (= 0 (logic/readable-edge-label-angle 0 0 100 0)))
+  (is (= 0 (logic/readable-edge-label-angle 100 0 0 0)))
+  (is (= (/ js/Math.PI 2) (logic/readable-edge-label-angle 0 0 0 100)))
+  (is (= (/ js/Math.PI -2) (logic/readable-edge-label-angle 0 100 0 0))))
+
 (deftest icon-display-text-renders-emoji-icons
   (is (= "⭐" (logic/icon-display-text {:type :emoji :id "star"})))
   (is (= "🚀" (logic/icon-display-text {:type "emoji" :id "rocket"})))
