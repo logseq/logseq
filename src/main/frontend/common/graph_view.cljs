@@ -97,11 +97,12 @@
            (datoms-for db :avet attr))))
 
 (defn- scalar-node
-  [{:keys [title-by-id name-by-id uuid-by-id icon-by-id]} id kind page?]
+  [{:keys [title-by-id name-by-id uuid-by-id icon-by-id created-at-by-id]} id kind page?]
   (let [title (get title-by-id id)
         name (get name-by-id id)
         uuid (get uuid-by-id id)
-        icon (get icon-by-id id)]
+        icon (get icon-by-id id)
+        created-at (get created-at-by-id id)]
     (cond->
      {:id (str id)
       :db-id id
@@ -109,6 +110,9 @@
       :page? page?
       :label (or title name (some-> uuid str) (str id))
       :kind kind}
+      (some? created-at)
+      (assoc :block/created-at created-at)
+
       (some? icon)
       (assoc :icon icon))))
 
@@ -125,7 +129,8 @@
      :uuid-by-id (if (empty? name-missing-ids)
                    {}
                    (entity-value-map db :block/uuid name-missing-ids))
-     :icon-by-id (entity-value-map db :logseq.property/icon node-ids)}))
+     :icon-by-id (entity-value-map db :logseq.property/icon node-ids)
+     :created-at-by-id (entity-value-map db :block/created-at node-ids)}))
 
 (defn- hidden-or-recycled?
   [entity]
@@ -523,6 +528,7 @@
         page-id->tag-idents (build-page-id->tag-idents tagged-pages tag-id->ident)
         title-by-id (entity-value-map db :block/title page-ids)
         icon-by-id (entity-value-map db :logseq.property/icon page-ids)
+        created-at-by-id (entity-value-map db :block/created-at page-ids)
         build-in-pages (->> sqlite-create-graph/built-in-pages-names
                             (map string/lower-case)
                             set)
@@ -576,6 +582,9 @@
                                :kind (page-kind tag-idents)
                                :size 8
                                :color color}
+                               (contains? created-at-by-id page-id)
+                               (assoc :block/created-at (get created-at-by-id page-id))
+
                                (contains? icon-by-id page-id)
                                (assoc :icon (get icon-by-id page-id))))))))
                []

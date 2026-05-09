@@ -341,11 +341,12 @@
                [:span (t :graph/node-count (count (:nodes graph-data)))]
                [:span (t :graph/link-count (count (:links graph-data)))]]}))
 
-(defn- time-travel-range
+(defn time-travel-range
   [graph-data]
-  (let [{:keys [created-at-min created-at-max]} (:all-pages graph-data)
-        duration (when (and (number? created-at-min)
-                            (number? created-at-max))
+  (let [created-ats (keep :block/created-at (:nodes graph-data))
+        created-at-min (when (seq created-ats) (apply min created-ats))
+        created-at-max (when (seq created-ats) (apply max created-ats))
+        duration (when (and created-at-min created-at-max)
                    (- created-at-max created-at-min))]
     (when (and duration (pos? duration))
       {:created-at-min created-at-min
@@ -359,6 +360,30 @@
         (max 0)
         (min duration))))
 
+(defn filter-graph-by-created-at
+  [graph-data created-at-filter]
+  (if-let [{:keys [created-at-min duration]} (time-travel-range graph-data)]
+    (let [offset (-> (or created-at-filter duration)
+                     (max 0)
+                     (min duration))
+          cutoff (+ created-at-min offset)
+          visible-node-ids (->> (:nodes graph-data)
+                                (filter (fn [node]
+                                          (when-let [created-at (:block/created-at node)]
+                                            (<= created-at cutoff))))
+                                (map :id)
+                                set)]
+      (assoc graph-data
+             :nodes (->> (:nodes graph-data)
+                         (filter #(contains? visible-node-ids (:id %)))
+                         vec)
+             :links (->> (:links graph-data)
+                         (filter (fn [{:keys [source target]}]
+                                   (and (contains? visible-node-ids source)
+                                        (contains? visible-node-ids target))))
+                         vec)))
+    graph-data))
+
 (defn- format-time-travel-date
   [timestamp]
   (when (number? timestamp)
@@ -368,8 +393,50 @@
                               :month "short"
                               :day "numeric"})))
 
+(defn- set-time-travel-filter!
+  [set-settings! value duration]
+  (set-settings!
+   (fn [settings]
+     (assoc settings
+            :created-at-filter
+            (when (< value duration)
+              value)))))
+
+(defn- cancel-time-travel-animation!
+  [animation-frame-ref]
+  (when-let [animation-frame-id (hooks/deref animation-frame-ref)]
+    (js/cancelAnimationFrame animation-frame-id)
+    (hooks/set-ref! animation-frame-ref nil)))
+
+(def ^:private time-travel-animation-ms 900)
+
+(defn- animate-time-travel-to-now!
+  [settings set-settings! graph-data animation-frame-ref]
+  (when-let [{:keys [duration]} (time-travel-range graph-data)]
+    (cancel-time-travel-animation! animation-frame-ref)
+    (let [start-value (time-travel-slider-value settings graph-data)]
+      (if (>= start-value duration)
+        (set-time-travel-filter! set-settings! duration duration)
+        (let [started-at (.now js/performance)]
+          (letfn [(step! [timestamp]
+                    (let [progress (-> (/ (- timestamp started-at) time-travel-animation-ms)
+                                       (max 0)
+                                       (min 1))
+                          eased (- 1 (js/Math.pow (- 1 progress) 3))
+                          value (+ start-value (* (- duration start-value) eased))]
+                      (if (< progress 1)
+                        (do
+                          (set-time-travel-filter! set-settings! value duration)
+                          (hooks/set-ref! animation-frame-ref
+                                          (js/requestAnimationFrame step!)))
+                        (do
+                          (hooks/set-ref! animation-frame-ref nil)
+                          (set-time-travel-filter! set-settings! duration duration)))))]
+            (hooks/set-ref! animation-frame-ref
+                            (js/requestAnimationFrame step!))))))))
+
 (defn- time-travel-control
-  [settings set-settings! graph-data]
+  [settings set-settings! graph-data animation-frame-ref]
   (when-let [{:keys [created-at-min created-at-max duration]} (time-travel-range graph-data)]
     (let [value (time-travel-slider-value settings graph-data)
           at-now? (= value duration)
@@ -379,7 +446,11 @@
         {:type "button"
          :aria-label (t :graph/time-travel-now)
          :title (t :graph/time-travel-now)
-         :on-click #(set-settings! (assoc settings :created-at-filter nil))}
+         :on-click #(animate-time-travel-to-now!
+                     settings
+                     set-settings!
+                     graph-data
+                     animation-frame-ref)}
         (ui/icon "player-play" {:size 18})]
        [:div.graph-time-travel-body
         [:div.graph-time-travel-label
@@ -395,12 +466,12 @@
           :value value
           :aria-label (t :graph/time-travel)
           :on-change (fn [event]
+                       (cancel-time-travel-animation! animation-frame-ref)
                        (let [next-value (js/parseFloat (.. event -target -value))]
-                         (set-settings!
-                          (assoc settings
-                                 :created-at-filter
-                                 (when (< next-value duration)
-                                   next-value)))))}]
+                         (set-time-travel-filter!
+                          set-settings!
+                          next-value
+                          duration)))}]
         [:div.graph-time-travel-ticks
          [:span (format-time-travel-date created-at-min)]
          [:span (format-time-travel-date created-at-max)]]]])))
@@ -446,12 +517,20 @@
         [build-error set-build-error!] (hooks/use-state nil)
         [retry-token set-retry-token!] (hooks/use-state 0)
         [selected-nodes set-selected-nodes!] (hooks/use-state [])
+        time-travel-animation-ref (hooks/use-ref nil)
         settings (:settings settings-state)
-        set-settings! (fn [settings]
-                        (set-settings-state! {:repo repo
-                                              :settings settings}))
+        set-settings! (fn [settings-or-fn]
+                        (set-settings-state!
+                         (fn [state]
+                           (let [current-settings (if (= repo (:repo state))
+                                                    (:settings state)
+                                                    (load-graph-settings repo))
+                                 next-settings (if (fn? settings-or-fn)
+                                                 (settings-or-fn current-settings)
+                                                 settings-or-fn)]
+                             {:repo repo
+                              :settings next-settings}))))
         view-mode (:view-mode settings)
-        created-at-filter (:created-at-filter settings)
         switch-view-mode! (fn [mode]
                             (when (not= mode view-mode)
                               (set-graph-data! nil)
@@ -463,6 +542,10 @@
      #(set-settings-state! {:repo repo
                             :settings (load-graph-settings repo)})
      [repo])
+    (hooks/use-effect!
+     (fn []
+       #(cancel-time-travel-animation! time-travel-animation-ref))
+     [])
     (hooks/use-effect!
      #(when (= repo (:repo settings-state))
         (save-graph-settings! repo settings))
@@ -476,9 +559,7 @@
          (set-selected-nodes! [])
          (-> (state/<invoke-db-worker :thread-api/build-graph repo {:type :global
                                                                     :theme theme
-                                                                    :view-mode view-mode
-                                                                    :created-at-filter (when (= view-mode :all-pages)
-                                                                                         created-at-filter)})
+                                                                    :view-mode view-mode})
              (p/then (fn [result]
                        (when-not @cancelled?
                          (set-graph-data! result)
@@ -490,14 +571,25 @@
                           (set-loading! false)))))
          (fn []
            (reset! cancelled? true))))
-     [repo theme view-mode created-at-filter retry-token])
+     [repo theme view-mode retry-token])
 
     (let [available-tags (when graph-data (tag-options graph-data))
           selected-tag-ids (selected-tag-id-set settings available-tags)
-          filtered-graph-data (when graph-data
-                                (if (= view-mode :tags-and-objects)
-                                  (filter-tags-and-objects-graph graph-data selected-tag-ids)
-                                  graph-data))]
+          selected-tag-key (if (some? (:selected-tag-ids settings))
+                             (string/join "\u0000" (sort (:selected-tag-ids settings)))
+                             "__all__")
+          mode-graph-data (hooks/use-memo
+                           #(when graph-data
+                              (if (= view-mode :tags-and-objects)
+                                (filter-tags-and-objects-graph graph-data selected-tag-ids)
+                                graph-data))
+                           [graph-data view-mode selected-tag-key])
+          filtered-graph-data (when mode-graph-data
+                                (filter-graph-by-created-at
+                                 mode-graph-data
+                                 (:created-at-filter settings)))
+          visible-node-ids (when filtered-graph-data
+                             (set (map :id (:nodes filtered-graph-data))))]
       [:div#global-graph.graph-root
        (selected-node-status selected-nodes)
        (settings-panel settings-open?
@@ -524,12 +616,16 @@
 
          :else
          [:<>
-          (graph/graph-2d {:nodes (:nodes filtered-graph-data)
-                           :links (:links filtered-graph-data)
+          (graph/graph-2d {:nodes (:nodes mode-graph-data)
+                           :links (:links mode-graph-data)
+                           :visible-node-ids visible-node-ids
                            :dark? dark?
                            :view-mode view-mode
                            :aria-label (t :graph/canvas-label)
                            :on-selection-change set-selected-nodes!
                            :on-node-activate graph-actions/activate-node!})
-          (when (= view-mode :all-pages)
-            (time-travel-control settings set-settings! filtered-graph-data))])])))
+          (time-travel-control
+           settings
+           set-settings!
+           mode-graph-data
+           time-travel-animation-ref)])])))

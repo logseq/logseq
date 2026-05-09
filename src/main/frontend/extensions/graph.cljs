@@ -32,6 +32,11 @@
       (:on-node-activate opts)
       (:on-selection-change opts)
       (:on-rendered opts)])
+    (hooks/use-effect!
+     (fn []
+       (when-let [container (hooks/deref container-ref)]
+         (pixi/update-visibility! container (:visible-node-ids opts))))
+     [(:visible-node-ids opts)])
     [:div.graph-canvas
      {:ref container-ref
       :style (canvas-style opts)
