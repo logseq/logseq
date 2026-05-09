@@ -58,8 +58,8 @@
   (if dark? "#CBD5E1" "#334155"))
 
 (defn- layout-nodes
-  [nodes links view-mode dark?]
-  (logic/layout-nodes nodes links view-mode dark?))
+  [nodes links view-mode dark? opts]
+  (logic/layout-nodes nodes links view-mode dark? opts))
 
 (defn- index-layouted-nodes
   [layouted-nodes]
@@ -343,32 +343,69 @@
 
 (defn- draw-edges!
   ([^js graphics layout-by-id links dark? view-mode]
-   (draw-edges! graphics layout-by-id links dark? view-mode (logic/highlight-state #{} {})))
+   (draw-edges! graphics layout-by-id links dark? view-mode (logic/highlight-state #{} {}) {}))
   ([^js graphics layout-by-id links dark? view-mode highlight-state]
+   (draw-edges! graphics layout-by-id links dark? view-mode highlight-state {}))
+  ([^js graphics layout-by-id links dark? view-mode highlight-state {:keys [arrow-mode]}]
    (let [max-edges (logic/draw-edge-limit (count layout-by-id)
                                            (count links)
                                            view-mode)
          links* (if (> (count links) max-edges)
                   (take max-edges links)
                   links)
-         stroke-color (color->int (edge-color dark?))]
+         stroke-color (color->int (edge-color dark?))
+         arrow-mode (case arrow-mode
+                      :forward :forward
+                      :both :both
+                      :none)]
      (.clear graphics)
      (doseq [{:keys [source target]} links*]
        (when-let [from-node (get layout-by-id source)]
          (when-let [to-node (get layout-by-id target)]
-           (.setStrokeStyle graphics
-                            #js {:width (if (:select-mode? highlight-state) 1.25 1)
-                                 :color stroke-color
-                                 :alpha (edge-alpha highlight-state source target)})
-           (.moveTo graphics (:x from-node) (:y from-node))
-           (.lineTo graphics (:x to-node) (:y to-node)))))
+           (let [dx (- (:x to-node) (:x from-node))
+                 dy (- (:y to-node) (:y from-node))
+                 distance (max 1 (js/Math.sqrt (+ (* dx dx) (* dy dy))))
+                 ux (/ dx distance)
+                 uy (/ dy distance)
+                 start-x (+ (:x from-node) (* ux (+ (:radius from-node 0) 3)))
+                 start-y (+ (:y from-node) (* uy (+ (:radius from-node 0) 3)))
+                 end-x (- (:x to-node) (* ux (+ (:radius to-node 0) 5)))
+                 end-y (- (:y to-node) (* uy (+ (:radius to-node 0) 5)))
+                 alpha (edge-alpha highlight-state source target)
+                 arrow! (fn [tip-x tip-y dir-x dir-y]
+                          (let [length 10
+                                width 4.8
+                                base-x (- tip-x (* dir-x length))
+                                base-y (- tip-y (* dir-y length))
+                                normal-x (- dir-y)
+                                normal-y dir-x]
+                            (.moveTo graphics tip-x tip-y)
+                            (.lineTo graphics
+                                     (+ base-x (* normal-x width))
+                                     (+ base-y (* normal-y width)))
+                            (.lineTo graphics
+                                     (- base-x (* normal-x width))
+                                     (- base-y (* normal-y width)))
+                            (.lineTo graphics tip-x tip-y)
+                            (.fill graphics #js {:color stroke-color
+                                                 :alpha alpha})))]
+             (.setStrokeStyle graphics
+                              #js {:width (if (:select-mode? highlight-state) 1.25 1)
+                                   :color stroke-color
+                                   :alpha alpha})
+             (.moveTo graphics start-x start-y)
+             (.lineTo graphics end-x end-y)
+             (when (contains? #{:forward :both} arrow-mode)
+               (arrow! end-x end-y ux uy))
+             (when (= :both arrow-mode)
+               (arrow! start-x start-y (- ux) (- uy)))))))
      (.stroke graphics)
      (count links*))))
 
 (defn- render-edges!
-  [^js container layout-by-id links dark? view-mode]
+  [^js container layout-by-id links dark? view-mode render-opts]
   (let [^js graphics (new (.-Graphics PIXI))
-        drawn-links (draw-edges! graphics layout-by-id links dark? view-mode)]
+        drawn-links (draw-edges! graphics layout-by-id links dark? view-mode (logic/highlight-state #{} {}) render-opts)]
     (.addChild container graphics)
     {:graphics graphics
      :drawn-links drawn-links}))
@@ -381,52 +418,76 @@
 (def ^:private edge-label-limit 420)
 
 (defn- sync-edge-labels!
-  [^js label-layer layout-by-id links dark? view-mode]
+  [^js label-layer ^js world width height layout-by-id links dark? view-mode show-edge-labels?]
   (destroy-children! label-layer)
-  (let [max-edges (logic/draw-edge-limit (count layout-by-id)
-                                          (count links)
-                                          view-mode)
-        style (new (.-TextStyle PIXI)
-                   #js {:fontFamily "Avenir Next, Inter, system-ui, sans-serif"
-                        :fontSize 10
-                        :fill (edge-label-color dark?)
-                        :alpha 0.8})
-        labeled-links (->> links
-                           (take max-edges)
-                           (filter #(seq (:label %)))
-                           (take edge-label-limit))]
-    (doseq [{:keys [source target label]} labeled-links]
-      (when-let [from-node (get layout-by-id source)]
-        (when-let [to-node (get layout-by-id target)]
-          (let [dx (- (:x to-node) (:x from-node))
-                dy (- (:y to-node) (:y from-node))
-                distance (js/Math.sqrt (+ (* dx dx) (* dy dy)))]
-            (when (> distance 36)
-              (let [^js text (new (.-Text PIXI)
-                                  #js {:text label
-                                       :style style})
-                    mid-x (/ (+ (:x from-node) (:x to-node)) 2)
-                    mid-y (/ (+ (:y from-node) (:y to-node)) 2)]
-                (when-let [^js anchor (.-anchor text)]
-                  (set! (.-x anchor) 0.5)
-                  (set! (.-y anchor) 0.5))
-                (set! (.-x text) mid-x)
-                (set! (.-y text) mid-y)
-                (set! (.-alpha text) 0.86)
-                (.addChild label-layer text))))))))
+  (when show-edge-labels?
+    (let [max-edges (logic/draw-edge-limit (count layout-by-id)
+                                            (count links)
+                                            view-mode)
+          style (new (.-TextStyle PIXI)
+                     #js {:fontFamily "Avenir Next, Inter, system-ui, sans-serif"
+                          :fontSize 11
+                          :fill (edge-label-color dark?)
+                          :alpha 0.96})
+          bg-color (color->int (if dark? "#0B1220" "#F8FAFC"))
+          border-color (color->int (if dark? "#475569" "#CBD5E1"))
+          labeled-links (->> links
+                             (take max-edges)
+                             (filter #(seq (:label %)))
+                             (take edge-label-limit))]
+      (doseq [{:keys [source target label]} labeled-links]
+        (when-let [from-node (get layout-by-id source)]
+          (when-let [to-node (get layout-by-id target)]
+            (let [{from-x :x from-y :y} (screen-point world (:x from-node) (:y from-node))
+                  {to-x :x to-y :y} (screen-point world (:x to-node) (:y to-node))
+                  dx (- to-x from-x)
+                  dy (- to-y from-y)
+                  distance (js/Math.sqrt (+ (* dx dx) (* dy dy)))
+                  mid-x (/ (+ from-x to-x) 2)
+                  mid-y (/ (+ from-y to-y) 2)]
+              (when (and (> distance 68)
+                         (<= -80 mid-x (+ width 80))
+                         (<= -40 mid-y (+ height 40)))
+                (let [^js entry (new (.-Container PIXI))
+                      ^js bg (new (.-Graphics PIXI))
+                      ^js text (new (.-Text PIXI)
+                                    #js {:text (logic/label-display-text label false)
+                                         :style style})
+                      padding-x 5
+                      padding-y 2]
+                  (when-let [^js anchor (.-anchor text)]
+                    (set! (.-x anchor) 0.5)
+                    (set! (.-y anchor) 0.5))
+                  (set! (.-x text) 0)
+                  (set! (.-y text) 0)
+                  (.roundRect bg
+                              (- (+ (/ (.-width text) 2) padding-x))
+                              (- (+ (/ (.-height text) 2) padding-y))
+                              (+ (.-width text) (* 2 padding-x))
+                              (+ (.-height text) (* 2 padding-y))
+                              4)
+                  (.fill bg #js {:color bg-color
+                                  :alpha 0.88})
+                  (.setStrokeStyle bg #js {:width 1
+                                           :color border-color
+                                           :alpha 0.72})
+                  (.stroke bg)
+                  (.addChild entry bg)
+                  (.addChild entry text)
+                  (set! (.-x entry) mid-x)
+                  (set! (.-y entry) mid-y)
+                  (set! (.-alpha entry) 0.92)
+                  (.addChild label-layer entry)))))))))
   nil)
 
 (defn- render-edge-labels!
-  [^js container layout-by-id links dark? view-mode]
+  [^js container ^js world width height layout-by-id links dark? view-mode show-edge-labels?]
   (let [^js label-layer (new (.-Container PIXI))]
     (.addChild container label-layer)
-    (sync-edge-labels! label-layer layout-by-id links dark? view-mode)
+    (sync-edge-labels! label-layer world width height layout-by-id links dark? view-mode show-edge-labels?)
     {:container label-layer
-     :sync! (fn
-              ([layout-by-id]
-               (sync-edge-labels! label-layer layout-by-id links dark? view-mode))
-              ([layout-by-id visible-links]
-               (sync-edge-labels! label-layer layout-by-id visible-links dark? view-mode)))
+     :sync! (fn [world width height layout-by-id visible-links]
+              (sync-edge-labels! label-layer world width height layout-by-id visible-links dark? view-mode show-edge-labels?))
      :destroy! #(destroy-children! label-layer)}))
 
 (defn- create-icon-text-style
@@ -936,7 +997,7 @@
         (.removeEventListener canvas "wheel" on-wheel)))))
 
 (defn- ^:large-vars/cleanup-todo setup-scene!
-  [^js app ^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids]} render-start]
+  [^js app ^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids depth arrow-mode link-distance show-edge-labels?]} render-start]
   (set! (.-innerHTML container) "")
   (let [^js canvas (or (.-canvas app) (.-view app))
         ^js stage (.-stage app)
@@ -954,7 +1015,9 @@
         height (.-clientHeight container)
         size* (atom {:width width :height height})
         normalized-view-mode (normalize-view-mode view-mode)
-        layouted-nodes* (atom (layout-nodes nodes links view-mode dark?))
+        depth (-> (or depth 1) (max 1) (min 5))
+        render-opts {:arrow-mode arrow-mode}
+        layouted-nodes* (atom (layout-nodes nodes links view-mode dark? {:link-distance link-distance}))
         all-node-id-set (set (map :id @layouted-nodes*))
         visible-node-ids* (atom (visible-node-id-set @layouted-nodes* visible-node-ids))
         visible-link-list (fn []
@@ -969,9 +1032,9 @@
         _ (set! (.. world -scale -y) (:scale initial-transform))
         neighbor-map (build-neighbor-map links)
         highlighted-node-ids* (atom #{})
-        highlight-state* (atom (logic/highlight-state @highlighted-node-ids* neighbor-map))
-        edge-render-info (render-edges! detail-layer @layout-by-id* (visible-link-list) dark? normalized-view-mode)
-        edge-label-render-info (render-edge-labels! detail-layer @layout-by-id* (visible-link-list) dark? normalized-view-mode)
+        highlight-state* (atom (logic/highlight-state @highlighted-node-ids* neighbor-map depth))
+        edge-render-info (render-edges! detail-layer @layout-by-id* (visible-link-list) dark? normalized-view-mode render-opts)
+        edge-label-render-info (render-edge-labels! label-layer-wrapper world width height @layout-by-id* (visible-link-list) dark? normalized-view-mode show-edge-labels?)
         _ (.addChild detail-layer drag-edge-layer)
         node-render-info (render-nodes! tag-layer detail-layer layouted-nodes* normalized-view-mode highlight-state* visible-node-ids*)
         _ ((:sync! node-render-info) world width height nil)
@@ -1028,7 +1091,7 @@
                                    (mark-transform!))))
         sync-highlight! (fn []
                           (reset! highlight-state*
-                                  (logic/highlight-state @highlighted-node-ids* neighbor-map))
+                                  (logic/highlight-state @highlighted-node-ids* neighbor-map depth))
                           (draw-edges! (:graphics edge-render-info)
                                        (logic/current-layout-by-id
                                         @layout-by-id*
@@ -1036,12 +1099,17 @@
                                        (visible-link-list)
                                        dark?
                                        normalized-view-mode
-                                       @highlight-state*)
-                          ((:sync! edge-label-render-info)
-                           (logic/current-layout-by-id
-                            @layout-by-id*
-                            @preview-layout-by-id*)
-                           (visible-link-list))
+                                       @highlight-state*
+                                       render-opts)
+                          (let [{:keys [width height]} @size*]
+                            ((:sync! edge-label-render-info)
+                             world
+                             width
+                             height
+                             (logic/current-layout-by-id
+                              @layout-by-id*
+                              @preview-layout-by-id*)
+                             (visible-link-list)))
                           (if-let [sync-styles! (:sync-styles! node-render-info)]
                             (sync-styles!)
                             (let [{:keys [width height]} @size*]
@@ -1067,7 +1135,7 @@
                                    (let [weights (logic/connected-drag-weights
                                                   neighbor-map
                                                   root-id
-                                                  {:max-depth 6
+                                                  {:max-depth depth
                                                    :max-nodes 1200
                                                    :decay 0.72
                                                    :min-weight 0.2})
@@ -1116,8 +1184,15 @@
                                             (visible-link-list)
                                             dark?
                                             normalized-view-mode
-                                            @highlight-state*)
-                               ((:sync! edge-label-render-info) preview-layout-by-id (visible-link-list))
+                                            @highlight-state*
+                                            render-opts)
+                               (let [{:keys [width height]} @size*]
+                                 ((:sync! edge-label-render-info)
+                                  world
+                                  width
+                                  height
+                                  preview-layout-by-id
+                                  (visible-link-list)))
                                (draw-drag-neighbor-edges! drag-edge-layer
                                                           preview-layout-by-id
                                                           (filter #(contains? @visible-node-ids* %)
@@ -1143,8 +1218,15 @@
                                            (visible-link-list)
                                            dark?
                                            normalized-view-mode
-                                           @highlight-state*)
-                              ((:sync! edge-label-render-info) @layout-by-id* (visible-link-list))
+                                           @highlight-state*
+                                           render-opts)
+                              (let [{:keys [width height]} @size*]
+                                ((:sync! edge-label-render-info)
+                                 world
+                                 width
+                                 height
+                                 @layout-by-id*
+                                 (visible-link-list)))
                               (reset! preview-layout-by-id* nil)
                               (.clear drag-edge-layer)
                               (reset! drag-session* nil)
@@ -1167,7 +1249,15 @@
                         (let [dirty? @transform-dirty?]
                           (when dirty?
                             (let [{:keys [width height]} @size*]
-                              ((:sync! node-render-info) world width height @hovered-node-id*)))
+                              ((:sync! node-render-info) world width height @hovered-node-id*)
+                              ((:sync! edge-label-render-info)
+                               world
+                               width
+                               height
+                               (logic/current-layout-by-id
+                                @layout-by-id*
+                                @preview-layout-by-id*)
+                               (visible-link-list))))
                           (when-let [label-layer (:container label-manager)]
                             (let [scale (.. world -scale -x)
                                   {:keys [target-alpha update? hovered-only? selected-only? active-only?]}
@@ -1291,7 +1381,7 @@
   nil)
 
 (defn render-container!
-  [^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids]}]
+  [^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids depth arrow-mode link-distance show-edge-labels?]}]
   (when container
     (destroy-instance! container)
     (let [token (get (swap! *render-tokens update container (fnil inc 0)) container)
@@ -1316,7 +1406,11 @@
                                                    :on-selection-change on-selection-change
                                                    :on-rendered on-rendered
                                                    :view-mode view-mode
-                                                   :visible-node-ids visible-node-ids}
+                                                   :visible-node-ids visible-node-ids
+                                                   :depth depth
+                                                   :arrow-mode arrow-mode
+                                                   :link-distance link-distance
+                                                   :show-edge-labels? show-edge-labels?}
                                     render-start))
                (.destroy ^js app))))
           (.catch

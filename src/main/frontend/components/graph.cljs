@@ -12,9 +12,18 @@
             [rum.core :as rum]))
 
 (def ^:private default-open-groups #{:view-mode :displayed-tags :layout})
+(def ^:private default-depth 1)
+(def ^:private default-arrow-mode :none)
+(def ^:private default-link-distance 72)
+(def ^:private default-show-edge-labels? true)
+(def ^:private arrow-modes #{:none :forward :both})
 (def ^:private default-settings {:view-mode :tags-and-objects
                                  :selected-tag-ids nil
                                  :created-at-filter nil
+                                 :depth default-depth
+                                 :arrow-mode default-arrow-mode
+                                 :link-distance default-link-distance
+                                 :show-edge-labels? default-show-edge-labels?
                                  :open-groups default-open-groups})
 
 (defn- storage-key
@@ -27,10 +36,37 @@
     :all-pages
     :tags-and-objects))
 
+(defn- clamp-number
+  [value min-value max-value default-value]
+  (if (number? value)
+    (-> value
+        (max min-value)
+        (min max-value))
+    default-value))
+
+(defn- valid-depth
+  [value]
+  (int (clamp-number value 1 5 default-depth)))
+
+(defn- valid-link-distance
+  [value]
+  (int (clamp-number value 36 180 default-link-distance)))
+
+(defn- valid-arrow-mode
+  [value]
+  (let [value (keyword value)]
+    (if (contains? arrow-modes value)
+      value
+      default-arrow-mode)))
+
 (defn encode-settings
-  [{:keys [view-mode selected-tag-ids created-at-filter open-groups]}]
+  [{:keys [view-mode selected-tag-ids created-at-filter depth arrow-mode link-distance show-edge-labels? open-groups]}]
   (clj->js
    (cond-> {:viewMode (name (valid-view-mode view-mode))
+            :depth (valid-depth depth)
+            :arrowMode (name (valid-arrow-mode arrow-mode))
+            :linkDistance (valid-link-distance link-distance)
+            :showEdgeLabels (boolean show-edge-labels?)
             :openGroups (mapv name (or open-groups default-open-groups))}
      (some? selected-tag-ids)
      (assoc :selectedTagIds (vec selected-tag-ids))
@@ -54,6 +90,18 @@
              (and (contains? data :createdAtFilter)
                   (number? (:createdAtFilter data)))
              (assoc :created-at-filter (:createdAtFilter data))
+
+             (contains? data :depth)
+             (assoc :depth (valid-depth (:depth data)))
+
+             (contains? data :arrowMode)
+             (assoc :arrow-mode (valid-arrow-mode (:arrowMode data)))
+
+             (contains? data :linkDistance)
+             (assoc :link-distance (valid-link-distance (:linkDistance data)))
+
+             (contains? data :showEdgeLabels)
+             (assoc :show-edge-labels? (true? (:showEdgeLabels data)))
 
              (contains? data :openGroups)
              (assoc :open-groups (set (map keyword (:openGroups data))))))))
@@ -329,17 +377,92 @@
               :variant :outline
               :size :sm)])
 
+(defn- layout-slider
+  [{:keys [label value min max step on-change]}]
+  [:label.graph-layout-control
+   [:span.graph-layout-control-header
+    [:span label]
+    [:strong value]]
+   [:input.graph-layout-slider
+    {:type "range"
+     :min min
+     :max max
+     :step step
+     :value value
+     :aria-label label
+     :on-change (fn [event]
+                  (on-change (js/parseInt (.. event -target -value) 10)))}]])
+
+(defn- layout-toggle
+  [label checked? on-change]
+  [:label.graph-layout-toggle
+   (ui/checkbox {:checked checked?
+                 :aria-label label
+                 :on-change #(on-change (not checked?))})
+   [:span label]])
+
 (defn- layout-group
   [settings set-settings! graph-data]
-  (settings-group
-   {:settings settings
-    :set-settings! set-settings!
-    :id :layout
-    :title (t :graph/layout)
-    :meta (t :graph/layout-force)
-    :children [:div.graph-layout-stats
-               [:span (t :graph/node-count (count (:nodes graph-data)))]
-               [:span (t :graph/link-count (count (:links graph-data)))]]}))
+  (let [depth (valid-depth (:depth settings))
+        link-distance (valid-link-distance (:link-distance settings))
+        arrow-mode (valid-arrow-mode (:arrow-mode settings))]
+    (settings-group
+     {:settings settings
+      :set-settings! set-settings!
+      :id :layout
+      :title (t :graph/layout)
+      :meta (t :graph/layout-force)
+      :children [:div.graph-layout-controls
+                 [:div.graph-layout-stats
+                  [:span (t :graph/node-count (count (:nodes graph-data)))]
+                  [:span (t :graph/link-count (count (:links graph-data)))]]
+                 (layout-slider
+                  {:label (t :graph/layout-depth)
+                   :value depth
+                   :min 1
+                   :max 5
+                   :step 1
+                   :on-change #(set-settings! (fn [settings]
+                                                 (assoc settings :depth (valid-depth %))))})
+                 (layout-slider
+                  {:label (t :graph/layout-link-distance)
+                   :value link-distance
+                   :min 36
+                   :max 180
+                   :step 6
+                   :on-change #(set-settings! (fn [settings]
+                                                 (assoc settings :link-distance (valid-link-distance %))))})
+                 [:div.graph-layout-control
+                  [:span.graph-layout-control-header
+                   [:span (t :graph/layout-arrows)]
+                   [:strong (case arrow-mode
+                              :both (t :graph/layout-arrows-both)
+                              :forward (t :graph/layout-arrows-forward)
+                              (t :graph/layout-arrows-none))]]
+                  (shui/tabs
+                   {:value (name arrow-mode)
+                    :on-value-change #(set-settings! (fn [settings]
+                                                       (assoc settings :arrow-mode (valid-arrow-mode %))))
+                    :class "graph-arrow-tabs"}
+                   (shui/tabs-list
+                    {:class "graph-arrow-tabs-list"}
+                    (shui/tabs-trigger
+                     {:value "none"
+                      :class "graph-arrow-tab"}
+                     (t :graph/layout-arrows-none))
+                    (shui/tabs-trigger
+                     {:value "forward"
+                      :class "graph-arrow-tab"}
+                     (t :graph/layout-arrows-forward))
+                    (shui/tabs-trigger
+                     {:value "both"
+                      :class "graph-arrow-tab"}
+                     (t :graph/layout-arrows-both))))]
+                 (layout-toggle
+                  (t :graph/layout-edge-labels)
+                  (true? (:show-edge-labels? settings))
+                  #(set-settings! (fn [settings]
+                                    (assoc settings :show-edge-labels? %))))]})))
 
 (defn time-travel-range
   [graph-data]
@@ -619,6 +742,10 @@
           (graph/graph-2d {:nodes (:nodes mode-graph-data)
                            :links (:links mode-graph-data)
                            :visible-node-ids visible-node-ids
+                           :depth (valid-depth (:depth settings))
+                           :arrow-mode (valid-arrow-mode (:arrow-mode settings))
+                           :link-distance (valid-link-distance (:link-distance settings))
+                           :show-edge-labels? (true? (:show-edge-labels? settings))
                            :dark? dark?
                            :view-mode view-mode
                            :aria-label (t :graph/canvas-label)

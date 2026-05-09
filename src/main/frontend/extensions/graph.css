@@ -341,6 +341,57 @@
     background: color-mix(in srgb, var(--ls-primary-background-color) 40%, transparent);
 }
 
+.graph-layout-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.graph-layout-control {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--ls-secondary-text-color);
+}
+
+.graph-layout-control-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.graph-layout-control-header strong {
+    flex: 0 0 auto;
+    font-weight: 650;
+    color: var(--ls-primary-text-color);
+}
+
+.graph-layout-slider {
+    width: 100%;
+    accent-color: var(--ls-link-text-color);
+}
+
+.graph-layout-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ls-primary-text-color);
+}
+
+.graph-arrow-tabs-list {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.graph-arrow-tab {
+    min-width: 0;
+}
+
 .graph-loading {
     position: absolute;
     inset: 0;

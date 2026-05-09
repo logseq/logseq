@@ -140,18 +140,39 @@
     (disj (set selected-ids) node-id)
     (conj (set selected-ids) node-id)))
 
+(defn- connected-node-ids
+  [selected-ids neighbor-map depth]
+  (let [depth (-> (or depth 1) (max 1) (min 5))]
+    (loop [queue (into cljs.core/PersistentQueue.EMPTY (map #(vector % 0) selected-ids))
+           seen selected-ids]
+      (if (empty? queue)
+        seen
+        (let [[node-id current-depth] (peek queue)
+              queue (pop queue)]
+          (if (>= current-depth depth)
+            (recur queue seen)
+            (let [[queue seen]
+                  (reduce
+                   (fn [[queue* seen*] neighbor-id]
+                     (if (contains? seen* neighbor-id)
+                       [queue* seen*]
+                       [(conj queue* [neighbor-id (inc current-depth)])
+                        (conj seen* neighbor-id)]))
+                   [queue seen]
+                   (get neighbor-map node-id []))]
+              (recur queue seen))))))))
+
 (defn highlight-state
-  [selected-ids neighbor-map]
-  (let [selected-ids (set selected-ids)
-        connected-ids (reduce
-                       (fn [ids selected-id]
-                         (into ids (get neighbor-map selected-id [])))
-                       #{}
-                       selected-ids)]
-    {:selected-ids selected-ids
-     :connected-ids (set/difference connected-ids selected-ids)
-     :active-ids (into selected-ids connected-ids)
-     :select-mode? (seq selected-ids)}))
+  ([selected-ids neighbor-map]
+   (highlight-state selected-ids neighbor-map 1))
+  ([selected-ids neighbor-map depth]
+   (let [selected-ids (set selected-ids)
+         active-ids (connected-node-ids selected-ids neighbor-map depth)
+         connected-ids (set/difference active-ids selected-ids)]
+     {:selected-ids selected-ids
+      :connected-ids connected-ids
+      :active-ids active-ids
+      :select-mode? (seq selected-ids)})))
 
 (defn node-emphasis
   [{:keys [selected-ids connected-ids select-mode?]} node-id]
@@ -399,8 +420,10 @@
          node-count)))
 
 (defn- link-distance
-  [view-mode]
-  (if (= view-mode :tags-and-objects) 58 72))
+  [view-mode value]
+  (if (number? value)
+    value
+    (if (= view-mode :tags-and-objects) 58 72)))
 
 (defn- charge-strength
   [view-mode]
@@ -518,7 +541,9 @@
     nodes))
 
 (defn layout-nodes
-  [nodes links view-mode dark?]
+  ([nodes links view-mode dark?]
+   (layout-nodes nodes links view-mode dark? {}))
+  ([nodes links view-mode dark? opts]
   (let [view-mode (normalize-view-mode view-mode)
         node-id-set (set (map :id nodes))
         links (keep-links-with-nodes links node-id-set)
@@ -534,7 +559,7 @@
                                   (into-array))
             link-force (-> (d3-force/forceLink simulation-links)
                            (.id (fn [^js node] (.-id node)))
-                           (.distance (link-distance view-mode))
+                           (.distance (link-distance view-mode (:link-distance opts)))
                            (.strength 0.82))
             collide-force (-> (d3-force/forceCollide)
                               (.radius (fn [^js node]
@@ -559,4 +584,4 @@
              (map (fn [^js sim-node]
                     (let [node (nth nodes (.-idx sim-node))]
                       (decorate-node node degree dark? (.-x sim-node) (.-y sim-node)))))
-             vec)))))
+             vec))))))
