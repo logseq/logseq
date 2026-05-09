@@ -473,6 +473,24 @@
          large-graph-render-node-limit
          node-count)))
 
+(def ^:private tag-cluster-color-palette
+  ["#14B8A6" "#3B82F6" "#8B5CF6" "#EC4899"
+   "#F59E0B" "#10B981" "#EF4444" "#06B6D4"
+   "#84CC16" "#F97316" "#A855F7" "#64748B"])
+
+(defn- tag-title-color-int
+  [title]
+  (let [title (str (or title ""))
+        hash (reduce
+              (fn [result idx]
+                (mod (+ (* result 31)
+                        (.charCodeAt title idx))
+                     2147483647))
+              0
+              (range (count title)))]
+    (color->int (nth tag-cluster-color-palette
+                     (mod hash (count tag-cluster-color-palette))))))
+
 (defn tag-cluster-backgrounds
   [nodes view-mode]
   (if (= :tags-and-objects (normalize-view-mode view-mode))
@@ -510,7 +528,8 @@
                    :x center-x
                    :y center-y
                    :radius radius
-                   :color-int (:color-int tag-node)})))
+                   :color-int (tag-title-color-int (or (:label tag-node)
+                                                        cluster-id))})))
          (sort-by :id)
          vec)
     []))
