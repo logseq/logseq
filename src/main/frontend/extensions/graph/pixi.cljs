@@ -47,7 +47,7 @@
 
 (defn- edge-color
   [dark?]
-  (if dark? "#334155" "#CBD5E1"))
+  (if dark? "#64748B" "#94A3B8"))
 
 (defn- label-color
   [dark?]
@@ -332,14 +332,14 @@
 (defn- edge-alpha
   [{:keys [selected-ids active-ids select-mode?]} source target]
   (cond
-    (not select-mode?) 0.38
+    (not select-mode?) 0.54
     (or (and (contains? selected-ids source)
              (contains? active-ids target))
         (and (contains? selected-ids target)
-             (contains? active-ids source))) 0.72
+             (contains? active-ids source))) 0.82
     (and (contains? active-ids source)
-         (contains? active-ids target)) 0.34
-    :else 0.05))
+         (contains? active-ids target)) 0.46
+    :else 0.18))
 
 (defn- draw-edges!
   ([^js graphics layout-by-id links dark? view-mode]
@@ -395,11 +395,11 @@
                                    :alpha alpha})
              (.moveTo graphics start-x start-y)
              (.lineTo graphics end-x end-y)
+             (.stroke graphics)
              (when (contains? #{:forward :both} arrow-mode)
                (arrow! end-x end-y ux uy))
              (when (= :both arrow-mode)
                (arrow! start-x start-y (- ux) (- uy)))))))
-     (.stroke graphics)
      (count links*))))
 
 (defn- render-edges!
