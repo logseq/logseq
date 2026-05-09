@@ -71,10 +71,6 @@
                      :field :e2ee-password}
                     data)))
 
-(defn- throw-missing-e2ee-password!
-  [data]
-  (throw (missing-e2ee-password-ex data)))
-
 (defn- ensure-refresh-token!
   [refresh-token]
   (when-not (seq refresh-token)
