@@ -474,8 +474,46 @@
          node-count)))
 
 (defn tag-cluster-backgrounds
-  [_nodes _view-mode]
-  [])
+  [nodes view-mode]
+  (if (= :tags-and-objects (normalize-view-mode view-mode))
+    (->> nodes
+         (filter :cluster-id)
+         (group-by :cluster-id)
+         (map (fn [[cluster-id nodes]]
+                (let [bounds (reduce
+                              (fn [bounds {:keys [x y radius]}]
+                                (let [radius (or radius 0)]
+                                  {:min-x (min (:min-x bounds) (- x radius))
+                                   :min-y (min (:min-y bounds) (- y radius))
+                                   :max-x (max (:max-x bounds) (+ x radius))
+                                   :max-y (max (:max-y bounds) (+ y radius))}))
+                              {:min-x js/Infinity
+                               :min-y js/Infinity
+                               :max-x js/-Infinity
+                               :max-y js/-Infinity}
+                              nodes)
+                      tag-node (some #(when (and (= "tag" (:kind %))
+                                                 (= cluster-id (:id %)))
+                                        %)
+                                     nodes)
+                      center-x (/ (+ (:min-x bounds) (:max-x bounds)) 2)
+                      center-y (/ (+ (:min-y bounds) (:max-y bounds)) 2)
+                      radius (->> nodes
+                                  (map (fn [{:keys [x y radius]}]
+                                         (let [dx (- x center-x)
+                                               dy (- y center-y)]
+                                           (+ (js/Math.sqrt (+ (* dx dx) (* dy dy)))
+                                              (or radius 0)
+                                              44))))
+                                  (apply max 84))]
+                  {:id cluster-id
+                   :x center-x
+                   :y center-y
+                   :radius radius
+                   :color-int (:color-int tag-node)})))
+         (sort-by :id)
+         vec)
+    []))
 
 (defn- link-distance
   [view-mode value]
@@ -533,11 +571,19 @@
               (decorate-node node degree dark? x y))))
          vec)))
 
-(defn- links-by-object-id
-  [links]
+(defn- tag-links-by-node-id
+  [links tag-ids]
   (reduce
    (fn [m {:keys [source target]}]
-     (update m source (fnil conj []) target))
+     (cond
+       (contains? tag-ids target)
+       (update m source (fnil conj []) target)
+
+       (contains? tag-ids source)
+       (update m target (fnil conj []) source)
+
+       :else
+       m))
    {}
    links))
 
@@ -549,7 +595,7 @@
                      set)
         tags (filter #(contains? tag-ids (:id %)) nodes)
         objects (remove #(contains? tag-ids (:id %)) nodes)
-        object-links (links-by-object-id links)
+        object-links (tag-links-by-node-id links tag-ids)
         tag-count (max 1 (count tags))
         cluster-radius (max 360 (* 72 (js/Math.sqrt tag-count)))
         golden-angle (* js/Math.PI (- 3 (js/Math.sqrt 5)))
@@ -566,20 +612,38 @@
      (concat
       (map (fn [tag]
              (let [[x y] (get tag-position-by-id (:id tag) [0 0])]
-               (decorate-node tag degree dark? x y)))
+               (decorate-node (assoc tag
+                                     :cluster-id (:id tag)
+                                     :cluster-root? true
+                                     :cluster-x x
+                                     :cluster-y y)
+                              degree
+                              dark?
+                              x
+                              y)))
            tags)
       (map-indexed
        (fn [idx object]
          (let [linked-tag-id (some tag-ids (get object-links (:id object)))
-               linked-tag-id (or linked-tag-id (first tag-ids))
                cluster-idx (get @counters* linked-tag-id 0)
-               _ (swap! counters* update linked-tag-id (fnil inc 0))
+               _ (when linked-tag-id
+                   (swap! counters* update linked-tag-id (fnil inc 0)))
                [cx cy] (get tag-position-by-id linked-tag-id [0 0])
                angle (+ (* idx 0.11) (* cluster-idx golden-angle))
-               radius (+ 58 (* 10 (js/Math.sqrt (inc cluster-idx))))
+               radius (if linked-tag-id
+                        (+ 58 (* 10 (js/Math.sqrt (inc cluster-idx))))
+                        (+ 160 (* 20 (js/Math.sqrt (inc idx)))))
                x (+ cx (* radius (js/Math.cos angle)))
                y (+ cy (* radius (js/Math.sin angle)))]
-           (decorate-node object degree dark? x y)))
+           (decorate-node (cond-> object
+                            linked-tag-id
+                            (assoc :cluster-id linked-tag-id
+                                   :cluster-x cx
+                                   :cluster-y cy))
+                          degree
+                          dark?
+                          x
+                          y)))
        objects)))))
 
 (defn- fast-layout-nodes
@@ -608,7 +672,10 @@
         degree (build-degree-map links)]
     (if (= :fast (layout-mode (count nodes) view-mode))
       (fast-layout-nodes nodes links view-mode degree dark?)
-      (let [nodes (force-seed-nodes nodes links view-mode degree dark?)
+      (let [nodes (if (and (= view-mode :tags-and-objects)
+                           (some #(= "tag" (:kind %)) nodes))
+                    (clustered-tags-layout-nodes nodes links degree dark?)
+                    (force-seed-nodes nodes links view-mode degree dark?))
             simulation-nodes (->> nodes
                                   (map-indexed #(simulation-node %2 degree %1))
                                   (into-array))
@@ -633,8 +700,21 @@
                                                  (.distanceMax 420)))
                            (.force "center" (d3-force/forceCenter 0 0))
                            (.force "collision" collide-force)
-                           (.force "y" y-force)
-                           (.stop))
+                           (.force "y" y-force))
+            _ (when (= view-mode :tags-and-objects)
+                (.force simulation
+                        "cluster-x"
+                        (-> (d3-force/forceX
+                             (fn [^js node]
+                               (or (:cluster-x (nth nodes (.-idx node))) 0)))
+                            (.strength 0.16)))
+                (.force simulation
+                        "cluster-y"
+                        (-> (d3-force/forceY
+                             (fn [^js node]
+                               (or (:cluster-y (nth nodes (.-idx node))) 0)))
+                            (.strength 0.16))))
+            _ (.stop simulation)
             ticks (layout-tick-count (count nodes) view-mode)]
         (dotimes [_ ticks]
           (.tick simulation))

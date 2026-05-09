@@ -673,6 +673,21 @@
                  (contains? visible-node-ids target)))
           links))
 
+(defn- draw-cluster-backgrounds!
+  [^js graphics nodes view-mode dark? visible-node-ids*]
+  (.clear graphics)
+  (doseq [{:keys [x y radius color-int]}
+          (logic/tag-cluster-backgrounds
+           (filter #(visible-node? visible-node-ids* %) nodes)
+           view-mode)]
+    (.circle graphics x y radius)
+    (.fill graphics #js {:color (or color-int (color->int (if dark? "#34D399" "#047857")))
+                         :alpha (if dark? 0.10 0.08)})
+    (.setStrokeStyle graphics #js {:width 1.2
+                                   :color (or color-int (color->int (if dark? "#34D399" "#047857")))
+                                   :alpha (if dark? 0.22 0.16)})
+    (.stroke graphics)))
+
 (defn- ^:large-vars/cleanup-todo render-nodes!
   [^js tag-container ^js detail-container layouted-nodes* view-mode highlight-state* visible-node-ids*]
   (let [^js container (new (.-Container PIXI))
@@ -1017,6 +1032,7 @@
         ^js detail-layer (new (.-Container PIXI))
         ^js tag-layer (new (.-Container PIXI))
         ^js label-layer-wrapper (new (.-Container PIXI))
+        ^js cluster-background-layer (new (.-Graphics PIXI))
         ^js drag-edge-layer (new (.-Graphics PIXI))
         _ (.appendChild container canvas)
         _ (.addChild stage world)
@@ -1049,6 +1065,18 @@
                             (logic/highlight-visible-links
                              (base-visible-link-list)
                              @highlight-state*))
+        _ (.addChild detail-layer cluster-background-layer)
+        _ (draw-cluster-backgrounds! cluster-background-layer @layouted-nodes* normalized-view-mode dark? visible-node-ids*)
+        current-layout-nodes (fn []
+                               (vals (logic/current-layout-by-id
+                                      @layout-by-id*
+                                      @preview-layout-by-id*)))
+        sync-cluster-backgrounds! (fn [nodes]
+                                    (draw-cluster-backgrounds! cluster-background-layer
+                                                               nodes
+                                                               normalized-view-mode
+                                                               dark?
+                                                               visible-node-ids*))
         edge-render-info (render-edges! detail-layer @layout-by-id* (visible-link-list) dark? normalized-view-mode render-opts)
         edge-label-render-info (render-edge-labels! label-layer-wrapper world width height @layout-by-id* (visible-link-list) dark? normalized-view-mode show-edge-labels?)
         _ (.addChild detail-layer drag-edge-layer)
@@ -1108,6 +1136,7 @@
         sync-highlight! (fn []
                           (reset! highlight-state*
                                   (logic/highlight-state @highlighted-node-ids* neighbor-map @depth*))
+                          (sync-cluster-backgrounds! (current-layout-nodes))
                           (draw-edges! (:graphics edge-render-info)
                                        (logic/current-layout-by-id
                                         @layout-by-id*
@@ -1195,6 +1224,7 @@
                                                          @layout-by-id*
                                                          positions)]
                                (reset! preview-layout-by-id* preview-layout-by-id)
+                               (sync-cluster-backgrounds! (vals preview-layout-by-id))
                                (draw-edges! (:graphics edge-render-info)
                                             preview-layout-by-id
                                             (visible-link-list)
@@ -1229,6 +1259,7 @@
                                 (when-let [idx (get node-index-by-id moved-node-id)]
                                   (when-let [moved-node (get next-layouted-nodes idx)]
                                     (swap! layout-by-id* assoc moved-node-id moved-node))))
+                              (sync-cluster-backgrounds! @layouted-nodes*)
                               (draw-edges! (:graphics edge-render-info)
                                            @layout-by-id*
                                            (visible-link-list)
@@ -1329,6 +1360,7 @@
                                           (filter #(and (visible-node? visible-node-ids* %)
                                                         (= "tag" (:kind %)))
                                                   @layouted-nodes*)))
+                                 (sync-cluster-backgrounds! @layouted-nodes*)
                                  (sync-highlight!))))
         update-depth! (fn [next-depth]
                         (let [next-depth (-> (or next-depth 1) (max 1) (min 5))]
