@@ -3,12 +3,12 @@
             [frontend.components.graph :as graph]))
 
 (def graph-data
-  {:nodes [{:id "1" :label "Design" :kind "tag"}
-           {:id "2" :label "Research" :kind "tag"}
-           {:id "3" :label "Archive" :kind "tag"}
-           {:id "10" :label "Design task" :kind "object"}
-           {:id "11" :label "Research task" :kind "object"}
-           {:id "12" :label "Archived task" :kind "object"}]
+  {:nodes [{:id "1" :label "Design" :kind "tag" :block/created-at 1000}
+           {:id "2" :label "Research" :kind "tag" :block/created-at 2000}
+           {:id "3" :label "Archive" :kind "tag" :block/created-at 3000}
+           {:id "10" :label "Design task" :kind "object" :block/created-at 1500}
+           {:id "11" :label "Research task" :kind "object" :block/created-at 2500}
+           {:id "12" :label "Archived task" :kind "object" :block/created-at 3500}]
    :links [{:source "10" :target "1"}
            {:source "11" :target "2"}
            {:source "12" :target "3"}]})
@@ -62,3 +62,19 @@
       (is (= #{{:source "10" :target "1"}
                {:source "11" :target "2"}}
              (set (:links filtered)))))))
+
+(deftest time-travel-range-starts-with-first-visible-node
+  (let [filtered (graph/filter-tags-and-objects-graph
+                  graph-data
+                  #{"2" "3"})]
+    (is (= {:created-at-min 2000
+            :created-at-max 3500
+            :duration 1500}
+           (graph/time-travel-range filtered)))))
+
+(deftest time-travel-filter-applies-to-any-graph-mode
+  (let [filtered (graph/filter-graph-by-created-at graph-data 1000)]
+    (is (= #{"1" "2" "10"}
+           (set (map :id (:nodes filtered)))))
+    (is (= #{{:source "10" :target "1"}}
+           (set (:links filtered))))))

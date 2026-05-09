@@ -131,6 +131,20 @@
     (is (= 1000 (get-in result [:all-pages :created-at-min])))
     (is (<= 3000 (get-in result [:all-pages :created-at-max])))))
 
+(deftest global-tags-and-objects-nodes-include-created-at
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Timed Objects"
+                        :block/created-at 1000}
+                 :blocks [{:block/title "timed object"
+                           :block/created-at 2000
+                           :build/tags [:Topic]}]}]
+               :classes {:Topic {:block/created-at 1500}}})
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :tags-and-objects})]
+    (is (= 1500 (:block/created-at (node-by-label result "Topic"))))
+    (is (= 2000 (:block/created-at (node-by-label result "timed object"))))))
+
 (deftest global-graph-nodes-include-icons
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
