@@ -154,7 +154,7 @@
     (is (= :dimmed (logic/node-emphasis one-hop "d")))
     (is (= :connected (logic/node-emphasis two-hop "d")))))
 
-(deftest highlighted-links-only-include-active-depth-edges
+(deftest highlighted-links-keep-default-graph-lines
   (let [links [{:source "a" :target "b"}
                {:source "a" :target "c"}
                {:source "b" :target "d"}
@@ -166,10 +166,7 @@
                       "e" ["d"]}
         state (logic/highlight-state #{"a"} neighbor-map 2)]
     (is (= links (logic/highlight-visible-links links (logic/highlight-state #{} neighbor-map))))
-    (is (= #{{:source "a" :target "b"}
-             {:source "a" :target "c"}
-             {:source "b" :target "d"}}
-           (set (logic/highlight-visible-links links state))))))
+    (is (= links (logic/highlight-visible-links links state)))))
 
 (deftest node-click-action-distinguishes-highlight-unhighlight-and-open
   (is (= {:action :highlight
