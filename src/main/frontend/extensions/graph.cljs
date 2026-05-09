@@ -25,7 +25,6 @@
    (:show-arrows? opts)
    (:link-distance opts)
    (:show-edge-labels? opts)
-   (:show-tag-labels? opts)
    (:grid-layout? opts)
    (:on-node-activate opts)
    (:on-selection-change opts)
