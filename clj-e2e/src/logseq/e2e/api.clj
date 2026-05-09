@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as string]
    [jsonista.core :as json]
+   [logseq.e2e.util :as util]
    [wally.main :as w]))
 
 (defn- to-snake-case
@@ -36,4 +37,18 @@
         estr (format "s => { const args = JSON.parse(s);const o=logseq.%1$s; return o['%2$s']?.apply(null, args || []); }" ns1 name1)
         args (json/write-value-as-string (vec args))]
     ;; (prn "Debug: eval-js #" estr args)
-    (w/eval-js estr args)))
+    (loop [attempt 0]
+      (let [result (try
+                     {:ok? true
+                      :value (w/eval-js estr args)}
+                     (catch Throwable e
+                       (let [message (str e)]
+                         (if (and (< attempt 10)
+                                  (string/includes? message "Execution context was destroyed"))
+                           {:retry? true}
+                           (throw e)))))]
+        (if (:retry? result)
+          (do
+            (util/wait-timeout 1000)
+            (recur (inc attempt)))
+          (:value result))))))

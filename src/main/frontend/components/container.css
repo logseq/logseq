@@ -572,7 +572,7 @@
     max-width: 60vw;
   }
 
-  &-scollable {
+  &-scrollable {
     min-height: 100%;
     overflow-y: scroll;
   }

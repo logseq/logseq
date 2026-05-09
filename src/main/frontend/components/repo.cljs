@@ -324,22 +324,21 @@
          (repos-inner local-graphs))]
 
       (when (and (user-handler/rtc-group?)
-                 (seq remote-graphs)
                  login?)
         [:<>
-         (when (seq own-graphs)
+         [:div
+          [:hr.mt-8]
+          [:div.flex.align-items.justify-between
+           [:h2.text-lg.font-medium.mb-4 (t :graph/remote-graphs)]
            [:div
-            [:hr.mt-8]
-            [:div.flex.align-items.justify-between
-             [:h2.text-lg.font-medium.mb-4 (t :graph/remote-graphs)]
-             [:div
-              (ui/button
-               [:span.flex.items-center (t :ui/refresh)
-                (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
-               :background "gray"
-               :disabled remotes-loading?
-               :on-click (fn [] (rtc-handler/<get-remote-graphs)))]]
-            (repos-inner own-graphs)])
+            (ui/button
+             [:span.flex.items-center (t :ui/refresh)
+              (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
+             :background "gray"
+             :disabled remotes-loading?
+             :on-click (fn [] (rtc-handler/<get-remote-graphs)))]]
+          (when (seq own-graphs)
+            (repos-inner own-graphs))]
 
          (when (seq shared-graphs)
            [:div
@@ -359,7 +358,8 @@
                             ready-for-use? (not= false graph-ready-for-use?)
                             title (str "<" GraphName "> #" GraphUUID)]
                         (when short-repo-name
-                          {:title [:span.flex.items-center.title-wrap short-repo-name
+                          {:key (or GraphUUID repo-url short-repo-name)
+                           :title [:span.flex.items-center.title-wrap short-repo-name
                                    (when remote? [:span.pl-1.flex.items-center
                                                   {:title title}
                                                   (ui/icon (if graph-e2ee? "lock" "cloud") {:size 18})
@@ -463,26 +463,33 @@
      {:class (when (<= (count repos) 1) "no-repos")}
      (header-fn)
      [:div.cp__repos-list-wrap
-      (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
-        (let [on-click' (:on-click options)
-              href' (:href options)
-              menu-item (if (util/mobile?) ui/menu-link shui/dropdown-menu-item)]
-          (if hr
-            (if (util/mobile?) [:hr.py-2] (shui/dropdown-menu-separator))
-            (menu-item
-             (assoc options
-                    :title hover-detail
-                    :on-click (fn [^js e]
-                                (when on-click'
-                                  (when-not (false? (on-click' e))
-                                    (shui/popup-hide! contentid)))))
-             (or item
-                 (if href'
-                   [:a.flex.items-center.w-full
-                    {:href href' :on-click #(shui/popup-hide! contentid)
-                     :style {:color "inherit"}} title]
-                   [:span.flex.items-center.gap-1.w-full
-                    icon [:div title]]))))))]
+      (map-indexed
+       (fn [idx {:keys [hr item hover-detail title options icon key]}]
+         (let [on-click' (:on-click options)
+               href' (:href options)
+               menu-item (if (util/mobile?) ui/menu-link shui/dropdown-menu-item)
+               item-key (if hr
+                          (str "separator-" idx)
+                          (or key href' (str "item-" idx)))]
+           (rum/with-key
+             (if hr
+               (if (util/mobile?) [:hr.py-2] (shui/dropdown-menu-separator))
+               (menu-item
+                (assoc options
+                       :title hover-detail
+                       :on-click (fn [^js e]
+                                   (when on-click'
+                                     (when-not (false? (on-click' e))
+                                       (shui/popup-hide! contentid)))))
+                (or item
+                    (if href'
+                      [:a.flex.items-center.w-full
+                       {:href href' :on-click #(shui/popup-hide! contentid)
+                        :style {:color "inherit"}} title]
+                      [:span.flex.items-center.gap-1.w-full
+                       icon [:div title]]))))
+             item-key)))
+       (items-fn))]
      (when footer?
        (repos-footer))]))
 

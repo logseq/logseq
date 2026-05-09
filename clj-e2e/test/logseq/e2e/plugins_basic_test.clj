@@ -1,6 +1,7 @@
 (ns logseq.e2e.plugins-basic-test
   (:require
    [clojure.set :as set]
+   [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
    [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
@@ -196,34 +197,46 @@
                                [{:content "b1"
                                  :children [{:content "b1.1"
                                              :children [{:content "b1.1.1"}
-                                                        {:content "b1.1.2"}]}
+                                                       {:content "b1.1.2"}]}
                                             {:content "b1.2"}]}
                                 {:content "b2"}])
+          _ (w/wait-for ".block-title-wrap:text('b2')")
           contents (util/get-page-blocks-contents)]
       (is (= contents ["b1" "b1.1" "b1.1.1" "b1.1.2" "b1.2" "b2"]))
       (is (= (map #(get % "title") result) ["b1" "b1.1" "b1.1.1" "b1.1.2" "b1.2" "b2"]))))
   (testing "insert batch blocks with properties"
     (let [page "insert batch blocks with properties"
+          z1 (str "z1-" (new-property))
+          z2 (str "z2-" (new-property))
+          z3 (str "z3-" (new-property))
+          z4 (str "z4-" (new-property))
           _ (page/new-page page)
           page-uuid (get (ls-api-call! :editor.getBlock page) "uuid")
           result (ls-api-call! :editor.insertBatchBlock page-uuid
                                [{:content "b1"
                                  :children [{:content "b1.1"
                                              :children [{:content "b1.1.1"
-                                                         :properties {"z3" "Page 1"
-                                                                      "z4" ["Page 2" "Page 3"]}}
+                                                         :properties {z3 "Page 1"
+                                                                      z4 ["Page 2" "Page 3"]}}
                                                         {:content "b1.1.2"}]}
                                             {:content "b1.2"}]
-                                 :properties {"z1" "test"
-                                              "z2" true}}
+                                 :properties {z1 "test"
+                                              z2 true}}
                                 {:content "b2"}]
-                               {:schema {"z3" "page"
-                                         "z4" "page"}})
+                               {:schema {z3 {:type "page"}
+                                         z4 {:type "page"}}})
           _ (assert/assert-is-visible ".block-title-wrap:text('Page 3')")
           contents (util/get-page-blocks-contents)]
       (is (= contents
-             ["b1" "test" "b1.1" "b1.1.1" "Page 1" "Page 2" "Page 3" "b1.1.2" "b1.2" "b2"]))
-      (is (true? (get (first result) (->plugin-ident "z2")))))))
+             ["b1" "test" "b1.1" "b1.1.1" "b1.1.2" "b1.2" "b2"]))
+      (is (true? (get (first result) (->plugin-ident z2))))
+      (let [b1-1-1 (nth result 2)
+            page-1 (ls-api-call! :editor.getBlock (get b1-1-1 (->plugin-ident z3)))
+            pages (map #(-> (ls-api-call! :editor.getBlock %)
+                            (get "title"))
+                       (get b1-1-1 (->plugin-ident z4)))]
+        (is (= "page 1" (some-> (get page-1 "title") string/lower-case)))
+        (is (= ["page 2" "page 3"] (map string/lower-case pages)))))))
 
 (deftest create-page-test
   (testing "create page"

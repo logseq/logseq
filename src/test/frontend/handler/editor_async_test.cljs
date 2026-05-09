@@ -24,7 +24,10 @@
   {:before (fn []
              (reset! *previous-state @state/state)
              (async done
+                    (reset! state/*db-worker nil)
                     (test-helper/start-test-db!)
+                    (state/set-current-repo! test-helper/test-db)
+                    (state/clear-edit!)
                     (done)))
    :after (fn []
             (let [previous-state @*previous-state]
@@ -91,6 +94,7 @@
                             (f)
                             (js/setTimeout f 0)))]
           (p/do!
+           (state/set-current-repo! test-helper/test-db)
            (editor/delete-block! test-helper/test-db)
            (when (fn? on-delete)
              (on-delete))))

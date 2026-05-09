@@ -109,20 +109,24 @@
           (is (= (t/day-of-week (tc/from-long next-time)) (t/day-of-week now)))))
 
       (testing "schedule on future time should move it to the next one"
-        (let [next-time (get-next-time (t/plus now (t/minutes 10)) minute-unit 1)]
-          (is (= 11 (in-minutes next-time))))
-        (let [next-time (get-next-time (t/plus now (t/hours 10)) hour-unit 1)]
-          (is (= 11 (in-hours next-time))))
-        (let [next-time (get-next-time (t/plus now (t/days 10)) day-unit 1)]
-          (is (= 11 (in-days next-time))))
-        (let [next-time (get-next-time (t/plus now (t/weeks 10)) week-unit 1)]
-          (is (= 11 (in-weeks next-time))))
-        (let [next-time (get-next-time (t/plus now (t/months 10)) month-unit 1)]
-          ;; Lenient assertion adopted from upstream — `t/in-months` can return
-          ;; 10 or 11 around month-end boundaries even with `t/now` pinned.
-          (is (contains? #{10 11} (in-months next-time))))
-        (let [next-time (get-next-time (t/plus now (t/years 10)) year-unit 1)]
-          (is (= 11 (in-years next-time)))))
+      (let [current-value (t/plus now (t/minutes 10))
+            next-time (get-next-time current-value minute-unit 1)]
+        (is (= (tc/to-long (t/plus current-value (t/minutes 1))) next-time)))
+      (let [current-value (t/plus now (t/hours 10))
+            next-time (get-next-time current-value hour-unit 1)]
+        (is (= (tc/to-long (t/plus current-value (t/hours 1))) next-time)))
+      (let [current-value (t/plus now (t/days 10))
+            next-time (get-next-time current-value day-unit 1)]
+        (is (= (tc/to-long (t/plus current-value (t/days 1))) next-time)))
+      (let [current-value (t/plus now (t/weeks 10))
+            next-time (get-next-time current-value week-unit 1)]
+        (is (= (tc/to-long (t/plus current-value (t/weeks 1))) next-time)))
+      (let [current-value (t/plus now (t/months 10))
+            next-time (get-next-time current-value month-unit 1)]
+        (is (= (tc/to-long (t/plus current-value (t/months 1))) next-time)))
+      (let [current-value (t/plus now (t/years 10))
+            next-time (get-next-time current-value year-unit 1)]
+        (is (= (tc/to-long (t/plus current-value (t/years 1))) next-time))))
 
       (testing "schedule on past time should move it to future"
         (let [next-time (get-next-time (t/minus now (t/minutes 10)) minute-unit 1)]

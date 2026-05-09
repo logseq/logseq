@@ -420,7 +420,7 @@
 
 (defmethod handle :editor/load-blocks [[_ ids]]
   (when (seq ids)
-    ;; not using `<get-blocks` here becuase because we want to
+    ;; not using `<get-blocks` here because we want to
     ;; load all nested children here for copy/export
     (p/all (map (fn [id]
                   (db-async/<get-block (state/get-current-repo) id
