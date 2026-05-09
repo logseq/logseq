@@ -75,6 +75,11 @@
     (is (= 180 (:link-distance decoded)))
     (is (false? (:show-edge-labels? decoded)))))
 
+(deftest depth-control-is-active-only-with-selected-nodes
+  (is (true? (graph/depth-control-disabled? [])))
+  (is (true? (graph/depth-control-disabled? nil)))
+  (is (false? (graph/depth-control-disabled? [{:id "1"}]))))
+
 (deftest tag-selection-toggle-materializes-custom-selection-from-all
   (let [available-tags (graph/tag-options graph-data)
         settings (graph/toggle-selected-tag-id {:selected-tag-ids nil} available-tags "2")]
