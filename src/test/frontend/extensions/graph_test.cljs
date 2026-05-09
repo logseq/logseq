@@ -11,19 +11,19 @@
 (deftest render-container-deps-ignore-incremental-depth
   (let [opts {:nodes []
               :links []
-              :dark? true
+              :dark? false
               :view-mode :tags-and-objects
               :width 640
               :height 480
               :aria-label "Graph"
               :depth 1
-              :arrow-mode :both
+              :show-arrows? true
               :link-distance 72
-              :show-edge-labels? true
+              :show-edge-labels? false
               :on-node-activate identity
               :on-selection-change identity
               :on-rendered identity}
         deps (graph/render-container-deps opts)]
     (is (not (some #{1} deps)))
-    (is (some #{:both} deps))
+    (is (some #{true} deps))
     (is (some #{72} deps))))

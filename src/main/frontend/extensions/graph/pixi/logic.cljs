@@ -91,6 +91,13 @@
       :else
       angle)))
 
+(defn edge-render-runs
+  [links show-arrows?]
+  (mapv #(assoc %
+                :show-arrow? (boolean show-arrows?)
+                :parallel-offset 0)
+        links))
+
 (defn- emoji-native
   [id]
   (when (string? id)

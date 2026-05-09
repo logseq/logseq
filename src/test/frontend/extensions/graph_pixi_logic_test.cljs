@@ -92,6 +92,17 @@
   (is (= (/ js/Math.PI 2) (logic/readable-edge-label-angle 0 0 0 100)))
   (is (= (/ js/Math.PI -2) (logic/readable-edge-label-angle 0 100 0 0))))
 
+(deftest edge-render-runs-separate-bidirectional-links
+  (is (= [{:source "a" :target "b" :show-arrow? true :parallel-offset -1}
+          {:source "b" :target "a" :show-arrow? true :parallel-offset 1}
+          {:source "a" :target "c" :show-arrow? true :parallel-offset 0}]
+         (logic/edge-render-runs [{:source "a" :target "b"}
+                                  {:source "b" :target "a"}
+                                  {:source "a" :target "c"}]
+                                 true)))
+  (is (= [false]
+         (mapv :show-arrow? (logic/edge-render-runs [{:source "a" :target "b"}] false)))))
+
 (deftest icon-display-text-renders-emoji-icons
   (is (= "⭐" (logic/icon-display-text {:type :emoji :id "star"})))
   (is (= "🚀" (logic/icon-display-text {:type "emoji" :id "rocket"})))
