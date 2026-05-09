@@ -179,7 +179,7 @@
                             (conj {:id "home-setting" :systemIcon "ellipsis"})
                             (and show-sync? (not page?))
                             (conj {:id "sync" :systemIcon "circle.fill" :color sync-color
-                                   :size "xsmall"}))
+                                   :size "small"}))
 
                           (= tab "graphs")
                           [{:id "graph-setting" :systemIcon "ellipsis"}
