@@ -19,12 +19,15 @@
               :depth 1
               :show-arrows? false
               :grid-layout? true
+              :show-tag-labels? true
               :link-distance 72
               :show-edge-labels? false
               :on-node-activate identity
               :on-selection-change identity
               :on-rendered identity}
-        deps (graph/render-container-deps opts)]
+        deps (graph/render-container-deps opts)
+        deps-without-tag-labels (graph/render-container-deps (assoc opts :show-tag-labels? false))]
     (is (not (some #{1} deps)))
     (is (some #{true} deps))
+    (is (not= deps deps-without-tag-labels))
     (is (some #{72} deps))))

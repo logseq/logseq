@@ -525,8 +525,8 @@
                        {:id "obj-b" :kind "object" :cluster-id "tag-a" :x 100 :y 220 :radius 8}]
                       :tags-and-objects
                       {:grid-layout? false})]
-    (is (= 180 (:x background)))
-    (is (= 150 (:y background)))))
+    (is (= 179 (:x background)))
+    (is (= 149 (:y background)))))
 
 (deftest tag-cluster-background-colors-come-from-tag-title
   (let [backgrounds (logic/tag-cluster-backgrounds

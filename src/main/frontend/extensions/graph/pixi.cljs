@@ -264,7 +264,7 @@
                                   base-label-ids)
                       label-id-set (set label-ids)]
                   (doseq [id label-ids]
-                    (when-let [{:keys [x y label radius]} (get-node-by-id id)]
+                    (when-let [{:keys [x y label radius kind]} (get-node-by-id id)]
                       (let [entry (or (get @entry-by-id* id)
                                       (let [^js entry-container (new (.-Container PIXI))
                                             ^js bg (new (.-Graphics PIXI))
@@ -304,14 +304,27 @@
                                                 :alpha (if hovered? 0.75 0.42)})
                           (.stroke bg-node)
                           (swap! entry-by-id* assoc id (assoc entry :hovered? hovered?)))
-                        (let [offset (+ 6 (min 16 (* radius scale 0.42)))
-                              title-scale (if hovered? 1.22 1.0)]
+                        (let [tag-label? (= "tag" kind)
+                              offset (+ 6 (min 16 (* radius scale 0.42)))
+                              title-scale (cond
+                                            hovered? 1.22
+                                            tag-label? 1.08
+                                            :else 1.0)
+                              label-width (+ (.-width text-node) 8)
+                              label-height (+ (.-height text-node) 4)]
                           (set! (.-x text-node) 1)
                           (set! (.-y text-node) 0)
                           (set! (.. container-node -scale -x) title-scale)
                           (set! (.. container-node -scale -y) title-scale)
-                          (set! (.-x container-node) (+ sx offset))
-                          (set! (.-y container-node) (- sy (if hovered? 18 10)))
+                          (if tag-label?
+                            (do
+                              (set! (.-x container-node)
+                                    (- sx (/ (* label-width title-scale) 2)))
+                              (set! (.-y container-node)
+                                    (- sy (/ (* label-height title-scale) 2))))
+                            (do
+                              (set! (.-x container-node) (+ sx offset))
+                              (set! (.-y container-node) (- sy (if hovered? 18 10)))))
                           (when hovered?
                             (.setChildIndex label-layer
                                             container-node
@@ -603,16 +616,21 @@
    "tabler-icons-extension, system-ui, sans-serif" (create-icon-text-style
                                                     "tabler-icons-extension, system-ui, sans-serif")})
 
+(defn- node-sprite-kind
+  [_node]
+  "circle")
+
 (defn- create-node-display!
-  [^js circle-texture icon-styles node]
+  [{:keys [circle]} icon-styles node]
   (if-let [{:keys [kind style text]} (icon-display-spec node)]
     (let [^js text (new (.-Text PIXI)
                         #js {:text text
                              :style (get icon-styles style)})]
       (gobj/set text "logseqGraphNodeDisplay" kind)
       text)
-    (let [^js sprite (new (.-Sprite PIXI) circle-texture)]
-      (gobj/set sprite "logseqGraphNodeDisplay" "circle")
+    (let [kind (node-sprite-kind node)
+          ^js sprite (new (.-Sprite PIXI) circle)]
+      (gobj/set sprite "logseqGraphNodeDisplay" kind)
       sprite)))
 
 (defn- display-kind
@@ -623,33 +641,56 @@
   [node]
   (if-let [{:keys [kind]} (icon-display-spec node)]
     kind
-    "circle"))
+    (node-sprite-kind node)))
+
+(defn- node-density-alpha
+  [node emphasis scale]
+  (cond
+    (= "tag" (:kind node)) 1.0
+    (contains? #{:selected :hovered :connected :preview} emphasis) 1.0
+    (>= scale 0.72) 1.0
+    (>= (:degree node 0) 8) 0.88
+    :else
+    (max 0.32 (min 1.0 (+ 0.30 (* scale 0.76))))))
 
 (defn- configure-node-display!
-  [^js display node emphasis]
+  ([^js display node emphasis]
+   (configure-node-display! display node emphasis 1.0))
+  ([^js display node emphasis world-scale]
   (let [kind (display-kind display)
         icon? (contains? #{"emoji" "icon"} kind)
         emoji? (= "emoji" kind)
-        scale (/ (* 2 (:radius node)) (if icon? icon-texture-font-size 96))
+        tag? (= "tag" (:kind node))
+        tag-circle? (and tag? (= "circle" kind))
+        display-radius (if tag-circle? 8.5 (:radius node))
+        scale (/ (* 2 display-radius) (if icon? icon-texture-font-size 96))
+        base-scale (if (and tag? (not tag-circle?)) 1.18 1.0)
         emphasis-scale (case emphasis
                          :selected 1.55
+                         :hovered 1.42
                          :connected 1.22
+                         :preview 1.16
                          1.0)
         alpha (case emphasis
                 :selected 1.0
+                :hovered 1.0
                 :connected 0.95
+                :preview 0.92
                 :dimmed 0.16
-                1.0)]
+                1.0)
+        alpha (* alpha (node-density-alpha node emphasis world-scale))]
     (when-let [^js anchor (.-anchor display)]
       (set! (.-x anchor) 0.5)
       (set! (.-y anchor) 0.5))
     (set! (.-x display) (:x node))
     (set! (.-y display) (:y node))
-    (set! (.-tint display) (if emoji? 0xFFFFFF (:color-int node)))
+    (set! (.-tint display) (cond
+                             emoji? 0xFFFFFF
+                             :else (:color-int node)))
     (set! (.-alpha display) alpha)
-    (set! (.. display -scale -x) (* scale emphasis-scale))
-    (set! (.. display -scale -y) (* scale emphasis-scale))
-    (set! (.-visible display) true)))
+    (set! (.. display -scale -x) (* scale base-scale emphasis-scale))
+    (set! (.. display -scale -y) (* scale base-scale emphasis-scale))
+    (set! (.-visible display) true))))
 
 (defn- remove-display-from-parent!
   [^js display]
@@ -677,76 +718,155 @@
                  (contains? visible-node-ids target)))
           links))
 
+(defn- draw-closed-points!
+  [^js graphics points]
+  (when-let [{:keys [x y]} (first points)]
+    (.moveTo graphics x y)
+    (doseq [{:keys [x y]} (rest points)]
+      (.lineTo graphics x y))
+    (.closePath graphics)))
+
+(defn- cluster-alpha
+  [dark? radius emphasis]
+  (let [base (case emphasis
+               :selected (if dark? 0.105 0.082)
+               :preview (if dark? 0.078 0.060)
+               :dimmed (if dark? 0.014 0.012)
+               (if dark? 0.070 0.052))
+        falloff (max 0.38
+                     (- 1.0 (/ (max 0 (- radius 260)) 1400)))]
+    (* base falloff)))
+
+(defn- cluster-emphasis
+  [cluster-id active-cluster-ids selected-cluster-ids preview-cluster-ids interaction?]
+  (cond
+    (contains? selected-cluster-ids cluster-id) :selected
+    (contains? preview-cluster-ids cluster-id) :preview
+    (contains? active-cluster-ids cluster-id) :preview
+    interaction? :dimmed
+    :else :normal))
+
 (defn- draw-cluster-backgrounds!
-  [^js graphics nodes view-mode dark? visible-node-ids* grid-layout?]
-  (.clear graphics)
-  (doseq [{:keys [x y radius color-int]}
-          (logic/tag-cluster-backgrounds
-           (filter #(visible-node? visible-node-ids* %) nodes)
-           view-mode
-           {:grid-layout? grid-layout?})]
-    (.circle graphics x y radius)
-    (.fill graphics #js {:color (or color-int (color->int (if dark? "#34D399" "#047857")))
-                         :alpha (if dark? 0.10 0.08)})
-    (.setStrokeStyle graphics #js {:width 1.2
-                                   :color (or color-int (color->int (if dark? "#34D399" "#047857")))
-                                   :alpha (if dark? 0.22 0.16)})
-    (.stroke graphics)))
+  ([^js graphics nodes view-mode dark? visible-node-ids* grid-layout?]
+   (draw-cluster-backgrounds! graphics nodes view-mode dark? visible-node-ids* grid-layout? {}))
+  ([^js graphics nodes view-mode dark? visible-node-ids* grid-layout?
+    {:keys [active-ids selected-ids preview-ids hovered-id]}]
+   (.clear graphics)
+   (let [active-ids (set active-ids)
+         selected-ids (set selected-ids)
+         preview-ids (cond-> (set preview-ids)
+                       hovered-id (conj hovered-id))
+         visible-nodes (filter #(visible-node? visible-node-ids* %) nodes)
+         active-cluster-ids (->> visible-nodes
+                                 (filter #(contains? active-ids (:id %)))
+                                 (keep :cluster-id)
+                                 set)
+         selected-cluster-ids (->> visible-nodes
+                                   (filter #(contains? selected-ids (:id %)))
+                                   (keep :cluster-id)
+                                   (into selected-ids))
+         preview-cluster-ids (->> visible-nodes
+                                  (filter #(contains? preview-ids (:id %)))
+                                  (keep :cluster-id)
+                                  (into preview-ids))
+         interaction? (seq selected-ids)]
+     (doseq [{:keys [id x y radius color-int points]}
+             (logic/tag-cluster-backgrounds
+              visible-nodes
+              view-mode
+              {:grid-layout? grid-layout?})]
+       (let [color (or color-int (color->int (if dark? "#34D399" "#047857")))
+             emphasis (cluster-emphasis id
+                                        active-cluster-ids
+                                        selected-cluster-ids
+                                        preview-cluster-ids
+                                        interaction?)
+             fill-alpha (cluster-alpha dark? radius emphasis)
+             stroke-alpha (case emphasis
+                            :selected (if dark? 0.25 0.20)
+                            :preview (if dark? 0.18 0.14)
+                            :dimmed 0.035
+                            (if dark? 0.16 0.13))]
+         (if (seq points)
+           (draw-closed-points! graphics points)
+           (.circle graphics x y radius))
+         (.fill graphics #js {:color color
+                              :alpha fill-alpha})
+         (.setStrokeStyle graphics #js {:width (case emphasis
+                                                 :selected 1.7
+                                                 :preview 1.35
+                                                 1.0)
+                                        :color color
+                                        :alpha stroke-alpha
+                                        :join "round"})
+         (.stroke graphics))))))
 
 (defn- ^:large-vars/cleanup-todo render-nodes!
-  [^js tag-container ^js detail-container layouted-nodes* view-mode highlight-state* visible-node-ids*]
+  [^js tag-container ^js detail-container layouted-nodes* view-mode highlight-state* visible-node-ids* current-layout-nodes]
   (let [^js container (new (.-Container PIXI))
-        texture (create-circle-texture)
+        textures {:circle (create-circle-texture)}
         icon-styles (create-icon-text-styles)
         node-count (count @layouted-nodes*)
         max-nodes (logic/render-node-limit node-count view-mode)
-        virtual? (< max-nodes node-count)]
+        virtual? (< max-nodes node-count)
+        world-scale* (atom 1.0)]
     (.addChild detail-container container)
     (if-not virtual?
-      (let [node-index-by-id (into {} (map-indexed (fn [idx node] [(:id node) idx]) @layouted-nodes*))
-            displays (reduce
+      (let [displays (reduce
                      (fn [acc node]
-                       (let [^js display (create-node-display! texture icon-styles node)
+                       (let [^js display (create-node-display! textures icon-styles node)
                              ^js display-container (if (= "tag" (:kind node))
                                                      tag-container
                                                      container)]
                          (if (visible-node? visible-node-ids* node)
                            (configure-node-display! display
                                                     node
-                                                    (logic/node-emphasis @highlight-state* (:id node)))
+                                                    (logic/node-emphasis @highlight-state* (:id node))
+                                                    @world-scale*)
                            (set! (.-visible display) false))
                          (.addChild display-container display)
                          (assoc acc (:id node) display)))
                      {}
                      @layouted-nodes*)]
         {:container container
-         :texture texture
+         :textures textures
          :displays displays
          :drawn-node-count (count displays)
-         :sync! (fn [_world _width _height _hovered-node-id] nil)
+         :sync! (fn [^js world _width _height _hovered-node-id]
+                  (reset! world-scale* (.. world -scale -x))
+                  (let [node-by-id (into {} (map (fn [node] [(:id node) node]) (current-layout-nodes)))]
+                    (doseq [[id ^js display] displays]
+                      (when-let [node (get node-by-id id)]
+                        (when (visible-node? visible-node-ids* node)
+                          (configure-node-display! display
+                                                   node
+                                                   (logic/node-emphasis @highlight-state* id)
+                                                   @world-scale*))))))
          :sync-styles! (fn []
-                         (doseq [[id ^js display] displays]
-                           (when-let [idx (get node-index-by-id id)]
-                             (when-let [node (get @layouted-nodes* idx)]
+                         (let [node-by-id (into {} (map (fn [node] [(:id node) node]) (current-layout-nodes)))]
+                           (doseq [[id ^js display] displays]
+                             (when-let [node (get node-by-id id)]
                                (if (visible-node? visible-node-ids* node)
                                  (configure-node-display! display
                                                           node
-                                                          (logic/node-emphasis @highlight-state* id))
+                                                          (logic/node-emphasis @highlight-state* id)
+                                                          @world-scale*)
                                  (set! (.-visible display) false))))))})
       (let [displays* (atom {})
-            pool* (atom [])
+            pool* (atom {"circle" []})
             drawn-node-count* (atom 0)
-            acquire-sprite! (fn []
-                              (if-let [^js display (peek @pool*)]
+            acquire-sprite! (fn [kind]
+                              (if-let [^js display (peek (get @pool* kind))]
                                 (do
-                                  (swap! pool* pop)
+                                  (swap! pool* update kind pop)
                                   display)
-                                (new (.-Sprite PIXI) texture)))
+                                (new (.-Sprite PIXI) (get textures (keyword kind)))))
             acquire-display! (fn [node]
                                (if (contains? #{"emoji" "icon"} (node-display-kind node))
-                                 (create-node-display! texture icon-styles node)
-                                 (let [^js display (acquire-sprite!)]
-                                   (gobj/set display "logseqGraphNodeDisplay" "circle")
+                                 (create-node-display! textures icon-styles node)
+                                 (let [kind (node-sprite-kind node)
+                                       ^js display (acquire-sprite! kind)]
+                                   (gobj/set display "logseqGraphNodeDisplay" kind)
                                    display)))
             release-display! (fn [id]
                                (when-let [^js display (get @displays* id)]
@@ -754,7 +874,7 @@
                                  (set! (.-visible display) false)
                                  (swap! displays* dissoc id)
                                  (if (= "circle" (display-kind display))
-                                   (swap! pool* conj display)
+                                   (swap! pool* update (display-kind display) conj display)
                                    (.destroy display))))
             mount-display! (fn [node]
                             (let [id (:id node)
@@ -774,28 +894,32 @@
                                                           container)]
                               (configure-node-display! display
                                                        node
-                                                       (logic/node-emphasis @highlight-state* id))
+                                                       (logic/node-emphasis @highlight-state* id)
+                                                       @world-scale*)
                               (when-not (identical? (.-parent display) display-container)
                                 (remove-display-from-parent! display)
                                 (.addChild display-container display))))]
         {:container container
-         :texture texture
+         :textures textures
          :displays* displays*
          :drawn-node-count drawn-node-count*
          :sync-styles! (fn []
                          (doseq [[id ^js display] @displays*]
-                           (when-let [node (some #(when (= id (:id %)) %) @layouted-nodes*)]
+                           (when-let [node (some #(when (= id (:id %)) %) (current-layout-nodes))]
                              (if (visible-node? visible-node-ids* node)
                                (configure-node-display! display
                                                         node
-                                                        (logic/node-emphasis @highlight-state* id))
+                                                        (logic/node-emphasis @highlight-state* id)
+                                                        @world-scale*)
                                (release-display! id)))))
          :sync! (fn [^js world width height hovered-node-id]
                   (let [scale (.. world -scale -x)
+                        _ (reset! world-scale* scale)
                         viewport (expand-viewport
                                   (world-viewport-rect world width height)
                                   (/ 220 (max scale 0.5)))
-                        visible-nodes (->> @layouted-nodes*
+                        layouted-nodes (current-layout-nodes)
+                        visible-nodes (->> layouted-nodes
                                            (filter #(visible-node? visible-node-ids* %))
                                            (filter #(node-in-viewport? viewport %))
                                            (take max-nodes)
@@ -804,7 +928,7 @@
                                         (if-let [hovered-node (some (fn [node]
                                                                       (when (= hovered-node-id (:id node))
                                                                         node))
-                                                                    @layouted-nodes*)]
+                                                                    layouted-nodes)]
                                           (if (visible-node? visible-node-ids* hovered-node)
                                             (vec (cons hovered-node
                                                        (remove #(= hovered-node-id (:id %)) visible-nodes)))
@@ -1029,7 +1153,7 @@
         (.removeEventListener canvas "wheel" on-wheel)))))
 
 (defn- ^:large-vars/cleanup-todo setup-scene!
-  [^js app ^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids depth show-arrows? link-distance show-edge-labels? grid-layout?]} render-start]
+  [^js app ^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids background-visible-node-ids depth show-arrows? link-distance show-edge-labels? show-tag-labels? grid-layout?]} render-start]
   (set! (.-innerHTML container) "")
   (let [^js canvas (or (.-canvas app) (.-view app))
         ^js stage (.-stage app)
@@ -1060,6 +1184,10 @@
         display-links (logic/display-links links @layouted-nodes*)
         all-node-id-set (set (map :id @layouted-nodes*))
         visible-node-ids* (atom (visible-node-id-set @layouted-nodes* visible-node-ids))
+        background-visible-node-ids* (atom (visible-node-id-set
+                                            @layouted-nodes*
+                                            (or background-visible-node-ids
+                                                visible-node-ids)))
         base-visible-link-list (fn []
                                  (visible-links display-links @visible-node-ids*))
         node-index-by-id (into {} (map-indexed (fn [idx node] [(:id node) idx]) @layouted-nodes*))
@@ -1072,13 +1200,39 @@
         _ (set! (.. world -scale -y) (:scale initial-transform))
         neighbor-map (build-neighbor-map display-links)
         highlighted-node-ids* (atom #{})
-        highlight-state* (atom (logic/highlight-state @highlighted-node-ids* neighbor-map @depth*))
+        hovered-node-id* (atom nil)
+        node-kind (fn [node-id]
+                    (:kind (get @layout-by-id* node-id)))
+        overlapping-tag-ids (fn [node-ids]
+                              (let [object-ids (->> node-ids
+                                                    (mapcat #(get neighbor-map %))
+                                                    (filter #(not= "tag" (node-kind %)))
+                                                    set)]
+                                (->> object-ids
+                                     (mapcat #(get neighbor-map %))
+                                     (filter #(= "tag" (node-kind %)))
+                                     set)))
+        highlight-state-value (fn []
+                                (let [base (logic/highlight-state @highlighted-node-ids*
+                                                                  neighbor-map
+                                                                  @depth*)
+                                      selected-tag-ids (set (filter #(= "tag" (node-kind %))
+                                                                    @highlighted-node-ids*))
+                                      overlapping-tags (overlapping-tag-ids selected-tag-ids)
+                                      active-ids (set/union (:active-ids base) overlapping-tags)
+                                      connected-ids (set/difference active-ids
+                                                                    @highlighted-node-ids*)]
+                                  (assoc base
+                                         :active-ids active-ids
+                                         :connected-ids connected-ids
+                                         :hovered-id @hovered-node-id*)))
+        highlight-state* (atom (highlight-state-value))
         visible-link-list (fn []
                             (logic/highlight-visible-links
                              (base-visible-link-list)
                              @highlight-state*))
         _ (.addChild detail-layer cluster-background-layer)
-        _ (draw-cluster-backgrounds! cluster-background-layer @layouted-nodes* normalized-view-mode dark? visible-node-ids* grid-layout?)
+        _ (draw-cluster-backgrounds! cluster-background-layer @layouted-nodes* normalized-view-mode dark? background-visible-node-ids* grid-layout? @highlight-state*)
         current-layout-nodes (fn []
                                (vals (logic/current-layout-by-id
                                       @layout-by-id*
@@ -1088,12 +1242,13 @@
                                                                nodes
                                                                normalized-view-mode
                                                                dark?
-                                                               visible-node-ids*
-                                                               grid-layout?))
+                                                               background-visible-node-ids*
+                                                               grid-layout?
+                                                               @highlight-state*))
         edge-render-info (render-edges! detail-layer @layout-by-id* (visible-link-list) dark? normalized-view-mode render-opts)
         edge-label-render-info (render-edge-labels! label-layer-wrapper world width height @layout-by-id* (visible-link-list) dark? normalized-view-mode show-edge-labels?)
         _ (.addChild detail-layer drag-edge-layer)
-        node-render-info (render-nodes! tag-layer detail-layer layouted-nodes* normalized-view-mode highlight-state* visible-node-ids*)
+        node-render-info (render-nodes! tag-layer detail-layer layouted-nodes* normalized-view-mode highlight-state* visible-node-ids* current-layout-nodes)
         _ ((:sync! node-render-info) world width height nil)
         all-node-index* (atom (index-layouted-nodes (filter #(visible-node? visible-node-ids* %) @layouted-nodes*)))
         tag-node-index* (atom (index-layouted-nodes (filter #(and (visible-node? visible-node-ids* %)
@@ -1112,7 +1267,6 @@
                                                      @layout-by-id*
                                                      @preview-layout-by-id*)
                                                     id)))
-        hovered-node-id* (atom nil)
         drag-session* (atom nil)
         detail-target-alpha (atom 1.0)
         label-target-alpha (atom 0.0)
@@ -1147,8 +1301,7 @@
                                    (.resize (.-renderer app) width height)
                                    (mark-transform!))))
         sync-highlight! (fn []
-                          (reset! highlight-state*
-                                  (logic/highlight-state @highlighted-node-ids* neighbor-map @depth*))
+                          (reset! highlight-state* (highlight-state-value))
                           (sync-cluster-backgrounds! (current-layout-nodes))
                           (draw-edges! (:graphics edge-render-info)
                                        (logic/current-layout-by-id
@@ -1173,6 +1326,9 @@
                             (let [{:keys [width height]} @size*]
                               ((:sync! node-render-info) world width height @hovered-node-id*)))
                           (mark-transform!))
+        sync-hover-preview! (fn [node-id]
+                              (reset! hovered-node-id* node-id)
+                              (mark-transform!))
         update-highlight! (fn [node remove?]
                             (swap! highlighted-node-ids*
                                    logic/update-highlighted-node-ids
@@ -1237,29 +1393,13 @@
                                                          @layout-by-id*
                                                          positions)]
                                (reset! preview-layout-by-id* preview-layout-by-id)
-                               (sync-cluster-backgrounds! (vals preview-layout-by-id))
-                               (draw-edges! (:graphics edge-render-info)
-                                            preview-layout-by-id
-                                            (visible-link-list)
-                                            dark?
-                                            normalized-view-mode
-                                            @highlight-state*
-                                            render-opts)
-                               (let [{:keys [width height]} @size*]
-                                 ((:sync! edge-label-render-info)
-                                  world
-                                  width
-                                  height
-                                  preview-layout-by-id
-                                  (visible-link-list)))
                                (draw-drag-neighbor-edges! drag-edge-layer
                                                           preview-layout-by-id
                                                           (filter #(contains? @visible-node-ids* %)
                                                                   (get neighbor-map root-id))
                                                           next-x
                                                           next-y
-                                                          dark?))
-                             (mark-transform!)))
+                                                          dark?))))
         commit-node-drag! (fn [node next-x next-y]
                             (let [node-id (:id node)
                                   positions (or (:positions @drag-session*)
@@ -1320,13 +1460,23 @@
                                (visible-link-list))))
                           (when-let [label-layer (:container label-manager)]
                             (let [scale (.. world -scale -x)
+                                  tag-labels-only? (and show-tag-labels?
+                                                        (= normalized-view-mode :tags-and-objects)
+                                                        (not (:label-visible? @visibility-state*))
+                                                        (empty? @highlighted-node-ids*)
+                                                        (nil? @hovered-node-id*))
+                                  label-visibility-state (cond-> @visibility-state*
+                                                          tag-labels-only?
+                                                          (assoc :label-visible? true)
+                                                          true
+                                                          (assoc :linked-label-visible?
+                                                                 (>= scale logic/linked-label-visible-scale)))
                                   {:keys [target-alpha update? hovered-only? selected-only? active-only?]}
                                   (logic/label-render-state
                                    @hovered-node-id*
                                    @highlighted-node-ids*
                                    (:active-ids @highlight-state*)
-                                   (assoc @visibility-state*
-                                          :linked-label-visible? (>= scale logic/linked-label-visible-scale))
+                                   label-visibility-state
                                    (.-alpha label-layer))]
                               (ticker-step label-layer target-alpha)
                               (when (and dirty? update?)
@@ -1336,8 +1486,15 @@
                                    width
                                    height
                                    @hovered-node-id*
-                                   {:node-visible? (if (:detail-expanded? @visibility-state*)
+                                   {:node-visible? (cond
+                                                     tag-labels-only?
+                                                     #(and (visible-node? visible-node-ids* %)
+                                                           (= "tag" (:kind %)))
+
+                                                     (:detail-expanded? @visibility-state*)
                                                      #(visible-node? visible-node-ids* %)
+
+                                                     :else
                                                      #(and (visible-node? visible-node-ids* %)
                                                            (= "tag" (:kind %))))
                                     :hovered-only? hovered-only?
@@ -1347,14 +1504,21 @@
                                     :active-only? active-only?})))))
                           (when dirty?
                             (reset! transform-dirty? false))))
-        update-visibility! (fn [next-visible-node-ids]
+        update-visibility! (fn [next-visible-node-ids next-background-visible-node-ids]
                              (let [next-visible-node-ids (if (some? next-visible-node-ids)
                                                            (visible-node-id-set
                                                             @layouted-nodes*
                                                             next-visible-node-ids)
-                                                           all-node-id-set)]
-                               (when (not= next-visible-node-ids @visible-node-ids*)
+                                                           all-node-id-set)
+                                   next-background-visible-node-ids (if (some? next-background-visible-node-ids)
+                                                                      (visible-node-id-set
+                                                                       @layouted-nodes*
+                                                                       next-background-visible-node-ids)
+                                                                      next-visible-node-ids)]
+                               (when (or (not= next-visible-node-ids @visible-node-ids*)
+                                         (not= next-background-visible-node-ids @background-visible-node-ids*))
                                  (reset! visible-node-ids* next-visible-node-ids)
+                                 (reset! background-visible-node-ids* next-background-visible-node-ids)
                                  (let [next-highlighted-node-ids (set/intersection
                                                                   @highlighted-node-ids*
                                                                   next-visible-node-ids)]
@@ -1410,9 +1574,7 @@
                         :node-selected? #(contains? @highlighted-node-ids* %)
                         :on-scale-change update-detail-visibility!
                         :on-transform mark-transform!
-                        :on-hover-node-change (fn [node-id]
-                                                (reset! hovered-node-id* node-id)
-                                                (mark-transform!))
+                        :on-hover-node-change sync-hover-preview!
                         :on-node-drag apply-node-drag!
                         :on-node-drag-end commit-node-drag!})
         resize-observer (when (exists? js/ResizeObserver)
@@ -1442,16 +1604,18 @@
                 (.remove (.-ticker app) animate-layer)
                 ((:destroy! label-manager))
                 ((:destroy! edge-label-render-info))
-                (when-let [^js texture (:texture node-render-info)]
+                (doseq [^js texture (vals (:textures node-render-info))]
                   (.destroy texture true)))
      :canvas canvas}))
 
 (defn update-visibility!
-  [^js container visible-node-ids]
+  ([^js container visible-node-ids]
+   (update-visibility! container visible-node-ids nil))
+  ([^js container visible-node-ids background-visible-node-ids]
   (when-let [update-visibility! (some-> (get @*graph-instances container)
                                         :update-visibility!)]
-    (update-visibility! visible-node-ids))
-  nil)
+    (update-visibility! visible-node-ids background-visible-node-ids))
+  nil))
 
 (defn update-depth!
   [^js container depth]
@@ -1461,7 +1625,7 @@
   nil)
 
 (defn render-container!
-  [^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids depth show-arrows? link-distance show-edge-labels? grid-layout?]}]
+  [^js container {:keys [nodes links dark? on-node-activate on-selection-change on-rendered view-mode visible-node-ids background-visible-node-ids depth show-arrows? link-distance show-edge-labels? show-tag-labels? grid-layout?]}]
   (when container
     (destroy-instance! container)
     (let [token (get (swap! *render-tokens update container (fnil inc 0)) container)
@@ -1484,10 +1648,12 @@
                                                    :on-rendered on-rendered
                                                    :view-mode view-mode
                                                    :visible-node-ids visible-node-ids
+                                                   :background-visible-node-ids background-visible-node-ids
                                                    :depth depth
                                                    :show-arrows? show-arrows?
                                                    :link-distance link-distance
                                                    :show-edge-labels? show-edge-labels?
+                                                   :show-tag-labels? show-tag-labels?
                                                    :grid-layout? grid-layout?}
                                     render-start))
                (.destroy ^js app))))

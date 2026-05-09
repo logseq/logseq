@@ -16,6 +16,8 @@
 (def ^:private default-show-arrows? false)
 (def ^:private default-link-distance 72)
 (def ^:private default-show-edge-labels? true)
+(def ^:private default-show-tag-labels? false)
+(def ^:private default-show-tags-only? false)
 (def ^:private default-grid-layout? true)
 (def ^:private default-settings {:view-mode :tags-and-objects
                                  :selected-tag-ids nil
@@ -24,6 +26,8 @@
                                  :show-arrows? default-show-arrows?
                                  :link-distance default-link-distance
                                  :show-edge-labels? default-show-edge-labels?
+                                 :show-tag-labels? default-show-tag-labels?
+                                 :show-tags-only? default-show-tags-only?
                                  :grid-layout? default-grid-layout?
                                  :open-groups default-open-groups})
 
@@ -54,13 +58,15 @@
   (int (clamp-number value 36 180 default-link-distance)))
 
 (defn encode-settings
-  [{:keys [view-mode selected-tag-ids created-at-filter depth show-arrows? link-distance show-edge-labels? grid-layout? open-groups]}]
+  [{:keys [view-mode selected-tag-ids created-at-filter depth show-arrows? link-distance show-edge-labels? show-tag-labels? show-tags-only? grid-layout? open-groups]}]
   (clj->js
    (cond-> {:viewMode (name (valid-view-mode view-mode))
             :depth (valid-depth depth)
             :showArrows (boolean show-arrows?)
             :linkDistance (valid-link-distance link-distance)
             :showEdgeLabels (boolean show-edge-labels?)
+            :showTagLabels (boolean show-tag-labels?)
+            :showTagsOnly (boolean show-tags-only?)
             :gridLayout (boolean grid-layout?)
             :openGroups (mapv name (or open-groups default-open-groups))}
      (some? selected-tag-ids)
@@ -97,6 +103,12 @@
 
              (contains? data :showEdgeLabels)
              (assoc :show-edge-labels? (true? (:showEdgeLabels data)))
+
+             (contains? data :showTagLabels)
+             (assoc :show-tag-labels? (true? (:showTagLabels data)))
+
+             (contains? data :showTagsOnly)
+             (assoc :show-tags-only? (true? (:showTagsOnly data)))
 
              (contains? data :gridLayout)
              (assoc :grid-layout? (true? (:gridLayout data)))
@@ -269,6 +281,21 @@
                        (filter #(contains? visible-node-ids (:id %)))
                        vec)
            :links selected-links)))
+
+(defn tag-node-ids
+  [graph-data]
+  (->> (:nodes graph-data)
+       (filter #(= "tag" (:kind %)))
+       (map :id)
+       set))
+
+(defn visible-node-id-set
+  [graph-data tags-only?]
+  (let [node-ids (set (map :id (:nodes graph-data)))]
+    (if tags-only?
+      (set (filter node-ids (tag-node-ids graph-data)))
+      node-ids)))
+
 
 (defn- settings-toggle
   [settings group-id]
@@ -450,11 +477,22 @@
                   #(set-settings! (fn [settings]
                                     (assoc settings :show-edge-labels? %))))
                  (when (= view-mode :tags-and-objects)
-                   (layout-toggle
-                    (t :graph/layout-grid-layout)
-                    grid-layout?
-                    #(set-settings! (fn [settings]
-                                      (assoc settings :grid-layout? %)))))]})))
+                   [:<>
+                    (layout-toggle
+                     (t :graph/layout-tags-only)
+                     (true? (:show-tags-only? settings))
+                     #(set-settings! (fn [settings]
+                                       (assoc settings :show-tags-only? %))))
+                    (layout-toggle
+                     (t :graph/layout-tag-names)
+                     (true? (:show-tag-labels? settings))
+                     #(set-settings! (fn [settings]
+                                       (assoc settings :show-tag-labels? %))))
+                    (layout-toggle
+                     (t :graph/layout-grid-layout)
+                     grid-layout?
+                     #(set-settings! (fn [settings]
+                                       (assoc settings :grid-layout? %))))])]})))
 
 (defn time-travel-range
   [graph-data]
@@ -704,7 +742,12 @@
                                  mode-graph-data
                                  (:created-at-filter settings)))
           visible-node-ids (when filtered-graph-data
-                             (set (map :id (:nodes filtered-graph-data))))]
+                             (visible-node-id-set
+                              filtered-graph-data
+                              (and (= view-mode :tags-and-objects)
+                                   (true? (:show-tags-only? settings)))))
+          background-visible-node-ids (when filtered-graph-data
+                                        (set (map :id (:nodes filtered-graph-data))))]
       [:div#global-graph.graph-root
        (selected-node-status selected-nodes)
        (settings-panel settings-open?
@@ -735,10 +778,12 @@
           (graph/graph-2d {:nodes (:nodes mode-graph-data)
                            :links (:links mode-graph-data)
                            :visible-node-ids visible-node-ids
+                           :background-visible-node-ids background-visible-node-ids
                            :depth (valid-depth (:depth settings))
                            :show-arrows? (true? (:show-arrows? settings))
                            :link-distance (valid-link-distance (:link-distance settings))
                            :show-edge-labels? (true? (:show-edge-labels? settings))
+                           :show-tag-labels? (true? (:show-tag-labels? settings))
                            :grid-layout? (true? (:grid-layout? settings))
                            :dark? dark?
                            :view-mode view-mode

@@ -237,10 +237,12 @@
     []))
 
 (defn node-emphasis
-  [{:keys [selected-ids connected-ids select-mode?]} node-id]
+  [{:keys [selected-ids connected-ids preview-ids hovered-id select-mode?]} node-id]
   (cond
     (contains? selected-ids node-id) :selected
+    (= hovered-id node-id) :hovered
     (contains? connected-ids node-id) :connected
+    (contains? preview-ids node-id) :preview
     select-mode? :dimmed
     :else :normal))
 
@@ -377,10 +379,14 @@
   [hex-color]
   (js/parseInt (subs hex-color 1) 16))
 
+(defn- tag-node-color
+  [dark?]
+  (if dark? "#8F78B8" "#B9A5E6"))
+
 (defn- node-color
   [kind dark?]
   (case kind
-    "tag" (if dark? "#B69AE8" "#8B6CCB")
+    "tag" (tag-node-color dark?)
     "property" (if dark? "#A08D85" "#817068")
     (if dark? "#858D98" "#E6E6E6")))
 
@@ -440,11 +446,13 @@
 (defn- node-radius
   [kind degree]
   (let [base (case kind
-               "tag" 5.6
+               "tag" 7.4
                "object" 4.4
                "journal" 4.4
                3.8)]
-    (+ base (min 12.0 (* 3.4 (js/Math.sqrt (double degree)))))))
+    (+ base (min (if (= kind "tag") 15.0 12.0)
+                 (* (if (= kind "tag") 4.1 3.4)
+                    (js/Math.sqrt (double degree)))))))
 
 (defn- decorate-node
   [node degree dark? x y]
@@ -512,6 +520,68 @@
          large-graph-render-node-limit
          node-count)))
 
+(defn- point-cross
+  [o a b]
+  (- (* (- (:x a) (:x o))
+        (- (:y b) (:y o)))
+     (* (- (:y a) (:y o))
+        (- (:x b) (:x o)))))
+
+(defn- hull-half
+  [points]
+  (reduce
+   (fn [h point]
+     (let [h (loop [h h]
+               (if (and (>= (count h) 2)
+                        (not (pos? (point-cross (nth h (- (count h) 2))
+                                                (peek h)
+                                                point))))
+                 (recur (pop h))
+                 h))]
+       (conj h point)))
+   []
+   points))
+
+(defn- convex-hull
+  [points]
+  (let [points (->> points
+                    (distinct)
+                    (sort-by (juxt :x :y))
+                    vec)]
+    (if (< (count points) 3)
+      points
+      (let [lower (hull-half points)
+            upper (hull-half (rseq points))]
+        (vec (concat (butlast lower)
+                     (butlast upper)))))))
+
+(defn- cluster-boundary-points
+  [nodes center-x center-y]
+  (let [points (mapcat
+                (fn [{:keys [x y radius]}]
+                  (let [padding (+ (or radius 0) 34)
+                        diagonal (* padding 0.72)]
+                    [{:x (+ x padding) :y y}
+                     {:x (+ x diagonal) :y (+ y diagonal)}
+                     {:x x :y (+ y padding)}
+                     {:x (- x diagonal) :y (+ y diagonal)}
+                     {:x (- x padding) :y y}
+                     {:x (- x diagonal) :y (- y diagonal)}
+                     {:x x :y (- y padding)}
+                     {:x (+ x diagonal) :y (- y diagonal)}]))
+                nodes)
+        hull (convex-hull points)]
+    (when (>= (count hull) 3)
+      (->> hull
+           (map (fn [{:keys [x y]}]
+                  (let [dx (- x center-x)
+                        dy (- y center-y)
+                        distance (max 1 (js/Math.sqrt (+ (* dx dx) (* dy dy))))
+                        soften 16]
+                    {:x (+ x (* (/ dx distance) soften))
+                     :y (+ y (* (/ dy distance) soften))})))
+           vec))))
+
 (def ^:private tag-cluster-color-palette
   ["#14B8A6" "#3B82F6" "#8B5CF6" "#EC4899"
    "#F59E0B" "#10B981" "#EF4444" "#06B6D4"
@@ -577,6 +647,7 @@
                    :x center-x
                    :y center-y
                    :radius radius
+                   :points (cluster-boundary-points nodes center-x center-y)
                    :color-int (tag-title-color-int (or (:label tag-node
                                                                cluster-id)))})))
          (sort-by :id)

@@ -25,6 +25,7 @@
    (:show-arrows? opts)
    (:link-distance opts)
    (:show-edge-labels? opts)
+   (:show-tag-labels? opts)
    (:grid-layout? opts)
    (:on-node-activate opts)
    (:on-selection-change opts)
@@ -43,8 +44,10 @@
     (hooks/use-effect!
      (fn []
        (when-let [container (hooks/deref container-ref)]
-         (pixi/update-visibility! container (:visible-node-ids opts))))
-     [(:visible-node-ids opts)])
+         (pixi/update-visibility! container
+                                  (:visible-node-ids opts)
+                                  (:background-visible-node-ids opts))))
+     [(:visible-node-ids opts) (:background-visible-node-ids opts)])
     (hooks/use-effect!
      (fn []
        (when-let [container (hooks/deref container-ref)]
