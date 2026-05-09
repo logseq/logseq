@@ -159,12 +159,31 @@
                                     :preview-target-db-id (:db/id block)
                                     :property :logseq.property/icon})])))
 
-(rum/defc default-icon-row < rum/reactive
-  "Renders the Default Icon property for classes.
-   Uses a single icon-picker button that opens the universal icon search popup
-   supporting all icon types (icon, emoji, avatar, text, image)."
-  [block _editing?]
-  (let [block (or (model/sub-block (:db/id block)) block)
+;; Renders the Default Icon property for classes. Uses a single
+;; icon-picker button that opens the universal icon search popup
+;; supporting all icon types (icon, emoji, avatar, text, image).
+(rum/defcs default-icon-row < rum/reactive db-mixins/query
+  (rum/local [] ::all-instances)
+  (rum/local nil ::last-fetched-block-id)
+  [state block _editing?]
+  (let [block-id (:db/id block)
+        repo (state/get-current-repo)
+        *all-instances (::all-instances state)
+        *last-fetched (::last-fetched-block-id state)
+        ;; Async fetch on first render or when block-id changes. Tag
+        ;; instances aren't eagerly loaded into the main-thread conn
+        ;; — Logseq pulls only a partial subset on init — so
+        ;; `(:block/_tags class)` returns empty here at render time
+        ;; even though the worker has the full data. `<get-tag-objects`
+        ;; queries the worker async; result lands in `::all-instances`.
+        _ (when (and repo block-id (not= @*last-fetched block-id))
+            (reset! *last-fetched block-id)
+            (-> (db-async/<get-tag-objects repo block-id)
+                (p/then (fn [result]
+                          (reset! *all-instances (vec (or result [])))))
+                (p/catch (fn [_] (reset! *all-instances [])))))
+        all-instances (rum/react *all-instances)
+        block (or (model/sub-block block-id) block)
         own-value (:logseq.property.class/default-icon block)
         inherited-value (when-not own-value
                           (some :logseq.property.class/default-icon
@@ -175,6 +194,58 @@
               (model/sub-block (:db/id parent))))
         current-value (or own-value inherited-value)
         page-title (:block/title block)
+        ;; Subscribe to each loaded instance so the row's reset
+        ;; affordance count updates live when instances diverge or
+        ;; re-align (e.g., via the table batch-toolbar).
+        _ (doseq [inst all-instances]
+            (model/sub-block (:db/id inst)))
+        diverged-instances (vec (filter :logseq.property/icon all-instances))
+        diverged-count (count diverged-instances)
+        ;; Bounded preview: show up to 5 affected rows with their
+        ;; current (custom) icon + title, then "and N more" if there
+        ;; are extras. For a single divergence we skip the list — the
+        ;; title's count is enough information on its own.
+        preview-cap 5
+        preview-rows (take preview-cap diverged-instances)
+        remaining (max 0 (- diverged-count preview-cap))
+        reset-instances!
+        (fn []
+          (-> (shui/dialog-confirm!
+               {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
+                        [:span.top-1.relative
+                         (shui/tabler-icon "alert-triangle")]
+                        (str "Clear " diverged-count " customized icon"
+                             (when (not= 1 diverged-count) "s") "?")]
+                :content [:div.flex.flex-col.gap-3
+                          [:p.opacity-70.text-sm.leading-relaxed
+                           (str "These "
+                                (if (= 1 diverged-count) "row" "rows")
+                                " will use the default icon instead of "
+                                (if (= 1 diverged-count) "its" "their")
+                                " custom one"
+                                (when (not= 1 diverged-count) "s")
+                                (if (> diverged-count 1) ":" "."))]
+                          (when (> diverged-count 1)
+                            [:ul.flex.flex-col.gap-2.text-sm.m-0.p-0.list-none
+                             (for [inst preview-rows]
+                               [:li.flex.items-center.gap-2
+                                {:key (str (:db/id inst))}
+                                [:span.flex-shrink-0.inline-flex.items-center.justify-center
+                                 {:style {:width 18 :height 18}}
+                                 (icon-component/icon
+                                  (:logseq.property/icon inst)
+                                  {:size 16 :color? true})]
+                                [:span.truncate (or (:block/title inst) "(untitled)")]])
+                             (when (pos? remaining)
+                               [:li.opacity-60.text-xs.pl-7
+                                (str "and " remaining " more")])])]
+                :outside-cancel? true})
+              (p/then
+               (fn [_]
+                 (property-handler/batch-remove-block-property!
+                  (map :db/id diverged-instances)
+                  :logseq.property/icon)))
+              (p/catch (fn [_] nil))))
         ;; Enrich type-only values for display preview.
         ;; Without this, normalize-icon produces {:data {:value nil}} for
         ;; type-only maps like {:type :avatar}, causing invisible buttons.
@@ -206,10 +277,15 @@
                       (property-handler/remove-block-property!
                        (:db/id block)
                        :logseq.property.class/default-icon)))]
-    [:div.flex.flex-row.items-center.gap-2.w-full.cursor-pointer
+    [:div.flex.flex-row.items-center.gap-2.cursor-pointer
      {:on-click (fn [^js e]
                   ;; Delegate clicks on the surrounding row to the icon-picker
-                  ;; button, but skip if the button itself was clicked
+                  ;; button, but skip if the button itself was clicked.
+                  ;; `.querySelector "button"` returns the FIRST button — the
+                  ;; icon-picker — so the reset button (which sits inline to
+                  ;; its right) is unaffected; its own `:on-click` stops
+                  ;; propagation so this delegate never fires for its
+                  ;; clicks.
                   (when-not (some-> (.-target e) (.closest "button"))
                     (when-let [btn (some-> (.-currentTarget e) (.querySelector "button"))]
                       (.click btn))))}
@@ -220,6 +296,25 @@
                                   :page-title page-title
                                   :default-icon? true
                                   :preview-target-db-id (:db/id block)
+                                  ;; Inheriting instances — those
+                                  ;; without their own
+                                  ;; `:logseq.property/icon` — pick up
+                                  ;; this default at render time. Pass
+                                  ;; their db-ids as `:preview-inheritor-db-ids`
+                                  ;; so the picker's hover broadcasts
+                                  ;; reach those row icons (which render
+                                  ;; `:logseq.property/icon` via
+                                  ;; inheritance) WITHOUT also matching
+                                  ;; the class entity's own
+                                  ;; `:logseq.property/icon` page-title /
+                                  ;; sidebar icons (those are different
+                                  ;; from default-icon, just same-named
+                                  ;; on the same entity).
+                                  :preview-inheritor-db-ids
+                                  (->> all-instances
+                                       (remove :logseq.property/icon)
+                                       (map :db/id)
+                                       set)
                                   ;; Scope the hover-preview to the
                                   ;; default-icon property so this row's
                                   ;; picker doesn't leak previews into
@@ -227,7 +322,38 @@
                                   ;; to `:logseq.property/icon`-scoped
                                   ;; previews on the same class entity).
                                   :property :logseq.property.class/default-icon
-                                  :icon-props {:size 20}})]))
+                                  :icon-props {:size 20}})
+     ;; Inline "reset instances" affordance — visible only when at
+     ;; least one instance has its own `:logseq.property/icon` set
+     ;; (i.e., diverges from this default). Sits next to the icon
+     ;; preview (no `ml-auto`) so it reads as a sibling-action on the
+     ;; default the user is editing, not a far-edge utility. Clicking
+     ;; opens a confirm dialog; on confirm, the per-instance
+     ;; overrides are batch-removed so the rows fall back to
+     ;; inheritance. Hidden when nothing is diverged so the row stays
+     ;; quiet in the common case. Icon + short copy mirrors Logseq's
+     ;; section-header `· N` count convention; tooltip carries the
+     ;; full long-form description.
+     (when (pos? diverged-count)
+       (shui/tooltip-provider
+        (shui/tooltip
+         {:delayDuration 400}
+         (shui/tooltip-trigger
+          {:as-child true}
+          (shui/button
+           {:variant :ghost
+            :size :sm
+            :class "h-7 px-2 gap-1.5 text-xs font-normal opacity-60 hover:opacity-100"
+            :on-click (fn [^js e]
+                        (.stopPropagation e)
+                        (reset-instances!))}
+           (shui/tabler-icon "rotate-clockwise" {:size 13})
+           [:span (str "Clear " diverged-count " customized icon"
+                       (when (not= 1 diverged-count) "s"))]))
+         (shui/tooltip-content
+          (str "Clear " diverged-count " customized icon"
+               (when (not= 1 diverged-count) "s")
+               " — these rows will inherit from this default again")))))]))
 
 (defn select-type?
   [block property]

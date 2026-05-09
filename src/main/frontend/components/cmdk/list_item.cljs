@@ -2,8 +2,6 @@
   (:require
    ["remove-accents" :as remove-accents]
    [clojure.string :as string]
-   [frontend.components.icon :as icon-component]
-   [frontend.handler.block :as block-handler]
    [goog.string :as gstring]
    [logseq.shui.ui :as shui]
    [rum.core :as rum]))
@@ -111,9 +109,16 @@
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
        [:div {:class "text-sm font-medium text-gray-12 flex items-center gap-2 flex-wrap"}
-        (block-handler/block-title-with-icon source-block
-                                             (highlight-query text)
-                                             icon-component/icon)
+        ;; Title only — the icon is already rendered in the dedicated
+        ;; slot above (lines ~97-109) via the caller's `:icon` prop,
+        ;; which uses `get-node-icon-cp` to resolve own/inherited icons
+        ;; consistently. `block-title-with-icon` would have prepended
+        ;; another `(:logseq.property/icon source-block)` inline, which
+        ;; for blocks with their own icon override (e.g. an instance row
+        ;; that diverges from its class default) renders the same icon
+        ;; twice side-by-side. Inheriting rows hid the bug because the
+        ;; inline render is nil when the block has no own icon.
+        (or (highlight-query text) (:block/title source-block))
         text-badge
         (when info
           [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]

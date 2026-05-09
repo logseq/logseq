@@ -1857,6 +1857,27 @@
   border-radius: 22%;
 }
 
+/* Asset-grid tiles follow the avatar shape. The base avatar-mode
+   rules above clip every grid tile (`.image-asset-item.avatar-mode`,
+   `.web-image-item.avatar-mode`, `.web-image-placeholder.avatar-mode`)
+   to a circle. When the avatar is set to rounded-rect, the asset-
+   picker root gets `data-avatar-shape="rounded-rect"`, and these
+   selectors override the circle clip with the same 22% radius the
+   avatar root uses — so the cropped thumbnails mirror the silhouette
+   the user just chose. The two `> div` clauses cover the loading
+   skeleton (`.bg-gray-04.animate-pulse`) and the ghost-asset
+   placeholder; `:not(.external-badge):not(.saved-badge)` exempts the
+   corner badges so they keep their own 4px chip radius. */
+.asset-picker[data-avatar-shape="rounded-rect"] .image-asset-item.avatar-mode,
+.asset-picker[data-avatar-shape="rounded-rect"] .image-asset-item.avatar-mode img,
+.asset-picker[data-avatar-shape="rounded-rect"] .image-asset-item.avatar-mode > div,
+.asset-picker[data-avatar-shape="rounded-rect"] .web-image-item.avatar-mode,
+.asset-picker[data-avatar-shape="rounded-rect"] .web-image-item.avatar-mode img,
+.asset-picker[data-avatar-shape="rounded-rect"] .web-image-item.avatar-mode > div:not(.external-badge):not(.saved-badge),
+.asset-picker[data-avatar-shape="rounded-rect"] .web-image-placeholder.avatar-mode {
+  border-radius: 22%;
+}
+
 /* ============================================================
    Generic toolbar / footer-rail link utility.
    Mirrors the pattern from Settings → Keymap shortcut popover

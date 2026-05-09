@@ -49,6 +49,95 @@
 (defonce *upload-status (atom ""))
 (defonce *uploading-files (atom {}))
 
+;; ============================================================
+;; Icon hover-preview helpers
+;;
+;; The picker broadcasts hover state to `:ui/icon-hover-preview`,
+;; which page-icon readers (sidebar, cmdk, page-title, table rows)
+;; consume to render a live preview of what the user is hovering.
+;;
+;; Two orthogonal preview signals share the same state slot:
+;;
+;;   :icon  — full icon override from a tile/grid hover
+;;            (e.g. hovering the Avatar tile in the Custom tab).
+;;   :color — color-only preview from a color-swatch hover.
+;;
+;; They MUST compose: hovering an avatar tile and then moving onto a
+;; color swatch should keep showing the avatar with the previewed
+;; color overlaid. Direct `state/set-state!` writes overwrite
+;; siblings, so use these helpers instead — they merge fields when
+;; the scope (db-id + db-ids) matches the existing preview, and
+;; replace otherwise.
+;;
+;; The envelope carries two independent scopes — primary (`:db-id` +
+;; `:property`, optionally `:db-ids` for batch peers) and inheritor
+;; (`:inheritor-db-ids` + `:inheritor-property`). The inheritor scope
+;; lets a class default-icon edit preview on instance rows
+;; (rendering `:logseq.property/icon` via inheritance) WITHOUT
+;; matching the class entity's own `:logseq.property/icon` page-title
+;; / sidebar icons, which are unrelated to the property under edit.
+;; ============================================================
+
+(defn- icon-preview-same-scope?
+  "True when `incoming` describes the same picker scope as `current`
+  (entity + entity-set). Property is intentionally NOT part of scope
+  identity — a class default-icon picker broadcasts under multiple
+  properties simultaneously and they all belong to the same picker."
+  [current incoming]
+  (and current incoming
+       (= (:db-id current) (:db-id incoming))
+       (= (:db-ids current) (:db-ids incoming))))
+
+(defn- merge-into-icon-preview!
+  "Merge `incoming` into `:ui/icon-hover-preview`. If the existing
+  preview's scope matches, preserve any sibling visual fields
+  (`:icon`/`:color`) so tile and color hovers compose. Otherwise
+  replace — different scope means the previous picker is gone or
+  unrelated."
+  [incoming]
+  (state/update-state!
+   :ui/icon-hover-preview
+   (fn [current]
+     (if (icon-preview-same-scope? current incoming)
+       (merge current incoming)
+       incoming))))
+
+(defn- dissoc-icon-preview-field!
+  "Remove `field` from the preview map iff scope matches. If no
+  visual fields remain (`:icon` or `:color`), clear the slot
+  entirely so receivers fully revert."
+  [scope-target field]
+  (state/update-state!
+   :ui/icon-hover-preview
+   (fn [current]
+     (when (and current (icon-preview-same-scope? current scope-target))
+       (let [next (dissoc current field)]
+         (when (or (:icon next) (:color next))
+           next))))))
+
+(defn- icon-preview-matches?
+  "True when `preview` applies to entity at `entity-id` rendering
+  `viewer-property`. Two independent scopes:
+
+   1. Primary — entity matches `:db-id` (singleton) or is in
+      `:db-ids` (set, e.g. batch-selected peers), AND viewer-property
+      matches `:property`.
+
+   2. Inheritor — entity is in `:inheritor-db-ids`, AND viewer-property
+      matches `:inheritor-property`. Used for class default-icon edits
+      so instance rows (rendering `:logseq.property/icon` via
+      inheritance) preview without dragging in the class entity's own
+      `:logseq.property/icon` page-title icon, which is unrelated to
+      the default-icon property under edit."
+  [preview entity-id viewer-property]
+  (let [primary?   (and (= viewer-property (:property preview))
+                        (or (= entity-id (:db-id preview))
+                            (contains? (:db-ids preview) entity-id)))
+        inheritor? (and (:inheritor-property preview)
+                        (= viewer-property (:inheritor-property preview))
+                        (contains? (:inheritor-db-ids preview) entity-id))]
+    (or primary? inheritor?)))
+
 ;; Offscreen canvas for measuring text width (never attached to DOM).
 ;; Lazily constructed so the namespace can load in environments without a DOM
 ;; (e.g. the :node-test build).
@@ -778,9 +867,7 @@
         preview-property (or (:property opts) :logseq.property/icon)
         preview (state/sub :ui/icon-hover-preview)
         preview-active? (and preview
-                             (= preview-property (:property preview))
-                             (or (= (:db-id preview) (:db/id entity))
-                                 (contains? (:db-ids preview) (:db/id entity))))
+                             (icon-preview-matches? preview (:db/id entity) preview-property))
         preview-icon (when preview-active? (:icon preview))
         ;; Preview color is only applied when the hover-preview state
         ;; carries an explicit `:color`. Without that guard, a shape- or
@@ -2224,7 +2311,7 @@
        [:div.text-sm.text-gray-07.dark:opacity-80
         "Enter initials or use page initials"]])))
 
-(rum/defc custom-tab-cp
+(rum/defc custom-tab-cp < rum/reactive
   "Combined tab showing Text, Avatar, and Image options side by side"
   [*q page-title *color *view *asset-picker-initial-mode icon-value opts]
   (let [query @*q
@@ -2236,7 +2323,30 @@
                                              (:block/title)))]
                        (derive-initials title))
                      (subs query 0 (min 8 (count query))))
-        selected-color (when-not (string/blank? @*color) @*color)
+        ;; Live color preview during hover/keyboard nav over color
+        ;; swatches in the picker's color popover. Without this, the
+        ;; page-title icon updates live (it reads `:ui/icon-hover-preview`
+        ;; via `get-node-icon-cp`) while the Text/Avatar tiles in the
+        ;; Custom tab stay locked to the committed color — a confusing
+        ;; mismatch the user can hit mid-pick. Same scope-match logic
+        ;; the asset-picker tile uses (db-id + property) so a Default
+        ;; Icon picker doesn't bleed previews into a sibling page-title
+        ;; picker on the same entity.
+        preview-target-db-id (:preview-target-db-id opts)
+        preview-target-db-ids (:preview-target-db-ids opts)
+        scope-property (or (:property opts) :logseq.property/icon)
+        hover-preview-state (state/sub :ui/icon-hover-preview)
+        hover-color-match? (and hover-preview-state
+                                (icon-preview-matches? hover-preview-state preview-target-db-id scope-property))
+        hover-color (when hover-color-match?
+                      (let [c (:color hover-preview-state)]
+                        (when (and c (not (string/blank? c)) (not= c "inherit"))
+                          c)))
+        committed-color (when-not (string/blank? @*color) @*color)
+        ;; Hover wins over committed so the tiles tint live; on
+        ;; mouse-leave the hover-preview clears and the committed
+        ;; color re-emerges.
+        selected-color (or hover-color committed-color)
         text-item (when text-value
                     {:type :text
                      :id (str "text-" text-value)
@@ -3017,7 +3127,7 @@
 
                    state)}
   [state {:keys [on-chosen on-back on-delete del-btn? current-icon avatar-context page-title
-                 *color preview-target-db-id preview-target-db-ids property]
+                 *color preview-target-db-id preview-target-db-ids preview-inheritor-db-ids property]
           :or {property :logseq.property/icon}}]
   (let [*search-q (::search-q state)
         *loading? (::loading? state)
@@ -3084,6 +3194,42 @@
         ;; Child components read `(some? avatar-context)` to decide circle vs
         ;; square; flip that live from the active tab.
         effective-avatar-context (when avatar-mode? synthesized-avatar-context)
+        ;; Avatar shape (`:circle` | `:rounded-rect`) for cropping the
+        ;; asset-grid tiles in lockstep with the avatar tile. Reads in
+        ;; precedence:
+        ;;  1. Customize-band Shape-row hover-preview — broadcasts a
+        ;;     synthetic icon with the previewed shape so the grid
+        ;;     tiles re-crop live while the user is hovering Circle /
+        ;;     Rectangle in the Shape sub-menu.
+        ;;  2. Optimistic `pending-icon` mirror — covers the ~50ms
+        ;;     window after commit before `current-icon` (the entity
+        ;;     prop) refreshes.
+        ;;  3. Committed `current-icon` — the entity-derived value.
+        ;; Falls back to `:circle` so the existing avatar-mode rules
+        ;; keep applying when no avatar context is active.
+        ;; Shared envelope for every preview broadcast in this picker
+        ;; (color popover, shape/fallback hover, sub-picker tile hover).
+        ;; Centralized so each broadcaster passes the SAME scope —
+        ;; receivers gate on it to ignore previews from other pickers.
+        ;; Two scopes (see icon.cljs `icon-preview-matches?` doc):
+        ;;   primary — `:db-id` / `:db-ids` rendering `:property`
+        ;;   inheritor — `:inheritor-db-ids` rendering `:inheritor-property`
+        preview-base-target (cond-> {:property property}
+                              preview-target-db-id (assoc :db-id preview-target-db-id)
+                              (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids))
+                              (seq preview-inheritor-db-ids)
+                              (assoc :inheritor-property :logseq.property/icon
+                                     :inheritor-db-ids (set preview-inheritor-db-ids)))
+        hover-preview-state (state/sub :ui/icon-hover-preview)
+        hover-shape-match? (and hover-preview-state
+                                (icon-preview-matches? hover-preview-state preview-target-db-id property))
+        hover-shape (when hover-shape-match?
+                      (get-in hover-preview-state [:icon :data :shape]))
+        avatar-source-icon (or (when (= :avatar (:type pending-icon)) pending-icon)
+                               (when (= :avatar (:type current-icon)) current-icon))
+        current-shape (or hover-shape
+                          (get-in avatar-source-icon [:data :shape])
+                          :circle)
         ;; Tab click handler. Persists an in-place :type flip when the current
         ;; icon already has an asset; otherwise it's a local preview only.
         on-mode-change
@@ -3378,6 +3524,14 @@
      {:id "asset-picker-modal"
       :class [(when avatar-mode? "avatar-mode")
               (when (rum/react *drag-active?) "drag-active")]
+      ;; Cascades shape into the asset-grid tile rules so cropped
+      ;; thumbnails match the avatar tile's silhouette. CSS reads
+      ;; `[data-avatar-shape="rounded-rect"]` to swap the
+      ;; `.avatar-mode` `rounded-full` for the same 22% radius the
+      ;; avatar root uses (icon.css:1855-1858). Only present in
+      ;; avatar-mode — image-mode tiles keep their default rounded
+      ;; squares regardless.
+      :data-avatar-shape (when avatar-mode? (name current-shape))
       :on-drag-enter (fn [e]
                        (.preventDefault e)
                        (.stopPropagation e)
@@ -3484,13 +3638,16 @@
                                         true)))
                         :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
                                      (fn [c]
-                                       (state/set-state! :ui/icon-hover-preview
-                                                         (cond-> {:color c :property property}
-                                                           preview-target-db-id (assoc :db-id preview-target-db-id)
-                                                           (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids))))))
+                                       ;; Additive — preserves any
+                                       ;; tile-hover `:icon` so moving
+                                       ;; from a tile to a color swatch
+                                       ;; keeps the tile shape visible
+                                       ;; with the swatch color overlaid.
+                                       (merge-into-icon-preview!
+                                        (assoc preview-base-target :color c))))
                         :on-hover-end! (when (or preview-target-db-id (seq preview-target-db-ids))
                                          (fn []
-                                           (state/set-state! :ui/icon-hover-preview nil)))
+                                           (dissoc-icon-preview-field! preview-base-target :color)))
                         :button-attrs {:data-topbar-stop "color"}
                         :popup-id :asset-picker-color))
         (when del-btn?
@@ -3511,6 +3668,39 @@
           :on-focus (fn [_]
                       (reset! *focus-region :search)
                       (reset! *highlighted-index nil))
+          ;; Auto-route a pasted URL to the asset-fetch path. The root
+          ;; paste listener at the picker modal skips when focus is in
+          ;; the search input + clipboard is text, so URLs pasted into
+          ;; this input would otherwise become an empty fuzzy-filter
+          ;; query (the "No matching images" failure mode users hit).
+          ;; Detection: scheme prefix regex + `js/URL.` constructor
+          ;; (cheap gate first, then strict validate). On match:
+          ;; preventDefault stops the URL from entering the input,
+          ;; then `<save-url-asset!` runs (which already validates
+          ;; MIME, rejects HTML, caps size, follows redirects). On
+          ;; failure we restore the URL to the input + toast the
+          ;; reason via `url-save-error-copy` so the user can copy /
+          ;; edit / paste elsewhere — paste content is never lost.
+          :on-paste (fn [^js e]
+                      (let [text (some-> e .-clipboardData (.getData "text"))
+                            trimmed (some-> text string/trim)
+                            url? (and trimmed
+                                      (re-matches #"^https?://\S+$" trimmed)
+                                      (try (js/URL. trimmed) true
+                                           (catch :default _ false)))]
+                        (when url?
+                          (.preventDefault e)
+                          (shui/shortcut-press! "mod+v")
+                          (let [repo (state/get-current-repo)
+                                asset-name (extract-filename-from-url trimmed)]
+                            (-> (<save-url-asset! repo trimmed asset-name)
+                                (p/then (fn [asset-entity]
+                                          (when asset-entity
+                                            (on-url-asset-entity-added asset-entity))))
+                                (p/catch (fn [err]
+                                           (reset! *search-q trimmed)
+                                           (update-web-query! trimmed)
+                                           (shui/toast! (url-save-error-copy err) :error))))))))
           :on-change (fn [e]
                        (let [v (util/evalue e)]
                          (reset! *search-q v)
@@ -3699,8 +3889,7 @@
                 ;; tint the page-title's separately-mounted asset-picker
                 ;; tile (and vice versa).
                 hover-match? (and hover-preview
-                                  (= preview-target-db-id (:db-id hover-preview))
-                                  (= property (:property hover-preview)))
+                                  (icon-preview-matches? hover-preview preview-target-db-id property))
                 ;; Two flavors of preview to consume:
                 ;; 1. Full icon override — broadcast by tile hover/keyboard
                 ;;    nav in the fallback sub-picker (icon already wrapped
@@ -3787,10 +3976,9 @@
                 preview-shape-on-hover!
                 (fn [shape]
                   (when preview-target-db-id
-                    (state/set-state! :ui/icon-hover-preview
-                                      {:db-id preview-target-db-id
-                                       :property property
-                                       :icon (assoc-in committed-icon [:data :shape] shape)})))
+                    (merge-into-icon-preview!
+                     (assoc preview-base-target
+                            :icon (assoc-in committed-icon [:data :shape] shape)))))
                 preview-fallback-on-hover!
                 (fn [fb-type]
                   (when preview-target-db-id
@@ -3813,14 +4001,12 @@
                                           (assoc-in [:data :fallback-type] :icon)
                                           (assoc-in [:data :fallback-icon]
                                                     (or current-fb-icon "circle-dashed"))))]
-                      (state/set-state! :ui/icon-hover-preview
-                                        {:db-id preview-target-db-id
-                                         :property property
-                                         :icon next-icon}))))
+                      (merge-into-icon-preview!
+                       (assoc preview-base-target :icon next-icon)))))
                 clear-preview-on-leave!
                 (fn []
                   (when preview-target-db-id
-                    (state/set-state! :ui/icon-hover-preview nil)))
+                    (dissoc-icon-preview-field! preview-base-target :icon)))
                 reset-style! (fn []
                                ;; Phase 1+2: Reset clears any divergence from
                                ;; the system defaults — shape back to :circle
@@ -3843,6 +4029,20 @@
                 ;; TODO future: detect class-default inheritance to
                 ;; surface "From #Company" as a third scope value.
                 has-image? (some? (get-in preview-icon [:data :asset-uuid]))
+                ;; Strip image asset data so the avatar tile always
+                ;; renders the FALLBACK config (color + shape +
+                ;; letters/icon/emoji) — even when an image is layered
+                ;; on top in the resolved icon. The descriptor next to
+                ;; the tile already says "Image, rectangle" so the
+                ;; user knows the image is set; the picked asset is
+                ;; visible in the grid below with its selected ring.
+                ;; The customize-band's whole purpose is to edit the
+                ;; fallback layer, so the tile previews exactly that
+                ;; layer in lockstep with the controls — otherwise the
+                ;; image hides every fallback edit and the controls
+                ;; feel inert.
+                fallback-preview-icon (cond-> preview-icon
+                                        has-image? (update :data dissoc :asset-uuid :asset-type))
                 scope-label (if (or has-image? style-dirty?)
                               "Custom"
                               "Default")
@@ -3858,7 +4058,7 @@
                                     "Emoji")
                                 :else "Letters")
                 descriptor-shape (case current-shape
-                                   :rounded-rect "rounded"
+                                   :rounded-rect "rectangle"
                                    "circle")
                 descriptor (str descriptor-fb ", " descriptor-shape)
                 ;; Wrap-fn shared by the Icon… sub-menu's icon-search.
@@ -3892,7 +4092,7 @@
                 :aria-label "Customize avatar"
                 :aria-expanded expanded?}
                [:div.preview-avatar
-                (icon preview-icon {:size 56})]]
+                (icon fallback-preview-icon {:size 56})]]
               [:div.cb-meta-stage
                ;; Resting state: the entire banner is one click target
                ;; that toggles the expanded customize panel. Layout:
@@ -5948,12 +6148,20 @@
   (rum/local nil ::virtuoso-ref)
   (rum/local :icon-picker ::view) ;; Default view, updated in :will-mount for avatars/images
   (rum/local nil ::asset-picker-initial-mode) ;; Optional :avatar | :image override when navigating from Custom tab tiles
+  ;; Holds the result of an async worker fetch for "all instances of
+  ;; the class being edited", used by the class default-icon picker
+  ;; to broadcast hover-preview to inheriting instance rows. Fetched
+  ;; in :will-mount because the main-thread conn doesn't have the
+  ;; full instance set (Logseq partial-replicates from worker) — so
+  ;; sync `(:block/_tags class)` access returns empty.
+  (rum/local nil ::fetched-inheritor-ids)
   {:will-mount (fn [s]
                  (let [opts (first (:rum/args s))
                        icon-value (:icon-value opts)
                        normalized (normalize-icon icon-value)
                        *view (::view s)
                        *tab (::tab s)
+                       *fetched-inheritor-ids (::fetched-inheritor-ids s)
                        ;; Prefer current icon's color; fall back to last-used preset.
                        ;; "inherit" is a CSS-layer sentinel (--ls-color-icon-preset),
                        ;; not a real color — drop it before it reaches React state.
@@ -5973,12 +6181,31 @@
                        ;; passes `:allowed-tabs [:all :emoji :icon]` to drop
                        ;; the Custom tab), seed `*tab` to the first allowed
                        ;; entry so we don't land on a hidden tab.
-                       allowed (some-> (:allowed-tabs opts) set)]
+                       allowed (some-> (:allowed-tabs opts) set)
+                       ;; For class default-icon edits, fetch the inheriting
+                       ;; instance ids from the worker — main-thread conn
+                       ;; doesn't have them. Resolves into the local atom;
+                       ;; the render reads via `(rum/react)` so re-render
+                       ;; fires when the promise lands.
+                       preview-target-db-id (:preview-target-db-id opts)
+                       property (or (:property opts) :logseq.property/icon)]
                    ;; Avatar/image icons open asset picker, text icons open text-picker
                    (when (contains? #{:avatar :image :text} (:type normalized))
                      (reset! *view (if (= :text (:type normalized)) :text-picker :asset-picker)))
                    (when (and allowed (not (allowed @*tab)))
                      (reset! *tab (first allowed)))
+                   (when (and preview-target-db-id
+                              (= property :logseq.property.class/default-icon)
+                              (not (seq (:preview-inheritor-db-ids opts))))
+                     (-> (db-async/<get-tag-objects (state/get-current-repo) preview-target-db-id)
+                         (p/then (fn [instances]
+                                   (reset! *fetched-inheritor-ids
+                                           (->> instances
+                                                (remove :logseq.property/icon)
+                                                (map :db/id)
+                                                set
+                                                not-empty))))
+                         (p/catch (fn [_] nil))))
                    (assoc s ::color (atom (or initial-color icon-color stored))
                           ::input-ref (rum/create-ref)
                           ::result-ref (rum/create-ref))))
@@ -6019,6 +6246,7 @@
                      0)))
                 s)}
   [state {:keys [on-chosen del-btn? icon-value page-title preview-target-db-id preview-target-db-ids
+                 preview-inheritor-db-ids
                  allowed-tabs hover-wrap-fn color-btn? property]
           :or {color-btn? true
                ;; `property` scopes hover-preview broadcasts so two pickers
@@ -6093,31 +6321,59 @@
          ;; square. Avoids reading as a committed photo-themed icon.
          :custom-image  {:type :image-placeholder
                          :id "image-placeholder"}}
-        preview-targets-set? (or preview-target-db-id (seq preview-target-db-ids))
+        ;; Derive the inheritor set via async worker query. The
+        ;; main-thread conn is a partial subset of the worker's data
+        ;; — instances aren't eagerly loaded, so `(:block/_tags
+        ;; class)` returns empty here even when the worker has them.
+        ;; Mirrors the precedent at `value.cljs:1131`.
+        ;; Caller-passed `:preview-inheritor-db-ids` still wins so
+        ;; explicit batch flows (selection toolbar) can override.
+        *fetched-inheritor-ids (::fetched-inheritor-ids state)
+        derived-inheritor-db-ids (or (not-empty (set preview-inheritor-db-ids))
+                                     (rum/react *fetched-inheritor-ids))
+        preview-targets-set? (or preview-target-db-id
+                                 (seq preview-target-db-ids)
+                                 (seq derived-inheritor-db-ids))
         ;; Every preview write carries `:property` so readers in
         ;; different fields editing the same entity (page-title icon vs
-        ;; class default-icon) can isolate by property. The default of
-        ;; `:logseq.property/icon` matches the existing implicit scope of
-        ;; sidebar / cmdk / page-title rendering — so unscoped callers
+        ;; class default-icon) can isolate by property. Default
+        ;; `:logseq.property/icon` matches the implicit scope of
+        ;; sidebar / cmdk / page-title rendering — unscoped callers
         ;; keep working as before.
+        ;;
+        ;; Two independent scopes:
+        ;;   PRIMARY    — `:db-id` (singleton) or `:db-ids` (set of
+        ;;                peers, e.g. batch-select). `:property` is
+        ;;                the property they all render.
+        ;;   INHERITOR  — `:inheritor-db-ids` carries entities that
+        ;;                inherit from the primary entity but render
+        ;;                a DIFFERENT property. Used by the class
+        ;;                default-icon picker: the class itself is
+        ;;                primary (rendering `:logseq.property.class/default-icon`),
+        ;;                instances are inheritors (rendering
+        ;;                `:logseq.property/icon`, falling back through
+        ;;                `get-node-icon`'s inheritance).
+        ;;
+        ;; Splitting the two scopes keeps the class entity's OWN
+        ;; `:logseq.property/icon` (page-title, sidebar) outside the
+        ;; preview — it's a different property than what's under edit
+        ;; and shouldn't tint when the user is editing default-icon.
         preview-base-target (cond-> {:property property}
                               preview-target-db-id (assoc :db-id preview-target-db-id)
-                              (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids)))
+                              (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids))
+                              (seq derived-inheritor-db-ids)
+                              (assoc :inheritor-property :logseq.property/icon
+                                     :inheritor-db-ids (set derived-inheritor-db-ids)))
         clear-tile-hover!
         (fn []
           (when preview-targets-set?
-            ;; Stale-db-id-and-property guard: if a different picker has
-            ;; since taken over the slot, don't clear its preview.
-            ;; Prevents cleanup-races between pickers on different blocks
-            ;; or on the same block but different properties (e.g. opening
-            ;; the Default Icon picker right after the page-title picker
-            ;; on the same class).
-            (let [current (:ui/icon-hover-preview @state/state)
-                  mine? (and (= property (:property current))
-                             (or (= preview-target-db-id (:db-id current))
-                                 (= (set preview-target-db-ids) (:db-ids current))))]
-              (when (or (nil? current) mine?)
-                (state/set-state! :ui/icon-hover-preview nil)))))
+            ;; Drop only the `:icon` field — keep any active `:color`
+            ;; from the color popover so moving the mouse off a tile
+            ;; into the color swatches doesn't wipe the color overlay
+            ;; on the way. `dissoc-icon-preview-field!` clears the
+            ;; whole slot when no visual fields remain, so cleanup is
+            ;; still complete when neither tile nor color is active.
+            (dissoc-icon-preview-field! preview-base-target :icon)))
         broadcast-tile-hover!
         (fn [item]
           ;; Custom-tab navigational markers (:custom-text/:custom-avatar/
@@ -6139,10 +6395,15 @@
 
               preview-targets-set?
               (let [normalized (normalize-icon wrapped)]
-                (state/set-state! :ui/icon-hover-preview
-                                  (cond-> preview-base-target
-                                    normalized (assoc :icon normalized)
-                                    (not (string/blank? @*color)) (assoc :color @*color)))))))
+                ;; Merge — preserves any active `:color` from a color
+                ;; popover hover so the previewed tile reads with the
+                ;; previewed tint. Without the merge, the color slot
+                ;; would clobber on every tile hover and the user
+                ;; would lose their color preview while picking.
+                (merge-into-icon-preview!
+                 (cond-> preview-base-target
+                   normalized (assoc :icon normalized)
+                   (not (string/blank? @*color)) (assoc :color @*color)))))))
         ;; When the picker is opened against an entity, derive del-btn? reactively
         ;; from the live entity. The static del-btn? prop is captured in the popup
         ;; closure and goes stale across keep-popup? flows (e.g. picking a color
@@ -6287,6 +6548,7 @@
                      ;; same preview state.
                      :preview-target-db-id preview-target-db-id
                      :preview-target-db-ids preview-target-db-ids
+                     :preview-inheritor-db-ids preview-inheritor-db-ids
                      ;; Property scope for hover-preview isolation —
                      ;; flows down so asset-picker's own preview writes
                      ;; (Shape/Fallback hovers, color swatch) carry the
@@ -6488,13 +6750,16 @@
                                                   (some-> (rum/deref *input-ref) (.focus))))))
                           :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
                                        (fn [c]
-                                         (state/set-state! :ui/icon-hover-preview
-                                                           (cond-> {:color c :property property}
-                                                             preview-target-db-id (assoc :db-id preview-target-db-id)
-                                                             (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids))))))
+                                         ;; Additive — preserves any
+                                         ;; `:icon` from a tile hover
+                                         ;; so the previewed tile shows
+                                         ;; with the previewed color
+                                         ;; overlaid.
+                                         (merge-into-icon-preview!
+                                          (assoc preview-base-target :color c))))
                           :on-hover-end! (when (or preview-target-db-id (seq preview-target-db-ids))
                                            (fn []
-                                             (state/set-state! :ui/icon-hover-preview nil)))
+                                             (dissoc-icon-preview-field! preview-base-target :color)))
                           :button-attrs {:data-topbar-stop "color"}))
           ;; delete button
           (when del-btn?
@@ -6576,7 +6841,29 @@
          ;; the case where a tile gets unmounted (Virtuoso scroll, search
          ;; refilter) while the mouse is still inside the popover, so its
          ;; on-mouse-out never fires.
-         :on-mouse-leave (fn [] (clear-tile-hover!))}
+         ;;
+         ;; Skip the clear when the cursor is heading INTO a Radix
+         ;; popover (the color picker is portal'd to body and lives
+         ;; inside `[data-radix-popper-content-wrapper]`). Without
+         ;; this, the tile preview wipes the moment the mouse crosses
+         ;; the grid edge to reach a color swatch — and the resulting
+         ;; color hover lands on the committed icon instead of the
+         ;; tile the user just had previewed. The check lets the
+         ;; preview persist across the grid→popover transition; full
+         ;; cleanup still runs on commit and on picker unmount.
+         :on-mouse-leave (fn [^js e]
+                           ;; `relatedTarget` can be `null` (mouse left
+                           ;; the window) OR a non-Element node (text
+                           ;; node when crossing certain DOM boundaries
+                           ;; in some browsers). Guard with `instanceof
+                           ;; js/Element` before calling `.closest`,
+                           ;; which is Element-only.
+                           (let [related (.-relatedTarget e)
+                                 to-popover? (and related
+                                                  (instance? js/Element related)
+                                                  (.closest related "[data-radix-popper-content-wrapper]"))]
+                             (when-not to-popover?
+                               (clear-tile-hover!))))}
         [:div.content-pane
          ;; Custom tab always shows its own content (Text/Avatar/Image buttons)
          (if (= @*tab :custom)
@@ -6640,8 +6927,7 @@
   (let [property (or property :logseq.property/icon)
         preview (when preview-target-db-id (state/sub :ui/icon-hover-preview))
         preview-active? (and preview
-                             (= (:db-id preview) preview-target-db-id)
-                             (= (:property preview) property))
+                             (icon-preview-matches? preview preview-target-db-id property))
         preview-icon (when preview-active? (:icon preview))
         ;; Source: previewed icon (cross-type swap) or the committed value.
         ;; Both go through the same color-overlay path below.
@@ -6669,7 +6955,7 @@
     (icon effective-icon-value (merge {:color? true} icon-props))))
 
 (rum/defc icon-picker
-  [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts page-title preview-target-db-id default-icon? property]
+  [icon-value {:keys [empty-label disabled? initial-open? del-btn? on-chosen icon-props popup-opts button-opts page-title preview-target-db-id preview-target-db-ids preview-inheritor-db-ids default-icon? property]
                :or {property :logseq.property/icon}}]
   (let [*trigger-ref (rum/use-ref nil)
         ;; Optimistic post-commit override. Holds the just-committed
@@ -6710,6 +6996,8 @@
               :page-title page-title
               :del-btn? del-btn?
               :preview-target-db-id preview-target-db-id
+              :preview-target-db-ids preview-target-db-ids
+              :preview-inheritor-db-ids preview-inheritor-db-ids
               :default-icon? default-icon?
               :property property})))]
     (hooks/use-effect!
