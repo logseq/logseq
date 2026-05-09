@@ -13,6 +13,22 @@
     (number? height)
     (assoc :height (str height "px"))))
 
+(defn render-container-deps
+  [opts]
+  [(:nodes opts)
+   (:links opts)
+   (:dark? opts)
+   (:view-mode opts)
+   (:width opts)
+   (:height opts)
+   (:aria-label opts)
+   (:arrow-mode opts)
+   (:link-distance opts)
+   (:show-edge-labels? opts)
+   (:on-node-activate opts)
+   (:on-selection-change opts)
+   (:on-rendered opts)])
+
 (rum/defc graph-2d
   [opts]
   (let [container-ref (hooks/use-ref nil)]
@@ -22,25 +38,17 @@
          (pixi/render-container! container opts)
          (fn []
            (pixi/destroy-instance! container))))
-     [(:nodes opts)
-      (:links opts)
-      (:dark? opts)
-      (:view-mode opts)
-      (:width opts)
-      (:height opts)
-      (:aria-label opts)
-      (:depth opts)
-      (:arrow-mode opts)
-      (:link-distance opts)
-      (:show-edge-labels? opts)
-      (:on-node-activate opts)
-      (:on-selection-change opts)
-      (:on-rendered opts)])
+     (render-container-deps opts))
     (hooks/use-effect!
      (fn []
        (when-let [container (hooks/deref container-ref)]
          (pixi/update-visibility! container (:visible-node-ids opts))))
      [(:visible-node-ids opts)])
+    (hooks/use-effect!
+     (fn []
+       (when-let [container (hooks/deref container-ref)]
+         (pixi/update-depth! container (:depth opts))))
+     [(:depth opts)])
     [:div.graph-canvas
      {:ref container-ref
       :style (canvas-style opts)

@@ -1019,7 +1019,7 @@
         height (.-clientHeight container)
         size* (atom {:width width :height height})
         normalized-view-mode (normalize-view-mode view-mode)
-        depth (-> (or depth 1) (max 1) (min 5))
+        depth* (atom (-> (or depth 1) (max 1) (min 5)))
         render-opts {:arrow-mode arrow-mode}
         layouted-nodes* (atom (layout-nodes nodes links view-mode dark? {:link-distance link-distance}))
         all-node-id-set (set (map :id @layouted-nodes*))
@@ -1036,7 +1036,7 @@
         _ (set! (.. world -scale -y) (:scale initial-transform))
         neighbor-map (build-neighbor-map links)
         highlighted-node-ids* (atom #{})
-        highlight-state* (atom (logic/highlight-state @highlighted-node-ids* neighbor-map depth))
+        highlight-state* (atom (logic/highlight-state @highlighted-node-ids* neighbor-map @depth*))
         visible-link-list (fn []
                             (logic/highlight-visible-links
                              (base-visible-link-list)
@@ -1099,7 +1099,7 @@
                                    (mark-transform!))))
         sync-highlight! (fn []
                           (reset! highlight-state*
-                                  (logic/highlight-state @highlighted-node-ids* neighbor-map depth))
+                                  (logic/highlight-state @highlighted-node-ids* neighbor-map @depth*))
                           (draw-edges! (:graphics edge-render-info)
                                        (logic/current-layout-by-id
                                         @layout-by-id*
@@ -1143,7 +1143,7 @@
                                    (let [weights (logic/connected-drag-weights
                                                   neighbor-map
                                                   root-id
-                                                  {:max-depth depth
+                                                  {:max-depth @depth*
                                                    :max-nodes 1200
                                                    :decay 0.72
                                                    :min-weight 0.2})
@@ -1322,6 +1322,15 @@
                                                         (= "tag" (:kind %)))
                                                   @layouted-nodes*)))
                                  (sync-highlight!))))
+        update-depth! (fn [next-depth]
+                        (let [next-depth (-> (or next-depth 1) (max 1) (min 5))]
+                          (when (not= next-depth @depth*)
+                            (reset! depth* next-depth)
+                            (when (seq @highlighted-node-ids*)
+                              (reset! preview-layout-by-id* nil)
+                              (.clear drag-edge-layer)
+                              (reset! drag-session* nil)
+                              (sync-highlight!)))))
         update-detail-visibility! (fn [scale]
                                     (let [prev @visibility-state*
                                           next (logic/next-visibility-state prev scale thresholds)]
@@ -1370,6 +1379,7 @@
                     :auto-collapse? large-graph?}))
     {:app app
      :update-visibility! update-visibility!
+     :update-depth! update-depth!
      :cleanup (fn []
                 (event-cleanup)
                 (when-let [^js observer resize-observer]
@@ -1386,6 +1396,13 @@
   (when-let [update-visibility! (some-> (get @*graph-instances container)
                                         :update-visibility!)]
     (update-visibility! visible-node-ids))
+  nil)
+
+(defn update-depth!
+  [^js container depth]
+  (when-let [update-depth! (some-> (get @*graph-instances container)
+                                   :update-depth!)]
+    (update-depth! depth))
   nil)
 
 (defn render-container!
