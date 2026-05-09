@@ -96,11 +96,7 @@
   (let [directed-endpoints (set (map (juxt :source :target) links))]
     (mapv (fn [{:keys [source target] :as link}]
             (let [reciprocal? (contains? directed-endpoints [target source])
-                  parallel-offset (if reciprocal?
-                                    (if (neg? (compare (str source) (str target)))
-                                      -1
-                                      1)
-                                    0)]
+                  parallel-offset (if reciprocal? 1 0)]
               (assoc link
                      :show-arrow? (boolean show-arrows?)
                      :parallel-offset parallel-offset)))
