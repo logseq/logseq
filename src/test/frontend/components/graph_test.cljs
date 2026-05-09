@@ -26,9 +26,6 @@
 (deftest settings-use-grid-tags-layout-by-default
   (is (true? (:grid-layout? (graph/decode-settings {})))))
 
-(deftest settings-hide-tag-labels-by-default
-  (is (false? (:show-tag-labels? (graph/decode-settings {})))))
-
 (deftest settings-roundtrip-keeps-all-tags-sentinel
   (let [settings {:view-mode :tags-and-objects
                   :selected-tag-ids nil
@@ -40,16 +37,6 @@
     (is (nil? (:selected-tag-ids decoded)))
     (is (= #{"1" "2" "3"}
            (graph/selected-tag-id-set decoded (graph/tag-options graph-data))))))
-
-(deftest settings-roundtrip-keeps-tag-label-visibility
-  (let [settings {:view-mode :tags-and-objects
-                  :show-tag-labels? true
-                  :open-groups #{:layout}}
-        encoded (graph/encode-settings settings)
-        data (js->clj (js/JSON.parse (js/JSON.stringify encoded)) :keywordize-keys true)
-        decoded (graph/decode-settings data)]
-    (is (true? (:showTagLabels data)))
-    (is (true? (:show-tag-labels? decoded)))))
 
 (deftest settings-roundtrip-keeps-time-travel-filter
   (let [settings {:view-mode :all-pages

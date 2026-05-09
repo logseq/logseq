@@ -700,8 +700,6 @@
  :graph/layout-force "Force graph"
  :graph/layout-grid-layout "Grid layout"
  :graph/layout-link-distance "Link distance"
- :graph/layout-tag-names "Tag names"
- :graph/layout-tags-only "Tags only"
  :graph/leave-action "Leave this graph"
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-error "Failed to leave graph."

@@ -697,8 +697,6 @@
  :graph/layout-force "力导向图"
  :graph/layout-grid-layout "网格布局"
  :graph/layout-link-distance "链接距离"
- :graph/layout-tag-names "标签名称"
- :graph/layout-tags-only "仅显示标签"
  :graph/leave-action "离开此图谱"
  :graph/leave-confirm-desc "确定要离开这个图谱吗？"
  :graph/leave-error "离开图谱失败。"

@@ -380,7 +380,9 @@
   (empty? selected-nodes))
 
 (defn- layout-slider
-  [{:keys [label value min max step disabled? on-change]}]
+  [{:keys [label value step disabled? on-change]
+    min-value :min
+    max-value :max}]
   [:label.graph-layout-control
    {:class (when disabled? "is-disabled")}
    [:span.graph-layout-control-header
@@ -388,8 +390,8 @@
     [:strong value]]
    [:input.graph-layout-slider
     {:type "range"
-     :min min
-     :max max
+     :min min-value
+     :max max-value
      :step step
      :value value
      :disabled disabled?
@@ -552,45 +554,56 @@
                             (js/requestAnimationFrame step!))))))))
 
 (defn- time-travel-control
-  [settings set-settings! graph-data animation-frame-ref]
+  [settings set-settings! graph-data animation-frame-ref open? set-open!]
   (when-let [{:keys [created-at-min created-at-max duration]} (time-travel-range graph-data)]
     (let [value (time-travel-slider-value settings graph-data)
           at-now? (= value duration)
           current-timestamp (+ created-at-min value)]
       [:div.graph-time-travel
-       [:button.graph-time-travel-reset
+       {:class (when open? "is-open")}
+       [:button.graph-time-travel-toggle
+        {:type "button"
+         :aria-label (t :graph/time-travel)
+         :title (t :graph/time-travel)
+         :on-click #(set-open! (not open?))}
+        (ui/icon (if open? "chevron-down" "history") {:size 18})]
+       [:div.graph-time-travel-panel
+        {:aria-hidden (not open?)}
+        [:button.graph-time-travel-reset
         {:type "button"
          :aria-label (t :graph/time-travel-now)
          :title (t :graph/time-travel-now)
+         :tab-index (if open? 0 -1)
          :on-click #(animate-time-travel-to-now!
                      settings
                      set-settings!
                      graph-data
                      animation-frame-ref)}
         (ui/icon "player-play" {:size 18})]
-       [:div.graph-time-travel-body
-        [:div.graph-time-travel-label
-         [:span (t :graph/time-travel)]
-         [:strong (if at-now?
-                    (t :graph/time-travel-now)
-                    (format-time-travel-date current-timestamp))]]
-        [:input.graph-time-travel-slider
-         {:type "range"
-          :min 0
-          :max duration
-          :step (max 1 (js/Math.floor (/ duration 240)))
-          :value value
-          :aria-label (t :graph/time-travel)
-          :on-change (fn [event]
-                       (cancel-time-travel-animation! animation-frame-ref)
-                       (let [next-value (js/parseFloat (.. event -target -value))]
-                         (set-time-travel-filter!
-                          set-settings!
-                          next-value
-                          duration)))}]
-        [:div.graph-time-travel-ticks
-         [:span (format-time-travel-date created-at-min)]
-         [:span (format-time-travel-date created-at-max)]]]])))
+        [:div.graph-time-travel-body
+         [:div.graph-time-travel-label
+          [:span (t :graph/time-travel)]
+          [:strong (if at-now?
+                     (t :graph/time-travel-now)
+                     (format-time-travel-date current-timestamp))]]
+         [:input.graph-time-travel-slider
+          {:type "range"
+           :min 0
+           :max duration
+           :step (max 1 (js/Math.floor (/ duration 240)))
+           :value value
+           :aria-label (t :graph/time-travel)
+           :tab-index (if open? 0 -1)
+           :on-change (fn [event]
+                        (cancel-time-travel-animation! animation-frame-ref)
+                        (let [next-value (js/parseFloat (.. event -target -value))]
+                          (set-time-travel-filter!
+                           set-settings!
+                           next-value
+                           duration)))}]
+         [:div.graph-time-travel-ticks
+          [:span (format-time-travel-date created-at-min)]
+          [:span (format-time-travel-date created-at-max)]]]]])))
 
 (defn- settings-panel
   [settings-open? set-settings-open! settings set-settings! view-mode set-view-mode!
@@ -618,6 +631,81 @@
           (tags-group settings set-settings! available-tags selected-tag-ids tag-query set-tag-query!))
         (layout-group settings set-settings! filtered-graph-data selected-nodes view-mode)])])
 
+(defn- global-graph-content
+  [{:keys [selected-nodes settings-open? set-settings-open! settings set-settings!
+           view-mode switch-view-mode! loading? filtered-graph-data available-tags
+           selected-tag-ids tag-query set-tag-query! build-error retry! mode-graph-data
+           visible-node-ids background-visible-node-ids dark? set-selected-nodes!
+           time-travel-animation-ref time-travel-open? set-time-travel-open!]}]
+  [:div#global-graph.graph-root
+   (selected-node-status selected-nodes)
+   (settings-panel settings-open?
+                   set-settings-open!
+                   settings
+                   set-settings!
+                   view-mode
+                   switch-view-mode!
+                   (when-not loading? filtered-graph-data)
+                   available-tags
+                   selected-tag-ids
+                   tag-query
+                   set-tag-query!
+                   selected-nodes)
+   (cond
+     loading?
+     [:div.graph-loading (t :graph/preparing)]
+
+     build-error
+     (graph-error retry!)
+
+     (nil? filtered-graph-data)
+     [:div.graph-loading (t :graph/preparing)]
+
+     :else
+     [:<>
+      (graph/graph-2d {:nodes (:nodes mode-graph-data)
+                       :links (:links mode-graph-data)
+                       :visible-node-ids visible-node-ids
+                       :background-visible-node-ids background-visible-node-ids
+                       :depth (valid-depth (:depth settings))
+                       :show-arrows? (true? (:show-arrows? settings))
+                       :link-distance (valid-link-distance (:link-distance settings))
+                       :show-edge-labels? (true? (:show-edge-labels? settings))
+                       :grid-layout? (true? (:grid-layout? settings))
+                       :dark? dark?
+                       :view-mode view-mode
+                       :aria-label (t :graph/canvas-label)
+                       :on-selection-change set-selected-nodes!
+                       :on-node-activate graph-actions/activate-node!})
+      (time-travel-control
+       settings
+       set-settings!
+       mode-graph-data
+       time-travel-animation-ref
+       time-travel-open?
+       set-time-travel-open!)])])
+
+(defn- load-global-graph!
+  [repo theme view-mode set-graph-data! set-loading! set-build-error! set-selected-nodes!]
+  (let [cancelled? (atom false)]
+    (set-graph-data! nil)
+    (set-loading! true)
+    (set-build-error! nil)
+    (set-selected-nodes! [])
+    (-> (state/<invoke-db-worker :thread-api/build-graph repo {:type :global
+                                                               :theme theme
+                                                               :view-mode view-mode})
+        (p/then (fn [result]
+                  (when-not @cancelled?
+                    (set-graph-data! result)
+                    (set-loading! false))))
+        (p/catch (fn [error]
+                   (log/error :graph/build-failed {:error error})
+                   (when-not @cancelled?
+                     (set-build-error! error)
+                     (set-loading! false)))))
+    #(reset! cancelled? true)))
+
 (rum/defc global-graph
   []
   (let [repo (state/get-current-repo)
@@ -633,6 +721,7 @@
         [build-error set-build-error!] (hooks/use-state nil)
         [retry-token set-retry-token!] (hooks/use-state 0)
         [selected-nodes set-selected-nodes!] (hooks/use-state [])
+        [time-travel-open? set-time-travel-open!] (hooks/use-state false)
         time-travel-animation-ref (hooks/use-ref nil)
         settings (:settings settings-state)
         set-settings! (fn [settings-or-fn]
@@ -668,25 +757,7 @@
      [repo settings-state])
     (hooks/use-effect!
      (fn []
-       (let [cancelled? (atom false)]
-         (set-graph-data! nil)
-         (set-loading! true)
-         (set-build-error! nil)
-         (set-selected-nodes! [])
-         (-> (state/<invoke-db-worker :thread-api/build-graph repo {:type :global
-                                                                    :theme theme
-                                                                    :view-mode view-mode})
-             (p/then (fn [result]
-                       (when-not @cancelled?
-                         (set-graph-data! result)
-                         (set-loading! false))))
-             (p/catch (fn [error]
-                        (log/error :graph/build-failed {:error error})
-                        (when-not @cancelled?
-                          (set-build-error! error)
-                          (set-loading! false)))))
-         (fn []
-           (reset! cancelled? true))))
+       (load-global-graph! repo theme view-mode set-graph-data! set-loading! set-build-error! set-selected-nodes!))
      [repo theme view-mode retry-token])
 
     (let [available-tags (when graph-data (tag-options graph-data))
@@ -708,49 +779,27 @@
                              (set (map :id (:nodes filtered-graph-data))))
           background-visible-node-ids (when filtered-graph-data
                                         (set (map :id (:nodes filtered-graph-data))))]
-      [:div#global-graph.graph-root
-       (selected-node-status selected-nodes)
-       (settings-panel settings-open?
-                       set-settings-open!
-                       settings
-                       set-settings!
-                       view-mode
-                       switch-view-mode!
-                       (when-not loading? filtered-graph-data)
-                       available-tags
-                       selected-tag-ids
-                       tag-query
-                       set-tag-query!
-                       selected-nodes)
-
-       (cond
-         loading?
-         [:div.graph-loading (t :graph/preparing)]
-
-         build-error
-         (graph-error #(set-retry-token! (inc retry-token)))
-
-         (nil? filtered-graph-data)
-         [:div.graph-loading (t :graph/preparing)]
-
-         :else
-         [:<>
-          (graph/graph-2d {:nodes (:nodes mode-graph-data)
-                           :links (:links mode-graph-data)
-                           :visible-node-ids visible-node-ids
-                           :background-visible-node-ids background-visible-node-ids
-                           :depth (valid-depth (:depth settings))
-                           :show-arrows? (true? (:show-arrows? settings))
-                           :link-distance (valid-link-distance (:link-distance settings))
-                           :show-edge-labels? (true? (:show-edge-labels? settings))
-                           :grid-layout? (true? (:grid-layout? settings))
-                           :dark? dark?
-                           :view-mode view-mode
-                           :aria-label (t :graph/canvas-label)
-                           :on-selection-change set-selected-nodes!
-                           :on-node-activate graph-actions/activate-node!})
-          (time-travel-control
-           settings
-           set-settings!
-           mode-graph-data
-           time-travel-animation-ref)])])))
+      (global-graph-content
+       {:selected-nodes selected-nodes
+        :settings-open? settings-open?
+        :set-settings-open! set-settings-open!
+        :settings settings
+        :set-settings! set-settings!
+        :view-mode view-mode
+        :switch-view-mode! switch-view-mode!
+        :loading? loading?
+        :filtered-graph-data filtered-graph-data
+        :available-tags available-tags
+        :selected-tag-ids selected-tag-ids
+        :tag-query tag-query
+        :set-tag-query! set-tag-query!
+        :build-error build-error
+        :retry! #(set-retry-token! (inc retry-token))
+        :mode-graph-data mode-graph-data
+        :visible-node-ids visible-node-ids
+        :background-visible-node-ids background-visible-node-ids
+        :dark? dark?
+        :set-selected-nodes! set-selected-nodes!
+        :time-travel-animation-ref time-travel-animation-ref
+        :time-travel-open? time-travel-open?
+        :set-time-travel-open! set-time-travel-open!}))))

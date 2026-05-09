@@ -621,8 +621,10 @@
                     :height 600
                     :dark? dark?
                     :view-mode :page
+                    :show-arrows? true
+                    :show-edge-labels? true
                     :aria-label (t :graph/canvas-label)
-                    :on-node-activate graph-actions/activate-node!})])
+	                    :on-node-activate graph-actions/activate-node!})])
 
 (rum/defc page-graph-aux
   [page opts]

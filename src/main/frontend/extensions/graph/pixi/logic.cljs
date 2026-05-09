@@ -583,9 +583,9 @@
            vec))))
 
 (def ^:private tag-cluster-color-palette
-  ["#14B8A6" "#3B82F6" "#8B5CF6" "#EC4899"
-   "#F59E0B" "#10B981" "#EF4444" "#06B6D4"
-   "#84CC16" "#F97316" "#A855F7" "#64748B"])
+  ["#2563EB" "#059669" "#D97706" "#DB2777"
+   "#7C3AED" "#0891B2" "#65A30D" "#DC2626"
+   "#0D9488" "#9333EA" "#475569" "#EA580C"])
 
 (defn- tag-title-color-int
   [title]
@@ -648,8 +648,7 @@
                    :y center-y
                    :radius radius
                    :points (cluster-boundary-points nodes center-x center-y)
-                   :color-int (tag-title-color-int (or (:label tag-node
-                                                               cluster-id)))})))
+                   :color-int (tag-title-color-int (:label tag-node cluster-id))})))
          (sort-by :id)
          vec)
     [])))
@@ -731,7 +730,7 @@
   (filterv tag-ids (get object-links object-id)))
 
 (defn- group-spacing
-  [tag-count max-object-count]
+  [_tag-count max-object-count]
   (let [group-radius (+ 68 (* 13 (js/Math.sqrt (max 1 max-object-count))) 72)
         center-distance (+ (* 2 group-radius) 40)]
     (max 280 center-distance)))
@@ -850,8 +849,8 @@
            tags)
       (mapcat
        (fn [idx object]
-         (let [linked-tag-ids (linked-tag-ids object-links tag-ids (:id object))
-               group-ids (if (seq linked-tag-ids) linked-tag-ids [nil])]
+         (let [object-tag-ids (linked-tag-ids object-links tag-ids (:id object))
+               group-ids (if (seq object-tag-ids) object-tag-ids [nil])]
            (map
             (fn [linked-tag-id]
               (let [cluster-idx (get @counters* linked-tag-id 0)

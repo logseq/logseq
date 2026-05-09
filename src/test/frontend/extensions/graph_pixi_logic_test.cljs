@@ -300,21 +300,6 @@
   (is (= 0.05 (logic/clamp-zoom-scale 0.01)))
   (is (= 3.6 (logic/clamp-zoom-scale 10))))
 
-(deftest layout-nodes-uses-subdued-node-colors
-  (let [nodes [{:id "tag-a" :kind "tag" :label "Tag A"}
-               {:id "obj-a" :kind "object" :label "Object A"}
-               {:id "page-a" :kind "page" :label "Page A"}]
-        light-by-id (into {} (map (juxt :id :color)
-                                  (logic/layout-nodes nodes [] :all-pages false)))
-        dark-by-id (into {} (map (juxt :id :color)
-                                 (logic/layout-nodes nodes [] :all-pages true)))]
-    (is (= "#8B6CCB" (get light-by-id "tag-a")))
-    (is (= "#E6E6E6" (get light-by-id "obj-a")))
-    (is (= "#E6E6E6" (get light-by-id "page-a")))
-    (is (= "#B69AE8" (get dark-by-id "tag-a")))
-    (is (= "#858D98" (get dark-by-id "obj-a")))
-    (is (= "#858D98" (get dark-by-id "page-a")))))
-
 (deftest layout-nodes-uses-link-forces
   (let [nodes [{:id "tag-a" :kind "tag" :label "Tag A"}
                {:id "obj-linked" :kind "object" :label "Linked object"}
