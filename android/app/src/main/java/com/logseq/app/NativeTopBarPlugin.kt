@@ -333,8 +333,7 @@ private fun TopBarButton(
   ) {
     if (icon != null) {
       val iconSize = when (spec.size.lowercase()) {
-        "xsmall" -> 12.dp
-        "small" -> 16.dp
+        "small" -> 12.dp
         else -> 22.dp
       }
 
