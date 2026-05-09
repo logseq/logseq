@@ -70,6 +70,14 @@
   [_label-kind _active?]
   1.0)
 
+(defn renderer-init-options
+  [device-pixel-ratio]
+  {:backgroundAlpha 0
+   :antialias false
+   :autoDensity true
+   :resolution (min 2 (or device-pixel-ratio 1))
+   :powerPreference "high-performance"})
+
 (defn readable-edge-label-angle
   [from-x from-y to-x to-y]
   (let [angle (js/Math.atan2 (- to-y from-y) (- to-x from-x))]

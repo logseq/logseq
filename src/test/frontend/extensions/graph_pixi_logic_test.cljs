@@ -83,6 +83,9 @@
   (is (= 1.0 (logic/label-surface-fill-alpha :node true)))
   (is (= 1.0 (logic/label-surface-fill-alpha :edge false))))
 
+(deftest renderer-init-options-enable-smooth-strokes
+  (is (= true (:antialias (logic/renderer-init-options 2)))))
+
 (deftest edge-label-angle-stays-aligned-and-readable
   (is (= 0 (logic/readable-edge-label-angle 0 0 100 0)))
   (is (= 0 (logic/readable-edge-label-angle 100 0 0 0)))
@@ -159,7 +162,7 @@
     (is (= :dimmed (logic/node-emphasis one-hop "d")))
     (is (= :connected (logic/node-emphasis two-hop "d")))))
 
-(deftest highlighted-links-keep-default-lines-and-filter-selected-neighborhood
+(deftest highlighted-links-hide-default-lines-and-filter-selected-neighborhood
   (let [links [{:source "a" :target "b"}
                {:source "a" :target "c"}
                {:source "b" :target "d"}
@@ -170,7 +173,7 @@
                       "d" ["b" "e"]
                       "e" ["d"]}
         state (logic/highlight-state #{"a"} neighbor-map 2)]
-    (is (= links (logic/highlight-visible-links links (logic/highlight-state #{} neighbor-map))))
+    (is (empty? (logic/highlight-visible-links links (logic/highlight-state #{} neighbor-map))))
     (is (= #{{:source "a" :target "b"}
              {:source "a" :target "c"}
              {:source "b" :target "d"}}
