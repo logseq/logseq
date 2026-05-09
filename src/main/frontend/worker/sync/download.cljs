@@ -467,10 +467,10 @@
   (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
     (if (and (seq repo) (seq graph-id) (seq base))
       (let [stage* (atom :init)
-            import-id* (atom nil)]
-        (-> (p/let [log-f (fn [payload]
-                            (rtc-log-and-state/rtc-log :rtc.log/download payload))
-                    _ (log-f {:sub-type :download-progress
+            import-id* (atom nil)
+            log-f (fn [payload]
+                    (rtc-log-and-state/rtc-log :rtc.log/download payload))]
+        (-> (p/let [_ (log-f {:sub-type :download-progress
                               :graph-uuid graph-id
                               :message "Preparing graph snapshot download"})
                     _ (reset! stage* :fetch-pull)
@@ -529,6 +529,9 @@
             (p/catch (fn [error]
                        (when-let [import-id @import-id*]
                          (clear-import-state! import-id))
+                       (log-f {:sub-type :download-completed
+                               :graph-uuid graph-id
+                               :message "Graph snapshot download failed"})
                        (log/error :db-sync/download-graph-by-id-failed
                                   {:repo repo
                                    :graph-id graph-id
