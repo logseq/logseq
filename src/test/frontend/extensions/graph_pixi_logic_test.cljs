@@ -105,6 +105,19 @@
   (is (= [false]
          (mapv :show-arrow? (logic/edge-render-runs [{:source "a" :target "b"}] false)))))
 
+(deftest edge-render-runs-deduplicate-same-direction-links
+  (let [runs (logic/edge-render-runs [{:source "tienson" :target "publish" :label "Project"}
+                                      {:source "tienson" :target "publish" :label "Project"}
+                                      {:source "publish" :target "tienson" :label "Lead"}]
+                                     true)]
+    (is (= 2 (count runs)))
+    (is (= #{["tienson" "publish"] ["publish" "tienson"]}
+           (set (map (juxt :source :target) runs))))
+    (is (= [true true] (mapv :show-arrow? runs)))
+    (is (= 1 (count (filter #(= ["tienson" "publish"]
+                                ((juxt :source :target) %))
+                             runs))))))
+
 (deftest icon-display-text-renders-emoji-icons
   (is (= "⭐" (logic/icon-display-text {:type :emoji :id "star"})))
   (is (= "🚀" (logic/icon-display-text {:type "emoji" :id "rocket"})))
