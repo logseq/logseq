@@ -78,6 +78,11 @@
     (is (= label hover-text))
     (is (= "Short" (logic/label-display-text "Short" false)))))
 
+(deftest label-surfaces-occlude-crossing-links
+  (is (= 1.0 (logic/label-surface-fill-alpha :node false)))
+  (is (= 1.0 (logic/label-surface-fill-alpha :node true)))
+  (is (= 1.0 (logic/label-surface-fill-alpha :edge false))))
+
 (deftest edge-label-angle-stays-aligned-and-readable
   (is (= 0 (logic/readable-edge-label-angle 0 0 100 0)))
   (is (= 0 (logic/readable-edge-label-angle 100 0 0 0)))

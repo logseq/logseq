@@ -66,6 +66,12 @@
       (str (subs label 0 max-prefix-length) "...")
       label)))
 
+(defn label-surface-fill-alpha
+  [label-kind active?]
+  (case label-kind
+    :node (if active? 0.94 0.82)
+    :edge 0.12))
+
 (defn readable-edge-label-angle
   [from-x from-y to-x to-y]
   (let [angle (js/Math.atan2 (- to-y from-y) (- to-x from-x))]
