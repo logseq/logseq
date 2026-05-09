@@ -377,9 +377,14 @@
               :variant :outline
               :size :sm)])
 
+(defn depth-control-disabled?
+  [selected-nodes]
+  (empty? selected-nodes))
+
 (defn- layout-slider
-  [{:keys [label value min max step on-change]}]
+  [{:keys [label value min max step disabled? on-change]}]
   [:label.graph-layout-control
+   {:class (when disabled? "is-disabled")}
    [:span.graph-layout-control-header
     [:span label]
     [:strong value]]
@@ -389,6 +394,7 @@
      :max max
      :step step
      :value value
+     :disabled disabled?
      :aria-label label
      :on-change (fn [event]
                   (on-change (js/parseInt (.. event -target -value) 10)))}]])
@@ -402,10 +408,11 @@
    [:span label]])
 
 (defn- layout-group
-  [settings set-settings! graph-data]
+  [settings set-settings! graph-data selected-nodes]
   (let [depth (valid-depth (:depth settings))
         link-distance (valid-link-distance (:link-distance settings))
-        arrow-mode (valid-arrow-mode (:arrow-mode settings))]
+        arrow-mode (valid-arrow-mode (:arrow-mode settings))
+        depth-disabled? (depth-control-disabled? selected-nodes)]
     (settings-group
      {:settings settings
       :set-settings! set-settings!
@@ -422,6 +429,7 @@
                    :min 1
                    :max 5
                    :step 1
+                   :disabled? depth-disabled?
                    :on-change #(set-settings! (fn [settings]
                                                  (assoc settings :depth (valid-depth %))))})
                  (layout-slider
@@ -601,7 +609,7 @@
 
 (defn- settings-panel
   [settings-open? set-settings-open! settings set-settings! view-mode set-view-mode!
-   filtered-graph-data available-tags selected-tag-ids tag-query set-tag-query!]
+   filtered-graph-data available-tags selected-tag-ids tag-query set-tag-query! selected-nodes]
     [:div.graph-settings
      {:class (when settings-open? "is-open")}
      [:button.graph-settings-dot
@@ -623,7 +631,7 @@
         (view-mode-group settings set-settings! view-mode set-view-mode!)
         (when (= view-mode :tags-and-objects)
           (tags-group settings set-settings! available-tags selected-tag-ids tag-query set-tag-query!))
-        (layout-group settings set-settings! filtered-graph-data)])])
+        (layout-group settings set-settings! filtered-graph-data selected-nodes)])])
 
 (rum/defc global-graph
   []
@@ -725,7 +733,8 @@
                        available-tags
                        selected-tag-ids
                        tag-query
-                       set-tag-query!)
+                       set-tag-query!
+                       selected-nodes)
 
        (cond
          loading?

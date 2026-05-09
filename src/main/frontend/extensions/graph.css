@@ -356,6 +356,10 @@
     color: var(--ls-secondary-text-color);
 }
 
+.graph-layout-control.is-disabled {
+    opacity: 0.48;
+}
+
 .graph-layout-control-header {
     display: flex;
     align-items: center;

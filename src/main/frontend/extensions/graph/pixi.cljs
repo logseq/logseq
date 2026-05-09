@@ -426,11 +426,13 @@
                                             view-mode)
           style (new (.-TextStyle PIXI)
                      #js {:fontFamily "Avenir Next, Inter, system-ui, sans-serif"
-                          :fontSize 11
+                          :fontSize 10
+                          :fontStyle "italic"
                           :fill (edge-label-color dark?)
-                          :alpha 0.96})
-          bg-color (color->int (if dark? "#0B1220" "#F8FAFC"))
-          border-color (color->int (if dark? "#475569" "#CBD5E1"))
+                          :alpha 0.9})
+          accent-color (color->int (edge-label-color dark?))
+          bg-color accent-color
+          border-color accent-color
           labeled-links (->> links
                              (take max-edges)
                              (filter #(seq (:label %)))
@@ -465,12 +467,18 @@
                               (- (+ (/ (.-height text) 2) padding-y))
                               (+ (.-width text) (* 2 padding-x))
                               (+ (.-height text) (* 2 padding-y))
-                              4)
+                              3)
                   (.fill bg #js {:color bg-color
-                                  :alpha 0.88})
+                                  :alpha 0.12})
                   (.setStrokeStyle bg #js {:width 1
                                            :color border-color
-                                           :alpha 0.72})
+                                           :alpha 0.52})
+                  (.stroke bg)
+                  (.setStrokeStyle bg #js {:width 1.4
+                                           :color accent-color
+                                           :alpha 0.65})
+                  (.moveTo bg (- (/ (.-width text) 2)) (+ (/ (.-height text) 2) 4))
+                  (.lineTo bg (/ (.-width text) 2) (+ (/ (.-height text) 2) 4))
                   (.stroke bg)
                   (.addChild entry bg)
                   (.addChild entry text)
@@ -1020,8 +1028,8 @@
         layouted-nodes* (atom (layout-nodes nodes links view-mode dark? {:link-distance link-distance}))
         all-node-id-set (set (map :id @layouted-nodes*))
         visible-node-ids* (atom (visible-node-id-set @layouted-nodes* visible-node-ids))
-        visible-link-list (fn []
-                            (visible-links links @visible-node-ids*))
+        base-visible-link-list (fn []
+                                 (visible-links links @visible-node-ids*))
         node-index-by-id (into {} (map-indexed (fn [idx node] [(:id node) idx]) @layouted-nodes*))
         layout-by-id* (atom (into {} (map (fn [node] [(:id node) node]) @layouted-nodes*)))
         preview-layout-by-id* (atom nil)
@@ -1033,6 +1041,10 @@
         neighbor-map (build-neighbor-map links)
         highlighted-node-ids* (atom #{})
         highlight-state* (atom (logic/highlight-state @highlighted-node-ids* neighbor-map depth))
+        visible-link-list (fn []
+                            (logic/highlight-visible-links
+                             (base-visible-link-list)
+                             @highlight-state*))
         edge-render-info (render-edges! detail-layer @layout-by-id* (visible-link-list) dark? normalized-view-mode render-opts)
         edge-label-render-info (render-edge-labels! label-layer-wrapper world width height @layout-by-id* (visible-link-list) dark? normalized-view-mode show-edge-labels?)
         _ (.addChild detail-layer drag-edge-layer)
