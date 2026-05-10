@@ -70,7 +70,7 @@
     "webpack-app-build": "pnpm exec webpack build --mode production --config-name app",
     "webpack-mobile-build": "pnpm exec webpack build --mode production --config-name mobile",
     "sync-android-release": "pnpm clean && pnpm release-mobile && rm -rf ./static/mobile/**/*.map && pnpm exec cap sync android",
-    "sync-ios-release": "pnpm clean && pnpm release-mobile && rm -rf ./static/mobile/**/*.map && pnpm exec cap sync ios",
+    "sync-ios-release": "pnpm clean && pnpm release-mobile && rm -rf ./static/mobile/**/*.map && pnpm exec cap sync ios && pnpm test:ios-web-fonts",
     "clean": "gulp clean",
     "test": "run-s cljs:test cljs:run-test",
     "test:ios-web-fonts": "node ./scripts/check-ios-web-fonts.mjs",
