@@ -170,6 +170,7 @@
 (def ^:private tag-object-grid-columns 9)
 (def ^:private tag-object-grid-rows 7)
 (def ^:private page-node-scale 0.72)
+(def ^:private edge-label-visible-scale 0.82)
 (def ^:private navigation-idle-ms 90)
 (def ^:private node-transition-speed 0.22)
 
@@ -554,19 +555,57 @@
       (min 1.42)))
 
 (defn- edge-label-gap-width
-  [label world-scale]
+  [label]
   (let [label (logic/label-display-text label false)
-        scale (edge-label-display-scale world-scale)]
-    (-> (+ 18 (* 6.4 (count label) scale))
-        (max 34)
-        (min 140))))
+        ;; Keep the gap in world units so it zooms with the edge instead of
+        ;; recalculating margins while the camera is moving.
+        width (+ 8 (* 3.2 (count label)))]
+    (-> width
+        (max 20)
+        (min 72))))
+
+(defn- edge-segment
+  [from-node to-node parallel-offset]
+  (let [dx (- (:x to-node) (:x from-node))
+        dy (- (:y to-node) (:y from-node))
+        distance (max 1 (js/Math.sqrt (+ (* dx dx) (* dy dy))))
+        ux (/ dx distance)
+        uy (/ dy distance)
+        normal-x (- uy)
+        normal-y ux
+        line-offset (* (or parallel-offset 0) 5)
+        start-x (+ (:x from-node)
+                   (* ux (+ (:radius from-node 0) 3))
+                   (* normal-x line-offset))
+        start-y (+ (:y from-node)
+                   (* uy (+ (:radius from-node 0) 3))
+                   (* normal-y line-offset))
+        end-x (+ (- (:x to-node)
+                    (* ux (+ (:radius to-node 0) 5)))
+                 (* normal-x line-offset))
+        end-y (+ (- (:y to-node)
+                    (* uy (+ (:radius to-node 0) 5)))
+                 (* normal-y line-offset))
+        segment-dx (- end-x start-x)
+        segment-dy (- end-y start-y)
+        segment-distance (max 1 (js/Math.sqrt (+ (* segment-dx segment-dx)
+                                                  (* segment-dy segment-dy))))]
+    {:ux ux
+     :uy uy
+     :start-x start-x
+     :start-y start-y
+     :end-x end-x
+     :end-y end-y
+     :mid-x (/ (+ start-x end-x) 2)
+     :mid-y (/ (+ start-y end-y) 2)
+     :segment-distance segment-distance}))
 
 (defn- draw-edges!
   ([^js graphics layout-by-id links dark? view-mode]
    (draw-edges! graphics layout-by-id links dark? view-mode (logic/highlight-state #{} {}) {}))
   ([^js graphics layout-by-id links dark? view-mode highlight-state]
    (draw-edges! graphics layout-by-id links dark? view-mode highlight-state {}))
-  ([^js graphics layout-by-id links dark? view-mode highlight-state {:keys [show-arrows? show-edge-labels? scale]}]
+  ([^js graphics layout-by-id links dark? view-mode highlight-state {:keys [show-arrows? show-edge-labels?]}]
    (let [max-edges (logic/draw-edge-limit (count layout-by-id)
                                           (count links)
                                           view-mode)
@@ -574,48 +613,25 @@
                   (take max-edges links)
                   links)
          stroke-color (color->int (edge-color dark?))
-         runs (logic/edge-render-runs links* show-arrows?)
-         scale (max 0.0001 (or scale 1))]
+         runs (logic/edge-render-runs links* show-arrows?)]
      (.clear graphics)
      (doseq [{:keys [source target label show-arrow? parallel-offset]} runs]
        (when-let [from-node (get layout-by-id source)]
          (when-let [to-node (get layout-by-id target)]
-           (let [dx (- (:x to-node) (:x from-node))
-                 dy (- (:y to-node) (:y from-node))
-                 distance (max 1 (js/Math.sqrt (+ (* dx dx) (* dy dy))))
-                 ux (/ dx distance)
-                 uy (/ dy distance)
-                 normal-x (- uy)
-                 normal-y ux
-                 line-offset (* (or parallel-offset 0) 5)
-                 start-x (+ (:x from-node)
-                            (* ux (+ (:radius from-node 0) 3))
-                            (* normal-x line-offset))
-                 start-y (+ (:y from-node)
-                            (* uy (+ (:radius from-node 0) 3))
-                            (* normal-y line-offset))
-                 end-x (+ (- (:x to-node)
-                             (* ux (+ (:radius to-node 0) 5)))
-                          (* normal-x line-offset))
-                 end-y (+ (- (:y to-node)
-                             (* uy (+ (:radius to-node 0) 5)))
-                          (* normal-y line-offset))
-                 segment-dx (- end-x start-x)
-                 segment-dy (- end-y start-y)
-                 segment-distance (max 1 (js/Math.sqrt (+ (* segment-dx segment-dx)
-                                                           (* segment-dy segment-dy))))
+           (let [{:keys [ux uy start-x start-y end-x end-y mid-x mid-y segment-distance]}
+                 (edge-segment from-node to-node parallel-offset)
                  label-gap? (and show-edge-labels? (seq label))
                  half-gap (when label-gap?
-                            (-> (/ (edge-label-gap-width label scale) scale 2)
+                            (-> (/ (edge-label-gap-width label) 2)
                                 (min (/ segment-distance 3))))
                  gap-start-x (when half-gap
-                               (- (/ (+ start-x end-x) 2) (* ux half-gap)))
+                               (- mid-x (* ux half-gap)))
                  gap-start-y (when half-gap
-                               (- (/ (+ start-y end-y) 2) (* uy half-gap)))
+                               (- mid-y (* uy half-gap)))
                  gap-end-x (when half-gap
-                             (+ (/ (+ start-x end-x) 2) (* ux half-gap)))
+                             (+ mid-x (* ux half-gap)))
                  gap-end-y (when half-gap
-                             (+ (/ (+ start-y end-y) 2) (* uy half-gap)))
+                             (+ mid-y (* uy half-gap)))
                  stroke-width (if (:select-mode? highlight-state) 1.25 1)
                  alpha (edge-alpha highlight-state source target)
                  arrow! (fn [tip-x tip-y dir-x dir-y]
@@ -678,21 +694,23 @@
 (defn- position-edge-label-entry!
   [^js entry ^js world width height layout-by-id]
   (let [source (gobj/get entry "logseqGraphEdgeSource")
-        target (gobj/get entry "logseqGraphEdgeTarget")]
+        target (gobj/get entry "logseqGraphEdgeTarget")
+        parallel-offset (gobj/get entry "logseqGraphEdgeParallelOffset")]
     (if-let [from-node (get layout-by-id source)]
       (if-let [to-node (get layout-by-id target)]
-        (let [{from-x :x from-y :y} (screen-point world (:x from-node) (:y from-node))
-              {to-x :x to-y :y} (screen-point world (:x to-node) (:y to-node))
+        (let [{:keys [start-x start-y end-x end-y mid-x mid-y]}
+              (edge-segment from-node to-node parallel-offset)
+              {from-x :x from-y :y} (screen-point world start-x start-y)
+              {to-x :x to-y :y} (screen-point world end-x end-y)
+              {label-x :x label-y :y} (screen-point world mid-x mid-y)
               dx (- to-x from-x)
               dy (- to-y from-y)
               distance (js/Math.sqrt (+ (* dx dx) (* dy dy)))
-              mid-x (/ (+ from-x to-x) 2)
-              mid-y (/ (+ from-y to-y) 2)
               visible? (and (> distance 68)
-                            (<= -80 mid-x (+ width 80))
-                            (<= -40 mid-y (+ height 40)))]
-          (set! (.-x entry) mid-x)
-          (set! (.-y entry) mid-y)
+                            (<= -80 label-x (+ width 80))
+                            (<= -40 label-y (+ height 40)))]
+          (set! (.-x entry) label-x)
+          (set! (.-y entry) label-y)
           (let [label-scale (edge-label-display-scale (.. world -scale -x))]
             (set! (.. entry -scale -x) label-scale)
             (set! (.. entry -scale -y) label-scale))
@@ -723,8 +741,9 @@
           labeled-links (->> links
                              (take max-edges)
                              (filter #(seq (:label %)))
-                             (take edge-label-limit))]
-      (doseq [{:keys [source target label]} labeled-links]
+                             (take edge-label-limit))
+          labeled-runs (logic/edge-render-runs labeled-links false)]
+      (doseq [{:keys [source target label parallel-offset]} labeled-runs]
         (when-let [from-node (get layout-by-id source)]
           (when-let [to-node (get layout-by-id target)]
             (let [^js entry (new (.-Container PIXI))
@@ -733,6 +752,7 @@
                                      :style style})]
               (gobj/set entry "logseqGraphEdgeSource" source)
               (gobj/set entry "logseqGraphEdgeTarget" target)
+              (gobj/set entry "logseqGraphEdgeParallelOffset" parallel-offset)
               (when-let [^js anchor (.-anchor text)]
                 (set! (.-x anchor) 0.5)
                 (set! (.-y anchor) 0.5))
@@ -1527,13 +1547,13 @@
                                    true
                                    (true? show-arrows?)))
         effective-show-edge-labels? (fn []
-                                      (if (edge-detail-view-mode? normalized-view-mode)
-                                        true
-                                        (true? show-edge-labels?)))
+                                      (and (>= (.. world -scale -x) edge-label-visible-scale)
+                                           (if (edge-detail-view-mode? normalized-view-mode)
+                                             true
+                                             (true? show-edge-labels?))))
         edge-render-opts (fn []
                            {:show-arrows? (effective-show-arrows?)
-                            :show-edge-labels? (effective-show-edge-labels?)
-                            :scale (.. world -scale -x)})
+                            :show-edge-labels? (effective-show-edge-labels?)})
         neighbor-map (build-neighbor-map @display-links*)
         highlighted-node-ids* (atom #{})
         hovered-node-id* (atom nil)

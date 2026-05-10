@@ -657,15 +657,21 @@
   [view-mode value]
   (if (number? value)
     value
-    (if (= view-mode :tags-and-objects) 58 72)))
+    (case view-mode
+      :tags-and-objects 58
+      :page 118
+      82)))
 
 (defn- charge-strength
   [view-mode]
-  (if (= view-mode :tags-and-objects) -95 -125))
+  (case view-mode
+    :tags-and-objects -95
+    :page -180
+    -140))
 
 (defn- y-strength
   [view-mode]
-  (if (= view-mode :tags-and-objects) 0.018 0.025))
+  (if (= view-mode :tags-and-objects) 0.018 0.0))
 
 (defn layout-tick-count
   [node-count view-mode]
