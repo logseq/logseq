@@ -21,6 +21,10 @@ const resourceSyncGlobs = [
 const outputFilePath = path.join(outputPath, '**')
 const rawCopySrc = (globs, options = {}) =>
   gulp.src(globs, { encoding: false, ...options })
+const removeWoff2FontSources = (cssText) =>
+  cssText.
+    replace(/@font-face\s*{[^{}]*url\(["']?web\/Inter-[^{}]*?\.woff2[^{}]*}\s*/g, '').
+    replace(/url\((["']?)[^)"']+?\.woff2(?:\?[^)"']*)?\1\)\s*format\((["'])woff2\2\),?/g, '')
 const staticCleanKeep = new Set([
   'entitlements.plist',
   'node_modules',
@@ -53,12 +57,26 @@ const css = {
   buildMobileCSS (...params) {
     return gulp.series(
       () => exec(`pnpm css:mobile-build`, {}),
+      css._removeUnsupportedIOSFonts,
     )(...params)
   },
 
   _optimizeCSSForRelease () {
     return gulp.src(path.join(outputPath, 'css', 'style.css')).
       pipe(gulp.dest(path.join(outputPath, 'css')))
+  },
+
+  _removeUnsupportedIOSFonts () {
+    const mobileCssPath = path.join(mobilePath, 'css')
+    for (const file of ['inter.css', 'style.css']) {
+      const filePath = path.join(mobileCssPath, file)
+      if (fs.existsSync(filePath)) {
+        fs.writeFileSync(
+          filePath,
+          removeWoff2FontSources(fs.readFileSync(filePath, 'utf8')))
+      }
+    }
+    return Promise.resolve()
   },
 }
 
@@ -151,10 +169,9 @@ const common = {
       () => rawCopySrc([
         'node_modules/inter-ui/inter.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css'))),
-      () => rawCopySrc('node_modules/inter-ui/web/*.*').
-        pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'web'))),
       () => rawCopySrc([
-        'node_modules/katex/dist/fonts/*.woff2',
+        'node_modules/katex/dist/fonts/*.woff',
+        'node_modules/katex/dist/fonts/*.ttf',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'fonts'))),
     )(...params)
   },
