@@ -14,28 +14,28 @@
 (deftest test-qmd-command-entries
   (let [entries qmd-command/entries
         by-command (into {} (map (juxt :command identity) entries))]
-    (is (= #{:qmd-init :qsearch}
+    (is (= #{:qmd :qsearch}
            (set (keys by-command))))
-    (is (= ["qmd" "init"] (:cmds (:qmd-init by-command))))
+    (is (= ["qmd"] (:cmds (:qmd by-command))))
     (is (= ["qsearch"] (:cmds (:qsearch by-command))))
-    (is (contains? (get-in by-command [:qmd-init :spec]) :collection))
-    (is (contains? (get-in by-command [:qmd-init :spec]) :index))
-    (is (contains? (get-in by-command [:qsearch :spec]) :collection))
-    (is (contains? (get-in by-command [:qsearch :spec]) :index))
+    (is (not (contains? (get-in by-command [:qmd :spec]) :collection)))
+    (is (not (contains? (get-in by-command [:qmd :spec]) :index)))
+    (is (not (contains? (get-in by-command [:qsearch :spec]) :collection)))
+    (is (not (contains? (get-in by-command [:qsearch :spec]) :index)))
     (is (contains? (get-in by-command [:qsearch :spec]) :limit))
     (is (= :n (get-in by-command [:qsearch :spec :limit :alias])))
     (is (contains? (get-in by-command [:qsearch :spec]) :no-rerank))))
 
 (deftest test-build-actions
-  (testing "qmd init requires repo"
-    (let [result (qmd-command/build-init-action {:collection "notes"} nil)]
+  (testing "qmd requires repo"
+    (let [result (qmd-command/build-action {} nil)]
       (is (false? (:ok? result)))
       (is (= :missing-repo (get-in result [:error :code])))))
 
-  (testing "qmd init builds action with deterministic default collection"
-    (let [result (qmd-command/build-init-action {} "logseq_db_My Graph")]
+  (testing "qmd builds action with deterministic default collection"
+    (let [result (qmd-command/build-action {} "logseq_db_My Graph")]
       (is (true? (:ok? result)))
-      (is (= :qmd-init (get-in result [:action :type])))
+      (is (= :qmd (get-in result [:action :type])))
       (is (= "logseq_db_My Graph" (get-in result [:action :repo])))
       (is (re-matches #"logseq-my-graph-[0-9a-f]{8}"
                       (get-in result [:action :collection])))))
@@ -51,7 +51,10 @@
       (is (= :missing-query-text (get-in result [:error :code])))))
 
   (testing "qsearch joins positional query text"
-    (let [result (qmd-command/build-search-action {:limit 10 :no-rerank true}
+    (let [result (qmd-command/build-search-action {:limit 10
+                                                   :no-rerank true
+                                                   :collection "ignored"
+                                                   :index "ignored"}
                                                   ["markdown" "mirror"]
                                                   "logseq_db_demo")]
       (is (true? (:ok? result)))
@@ -61,7 +64,6 @@
               :query "markdown mirror"
               :limit 10
               :collection "logseq-demo-9d477851"
-              :index nil
               :no-rerank true}
              (:action result))))))
 
@@ -95,7 +97,33 @@
     (is (= [7 8 9]
            (qmd-command/extract-block-ids results)))))
 
-(deftest test-execute-qmd-init-creates-missing-collection
+(deftest test-execute-qmd-checks-qmd-before-touching-graph
+  (async done
+    (let [calls (atom [])]
+      (-> (p/with-redefs [qmd-command/<run-qmd
+                          (fn [args]
+                            (swap! calls conj args)
+                            (p/resolved {:exit 127
+                                         :out ""
+                                         :err "qmd not found"}))
+                          cli-server/ensure-server! (fn [_ _]
+                                                      (throw (js/Error. "server should not start")))
+                          transport/invoke (fn [_ _ _]
+                                             (throw (js/Error. "mirror should not regenerate")))]
+            (qmd-command/execute-qmd
+             {:type :qmd
+              :repo "logseq_db_demo"
+              :collection "custom"}
+             {:root-dir "/tmp/root"}))
+          (p/then (fn [result]
+                    (is (= :error (:status result)))
+                    (is (= :qmd-not-found (get-in result [:error :code])))
+                    (is (= [["--help"]]
+                           @calls))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-qmd-creates-missing-collection-embeds-and-updates
   (async done
     (let [calls (atom [])]
       (-> (p/with-redefs [qmd-command/<run-qmd
@@ -113,6 +141,12 @@
                                    "--name" "custom" "--mask" "**/*.md"] args)
                                {:exit 0 :out "created" :err ""}
 
+                               (= ["embed"] args)
+                               {:exit 0 :out "embedded" :err ""}
+
+                               (= ["update"] args)
+                               {:exit 0 :out "updated" :err ""}
+
                                :else
                                {:exit 99 :out "" :err (pr-str args)})))
                           cli-server/ensure-server! (fn [config repo]
@@ -121,24 +155,29 @@
                                              (is (= :thread-api/markdown-mirror-regenerate method))
                                              (is (= ["logseq_db_demo"] args))
                                              (p/resolved {:status :completed}))]
-            (qmd-command/execute-qmd-init
-             {:type :qmd-init
+            (qmd-command/execute-qmd
+             {:type :qmd
               :repo "logseq_db_demo"
               :collection "custom"}
              {:root-dir "/tmp/root"}))
           (p/then (fn [result]
                     (is (= :ok (:status result)))
-                    (is (= :created (get-in result [:data :action])))
+                    (is (= true (get-in result [:data :qmd-installed?])))
+                    (is (= :created (get-in result [:data :collection-action])))
+                    (is (= :completed (get-in result [:data :embed])))
+                    (is (= :completed (get-in result [:data :update])))
                     (is (= "custom" (get-in result [:data :collection])))
                     (is (= [["--help"]
                             ["collection" "show" "custom"]
                             ["collection" "add" "/tmp/root/graphs/demo/mirror/markdown"
-                             "--name" "custom" "--mask" "**/*.md"]]
+                             "--name" "custom" "--mask" "**/*.md"]
+                            ["embed"]
+                            ["update"]]
                            @calls))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
-(deftest test-execute-qmd-init-updates-existing-matching-collection
+(deftest test-execute-qmd-uses-existing-matching-collection-embeds-and-updates
   (async done
     (let [calls (atom [])]
       (-> (p/with-redefs [qmd-command/<run-qmd
@@ -150,25 +189,29 @@
                                "collection" {:exit 0
                                              :out "Collection: custom\n  Path:     /tmp/root/graphs/demo/mirror/markdown\n  Pattern:  **/*.md\n"
                                              :err ""}
+                               "embed" {:exit 0 :out "embedded" :err ""}
                                "update" {:exit 0 :out "updated" :err ""})))
                           cli-server/ensure-server! (fn [config _repo] config)
                           transport/invoke (fn [_ _ _] (p/resolved {:status :completed}))]
-            (qmd-command/execute-qmd-init
-             {:type :qmd-init
+            (qmd-command/execute-qmd
+             {:type :qmd
               :repo "logseq_db_demo"
               :collection "custom"}
              {:root-dir "/tmp/root"}))
           (p/then (fn [result]
                     (is (= :ok (:status result)))
-                    (is (= :updated (get-in result [:data :action])))
+                    (is (= :existing (get-in result [:data :collection-action])))
+                    (is (= :completed (get-in result [:data :embed])))
+                    (is (= :completed (get-in result [:data :update])))
                     (is (= [["--help"]
                             ["collection" "show" "custom"]
+                            ["embed"]
                             ["update"]]
                            @calls))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
-(deftest test-execute-qmd-init-updates-existing-collection-through-symlinked-path
+(deftest test-execute-qmd-uses-existing-collection-through-symlinked-path
   (async done
     (let [tmp-dir (.mkdtempSync fs (node-path/join (.tmpdir os) "logseq-qmd-test-"))
           real-root (node-path/join tmp-dir "real-root")
@@ -186,23 +229,24 @@
                                                        "  Path:     " real-mirror-dir "\n"
                                                        "  Pattern:  **/*.md\n")
                                              :err ""}
+                               "embed" {:exit 0 :out "embedded" :err ""}
                                "update" {:exit 0 :out "updated" :err ""})))
                           cli-server/ensure-server! (fn [config _repo] config)
                           transport/invoke (fn [_ _ _] (p/resolved {:status :completed}))]
-            (qmd-command/execute-qmd-init
-             {:type :qmd-init
+            (qmd-command/execute-qmd
+             {:type :qmd
               :repo "logseq_db_demo"
               :collection "custom"}
              {:root-dir link-root}))
           (p/then (fn [result]
                     (is (= :ok (:status result)))
-                    (is (= :updated (get-in result [:data :action])))))
+                    (is (= :existing (get-in result [:data :collection-action])))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally (fn []
                        (.rmSync fs tmp-dir #js {:recursive true :force true})
                        (done)))))))
 
-(deftest test-execute-qmd-init-fails-on-mismatched-collection-path
+(deftest test-execute-qmd-fails-on-mismatched-collection-path
   (async done
     (-> (p/with-redefs [qmd-command/<run-qmd
                         (fn [args]
@@ -214,8 +258,8 @@
                                            :err ""})))
                         cli-server/ensure-server! (fn [config _repo] config)
                         transport/invoke (fn [_ _ _] (p/resolved {:status :completed}))]
-          (qmd-command/execute-qmd-init
-           {:type :qmd-init
+          (qmd-command/execute-qmd
+           {:type :qmd
             :repo "logseq_db_demo"
             :collection "custom"}
            {:root-dir "/tmp/root"}))
@@ -293,7 +337,7 @@
                             (swap! calls conj {:qmd args})
                             (p/resolved
                              (cond
-                               (= ["--index" "test-index" "query" "deadline" "--json" "-c" "custom"] args)
+                               (= ["query" "deadline" "--json" "-c" "logseq-demo-9d477851"] args)
                                {:exit 0
                                 :out (str "[{\"score\":0.46,"
                                           "\"file\":\"qmd://custom/pages/db-release-checklist.md\","
@@ -301,7 +345,7 @@
                                           "\"snippet\":" (js/JSON.stringify snippet) "}]")
                                 :err ""}
 
-                               (= ["--index" "test-index" "get" "qmd://custom/pages/db-release-checklist.md:1" "-l" "15"] args)
+                               (= ["get" "qmd://custom/pages/db-release-checklist.md:1" "-l" "15"] args)
                                {:exit 0
                                 :out (str "id:: 11111111-1111-4111-8111-111111111111\n\n"
                                           "- DONE on web, app should be able to input immediately after cmd+e(quick add) #[[UX Enhancement]] <!-- id: 6515 -->\n"
@@ -331,8 +375,7 @@
              {:type :qsearch
               :repo "logseq_db_demo"
               :query "deadline"
-              :collection "custom"
-              :index "test-index"}
+              :collection "logseq-demo-9d477851"}
              {:output-format :json}))
           (p/then (fn [result]
                     (is (= :ok (:status result)))
@@ -342,8 +385,8 @@
                            (mapv (fn [{:keys [invoke]}]
                                    (get-in invoke [1 2]))
                                  (filter :invoke @calls))))
-                    (is (= [["--index" "test-index" "query" "deadline" "--json" "-c" "custom"]
-                            ["--index" "test-index" "get" "qmd://custom/pages/db-release-checklist.md:1" "-l" "15"]]
+                    (is (= [["query" "deadline" "--json" "-c" "logseq-demo-9d477851"]
+                            ["get" "qmd://custom/pages/db-release-checklist.md:1" "-l" "15"]]
                            (mapv :qmd (filter :qmd @calls))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -792,6 +835,6 @@
                   (is (= :error (:status result)))
                   (is (= :qmd-no-block-ids (get-in result [:error :code])))
                   (is (string/includes? (get-in result [:error :hint])
-                                        "logseq qmd init"))))
+                                        "logseq qmd"))))
         (p/catch (fn [e] (is false (str "unexpected error: " e))))
         (p/finally done))))

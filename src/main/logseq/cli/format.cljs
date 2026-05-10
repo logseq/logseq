@@ -204,7 +204,7 @@
     :missing-tag-name "Use --name <tag-name>"
     :missing-query "Use --query <edn>"
     :missing-query-text (missing-search-query-hint command)
-    :qmd-no-block-ids "Run `logseq qmd init [--graph <graph>]` and retry"
+    :qmd-no-block-ids "Run `logseq qmd [--graph <graph>]` and retry"
     :unknown-query "Use `logseq query list` to see available queries"
     :ambiguous-tag-name "Retry with --id <tag-id>"
     :ambiguous-property-name "Retry with --id <property-id>"
@@ -555,17 +555,15 @@
        (str "\nMissing ids: " (string/join ", " missing-ids)))
      (:query human-data))))
 
-(defn- format-qmd-init
-  [{:keys [collection mirror-dir action]}]
+(defn- format-qmd
+  [{:keys [collection mirror-dir collection-action embed]
+    update-status :update}]
   (string/join "\n"
-               [(str "QMD collection "
-                     (case action
-                       :updated "updated"
-                       :created "created"
-                       "ready")
-                     ": "
-                     (or collection "-"))
-                (str "Mirror: " (or mirror-dir "-"))]))
+               [(str "QMD ready: " (or collection "-"))
+                (str "Mirror: " (or mirror-dir "-"))
+                (str "Collection: " (name (or collection-action :unknown)))
+                (str "Embed: " (name (or embed :unknown)))
+                (str "Update: " (name (or update-status :unknown)))]))
 
 (defn- normalize-asset-type
   [value]
@@ -1177,7 +1175,7 @@
         :list-asset (format-list-asset (:items data) now-ms list-title-max-display-width)
         (:search-block :search-page :search-property :search-tag)
         (format-list-page (:items data) now-ms)
-        :qmd-init (format-qmd-init data)
+        :qmd (format-qmd data)
         :qsearch (format-qsearch data (get-in human [:qsearch]) now-ms list-title-max-display-width)
         :upsert-block (format-upsert-block context (:result data))
         :upsert-page (format-upsert-page context (:result data))

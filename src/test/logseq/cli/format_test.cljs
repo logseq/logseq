@@ -602,24 +602,33 @@
     (is (= "logseq.class/Tag" (get-in parsed-json [:data :items 0 :db/ident])))
     (is (= :logseq.class/Tag (get-in parsed-edn [:data :items 0 :db/ident])))))
 
-(deftest test-human-output-qmd-init
+(deftest test-human-output-qmd
   (let [created (format/format-result {:status :ok
-                                       :command :qmd-init
+                                       :command :qmd
                                        :data {:repo "logseq_db_demo"
+                                              :qmd-installed? true
                                               :collection "custom"
                                               :mirror-dir "/tmp/root/graphs/demo/mirror/markdown"
-                                              :action :created}}
+                                              :collection-action :created
+                                              :embed :completed
+                                              :update :completed}}
                                       {:output-format nil})
         updated (format/format-result {:status :ok
-                                       :command :qmd-init
+                                       :command :qmd
                                        :data {:repo "logseq_db_demo"
+                                              :qmd-installed? true
                                               :collection "custom"
                                               :mirror-dir "/tmp/root/graphs/demo/mirror/markdown"
-                                              :action :updated}}
+                                              :collection-action :existing
+                                              :embed :completed
+                                              :update :completed}}
                                       {:output-format nil})]
-    (is (string/includes? created "QMD collection created: custom"))
+    (is (string/includes? created "QMD ready: custom"))
+    (is (string/includes? created "Collection: created"))
+    (is (string/includes? created "Embed: completed"))
+    (is (string/includes? created "Update: completed"))
     (is (string/includes? created "/tmp/root/graphs/demo/mirror/markdown"))
-    (is (string/includes? updated "QMD collection updated: custom"))))
+    (is (string/includes? updated "Collection: existing"))))
 
 (deftest test-human-output-qsearch
   (testing "renders page groups with show-like rows instead of a list table"
