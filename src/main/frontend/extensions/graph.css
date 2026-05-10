@@ -80,7 +80,7 @@
     position: absolute;
     left: 0;
     bottom: calc(100% + 10px);
-    width: min(360px, calc(100vw - 36px));
+    width: min(280px, calc(100vw - 36px));
     max-height: min(680px, calc(100vh - 56px));
     display: flex;
     flex-direction: column;
@@ -486,7 +486,7 @@ html[data-theme='light'] .graph-mode-tab[aria-selected="true"],
     left: 12px;
     bottom: 12px;
     z-index: 6;
-    max-width: min(360px, calc(100vw - 24px));
+    max-width: min(280px, calc(100vw - 24px));
     padding: 10px;
     border: 1px solid var(--ls-border-color);
     border-radius: 8px;
