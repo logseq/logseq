@@ -306,6 +306,7 @@ Inspect and edit commands:
 - `search page --content <query>` - search pages by `:block/name` (case-insensitive substring)
 - `search property --content <query>` - search properties by `:block/title` (Property entities only)
 - `search tag --content <query>` - search tags by `:block/title` (Tag entities only)
+- `qsearch <query>` - search QMD Markdown Mirror output and render matched Logseq blocks grouped by page in human output; uses the current graph when `--graph` is omitted
 - `query --query <edn> [--inputs <edn-vector>]` - run a Datascript query against the graph
 - `query --name <query-name> [--inputs <edn-vector>]` - run a named query (built-in or from `cli.edn`)
 - `query list` - list available named queries
@@ -409,6 +410,7 @@ JSON key migration (flat -> namespaced):
   - `doctor-server-revision-mismatch`: one or more discovered servers use a different revision than the local CLI revision (warning). Follow the printed remediation command for each affected graph: `logseq server restart --graph <name>`.
   - If bundled runtime startup fails with missing-module or missing-file errors, rebuild with `pnpm db-worker-node:release:bundle` and confirm `dist/db-worker-node.js` exists and every path listed in `dist/db-worker-node-assets.json` is present next to it.
 - `query` human output returns a plain string (the query result rendered via `pr-str`), which is convenient for pipelines like `logseq query ... | xargs logseq show --id`.
+- `qsearch` human output is page grouped. Each group renders the page id/title as the tree root and the matched blocks below it with the same tree-style id column and block details used by `show`, including visible tags and properties. When colors are enabled, query terms are highlighted case-insensitively after the final human text is rendered. JSON and EDN output keep the structured `:items`, `:missing-ids`, and `:qmd` payload.
 - Built-in named queries currently include `block-search`, `task-search`, `recent-updated`, `list-status`, and `list-priority`. Use `query list` to see the full set for your config.
 - Show output resolves block reference UUIDs inside text, replacing `[[<uuid>]]` with the referenced block content. Nested references are resolved recursively up to 10 levels to avoid excessive expansion. For example: `[[<uuid1>]]` → `[[some text [[<uuid2>]]]]` and then `<uuid2>` is also replaced.
 - When `show` targets an ordinary block (`--id` or `--uuid`), human output prepends one breadcrumb line (`page > ... > nearest parent`) above the root block line. Each segment is display-width truncated to `24` with `…`.

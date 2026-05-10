@@ -30,7 +30,7 @@
                 (map #(str "LPT" %) (range 1 10)))))
 
 (def ^:private max-file-stem-length 160)
-(def ^:private markdown-block-re #"^(\s*)-\s?(.*)$")
+(def ^:private markdown-block-line-re #"^(\s*)-\s?(.*)$")
 (def ^:private markdown-property-line-re #"^(\s*)\*\s+[^:\s][^:]*::\s?.*$")
 (def ^:private property-line-re #"^(\s*)[^:\s][^:]*::\s?.*$")
 (def ^:private ref-or-tag-re #"(#?)\[\[([^\[\]]+)\]\]")
@@ -306,17 +306,93 @@
       (str content " " (string/join " " tag-tokens'))
       content)))
 
-(defn- decorate-block-line
-  [block-info line]
-  (if-let [[_ spaces title] (re-matches markdown-block-re line)]
-    (str spaces "- " (decorate-block-content block-info title))
-    line))
+(declare decorate-rendered-content)
+
+(defn- order-list-number?
+  [block]
+  (let [v (:logseq.property/order-list-type block)
+        content (cond
+                  (string? v) v
+                  (keyword? v) (name v)
+                  :else (db-property/property-value-content v))]
+    (= "number" (some-> content string/lower-case))))
+
+(defn- embed-target
+  [block]
+  (let [target (:block/link block)]
+    (when (and (:block/uuid target)
+               (not (ldb/page? target)))
+      target)))
+
+(defn- block-id-comment
+  [db-id]
+  (str "<!-- id: " db-id " -->"))
+
+(defn- append-block-id-comment
+  [content db-id]
+  (let [comment-text (block-id-comment db-id)]
+    (if (string/blank? content)
+      comment-text
+      (str content " " comment-text))))
+
+(defn- content-first-line
+  [content]
+  (-> (or content "")
+      string/split-lines
+      first
+      (or "")
+      string/trim))
+
+(defn- block-first-line-fragment
+  [block]
+  (content-first-line (:block/title block)))
+
+(defn- code-fence-block-line?
+  [content]
+  (string/starts-with? (string/trim (or content "")) "```"))
+
+(defn- normalize-rendered-match-text
+  [content]
+  (-> (or content "")
+      string/lower-case
+      (string/replace ref-or-tag-re "$1[[]]")
+      (string/replace simple-hashtag-re "$1#[[]]")
+      (string/replace #"\s+" " ")
+      string/trim))
+
+(defn- rendered-line-matches-block?
+  [block-info content]
+  (when block-info
+    (let [content (or content "")
+          fragment (:first-line-fragment block-info)
+          content* (normalize-rendered-match-text content)
+          fragment* (normalize-rendered-match-text fragment)]
+      (cond
+        (:code-block? block-info)
+        (code-fence-block-line? content)
+
+        (string/blank? fragment)
+        (string/blank? (string/trim content))
+
+        :else
+        (string/includes? content* fragment*)))))
+
+(defn- code-block?
+  [block]
+  (or (= :code (:logseq.property.node/display-type block))
+      (some #(= :logseq.class/Code-block (:db/ident %))
+            (:block/tags block))))
 
 (defn- block-line-info
-  [db block]
-  {:status-marker (when (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
+  [db block marker]
+  {:db/id (:db/id block)
+   :first-line-fragment (block-first-line-fragment block)
+   :code-block? (code-block? block)
+   :status-marker (when (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
                     (some-> (:logseq.property/status block) status-marker))
-   :tag-tokens (mirror-tag-tokens block)})
+   :tag-tokens (mirror-tag-tokens block)
+   :marker marker
+   :embed-target (embed-target block)})
 
 (defn- property-derived-block?
   [block]
@@ -333,64 +409,139 @@
   [page]
   (outline-children page))
 
-(defn- outline-block-and-children
-  [block]
-  (cons block (mapcat outline-block-and-children (outline-children block))))
+(defn- block-line-infos
+  [db blocks]
+  (loop [[block & more] blocks
+         number 1
+         result []]
+    (if-not block
+      result
+      (let [ordered? (order-list-number? block)
+            marker (if ordered? (str number ".") "-")
+            result' (-> result
+                        (conj (block-line-info db block marker))
+                        (into (block-line-infos db (outline-children block))))]
+        (recur more
+               (cond-> number ordered? inc)
+               result')))))
 
 (defn- rendered-block-line-infos
   [db page]
-  (->> (mapcat outline-block-and-children (page-root-blocks page))
-       (map (fn [block]
-              (block-line-info db block)))))
+  (block-line-infos db (page-root-blocks page)))
 
-(defn- add-page-id-to-rendered-content
-  [db page content]
-  (let [block-line-infos (rendered-block-line-infos db page)]
+(defn- block->content-context
+  [options]
+  {:export-bullet-indentation (or (:export-bullet-indentation options) "  ")
+   :excluded-properties #{:logseq.property/status}
+   :export-properties-as-list-items? true
+   :export-node-property-values-as-page-refs? true
+   :export-default-property-values-as-blocks? true
+   :preserve-block-refs? true
+   :date-formatter (:date-formatter options)})
+
+(defn- block-content
+  [db block-uuid tree-opts options]
+  (common-file/block->content db block-uuid tree-opts (block->content-context options)))
+
+(defn- line-level
+  [spaces options]
+  (let [indent-width (max 1 (count (or (:export-bullet-indentation options) "  ")))]
+    (inc (quot (count spaces) indent-width))))
+
+(defn- decorate-block-line
+  [db block-info line options]
+  (if-let [[_ spaces title] (re-matches markdown-block-line-re line)]
+    (if-let [target (:embed-target block-info)]
+      (string/split-lines
+       (decorate-rendered-content
+        db
+        (block-content db (:block/uuid target) {:init-level (line-level spaces options)} options)
+        (block-line-infos db [target])
+        options
+        {:initial-lines []}))
+      (let [content (decorate-block-content block-info title)
+            content (cond-> content
+                      (not (:code-block? block-info))
+                      (append-block-id-comment (:db/id block-info)))
+            marker (or (:marker block-info) "-")]
+        [(str spaces marker
+              (when-not (string/blank? content) " ")
+              content)]))
+    [line]))
+
+(defn- decorate-rendered-content
+  [db content line-infos options {:keys [initial-lines insert-blank-before-first-block?]}]
+  (let [initial-lines (or initial-lines [])]
     (loop [[line & more] (string/split-lines (or content ""))
-           [block-line-info' & more-block-line-infos] block-line-infos
-           lines [(id-property-line (:block/uuid page))]
+           [block-line-info' & more-block-line-infos] line-infos
+           lines initial-lines
            seen-block? false
-           property-indent nil]
+           property-indent nil
+           in-code-block? false]
       (if (nil? line)
         (string/join "\n" lines)
-        (if (property-value-line? line property-indent)
+        (cond
+          in-code-block?
           (recur more
                  (cons block-line-info' more-block-line-infos)
                  (conj lines line)
                  seen-block?
-                 property-indent)
-          (if (re-matches markdown-block-re line)
-            (let [lines' (cond-> lines
-                           (not seen-block?) (conj "")
-                           true (conj (decorate-block-line block-line-info' line)))]
+                 property-indent
+                 (not (code-fence-block-line? line)))
+
+          (property-value-line? line property-indent)
+          (recur more
+                 (cons block-line-info' more-block-line-infos)
+                 (conj lines line)
+                 seen-block?
+                 property-indent
+                 false)
+
+          :else
+          (if-let [[_ _ title] (re-matches markdown-block-line-re line)]
+            (if (rendered-line-matches-block? block-line-info' title)
+              (let [lines' (cond-> lines
+                             (and insert-blank-before-first-block?
+                                  (not seen-block?)) (conj "")
+                             true (into (decorate-block-line db block-line-info' line options)))]
+                (recur more
+                       more-block-line-infos
+                       lines'
+                       true
+                       nil
+                       (and (:code-block? block-line-info')
+                            (code-fence-block-line? title))))
               (recur more
-                     more-block-line-infos
-                     lines'
-                     true
-                     nil))
+                     (cons block-line-info' more-block-line-infos)
+                     (conj lines line)
+                     seen-block?
+                     property-indent
+                     false))
             (let [property-indent' (property-line-indent line)]
               (recur more
                      (cons block-line-info' more-block-line-infos)
                      (conj lines line)
                      seen-block?
-                     property-indent'))))))))
+                     property-indent'
+                     false))))))))
+
+(defn- add-page-id-to-rendered-content
+  [db page content options]
+  (decorate-rendered-content
+   db
+   content
+   (rendered-block-line-infos db page)
+   options
+   {:initial-lines [(id-property-line (:block/uuid page))]
+    :insert-blank-before-first-block? true}))
 
 (defn- render-page-content
   [db page options]
   (add-page-id-to-rendered-content
    db
    page
-   (common-file/block->content
-    db
-    (:block/uuid page)
-    {:include-page-properties? true}
-    {:export-bullet-indentation (or (:export-bullet-indentation options) "  ")
-     :excluded-properties #{:logseq.property/status}
-     :export-properties-as-list-items? true
-     :export-node-property-values-as-page-refs? true
-     :export-default-property-values-as-blocks? true
-     :preserve-block-refs? true
-     :date-formatter (:date-formatter options)})))
+   (block-content db (:block/uuid page) {:include-page-properties? true} options)
+   options))
 
 (defn- mirrorable-page?
   [page]

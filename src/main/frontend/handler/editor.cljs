@@ -2704,34 +2704,88 @@
         :else
         nil))))
 
-(defn- input-page-ref?
-  [k current-pos blank-selected? last-key-code]
-  (and blank-selected?
-       (contains? keycode/left-square-brackets-keys k)
-       (= (:key last-key-code) k)
-       (> current-pos 0)))
+(def ^:private block-ref-trigger-keys
+  (conj keycode/left-square-brackets-keys "Process"))
+
+(defn- block-ref-trigger-key?
+  [k]
+  (contains? block-ref-trigger-keys k))
+
+(defn- replacement-edit
+  [value replacement {:keys [start end]}]
+  {:value (str (subs value 0 start) replacement (subs value end))
+   :pos (+ start 2)})
+
+(defn- double-left-trigger-edit
+  [value current-pos left replacement]
+  (let [start (- current-pos (* 2 (count left)))]
+    (when (and (>= start 0)
+               (= (subs value start current-pos) (str left left)))
+      (replacement-edit value replacement {:start start :end current-pos}))))
+
+(def ^:private fullwidth-block-ref-patterns
+  #{"【【"
+    "【【】"
+    "【【】】"
+    "【】【"
+    "【】【】"})
+
+(defn- fullwidth-block-ref-trigger-range
+  [value current-pos]
+  (let [min-start (max 0 (- current-pos 4))
+        ;; Patterns can extend up to 3 chars past cursor (e.g. cursor at pos 1 in "【【】】").
+        ;; Use +4 so the full 4-char pattern is always reachable.
+        max-end (min (count value) (+ current-pos 4))
+        candidates (for [start (range min-start current-pos)
+                         end (range current-pos (inc max-end))
+                         :let [text (subs value start end)]
+                         :when (contains? fullwidth-block-ref-patterns text)]
+                     {:start start
+                      :end end})]
+    (when (seq candidates)
+      (apply max-key #(- (:end %) (:start %)) candidates))))
+
+(defn- fullwidth-block-ref-trigger-edit
+  [value current-pos]
+  (when-let [range (fullwidth-block-ref-trigger-range value current-pos)]
+    (replacement-edit value page-ref/left-and-right-brackets range)))
+
+(defn- block-ref-trigger-edit
+  [value current-pos k]
+  (or (fullwidth-block-ref-trigger-edit value current-pos)
+      (when (contains? keycode/left-square-brackets-keys k)
+        (double-left-trigger-edit value current-pos "[" page-ref/left-and-right-brackets))))
+
+(defn- apply-bracket-trigger!
+  [input {:keys [value pos]} command-step]
+  (state/set-block-content-and-last-pos! (.-id input) value pos)
+  (commands/handle-step command-step)
+  (cursor/move-cursor-to input pos)
+  (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
 (defn- default-case-for-keyup-handler
   [input current-pos k code is-processed?]
-  (let [last-key-code (state/get-last-key-code)
-        blank-selected? (string/blank? (util/get-selected-text))
+  (let [blank-selected? (string/blank? (util/get-selected-text))
         non-enter-processed? (and is-processed? ;; #3251
                                   (not= code keycode/enter-code))  ;; #3459
-        editor-action (state/get-editor-action)]
-    (if (and (= editor-action :page-search-hashtag)
-             (input-page-ref? k current-pos blank-selected? last-key-code))
-      (do
-        (commands/handle-step [:editor/input page-ref/right-brackets {:last-pattern :skip-check
-                                                                      :backward-pos 2}])
-        (commands/handle-step [:editor/search-page])
-        (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
-      (when (and (not editor-action) (not non-enter-processed?))
+        editor-action (state/get-editor-action)
+        value (gobj/get input "value")
+        block-ref-trigger? (and blank-selected? (block-ref-trigger-key? k))
+        block-ref-edit (when block-ref-trigger?
+                         (block-ref-trigger-edit value current-pos k))]
+    (if (and (= editor-action :page-search-hashtag) block-ref-edit)
+      (apply-bracket-trigger! input block-ref-edit [:editor/search-page-hashtag])
+      (when-not editor-action
         (cond
-         ;; When you type text inside square brackets
-          (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
+          (and block-ref-edit
+               (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
+          (apply-bracket-trigger! input block-ref-edit [:editor/search-page])
+
+          ;; When you type text inside square brackets
+          (and (not non-enter-processed?)
+               (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
                (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
           (let [orig-pos (cursor/get-caret-pos input)
-                value (gobj/get input "value")
                 square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) page-ref/left-brackets)
                 pos (+ square-pos 2)
                 _ (state/set-editor-last-pos! pos)
@@ -2741,27 +2795,6 @@
                                :editor/search-page)]
             (commands/handle-step [command-step])
             (state/set-editor-action-data! {:pos pos}))
-
-         ;; Handle non-ascii square brackets
-          (and (input-page-ref? k current-pos blank-selected? last-key-code)
-               (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
-          (do
-            (commands/handle-step [:editor/input page-ref/left-and-right-brackets {:backward-truncate-number 2
-                                                                                   :backward-pos 2}])
-            (commands/handle-step [:editor/search-page])
-            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
-
-         ;; Handle non-ascii parentheses
-          (and blank-selected?
-               (contains? keycode/left-paren-keys k)
-               (= (:key last-key-code) k)
-               (> current-pos 0)
-               (not (wrapped-by? input block-ref/left-parens block-ref/right-parens)))
-          (do
-            (commands/handle-step [:editor/input block-ref/left-and-right-parens {:backward-truncate-number 2
-                                                                                  :backward-pos 2}])
-            (commands/handle-step [:editor/search-block :reference])
-            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
           :else
           nil)))))
@@ -2835,7 +2868,7 @@
                                      :key k
                                      :shift? (.-shiftKey e)}))
         (when-not (state/get-editor-action)
-          (state/set-editor-last-pos! current-pos))))))
+          (state/set-editor-last-pos! (cursor/pos input)))))))
 
 (defn editor-on-click!
   [id]
