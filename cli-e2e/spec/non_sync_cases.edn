@@ -629,6 +629,85 @@
      :qsearch ["--collection" "--no-rerank"]}},
    :tags [:qmd :search],
    :extends :non-sync/graph-json-env}
+  {:id "qmd-init-and-qsearch-human-page-groups",
+   :setup
+   ["python3 - <<'PY'
+import pathlib
+p = pathlib.Path('{{tmp-dir}}/fake-bin/qmd')
+p.parent.mkdir(parents=True, exist_ok=True)
+p.write_text(r'''#!/usr/bin/env python3
+import json
+import os
+import pathlib
+import re
+import sys
+
+args = sys.argv[1:]
+state = pathlib.Path(os.environ['QMD_FAKE_STATE'])
+
+if args == ['--help']:
+    print('qmd help')
+    sys.exit(0)
+
+if args[:2] == ['collection', 'show']:
+    if not state.exists():
+        print('Collection not found', file=sys.stderr)
+        sys.exit(1)
+    print('Collection: ' + args[2])
+    print('  Path:     ' + state.read_text().strip())
+    print('  Pattern:  **/*.md')
+    sys.exit(0)
+
+if args[:2] == ['collection', 'add']:
+    state.write_text(args[2])
+    print('created')
+    sys.exit(0)
+
+if args[:1] == ['update']:
+    print('updated')
+    sys.exit(0)
+
+if args[:1] == ['query']:
+    root = pathlib.Path(state.read_text().strip())
+    rows = []
+    for path in sorted(root.rglob('*.md')):
+        text = path.read_text(encoding='utf8')
+        match = re.search(r'<!-- id: (\\d+) -->', text)
+        if match:
+            rows.append({
+                'score': 1,
+                'file': 'qmd://custom/' + path.name,
+                'snippet': '- qmd target <!-- id: ' + match.group(1) + ' -->',
+            })
+            break
+    print(json.dumps(rows))
+    sys.exit(0)
+
+print('unexpected args: ' + repr(args), file=sys.stderr)
+sys.exit(2)
+''')
+p.chmod(0o755)
+PY"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name QmdHumanTag >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name qmd-human-prop --public true >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page QmdHumanPage --content \"qmd target\" --update-tags '[\"QmdHumanTag\"]' --update-properties '{:qmd-human-prop \"rich value\"}' >/dev/null"],
+   :cmds
+   ["QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-human-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json qmd init --graph {{graph-arg}} --collection custom >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph switch --graph {{graph-arg}} >/dev/null"
+    "QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-human-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human qsearch qmd target --collection custom --no-rerank"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["QmdHumanPage" "qmd target #QmdHumanTag" "qmd-human-prop: rich value" "└──"],
+    :stdout-not-contains ["QmdHumanPage (1 match)" "PAGE-TITLE" "Count:"]},
+   :covers
+   {:commands ["upsert tag" "upsert property" "qmd init" "graph switch" "qsearch"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--name" "--target-page" "--content" "--update-tags" "--update-properties"],
+     :qmd ["--collection"]
+     :qsearch ["--collection" "--no-rerank"]}},
+   :tags [:qmd :search],
+   :extends :non-sync/graph-json-env}
   {:id "search-page-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page SearchPageTarget >/dev/null"],

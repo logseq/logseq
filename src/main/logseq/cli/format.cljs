@@ -7,6 +7,7 @@
             [logseq.cli.humanize :as cli-humanize]
             [logseq.cli.output-mode :as output-mode]
             [logseq.cli.style :as style]
+            [logseq.cli.tree-text :as tree-text]
             [logseq.common.util :as common-util]
             ["string-width" :default string-width]))
 
@@ -191,7 +192,7 @@
     :search-page "Use: logseq search page --content <query>"
     :search-property "Use: logseq search property --content <query>"
     :search-tag "Use: logseq search tag --content <query>"
-    :qsearch "Use: logseq qsearch <query> --graph <graph>"
+    :qsearch "Use: logseq qsearch <query> [--graph <graph>]"
     "Use: logseq search <block|page|property|tag> --content <query>"))
 
 (defn- error-hint
@@ -203,7 +204,7 @@
     :missing-tag-name "Use --name <tag-name>"
     :missing-query "Use --query <edn>"
     :missing-query-text (missing-search-query-hint command)
-    :qmd-no-block-ids "Run `logseq qmd init --graph <graph>` and retry"
+    :qmd-no-block-ids "Run `logseq qmd init [--graph <graph>]` and retry"
     :unknown-query "Use `logseq query list` to see available queries"
     :ambiguous-tag-name "Retry with --id <tag-id>"
     :ambiguous-property-name "Retry with --id <property-id>"
@@ -420,26 +421,139 @@
    (format-list-dynamic items now-ms list-node-columns {:title-max-display-width title-max-display-width
                                                          :truncate-cell-max-lines list-human-cell-max-lines})))
 
-(def ^:private qsearch-columns
-  [["RANK"       (fn [item _] (:qmd/rank item)) [:qmd/rank] true]
-   ["ID"         (fn [item _] (or (:db/id item) (:id item))) [:db/id :id] true]
-   ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item))) [:title :block/title :name]]
-   ["PAGE-ID"    (fn [item _] (:block/page-id item)) [:block/page-id]]
-   ["PAGE-TITLE" (fn [item _] (:block/page-title item)) [:block/page-title]]
-   ["SCORE"      (fn [item _] (:qmd/score item)) [:qmd/score]]
-   ["FILE"       (fn [item _] (:qmd/file item)) [:qmd/file]]])
+(defn- qsearch-item-id
+  [item]
+  (or (:db/id item) (:id item)))
+
+(defn- qsearch-page-entity
+  [item]
+  (let [page (:block/page item)
+        page-id (:block/page-id item)
+        page-title (:block/page-title item)]
+    (cond
+      (map? page) page
+      (or page-id page-title)
+      (cond-> {}
+        page-id (assoc :db/id page-id)
+        page-title (assoc :block/title page-title))
+      :else
+      {:block/title "Unknown Page"})))
+
+(defn- qsearch-page-label
+  [page]
+  (or (:block/title page)
+      (:block/name page)
+      (some-> (:block/uuid page) str)
+      (some-> (:db/id page) str)
+      "Unknown Page"))
+
+(defn- qsearch-page-key
+  [page]
+  (if-let [id (:db/id page)]
+    [:db/id id]
+    [:label (qsearch-page-label page)]))
+
+(defn- dedupe-qsearch-items
+  [items]
+  (second
+   (reduce (fn [[seen acc] item]
+             (let [id (qsearch-item-id item)]
+               (if (and id (contains? seen id))
+                 [seen acc]
+                 [(cond-> seen id (conj id))
+                  (conj acc item)])))
+           [#{} []]
+           (or items []))))
+
+(defn- append-qsearch-group-item
+  [{:keys [groups by-key] :as state} item]
+  (let [page (qsearch-page-entity item)
+        page-key (qsearch-page-key page)
+        group-idx (get by-key page-key)
+        item* (cond-> item
+                (nil? (:db/id item)) (assoc :db/id (qsearch-item-id item)))]
+    (if (some? group-idx)
+      (update-in state [:groups group-idx :items] conj item*)
+      (let [group {:page page
+                   :items [item*]}
+            group-idx (count groups)]
+        (-> state
+            (update :groups conj group)
+            (assoc-in [:by-key page-key] group-idx))))))
+
+(defn- qsearch-page-groups
+  [items]
+  (:groups
+   (reduce append-qsearch-group-item
+           {:groups [] :by-key {}}
+           (dedupe-qsearch-items items))))
+
+(defn- qsearch-group->text
+  [{:keys [property-titles property-value-labels uuid->label]} {:keys [page items]}]
+  (let [root (assoc page :block/children (vec items))]
+    (tree-text/tree->text {:root root
+                           :property-titles property-titles
+                           :property-value-labels property-value-labels
+                           :uuid->label uuid->label})))
+
+(def ^:private ansi-or-text-pattern
+  #"\u001b\[[0-9;]*m|[^\u001b]+")
+
+(def ^:private regex-special-chars
+  #{\. \* \+ \? \^ \$ \{ \} \( \) \| \[ \] \\})
+
+(defn- escape-regex
+  [value]
+  (->> value
+       str
+       (map (fn [ch]
+              (if (contains? regex-special-chars ch)
+                (str "\\" ch)
+                (str ch))))
+       (apply str)))
+
+(defn- qsearch-highlight-terms
+  [query]
+  (->> (string/split (or query "") #"\s+")
+       (map string/trim)
+       (remove string/blank?)
+       (sort-by count >)
+       (map escape-regex)
+       distinct
+       vec))
+
+(defn- highlight-qsearch-query
+  [text query]
+  (let [terms (qsearch-highlight-terms query)]
+    (if (seq terms)
+      (let [pattern (js/RegExp. (string/join "|" terms) "gi")
+            highlight-segment (fn [segment]
+                                (if (re-matches style/ansi-pattern segment)
+                                  segment
+                                  (string/replace segment pattern
+                                                  (fn [match]
+                                                    (style/yellow match)))))]
+        (->> (re-seq ansi-or-text-pattern text)
+             (map highlight-segment)
+             (apply str)))
+      text)))
 
 (defn- format-qsearch
-  [data now-ms title-max-display-width]
-  (let [table (format-list-dynamic (:items data)
-                                   now-ms
-                                   qsearch-columns
-                                   {:title-max-display-width title-max-display-width
-                                    :truncate-cell-max-lines list-human-cell-max-lines})
+  [data human-data _now-ms _title-max-display-width]
+  (let [render-items (if (and (map? human-data)
+                              (contains? human-data :items))
+                       (:items human-data)
+                       (:items data))
+        groups (qsearch-page-groups render-items)
+        body (if (seq groups)
+               (string/join "\n\n" (map #(qsearch-group->text human-data %) groups))
+               "No matches")
         missing-ids (vec (or (:missing-ids data) []))]
-    (cond-> table
-      (seq missing-ids)
-      (str "\nMissing ids: " (string/join ", " missing-ids)))))
+    (highlight-qsearch-query
+     (cond-> body
+       (seq missing-ids)
+       (str "\nMissing ids: " (string/join ", " missing-ids)))
+     (:query human-data))))
 
 (defn- format-qmd-init
   [{:keys [collection mirror-dir action]}]
@@ -1064,7 +1178,7 @@
         (:search-block :search-page :search-property :search-tag)
         (format-list-page (:items data) now-ms)
         :qmd-init (format-qmd-init data)
-        :qsearch (format-qsearch data now-ms list-title-max-display-width)
+        :qsearch (format-qsearch data (get-in human [:qsearch]) now-ms list-title-max-display-width)
         :upsert-block (format-upsert-block context (:result data))
         :upsert-page (format-upsert-page context (:result data))
         :upsert-task (format-upsert-task context (:result data))

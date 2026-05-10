@@ -235,7 +235,7 @@
   #{:remove-block :remove-page :remove-tag :remove-property})
 
 (def ^:private server-graph-required-commands
-  #{:server-start :server-stop :server-restart :qmd-init :qsearch})
+  #{:server-start :server-stop :server-restart :qmd-init})
 
 (def ^:private supported-completion-shells
   #{"zsh" "bash"})

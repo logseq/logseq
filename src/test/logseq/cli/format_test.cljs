@@ -622,26 +622,148 @@
     (is (string/includes? updated "QMD collection updated: custom"))))
 
 (deftest test-human-output-qsearch
-  (let [result (format/format-result {:status :ok
-                                      :command :qsearch
-                                      :data {:items [{:db/id 3
-                                                      :block/title "alpha"
-                                                      :block/page-id 1
-                                                      :block/page-title "Home"
-                                                      :qmd/rank 1
-                                                      :qmd/score 0.75
-                                                      :qmd/file "qmd://custom/pages/Home.md"}]
-                                             :missing-ids [5]
-                                             :qmd {:collection "custom"
-                                                   :result-count 2}}}
-                                     {:output-format nil})]
-    (is (string/includes? result "ID"))
-    (is (string/includes? result "TITLE"))
-    (is (string/includes? result "PAGE-TITLE"))
-    (is (string/includes? result "alpha"))
-    (is (string/includes? result "Home"))
-    (is (string/includes? result "Missing ids: 5"))
-    (is (string/includes? result "Count: 1"))))
+  (testing "renders page groups with show-like rows instead of a list table"
+    (let [result (style/strip-ansi
+                  (format/format-result {:status :ok
+                                         :command :qsearch
+                                         :data {:items [{:db/id 3
+                                                         :block/title "alpha target"
+                                                         :block/page-id 1
+                                                         :block/page-title "Home"
+                                                         :qmd/rank 1
+                                                         :qmd/score 0.75
+                                                         :qmd/file "qmd://custom/pages/Home.md"}
+                                                        {:db/id 4
+                                                         :block/title "beta target"
+                                                         :block/page-id 1
+                                                         :block/page-title "Home"
+                                                         :qmd/rank 2
+                                                         :qmd/score 0.6
+                                                         :qmd/file "qmd://custom/pages/Home.md"}]
+                                                :missing-ids [5]
+                                                :qmd {:collection "custom"
+                                                      :result-count 2}}}
+                                        {:output-format nil}))]
+      (is (not (string/includes? result "Home (2 matches)")))
+      (is (string/includes? result "1 Home"))
+      (is (string/includes? result "3 ├── alpha target"))
+      (is (string/includes? result "4 └── beta target"))
+      (is (string/includes? result "Missing ids: 5"))
+      (is (not (string/includes? result "RANK")))
+      (is (not (string/includes? result "PAGE-TITLE")))
+      (is (not (string/includes? result "SCORE")))
+      (is (not (string/includes? result "Count: 2")))))
+
+  (testing "orders page groups by first qmd hit and keeps hit order inside each page"
+    (let [result (style/strip-ansi
+                  (format/format-result {:status :ok
+                                         :command :qsearch
+                                         :data {:items [{:db/id 11
+                                                         :block/title "release target"
+                                                         :block/page-id 10
+                                                         :block/page-title "Projects"
+                                                         :qmd/rank 1}
+                                                        {:db/id 3
+                                                         :block/title "alpha target"
+                                                         :block/page-id 1
+                                                         :block/page-title "Home"
+                                                         :qmd/rank 2}
+                                                        {:db/id 12
+                                                         :block/title "second release target"
+                                                         :block/page-id 10
+                                                         :block/page-title "Projects"
+                                                         :qmd/rank 3}]
+                                                :missing-ids []
+                                                :qmd {:collection "custom"
+                                                      :result-count 3}}}
+                                        {:output-format nil}))
+          projects-idx (string/index-of result "10 Projects")
+          home-idx (string/index-of result "1 Home")
+          first-project-hit-idx (string/index-of result "11 ├── release target")
+          second-project-hit-idx (string/index-of result "12 └── second release target")]
+      (is (some? projects-idx))
+      (is (some? home-idx))
+      (is (< projects-idx home-idx))
+      (is (not (string/includes? result "Projects (2 matches)")))
+      (is (not (string/includes? result "Home (1 match)")))
+      (is (< first-project-hit-idx second-project-hit-idx))))
+
+  (testing "deduplicates repeated block ids before rendering"
+    (let [result (style/strip-ansi
+                  (format/format-result {:status :ok
+                                         :command :qsearch
+                                         :data {:items [{:db/id 3
+                                                         :block/title "alpha target"
+                                                         :block/page-id 1
+                                                         :block/page-title "Home"
+                                                         :qmd/rank 1}
+                                                        {:db/id 3
+                                                         :block/title "alpha target"
+                                                         :block/page-id 1
+                                                         :block/page-title "Home"
+                                                         :qmd/rank 2}]
+                                                :missing-ids []
+                                                :qmd {:collection "custom"
+                                                      :result-count 2}}}
+                                        {:output-format nil}))]
+      (is (= 1 (count (re-seq #"alpha target" result))))
+      (is (not (string/includes? result "Home (1 match)")))
+      (is (string/includes? result "1 Home")))))
+
+(deftest test-human-output-qsearch-render-details
+  (let [result (style/strip-ansi
+                (format/format-result {:status :ok
+                                       :command :qsearch
+                                       :data {:items [{:db/id 3
+                                                       :block/title "alpha target"
+                                                       :block/page-id 1
+                                                       :block/page-title "Home"
+                                                       :qmd/rank 1}]
+                                              :missing-ids []
+                                              :qmd {:collection "custom"
+                                                    :result-count 1}}
+                                       :human {:qsearch
+                                               {:items [{:db/id 3
+                                                         :block/title "alpha target"
+                                                         :block/page {:db/id 1
+                                                                      :block/title "Home"}
+                                                         :block/tags [{:db/id 20
+                                                                       :block/title "Project"}]
+                                                         :user.property/priority "P1"}]
+                                                :property-titles {:user.property/priority "Priority"}
+                                                :property-value-labels {}
+                                                :uuid->label {}}}}
+                                      {:output-format nil}))]
+    (is (string/includes? result "3 └── alpha target #Project"))
+    (is (string/includes? result "Priority: P1"))
+    (is (not (string/includes? result "PAGE-TITLE")))
+    (is (not (string/includes? result "Count: 1")))))
+
+(deftest test-human-output-qsearch-highlights-query
+  (let [result (binding [style/*color-enabled?* true]
+                 (format/format-result {:status :ok
+                                        :command :qsearch
+                                        :data {:items [{:db/id 3
+                                                        :block/title "Alpha target"
+                                                        :block/page-id 1
+                                                        :block/page-title "Home"
+                                                        :qmd/rank 1}]
+                                               :missing-ids []
+                                               :qmd {:collection "custom"
+                                                     :result-count 1}}
+                                        :human {:qsearch {:query "alpha TARGET"}}}
+                                       {:output-format nil}))
+        highlighted-alpha (binding [style/*color-enabled?* true]
+                            (style/yellow "Alpha"))
+        highlighted-target (binding [style/*color-enabled?* true]
+                             (style/yellow "target"))
+        plain (style/strip-ansi result)]
+    (is (= (str "1 Home\n"
+                "3 └── Alpha target")
+           plain))
+    (is (re-find style/ansi-pattern result))
+    (is (string/includes? result highlighted-alpha))
+    (is (string/includes? result highlighted-target))))
 
 (deftest test-structured-output-qsearch
   (let [payload {:status :ok
