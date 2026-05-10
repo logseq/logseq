@@ -23,10 +23,10 @@
    (:height opts)
    (:aria-label opts)
    (:show-arrows? opts)
-   (:link-distance opts)
    (:show-edge-labels? opts)
    (:grid-layout? opts)
    (:on-node-activate opts)
+   (:on-node-preview opts)
    (:on-selection-change opts)
    (:on-rendered opts)])
 
@@ -52,6 +52,11 @@
        (when-let [container (hooks/deref container-ref)]
          (pixi/update-depth! container (:depth opts))))
      [(:depth opts)])
+    (hooks/use-effect!
+     (fn []
+       (when-let [container (hooks/deref container-ref)]
+         (pixi/update-link-distance! container (:link-distance opts))))
+     [(:link-distance opts)])
     [:div.graph-canvas
      {:ref container-ref
       :style (canvas-style opts)

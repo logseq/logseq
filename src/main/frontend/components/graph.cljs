@@ -676,7 +676,8 @@
                        :view-mode view-mode
                        :aria-label (t :graph/canvas-label)
                        :on-selection-change set-selected-nodes!
-                       :on-node-activate graph-actions/activate-node!})
+                       :on-node-activate graph-actions/activate-node!
+                       :on-node-preview graph-actions/preview-node!})
       (time-travel-control
        settings
        set-settings!
