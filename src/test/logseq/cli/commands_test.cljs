@@ -164,17 +164,26 @@
       (is (string/includes? plain-summary "Command options:")))))
 
 (deftest test-qmd-and-qsearch-parse
-  (testing "qmd init parses as graph-scoped command"
-    (let [result (commands/parse-args ["qmd" "init" "--graph" "demo"])]
+  (testing "qmd parses as graph-scoped command"
+    (let [result (commands/parse-args ["qmd" "--graph" "demo"])]
       (is (true? (:ok? result)))
-      (is (= :qmd-init (:command result)))
+      (is (= :qmd (:command result)))
       (is (= "demo" (get-in result [:options :graph])))))
 
-  (testing "qmd group help is available"
-    (let [result (commands/parse-args ["qmd"])]
-      (is (true? (:help? result)))
-      (is (string/includes? (strip-ansi (:summary result))
-                            "Usage: logseq qmd <subcommand> [options]"))))
+  (testing "qmd can omit graph so build-action can use the current graph"
+    (let [parsed (commands/parse-args ["qmd"])
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? parsed)))
+      (is (true? (:ok? result)))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= "demo" (get-in result [:action :graph])))))
+
+  (testing "qmd without graph or current graph fails at build-action"
+    (let [parsed (commands/parse-args ["qmd"])
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? parsed)))
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
 
   (testing "qsearch accepts positional query text"
     (let [result (commands/parse-args ["qsearch" "markdown" "mirror" "--graph" "demo" "-n" "10" "--no-rerank"])]
@@ -210,10 +219,28 @@
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "qmd init requires graph"
-    (let [result (commands/parse-args ["qmd" "init"])]
+  (testing "qmd and qsearch reject manual QMD collection and index options"
+    (doseq [args [["qmd" "--graph" "demo" "--collection" "custom"]
+                  ["qmd" "--graph" "demo" "--index" "custom-index"]
+                  ["qsearch" "markdown" "--graph" "demo" "--collection" "custom"]
+                  ["qsearch" "markdown" "--graph" "demo" "--index" "custom-index"]]]
+      (let [result (commands/parse-args args)]
+        (is (false? (:ok? result)) (pr-str args))
+        (is (= :invalid-options (get-in result [:error :code])) (pr-str args)))))
+
+  (testing "qmd and qsearch help omit internal collection and index options"
+    (doseq [args [["qmd" "--help"]
+                  ["qsearch" "--help"]]]
+      (let [result (commands/parse-args args)
+            summary (strip-ansi (:summary result))]
+        (is (true? (:help? result)) (pr-str args))
+        (is (not (string/includes? summary "--collection")) (pr-str args))
+        (is (not (string/includes? summary "--index")) (pr-str args)))))
+
+  (testing "qmd rejects obsolete positional subcommands"
+    (let [result (commands/parse-args ["qmd" "init" "--graph" "demo"])]
       (is (false? (:ok? result)))
-      (is (= :missing-graph (get-in result [:error :code]))))))
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
 (deftest test-parse-args-help-groups-primary
   (testing "graph/list/upsert/server groups show subcommands"

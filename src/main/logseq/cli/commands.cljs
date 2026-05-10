@@ -138,7 +138,7 @@
 
 (def ^:private qsearch-value-options
   #{"--graph" "-g" "--root-dir" "--config" "--timeout-ms" "--output" "-o"
-    "--index" "--collection" "--limit" "-n"})
+    "--limit" "-n"})
 
 (def ^:private qsearch-flag-options
   #{"--no-rerank" "--verbose" "-v" "--profile" "--help" "-h"})
@@ -235,7 +235,7 @@
   #{:remove-block :remove-page :remove-tag :remove-property})
 
 (def ^:private server-graph-required-commands
-  #{:server-start :server-stop :server-restart :qmd-init})
+  #{:server-start :server-stop :server-restart})
 
 (def ^:private supported-completion-shells
   #{"zsh" "bash"})
@@ -339,6 +339,10 @@
     (and (= :qsearch command)
          (not (seq args)))
     (assoc (missing-query-text-result summary) :command command)
+
+    (and (= :qmd command)
+         (seq args))
+    (command-core/invalid-options-result summary "qmd does not accept positional arguments")
 
     :else
     nil))
@@ -660,8 +664,8 @@
         (:search-block :search-page :search-property :search-tag)
         (search-command/build-action command options repo)
 
-        :qmd-init
-        (qmd-command/build-init-action options repo)
+        :qmd
+        (qmd-command/build-action options repo)
 
         :qsearch
         (qmd-command/build-search-action options args repo)
@@ -765,7 +769,7 @@
                          :search-page (search-command/execute-search-page action config)
                          :search-property (search-command/execute-search-property action config)
                          :search-tag (search-command/execute-search-tag action config)
-                         :qmd-init (qmd-command/execute-qmd-init action config)
+                         :qmd (qmd-command/execute-qmd action config)
                          :qsearch (qmd-command/execute-qsearch action config)
                          :upsert-block (upsert-command/execute-upsert-block action config)
                          :upsert-page (upsert-command/execute-upsert-page action config)

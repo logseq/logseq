@@ -214,12 +214,12 @@
                                      :blocks [{:block/title "first line\n- not a child"}
                                               {:block/title "after multiline"}]}]})
           page (db-test/find-page-by-title @conn "Multiline List")
-          first-block (db-test/find-block-by-content @conn "first line\n- not a child")
+          first-line-block (db-test/find-block-by-content @conn "first line\n- not a child")
           after-multiline (db-test/find-block-by-content @conn "after multiline")]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
                     (is (= (str (page-marker page-uuid) "\n\n"
-                                "- first line " (block-id-comment first-block) "\n"
+                                "- first line " (block-id-comment first-line-block) "\n"
                                 "  - not a child\n"
                                 "- after multiline " (block-id-comment after-multiline))
                            (get @files (page-path "pages/Multiline List.md"))))))
@@ -462,16 +462,16 @@
                                               {:block/title "second"
                                               :build/properties {:logseq.property/order-list-type "number"}}]}]})
           page (db-test/find-page-by-title @conn "Ordered")
-          first-block (db-test/find-block-by-content @conn "first")
+          ordered-first (db-test/find-block-by-content @conn "first")
           child (db-test/find-block-by-content @conn "child")
-          second (db-test/find-block-by-content @conn "second")]
+          ordered-second (db-test/find-block-by-content @conn "second")]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Ordered.md"))]
                       (is (= (str (page-marker (:block/uuid page)) "\n\n"
-                                  "1. TODO first #Project " (block-id-comment first-block) "\n"
+                                  "1. TODO first #Project " (block-id-comment ordered-first) "\n"
                                   "  - child " (block-id-comment child) "\n"
-                                  "2. second " (block-id-comment second))
+                                  "2. second " (block-id-comment ordered-second))
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -491,7 +491,7 @@
                                                :build/properties {:logseq.property/status :logseq.property/status.todo}}]}]})
           page (db-test/find-page-by-title @conn "Numbered Content")
           intro (db-test/find-block-by-content @conn "intro\n1. continuation")
-          second (db-test/find-block-by-content @conn "second")]
+          numbered-second (db-test/find-block-by-content @conn "second")]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Numbered Content.md"))]
@@ -501,7 +501,7 @@
                                   "- ``` #Snippet\n"
                                   "  1. code line\n"
                                   "  ```\n"
-                                  "- TODO second #Next " (block-id-comment second))
+                                  "- TODO second #Next " (block-id-comment numbered-second))
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
