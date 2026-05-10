@@ -246,11 +246,11 @@
 
 (deftest draw-edge-limit-is-bounded-for-large-graphs
   (is (= 712 (logic/draw-edge-limit 643 712 :all-pages)))
-  (is (= 8000 (logic/draw-edge-limit 50000 120000 :all-pages))))
+  (is (= 3600 (logic/draw-edge-limit 50000 120000 :all-pages))))
 
 (deftest render-node-limit-is-bounded-for-large-graphs
   (is (= 643 (logic/render-node-limit 643 :all-pages)))
-  (is (= 12000 (logic/render-node-limit 50000 :all-pages))))
+  (is (= 2200 (logic/render-node-limit 50000 :all-pages))))
 
 (deftest label-render-state-does-not-expand-labels-while-fading-out
   (testing "Zoomed-in labels are shown without hover"

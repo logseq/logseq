@@ -825,6 +825,55 @@
       (set-visible-view-mode! view-mode))
    [graph-data-by-mode view-mode]))
 
+(defn- global-graph-content-props
+  [settings-props graph-props tag-props time-travel-props action-props]
+  (let [{:keys [settings-open? set-settings-open! settings set-settings! view-mode switch-view-mode!
+                loading? build-error retry!]} settings-props
+        {:keys [filtered-graph-data mode-graph-data canvas-settings visible-node-ids
+                background-visible-node-ids dark? graph-view-mode]} graph-props
+        {:keys [available-tags selected-tag-ids tag-query set-tag-query!]} tag-props
+        {:keys [time-travel-animation-ref time-travel-open? set-time-travel-open!]} time-travel-props
+        {:keys [selected-nodes set-selected-nodes!]} action-props]
+  {:selected-nodes selected-nodes
+   :settings-open? settings-open?
+   :set-settings-open! set-settings-open!
+   :settings settings
+   :set-settings! set-settings!
+   :view-mode view-mode
+   :switch-view-mode! switch-view-mode!
+   :loading? loading?
+   :filtered-graph-data filtered-graph-data
+   :available-tags available-tags
+   :selected-tag-ids selected-tag-ids
+   :tag-query tag-query
+   :set-tag-query! set-tag-query!
+   :build-error build-error
+   :retry! retry!
+   :mode-graph-data mode-graph-data
+   :canvas-settings canvas-settings
+   :visible-node-ids visible-node-ids
+   :background-visible-node-ids background-visible-node-ids
+   :dark? dark?
+   :graph-view-mode graph-view-mode
+   :set-selected-nodes! set-selected-nodes!
+   :time-travel-animation-ref time-travel-animation-ref
+   :time-travel-open? time-travel-open?
+   :set-time-travel-open! set-time-travel-open!}))
+
+(defn- make-set-settings!
+  [repo set-settings-state!]
+  (fn [settings-or-fn]
+    (set-settings-state!
+     (fn [state]
+       (let [current-settings (if (= repo (:repo state))
+                                (:settings state)
+                                (load-graph-settings repo))
+             next-settings (if (fn? settings-or-fn)
+                             (settings-or-fn current-settings)
+                             settings-or-fn)]
+         {:repo repo
+          :settings next-settings})))))
+
 (rum/defc global-graph
   []
   (let [repo (state/get-current-repo)
@@ -845,17 +894,7 @@
         time-travel-animation-ref (hooks/use-ref nil)
         canvas-settings-ref (hooks/use-ref (:settings settings-state))
         settings (:settings settings-state)
-        set-settings! (fn [settings-or-fn]
-                        (set-settings-state!
-                         (fn [state]
-                           (let [current-settings (if (= repo (:repo state))
-                                                    (:settings state)
-                                                    (load-graph-settings repo))
-                                 next-settings (if (fn? settings-or-fn)
-                                                 (settings-or-fn current-settings)
-                                                 settings-or-fn)]
-                             {:repo repo
-                              :settings next-settings}))))
+        set-settings! (make-set-settings! repo set-settings-state!)
         view-mode (:view-mode settings)
         switch-view-mode! (fn [mode]
                             (when (not= mode view-mode)
@@ -920,28 +959,17 @@
           visible-node-ids (graph-visible-node-ids mode-graph-data filtered-graph-data)
           background-visible-node-ids visible-node-ids]
       (global-graph-content
-       {:selected-nodes selected-nodes
-        :settings-open? settings-open?
-        :set-settings-open! set-settings-open!
-        :settings settings
-        :set-settings! set-settings!
-        :view-mode view-mode
-        :switch-view-mode! switch-view-mode!
-        :loading? loading?
-        :filtered-graph-data filtered-graph-data
-        :available-tags available-tags
-        :selected-tag-ids selected-tag-ids
-        :tag-query tag-query
-        :set-tag-query! set-tag-query!
-        :build-error build-error
-        :retry! #(set-retry-token! (inc retry-token))
-        :mode-graph-data mode-graph-data
-        :canvas-settings canvas-settings
-        :visible-node-ids visible-node-ids
-        :background-visible-node-ids background-visible-node-ids
-        :dark? dark?
-        :graph-view-mode graph-view-mode
-        :set-selected-nodes! set-selected-nodes!
-        :time-travel-animation-ref time-travel-animation-ref
-        :time-travel-open? time-travel-open?
-        :set-time-travel-open! set-time-travel-open!}))))
+       (global-graph-content-props
+        {:settings-open? settings-open? :set-settings-open! set-settings-open!
+         :settings settings :set-settings! set-settings! :view-mode view-mode
+         :switch-view-mode! switch-view-mode! :loading? loading?
+         :build-error build-error :retry! #(set-retry-token! (inc retry-token))}
+        {:filtered-graph-data filtered-graph-data :mode-graph-data mode-graph-data
+         :canvas-settings canvas-settings :visible-node-ids visible-node-ids
+         :background-visible-node-ids background-visible-node-ids :dark? dark?
+         :graph-view-mode graph-view-mode}
+        {:available-tags available-tags :selected-tag-ids selected-tag-ids
+         :tag-query tag-query :set-tag-query! set-tag-query!}
+        {:time-travel-animation-ref time-travel-animation-ref :time-travel-open? time-travel-open?
+         :set-time-travel-open! set-time-travel-open!}
+        {:selected-nodes selected-nodes :set-selected-nodes! set-selected-nodes!})))))

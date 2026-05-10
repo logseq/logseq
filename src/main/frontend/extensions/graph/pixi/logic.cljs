@@ -506,19 +506,6 @@
            :color color
            :color-int (color->int color))))
 
-(defn- decorate-node-with-degree
-  [node d dark? x y]
-  (let [kind (:kind node)
-        color (or (:color node)
-                  (node-color kind dark?))]
-    (assoc node
-           :x x
-           :y y
-           :radius (node-radius kind d (:grid-object? node))
-           :degree d
-           :color color
-           :color-int (color->int color))))
-
 (defn- decorate-large-page-node
   [node x y d radius color-int]
   (assoc node

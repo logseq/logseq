@@ -264,19 +264,6 @@
          (remove #(contains? invalid-ids (get page-by-id %)))
          set)))
 
-(defn- graph-link-node-id
-  [db mode entity-id]
-  (case mode
-    :page
-    (let [entity (d/entity db entity-id)]
-      (some-> (if (ldb/page? entity)
-                entity
-                (:block/page entity))
-              :db/id))
-
-    :entity
-    entity-id))
-
 (defn- graph-link-node-id-map
   [db mode entity-ids node-id-set]
   (case mode
@@ -476,27 +463,6 @@
 
     :else
     (if dark? "#9CA3AF" "#CBD5E1")))
-
-(defn- build-page-node
-  [dark? current-page page-links _tags entity tag-idents]
-  (when-let [page-title (entity-display-title entity)]
-    (let [current-page? (= page-title (or current-page ""))
-          kind (page-kind tag-idents)
-          color (page-graph-node-color dark? kind current-page?)
-          n (get page-links (str (:db/id entity)) 1)
-          size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
-      (cond->
-       {:id (str (:db/id entity))
-        :db-id (:db/id entity)
-        :uuid (some-> (:block/uuid entity) str)
-        :page? true
-        :label page-title
-        :kind kind
-        :size size
-        :color color
-        :block/created-at (:block/created-at entity)}
-       (some? (:logseq.property/icon entity))
-       (assoc :icon (:logseq.property/icon entity))))))
 
 (defn- tag-ident-by-id
   [db tag-ids]
@@ -715,6 +681,47 @@
     {:nodes nodes'
      :links links'}))
 
+(defn- all-pages-visible-page-id?
+  [{:keys [journal? orphan-pages? builtin-pages? excluded-pages?
+           hidden-page-ids excluded-page-ids build-in-pages linked-page-ids]}
+   page-id page-name tag-idents]
+  (and (not (contains? hidden-page-ids page-id))
+       (not (property-page? tag-idents))
+       (or journal?
+           (not (contains? tag-idents :logseq.class/Journal)))
+       (or excluded-pages?
+           (not (contains? excluded-page-ids page-id)))
+       (or builtin-pages?
+           (not (contains? build-in-pages page-name)))
+       (or orphan-pages?
+           (contains? linked-page-ids page-id))))
+
+(defn- build-all-pages-node
+  [{:keys [dark? page-links title-by-id uuid-by-id icon-by-id created-at-by-id page-id->tag-idents]}
+   {page-id :e page-name :v}]
+  (when-let [page-title (get title-by-id page-id page-name)]
+    (let [created-at (get created-at-by-id page-id)
+          tag-idents (get page-id->tag-idents page-id #{})
+          kind (page-kind tag-idents)
+          color (page-graph-node-color dark? kind false)
+          n (get page-links (str page-id) 1)
+          size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
+      (cond->
+       {:id (str page-id)
+        :db-id page-id
+        :uuid (some-> (get uuid-by-id page-id) str)
+        :page? true
+        :label page-title
+        :kind kind
+        :size size
+        :color color
+        :block/created-at created-at}
+        (nil? created-at)
+        (dissoc :block/created-at)
+
+        (contains? icon-by-id page-id)
+        (assoc :icon (get icon-by-id page-id))))))
+
 (defn- build-all-pages-graph
   [db {:keys [theme journal? orphan-pages? builtin-pages? excluded-pages? created-at-filter]}]
   (let [name-datoms (vec (d/datoms db :avet :block/name))]
@@ -755,17 +762,14 @@
                                 (map string/lower-case)
                                 set)
             excluded-page-ids (entity-ids-with db :logseq.property/exclude-from-graph-view true)
-            visible-page-id? (fn [page-id page-name tag-idents linked-page-ids]
-                               (and (not (contains? hidden-name-page-ids page-id))
-                                    (not (property-page? tag-idents))
-                                    (or journal?
-                                        (not (contains? tag-idents :logseq.class/Journal)))
-                                    (or excluded-pages?
-                                        (not (contains? excluded-page-ids page-id)))
-                                    (or builtin-pages?
-                                        (not (contains? build-in-pages page-name)))
-                                    (or orphan-pages?
-                                        (contains? linked-page-ids page-id))))
+            visibility-opts {:journal? journal?
+                             :orphan-pages? orphan-pages?
+                             :builtin-pages? builtin-pages?
+                             :excluded-pages? excluded-pages?
+                             :hidden-page-ids hidden-name-page-ids
+                             :excluded-page-ids excluded-page-ids
+                             :build-in-pages build-in-pages
+                             :linked-page-ids linked}
             links (map (fn [[x y label]] [(str x) (str y) label]) links)
             page-links (reduce (fn [m [k v]] (-> (update m k inc)
                                                  (update v inc))) {} links)
@@ -775,6 +779,13 @@
             created-at-max (if (seq created-ats) (apply max created-ats) 0)
             created-at-cutoff (when created-at-filter
                                 (+ created-at-min created-at-filter))
+            node-context {:dark? dark?
+                          :page-links page-links
+                          :title-by-id title-by-id
+                          :uuid-by-id uuid-by-id
+                          :icon-by-id icon-by-id
+                          :created-at-by-id created-at-by-id
+                          :page-id->tag-idents page-id->tag-idents}
             nodes (reduce
                    (fn [nodes {page-id :e page-name :v}]
                      (let [created-at (get created-at-by-id page-id)
@@ -782,35 +793,14 @@
                        (if (or (and created-at-cutoff
                                     created-at
                                     (> created-at created-at-cutoff))
-                               (not (visible-page-id?
-                                     page-id
-                                     page-name
-                                     tag-idents
-                                     linked)))
+                               (not (all-pages-visible-page-id?
+                                     visibility-opts page-id page-name tag-idents)))
                          nodes
-                         (let [page-title (get title-by-id page-id page-name)]
-                           (if (some? page-title)
-                             (let [kind (page-kind tag-idents)
-                                   color (page-graph-node-color dark? kind false)
-                                   n (get page-links (str page-id) 1)
-                                   size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
-                               (conj nodes
-                                     (cond->
-                                      {:id (str page-id)
-                                       :db-id page-id
-                                       :uuid (some-> (get uuid-by-id page-id) str)
-                                       :page? true
-                                       :label page-title
-                                       :kind kind
-                                       :size size
-                                       :color color
-                                       :block/created-at created-at}
-                                       (nil? created-at)
-                                       (dissoc :block/created-at)
-
-                                       (contains? icon-by-id page-id)
-                                       (assoc :icon (get icon-by-id page-id)))))
-                             nodes)))))
+                         (if-let [node (build-all-pages-node
+                                        node-context
+                                        {:e page-id :v page-name})]
+                           (conj nodes node)
+                           nodes))))
                    []
                    name-datoms)]
         (-> {:nodes nodes
