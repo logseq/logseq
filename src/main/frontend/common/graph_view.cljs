@@ -175,7 +175,7 @@
         name-by-id (if (empty? title-missing-ids)
                      {}
                      (entity-value-map db :block/name title-missing-ids))
-        uuid-by-id (entity-value-map db :block/uuid node-ids)
+        uuid-by-id (entity-value-map-by-id db :block/uuid node-ids)
         icon-by-id (entity-value-map db :logseq.property/icon node-ids)
         created-at-by-id (entity-value-map db :block/created-at node-ids)]
     {:title-by-id title-by-id
@@ -580,6 +580,7 @@
         page-id->tag-idents (build-page-id->tag-idents tagged-pages tag-id->ident)
         title-by-id (entity-title-map db page-ids)
         icon-by-id (entity-value-map db :logseq.property/icon page-ids)
+        uuid-by-id (entity-value-map-by-id db :block/uuid page-ids)
         created-at-by-id (entity-value-map db :block/created-at page-ids)
         build-in-pages (->> sqlite-create-graph/built-in-pages-names
                             (map string/lower-case)
@@ -629,6 +630,7 @@
                              (cond->
                               {:id id
                                :db-id page-id
+                               :uuid (some-> (get uuid-by-id page-id) str)
                                :page? true
                                :label page-title
                                :kind (page-kind tag-idents)
@@ -747,7 +749,7 @@
                                      name-datoms))
             page-id-set (set (map :e name-datoms))
             title-by-id (entity-title-map db page-id-set)
-            uuid-by-id (entity-value-map db :block/uuid page-id-set)
+            uuid-by-id (entity-value-map-by-id db :block/uuid page-id-set)
             icon-by-id (entity-value-map db :logseq.property/icon page-id-set)
             created-at-by-id (entity-value-map db :block/created-at page-id-set)
             tagged-pages (vec (page-tag-links (tagged-page-links db) page-id-set))

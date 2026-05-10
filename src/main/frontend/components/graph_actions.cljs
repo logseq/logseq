@@ -6,7 +6,7 @@
 
 (defn redirect-to-node!
   [node]
-  (when-let [node-ref (or (:uuid node) (:label node))]
+  (when-let [node-ref (or (:uuid node) (:block/uuid node))]
     (route-handler/redirect-to-page! node-ref)))
 
 (defn open-node-in-sidebar!

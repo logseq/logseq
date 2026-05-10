@@ -22,3 +22,26 @@
       (is (= [["logseq_db_test" 101 :page]
               ["logseq_db_test" 202 :block]]
              @sidebar*)))))
+
+(deftest redirect-to-node-prefers-block-uuid-over-label
+  (let [redirects* (atom [])
+        page-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        page-node {:db-id 303
+                   :block/uuid page-uuid
+                   :page? true
+                   :label "Ordinary Page"}]
+    (with-redefs [route-handler/redirect-to-page! (fn [page-ref]
+                                                    (swap! redirects* conj page-ref))]
+      (graph-actions/redirect-to-node! page-node)
+
+      (is (= [page-uuid] @redirects*)))))
+
+(deftest redirect-to-node-requires-uuid
+  (let [redirects* (atom [])]
+    (with-redefs [route-handler/redirect-to-page! (fn [page-ref]
+                                                    (swap! redirects* conj page-ref))]
+      (graph-actions/redirect-to-node! {:db-id 404
+                                        :page? true
+                                        :label "Ordinary Page"})
+
+      (is (empty? @redirects*)))))

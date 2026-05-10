@@ -1,5 +1,6 @@
 (ns frontend.common.graph-view-test
   (:require [cljs.test :refer [deftest is testing]]
+            [datascript.core :as d]
             [frontend.common.graph-view :as graph-view]
             [logseq.db.test.helper :as db-test]))
 
@@ -56,6 +57,33 @@
     (testing "All-pages mode includes normal pages"
       (is (contains? labels "Plain Page")))
     (is (= :all-pages (get-in result [:meta :view-mode])))))
+
+(deftest global-all-pages-page-nodes-include-uuid
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Plain Page"}}]})
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :all-pages
+                                              :orphan-pages? true})
+        page (ffirst (d/q '[:find (pull ?p [:block/uuid])
+                            :where [?p :block/title "Plain Page"]]
+                          @conn))]
+    (is (= (str (:block/uuid page))
+           (:uuid (node-by-label result "Plain Page"))))))
+
+(deftest global-tags-and-objects-page-nodes-include-uuid
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Tagged Page"
+                        :build/tags [:Topic]}}]
+               :classes {:Topic {}}})
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :tags-and-objects})
+        page (ffirst (d/q '[:find (pull ?p [:block/uuid])
+                            :where [?p :block/title "Tagged Page"]]
+                          @conn))]
+    (is (= (str (:block/uuid page))
+           (:uuid (node-by-label result "Tagged Page"))))))
 
 (deftest global-all-pages-graph-keeps-links-within-rendered-nodes
   (let [conn (db-test/create-conn-with-blocks
