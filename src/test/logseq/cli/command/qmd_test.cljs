@@ -5,7 +5,9 @@
             [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
             [logseq.cli.command.qmd :as qmd-command]
+            [logseq.cli.format :as format]
             [logseq.cli.server :as cli-server]
+            [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
             [promesa.core :as p]))
 
@@ -251,7 +253,7 @@
                                                        :block/title "alpha"
                                                        :block/page {:db/id 1
                                                                     :block/title "Home"}}
-                                                    5 nil)))))]
+                                                    5 {:db/id 5})))))]
             (qmd-command/execute-qsearch
              {:type :qsearch
               :repo "logseq_db_demo"
@@ -259,7 +261,7 @@
               :limit 10
               :collection "custom"
               :no-rerank true}
-             {}))
+             {:output-format :json}))
           (p/then (fn [result]
                     (is (= :ok (:status result)))
                     (is (= [{:db/id 3
@@ -271,20 +273,484 @@
                              :qmd/file "qmd://custom/pages/A.md"}]
                            (get-in result [:data :items])))
                     (is (= [5] (get-in result [:data :missing-ids])))
-                    (is (= [{:qmd ["query" "alpha" "--json" "-c" "custom" "-n" "10" "--no-rerank"]}
-                            {:invoke [:thread-api/pull
-                                      ["logseq_db_demo"
-                                       [:db/id :block/title :block/uuid
-                                        {:block/page [:db/id :block/title :block/name :block/uuid]}]
-                                       3]]}
-                            {:invoke [:thread-api/pull
-                                      ["logseq_db_demo"
-                                       [:db/id :block/title :block/uuid
-                                        {:block/page [:db/id :block/title :block/name :block/uuid]}]
-                                       5]]}]
-                           @calls))))
+                    (is (= ["query" "alpha" "--json" "-c" "custom" "-n" "10" "--no-rerank"]
+                           (:qmd (first @calls))))
+                    (is (= [3 5]
+                           (mapv (fn [{:keys [invoke]}]
+                                   (get-in invoke [1 2]))
+                                 (filter :invoke @calls))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
+
+(deftest test-execute-qsearch-expands-property-snippet-with-qmd-get
+  (async done
+    (let [snippet (str "  * GitHub URL:: https://github.com/logseq/logseq/commit/5a40a2e1618182984d778dfeb1066786b2bbe176\n"
+                       "  * Assignee:: [[Tienson]]\n"
+                       "  - nice <!-- id: 6533 -->")
+          calls (atom [])]
+      (-> (p/with-redefs [qmd-command/<run-qmd
+                          (fn [args]
+                            (swap! calls conj {:qmd args})
+                            (p/resolved
+                             (cond
+                               (= ["--index" "test-index" "query" "deadline" "--json" "-c" "custom"] args)
+                               {:exit 0
+                                :out (str "[{\"score\":0.46,"
+                                          "\"file\":\"qmd://custom/pages/db-release-checklist.md\","
+                                          "\"line\":3,"
+                                          "\"snippet\":" (js/JSON.stringify snippet) "}]")
+                                :err ""}
+
+                               (= ["--index" "test-index" "get" "qmd://custom/pages/db-release-checklist.md:1" "-l" "15"] args)
+                               {:exit 0
+                                :out (str "id:: 11111111-1111-4111-8111-111111111111\n\n"
+                                          "- DONE on web, app should be able to input immediately after cmd+e(quick add) #[[UX Enhancement]] <!-- id: 6515 -->\n"
+                                          snippet)
+                                :err ""}
+
+                               :else
+                               {:exit 99 :out "" :err (pr-str args)})))
+                          cli-server/ensure-server! (fn [config repo]
+                                                      (assoc config :ensured-repo repo))
+                          transport/invoke (fn [_ method args]
+                                             (swap! calls conj {:invoke [method args]})
+                                             (case method
+                                               :thread-api/pull
+                                               (let [[_repo _selector id] args]
+                                                 (p/resolved
+                                                  (case id
+                                                    6515 {:db/id 6515
+                                                          :block/title "DONE on web, app should be able to input immediately after cmd+e(quick add) #[[UX Enhancement]]"
+                                                          :block/page {:db/id 100
+                                                                       :block/title "DB release checklist"}}
+                                                    6533 {:db/id 6533
+                                                          :block/title "nice"
+                                                          :block/page {:db/id 100
+                                                                       :block/title "DB release checklist"}})))))]
+            (qmd-command/execute-qsearch
+             {:type :qsearch
+              :repo "logseq_db_demo"
+              :query "deadline"
+              :collection "custom"
+              :index "test-index"}
+             {:output-format :json}))
+          (p/then (fn [result]
+                    (is (= :ok (:status result)))
+                    (is (= [6515 6533]
+                           (mapv :db/id (get-in result [:data :items]))))
+                    (is (= [6515 6533]
+                           (mapv (fn [{:keys [invoke]}]
+                                   (get-in invoke [1 2]))
+                                 (filter :invoke @calls))))
+                    (is (= [["--index" "test-index" "query" "deadline" "--json" "-c" "custom"]
+                            ["--index" "test-index" "get" "qmd://custom/pages/db-release-checklist.md:1" "-l" "15"]]
+                           (mapv :qmd (filter :qmd @calls))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-qsearch-expands-nested-child-snippet-with-enclosing-parent
+  (async done
+    (let [snippet "  - nice <!-- id: 6533 -->"
+          calls (atom [])]
+      (-> (p/with-redefs [qmd-command/<run-qmd
+                          (fn [args]
+                            (swap! calls conj {:qmd args})
+                            (p/resolved
+                             (cond
+                               (= ["query" "nice" "--json" "-c" "custom"] args)
+                               {:exit 0
+                                :out (str "[{\"score\":1,"
+                                          "\"file\":\"qmd://custom/pages/db-release-checklist.md\","
+                                          "\"line\":4,"
+                                          "\"snippet\":" (js/JSON.stringify snippet) "}]")
+                                :err ""}
+
+                               (= ["get" "qmd://custom/pages/db-release-checklist.md:1" "-l" "14"] args)
+                               {:exit 0
+                                :out (str "id:: 11111111-1111-4111-8111-111111111111\n\n"
+                                          "- DONE parent <!-- id: 6515 -->\n"
+                                          snippet)
+                                :err ""}
+
+                               :else
+                               {:exit 99 :out "" :err (pr-str args)})))
+                          cli-server/ensure-server! (fn [config repo]
+                                                      (assoc config :ensured-repo repo))
+                          transport/invoke (fn [_ method args]
+                                             (swap! calls conj {:invoke [method args]})
+                                             (case method
+                                               :thread-api/pull
+                                               (let [[_repo _selector id] args]
+                                                 (p/resolved
+                                                  (case id
+                                                    6515 {:db/id 6515
+                                                          :block/title "DONE parent"
+                                                          :block/page {:db/id 100
+                                                                       :block/title "DB release checklist"}}
+                                                    6533 {:db/id 6533
+                                                          :block/title "nice"
+                                                          :block/page {:db/id 100
+                                                                       :block/title "DB release checklist"}})))))]
+            (qmd-command/execute-qsearch
+             {:type :qsearch
+              :repo "logseq_db_demo"
+              :query "nice"
+              :collection "custom"}
+             {:output-format :json}))
+          (p/then (fn [result]
+                    (is (= :ok (:status result)))
+                    (is (= [6515 6533]
+                           (mapv :db/id (get-in result [:data :items]))))
+                    (is (= [6515 6533]
+                           (mapv (fn [{:keys [invoke]}]
+                                   (get-in invoke [1 2]))
+                                 (filter :invoke @calls))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-qsearch-expands-qmd-hunk-snippet-without-line-field
+  (async done
+    (let [snippet (str "@@ -4,4 @@ (3 before, 19 after)\n"
+                       "  * GitHub URL:: https://github.com/logseq/logseq/commit/5a40a2e1618182984d778dfeb1066786b2bbe176\n"
+                       "  * Assignee:: [[Tienson]]\n"
+                       "  - nice <!-- id: 6533 -->\n"
+                       "- on mobile side, I can’t see namespace pages(children pages) <!-- id: 6517 -->")
+          calls (atom [])]
+      (-> (p/with-redefs [qmd-command/<run-qmd
+                          (fn [args]
+                            (swap! calls conj {:qmd args})
+                            (p/resolved
+                             (cond
+                               (= ["query" "tienson sync" "--json" "-c" "custom"] args)
+                               {:exit 0
+                                :out (str "[{\"score\":0.47,"
+                                          "\"file\":\"qmd://custom/journals/2025-07-11.md\","
+                                          "\"snippet\":" (js/JSON.stringify snippet) "}]")
+                                :err ""}
+
+                               (= ["get" "qmd://custom/journals/2025-07-11.md:1" "-l" "18"] args)
+                               {:exit 0
+                                :out (str "id:: 00000001-2025-0711-0000-000000000000\n\n"
+                                          "- DONE on web, app should be able to input immediately after cmd+e(quick add) #[[UX Enhancement]] <!-- id: 6515 -->\n"
+                                          "  * GitHub URL:: https://github.com/logseq/logseq/commit/5a40a2e1618182984d778dfeb1066786b2bbe176\n"
+                                          "  * Assignee:: [[Tienson]]\n"
+                                          "  - nice <!-- id: 6533 -->\n"
+                                          "- on mobile side, I can’t see namespace pages(children pages) <!-- id: 6517 -->")
+                                :err ""}
+
+                               :else
+                               {:exit 99 :out "" :err (pr-str args)})))
+                          cli-server/ensure-server! (fn [config repo]
+                                                      (assoc config :ensured-repo repo))
+                          transport/invoke (fn [_ method args]
+                                             (swap! calls conj {:invoke [method args]})
+                                             (case method
+                                               :thread-api/pull
+                                               (let [[_repo _selector id] args]
+                                                 (p/resolved
+                                                  (case id
+                                                    6515 {:db/id 6515
+                                                          :block/title "DONE on web, app should be able to input immediately after cmd+e(quick add) #[[UX Enhancement]]"
+                                                          :block/page {:db/id 6465
+                                                                       :block/title "Jul 11th, 2025"}}
+                                                    6533 {:db/id 6533
+                                                          :block/title "nice"
+                                                          :block/page {:db/id 6465
+                                                                       :block/title "Jul 11th, 2025"}}
+                                                    6517 {:db/id 6517
+                                                          :block/title "on mobile side, I can’t see namespace pages(children pages)"
+                                                          :block/page {:db/id 6465
+                                                                       :block/title "Jul 11th, 2025"}})))))]
+            (qmd-command/execute-qsearch
+             {:type :qsearch
+              :repo "logseq_db_demo"
+              :query "tienson sync"
+              :collection "custom"}
+             {:output-format :json}))
+          (p/then (fn [result]
+                    (is (= :ok (:status result)))
+                    (is (= [6515 6533 6517]
+                           (mapv :db/id (get-in result [:data :items]))))
+                    (is (= [["query" "tienson sync" "--json" "-c" "custom"]
+                            ["get" "qmd://custom/journals/2025-07-11.md:1" "-l" "18"]]
+                           (mapv :qmd (filter :qmd @calls))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-qsearch-does-not-duplicate-already-complete-snippet
+  (async done
+    (let [snippet "- DONE parent <!-- id: 6515 -->\n  - nice <!-- id: 6533 -->"
+          calls (atom [])]
+      (-> (p/with-redefs [qmd-command/<run-qmd
+                          (fn [args]
+                            (swap! calls conj {:qmd args})
+                            (p/resolved
+                             (cond
+                               (= ["query" "nice" "--json" "-c" "custom"] args)
+                               {:exit 0
+                                :out (str "[{\"score\":1,"
+                                          "\"file\":\"qmd://custom/pages/db-release-checklist.md\","
+                                          "\"line\":3,"
+                                          "\"snippet\":" (js/JSON.stringify snippet) "}]")
+                                :err ""}
+
+                               (= ["get" "qmd://custom/pages/db-release-checklist.md:1" "-l" "14"] args)
+                               {:exit 0
+                                :out (str "id:: 11111111-1111-4111-8111-111111111111\n\n"
+                                          snippet)
+                                :err ""}
+
+                               :else
+                               {:exit 99 :out "" :err (pr-str args)})))
+                          cli-server/ensure-server! (fn [config repo]
+                                                      (assoc config :ensured-repo repo))
+                          transport/invoke (fn [_ method args]
+                                             (swap! calls conj {:invoke [method args]})
+                                             (case method
+                                               :thread-api/pull
+                                               (let [[_repo _selector id] args]
+                                                 (p/resolved
+                                                  (case id
+                                                    6515 {:db/id 6515
+                                                          :block/title "DONE parent"
+                                                          :block/page {:db/id 100
+                                                                       :block/title "DB release checklist"}}
+                                                    6533 {:db/id 6533
+                                                          :block/title "nice"
+                                                          :block/page {:db/id 100
+                                                                       :block/title "DB release checklist"}})))))]
+            (qmd-command/execute-qsearch
+             {:type :qsearch
+              :repo "logseq_db_demo"
+              :query "nice"
+              :collection "custom"}
+             {:output-format :json}))
+          (p/then (fn [result]
+                    (is (= :ok (:status result)))
+                    (is (= [6515 6533]
+                           (mapv :db/id (get-in result [:data :items]))))
+                    (is (= [6515 6533]
+                           (mapv (fn [{:keys [invoke]}]
+                                   (get-in invoke [1 2]))
+                                 (filter :invoke @calls))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-qsearch-keeps-original-snippet-when-qmd-get-fails
+  (async done
+    (let [calls (atom [])]
+      (-> (p/with-redefs [qmd-command/<run-qmd
+                          (fn [args]
+                            (swap! calls conj {:qmd args})
+                            (p/resolved
+                             (cond
+                               (= ["query" "nice" "--json" "-c" "custom"] args)
+                               {:exit 0
+                                :out "[{\"score\":1,\"file\":\"qmd://custom/pages/missing.md\",\"line\":9,\"snippet\":\"  - nice <!-- id: 6533 -->\"}]"
+                                :err ""}
+
+                               (= ["get" "qmd://custom/pages/missing.md:1" "-l" "19"] args)
+                               {:exit 1 :out "" :err "not found"}
+
+                               :else
+                               {:exit 99 :out "" :err (pr-str args)})))
+                          cli-server/ensure-server! (fn [config repo]
+                                                      (assoc config :ensured-repo repo))
+                          transport/invoke (fn [_ method args]
+                                             (swap! calls conj {:invoke [method args]})
+                                             (case method
+                                               :thread-api/pull
+                                               (let [[_repo _selector id] args]
+                                                 (p/resolved
+                                                  (case id
+                                                    6533 {:db/id 6533
+                                                          :block/title "nice"
+                                                          :block/page {:db/id 100
+                                                                       :block/title "DB release checklist"}})))))]
+            (qmd-command/execute-qsearch
+             {:type :qsearch
+              :repo "logseq_db_demo"
+              :query "nice"
+              :collection "custom"}
+             {:output-format :json}))
+          (p/then (fn [result]
+                    (is (= :ok (:status result)))
+                    (is (= [6533]
+                           (mapv :db/id (get-in result [:data :items]))))
+                    (is (= [["query" "nice" "--json" "-c" "custom"]
+                            ["get" "qmd://custom/pages/missing.md:1" "-l" "19"]]
+                           (mapv :qmd (filter :qmd @calls))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-qsearch-does-not-call-qmd-get-without-line
+  (async done
+    (let [calls (atom [])]
+      (-> (p/with-redefs [qmd-command/<run-qmd
+                          (fn [args]
+                            (swap! calls conj {:qmd args})
+                            (p/resolved
+                             {:exit 0
+                              :out "[{\"score\":1,\"file\":\"qmd://custom/pages/A.md\",\"snippet\":\"  - nice <!-- id: 6533 -->\"}]"
+                              :err ""}))
+                          cli-server/ensure-server! (fn [config repo]
+                                                      (assoc config :ensured-repo repo))
+                          transport/invoke (fn [_ method args]
+                                             (swap! calls conj {:invoke [method args]})
+                                             (case method
+                                               :thread-api/pull
+                                               (let [[_repo _selector id] args]
+                                                 (p/resolved
+                                                  (case id
+                                                    6533 {:db/id 6533
+                                                          :block/title "nice"
+                                                          :block/page {:db/id 100
+                                                                       :block/title "DB release checklist"}})))))]
+            (qmd-command/execute-qsearch
+             {:type :qsearch
+              :repo "logseq_db_demo"
+              :query "nice"
+              :collection "custom"}
+             {:output-format :json}))
+          (p/then (fn [result]
+                    (is (= :ok (:status result)))
+                    (is (= [6533]
+                           (mapv :db/id (get-in result [:data :items]))))
+                    (is (= [["query" "nice" "--json" "-c" "custom"]]
+                           (mapv :qmd (filter :qmd @calls))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-qsearch-normalizes-block-reference-labels
+  (async done
+    (let [ref-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          calls (atom [])]
+      (-> (p/with-redefs [qmd-command/<run-qmd
+                          (fn [args]
+                            (swap! calls conj {:qmd args})
+                            (p/resolved
+                             {:exit 0
+                              :out "[{\"score\":1,\"file\":\"qmd://custom/pages/A.md\",\"snippet\":\"- alpha <!-- id: 3 -->\"}]"
+                              :err ""}))
+                          cli-server/ensure-server! (fn [config repo]
+                                                      (assoc config :ensured-repo repo))
+                          transport/invoke (fn [_ method args]
+                                             (swap! calls conj {:invoke [method args]})
+                                             (case method
+                                               :thread-api/pull
+                                               (let [[_repo selector id] args]
+                                                 (p/resolved
+                                                  (cond
+                                                    (= id 3)
+                                                    {:db/id 3
+                                                     :block/title (str "alpha [[" ref-uuid "]]")
+                                                     :block/page {:db/id 1
+                                                                  :block/title "Home"}}
+
+                                                    (= id [:block/uuid ref-uuid])
+                                                    {:db/id 7
+                                                     :block/uuid ref-uuid
+                                                     :block/title "Referenced block"}
+
+                                                    :else
+                                                    (throw (ex-info "unexpected pull"
+                                                                    {:selector selector
+                                                                     :id id})))))))]
+            (qmd-command/execute-qsearch
+             {:type :qsearch
+              :repo "logseq_db_demo"
+              :query "alpha"
+              :collection "custom"}
+             {:output-format :json}))
+          (p/then (fn [result]
+                    (is (= :ok (:status result)))
+                    (is (= "alpha [[Referenced block]]"
+                           (get-in result [:data :items 0 :block/title])))
+                    (is (not (string/includes? (get-in result [:data :items 0 :block/title])
+                                               (str ref-uuid))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-qsearch-renders-pulled-block-details-like-show
+  (async done
+    (let [query-call-count (atom 0)]
+      (-> (p/with-redefs [qmd-command/<run-qmd
+                          (fn [_]
+                            (p/resolved
+                             {:exit 0
+                              :out "[{\"score\":1,\"file\":\"qmd://custom/pages/Home.md\",\"snippet\":\"- alpha <!-- id: 3 -->\"}]"
+                              :err ""}))
+                          cli-server/ensure-server! (fn [config repo]
+                                                      (assoc config :ensured-repo repo))
+                          transport/invoke (fn [_ method args]
+                                             (case method
+                                               :thread-api/pull
+                                               (let [[_repo _selector target] args]
+                                                 (p/resolved
+                                                  (cond
+                                                    (= target 3)
+                                                    {:db/id 3
+                                                     :block/title "alpha target"
+                                                     :block/page {:db/id 1
+                                                                  :block/title "Home"}
+                                                     :block/tags [{:db/id 20
+                                                                   :block/title "Project"}]}
+
+                                                    (= target [:db/ident :user.property/priority])
+                                                    {:db/id 30
+                                                     :db/ident :user.property/priority
+                                                     :block/title "Priority"}
+
+                                                    :else nil)))
+
+                                               :thread-api/q
+                                               (let [idx (swap! query-call-count inc)]
+                                                 (p/resolved
+                                                  (case idx
+                                                    1 [[:user.property/priority :default]]
+                                                    2 []
+                                                    3 [[3 :user.property/priority "P1"]]
+                                                    [])))))]
+            (qmd-command/execute-qsearch
+             {:type :qsearch
+              :repo "logseq_db_demo"
+              :query "alpha"
+              :collection "custom"}
+             {:output-format nil}))
+          (p/then (fn [result]
+                    (is (= :ok (:status result)))
+                    (let [plain (-> result
+                                    (assoc :command :qsearch)
+                                    (format/format-result {:output-format nil})
+                                    style/strip-ansi)]
+                      (is (string/includes? plain "3 └── alpha target #Project"))
+                      (is (string/includes? plain "Priority: P1"))
+                      (is (not (string/includes? plain "PAGE-TITLE")))
+                      (is (not (string/includes? plain "Count: 1"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest test-execute-qsearch-empty-qmd-results-returns-no-matches
+  (async done
+    (-> (p/with-redefs [qmd-command/<run-qmd
+                        (fn [_]
+                          (p/resolved {:exit 0
+                                       :out "[]"
+                                       :err ""}))
+                        cli-server/ensure-server! (fn [config _repo] config)]
+          (qmd-command/execute-qsearch
+           {:type :qsearch
+            :repo "logseq_db_demo"
+            :query "alpha"
+            :collection "custom"}
+           {}))
+        (p/then (fn [result]
+                  (is (= :ok (:status result)))
+                  (is (= [] (get-in result [:data :items])))
+                  (is (= [] (get-in result [:data :missing-ids])))
+                  (is (= 0 (get-in result [:data :qmd :result-count])))))
+        (p/catch (fn [e] (is false (str "unexpected error: " e))))
+        (p/finally done))))
 
 (deftest test-execute-qsearch-errors-when-qmd-results-have-no-block-ids
   (async done

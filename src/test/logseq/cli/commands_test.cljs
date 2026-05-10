@@ -185,15 +185,25 @@
       (is (= 10 (get-in result [:options :limit])))
       (is (true? (get-in result [:options :no-rerank])))))
 
+  (testing "qsearch can omit graph so build-action can use the current graph"
+    (let [parsed (commands/parse-args ["qsearch" "markdown" "mirror"])
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? parsed)))
+      (is (true? (:ok? result)))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= "demo" (get-in result [:action :graph])))))
+
   (testing "qsearch requires query text"
     (let [result (commands/parse-args ["qsearch" "--graph" "demo"])]
       (is (false? (:ok? result)))
       (is (= :missing-query-text (get-in result [:error :code])))))
 
-  (testing "qsearch requires graph"
+  (testing "qsearch without graph or current graph fails at build-action"
     (let [result (commands/parse-args ["qsearch" "markdown" "mirror"])]
-      (is (false? (:ok? result)))
-      (is (= :missing-graph (get-in result [:error :code])))))
+      (is (true? (:ok? result)))
+      (let [action-result (commands/build-action result {})]
+        (is (false? (:ok? action-result)))
+        (is (= :missing-repo (get-in action-result [:error :code]))))))
 
   (testing "qsearch rejects unknown options after positional query"
     (let [result (commands/parse-args ["qsearch" "markdown" "--unknown" "--graph" "demo"])]
