@@ -30,7 +30,7 @@
                 (map #(str "LPT" %) (range 1 10)))))
 
 (def ^:private max-file-stem-length 160)
-(def ^:private markdown-list-line-re #"^(\s*)(-|\d+\.)\s?(.*)$")
+(def ^:private markdown-block-line-re #"^(\s*)-\s?(.*)$")
 (def ^:private markdown-property-line-re #"^(\s*)\*\s+[^:\s][^:]*::\s?.*$")
 (def ^:private property-line-re #"^(\s*)[^:\s][^:]*::\s?.*$")
 (def ^:private ref-or-tag-re #"(#?)\[\[([^\[\]]+)\]\]")
@@ -388,7 +388,7 @@
 
 (defn- decorate-block-line
   [db block-info line options]
-  (if-let [[_ spaces marker title] (re-matches markdown-list-line-re line)]
+  (if-let [[_ spaces title] (re-matches markdown-block-line-re line)]
     (if-let [target (:embed-target block-info)]
       (string/split-lines
        (decorate-rendered-content
@@ -398,7 +398,7 @@
         options
         {:initial-lines []}))
       (let [content (decorate-block-content block-info title)
-            marker (or (:marker block-info) marker)]
+            marker (or (:marker block-info) "-")]
         [(str spaces marker (when-not (string/blank? content) " ") content)]))
     [line]))
 
@@ -418,7 +418,7 @@
                  (conj lines line)
                  seen-block?
                  property-indent)
-          (if (re-matches markdown-list-line-re line)
+          (if (re-matches markdown-block-line-re line)
             (let [lines' (cond-> lines
                            (and insert-blank-before-first-block?
                                 (not seen-block?)) (conj "")

@@ -285,6 +285,34 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest page-mirror-does-not-treat-numbered-content-lines-as-blocks-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Numbered Content"}
+                                     :blocks [{:block/title "intro\n1. continuation"
+                                               :build/tags [:Project]}
+                                              {:block/title "1. code line"
+                                               :build/tags [:Snippet]
+                                               :build/properties {:logseq.property.node/display-type :code}}
+                                              {:block/title "second"
+                                               :build/tags [:Next]
+                                               :build/properties {:logseq.property/status :logseq.property/status.todo}}]}]})
+          page (db-test/find-page-by-title @conn "Numbered Content")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Numbered Content.md"))]
+                      (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                  "- intro #Project\n"
+                                  "  1. continuation\n"
+                                  "- ``` #Snippet\n"
+                                  "  1. code line\n"
+                                  "  ```\n"
+                                  "- TODO second #Next")
+                             content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest page-mirror-renders-embedded-node-content-and-tags-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
