@@ -127,7 +127,7 @@
 
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered
-  [state search-mode]
+  [state]
   (let [sidebar? (:sidebar? (last (:rum/args state)))
         results @(::results state)
         input @(::input state)
@@ -154,9 +154,6 @@
         include-slash? (string/includes? input "/")
         start-with-slash? (string/starts-with? input "/")
         order* (cond
-                 (= search-mode :graph)
-                 []
-
                  start-with-slash?
                  [[(group-label :filters)        :filters       (visible-items :filters)]
                   [(group-label :current-page)   :current-page  (visible-items :current-page)]
@@ -626,16 +623,11 @@
     (let [page? (page-item? item)
           block? (boolean (:source-block item))
           shift? (event-shift? event)
-          shift-or-sidebar? (or shift? (boolean (:open-sidebar? (:opts state))))
-          search-mode (:search/mode @state/state)
-          graph-view? (= search-mode :graph)]
+          shift-or-sidebar? (or shift? (boolean (:open-sidebar? (:opts state))))]
       (cond
         (:file-path item) (do
                             (open-file (:file-path item))
                             (shui/dialog-close! :ls-dialog-cmdk))
-        (and graph-view? page? (not shift?)) (do
-                                               (state/add-graph-search-filter! @(::input state))
-                                               (reset! (::input state) ""))
         (and shift-or-sidebar? block?) (handle-action :open-block-right state event)
         (and shift-or-sidebar? page?) (handle-action :open-page-right state event)
         page? (handle-action :open-page state event)
@@ -1118,14 +1110,10 @@
 
 (defn- input-placeholder
   []
-  (let [search-mode (:search/mode @state/state)
-        action (get-action)]
+  (let [action (get-action)]
     (cond
       (= action :move-blocks)
       (t :cmdk.input/move-blocks-placeholder)
-
-      (= search-mode :graph)
-      (t :cmdk.input/add-graph-filter-placeholder)
 
       (= action :new-page)
       (t :cmdk.input/type-page-name-placeholder)
@@ -1360,10 +1348,10 @@
   [state {:keys [sidebar?] :as opts}]
   (let [*input (::input state)
         search-mode (state/sub :search/mode)
-        group-filter (or (when (and (not (contains? #{:global :graph} search-mode)) (not (:sidebar? opts)))
+        group-filter (or (when (and (not= :global search-mode) (not (:sidebar? opts)))
                            search-mode)
                          (:group (rum/react (::filter state))))
-        results-ordered (state->results-ordered state search-mode)
+        results-ordered (state->results-ordered state)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
     [:div.cp__cmdk {:ref #(when-not @(::ref state) (reset! (::ref state) %))

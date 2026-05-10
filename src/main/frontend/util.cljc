@@ -103,7 +103,6 @@
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
-#?(:cljs (defonce hsl2hex utils/hsl2hex))
 #?(:cljs (defonce base64string-to-unit8array utils/base64ToUint8Array))
 #?(:cljs (defonce uint8array-to-base64string utils/uint8ArrayToBase64))
 
@@ -1085,19 +1084,6 @@
 
        {:y (- (:height viewport-rect) (:bottom target-rect))
         :x (- (:width viewport-rect) (:right target-rect))})))
-
-(def regex-char-esc-smap
-  (let [esc-chars "{}[]()&^%$#!?*.+|\\"]
-    (zipmap esc-chars
-            (map #(str "\\" %) esc-chars))))
-
-(defn regex-escape
-  "Escape all regex meta chars in text."
-  [text]
-  (string/join (replace regex-char-esc-smap text)))
-
-(comment
-  (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
 
 #?(:cljs
    (defn meta-key? [e]

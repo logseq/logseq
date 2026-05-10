@@ -1,65 +1,114 @@
 (ns frontend.extensions.graph
-  (:require [cljs-bean.core :as bean]
-            [frontend.extensions.graph.pixi :as pixi]
-            [frontend.handler.route :as route-handler]
-            [frontend.colors :as colors]
-            [frontend.db :as db]
-            [goog.object :as gobj]
+  (:require [frontend.extensions.graph.pixi :as pixi]
+            [logseq.shui.hooks :as hooks]
             [rum.core :as rum]))
 
-(defn- highlight-neighbours!
-  [^js graph node focus-nodes _dark?]
-  (.forEachNeighbor
-   (.-graph graph) node
-   (fn [node attributes]
-     (when-not (contains? focus-nodes node)
-       (let [attributes (bean/->clj attributes)
-             accent-color (or (colors/get-accent-color) "#6366F1")
-             attributes (assoc attributes
-                               :color accent-color
-                               :border {:width 2
-                                        :color accent-color})]
-         (.resetNodeStyle graph node (bean/->js attributes)))))))
+(defn canvas-style
+  [{:keys [width height]}]
+  (cond-> {:width "100%"
+           :height "100%"}
+    (number? width)
+    (assoc :width (str width "px"))
 
-(defn- highlight-edges!
-  [^js graph node dark?]
-  (.forEachEdge
-   (.-graph graph) node
-   (fn [edge _attributes]
-     (.resetEdgeStyle graph edge (bean/->js {:width 1
-                                             :color (if dark? "#999" "#A5B4FC")})))))
+    (number? height)
+    (assoc :height (str height "px"))))
 
-(defn on-click-handler [graph node event *focus-nodes *n-hops drag? dark?]
-  ;; shift+click to select the page
-  (if (or (gobj/get event "shiftKey") drag?)
-    (do
-      (when-not @*n-hops
-        (swap! *focus-nodes ;; Don't trigger re-render
-               (fn [v]
-                 (vec (distinct (conj v node))))))
-      ;; highlight current node
-      (.setNodeAttribute (.-graph graph) node "parent" "ls-selected-nodes")
-      (highlight-neighbours! graph node (set @*focus-nodes) dark?)
-      (highlight-edges! graph node dark?))
-    (when-not drag?
-      (.unhoverNode ^js graph node)
-      (when-let [page (and (string? node)
-                           (some-> (js/parseInt node) db/entity))]
-        (route-handler/redirect-to-page! (:block/uuid page))))))
+(defn render-container-deps
+  [opts]
+  [(:nodes opts)
+   (:links opts)
+   (:dark? opts)
+   (:view-mode opts)
+   (:width opts)
+   (:height opts)
+   (:aria-label opts)
+   (:grid-layout? opts)
+   (:on-node-activate opts)
+   (:on-node-preview opts)
+   (:on-selection-change opts)
+   (:on-rendered opts)])
 
-(rum/defcs graph-2d <
-  (rum/local nil :ref)
-  {:did-update pixi/render!
-   :should-update (fn [old-state new-state]
-                    (not= (select-keys (first (:rum/args old-state))
-                                       [:nodes :links :dark? :link-dist :charge-strength :charge-range])
-                          (select-keys (first (:rum/args new-state))
-                                       [:nodes :links :dark? :link-dist :charge-strength :charge-range])))
-   :will-unmount (fn [state]
-                   (reset! pixi/*graph-instance nil)
-                   state)}
-  [state _opts]
-  [:div.graph {:ref (fn [value]
-                      (let [ref (get state :ref)]
-                        (when (and ref value)
-                          (reset! ref value))))}])
+(defn- schedule-render-container!
+  [container opts]
+  (let [animation-frame-id* (atom nil)
+        timeout-id* (atom nil)
+        render! #(reset! timeout-id*
+                         (js/setTimeout
+                          (fn []
+                            (reset! timeout-id* nil)
+                            (pixi/render-container! container opts))
+                          0))]
+    (if (exists? js/requestAnimationFrame)
+      (reset! animation-frame-id*
+              (js/requestAnimationFrame
+               (fn []
+                 (reset! animation-frame-id* nil)
+                 (render!))))
+      (render!))
+    (fn []
+      (when-let [animation-frame-id @animation-frame-id*]
+        (js/cancelAnimationFrame animation-frame-id))
+      (when-let [timeout-id @timeout-id*]
+        (js/clearTimeout timeout-id)))))
+
+(rum/defc graph-2d
+  [opts]
+  (let [container-ref (hooks/use-ref nil)
+        render-pending-ref (hooks/use-ref false)
+        incremental-update-ready? (fn [container]
+                                    (and container
+                                         (not (hooks/deref render-pending-ref))))]
+    (hooks/use-effect!
+     (fn []
+       (let [container (hooks/deref container-ref)]
+         (when container
+           (hooks/set-ref! render-pending-ref true)
+           (schedule-render-container!
+            container
+            (assoc opts
+                   :on-rendered
+                   (fn [render-info]
+                     (hooks/set-ref! render-pending-ref false)
+                     (when-let [on-rendered (:on-rendered opts)]
+                       (on-rendered render-info))))))))
+     (render-container-deps opts))
+    (hooks/use-effect!
+     (fn []
+       (fn []
+         (when-let [container (hooks/deref container-ref)]
+           (pixi/destroy-instance! container))))
+     [])
+    (hooks/use-effect!
+     (fn []
+       (when-let [container (hooks/deref container-ref)]
+         (when (incremental-update-ready? container)
+           (pixi/update-visibility! container
+                                    (:visible-node-ids opts)
+                                    (:background-visible-node-ids opts)))))
+     [(:visible-node-ids opts) (:background-visible-node-ids opts)])
+    (hooks/use-effect!
+     (fn []
+       (when-let [container (hooks/deref container-ref)]
+         (when (incremental-update-ready? container)
+           (pixi/update-depth! container (:depth opts)))))
+     [(:depth opts)])
+    (hooks/use-effect!
+     (fn []
+       (when-let [container (hooks/deref container-ref)]
+         (when (incremental-update-ready? container)
+           (pixi/update-link-distance! container (:link-distance opts)))))
+     [(:link-distance opts)])
+    (hooks/use-effect!
+     (fn []
+       (when-let [container (hooks/deref container-ref)]
+         (when (incremental-update-ready? container)
+           (pixi/update-edge-display! container
+                                      (:show-arrows? opts)
+                                      (:show-edge-labels? opts)))))
+     [(:show-arrows? opts) (:show-edge-labels? opts)])
+    [:div.graph-canvas
+     {:ref container-ref
+      :style (canvas-style opts)
+      :role "application"
+      :tabIndex 0
+      :aria-label (:aria-label opts)}]))
