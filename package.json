@@ -32,7 +32,7 @@
     "gulp-replace": "^1.1.4",
     "npm-run-all2": "^8.0.4",
     "playwright": "^1.58.2",
-    "postcss": "^8.5.13",
+    "postcss": "^8.5.14",
     "postcss-cli": "11.0.1",
     "postcss-import": "16.1.1",
     "postcss-import-ext-glob": "2.1.1",
