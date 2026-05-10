@@ -1,12 +1,12 @@
 (ns frontend.components.page
-  (:require ["/frontend/utils" :as utils]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.components.block :as component-block]
             [frontend.components.class :as class-component]
             [frontend.components.content :as content]
             [frontend.components.db-based.page :as db-page]
             [frontend.components.editor :as editor]
+            [frontend.components.graph-actions :as graph-actions]
             [frontend.components.library :as library]
             [frontend.components.objects :as objects]
             [frontend.components.plugins :as plugins]
@@ -15,7 +15,6 @@
             [frontend.components.recycle :as recycle]
             [frontend.components.reference :as reference]
             [frontend.components.scheduled-deadlines :as scheduled]
-            [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -24,11 +23,8 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
-            [frontend.extensions.graph.pixi :as pixi]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
@@ -616,392 +612,25 @@
   [page-m option]
   (page-cp (merge option page-m)))
 
-(defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
-
-;; scrollHeight
-(rum/defcs graph-filter-section < (rum/local false ::open?)
-  [state title content {:keys [search-filters]}]
-  (let [open? (get state ::open?)]
-    (when (and (seq search-filters) (not @open?))
-      (reset! open? true))
-    [:li.relative
-     [:div
-      [:button.w-full.px-4.py-2.text-left.focus:outline-none {:on-click #(swap! open? not)}
-       [:div.flex.items-center.justify-between
-        title
-        (if @open? (svg/caret-down) (svg/caret-right))]]
-      (content open?)]]))
-
-(rum/defc filter-expand-area
-  [open? content]
-  [:div.relative.overflow-hidden.transition-all.max-h-0.duration-700
-   {:style {:max-height (if @open? 400 0)}}
-   content])
-
-(defonce *n-hops (atom nil))
-(defonce *focus-nodes (atom []))
-(defonce *graph-reset? (atom false))
-(defonce *graph-forcereset? (atom false))
-(defonce *journal? (atom nil))
-(defonce *orphan-pages? (atom true))
-(defonce *builtin-pages? (atom nil))
-(defonce *excluded-pages? (atom true))
-(defonce *show-journals-in-page-graph? (atom nil))
-(defonce *created-at-filter (atom nil))
-(defonce *link-dist (atom 70))
-(defonce *charge-strength (atom -600))
-(defonce *charge-range (atom 600))
-
-(rum/defcs simulation-switch < rum/reactive
-  [state]
-  (let [*simulation-paused? pixi/*simulation-paused?]
-    [:div.flex.flex-col.mb-2
-     [:p {:title (t :graph/pause-simulation)}
-      (t :graph/pause-simulation)]
-     (ui/toggle
-      (rum/react *simulation-paused?)
-      (fn []
-        (let [paused? @*simulation-paused?]
-          (if paused?
-            (pixi/resume-simulation!)
-            (pixi/stop-simulation!))))
-      true)]))
-
-(rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
-  [graph settings forcesettings n-hops]
-  (let [{:keys [journal? orphan-pages? builtin-pages? excluded-pages?]
-         :or {orphan-pages? true}} settings
-        {:keys [link-dist charge-strength charge-range]} forcesettings
-        journal?' (rum/react *journal?)
-        orphan-pages?' (rum/react *orphan-pages?)
-        builtin-pages?' (rum/react *builtin-pages?)
-        excluded-pages?' (rum/react *excluded-pages?)
-        link-dist'  (rum/react *link-dist)
-        charge-strength'  (rum/react *charge-strength)
-        charge-range'  (rum/react *charge-range)
-        journal? (if (nil? journal?') journal? journal?')
-        orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
-        builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
-        excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
-        created-at-filter (or (rum/react *created-at-filter) (:created-at-filter settings))
-        link-dist (if (nil? link-dist') link-dist link-dist')
-        charge-strength (if (nil? charge-strength') charge-strength charge-strength')
-        charge-range (if (nil? charge-range') charge-range charge-range')
-        set-setting! (fn [key value]
-                       (let [new-settings (assoc settings key value)]
-                         (config-handler/set-config! :graph/settings new-settings)))
-        set-forcesetting! (fn [key value]
-                            (let [new-forcesettings (assoc forcesettings key value)]
-                              (config-handler/set-config! :graph/forcesettings new-forcesettings)))
-        search-graph-filters (state/sub :search/graph-filters)
-        focus-nodes (rum/react *focus-nodes)]
-    [:div.absolute.top-4.right-4.graph-filters
-     [:div.flex.flex-col
-      [:div.shadow-xl.rounded-sm
-       [:ul
-        (graph-filter-section
-         [:span.font-medium (t :graph/nodes)]
-         (fn [open?]
-           (filter-expand-area
-            open?
-            [:div
-             [:p.text-sm.opacity-70.px-4
-              (let [c1 (count (:nodes graph))]
-                (t :graph/page-count c1))]
-             [:div.p-6
-                ;; [:div.flex.items-center.justify-between.mb-2
-                ;;  [:span "Layout"]
-                ;;  (ui/select
-                ;;    (mapv
-                ;;     (fn [item]
-                ;;       (if (= (:label item) layout)
-                ;;         (assoc item :selected "selected")
-                ;;         item))
-                ;;     [{:label "gForce"}
-                ;;      {:label "dagre"}])
-                ;;    (fn [_e value]
-                ;;      (set-setting! :layout value))
-                ;;    {:class "graph-layout"})]
-              [:div.flex.items-center.justify-between.mb-2
-               [:span (t :settings.features/enable-journals)]
-                 ;; FIXME: why it's not aligned well?
-               [:div.mt-1
-                (ui/toggle journal?
-                           (fn []
-                             (let [value (not journal?)]
-                               (reset! *journal? value)
-                               (set-setting! :journal? value)))
-                           true)]]
-              [:div.flex.items-center.justify-between.mb-2
-               [:span (t :graph/orphan-pages)]
-               [:div.mt-1
-                (ui/toggle orphan-pages?
-                           (fn []
-                             (let [value (not orphan-pages?)]
-                               (reset! *orphan-pages? value)
-                               (set-setting! :orphan-pages? value)))
-                           true)]]
-              [:div.flex.items-center.justify-between.mb-2
-               [:span (t :graph/built-in-pages)]
-               [:div.mt-1
-                (ui/toggle builtin-pages?
-                           (fn []
-                             (let [value (not builtin-pages?)]
-                               (reset! *builtin-pages? value)
-                               (set-setting! :builtin-pages? value)))
-                           true)]]
-              [:div.flex.items-center.justify-between.mb-2
-               [:span (t :graph/excluded-pages)]
-               [:div.mt-1
-                (ui/toggle excluded-pages?
-                           (fn []
-                             (let [value (not excluded-pages?)]
-                               (reset! *excluded-pages? value)
-                               (set-setting! :excluded-pages? value)))
-                           true)]]
-
-              [:div.flex.flex-col.mb-2
-               [:p (t :graph/created-before)]
-               (when created-at-filter
-                 [:div (.toDateString (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))])
-
-               (ui/tooltip
-                   ;; Slider keeps track off the range from min created-at to max created-at
-                   ;; because there were bugs with setting min and max directly
-                (ui/slider created-at-filter
-                           {:min 0
-                            :max (- (get-in graph [:all-pages :created-at-max])
-                                    (get-in graph [:all-pages :created-at-min]))
-                            :on-change #(do
-                                          (reset! *created-at-filter (int %))
-                                          (set-setting! :created-at-filter (int %)))})
-                [:div.px-1 (str (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))])]
-
-              (when (seq focus-nodes)
-                [:div.flex.flex-col.mb-2
-                 [:p {:title (t :graph/n-hops-from-selected-nodes)}
-                  (t :graph/n-hops-from-selected-nodes)]
-                 (ui/tooltip
-                  (ui/slider (or n-hops 10)
-                             {:min 1
-                              :max 10
-                              :on-change #(reset! *n-hops (int %))})
-                  [:div n-hops])])
-
-              [:a.opacity-70.opacity-100 {:on-click (fn []
-                                                      (swap! *graph-reset? not)
-                                                      (reset! *focus-nodes [])
-                                                      (reset! *n-hops nil)
-                                                      (reset! *created-at-filter nil)
-                                                      (set-setting! :created-at-filter nil)
-                                                      (state/clear-search-filters!))}
-               (t :graph/reset)]]]))
-         {})
-        (graph-filter-section
-         [:span.font-medium (t :graph/search)]
-         (fn [open?]
-           (filter-expand-area
-            open?
-            [:div.p-6
-             (if (seq search-graph-filters)
-               [:div
-                (for [q search-graph-filters]
-                  [:div.flex.flex-row.justify-between.items-center.mb-2
-                   [:span.font-medium q]
-                   [:a.search-filter-close.opacity-70.opacity-100 {:on-click #(state/remove-search-filter! q)}
-                    svg/close]])
-
-                [:a.opacity-70.opacity-100 {:on-click state/clear-search-filters!}
-                 (t :notification/clear-all)]]
-               [:a.opacity-70.opacity-100 {:on-click #(route-handler/go-to-search! :graph)}
-                (t :graph/click-to-search)])]))
-         {:search-filters search-graph-filters})
-        (graph-filter-section
-         [:span.font-medium (t :graph/forces)]
-         (fn [open?]
-           (filter-expand-area
-           open?
-           [:div
-            [:p.text-sm.opacity-70.px-4
-              (let [c2 (count (:links graph))]
-                (t :graph/link-count c2))]
-             [:div.p-6
-              (simulation-switch)
-
-              [:div.flex.flex-col.mb-2
-               [:p {:title (t :graph/link-distance)}
-                (t :graph/link-distance)]
-               (ui/tooltip
-                (ui/slider (/ link-dist 10)
-                           {:min 1                                  ;; 10
-                            :max 18                                 ;; 180
-                            :on-change #(let [value (int %)]
-                                          (reset! *link-dist (* value 10))
-                                          (set-forcesetting! :link-dist (* value 10)))})
-                [:div link-dist])]
-
-              [:div.flex.flex-col.mb-2
-               [:p {:title (t :graph/charge-strength)}
-                (t :graph/charge-strength)]
-               (ui/tooltip
-                (ui/slider (/ charge-strength 100)
-                           {:min -10                                ;;-1000
-                            :max 10                                 ;;1000
-                            :on-change #(let [value (int %)]
-                                          (reset! *charge-strength (* value 100))
-                                          (set-forcesetting! :charge-strength (* value 100)))})
-                [:div charge-strength])]
-
-              [:div.flex.flex-col.mb-2
-               [:p {:title (t :graph/charge-range)}
-                (t :graph/charge-range)]
-               (ui/tooltip
-                (ui/slider (/ charge-range 100)
-                           {:min 5                                  ;;500
-                            :max 40                                 ;;4000
-                            :on-change #(let [value (int %)]
-                                          (reset! *charge-range (* value 100))
-                                          (set-forcesetting! :charge-range (* value 100)))})
-                [:div charge-range])]
-
-              [:a
-               {:on-click (fn []
-                            (swap! *graph-forcereset? not)
-                            (reset! *link-dist 70)
-                            (reset! *charge-strength -600)
-                            (reset! *charge-range 600))}
-               (t :graph/reset-forces)]]]))
-         {})
-        (graph-filter-section
-         [:span.font-medium (t :ui/export)]
-         (fn [open?]
-           (filter-expand-area
-            open?
-            (when-let [canvas (js/document.querySelector "#global-graph canvas")]
-              [:div.p-6
-                 ;; We'll get an empty image if we don't wrap this in a requestAnimationFrame
-               [:div [:a {:on-click #(.requestAnimationFrame js/window (fn [] (utils/canvasToImage canvas "graph" "png")))} (t :graph/as-png)]]])))
-         {:search-filters search-graph-filters})]]]]))
-
-(defonce last-node-position (atom nil))
-(defn- graph-register-handlers
-  [graph focus-nodes n-hops dark?]
-  (.on graph "nodeClick"
-       (fn [event node]
-         (let [x (.-x event)
-               y (.-y event)
-               drag? (not (let [[last-node last-x last-y] @last-node-position
-                                threshold 5]
-                            (and (= node last-node)
-                                 (<= (abs (- x last-x)) threshold)
-                                 (<= (abs (- y last-y)) threshold))))]
-           (graph/on-click-handler graph node event focus-nodes n-hops drag? dark?))))
-  (.on graph "nodeMousedown"
-       (fn [event node]
-         (reset! last-node-position [node (.-x event) (.-y event)]))))
-
-(rum/defc global-graph-inner < rum/reactive
-  [graph settings forcesettings theme]
-  (let [[width height] (rum/react layout)
-        dark? (= theme "dark")
-        n-hops (rum/react *n-hops)
-        link-dist (rum/react *link-dist)
-        charge-strength (rum/react *charge-strength)
-        charge-range (rum/react *charge-range)
-        reset? (rum/react *graph-reset?)
-        forcereset? (rum/react *graph-forcereset?)
-        focus-nodes (when n-hops (rum/react *focus-nodes))
-        graph (if (and (integer? n-hops)
-                       (seq focus-nodes)
-                       (not (:orphan-pages? settings)))
-                (graph-handler/n-hops graph focus-nodes n-hops)
-                graph)]
-    [:div.relative#global-graph
-     (graph/graph-2d {:nodes (:nodes graph)
-                      :links (:links graph)
-                      :width (- width 24)
-                      :height (- height 48)
-                      :dark? dark?
-                      :link-dist link-dist
-                      :charge-strength charge-strength
-                      :charge-range charge-range
-                      :register-handlers-fn
-                      (fn [graph]
-                        (graph-register-handlers graph *focus-nodes *n-hops dark?))
-                      :reset? reset?
-                      :forcereset? forcereset?})
-     (graph-filters graph settings forcesettings n-hops)]))
-
-(defn- filter-graph-nodes
-  [nodes filters]
-  (if (seq filters)
-    (let [filter-patterns (map #(re-pattern (str "(?i)" (util/regex-escape %))) filters)]
-      (filter (fn [node] (some #(re-find % (:label node)) filter-patterns)) nodes))
-    nodes))
-
-(rum/defc graph-aux
-  [settings forcesettings theme search-graph-filters]
-  (let [[graph set-graph!] (hooks/use-state nil)]
-    (hooks/use-effect!
-     (fn []
-       (p/let [result (state/<invoke-db-worker :thread-api/build-graph (state/get-current-repo)
-                                               (assoc settings
-                                                      :type :global
-                                                      :theme theme))]
-         (set-graph! result)))
-     [theme settings])
-    (when graph
-      (let [graph' (update graph :nodes #(filter-graph-nodes % search-graph-filters))]
-        (global-graph-inner graph' settings forcesettings theme)))))
-
-(rum/defcs global-graph < rum/reactive
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/listen state js/window "resize"
-                    (fn [_e]
-                      (reset! layout [js/window.innerWidth js/window.innerHeight])))))
-  {:will-unmount (fn [state]
-                   (reset! *n-hops nil)
-                   (reset! *focus-nodes [])
-                   ;; Clear graph search mode on leave so block selection action bar
-                   ;; can open normally on non-graph routes.
-                   (state/set-search-mode! nil)
-                   state)}
-  [state]
-  (let [settings (state/graph-settings)
-        forcesettings (state/graph-forcesettings)
-        theme (state/sub :ui/theme)
-        ;; Needed for query to retrigger after reset
-        _reset? (rum/react *graph-reset?)
-        search-graph-filters (state/sub :search/graph-filters)]
-    (graph-aux settings forcesettings theme search-graph-filters)))
-
 (rum/defc page-graph-inner < rum/reactive
   [_page graph dark?]
-  (let [show-journals-in-page-graph? (rum/react *show-journals-in-page-graph?)]
-    [:div.sidebar-item.flex-col
-     [:div.flex.items-center.justify-between.mb-0
-      [:span (t :graph.page/show-journals)]
-      [:div.mt-1
-       (ui/toggle show-journals-in-page-graph? ;my-val;
-                  (fn []
-                    (let [value (not show-journals-in-page-graph?)]
-                      (reset! *show-journals-in-page-graph? value)))
-                  true)]]
-
-     (graph/graph-2d {:nodes (:nodes graph)
-                      :links (:links graph)
-                      :width 600
-                      :height 600
-                      :dark? dark?
-                      :register-handlers-fn
-                      (fn [graph]
-                        (graph-register-handlers graph (atom nil) (atom nil) dark?))})]))
+  [:div.page-graph-panel.flex.flex-col.w-full
+   {:style {:height "min(72vh, 860px)"
+            :min-height 560}}
+   (graph/graph-2d {:nodes (:nodes graph)
+                    :links (:links graph)
+                    :dark? dark?
+                    :view-mode :page
+                    :show-arrows? true
+                    :show-edge-labels? true
+                    :aria-label (t :graph/canvas-label)
+                    :on-node-activate graph-actions/activate-node!
+                    :on-node-preview graph-actions/preview-node!})])
 
 (rum/defc page-graph-aux
   [page opts]
   (let [[graph set-graph!] (hooks/use-state nil)
-        dark? (= (:theme opts) "dark")]
+        dark? (contains? #{"dark" :dark} (:theme opts))]
     (hooks/use-effect!
      (fn []
        (p/let [result (state/<invoke-db-worker :thread-api/build-graph (state/get-current-repo) opts)]
@@ -1017,13 +646,12 @@
                            (state/sub [:route-match :path-params :name]))
                       (model/get-today-journal-title))
         theme (:ui/theme @state/state)
-        show-journals-in-page-graph (rum/react *show-journals-in-page-graph?)
         page-entity (db/get-page current-page)]
     (page-graph-aux current-page
                     {:type (if (ldb/page? page-entity) :page :block)
                      :block/uuid (:block/uuid page-entity)
                      :theme theme
-                     :show-journals? show-journals-in-page-graph})))
+                     :show-journal? false})))
 
 (defn batch-delete-dialog
   [pages refresh-fn]
