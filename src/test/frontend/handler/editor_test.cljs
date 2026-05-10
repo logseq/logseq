@@ -122,8 +122,9 @@
   (state/set-editor-action! nil))
 
 (defn- default-keyup-result
-  [{:keys [value cursor-pos key code action]
-    :or {code "KeyA"}}]
+  [{:keys [value cursor-pos key code action is-processed?]
+    :or {code "KeyA"
+         is-processed? false}}]
   (let [pos (or cursor-pos (count value))
         input #js {:id "edit-block-test"
                    :value value}
@@ -145,7 +146,7 @@
                                           (reset! cursor-pos' pos'))
                   commands/handle-step (fn [step]
                                          (swap! steps conj step))]
-      (#'editor/default-case-for-keyup-handler input pos key code false)
+      (#'editor/default-case-for-keyup-handler input pos key code is-processed?)
       {:content @content
        :cursor-pos @cursor-pos'
        :steps @steps})))
@@ -165,7 +166,8 @@
             :steps [[:editor/search-page]]}
            (default-keyup-result {:value value
                                   :cursor-pos cursor-pos
-                                  :key "Process"}))
+                                  :key "Process"
+                                  :is-processed? true}))
         (str "Normalizes " value " at cursor " cursor-pos))))
 
 (deftest default-keyup-handler-normalizes-hashtag-fullwidth-page-ref-input
@@ -175,6 +177,7 @@
          (default-keyup-result {:value "#【】【】"
                                 :cursor-pos 5
                                 :key "Process"
+                                :is-processed? true
                                 :action :page-search-hashtag}))))
 
 (deftest default-keyup-handler-ignores-non-page-ref-trigger-key

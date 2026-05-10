@@ -2775,10 +2775,15 @@
                          (block-ref-trigger-edit value current-pos k))]
     (if (and (= editor-action :page-search-hashtag) block-ref-edit)
       (apply-bracket-trigger! input block-ref-edit [:editor/search-page-hashtag])
-      (when (and (not editor-action) (not non-enter-processed?))
+      (when-not editor-action
         (cond
-         ;; When you type text inside square brackets
-          (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
+          (and block-ref-edit
+               (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
+          (apply-bracket-trigger! input block-ref-edit [:editor/search-page])
+
+          ;; When you type text inside square brackets
+          (and (not non-enter-processed?)
+               (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
                (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
           (let [orig-pos (cursor/get-caret-pos input)
                 square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) page-ref/left-brackets)
@@ -2790,10 +2795,6 @@
                                :editor/search-page)]
             (commands/handle-step [command-step])
             (state/set-editor-action-data! {:pos pos}))
-
-          (and block-ref-edit
-               (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
-          (apply-bracket-trigger! input block-ref-edit [:editor/search-page])
 
           :else
           nil)))))
