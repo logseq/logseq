@@ -602,6 +602,60 @@
     (is (= "logseq.class/Tag" (get-in parsed-json [:data :items 0 :db/ident])))
     (is (= :logseq.class/Tag (get-in parsed-edn [:data :items 0 :db/ident])))))
 
+(deftest test-human-output-qmd-init
+  (let [created (format/format-result {:status :ok
+                                       :command :qmd-init
+                                       :data {:repo "logseq_db_demo"
+                                              :collection "custom"
+                                              :mirror-dir "/tmp/root/graphs/demo/mirror/markdown"
+                                              :action :created}}
+                                      {:output-format nil})
+        updated (format/format-result {:status :ok
+                                       :command :qmd-init
+                                       :data {:repo "logseq_db_demo"
+                                              :collection "custom"
+                                              :mirror-dir "/tmp/root/graphs/demo/mirror/markdown"
+                                              :action :updated}}
+                                      {:output-format nil})]
+    (is (string/includes? created "QMD collection created: custom"))
+    (is (string/includes? created "/tmp/root/graphs/demo/mirror/markdown"))
+    (is (string/includes? updated "QMD collection updated: custom"))))
+
+(deftest test-human-output-qsearch
+  (let [result (format/format-result {:status :ok
+                                      :command :qsearch
+                                      :data {:items [{:db/id 3
+                                                      :block/title "alpha"
+                                                      :block/page-id 1
+                                                      :block/page-title "Home"
+                                                      :qmd/rank 1
+                                                      :qmd/score 0.75
+                                                      :qmd/file "qmd://custom/pages/Home.md"}]
+                                             :missing-ids [5]
+                                             :qmd {:collection "custom"
+                                                   :result-count 2}}}
+                                     {:output-format nil})]
+    (is (string/includes? result "ID"))
+    (is (string/includes? result "TITLE"))
+    (is (string/includes? result "PAGE-TITLE"))
+    (is (string/includes? result "alpha"))
+    (is (string/includes? result "Home"))
+    (is (string/includes? result "Missing ids: 5"))
+    (is (string/includes? result "Count: 1"))))
+
+(deftest test-structured-output-qsearch
+  (let [payload {:status :ok
+                 :command :qsearch
+                 :data {:items [{:db/id 3
+                                 :block/title "alpha"
+                                 :qmd/rank 1}]
+                        :missing-ids [5]
+                        :qmd {:collection "custom"}}}
+        json-result (format/format-result payload {:output-format :json})
+        edn-result (format/format-result payload {:output-format :edn})]
+    (is (string/includes? json-result "\"qmd/rank\""))
+    (is (string/includes? edn-result ":qmd/rank"))))
+
 (deftest test-list-property-json-edn-cardinality-shape
   (testing "list property json keeps namespaced db/cardinality while edn stays unchanged"
     (let [base-result {:status :ok

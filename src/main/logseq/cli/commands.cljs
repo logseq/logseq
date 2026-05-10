@@ -10,6 +10,7 @@
             [logseq.cli.command.example :as example-command]
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
+            [logseq.cli.command.qmd :as qmd-command]
             [logseq.cli.command.query :as query-command]
             [logseq.cli.command.remove :as remove-command]
             [logseq.cli.command.search :as search-command]
@@ -97,6 +98,7 @@
                upsert-command/entries
                remove-command/entries
                query-command/entries
+               qmd-command/entries
                search-command/entries
                show-command/entries
                doctor-command/entries
@@ -133,6 +135,45 @@
           {:args args :id-from-stdin? false}))
       {:args args :id-from-stdin? false})
     {:args args :id-from-stdin? false}))
+
+(def ^:private qsearch-value-options
+  #{"--graph" "-g" "--root-dir" "--config" "--timeout-ms" "--output" "-o"
+    "--index" "--collection" "--limit" "-n"})
+
+(def ^:private qsearch-flag-options
+  #{"--no-rerank" "--verbose" "-v" "--profile" "--help" "-h"})
+
+(defn- normalize-qsearch-args
+  [args]
+  (if (= "qsearch" (first args))
+    (loop [remaining (vec (rest args))
+           option-tokens []
+           query-tokens []]
+      (if-let [token (first remaining)]
+        (cond
+          (contains? qsearch-value-options token)
+          (let [value (second remaining)]
+            (recur (subvec remaining (if value 2 1))
+                   (cond-> (conj option-tokens token)
+                     value (conj value))
+                   query-tokens))
+
+          (contains? qsearch-flag-options token)
+          (recur (subvec remaining 1)
+                 (conj option-tokens token)
+                 query-tokens)
+
+          (string/starts-with? token "-")
+          (recur (subvec remaining 1)
+                 (conj option-tokens token)
+                 query-tokens)
+
+          :else
+          (recur (subvec remaining 1)
+                 option-tokens
+                 (conj query-tokens token)))
+        (vec (concat ["qsearch"] option-tokens query-tokens))))
+    args))
 
 (defn- unknown-command-message
   [{:keys [dispatch wrong-input]}]
@@ -187,9 +228,6 @@
 (def ^:private upsert-validation-commands
   #{:upsert-block :upsert-page :upsert-task :upsert-tag :upsert-property :upsert-asset})
 
-(def ^:private search-validation-commands
-  #{:search-block :search-page :search-property :search-tag})
-
 (def ^:private list-validation-commands
   #{:list-page :list-tag :list-property :list-task :list-node :list-asset})
 
@@ -197,7 +235,7 @@
   #{:remove-block :remove-page :remove-tag :remove-property})
 
 (def ^:private server-graph-required-commands
-  #{:server-start :server-stop :server-restart})
+  #{:server-start :server-stop :server-restart :qmd-init :qsearch})
 
 (def ^:private supported-completion-shells
   #{"zsh" "bash"})
@@ -290,12 +328,16 @@
          (not (seq (some-> (:name opts) string/trim))))
     (missing-query-result summary)
 
-    (and (search-validation-commands command)
+    (and (contains? #{:search-block :search-page :search-property :search-tag} command)
          (seq args))
     (command-core/invalid-options-result summary (legacy-search-query-guidance cmds))
 
-    (and (search-validation-commands command)
+    (and (contains? #{:search-block :search-page :search-property :search-tag} command)
          (not (seq (some-> (:content opts) str string/trim))))
+    (assoc (missing-query-text-result summary) :command command)
+
+    (and (= :qsearch command)
+         (not (seq args)))
     (assoc (missing-query-text-result summary) :command command)
 
     :else
@@ -495,7 +537,7 @@
   [raw-args]
   (let [summary (command-core/top-level-summary table)
         {:keys [opts args]} (command-core/parse-leading-global-opts raw-args)
-        {:keys [args id-from-stdin?]} (inject-stdin-id-arg (vec args))
+        {:keys [args id-from-stdin?]} (inject-stdin-id-arg (normalize-qsearch-args (vec args)))
         group-path (group-help-path args)]
     (cond
       (:version opts)
@@ -618,6 +660,12 @@
         (:search-block :search-page :search-property :search-tag)
         (search-command/build-action command options repo)
 
+        :qmd-init
+        (qmd-command/build-init-action options repo)
+
+        :qsearch
+        (qmd-command/build-search-action options args repo)
+
         :upsert-block
         (upsert-command/build-block-action options args repo)
 
@@ -717,6 +765,8 @@
                          :search-page (search-command/execute-search-page action config)
                          :search-property (search-command/execute-search-property action config)
                          :search-tag (search-command/execute-search-tag action config)
+                         :qmd-init (qmd-command/execute-qmd-init action config)
+                         :qsearch (qmd-command/execute-qsearch action config)
                          :upsert-block (upsert-command/execute-upsert-block action config)
                          :upsert-page (upsert-command/execute-upsert-page action config)
                          :upsert-task (upsert-command/execute-upsert-task action config)

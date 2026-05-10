@@ -85,6 +85,7 @@
       (is (string/includes? plain-summary "upsert asset"))
       (is (string/includes? plain-summary "remove"))
       (is (string/includes? plain-summary "query"))
+      (is (string/includes? plain-summary "qsearch"))
       (is (string/includes? plain-summary "search"))
       (is (string/includes? plain-summary "show"))
       (is (string/includes? plain-summary "doctor"))
@@ -98,6 +99,7 @@
       (is (string/includes? plain-summary "completion"))
       (is (string/includes? plain-summary "example"))
       (is (not (string/includes? plain-summary "example upsert")))
+      (is (string/includes? plain-summary "qmd"))
       (is (string/includes? plain-summary "skill"))
       (is (not (string/includes? plain-summary "skill show")))
       (is (string/includes? plain-summary "Path to CLI root dir (default ~/logseq)"))
@@ -119,6 +121,7 @@
       (is (contains-bold? summary "remove property"))
       (is (contains-bold? summary "query"))
       (is (contains-bold? summary "query list"))
+      (is (contains-bold? summary "qsearch"))
       (is (contains-bold? summary "search block"))
       (is (contains-bold? summary "search page"))
       (is (contains-bold? summary "search property"))
@@ -138,6 +141,7 @@
       (is (contains-bold? summary "completion"))
       (is (contains-bold? summary "example"))
       (is (not (contains-bold? summary "example upsert")))
+      (is (contains-bold? summary "qmd"))
       (is (contains-bold? summary "skill"))
       (is (not (contains-bold? summary "skill show")))
       (is (contains-bold? summary "--help"))
@@ -158,6 +162,48 @@
           plain-summary (strip-ansi summary)]
       (is (string/includes? plain-summary "Global options:"))
       (is (string/includes? plain-summary "Command options:")))))
+
+(deftest test-qmd-and-qsearch-parse
+  (testing "qmd init parses as graph-scoped command"
+    (let [result (commands/parse-args ["qmd" "init" "--graph" "demo"])]
+      (is (true? (:ok? result)))
+      (is (= :qmd-init (:command result)))
+      (is (= "demo" (get-in result [:options :graph])))))
+
+  (testing "qmd group help is available"
+    (let [result (commands/parse-args ["qmd"])]
+      (is (true? (:help? result)))
+      (is (string/includes? (strip-ansi (:summary result))
+                            "Usage: logseq qmd <subcommand> [options]"))))
+
+  (testing "qsearch accepts positional query text"
+    (let [result (commands/parse-args ["qsearch" "markdown" "mirror" "--graph" "demo" "-n" "10" "--no-rerank"])]
+      (is (true? (:ok? result)))
+      (is (= :qsearch (:command result)))
+      (is (= ["markdown" "mirror"] (:args result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= 10 (get-in result [:options :limit])))
+      (is (true? (get-in result [:options :no-rerank])))))
+
+  (testing "qsearch requires query text"
+    (let [result (commands/parse-args ["qsearch" "--graph" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-query-text (get-in result [:error :code])))))
+
+  (testing "qsearch requires graph"
+    (let [result (commands/parse-args ["qsearch" "markdown" "mirror"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-graph (get-in result [:error :code])))))
+
+  (testing "qsearch rejects unknown options after positional query"
+    (let [result (commands/parse-args ["qsearch" "markdown" "--unknown" "--graph" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "qmd init requires graph"
+    (let [result (commands/parse-args ["qmd" "init"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-graph (get-in result [:error :code]))))))
 
 (deftest test-parse-args-help-groups-primary
   (testing "graph/list/upsert/server groups show subcommands"
