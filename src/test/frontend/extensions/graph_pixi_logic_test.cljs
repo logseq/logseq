@@ -86,6 +86,11 @@
 (deftest renderer-init-options-enable-smooth-strokes
   (is (= true (:antialias (logic/renderer-init-options 2)))))
 
+(deftest graph-ticker-targets-120-fps
+  (let [ticker #js {:maxFPS 0}]
+    (is (identical? ticker (logic/apply-graph-ticker-frame-rate! ticker)))
+    (is (= 120 (.-maxFPS ticker)))))
+
 (deftest edge-label-angle-stays-aligned-and-readable
   (is (= 0 (logic/readable-edge-label-angle 0 0 100 0)))
   (is (= 0 (logic/readable-edge-label-angle 100 0 0 0)))
@@ -554,6 +559,26 @@
     (is (< (:radius (get by-id "island"))
            (:radius (get by-id "leaf-1"))))))
 
+(deftest layout-nodes-fast-all-pages-keeps-degree-based-sizing
+  (let [nodes (mapv (fn [idx]
+                      {:id idx
+                       :kind "page"
+                       :label (str "Page " idx)})
+                    (range 3000))
+        links (conj (mapv (fn [target]
+                            {:source 0
+                             :target target})
+                          (range 1 101))
+                    {:source 0 :target 999999})
+        layouted (logic/layout-nodes nodes links :all-pages false)
+        by-id (into {} (map (juxt :id identity) layouted))]
+    (is (= 3000 (count layouted)))
+    (is (= 100 (:degree (get by-id 0))))
+    (is (= 1 (:degree (get by-id 1))))
+    (is (= 0 (:degree (get by-id 101))))
+    (is (< (:radius (get by-id 1))
+           (:radius (get by-id 0))))))
+
 (deftest layout-nodes-large-graph-uses-fast-path
   (let [nodes (mapv (fn [idx]
                       {:id idx
@@ -575,7 +600,7 @@
                       (number? (:radius %))
                       (number? (:color-int %)))
                 sample))
-    (is (< elapsed 1500))))
+    (is (< elapsed 500))))
 
 (deftest layout-nodes-4k-all-pages-uses-fast-path
   (let [nodes (mapv (fn [idx]

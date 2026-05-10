@@ -2241,6 +2241,7 @@
                             (.observe observer container)
                             observer))
         render-elapsed (- (.now js/performance) render-start)]
+    (logic/apply-graph-ticker-frame-rate! (.-ticker app))
     (.add (.-ticker app) animate-layer)
     (mark-transform!)
     (update-detail-visibility! (:scale initial-transform))

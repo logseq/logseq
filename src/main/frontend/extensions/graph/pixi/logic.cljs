@@ -86,6 +86,13 @@
    :resolution (min 2 (or device-pixel-ratio 1))
    :powerPreference "high-performance"})
 
+(def graph-target-fps 120)
+
+(defn apply-graph-ticker-frame-rate!
+  [^js ticker]
+  (set! (.-maxFPS ticker) graph-target-fps)
+  ticker)
+
 (defn readable-edge-label-angle
   [from-x from-y to-x to-y]
   (let [angle (js/Math.atan2 (- to-y from-y) (- to-x from-x))]
@@ -392,23 +399,45 @@
 
 (defn- build-degree-map
   [links]
-  (reduce
-   (fn [m {:keys [source target]}]
-     (-> m
-         (update source (fnil inc 0))
-         (update target (fnil inc 0))))
-   {}
-   links))
+  (persistent!
+   (reduce
+    (fn [m {:keys [source target]}]
+      (let [source-degree (inc (or (get m source) 0))
+            target-degree (inc (or (get m target) 0))]
+        (-> m
+            (assoc! source source-degree)
+            (assoc! target target-degree))))
+    (transient {})
+    links)))
 
 (defn- keep-links-with-nodes
   [links node-id-set]
-  (keep (fn [{:keys [source target] :as link}]
-          (when (and source
-                     target
-                     (contains? node-id-set source)
-                     (contains? node-id-set target))
-            link))
-        links))
+  (persistent!
+   (reduce
+    (fn [result {:keys [source target] :as link}]
+      (if (and source
+               target
+               (contains? node-id-set source)
+               (contains? node-id-set target))
+        (conj! result link)
+        result))
+    (transient [])
+    links)))
+
+(defn- build-fast-degree-map
+  [nodes links]
+  (let [node-id-set (js/Set.)
+        degree (js/Map.)]
+    (doseq [{:keys [id]} nodes]
+      (.add node-id-set id))
+    (doseq [{:keys [source target]} links]
+      (when (and source
+                 target
+                 (.has node-id-set source)
+                 (.has node-id-set target))
+        (.set degree source (inc (or (.get degree source) 0)))
+        (.set degree target (inc (or (.get degree target) 0)))))
+    degree))
 
 (defn display-links
   [links layouted-nodes]
@@ -474,6 +503,28 @@
            :degree d
            :color color
            :color-int (color->int color))))
+
+(defn- decorate-node-with-degree
+  [node d dark? x y]
+  (let [kind (:kind node)
+        color (or (:color node)
+                  (node-color kind dark?))]
+    (assoc node
+           :x x
+           :y y
+           :radius (node-radius kind d (:grid-object? node))
+           :degree d
+           :color color
+           :color-int (color->int color))))
+
+(defn- decorate-large-page-node
+  [node x y d radius color-int]
+  (assoc node
+         :x x
+         :y y
+         :radius radius
+         :degree d
+         :color-int color-int))
 
 (defn- simulation-node
   [node degree idx]
@@ -622,49 +673,49 @@
    (tag-cluster-backgrounds nodes view-mode {}))
   ([nodes view-mode {:keys [grid-layout?]}]
    (if (= :tags-and-objects (normalize-view-mode view-mode))
-    (->> nodes
-         (filter :cluster-id)
-         (group-by :cluster-id)
-         (map (fn [[cluster-id nodes]]
-                (let [bounds (reduce
-                              (fn [bounds {:keys [x y radius]}]
-                                (let [radius (or radius 0)]
-                                  {:min-x (min (:min-x bounds) (- x radius))
-                                   :min-y (min (:min-y bounds) (- y radius))
-                                   :max-x (max (:max-x bounds) (+ x radius))
-                                   :max-y (max (:max-y bounds) (+ y radius))}))
-                              {:min-x js/Infinity
-                               :min-y js/Infinity
-                               :max-x js/-Infinity
-                               :max-y js/-Infinity}
-                              nodes)
-                      tag-node (some #(when (and (= "tag" (:kind %))
-                                                 (= cluster-id (:id %)))
-                                        %)
-                                     nodes)
-                      center-x (if (and grid-layout? tag-node)
-                                 (:x tag-node)
-                                 (/ (+ (:min-x bounds) (:max-x bounds)) 2))
-                      center-y (if (and grid-layout? tag-node)
-                                 (:y tag-node)
-                                 (/ (+ (:min-y bounds) (:max-y bounds)) 2))
-                      radius (->> nodes
-                                  (map (fn [{:keys [x y radius]}]
-                                         (let [dx (- x center-x)
-                                               dy (- y center-y)]
-                                           (+ (js/Math.sqrt (+ (* dx dx) (* dy dy)))
-                                              (or radius 0)
-                                              44))))
-                                  (apply max 84))]
-                  {:id cluster-id
-                   :x center-x
-                   :y center-y
-                   :radius radius
-                   :points (cluster-boundary-points nodes center-x center-y)
-                   :color-int (tag-title-color-int (:label tag-node cluster-id))})))
-         (sort-by :id)
-         vec)
-    [])))
+     (->> nodes
+          (filter :cluster-id)
+          (group-by :cluster-id)
+          (map (fn [[cluster-id nodes]]
+                 (let [bounds (reduce
+                               (fn [bounds {:keys [x y radius]}]
+                                 (let [radius (or radius 0)]
+                                   {:min-x (min (:min-x bounds) (- x radius))
+                                    :min-y (min (:min-y bounds) (- y radius))
+                                    :max-x (max (:max-x bounds) (+ x radius))
+                                    :max-y (max (:max-y bounds) (+ y radius))}))
+                               {:min-x js/Infinity
+                                :min-y js/Infinity
+                                :max-x js/-Infinity
+                                :max-y js/-Infinity}
+                               nodes)
+                       tag-node (some #(when (and (= "tag" (:kind %))
+                                                  (= cluster-id (:id %)))
+                                         %)
+                                      nodes)
+                       center-x (if (and grid-layout? tag-node)
+                                  (:x tag-node)
+                                  (/ (+ (:min-x bounds) (:max-x bounds)) 2))
+                       center-y (if (and grid-layout? tag-node)
+                                  (:y tag-node)
+                                  (/ (+ (:min-y bounds) (:max-y bounds)) 2))
+                       radius (->> nodes
+                                   (map (fn [{:keys [x y radius]}]
+                                          (let [dx (- x center-x)
+                                                dy (- y center-y)]
+                                            (+ (js/Math.sqrt (+ (* dx dx) (* dy dy)))
+                                               (or radius 0)
+                                               44))))
+                                   (apply max 84))]
+                   {:id cluster-id
+                    :x center-x
+                    :y center-y
+                    :radius radius
+                    :points (cluster-boundary-points nodes center-x center-y)
+                    :color-int (tag-title-color-int (:label tag-node cluster-id))})))
+          (sort-by :id)
+          vec)
+     [])))
 
 (defn- link-distance
   [view-mode value]
@@ -754,7 +805,7 @@
     {:x (/ (+ min-x max-x) 2)
      :y (/ (+ min-y max-y) 2)
      :radius (/ (max (- max-x min-x)
-                    (- max-y min-y))
+                     (- max-y min-y))
                 2)}
     {:x 0
      :y 0
@@ -792,21 +843,50 @@
   [nodes degree dark?]
   (let [[linked isolated] (split-linked-nodes nodes degree)
         golden-angle (* js/Math.PI (- 3 (js/Math.sqrt 5)))
-        linked-nodes (->> linked
-                          (sort-by #(all-pages-node-priority degree %))
-                          (map-indexed
-                           (fn [idx node]
-                             (let [rank (inc idx)
-                                   angle (* idx golden-angle)
-                                   radius (* 15 (js/Math.sqrt rank))
-                                   x (* radius (js/Math.cos angle))
-                                   y (* radius (js/Math.sin angle))]
-                               (decorate-node node degree dark? x y))))
-                          vec)
+        linked (if (>= (count nodes) all-pages-fast-layout-threshold)
+                 linked
+                 (sort-by #(all-pages-node-priority degree %) linked))
+        linked-nodes (mapv
+                      (fn [idx node]
+                        (let [rank (inc idx)
+                              angle (* idx golden-angle)
+                              radius (* 15 (js/Math.sqrt rank))
+                              x (* radius (js/Math.cos angle))
+                              y (* radius (js/Math.sin angle))]
+                          (decorate-node node degree dark? x y)))
+                      (range)
+                      linked)
         {:keys [radius]} (graph-center linked-nodes)
         isolated-start-radius (+ (max 180 radius) 96)]
     (vec (concat linked-nodes
                  (place-isolated-ring-nodes isolated degree dark? isolated-start-radius)))))
+
+(defn- all-pages-fast-layout-nodes
+  [nodes degree dark?]
+  (let [node-count (count nodes)
+        columns (max 1 (js/Math.ceil (js/Math.sqrt node-count)))
+        spacing 24
+        origin-x (/ (* (dec columns) spacing) 2)
+        color-int (color->int (node-color "page" dark?))
+        radius-by-degree (js/Map.)]
+    (mapv
+     (fn [idx node]
+       (let [col (mod idx columns)
+             row (js/Math.floor (/ idx columns))
+             x (- (* col spacing) origin-x)
+             y (* row spacing)]
+         (if degree
+           (let [d (or (.get ^js degree (node-source-id node)) 0)
+                 cached-radius (.get radius-by-degree d)
+                 radius (if (some? cached-radius)
+                          cached-radius
+                          (let [radius (node-radius (:kind node) d)]
+                            (.set radius-by-degree d radius)
+                            radius))]
+             (decorate-large-page-node node x y d radius color-int))
+           (decorate-large-page-node node x y 0 3.8 color-int))))
+     (range)
+     nodes)))
 
 (defn- stabilize-all-pages-layout
   [nodes degree dark?]
@@ -1097,71 +1177,78 @@
    (layout-nodes nodes links view-mode dark? {}))
   ([nodes links view-mode dark? opts]
    (let [view-mode (normalize-view-mode view-mode)
-         node-id-set (set (map :id nodes))
-         links (keep-links-with-nodes links node-id-set)
-         degree (build-degree-map links)
-         grid-layout? (grid-layout-enabled? opts)]
-     (cond
-       (= :fast (layout-mode (count nodes) view-mode))
-       (fast-layout-nodes nodes links view-mode degree dark? opts)
+         mode (layout-mode (count nodes) view-mode)
+         fast-all-pages? (and (= :fast mode)
+                              (= view-mode :all-pages))]
+     (if fast-all-pages?
+       (all-pages-fast-layout-nodes nodes (build-fast-degree-map nodes links) dark?)
+       (let [node-id-set (set (map :id nodes))
+             filtered-links (keep-links-with-nodes links node-id-set)
+             degree (build-degree-map filtered-links)
+             grid-layout? (grid-layout-enabled? opts)]
+         (cond
+           (= :fast mode)
+           (fast-layout-nodes nodes filtered-links view-mode degree dark? opts)
 
-       :else
-       (let [tags-mode? (and (= view-mode :tags-and-objects)
-                             (some #(= "tag" (:kind %)) nodes))
-             nodes (if tags-mode?
-                     (clustered-tags-layout-nodes nodes links degree dark? opts)
-                     (force-seed-nodes nodes links view-mode degree dark? opts))]
-         (if (and tags-mode? grid-layout?)
-           nodes
-           (let [simulation-nodes (->> nodes
-                                       (map-indexed #(simulation-node %2 degree %1))
-                                       (into-array))
-                 simulation-links (->> links
-                                       (map simulation-link)
-                                       (into-array))
-                 link-force (-> (d3-force/forceLink simulation-links)
-                                (.id (fn [^js node] (.-id node)))
-                                (.distance (link-distance view-mode (:link-distance opts)))
-                                (.strength 0.82))
-                 collide-force (-> (d3-force/forceCollide)
-                                   (.radius (fn [^js node]
-                                              (+ 10 (.-radius node))))
-                                   (.strength 0.86)
-                                   (.iterations 2))
-                 y-force (d3-force/forceY 0)
-                 _ (.strength y-force (y-strength view-mode))
-                 simulation (cond-> (-> (d3-force/forceSimulation simulation-nodes)
-                                        (.force "link" link-force)
-                                        (.force "charge" (-> (d3-force/forceManyBody)
-                                                             (.strength (charge-strength view-mode))
-                                                             (.distanceMax 420)))
-                                        (.force "collision" collide-force)
-                                        (.force "y" y-force))
-                              (or (not= view-mode :tags-and-objects)
-                                  (not grid-layout?))
-                              (.force "center" (d3-force/forceCenter 0 0)))
-                 _ (when (= view-mode :tags-and-objects)
-                     (.force simulation
-                             "cluster-x"
-                             (-> (d3-force/forceX
-                                  (fn [^js node]
-                                    (or (:cluster-x (nth nodes (.-idx node))) 0)))
-                                 (.strength 0.16)))
-                     (.force simulation
-                             "cluster-y"
-                             (-> (d3-force/forceY
-                                  (fn [^js node]
-                                    (or (:cluster-y (nth nodes (.-idx node))) 0)))
-                                 (.strength 0.16))))
-                 _ (.stop simulation)
-                 ticks (layout-tick-count (count nodes) view-mode)]
-             (dotimes [_ ticks]
-               (.tick simulation))
-             (let [layouted-nodes (->> simulation-nodes
-                                        (map (fn [^js sim-node]
-                                               (let [node (nth nodes (.-idx sim-node))]
-                                                 (decorate-node node degree dark? (.-x sim-node) (.-y sim-node)))))
-                                        vec)]
-               (if (= view-mode :all-pages)
-                 (stabilize-all-pages-layout layouted-nodes degree dark?)
-                 layouted-nodes)))))))))
+           :else
+           (let [tags-mode? (and (= view-mode :tags-and-objects)
+                                 (some #(= "tag" (:kind %)) nodes))
+                 nodes (if tags-mode?
+                         (clustered-tags-layout-nodes nodes filtered-links degree dark? opts)
+                         (force-seed-nodes nodes filtered-links view-mode degree dark? opts))]
+             (if (and tags-mode?
+                      (or grid-layout?
+                          (> (count nodes) 900)))
+               nodes
+               (let [simulation-nodes (->> nodes
+                                           (map-indexed #(simulation-node %2 degree %1))
+                                           (into-array))
+                     simulation-links (->> filtered-links
+                                           (map simulation-link)
+                                           (into-array))
+                     link-force (-> (d3-force/forceLink simulation-links)
+                                    (.id (fn [^js node] (.-id node)))
+                                    (.distance (link-distance view-mode (:link-distance opts)))
+                                    (.strength 0.82))
+                     collide-force (-> (d3-force/forceCollide)
+                                       (.radius (fn [^js node]
+                                                  (+ 10 (.-radius node))))
+                                       (.strength 0.86)
+                                       (.iterations 2))
+                     y-force (d3-force/forceY 0)
+                     _ (.strength y-force (y-strength view-mode))
+                     simulation (cond-> (-> (d3-force/forceSimulation simulation-nodes)
+                                            (.force "link" link-force)
+                                            (.force "charge" (-> (d3-force/forceManyBody)
+                                                                 (.strength (charge-strength view-mode))
+                                                                 (.distanceMax 420)))
+                                            (.force "collision" collide-force)
+                                            (.force "y" y-force))
+                                  (or (not= view-mode :tags-and-objects)
+                                      (not grid-layout?))
+                                  (.force "center" (d3-force/forceCenter 0 0)))
+                     _ (when (= view-mode :tags-and-objects)
+                         (.force simulation
+                                 "cluster-x"
+                                 (-> (d3-force/forceX
+                                      (fn [^js node]
+                                        (or (:cluster-x (nth nodes (.-idx node))) 0)))
+                                     (.strength 0.16)))
+                         (.force simulation
+                                 "cluster-y"
+                                 (-> (d3-force/forceY
+                                      (fn [^js node]
+                                        (or (:cluster-y (nth nodes (.-idx node))) 0)))
+                                     (.strength 0.16))))
+                     _ (.stop simulation)
+                     ticks (layout-tick-count (count nodes) view-mode)]
+                 (dotimes [_ ticks]
+                   (.tick simulation))
+                 (let [layouted-nodes (->> simulation-nodes
+                                           (map (fn [^js sim-node]
+                                                  (let [node (nth nodes (.-idx sim-node))]
+                                                    (decorate-node node degree dark? (.-x sim-node) (.-y sim-node)))))
+                                           vec)]
+                   (if (= view-mode :all-pages)
+                     (stabilize-all-pages-layout layouted-nodes degree dark?)
+                     layouted-nodes)))))))))))
