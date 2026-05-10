@@ -204,6 +204,28 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest multiline-markdown-list-lines-do-not-consume-next-block-db-id-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "33333333-3333-4333-8333-333333333340"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Multiline List"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "first line\n- not a child"}
+                                              {:block/title "after multiline"}]}]})
+          page (db-test/find-page-by-title @conn "Multiline List")
+          first-block (db-test/find-block-by-content @conn "first line\n- not a child")
+          after-multiline (db-test/find-block-by-content @conn "after multiline")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker page-uuid) "\n\n"
+                                "- first line " (block-id-comment first-block) "\n"
+                                "  - not a child\n"
+                                "- after multiline " (block-id-comment after-multiline))
+                           (get @files (page-path "pages/Multiline List.md"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest nested-block-db-id-comments-preserve-indent-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
@@ -247,6 +269,32 @@
                                 "  ```\n"
                                 "- normal " (block-id-comment normal))
                            (get @files (page-path "pages/Code Mirror.md"))))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest code-block-markdown-list-lines-do-not-consume-block-db-ids-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          page-uuid #uuid "33333333-3333-4333-8333-333333333339"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Code List"
+                                             :block/uuid page-uuid}
+                                     :blocks [{:block/title "- not an outline block\n(+ 1 2)"
+                                               :build/tags [:logseq.class/Code-block]
+                                               :build/properties {:logseq.property.node/display-type :code
+                                                                  :logseq.property.code/lang "clojure"}}
+                                              {:block/title "after code"}]}]})
+          page (db-test/find-page-by-title @conn "Code List")
+          after-code (db-test/find-block-by-content @conn "after code")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker page-uuid) "\n\n"
+                                "- ```clojure\n"
+                                "  - not an outline block\n"
+                                "  (+ 1 2)\n"
+                                "  ```\n"
+                                "- after code " (block-id-comment after-code))
+                           (get @files (page-path "pages/Code List.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
