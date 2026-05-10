@@ -6,6 +6,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (defn- build-links
@@ -86,6 +87,28 @@
              (transient {})
              (datoms-for db :avet attr)))))
 
+(defn- entity-display-title
+  [entity]
+  (let [title (:block/title entity)]
+    (cond-> (if (and (string? title)
+                     (re-find db-content/id-ref-pattern title))
+              (or (db-content/recur-replace-uuid-in-block-title entity 10)
+                  title)
+              title)
+      (string? title)
+      (string/replace #"#?\[\[([^\]]+)\]\]" "$1"))))
+
+(defn- entity-title-map
+  [db ids]
+  (persistent!
+   (reduce
+    (fn [m id]
+      (if-let [title (some-> (d/entity db id) entity-display-title)]
+        (assoc! m id title)
+        m))
+    (transient {})
+    ids)))
+
 (defn- entity-id-subset-with
   [db attr ids]
   (persistent!
@@ -118,17 +141,14 @@
 
 (defn- build-node-context
   [db node-ids]
-  (let [title-by-id (entity-value-map db :block/title node-ids)
+  (let [title-by-id (entity-title-map db node-ids)
         title-missing-ids (set/difference node-ids (set (keys title-by-id)))
         name-by-id (if (empty? title-missing-ids)
                      {}
-                     (entity-value-map db :block/name title-missing-ids))
-        name-missing-ids (set/difference title-missing-ids (set (keys name-by-id)))]
+                     (entity-value-map db :block/name title-missing-ids))]
     {:title-by-id title-by-id
      :name-by-id name-by-id
-     :uuid-by-id (if (empty? name-missing-ids)
-                   {}
-                   (entity-value-map db :block/uuid name-missing-ids))
+     :uuid-by-id (entity-value-map db :block/uuid node-ids)
      :icon-by-id (entity-value-map db :logseq.property/icon node-ids)
      :created-at-by-id (entity-value-map db :block/created-at node-ids)}))
 
@@ -351,7 +371,7 @@
      (remove ldb/hidden?)
      (remove nil?)
      (keep (fn [p]
-             (if-let [page-title (:block/title p)]
+             (if-let [page-title (entity-display-title p)]
                (let [current-page? (= page-title current-page)
                      kind (cond
                             (ldb/class? p) "tag"
@@ -403,7 +423,7 @@
 
 (defn- build-page-node
   [dark? current-page page-links _tags entity tag-idents]
-  (when-let [page-title (:block/title entity)]
+  (when-let [page-title (entity-display-title entity)]
     (let [current-page? (= page-title (or current-page ""))
           kind (page-kind tag-idents)
           color (page-graph-node-color dark? kind current-page?)
@@ -534,7 +554,7 @@
         tagged-pages (vec (page-tag-links (tagged-page-links db) page-ids))
         tag-id->ident (tag-ident-by-id db (set (map second tagged-pages)))
         page-id->tag-idents (build-page-id->tag-idents tagged-pages tag-id->ident)
-        title-by-id (entity-value-map db :block/title page-ids)
+        title-by-id (entity-title-map db page-ids)
         icon-by-id (entity-value-map db :logseq.property/icon page-ids)
         created-at-by-id (entity-value-map db :block/created-at page-ids)
         build-in-pages (->> sqlite-create-graph/built-in-pages-names

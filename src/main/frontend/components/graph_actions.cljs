@@ -16,16 +16,26 @@
                               db-id
                               (if (:page? node) :page :block))))
 
-(defn- node-preview-page-name
+(defn- node-preview-ref
   [node]
-  (or (some-> (:db-id node) db/entity :block/uuid str)
-      (some-> (:uuid node) str)
-      (:label node)))
+  (or (some-> (:uuid node) str)
+      (some-> (:db-id node) db/entity :block/uuid str)
+      (when (:page? node)
+        (:label node))))
 
 (defn preview-node!
   [node event]
-  (when-let [page-name (node-preview-page-name node)]
-    (let [content (fn []
+  (when node
+    (let [page-name (node-preview-ref node)
+          page-preview-option (cond->
+                                {:repo (state/get-current-repo)
+                                 :page-name page-name
+                                 :scroll-container (some-> js/document
+                                                           (.querySelector ".ls-preview-popup"))
+                                 :preview? true}
+                                (:db-id node)
+                                (assoc :db/id (:db-id node)))
+          content (fn []
                     [:div.tippy-wrapper.as-page
                      {:tab-index -1
                       :style {:width "100%"
@@ -35,11 +45,7 @@
                               :font-weight "normal"
                               :padding-bottom 64}}
                      (when-let [page-cp (state/get-page-blocks-cp)]
-                       (page-cp {:repo (state/get-current-repo)
-                                 :page-name page-name
-                                 :scroll-container (some-> js/document
-                                                           (.querySelector ".ls-preview-popup"))
-                                 :preview? true}))])]
+                       (page-cp page-preview-option))])]
       (shui/popup-show! [(.-clientX event) (.-clientY event)]
                         content
                         {:id :graph-node-preview
