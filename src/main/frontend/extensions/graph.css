@@ -21,47 +21,66 @@
     background: transparent;
 }
 
-.graph-settings {
+.graph-bottom-toolbar {
     position: absolute;
-    top: 16px;
-    right: 18px;
+    left: 18px;
+    bottom: 18px;
     z-index: 5;
     display: flex;
-    flex-direction: column;
     align-items: flex-end;
     gap: 10px;
 }
 
-.graph-settings-dot {
-    width: 18px;
-    height: 18px;
+.graph-settings {
+    position: relative;
+    width: 46px;
+    height: 46px;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.graph-toolbar-button {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
     padding: 0;
-    border: 1px solid color-mix(in srgb, var(--ls-link-text-color) 35%, transparent);
+    border: none;
     border-radius: 9999px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    background: color-mix(in srgb, var(--ls-primary-background-color) 72%, transparent);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    color: var(--ls-link-text-color);
+    background: color-mix(in srgb, var(--ls-link-text-color) 10%, transparent);
+    transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
 }
 
-.graph-settings-dot-core {
-    width: 10px;
-    height: 10px;
-    border-radius: 9999px;
-    background: var(--ls-link-text-color);
-    opacity: 0.9;
-    transition: transform 120ms ease, opacity 120ms ease;
+.graph-toolbar-button:hover {
+    transform: translateY(-1px);
+    background: color-mix(in srgb, var(--ls-link-text-color) 16%, transparent);
 }
 
-.graph-settings-dot:hover .graph-settings-dot-core {
-    transform: scale(1.15);
-    opacity: 1;
+.graph-settings-toggle {
+    width: 46px;
+    height: 46px;
+    min-width: 46px;
+    min-height: 46px;
+    border: 1px solid color-mix(in srgb, var(--ls-link-text-color) 18%, var(--ls-border-color));
+    background: color-mix(in srgb, var(--ls-primary-background-color) 82%, transparent);
+    box-shadow: 0 12px 34px rgba(15, 23, 42, 0.16);
+    backdrop-filter: blur(16px);
 }
 
 .graph-settings-panel {
-    width: min(430px, calc(100vw - 36px));
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 10px);
+    width: min(360px, calc(100vw - 36px));
     max-height: min(680px, calc(100vh - 56px));
     display: flex;
     flex-direction: column;
@@ -218,12 +237,29 @@
     transition: color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }
 
+.graph-mode-tab:hover {
+    color: var(--ls-primary-text-color) !important;
+    background: color-mix(in srgb, var(--ls-link-text-color) 12%, transparent) !important;
+}
+
 .graph-mode-tab[data-state="active"],
 .graph-mode-tab[aria-selected="true"] {
+    color: var(--ls-primary-background-color) !important;
+    background: var(--ls-link-text-color) !important;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--ls-link-text-color) 42%, transparent),
+                0 6px 18px color-mix(in srgb, var(--ls-link-text-color) 18%, transparent);
+}
+
+html[data-theme='light'] .graph-mode-tab[data-state="active"],
+html[data-theme='light'] .graph-mode-tab[aria-selected="true"],
+.white-theme .graph-mode-tab[data-state="active"],
+.white-theme .graph-mode-tab[aria-selected="true"] {
     color: #fff !important;
-    background: var(--lx-accent-09, var(--ls-button-background, hsl(var(--primary)))) !important;
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--lx-accent-09, var(--ls-button-background, hsl(var(--primary)))) 42%, transparent),
-                0 6px 18px color-mix(in srgb, var(--lx-accent-09, var(--ls-button-background, hsl(var(--primary)))) 18%, transparent);
+}
+
+.graph-mode-tab[data-state="active"]:hover,
+.graph-mode-tab[aria-selected="true"]:hover {
+    background: var(--ls-link-text-hover-color, var(--ls-link-text-color)) !important;
 }
 
 .graph-tags-control {
@@ -405,6 +441,12 @@
     font-size: 14px;
     opacity: 0.75;
     z-index: 1;
+    pointer-events: none;
+}
+
+.graph-loading-inline {
+    align-items: flex-start;
+    padding-top: 18px;
 }
 
 .graph-error {
@@ -468,10 +510,6 @@
 }
 
 .graph-time-travel {
-    position: absolute;
-    left: 18px;
-    bottom: 18px;
-    z-index: 5;
     width: 46px;
     height: 46px;
     min-height: 0;
@@ -617,19 +655,19 @@
 
 @media (max-width: 900px) {
     .graph-settings-panel {
-        width: min(360px, calc(100vw - 24px));
+        width: min(320px, calc(100vw - 24px));
         padding: 12px;
     }
 
     .graph-settings {
-        right: 12px;
+        gap: 8px;
     }
 
     .graph-tag-list {
         max-height: min(220px, calc(100vh - 330px));
     }
 
-    .graph-time-travel {
+    .graph-bottom-toolbar {
         left: 12px;
         bottom: 12px;
     }

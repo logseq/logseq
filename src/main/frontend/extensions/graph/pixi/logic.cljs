@@ -444,25 +444,33 @@
      links)))
 
 (defn- node-radius
-  [kind degree]
-  (let [base (case kind
-               "tag" 7.4
-               "object" 4.4
-               "journal" 4.4
-               3.8)]
-    (+ base (min (if (= kind "tag") 15.0 12.0)
-                 (* (if (= kind "tag") 4.1 3.4)
-                    (js/Math.sqrt (double degree)))))))
+  ([kind degree]
+   (node-radius kind degree false))
+  ([kind degree grid-object?]
+   (let [base (case kind
+                "tag" 7.4
+                "object" 4.4
+                "journal" 4.4
+                3.8)
+         radius (+ base (min (if (= kind "tag") 15.0 12.0)
+                             (* (if (= kind "tag") 4.1 3.4)
+                                (js/Math.sqrt (double degree)))))]
+     (if grid-object?
+       (-> radius
+           (min 5.8)
+           (max 3.2))
+       radius))))
 
 (defn- decorate-node
   [node degree dark? x y]
   (let [kind (:kind node)
         d (get degree (node-source-id node) 0)
-        color (node-color kind dark?)]
+        color (or (:color node)
+                  (node-color kind dark?))]
     (assoc node
            :x x
            :y y
-           :radius (node-radius kind d)
+           :radius (node-radius kind d (:grid-object? node))
            :degree d
            :color color
            :color-int (color->int color))))
@@ -479,6 +487,9 @@
       (set! (.-x ^js result) (:x node)))
     (when (number? (:y node))
       (set! (.-y ^js result) (:y node)))
+    (when (:root? node)
+      (set! (.-fx ^js result) 0)
+      (set! (.-fy ^js result) 0))
     result))
 
 (defn- simulation-link
@@ -583,9 +594,11 @@
            vec))))
 
 (def ^:private tag-cluster-color-palette
-  ["#2563EB" "#059669" "#D97706" "#DB2777"
-   "#7C3AED" "#0891B2" "#65A30D" "#DC2626"
-   "#0D9488" "#9333EA" "#475569" "#EA580C"])
+  ["#3B82F6" "#10B981" "#F59E0B" "#F43F5E"
+   "#8B5CF6" "#06B6D4" "#84CC16" "#F97316"
+   "#14B8A6" "#A855F7" "#64748B" "#EC4899"])
+
+(def ^:private grid-group-object-limit 36)
 
 (defn- tag-title-color-int
   [title]
@@ -715,6 +728,162 @@
               (decorate-node node degree dark? x y))))
          vec)))
 
+(defn- linked-node?
+  [degree node]
+  (pos? (get degree (node-source-id node) 0)))
+
+(defn- split-linked-nodes
+  [nodes degree]
+  (reduce
+   (fn [[linked isolated] node]
+     (if (linked-node? degree node)
+       [(conj linked node) isolated]
+       [linked (conj isolated node)]))
+   [[] []]
+   nodes))
+
+(defn- all-pages-node-priority
+  [degree node]
+  [(if (= "tag" (:kind node)) 0 1)
+   (- (get degree (node-source-id node) 0))
+   (str (or (:id node) ""))])
+
+(defn- graph-center
+  [nodes]
+  (if-let [{:keys [min-x min-y max-x max-y]} (layout-bounds nodes)]
+    {:x (/ (+ min-x max-x) 2)
+     :y (/ (+ min-y max-y) 2)
+     :radius (/ (max (- max-x min-x)
+                    (- max-y min-y))
+                2)}
+    {:x 0
+     :y 0
+     :radius 0}))
+
+(defn- place-isolated-ring-nodes
+  [nodes degree dark? start-radius]
+  (let [node-gap 42
+        ring-gap 58
+        sorted-nodes (sort-by #(str (:id %)) nodes)]
+    (loop [remaining sorted-nodes
+           ring 0
+           result []]
+      (if (empty? remaining)
+        (vec result)
+        (let [radius (+ start-radius (* ring ring-gap))
+              capacity (max 14 (js/Math.floor (/ (* 2 js/Math.PI radius) node-gap)))
+              ring-nodes (take capacity remaining)
+              angle-offset (* ring 0.41)]
+          (recur
+           (drop capacity remaining)
+           (inc ring)
+           (into result
+                 (map-indexed
+                  (fn [idx node]
+                    (let [angle (+ angle-offset
+                                   (* idx (/ (* 2 js/Math.PI)
+                                             (max 1 (count ring-nodes)))))
+                          x (* radius (js/Math.cos angle))
+                          y (* radius (js/Math.sin angle))]
+                      (decorate-node node degree dark? x y)))
+                  ring-nodes))))))))
+
+(defn- all-pages-layout-nodes
+  [nodes degree dark?]
+  (let [[linked isolated] (split-linked-nodes nodes degree)
+        golden-angle (* js/Math.PI (- 3 (js/Math.sqrt 5)))
+        linked-nodes (->> linked
+                          (sort-by #(all-pages-node-priority degree %))
+                          (map-indexed
+                           (fn [idx node]
+                             (let [rank (inc idx)
+                                   angle (* idx golden-angle)
+                                   radius (* 15 (js/Math.sqrt rank))
+                                   x (* radius (js/Math.cos angle))
+                                   y (* radius (js/Math.sin angle))]
+                               (decorate-node node degree dark? x y))))
+                          vec)
+        {:keys [radius]} (graph-center linked-nodes)
+        isolated-start-radius (+ (max 180 radius) 96)]
+    (vec (concat linked-nodes
+                 (place-isolated-ring-nodes isolated degree dark? isolated-start-radius)))))
+
+(defn- stabilize-all-pages-layout
+  [nodes degree dark?]
+  (let [[linked isolated] (split-linked-nodes nodes degree)]
+    (if-not (seq linked)
+      (all-pages-layout-nodes nodes degree dark?)
+      (let [{center-x :x center-y :y radius :radius} (graph-center linked)
+            linked-nodes (mapv (fn [node]
+                                 (assoc node
+                                        :x (- (:x node) center-x)
+                                        :y (- (:y node) center-y)))
+                               linked)
+            isolated-start-radius (+ (max 180 radius) 96)]
+        (vec (concat linked-nodes
+                     (place-isolated-ring-nodes isolated degree dark? isolated-start-radius)))))))
+
+(defn- root-node-id
+  [nodes]
+  (some (fn [node]
+          (when (:root? node)
+            (:id node)))
+        nodes))
+
+(defn- graph-depths
+  [links root-id]
+  (let [neighbor-map (reduce (fn [m {:keys [source target]}]
+                               (-> m
+                                   (update source (fnil conj #{}) target)
+                                   (update target (fnil conj #{}) source)))
+                             {}
+                             links)]
+    (loop [queue (conj cljs.core/PersistentQueue.EMPTY [root-id 0])
+           depths {root-id 0}]
+      (if (empty? queue)
+        depths
+        (let [[node-id depth] (peek queue)
+              queue (pop queue)
+              [queue depths]
+              (reduce (fn [[queue* depths*] neighbor-id]
+                        (if (contains? depths* neighbor-id)
+                          [queue* depths*]
+                          [(conj queue* [neighbor-id (inc depth)])
+                           (assoc depths* neighbor-id (inc depth))]))
+                      [queue depths]
+                      (get neighbor-map node-id #{}))]
+          (recur queue depths))))))
+
+(defn- page-layout-nodes
+  [nodes links degree dark?]
+  (if-let [root-id (root-node-id nodes)]
+    (let [depths (graph-depths links root-id)
+          golden-angle (* js/Math.PI (- 3 (js/Math.sqrt 5)))
+          nodes-by-depth (->> nodes
+                              (remove #(= root-id (:id %)))
+                              (group-by #(min 3 (get depths (:id %) 3))))]
+      (vec
+       (cons
+        (decorate-node (some #(when (= root-id (:id %)) %) nodes) degree dark? 0 0)
+        (mapcat
+         (fn [depth]
+           (let [ring-nodes (sort-by (juxt #(- (get degree (node-source-id %) 0))
+                                           #(str (:id %)))
+                                     (get nodes-by-depth depth))
+                 count* (max 1 (count ring-nodes))
+                 radius (+ 150 (* 128 (dec depth)) (* 10 (js/Math.sqrt count*)))]
+             (map-indexed
+              (fn [idx node]
+                (let [angle (+ (* idx (/ (* 2 js/Math.PI) count*))
+                               (* depth 0.37)
+                               (* idx golden-angle 0.08))
+                      x (* radius (js/Math.cos angle))
+                      y (* radius (js/Math.sin angle))]
+                  (decorate-node node degree dark? x y)))
+              ring-nodes)))
+         (sort (keys nodes-by-depth))))))
+    (phyllotaxis-layout-nodes nodes degree dark?)))
+
 (defn- tag-links-by-node-id
   [links tag-ids]
   (reduce
@@ -737,9 +906,10 @@
 
 (defn- group-spacing
   [_tag-count max-object-count]
-  (let [group-radius (+ 68 (* 13 (js/Math.sqrt (max 1 max-object-count))) 72)
-        center-distance (+ (* 2 group-radius) 40)]
-    (max 280 center-distance)))
+  (let [object-count (min grid-group-object-limit (max 1 max-object-count))
+        group-radius (+ 54 (* 10 (js/Math.sqrt object-count)) 48)
+        center-distance (+ (* 2 group-radius) 28)]
+    (max 210 center-distance)))
 
 (defn- tag-grid-position
   [idx tag-count spacing]
@@ -865,7 +1035,7 @@
                     [cx cy] (get tag-position-by-id linked-tag-id [0 0])
                     angle (+ (* idx 0.11) (* cluster-idx golden-angle))
                     radius (if linked-tag-id
-                             (+ 68 (* 13 (js/Math.sqrt (inc cluster-idx))))
+                             (+ 48 (* 10 (js/Math.sqrt (inc cluster-idx))))
                              (+ 160 (* 20 (js/Math.sqrt (inc idx)))))
                     x (+ cx (* radius (js/Math.cos angle)))
                     y (+ cy (* radius (js/Math.sin angle)))]
@@ -873,6 +1043,7 @@
                                  linked-tag-id
                                  (assoc :id (visual-node-id linked-tag-id (:id object))
                                         :source-id (:id object)
+                                        :grid-object? true
                                         :cluster-id linked-tag-id
                                         :cluster-x cx
                                         :cluster-y cy))
@@ -892,18 +1063,33 @@
 
 (defn- fast-layout-nodes
   [nodes links view-mode degree dark? opts]
-  (if (and (= view-mode :tags-and-objects)
-           (some #(= "tag" (:kind %)) nodes))
+  (cond
+    (= view-mode :page)
+    (page-layout-nodes nodes links degree dark?)
+
+    (and (= view-mode :tags-and-objects)
+         (some #(= "tag" (:kind %)) nodes))
     (clustered-tags-layout-nodes nodes links degree dark? opts)
+
+    (= view-mode :all-pages)
+    (all-pages-layout-nodes nodes degree dark?)
+
+    :else
     (phyllotaxis-layout-nodes nodes degree dark?)))
 
 (defn- force-seed-nodes
   [nodes links view-mode degree dark? opts]
-  (if (and (or (= view-mode :tags-and-objects)
-               (= view-mode :all-pages))
-           (> (count nodes) 900)
-           (= :force (layout-mode (count nodes) view-mode)))
+  (cond
+    (= view-mode :page)
+    (page-layout-nodes nodes links degree dark?)
+
+    (and (or (= view-mode :tags-and-objects)
+             (= view-mode :all-pages))
+         (> (count nodes) 900)
+         (= :force (layout-mode (count nodes) view-mode)))
     (fast-layout-nodes nodes links view-mode degree dark? opts)
+
+    :else
     nodes))
 
 (defn layout-nodes
@@ -971,8 +1157,11 @@
                  ticks (layout-tick-count (count nodes) view-mode)]
              (dotimes [_ ticks]
                (.tick simulation))
-             (->> simulation-nodes
-                  (map (fn [^js sim-node]
-                         (let [node (nth nodes (.-idx sim-node))]
-                           (decorate-node node degree dark? (.-x sim-node) (.-y sim-node)))))
-                  vec))))))))
+             (let [layouted-nodes (->> simulation-nodes
+                                        (map (fn [^js sim-node]
+                                               (let [node (nth nodes (.-idx sim-node))]
+                                                 (decorate-node node degree dark? (.-x sim-node) (.-y sim-node)))))
+                                        vec)]
+               (if (= view-mode :all-pages)
+                 (stabilize-all-pages-layout layouted-nodes degree dark?)
+                 layouted-nodes)))))))))

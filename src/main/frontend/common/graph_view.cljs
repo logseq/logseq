@@ -340,8 +340,10 @@
         {:nodes (vec nodes)
          :links (vec (distinct (concat links property-links)))}))))
 
+(declare page-graph-node-color)
+
 (defn- build-nodes
-  [dark? current-page page-links tags nodes]
+  [dark? current-page page-links _tags nodes]
   (let [current-page (or current-page "")
         pages (common-util/distinct-by :db/id nodes)]
     (->>
@@ -351,14 +353,12 @@
      (keep (fn [p]
              (if-let [page-title (:block/title p)]
                (let [current-page? (= page-title current-page)
-                     color (case [dark? current-page?] ; FIXME: Put it into CSS
-                             [false false] "#999"
-                             [false true]  "#045591"
-                             [true false]  "#93a1a1"
-                             [true true]   "#ffffff")
-                     color (if (contains? tags (:db/id p))
-                             (if dark? "orange" "green")
-                             color)
+                     kind (cond
+                            (ldb/class? p) "tag"
+                            (ldb/property? p) "property"
+                            (ldb/journal? p) "journal"
+                            :else "page")
+                     color (page-graph-node-color dark? kind current-page?)
                      n (get page-links page-title 1)
                      size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
                  {:id (str (:db/id p))
@@ -366,11 +366,7 @@
                   :uuid (some-> (:block/uuid p) str)
                   :page? true
                   :label page-title
-                  :kind (cond
-                          (ldb/class? p) "tag"
-                          (ldb/property? p) "property"
-                          (ldb/journal? p) "journal"
-                          :else "page")
+                  :kind kind
                   :size size
                   :color color
                   :block/created-at (:block/created-at p)})
@@ -387,18 +383,30 @@
     (contains? tag-idents :logseq.class/Journal) "journal"
     :else "page"))
 
+(defn- page-graph-node-color
+  [dark? kind current-page?]
+  (cond
+    current-page?
+    (if dark? "#93C5FD" "#2563EB")
+
+    (= kind "tag")
+    (if dark? "#A78BFA" "#8B5CF6")
+
+    (= kind "property")
+    (if dark? "#F0B891" "#D97706")
+
+    (= kind "journal")
+    (if dark? "#7DD3FC" "#0284C7")
+
+    :else
+    (if dark? "#9CA3AF" "#CBD5E1")))
+
 (defn- build-page-node
-  [dark? current-page page-links tags entity tag-idents]
+  [dark? current-page page-links _tags entity tag-idents]
   (when-let [page-title (:block/title entity)]
     (let [current-page? (= page-title (or current-page ""))
-          color (case [dark? current-page?] ; FIXME: Put it into CSS
-                  [false false] "#999"
-                  [false true]  "#045591"
-                  [true false]  "#93a1a1"
-                  [true true]   "#ffffff")
-          color (if (contains? tags (:db/id entity))
-                  (if dark? "orange" "green")
-                  color)
+          kind (page-kind tag-idents)
+          color (page-graph-node-color dark? kind current-page?)
           n (get page-links (str (:db/id entity)) 1)
           size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
       (cond->
@@ -407,7 +415,7 @@
         :uuid (some-> (:block/uuid entity) str)
         :page? true
         :label page-title
-        :kind (page-kind tag-idents)
+        :kind kind
         :size size
         :color color
         :block/created-at (:block/created-at entity)}
@@ -788,7 +796,11 @@
                      (remove nil?)
                      (map #(d/entity db %))
                      (common-util/distinct-by :db/id))
-          nodes (build-nodes dark? (:block/title page-entity) links tags nodes)]
+          nodes (->> (build-nodes dark? (:block/title page-entity) links tags nodes)
+                     (mapv (fn [node]
+                             (cond-> node
+                               (= (:db-id node) page-id)
+                               (assoc :root? true)))))]
       (normalize-page-name
        {:nodes nodes
         :links links}))))

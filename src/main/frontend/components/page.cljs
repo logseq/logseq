@@ -614,11 +614,11 @@
 
 (rum/defc page-graph-inner < rum/reactive
   [_page graph dark?]
-  [:div.sidebar-item.flex-col
+  [:div.page-graph-panel.flex.flex-col.w-full
+   {:style {:height "min(72vh, 860px)"
+            :min-height 560}}
    (graph/graph-2d {:nodes (:nodes graph)
                     :links (:links graph)
-                    :width 600
-                    :height 600
                     :dark? dark?
                     :view-mode :page
                     :show-arrows? true

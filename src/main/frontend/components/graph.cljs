@@ -16,7 +16,8 @@
 (def ^:private default-show-arrows? false)
 (def ^:private default-link-distance 72)
 (def ^:private default-show-edge-labels? true)
-(def ^:private default-grid-layout? true)
+(def ^:private default-grid-layout? false)
+(def ^:private default-show-journals? false)
 (def ^:private default-settings {:view-mode :tags-and-objects
                                  :selected-tag-ids nil
                                  :created-at-filter nil
@@ -25,6 +26,7 @@
                                  :link-distance default-link-distance
                                  :show-edge-labels? default-show-edge-labels?
                                  :grid-layout? default-grid-layout?
+                                 :show-journals? default-show-journals?
                                  :open-groups default-open-groups})
 
 (defn- storage-key
@@ -54,7 +56,7 @@
   (int (clamp-number value 36 180 default-link-distance)))
 
 (defn encode-settings
-  [{:keys [view-mode selected-tag-ids created-at-filter depth show-arrows? link-distance show-edge-labels? grid-layout? open-groups]}]
+  [{:keys [view-mode selected-tag-ids created-at-filter depth show-arrows? link-distance show-edge-labels? grid-layout? show-journals? open-groups]}]
   (clj->js
    (cond-> {:viewMode (name (valid-view-mode view-mode))
             :depth (valid-depth depth)
@@ -62,6 +64,7 @@
             :linkDistance (valid-link-distance link-distance)
             :showEdgeLabels (boolean show-edge-labels?)
             :gridLayout (boolean grid-layout?)
+            :showJournals (not (false? show-journals?))
             :openGroups (mapv name (or open-groups default-open-groups))}
      (some? selected-tag-ids)
      (assoc :selectedTagIds (vec selected-tag-ids))
@@ -100,6 +103,9 @@
 
              (contains? data :gridLayout)
              (assoc :grid-layout? (true? (:gridLayout data)))
+
+             (contains? data :showJournals)
+             (assoc :show-journals? (not (false? (:showJournals data))))
 
              (contains? data :openGroups)
              (assoc :open-groups (set (map keyword (:openGroups data))))))))
@@ -411,8 +417,8 @@
   [settings set-settings! graph-data selected-nodes view-mode]
   (let [depth (valid-depth (:depth settings))
         link-distance (valid-link-distance (:link-distance settings))
-        show-arrows? (true? (:show-arrows? settings))
         grid-layout? (true? (:grid-layout? settings))
+        show-journals? (not (false? (:show-journals? settings)))
         depth-disabled? (depth-control-disabled? selected-nodes)]
     (settings-group
      {:settings settings
@@ -441,23 +447,19 @@
                    :step 6
                    :on-change #(set-settings! (fn [settings]
                                                  (assoc settings :link-distance (valid-link-distance %))))})
-                 (layout-toggle
-                  (t :graph/layout-arrows)
-                  show-arrows?
-                  #(set-settings! (fn [settings]
-                                    (assoc settings :show-arrows? %))))
-                 (layout-toggle
-                  (t :graph/layout-edge-labels)
-                  (true? (:show-edge-labels? settings))
-                  #(set-settings! (fn [settings]
-                                    (assoc settings :show-edge-labels? %))))
                  (when (= view-mode :tags-and-objects)
                    [:<>
                     (layout-toggle
                      (t :graph/layout-grid-layout)
                      grid-layout?
                      #(set-settings! (fn [settings]
-                                       (assoc settings :grid-layout? %))))])]})))
+                                       (assoc settings :grid-layout? %))))])
+                 (when (= view-mode :all-pages)
+                   (layout-toggle
+                    (t :graph/layout-show-journals)
+                    show-journals?
+                    #(set-settings! (fn [settings]
+                                      (assoc settings :show-journals? %)))))]})))
 
 (defn time-travel-range
   [graph-data]
@@ -500,6 +502,30 @@
                                    (and (contains? visible-node-ids source)
                                         (contains? visible-node-ids target))))
                          vec)))
+    graph-data))
+
+(defn- filter-all-pages-journals
+  [graph-data show-journals?]
+  (if show-journals?
+    graph-data
+    (let [visible-node-ids (->> (:nodes graph-data)
+                                (remove #(= "journal" (:kind %)))
+                                (map :id)
+                                set)]
+      (assoc graph-data
+             :nodes (->> (:nodes graph-data)
+                         (filter #(contains? visible-node-ids (:id %)))
+                         vec)
+             :links (->> (:links graph-data)
+                         (filter (fn [{:keys [source target]}]
+                                   (and (contains? visible-node-ids source)
+                                        (contains? visible-node-ids target))))
+                         vec)))))
+
+(defn- filter-graph-by-layout-settings
+  [graph-data view-mode show-journals?]
+  (if (= view-mode :all-pages)
+    (filter-all-pages-journals graph-data show-journals?)
     graph-data))
 
 (defn- format-time-travel-date
@@ -561,7 +587,7 @@
           current-timestamp (+ created-at-min value)]
       [:div.graph-time-travel
        {:class (when open? "is-open")}
-       [:button.graph-time-travel-toggle
+       [:button.graph-time-travel-toggle.graph-toolbar-button
         {:type "button"
          :aria-label (t :graph/time-travel)
          :title (t :graph/time-travel)
@@ -610,11 +636,11 @@
    filtered-graph-data available-tags selected-tag-ids tag-query set-tag-query! selected-nodes]
     [:div.graph-settings
      {:class (when settings-open? "is-open")}
-     [:button.graph-settings-dot
+     [:button.graph-settings-toggle.graph-toolbar-button
       {:aria-label (t :graph/settings)
        :title (t :graph/settings)
        :on-click #(set-settings-open! (not settings-open?))}
-      [:span.graph-settings-dot-core]]
+      (ui/icon (if settings-open? "chevron-down" "settings") {:size 18})]
      (when settings-open?
        [:div.graph-settings-panel
         [:div.graph-settings-panel-header
@@ -631,38 +657,48 @@
           (tags-group settings set-settings! available-tags selected-tag-ids tag-query set-tag-query!))
         (layout-group settings set-settings! filtered-graph-data selected-nodes view-mode)])])
 
-(defn- global-graph-content
-  [{:keys [selected-nodes settings-open? set-settings-open! settings set-settings!
-           view-mode switch-view-mode! loading? filtered-graph-data available-tags
-           selected-tag-ids tag-query set-tag-query! build-error retry! mode-graph-data
-           visible-node-ids background-visible-node-ids dark? set-selected-nodes!
-           time-travel-animation-ref time-travel-open? set-time-travel-open!]}]
-  [:div#global-graph.graph-root
-   (selected-node-status selected-nodes)
+(defn- graph-bottom-toolbar
+  [settings-open? set-settings-open! settings set-settings! view-mode switch-view-mode!
+   filtered-graph-data available-tags selected-tag-ids tag-query set-tag-query! selected-nodes
+   time-travel-animation-ref time-travel-open? set-time-travel-open! mode-graph-data]
+  [:div.graph-bottom-toolbar
    (settings-panel settings-open?
                    set-settings-open!
                    settings
                    set-settings!
                    view-mode
                    switch-view-mode!
-                   (when-not loading? filtered-graph-data)
+                   filtered-graph-data
                    available-tags
                    selected-tag-ids
                    tag-query
                    set-tag-query!
                    selected-nodes)
-   (cond
-     loading?
-     [:div.graph-loading (t :graph/preparing)]
+   (time-travel-control
+    settings
+    set-settings!
+    mode-graph-data
+    time-travel-animation-ref
+    time-travel-open?
+    set-time-travel-open!)])
 
-     build-error
-     (graph-error retry!)
+(defn- global-graph-content
+  [{:keys [selected-nodes settings-open? set-settings-open! settings set-settings!
+           view-mode switch-view-mode! loading? filtered-graph-data available-tags
+           selected-tag-ids tag-query set-tag-query! build-error retry! mode-graph-data
+           visible-node-ids background-visible-node-ids dark? graph-view-mode set-selected-nodes!
+           time-travel-animation-ref time-travel-open? set-time-travel-open!]}]
+  [:div#global-graph.graph-root
+   (selected-node-status selected-nodes)
+   [:<>
+    (cond
+      (and build-error (nil? mode-graph-data))
+      (graph-error retry!)
 
-     (nil? filtered-graph-data)
-     [:div.graph-loading (t :graph/preparing)]
+      (nil? mode-graph-data)
+      [:div.graph-loading (t :graph/preparing)]
 
-     :else
-     [:<>
+      :else
       (graph/graph-2d {:nodes (:nodes mode-graph-data)
                        :links (:links mode-graph-data)
                        :visible-node-ids visible-node-ids
@@ -673,38 +709,56 @@
                        :show-edge-labels? (true? (:show-edge-labels? settings))
                        :grid-layout? (true? (:grid-layout? settings))
                        :dark? dark?
-                       :view-mode view-mode
+                       :view-mode graph-view-mode
                        :aria-label (t :graph/canvas-label)
                        :on-selection-change set-selected-nodes!
                        :on-node-activate graph-actions/activate-node!
-                       :on-node-preview graph-actions/preview-node!})
-      (time-travel-control
-       settings
-       set-settings!
-       mode-graph-data
-       time-travel-animation-ref
-       time-travel-open?
-       set-time-travel-open!)])])
+                       :on-node-preview graph-actions/preview-node!}))
+    (when (and loading? mode-graph-data)
+      [:div.graph-loading.graph-loading-inline (t :graph/preparing)])
+    (graph-bottom-toolbar
+     settings-open?
+     set-settings-open!
+     settings
+     set-settings!
+     view-mode
+     switch-view-mode!
+     (when-not loading? filtered-graph-data)
+     available-tags
+     selected-tag-ids
+     tag-query
+     set-tag-query!
+     selected-nodes
+     time-travel-animation-ref
+     time-travel-open?
+     set-time-travel-open!
+     mode-graph-data)]])
 
 (defn- load-global-graph!
-  [repo theme view-mode set-graph-data! set-loading! set-build-error! set-selected-nodes!]
+  [repo theme view-mode set-graph-data-by-mode! set-loading-modes! set-build-errors! set-selected-nodes!]
   (let [cancelled? (atom false)]
-    (set-graph-data! nil)
-    (set-loading! true)
-    (set-build-error! nil)
+    (set-loading-modes! (fn [loading-modes]
+                          (conj (or loading-modes #{}) view-mode)))
+    (set-build-errors! (fn [errors]
+                         (dissoc (or errors {}) view-mode)))
     (set-selected-nodes! [])
     (-> (state/<invoke-db-worker :thread-api/build-graph repo {:type :global
                                                                :theme theme
-                                                               :view-mode view-mode})
+                                                               :view-mode view-mode
+                                                               :journal? true})
         (p/then (fn [result]
                   (when-not @cancelled?
-                    (set-graph-data! result)
-                    (set-loading! false))))
+                    (set-graph-data-by-mode! (fn [data-by-mode]
+                                               (assoc (or data-by-mode {}) view-mode result)))
+                    (set-loading-modes! (fn [loading-modes]
+                                          (disj (or loading-modes #{}) view-mode))))))
         (p/catch (fn [error]
                    (log/error :graph/build-failed {:error error})
                    (when-not @cancelled?
-                     (set-build-error! error)
-                     (set-loading! false)))))
+                     (set-build-errors! (fn [errors]
+                                          (assoc (or errors {}) view-mode error)))
+                     (set-loading-modes! (fn [loading-modes]
+                                           (disj (or loading-modes #{}) view-mode)))))))
     #(reset! cancelled? true)))
 
 (rum/defc global-graph
@@ -717,14 +771,16 @@
                                                                :settings (load-graph-settings repo)})
         [settings-open? set-settings-open!] (hooks/use-state false)
         [tag-query set-tag-query!] (hooks/use-state "")
-        [graph-data set-graph-data!] (hooks/use-state nil)
-        [loading? set-loading!] (hooks/use-state true)
-        [build-error set-build-error!] (hooks/use-state nil)
+        [graph-data-by-mode set-graph-data-by-mode!] (hooks/use-state {})
+        [loading-modes set-loading-modes!] (hooks/use-state #{})
+        [build-errors set-build-errors!] (hooks/use-state {})
         [retry-token set-retry-token!] (hooks/use-state 0)
         [selected-nodes set-selected-nodes!] (hooks/use-state [])
         [time-travel-open? set-time-travel-open!] (hooks/use-state false)
+        [visible-view-mode set-visible-view-mode!] (hooks/use-state (:view-mode (:settings settings-state)))
         time-travel-animation-ref (hooks/use-ref nil)
         settings (:settings settings-state)
+        show-journals? (not (false? (:show-journals? settings)))
         set-settings! (fn [settings-or-fn]
                         (set-settings-state!
                          (fn [state]
@@ -739,15 +795,19 @@
         view-mode (:view-mode settings)
         switch-view-mode! (fn [mode]
                             (when (not= mode view-mode)
-                              (set-graph-data! nil)
-                              (set-loading! true)
-                              (set-build-error! nil)
                               (set-selected-nodes! [])
                               (set-settings! (assoc settings :view-mode mode))))]
     (hooks/use-effect!
      #(set-settings-state! {:repo repo
                             :settings (load-graph-settings repo)})
      [repo])
+    (hooks/use-effect!
+     #(do
+        (set-graph-data-by-mode! {})
+        (set-loading-modes! #{})
+        (set-build-errors! {})
+        (set-visible-view-mode! view-mode))
+     [repo theme])
     (hooks/use-effect!
      (fn []
        #(cancel-time-travel-animation! time-travel-animation-ref))
@@ -758,23 +818,40 @@
      [repo settings-state])
     (hooks/use-effect!
      (fn []
-       (load-global-graph! repo theme view-mode set-graph-data! set-loading! set-build-error! set-selected-nodes!))
-     [repo theme view-mode retry-token])
+       (when (nil? (get graph-data-by-mode view-mode))
+         (load-global-graph! repo theme view-mode set-graph-data-by-mode! set-loading-modes! set-build-errors! set-selected-nodes!)))
+     [repo theme view-mode retry-token graph-data-by-mode])
+    (hooks/use-effect!
+     #(when (get graph-data-by-mode view-mode)
+        (set-visible-view-mode! view-mode))
+     [graph-data-by-mode view-mode])
 
-    (let [available-tags (when graph-data (tag-options graph-data))
+    (let [graph-data (get graph-data-by-mode view-mode)
+          graph-view-mode (if graph-data view-mode visible-view-mode)
+          graph-data (or graph-data (get graph-data-by-mode graph-view-mode))
+          loading? (contains? loading-modes view-mode)
+          build-error (get build-errors view-mode)
+          available-tags (when graph-data (tag-options graph-data))
           selected-tag-ids (selected-tag-id-set settings available-tags)
           selected-tag-key (if (some? (:selected-tag-ids settings))
                              (string/join "\u0000" (sort (:selected-tag-ids settings)))
                              "__all__")
           mode-graph-data (hooks/use-memo
                            #(when graph-data
-                              (if (= view-mode :tags-and-objects)
+                              (if (= graph-view-mode :tags-and-objects)
                                 (filter-tags-and-objects-graph graph-data selected-tag-ids)
                                 graph-data))
-                           [graph-data view-mode selected-tag-key])
+                           [graph-data graph-view-mode selected-tag-key])
+          layout-filtered-graph-data (hooks/use-memo
+                                      #(when mode-graph-data
+                                         (filter-graph-by-layout-settings
+                                          mode-graph-data
+                                          graph-view-mode
+                                          show-journals?))
+                                      [mode-graph-data graph-view-mode show-journals?])
           filtered-graph-data (when mode-graph-data
                                 (filter-graph-by-created-at
-                                 mode-graph-data
+                                 layout-filtered-graph-data
                                  (:created-at-filter settings)))
           visible-node-ids (when filtered-graph-data
                              (set (map :id (:nodes filtered-graph-data))))
@@ -800,6 +877,7 @@
         :visible-node-ids visible-node-ids
         :background-visible-node-ids background-visible-node-ids
         :dark? dark?
+        :graph-view-mode graph-view-mode
         :set-selected-nodes! set-selected-nodes!
         :time-travel-animation-ref time-travel-animation-ref
         :time-travel-open? time-travel-open?
