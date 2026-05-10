@@ -22,13 +22,16 @@
    (:width opts)
    (:height opts)
    (:aria-label opts)
-   (:show-arrows? opts)
-   (:show-edge-labels? opts)
    (:grid-layout? opts)
    (:on-node-activate opts)
    (:on-node-preview opts)
    (:on-selection-change opts)
    (:on-rendered opts)])
+
+(defn- schedule-render-container!
+  [container opts]
+  (let [timeout-id (js/setTimeout #(pixi/render-container! container opts) 0)]
+    #(js/clearTimeout timeout-id)))
 
 (rum/defc graph-2d
   [opts]
@@ -36,10 +39,15 @@
     (hooks/use-effect!
      (fn []
        (let [container (hooks/deref container-ref)]
-         (pixi/render-container! container opts)
-         (fn []
-           (pixi/destroy-instance! container))))
+         (when container
+           (schedule-render-container! container opts))))
      (render-container-deps opts))
+    (hooks/use-effect!
+     (fn []
+       (fn []
+         (when-let [container (hooks/deref container-ref)]
+           (pixi/destroy-instance! container))))
+     [])
     (hooks/use-effect!
      (fn []
        (when-let [container (hooks/deref container-ref)]
@@ -57,6 +65,13 @@
        (when-let [container (hooks/deref container-ref)]
          (pixi/update-link-distance! container (:link-distance opts))))
      [(:link-distance opts)])
+    (hooks/use-effect!
+     (fn []
+       (when-let [container (hooks/deref container-ref)]
+         (pixi/update-edge-display! container
+                                    (:show-arrows? opts)
+                                    (:show-edge-labels? opts))))
+     [(:show-arrows? opts) (:show-edge-labels? opts)])
     [:div.graph-canvas
      {:ref container-ref
       :style (canvas-style opts)

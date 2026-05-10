@@ -650,3 +650,30 @@
     (is (< elapsed 500))
     (is (< (js/Math.abs (:x (get by-id "tag-0"))) 900))
     (is (< (js/Math.abs (:y (get by-id "tag-0"))) 900))))
+
+(deftest layout-nodes-non-grid-tags-keeps-force-layout-controls
+  (let [tag-count 8
+        object-count 960
+        tags (mapv (fn [idx]
+                     {:id (str "tag-" idx)
+                      :kind "tag"
+                      :label (str "Tag " idx)})
+                   (range tag-count))
+        objects (mapv (fn [idx]
+                        {:id (str "obj-" idx)
+                         :kind "object"
+                         :label (str "Object " idx)})
+                      (range object-count))
+        nodes (into tags objects)
+        links (mapv (fn [idx]
+                      {:source (str "obj-" idx)
+                       :target (str "tag-" (mod idx tag-count))})
+                    (range object-count))
+        compact (logic/layout-nodes nodes links :tags-and-objects false {:link-distance 40})
+        loose (logic/layout-nodes nodes links :tags-and-objects false {:link-distance 140})
+        compact-by-id (into {} (map (juxt :id identity) compact))
+        loose-by-id (into {} (map (juxt :id identity) loose))
+        compact-node (get compact-by-id "obj-100")
+        loose-node (get loose-by-id "obj-100")]
+    (is (not= [(:x compact-node) (:y compact-node)]
+              [(:x loose-node) (:y loose-node)]))))

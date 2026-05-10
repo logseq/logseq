@@ -13,18 +13,16 @@
 
 (def ^:private default-open-groups #{:view-mode :displayed-tags :layout})
 (def ^:private default-depth 1)
-(def ^:private default-show-arrows? false)
 (def ^:private default-link-distance 72)
-(def ^:private default-show-edge-labels? true)
 (def ^:private default-grid-layout? false)
 (def ^:private default-show-journals? false)
+(def ^:private graph-show-arrows? false)
+(def ^:private graph-show-edge-labels? true)
 (def ^:private default-settings {:view-mode :tags-and-objects
                                  :selected-tag-ids nil
                                  :created-at-filter nil
                                  :depth default-depth
-                                 :show-arrows? default-show-arrows?
                                  :link-distance default-link-distance
-                                 :show-edge-labels? default-show-edge-labels?
                                  :grid-layout? default-grid-layout?
                                  :show-journals? default-show-journals?
                                  :open-groups default-open-groups})
@@ -56,13 +54,11 @@
   (int (clamp-number value 36 180 default-link-distance)))
 
 (defn encode-settings
-  [{:keys [view-mode selected-tag-ids created-at-filter depth show-arrows? link-distance show-edge-labels? grid-layout? show-journals? open-groups]}]
+  [{:keys [view-mode selected-tag-ids created-at-filter depth link-distance grid-layout? show-journals? open-groups]}]
   (clj->js
    (cond-> {:viewMode (name (valid-view-mode view-mode))
             :depth (valid-depth depth)
-            :showArrows (boolean show-arrows?)
             :linkDistance (valid-link-distance link-distance)
-            :showEdgeLabels (boolean show-edge-labels?)
             :gridLayout (boolean grid-layout?)
             :showJournals (not (false? show-journals?))
             :openGroups (mapv name (or open-groups default-open-groups))}
@@ -92,14 +88,8 @@
              (contains? data :depth)
              (assoc :depth (valid-depth (:depth data)))
 
-             (contains? data :showArrows)
-             (assoc :show-arrows? (true? (:showArrows data)))
-
              (contains? data :linkDistance)
              (assoc :link-distance (valid-link-distance (:linkDistance data)))
-
-             (contains? data :showEdgeLabels)
-             (assoc :show-edge-labels? (true? (:showEdgeLabels data)))
 
              (contains? data :gridLayout)
              (assoc :grid-layout? (true? (:gridLayout data)))
@@ -704,9 +694,9 @@
                        :visible-node-ids visible-node-ids
                        :background-visible-node-ids background-visible-node-ids
                        :depth (valid-depth (:depth settings))
-                       :show-arrows? (true? (:show-arrows? settings))
+                       :show-arrows? graph-show-arrows?
                        :link-distance (valid-link-distance (:link-distance settings))
-                       :show-edge-labels? (true? (:show-edge-labels? settings))
+                       :show-edge-labels? graph-show-edge-labels?
                        :grid-layout? (true? (:grid-layout? settings))
                        :dark? dark?
                        :view-mode graph-view-mode
@@ -761,6 +751,40 @@
                                            (disj (or loading-modes #{}) view-mode)))))))
     #(reset! cancelled? true)))
 
+(defn- use-global-graph-effects!
+  [{:keys [repo theme view-mode retry-token settings settings-state graph-data-by-mode
+           time-travel-animation-ref set-settings-state! set-graph-data-by-mode!
+           set-loading-modes! set-build-errors! set-visible-view-mode!
+           set-selected-nodes!]}]
+  (hooks/use-effect!
+   #(set-settings-state! {:repo repo
+                          :settings (load-graph-settings repo)})
+   [repo])
+  (hooks/use-effect!
+   #(do
+      (set-graph-data-by-mode! {})
+      (set-loading-modes! #{})
+      (set-build-errors! {})
+      (set-visible-view-mode! view-mode))
+   [repo theme])
+  (hooks/use-effect!
+   (fn []
+     #(cancel-time-travel-animation! time-travel-animation-ref))
+   [])
+  (hooks/use-effect!
+   #(when (= repo (:repo settings-state))
+      (save-graph-settings! repo settings))
+   [repo settings-state])
+  (hooks/use-effect!
+   (fn []
+     (when (nil? (get graph-data-by-mode view-mode))
+       (load-global-graph! repo theme view-mode set-graph-data-by-mode! set-loading-modes! set-build-errors! set-selected-nodes!)))
+   [repo theme view-mode retry-token graph-data-by-mode])
+  (hooks/use-effect!
+   #(when (get graph-data-by-mode view-mode)
+      (set-visible-view-mode! view-mode))
+   [graph-data-by-mode view-mode]))
+
 (rum/defc global-graph
   []
   (let [repo (state/get-current-repo)
@@ -797,34 +821,13 @@
                             (when (not= mode view-mode)
                               (set-selected-nodes! [])
                               (set-settings! (assoc settings :view-mode mode))))]
-    (hooks/use-effect!
-     #(set-settings-state! {:repo repo
-                            :settings (load-graph-settings repo)})
-     [repo])
-    (hooks/use-effect!
-     #(do
-        (set-graph-data-by-mode! {})
-        (set-loading-modes! #{})
-        (set-build-errors! {})
-        (set-visible-view-mode! view-mode))
-     [repo theme])
-    (hooks/use-effect!
-     (fn []
-       #(cancel-time-travel-animation! time-travel-animation-ref))
-     [])
-    (hooks/use-effect!
-     #(when (= repo (:repo settings-state))
-        (save-graph-settings! repo settings))
-     [repo settings-state])
-    (hooks/use-effect!
-     (fn []
-       (when (nil? (get graph-data-by-mode view-mode))
-         (load-global-graph! repo theme view-mode set-graph-data-by-mode! set-loading-modes! set-build-errors! set-selected-nodes!)))
-     [repo theme view-mode retry-token graph-data-by-mode])
-    (hooks/use-effect!
-     #(when (get graph-data-by-mode view-mode)
-        (set-visible-view-mode! view-mode))
-     [graph-data-by-mode view-mode])
+    (use-global-graph-effects!
+     {:repo repo :theme theme :view-mode view-mode :retry-token retry-token
+      :settings settings :settings-state settings-state :graph-data-by-mode graph-data-by-mode
+      :time-travel-animation-ref time-travel-animation-ref
+      :set-settings-state! set-settings-state! :set-graph-data-by-mode! set-graph-data-by-mode!
+      :set-loading-modes! set-loading-modes! :set-build-errors! set-build-errors!
+      :set-visible-view-mode! set-visible-view-mode! :set-selected-nodes! set-selected-nodes!})
 
     (let [graph-data (get graph-data-by-mode view-mode)
           graph-view-mode (if graph-data view-mode visible-view-mode)

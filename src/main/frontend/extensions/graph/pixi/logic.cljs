@@ -558,6 +558,8 @@
 
 (def regular-graph-draw-edge-limit 28000)
 
+(def ^:private tag-force-node-limit 900)
+
 (defn layout-mode
   [node-count view-mode]
   (let [view-mode (normalize-view-mode view-mode)
@@ -1141,6 +1143,52 @@
     (clustered-tags-grid-layout-nodes nodes links degree dark?)
     (clustered-tags-force-layout-nodes nodes links degree dark?)))
 
+(defn- bounded-tag-force-nodes
+  [nodes]
+  (if (<= (count nodes) tag-force-node-limit)
+    nodes
+    (let [tags (filter #(= "tag" (:kind %)) nodes)
+          object-limit (max 0 (- tag-force-node-limit (count tags)))]
+      (vec (concat tags
+                   (take object-limit (remove #(= "tag" (:kind %)) nodes)))))))
+
+(defn- links-between-node-ids
+  [links node-ids]
+  (keep (fn [{:keys [source target] :as link}]
+          (when (and (contains? node-ids source)
+                     (contains? node-ids target))
+            link))
+        links))
+
+(defn- merge-bounded-tag-force-layout
+  [nodes force-layouted-nodes]
+  (let [node-by-id (into {} (map (juxt :id identity) nodes))
+        force-by-id (into {} (map (juxt :id identity) force-layouted-nodes))
+        cluster-delta-by-id (reduce
+                             (fn [m {:keys [id x y kind]}]
+                               (if (and (= "tag" kind)
+                                        (contains? node-by-id id))
+                                 (let [original (get node-by-id id)]
+                                   (assoc m id {:dx (- x (:x original))
+                                                :dy (- y (:y original))
+                                                :x x
+                                                :y y}))
+                                 m))
+                             {}
+                             force-layouted-nodes)]
+    (mapv
+     (fn [{:keys [id cluster-id] :as node}]
+       (let [node (or (get force-by-id id) node)]
+         (if-let [{:keys [dx dy x y]} (get cluster-delta-by-id cluster-id)]
+           (cond-> (assoc node
+                          :cluster-x x
+                          :cluster-y y)
+             (not (contains? force-by-id id))
+             (assoc :x (+ (:x node) dx)
+                    :y (+ (:y node) dy)))
+           node)))
+     nodes)))
+
 (defn- fast-layout-nodes
   [nodes links view-mode degree dark? opts]
   (cond
@@ -1196,14 +1244,22 @@
                  nodes (if tags-mode?
                          (clustered-tags-layout-nodes nodes filtered-links degree dark? opts)
                          (force-seed-nodes nodes filtered-links view-mode degree dark? opts))]
-             (if (and tags-mode?
-                      (or grid-layout?
-                          (> (count nodes) 900)))
+             (if (and tags-mode? grid-layout?)
                nodes
-               (let [simulation-nodes (->> nodes
+               (let [bounded-tag-force? (and tags-mode?
+                                             (> (count nodes) tag-force-node-limit))
+                     force-nodes (if bounded-tag-force?
+                                   (bounded-tag-force-nodes nodes)
+                                   nodes)
+                     force-node-ids (when bounded-tag-force?
+                                      (set (map :id force-nodes)))
+                     force-links (if bounded-tag-force?
+                                   (links-between-node-ids filtered-links force-node-ids)
+                                   filtered-links)
+                     simulation-nodes (->> force-nodes
                                            (map-indexed #(simulation-node %2 degree %1))
                                            (into-array))
-                     simulation-links (->> filtered-links
+                     simulation-links (->> force-links
                                            (map simulation-link)
                                            (into-array))
                      link-force (-> (d3-force/forceLink simulation-links)
@@ -1232,13 +1288,13 @@
                                  "cluster-x"
                                  (-> (d3-force/forceX
                                       (fn [^js node]
-                                        (or (:cluster-x (nth nodes (.-idx node))) 0)))
+                                        (or (:cluster-x (nth force-nodes (.-idx node))) 0)))
                                      (.strength 0.16)))
                          (.force simulation
                                  "cluster-y"
                                  (-> (d3-force/forceY
                                       (fn [^js node]
-                                        (or (:cluster-y (nth nodes (.-idx node))) 0)))
+                                        (or (:cluster-y (nth force-nodes (.-idx node))) 0)))
                                      (.strength 0.16))))
                      _ (.stop simulation)
                      ticks (layout-tick-count (count nodes) view-mode)]
@@ -1246,9 +1302,12 @@
                    (.tick simulation))
                  (let [layouted-nodes (->> simulation-nodes
                                            (map (fn [^js sim-node]
-                                                  (let [node (nth nodes (.-idx sim-node))]
+                                                  (let [node (nth force-nodes (.-idx sim-node))]
                                                     (decorate-node node degree dark? (.-x sim-node) (.-y sim-node)))))
-                                           vec)]
+                                           vec)
+                       layouted-nodes (if bounded-tag-force?
+                                        (merge-bounded-tag-force-layout nodes layouted-nodes)
+                                        layouted-nodes)]
                    (if (= view-mode :all-pages)
                      (stabilize-all-pages-layout layouted-nodes degree dark?)
                      layouted-nodes)))))))))))

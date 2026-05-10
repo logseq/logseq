@@ -655,15 +655,15 @@
                    (when-let [to-node (get layout-by-id target)]
                      (let [{:keys [start-x start-y end-x end-y]}
                            (edge-segment from-node to-node parallel-offset)
-                           distance-squared (point-segment-distance-squared
-                                             world-x
-                                             world-y
-                                             start-x
-                                             start-y
-                                             end-x
-                                             end-y)]
-                       (when (<= distance-squared threshold-squared)
-                         (assoc link :hit-distance-squared distance-squared)))))))
+                           edge-distance-squared (point-segment-distance-squared
+                                                  world-x
+                                                  world-y
+                                                  start-x
+                                                  start-y
+                                                  end-x
+                                                  end-y)]
+                       (when (<= edge-distance-squared threshold-squared)
+                         (assoc link :hit-distance-squared edge-distance-squared)))))))
          (sort-by :hit-distance-squared)
          first)))
 
@@ -811,25 +811,25 @@
                              (take edge-label-limit))
           labeled-runs (logic/edge-render-runs labeled-links false)]
       (doseq [{:keys [source target label parallel-offset]} labeled-runs]
-        (when-let [from-node (get layout-by-id source)]
-          (when-let [to-node (get layout-by-id target)]
-            (let [^js entry (new (.-Container PIXI))
-                  ^js text (new (.-Text PIXI)
-                                #js {:text (logic/label-display-text label false)
-                                     :style style})]
-              (gobj/set entry "logseqGraphEdgeSource" source)
-              (gobj/set entry "logseqGraphEdgeTarget" target)
-              (gobj/set entry "logseqGraphEdgeParallelOffset" parallel-offset)
-              (when-let [^js anchor (.-anchor text)]
-                (set! (.-x anchor) 0.5)
-                (set! (.-y anchor) 0.5))
-              (set! (.-x text) 0)
-              (set! (.-y text) 0)
-              (.addChild entry text)
-              (set! (.-alpha entry) 0.78)
-              (position-edge-label-entry! entry world width height layout-by-id)
-              (.addChild label-layer entry)))))))
-  nil)
+        (when (and (contains? layout-by-id source)
+                   (contains? layout-by-id target))
+          (let [^js entry (new (.-Container PIXI))
+                ^js text (new (.-Text PIXI)
+                              #js {:text (logic/label-display-text label false)
+                                   :style style})]
+            (gobj/set entry "logseqGraphEdgeSource" source)
+            (gobj/set entry "logseqGraphEdgeTarget" target)
+            (gobj/set entry "logseqGraphEdgeParallelOffset" parallel-offset)
+            (when-let [^js anchor (.-anchor text)]
+              (set! (.-x anchor) 0.5)
+              (set! (.-y anchor) 0.5))
+            (set! (.-x text) 0)
+            (set! (.-y text) 0)
+            (.addChild entry text)
+            (set! (.-alpha entry) 0.78)
+            (position-edge-label-entry! entry world width height layout-by-id)
+            (.addChild label-layer entry)))))
+  nil))
 
 (defn- render-edge-labels!
   [^js container ^js world width height layout-by-id links dark? view-mode show-edge-labels?]
@@ -1596,6 +1596,8 @@
         depth* (atom (-> (or depth 1) (max 1) (min 5)))
         grid-layout? (true? grid-layout?)
         link-distance* (atom link-distance)
+        show-arrows?* (atom (true? show-arrows?))
+        show-edge-labels?* (atom (true? show-edge-labels?))
         layouted-nodes* (atom (layout-nodes nodes
                                             links
                                             view-mode
@@ -1620,12 +1622,12 @@
         effective-show-arrows? (fn []
                                  (if (edge-detail-view-mode? normalized-view-mode)
                                    true
-                                   (true? show-arrows?)))
+                                   @show-arrows?*))
         effective-show-edge-labels? (fn []
                                       (and (>= (.. world -scale -x) edge-label-visible-scale)
                                            (if (edge-detail-view-mode? normalized-view-mode)
                                              true
-                                             (true? show-edge-labels?))))
+                                             @show-edge-labels?*)))
         edge-render-opts (fn []
                            {:show-arrows? (effective-show-arrows?)
                             :show-edge-labels? (effective-show-edge-labels?)})
@@ -1776,6 +1778,18 @@
                                     layout-by-id
                                     (visible-link-list)
                                     (effective-show-edge-labels?))))
+        update-edge-display! (fn [next-show-arrows? next-show-edge-labels?]
+                               (let [next-show-arrows? (true? next-show-arrows?)
+                                     next-show-edge-labels? (true? next-show-edge-labels?)]
+                                 (when (or (not= next-show-arrows? @show-arrows?*)
+                                           (not= next-show-edge-labels? @show-edge-labels?*))
+                                   (reset! show-arrows?* next-show-arrows?)
+                                   (reset! show-edge-labels?* next-show-edge-labels?)
+                                   (sync-edges-and-labels!
+                                    (logic/current-layout-by-id
+                                     @layout-by-id*
+                                     @preview-layout-by-id*))
+                                   (mark-transform!))))
         sync-highlight! (fn []
                           (reset! highlight-state* (highlight-state-value))
                           (sync-cluster-backgrounds! (current-layout-nodes))
@@ -2079,9 +2093,9 @@
                                    (logic/current-layout-by-id
                                     @layout-by-id*
                                     @preview-layout-by-id*))))))
-                            (when-let [sync-edge-label-transform! (:sync-transform! edge-label-render-info)]
+                            (when-let [sync-edge-label-transform-fn (:sync-transform! edge-label-render-info)]
                               (let [{:keys [width height]} @size*]
-                                (sync-edge-label-transform!
+                                (sync-edge-label-transform-fn
                                  world
                                  width
                                  height
@@ -2258,6 +2272,7 @@
      :update-visibility! update-visibility!
      :update-depth! update-depth!
      :update-link-distance! update-link-distance!
+     :update-edge-display! update-edge-display!
      :cleanup (fn []
                 (event-cleanup)
                 (when-let [^js observer resize-observer]
@@ -2292,10 +2307,16 @@
     (update-link-distance-fn link-distance))
   nil)
 
+(defn update-edge-display!
+  [^js container show-arrows? show-edge-labels?]
+  (when-let [update-edge-display-fn (some-> (get @*graph-instances container)
+                                            :update-edge-display!)]
+    (update-edge-display-fn show-arrows? show-edge-labels?))
+  nil)
+
 (defn render-container!
   [^js container {:keys [nodes links dark? on-node-activate on-node-preview on-selection-change on-rendered view-mode visible-node-ids background-visible-node-ids depth show-arrows? link-distance show-edge-labels? grid-layout?]}]
   (when container
-    (destroy-instance! container)
     (let [token (get (swap! *render-tokens update container (fnil inc 0)) container)
           render-start (.now js/performance)
           app (new (.-Application PIXI))]
@@ -2305,25 +2326,27 @@
           (.then
            (fn []
              (if (= token (get @*render-tokens container))
-               (swap! *graph-instances
-                      assoc
-                      container
-                      (setup-scene! app container {:nodes nodes
-                                                   :links links
-                                                   :dark? dark?
-                                                   :on-node-activate on-node-activate
-                                                   :on-node-preview on-node-preview
-                                                   :on-selection-change on-selection-change
-                                                   :on-rendered on-rendered
-                                                   :view-mode view-mode
-                                                   :visible-node-ids visible-node-ids
-                                                   :background-visible-node-ids background-visible-node-ids
-                                                   :depth depth
-                                                   :show-arrows? show-arrows?
-                                                   :link-distance link-distance
-                                                   :show-edge-labels? show-edge-labels?
-                                                   :grid-layout? grid-layout?}
-                                    render-start))
+               (let [old-instance (get @*graph-instances container)]
+                 (destroy-instance-data! old-instance)
+                 (swap! *graph-instances
+                        assoc
+                        container
+                        (setup-scene! app container {:nodes nodes
+                                                     :links links
+                                                     :dark? dark?
+                                                     :on-node-activate on-node-activate
+                                                     :on-node-preview on-node-preview
+                                                     :on-selection-change on-selection-change
+                                                     :on-rendered on-rendered
+                                                     :view-mode view-mode
+                                                     :visible-node-ids visible-node-ids
+                                                     :background-visible-node-ids background-visible-node-ids
+                                                     :depth depth
+                                                     :show-arrows? show-arrows?
+                                                     :link-distance link-distance
+                                                     :show-edge-labels? show-edge-labels?
+                                                     :grid-layout? grid-layout?}
+                                      render-start)))
                (.destroy ^js app))))
           (.catch
            (fn [error]
