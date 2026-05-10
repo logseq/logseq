@@ -191,6 +191,7 @@
     :search-page "Use: logseq search page --content <query>"
     :search-property "Use: logseq search property --content <query>"
     :search-tag "Use: logseq search tag --content <query>"
+    :qsearch "Use: logseq qsearch <query> --graph <graph>"
     "Use: logseq search <block|page|property|tag> --content <query>"))
 
 (defn- error-hint
@@ -202,6 +203,7 @@
     :missing-tag-name "Use --name <tag-name>"
     :missing-query "Use --query <edn>"
     :missing-query-text (missing-search-query-hint command)
+    :qmd-no-block-ids "Run `logseq qmd init --graph <graph>` and retry"
     :unknown-query "Use `logseq query list` to see available queries"
     :ambiguous-tag-name "Retry with --id <tag-id>"
     :ambiguous-property-name "Retry with --id <property-id>"
@@ -417,6 +419,39 @@
   ([items now-ms title-max-display-width]
    (format-list-dynamic items now-ms list-node-columns {:title-max-display-width title-max-display-width
                                                          :truncate-cell-max-lines list-human-cell-max-lines})))
+
+(def ^:private qsearch-columns
+  [["RANK"       (fn [item _] (:qmd/rank item)) [:qmd/rank] true]
+   ["ID"         (fn [item _] (or (:db/id item) (:id item))) [:db/id :id] true]
+   ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item))) [:title :block/title :name]]
+   ["PAGE-ID"    (fn [item _] (:block/page-id item)) [:block/page-id]]
+   ["PAGE-TITLE" (fn [item _] (:block/page-title item)) [:block/page-title]]
+   ["SCORE"      (fn [item _] (:qmd/score item)) [:qmd/score]]
+   ["FILE"       (fn [item _] (:qmd/file item)) [:qmd/file]]])
+
+(defn- format-qsearch
+  [data now-ms title-max-display-width]
+  (let [table (format-list-dynamic (:items data)
+                                   now-ms
+                                   qsearch-columns
+                                   {:title-max-display-width title-max-display-width
+                                    :truncate-cell-max-lines list-human-cell-max-lines})
+        missing-ids (vec (or (:missing-ids data) []))]
+    (cond-> table
+      (seq missing-ids)
+      (str "\nMissing ids: " (string/join ", " missing-ids)))))
+
+(defn- format-qmd-init
+  [{:keys [collection mirror-dir action]}]
+  (string/join "\n"
+               [(str "QMD collection "
+                     (case action
+                       :updated "updated"
+                       :created "created"
+                       "ready")
+                     ": "
+                     (or collection "-"))
+                (str "Mirror: " (or mirror-dir "-"))]))
 
 (defn- normalize-asset-type
   [value]
@@ -1028,6 +1063,8 @@
         :list-asset (format-list-asset (:items data) now-ms list-title-max-display-width)
         (:search-block :search-page :search-property :search-tag)
         (format-list-page (:items data) now-ms)
+        :qmd-init (format-qmd-init data)
+        :qsearch (format-qsearch data now-ms list-title-max-display-width)
         :upsert-block (format-upsert-block context (:result data))
         :upsert-page (format-upsert-page context (:result data))
         :upsert-task (format-upsert-task context (:result data))
