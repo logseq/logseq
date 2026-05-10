@@ -1739,6 +1739,7 @@
         visibility-state* (atom {:detail-expanded? true
                                  :label-visible? false})
         transform-dirty? (atom true)
+        display-visible-key* (atom nil)
         navigation-active? (atom false)
         last-navigation-ms* (atom 0)
         show-detail-scale (if large-graph? 0.88 0.70)
@@ -1826,6 +1827,7 @@
                                                                           {:link-distance next-link-distance
                                                                            :grid-layout? grid-layout?})]
                                     (reset! layouted-nodes* next-layouted-nodes)
+                                    (reset! display-visible-key* nil)
                                     (reset! layout-by-id*
                                             (into {} (map (fn [node] [(:id node) node]) next-layouted-nodes)))
                                     (reset! display-links* (logic/display-links scene-links next-layouted-nodes))
@@ -1922,32 +1924,45 @@
                                          (grid-layout-display-node-ids @layouted-nodes* visible-node-ids*)
                                          (if-let [tag-id (and (contains? #{:isolate :objects}
                                                                        (tag-focus-level scale))
-                                                            (focused-tag-id-for-scale scale))]
+                                                           (focused-tag-id-for-scale scale))]
                                            (tag-context-node-ids tag-id)
                                            @background-visible-node-ids*))))
+        display-visible-key (fn [scale]
+                              (let [focus-level (when (= normalized-view-mode :tags-and-objects)
+                                                  (tag-focus-level scale))]
+                                {:view-mode normalized-view-mode
+                                 :focus-level focus-level
+                                 :focused-tag-id @tag-focus-node-id*
+                                 :highlighted-node-ids @highlighted-node-ids*
+                                 :object-scale-bucket (when (= focus-level :objects)
+                                                        (js/Math.floor (* scale 12)))}))
         update-display-visible! (fn [scale]
-                                  (let [next-visible-node-ids (tag-drill-visible-node-ids scale)
-                                        next-context-node-ids (tag-drill-context-node-ids scale)]
-                                    (if (or (not= next-visible-node-ids @display-visible-node-ids*)
-                                            (not= next-context-node-ids @context-visible-node-ids*))
-                                      (do
-                                        (reset! display-visible-node-ids* next-visible-node-ids)
-                                        (reset! context-visible-node-ids* next-context-node-ids)
-                                        (reset! display-node-index*
-                                                (index-layouted-nodes
-                                                 (filter #(visible-node? display-visible-node-ids* %)
-                                                         @layouted-nodes*)))
-                                        (reset! full-node-index*
-                                                (index-layouted-nodes
-                                                 (filter #(visible-node? visible-node-ids* %)
-                                                         @layouted-nodes*)))
-                                        (sync-cluster-backgrounds! @layouted-nodes*)
-                                        (sync-edges-and-labels!
-                                         (logic/current-layout-by-id
-                                          @layout-by-id*
-                                          @preview-layout-by-id*))
-                                        true)
-                                      false)))
+                                  (let [next-key (display-visible-key scale)]
+                                    (if (= next-key @display-visible-key*)
+                                      false
+                                      (let [next-visible-node-ids (tag-drill-visible-node-ids scale)
+                                            next-context-node-ids (tag-drill-context-node-ids scale)]
+                                        (reset! display-visible-key* next-key)
+                                        (if (or (not= next-visible-node-ids @display-visible-node-ids*)
+                                                (not= next-context-node-ids @context-visible-node-ids*))
+                                          (do
+                                            (reset! display-visible-node-ids* next-visible-node-ids)
+                                            (reset! context-visible-node-ids* next-context-node-ids)
+                                            (reset! display-node-index*
+                                                    (index-layouted-nodes
+                                                     (filter #(visible-node? display-visible-node-ids* %)
+                                                             @layouted-nodes*)))
+                                            (reset! full-node-index*
+                                                    (index-layouted-nodes
+                                                     (filter #(visible-node? visible-node-ids* %)
+                                                             @layouted-nodes*)))
+                                            (sync-cluster-backgrounds! @layouted-nodes*)
+                                            (sync-edges-and-labels!
+                                             (logic/current-layout-by-id
+                                              @layout-by-id*
+                                              @preview-layout-by-id*))
+                                            true)
+                                          false)))))
         sync-hover-preview! (fn [node-id]
                               (reset! hovered-node-id* node-id)
                               (mark-transform!))
@@ -2206,6 +2221,7 @@
                                    (reset! hovered-node-id* nil))
                                  (reset! preview-layout-by-id* nil)
                                  (reset! drag-session* nil)
+                                 (reset! display-visible-key* nil)
                                  (reset! tag-node-index*
                                          (index-layouted-nodes
                                           (filter #(and (visible-node? visible-node-ids* %)
