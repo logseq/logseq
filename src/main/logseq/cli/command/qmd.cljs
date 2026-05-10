@@ -6,14 +6,21 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [logseq.cli.command.core :as core]
+            [logseq.cli.command.show :as show-command]
+            [logseq.cli.output-mode :as output-mode]
             [logseq.cli.root-dir :as root-dir]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
+            [logseq.cli.uuid-refs :as uuid-refs]
             [logseq.common.graph-dir :as graph-dir]
             [promesa.core :as p]))
 
 (def ^:private markdown-glob "**/*.md")
 (def ^:private block-id-comment-re #"<!--\s*id:\s*(-?\d+)\s*-->")
+(def ^:private block-line-re #"^(\s*)-\s?.*<!--\s*id:\s*(-?\d+)\s*-->.*$")
+(def ^:private qmd-hunk-header-re #"(?m)^@@\s+-([0-9]+)(?:,[0-9]+)?\s+\@\@.*$")
+(def ^:private qsearch-context-lookback 50)
+(def ^:private qsearch-context-lookahead 10)
 
 (def ^:private qmd-common-spec
   {:index {:desc "QMD index name"}
@@ -263,9 +270,124 @@
                    (conj acc id)))
                [])))
 
+(defn- positive-int
+  [value]
+  (let [parsed (cond
+                 (number? value) value
+                 (string? value) (js/parseInt value 10)
+                 :else js/NaN)]
+    (when (and (number? parsed)
+               (not (js/isNaN parsed))
+               (pos? parsed))
+      parsed)))
+
+(defn- split-snippet-lines
+  [snippet]
+  (let [lines (string/split-lines (or snippet ""))]
+    (if (seq lines) (vec lines) [""])))
+
+(defn- hunk-start-line
+  [snippet]
+  (some-> (re-find qmd-hunk-header-re (or snippet ""))
+          second
+          positive-int))
+
+(defn- qmd-result-line
+  [result]
+  (or (positive-int (:line result))
+      (hunk-start-line (:snippet result))))
+
+(defn- find-subsequence-index
+  [lines candidate]
+  (let [lines (vec lines)
+        candidate (vec candidate)
+        candidate-count (count candidate)
+        last-start (- (count lines) candidate-count)]
+    (when (and (pos? candidate-count)
+               (not (neg? last-start)))
+      (loop [idx 0]
+        (cond
+          (> idx last-start) nil
+          (= candidate (subvec lines idx (+ idx candidate-count))) idx
+          :else (recur (inc idx)))))))
+
+(defn- leading-space-count
+  [line]
+  (count (second (re-find #"^(\s*)" (or line "")))))
+
+(defn- block-line-info
+  [line]
+  (when-let [[_ indent] (re-matches block-line-re (or line ""))]
+    {:line line
+     :indent (count indent)}))
+
+(defn- enclosing-block-line
+  [context-lines snippet-lines snippet-start-index]
+  (let [first-line (first snippet-lines)
+        first-indent (leading-space-count first-line)
+        needs-parent-indent? (pos? first-indent)]
+    (loop [idx snippet-start-index]
+      (when (>= idx 0)
+        (if-let [{:keys [line indent]} (block-line-info (get context-lines idx))]
+          (if (and needs-parent-indent?
+                   (not (< indent first-indent)))
+            (recur (dec idx))
+            line)
+          (recur (dec idx)))))))
+
+(defn- expanded-snippet
+  [result context]
+  (let [snippet (:snippet result)
+        snippet-lines (split-snippet-lines snippet)
+        context-lines (vec (string/split-lines (or context "")))
+        line (qmd-result-line result)
+        start-line (max 1 (- line qsearch-context-lookback))
+        snippet-start (or (find-subsequence-index context-lines snippet-lines)
+                          (let [idx (- line start-line)]
+                            (when (<= 0 idx (dec (count context-lines)))
+                              idx)))
+        enclosing-line (when snippet-start
+                         (enclosing-block-line context-lines snippet-lines snippet-start))]
+    (if (and enclosing-line
+             (not (some #{enclosing-line} snippet-lines)))
+      (str enclosing-line "\n" snippet)
+      snippet)))
+
+(defn- qmd-get-args
+  [action file start-line line-count]
+  (qmd-args (:index action)
+            ["get" (str file ":" start-line) "-l" (str line-count)]))
+
+(defn- <expand-qmd-result-snippet
+  [action result]
+  (let [file (:file result)
+        line (qmd-result-line result)
+        snippet (:snippet result)]
+    (if (and (string? file)
+             (seq file)
+             line
+             (string? snippet)
+             (seq snippet))
+      (let [snippet-line-count (max 1 (count (split-snippet-lines snippet)))
+            start-line (max 1 (- line qsearch-context-lookback))
+            line-count (+ (- line start-line)
+                          snippet-line-count
+                          qsearch-context-lookahead)]
+        (p/catch
+         (p/let [get-result (<run-qmd (qmd-get-args action file start-line line-count))]
+           (if (zero? (:exit get-result))
+             (assoc result :snippet (expanded-snippet result (:out get-result)))
+             result))
+         (fn [_] result)))
+      (p/resolved result))))
+
+(defn- <expand-qmd-result-snippets
+  [action results]
+  (p/let [expanded (p/all (map #(<expand-qmd-result-snippet action %) results))]
+    (vec expanded)))
+
 (def ^:private qsearch-pull-selector
-  [:db/id :block/title :block/uuid
-   {:block/page [:db/id :block/title :block/name :block/uuid]}])
+  show-command/block-render-selector)
 
 (defn- qmd-result-by-id
   [results]
@@ -292,6 +414,52 @@
       (or (:block/title page) (:block/name page))
       (assoc :block/page-title (or (:block/title page) (:block/name page))))))
 
+(defn- qsearch-entity-present?
+  [entity]
+  (and (map? entity)
+       (or (contains? entity :block/title)
+           (contains? entity :block/uuid)
+           (contains? entity :block/page))))
+
+(defn- <normalize-qsearch-item-refs
+  [config repo items]
+  (let [uuid-strings (uuid-refs/collect-uuid-refs-from-items items [:block/title :block/page-title])]
+    (p/let [uuid->label (uuid-refs/fetch-uuid-labels config repo uuid-strings)]
+      (uuid-refs/normalize-item-string-fields items [:block/title :block/page-title] uuid->label))))
+
+(defn- qsearch-ok-data
+  ([action result-count items missing-ids]
+   (qsearch-ok-data action result-count items missing-ids nil))
+  ([action result-count items missing-ids human-data]
+   (cond-> {:status :ok
+            :data {:items items
+                   :missing-ids missing-ids
+                   :qmd {:collection (:collection action)
+                         :index (:index action)
+                         :result-count result-count}}}
+     human-data (assoc :human {:qsearch human-data}))))
+
+(defn- human-output?
+  [config]
+  (not (output-mode/structured? (output-mode/parse (:output-format config)))))
+
+(defn- <qsearch-human-data
+  [config action entities]
+  (let [entities (vec (filter qsearch-entity-present? entities))]
+    (if (seq entities)
+      (p/let [items (show-command/attach-render-properties config (:repo action) entities)
+              tree-data (show-command/prepare-tree-render-data
+                         config
+                         action
+                         {:root {:block/children items}})]
+        {:query (:query action)
+         :items (get-in tree-data [:root :block/children])
+         :property-titles (:property-titles tree-data)
+         :property-value-labels (:property-value-labels tree-data)
+         :uuid->label (:uuid->label tree-data)})
+      (p/resolved {:query (:query action)
+                   :items []}))))
+
 (defn- qsearch-args
   [{:keys [query collection limit no-rerank index]}]
   (cond-> (qmd-args index ["query" query "--json" "-c" collection])
@@ -305,32 +473,38 @@
     (if-not (zero? (:exit qmd-result))
       (qmd-command-failed "qmd query failed" qmd-result)
       (let [results (vec (or (parse-qmd-json-output (:out qmd-result)) []))
-            ids (extract-block-ids results)]
-        (if-not (seq ids)
-          {:status :error
-           :error {:code :qmd-no-block-ids
-                   :message "QMD results did not include Markdown Mirror block ids"
-                   :hint "Run `logseq qmd init --graph <graph>` and retry"}}
-          (let [result-by-id (qmd-result-by-id results)]
-            (p/let [entities (p/all
-                              (map (fn [id]
-                                     (transport/invoke cfg :thread-api/pull
-                                                       [(:repo action) qsearch-pull-selector id]))
-                                   ids))
-                    pairs (mapv vector ids entities)
-                    items (->> pairs
-                               (keep (fn [[id entity]]
-                                       (when entity
-                                         (normalize-qsearch-item entity
-                                                                 (get result-by-id id)))))
-                               vec)
-                    missing-ids (->> pairs
-                                     (keep (fn [[id entity]]
-                                             (when-not entity id)))
-                                     vec)]
-              {:status :ok
-               :data {:items items
-                      :missing-ids missing-ids
-                      :qmd {:collection (:collection action)
-                            :index (:index action)
-                            :result-count (count results)}}})))))))
+            result-count (count results)]
+        (p/let [results (<expand-qmd-result-snippets action results)]
+          (let [ids (extract-block-ids results)]
+            (cond
+              (empty? results)
+              (qsearch-ok-data action 0 [] [])
+
+              (not (seq ids))
+              {:status :error
+               :error {:code :qmd-no-block-ids
+                       :message "QMD results did not include Markdown Mirror block ids"
+                       :hint "Run `logseq qmd init [--graph <graph>]` and retry"}}
+
+              :else
+              (let [result-by-id (qmd-result-by-id results)]
+                (p/let [entities (p/all
+                                  (map (fn [id]
+                                         (transport/invoke cfg :thread-api/pull
+                                                           [(:repo action) qsearch-pull-selector id]))
+                                       ids))
+                        pairs (mapv vector ids entities)
+                        items (->> pairs
+                                   (keep (fn [[id entity]]
+                                           (when (qsearch-entity-present? entity)
+                                             (normalize-qsearch-item entity
+                                                                     (get result-by-id id)))))
+                                   vec)
+                        missing-ids (->> pairs
+                                         (keep (fn [[id entity]]
+                                                 (when-not (qsearch-entity-present? entity) id)))
+                                         vec)
+                        items (<normalize-qsearch-item-refs cfg (:repo action) items)
+                        human-data (when (human-output? config)
+                                     (<qsearch-human-data cfg action entities))]
+                  (qsearch-ok-data action result-count items missing-ids human-data))))))))))
