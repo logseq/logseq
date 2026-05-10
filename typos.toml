@@ -17,8 +17,6 @@ deleteable = "deleteable"
 fom = "fom"
 tne = "tne"
 Damon = "Damon"
-Ede = "Ede"
-
 [files]
 extend-exclude = ["resources/*",
                   "src/resources/*",
