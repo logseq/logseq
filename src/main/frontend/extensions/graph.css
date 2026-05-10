@@ -237,6 +237,21 @@
     transition: color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }
 
+.graph-mode-tab-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.graph-mode-tab-loading {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
 .graph-mode-tab:hover {
     color: var(--ls-primary-text-color) !important;
     background: color-mix(in srgb, var(--ls-link-text-color) 12%, transparent) !important;

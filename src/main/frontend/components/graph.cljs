@@ -1,6 +1,7 @@
 (ns frontend.components.graph
   (:require [clojure.string :as string]
             [frontend.components.graph-actions :as graph-actions]
+            [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
             [frontend.extensions.graph :as graph]
             [frontend.state :as state]
@@ -253,18 +254,24 @@
 (defn filter-tags-and-objects-graph
   [graph-data selected-tag-ids]
   (let [selected-tag-ids (set selected-tag-ids)
-        selected-links (->> (:links graph-data)
-                            (filter (fn [{:keys [source target]}]
-                                      (or (contains? selected-tag-ids target)
-                                          (contains? selected-tag-ids source))))
-                            vec)
-        linked-node-ids (set (mapcat (juxt :source :target) selected-links))
-        visible-node-ids (into selected-tag-ids linked-node-ids)]
-    (assoc graph-data
-           :nodes (->> (:nodes graph-data)
-                       (filter #(contains? visible-node-ids (:id %)))
-                       vec)
-           :links selected-links)))
+        tag-ids (->> (:nodes graph-data)
+                     (filter #(= "tag" (:kind %)))
+                     (map :id)
+                     set)]
+    (if (= selected-tag-ids tag-ids)
+      graph-data
+      (let [selected-links (->> (:links graph-data)
+                                (filter (fn [{:keys [source target]}]
+                                          (or (contains? selected-tag-ids target)
+                                              (contains? selected-tag-ids source))))
+                                vec)
+            linked-node-ids (set (mapcat (juxt :source :target) selected-links))
+            visible-node-ids (into selected-tag-ids linked-node-ids)]
+        (assoc graph-data
+               :nodes (->> (:nodes graph-data)
+                           (filter #(contains? visible-node-ids (:id %)))
+                           vec)
+               :links selected-links)))))
 
 (defn- settings-toggle
   [settings group-id]
@@ -293,8 +300,17 @@
      [:div.graph-settings-group-body
       [:div.graph-settings-group-body-inner children]]]))
 
+(defn- view-mode-tab-label
+  [label loading?]
+  [:span.graph-mode-tab-label
+   [:span label]
+   (when loading?
+     [:span.graph-mode-tab-loading
+      {:aria-hidden true}
+      (svg/loader-fn {:class "w-3 h-3"})])])
+
 (defn- view-mode-group
-  [settings set-settings! view-mode set-view-mode!]
+  [settings set-settings! view-mode set-view-mode! loading?]
   (settings-group
    {:settings settings
     :set-settings! set-settings!
@@ -310,11 +326,15 @@
       (shui/tabs-trigger
        {:value "tags-and-objects"
         :class "graph-mode-tab"}
-       (t :graph/view-mode-tags))
+       (view-mode-tab-label
+        (t :graph/view-mode-tags)
+        (and loading? (= view-mode :tags-and-objects))))
       (shui/tabs-trigger
        {:value "all-pages"
         :class "graph-mode-tab"}
-       (t :graph/view-mode-all-pages))))}))
+       (view-mode-tab-label
+        (t :graph/view-mode-all-pages)
+        (and loading? (= view-mode :all-pages))))))}))
 
 (defn- tags-group
   [settings set-settings! available-tags selected-tag-ids tag-query set-tag-query!]
@@ -453,9 +473,13 @@
 
 (defn time-travel-range
   [graph-data]
-  (let [created-ats (keep :block/created-at (:nodes graph-data))
-        created-at-min (when (seq created-ats) (apply min created-ats))
-        created-at-max (when (seq created-ats) (apply max created-ats))
+  (let [{:keys [created-at-min created-at-max]} (:all-pages graph-data)
+        [created-at-min created-at-max] (if (and (number? created-at-min)
+                                                 (number? created-at-max))
+                                          [created-at-min created-at-max]
+                                          (let [created-ats (keep :block/created-at (:nodes graph-data))]
+                                            [(when (seq created-ats) (apply min created-ats))
+                                             (when (seq created-ats) (apply max created-ats))]))
         duration (when (and created-at-min created-at-max)
                    (- created-at-max created-at-min))]
     (when (and duration (pos? duration))
@@ -472,7 +496,8 @@
 
 (defn filter-graph-by-created-at
   [graph-data created-at-filter]
-  (if-let [{:keys [created-at-min duration]} (time-travel-range graph-data)]
+  (if-let [{:keys [created-at-min duration]} (when (some? created-at-filter)
+                                               (time-travel-range graph-data))]
     (let [offset (-> (or created-at-filter duration)
                      (max 0)
                      (min duration))
@@ -517,6 +542,12 @@
   (if (= view-mode :all-pages)
     (filter-all-pages-journals graph-data show-journals?)
     graph-data))
+
+(defn graph-visible-node-ids
+  [source-graph-data visible-graph-data]
+  (when (and visible-graph-data
+             (not (identical? source-graph-data visible-graph-data)))
+    (set (map :id (:nodes visible-graph-data)))))
 
 (defn- format-time-travel-date
   [timestamp]
@@ -623,7 +654,7 @@
 
 (defn- settings-panel
   [settings-open? set-settings-open! settings set-settings! view-mode set-view-mode!
-   filtered-graph-data available-tags selected-tag-ids tag-query set-tag-query! selected-nodes]
+   loading? filtered-graph-data available-tags selected-tag-ids tag-query set-tag-query! selected-nodes]
     [:div.graph-settings
      {:class (when settings-open? "is-open")}
      [:button.graph-settings-toggle.graph-toolbar-button
@@ -642,14 +673,14 @@
            :aria-label (t :ui/close)
            :on-click #(set-settings-open! false)}
           (ui/icon "x" {:size 18})]]
-        (view-mode-group settings set-settings! view-mode set-view-mode!)
+        (view-mode-group settings set-settings! view-mode set-view-mode! loading?)
         (when (= view-mode :tags-and-objects)
           (tags-group settings set-settings! available-tags selected-tag-ids tag-query set-tag-query!))
         (layout-group settings set-settings! filtered-graph-data selected-nodes view-mode)])])
 
 (defn- graph-bottom-toolbar
   [settings-open? set-settings-open! settings set-settings! view-mode switch-view-mode!
-   filtered-graph-data available-tags selected-tag-ids tag-query set-tag-query! selected-nodes
+   loading? filtered-graph-data available-tags selected-tag-ids tag-query set-tag-query! selected-nodes
    time-travel-animation-ref time-travel-open? set-time-travel-open! mode-graph-data]
   [:div.graph-bottom-toolbar
    (settings-panel settings-open?
@@ -658,6 +689,7 @@
                    set-settings!
                    view-mode
                    switch-view-mode!
+                   loading?
                    filtered-graph-data
                    available-tags
                    selected-tag-ids
@@ -676,7 +708,7 @@
   [{:keys [selected-nodes settings-open? set-settings-open! settings set-settings!
            view-mode switch-view-mode! loading? filtered-graph-data available-tags
            selected-tag-ids tag-query set-tag-query! build-error retry! mode-graph-data
-           visible-node-ids background-visible-node-ids dark? graph-view-mode set-selected-nodes!
+           canvas-settings visible-node-ids background-visible-node-ids dark? graph-view-mode set-selected-nodes!
            time-travel-animation-ref time-travel-open? set-time-travel-open!]}]
   [:div#global-graph.graph-root
    (selected-node-status selected-nodes)
@@ -693,11 +725,11 @@
                        :links (:links mode-graph-data)
                        :visible-node-ids visible-node-ids
                        :background-visible-node-ids background-visible-node-ids
-                       :depth (valid-depth (:depth settings))
+                       :depth (valid-depth (:depth canvas-settings))
                        :show-arrows? graph-show-arrows?
-                       :link-distance (valid-link-distance (:link-distance settings))
+                       :link-distance (valid-link-distance (:link-distance canvas-settings))
                        :show-edge-labels? graph-show-edge-labels?
-                       :grid-layout? (true? (:grid-layout? settings))
+                       :grid-layout? (true? (:grid-layout? canvas-settings))
                        :dark? dark?
                        :view-mode graph-view-mode
                        :aria-label (t :graph/canvas-label)
@@ -713,6 +745,7 @@
      set-settings!
      view-mode
      switch-view-mode!
+     loading?
      (when-not loading? filtered-graph-data)
      available-tags
      selected-tag-ids
@@ -803,8 +836,8 @@
         [time-travel-open? set-time-travel-open!] (hooks/use-state false)
         [visible-view-mode set-visible-view-mode!] (hooks/use-state (:view-mode (:settings settings-state)))
         time-travel-animation-ref (hooks/use-ref nil)
+        canvas-settings-ref (hooks/use-ref (:settings settings-state))
         settings (:settings settings-state)
-        show-journals? (not (false? (:show-journals? settings)))
         set-settings! (fn [settings-or-fn]
                         (set-settings-state!
                          (fn [state]
@@ -828,16 +861,34 @@
       :set-settings-state! set-settings-state! :set-graph-data-by-mode! set-graph-data-by-mode!
       :set-loading-modes! set-loading-modes! :set-build-errors! set-build-errors!
       :set-visible-view-mode! set-visible-view-mode! :set-selected-nodes! set-selected-nodes!})
+    (hooks/use-effect!
+     #(when (= view-mode visible-view-mode)
+        (hooks/set-ref! canvas-settings-ref settings))
+     [settings view-mode visible-view-mode])
 
-    (let [graph-data (get graph-data-by-mode view-mode)
-          graph-view-mode (if graph-data view-mode visible-view-mode)
-          graph-data (or graph-data (get graph-data-by-mode graph-view-mode))
+    (let [graph-view-mode visible-view-mode
+          switching-view-mode? (not= view-mode graph-view-mode)
+          canvas-settings (if switching-view-mode?
+                            (hooks/deref canvas-settings-ref)
+                            settings)
+          show-journals? (not (false? (:show-journals? canvas-settings)))
+          graph-data (get graph-data-by-mode graph-view-mode)
+          tags-graph-data (get graph-data-by-mode :tags-and-objects)
           loading? (contains? loading-modes view-mode)
           build-error (get build-errors view-mode)
-          available-tags (when graph-data (tag-options graph-data))
-          selected-tag-ids (selected-tag-id-set settings available-tags)
-          selected-tag-key (if (some? (:selected-tag-ids settings))
-                             (string/join "\u0000" (sort (:selected-tag-ids settings)))
+          available-tags (hooks/use-memo
+                          #(when (and (= view-mode :tags-and-objects)
+                                      tags-graph-data)
+                             (tag-options tags-graph-data))
+                          [view-mode tags-graph-data])
+          canvas-available-tags (hooks/use-memo
+                                 #(when (and (= graph-view-mode :tags-and-objects)
+                                             graph-data)
+                                    (tag-options graph-data))
+                                 [graph-view-mode graph-data])
+          selected-tag-ids (selected-tag-id-set canvas-settings canvas-available-tags)
+          selected-tag-key (if (some? (:selected-tag-ids canvas-settings))
+                             (string/join "\u0000" (sort (:selected-tag-ids canvas-settings)))
                              "__all__")
           mode-graph-data (hooks/use-memo
                            #(when graph-data
@@ -855,11 +906,9 @@
           filtered-graph-data (when mode-graph-data
                                 (filter-graph-by-created-at
                                  layout-filtered-graph-data
-                                 (:created-at-filter settings)))
-          visible-node-ids (when filtered-graph-data
-                             (set (map :id (:nodes filtered-graph-data))))
-          background-visible-node-ids (when filtered-graph-data
-                                        (set (map :id (:nodes filtered-graph-data))))]
+                                 (:created-at-filter canvas-settings)))
+          visible-node-ids (graph-visible-node-ids mode-graph-data filtered-graph-data)
+          background-visible-node-ids visible-node-ids]
       (global-graph-content
        {:selected-nodes selected-nodes
         :settings-open? settings-open?
@@ -877,6 +926,7 @@
         :build-error build-error
         :retry! #(set-retry-token! (inc retry-token))
         :mode-graph-data mode-graph-data
+        :canvas-settings canvas-settings
         :visible-node-ids visible-node-ids
         :background-visible-node-ids background-visible-node-ids
         :dark? dark?

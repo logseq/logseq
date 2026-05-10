@@ -1065,14 +1065,16 @@
     (.removeChild parent display)))
 
 (defn- visible-node-id-set
-  [nodes visible-node-ids]
-  (if (some? visible-node-ids)
-    (let [source-id-set (set visible-node-ids)]
-      (->> nodes
-           (filter #(contains? source-id-set (logic/node-source-id %)))
-           (map :id)
-           set))
-    (set (map :id nodes))))
+  ([nodes visible-node-ids]
+   (visible-node-id-set nodes (set (map :id nodes)) visible-node-ids))
+  ([nodes all-node-id-set visible-node-ids]
+   (if (some? visible-node-ids)
+     (let [source-id-set (set visible-node-ids)]
+       (->> nodes
+            (filter #(contains? source-id-set (logic/node-source-id %)))
+            (map :id)
+            set))
+     all-node-id-set)))
 
 (defn- visible-node?
   [visible-node-ids* node]
@@ -1606,9 +1608,13 @@
                                              :grid-layout? grid-layout?}))
         display-links* (atom (logic/display-links links @layouted-nodes*))
         all-node-id-set (set (map :id @layouted-nodes*))
-        visible-node-ids* (atom (visible-node-id-set @layouted-nodes* visible-node-ids))
+        visible-node-ids* (atom (visible-node-id-set
+                                 @layouted-nodes*
+                                 all-node-id-set
+                                 visible-node-ids))
         background-visible-node-ids* (atom (visible-node-id-set
                                             @layouted-nodes*
+                                            all-node-id-set
                                             (or background-visible-node-ids
                                                 visible-node-ids)))
         node-index-by-id (into {} (map-indexed (fn [idx node] [(:id node) idx]) @layouted-nodes*))
@@ -2171,11 +2177,13 @@
                              (let [next-visible-node-ids (if (some? next-visible-node-ids)
                                                            (visible-node-id-set
                                                             @layouted-nodes*
+                                                            all-node-id-set
                                                             next-visible-node-ids)
                                                            all-node-id-set)
                                    next-background-visible-node-ids (if (some? next-background-visible-node-ids)
                                                                       (visible-node-id-set
                                                                        @layouted-nodes*
+                                                                       all-node-id-set
                                                                        next-background-visible-node-ids)
                                                                       next-visible-node-ids)]
                                (when (or (not= next-visible-node-ids @visible-node-ids*)

@@ -30,17 +30,47 @@
 
 (defn- schedule-render-container!
   [container opts]
-  (let [timeout-id (js/setTimeout #(pixi/render-container! container opts) 0)]
-    #(js/clearTimeout timeout-id)))
+  (let [animation-frame-id* (atom nil)
+        timeout-id* (atom nil)
+        render! #(reset! timeout-id*
+                         (js/setTimeout
+                          (fn []
+                            (reset! timeout-id* nil)
+                            (pixi/render-container! container opts))
+                          0))]
+    (if (exists? js/requestAnimationFrame)
+      (reset! animation-frame-id*
+              (js/requestAnimationFrame
+               (fn []
+                 (reset! animation-frame-id* nil)
+                 (render!))))
+      (render!))
+    (fn []
+      (when-let [animation-frame-id @animation-frame-id*]
+        (js/cancelAnimationFrame animation-frame-id))
+      (when-let [timeout-id @timeout-id*]
+        (js/clearTimeout timeout-id)))))
 
 (rum/defc graph-2d
   [opts]
-  (let [container-ref (hooks/use-ref nil)]
+  (let [container-ref (hooks/use-ref nil)
+        render-pending-ref (hooks/use-ref false)
+        incremental-update-ready? (fn [container]
+                                    (and container
+                                         (not (hooks/deref render-pending-ref))))]
     (hooks/use-effect!
      (fn []
        (let [container (hooks/deref container-ref)]
          (when container
-           (schedule-render-container! container opts))))
+           (hooks/set-ref! render-pending-ref true)
+           (schedule-render-container!
+            container
+            (assoc opts
+                   :on-rendered
+                   (fn [render-info]
+                     (hooks/set-ref! render-pending-ref false)
+                     (when-let [on-rendered (:on-rendered opts)]
+                       (on-rendered render-info))))))))
      (render-container-deps opts))
     (hooks/use-effect!
      (fn []
@@ -51,26 +81,30 @@
     (hooks/use-effect!
      (fn []
        (when-let [container (hooks/deref container-ref)]
-         (pixi/update-visibility! container
-                                  (:visible-node-ids opts)
-                                  (:background-visible-node-ids opts))))
+         (when (incremental-update-ready? container)
+           (pixi/update-visibility! container
+                                    (:visible-node-ids opts)
+                                    (:background-visible-node-ids opts)))))
      [(:visible-node-ids opts) (:background-visible-node-ids opts)])
     (hooks/use-effect!
      (fn []
        (when-let [container (hooks/deref container-ref)]
-         (pixi/update-depth! container (:depth opts))))
+         (when (incremental-update-ready? container)
+           (pixi/update-depth! container (:depth opts)))))
      [(:depth opts)])
     (hooks/use-effect!
      (fn []
        (when-let [container (hooks/deref container-ref)]
-         (pixi/update-link-distance! container (:link-distance opts))))
+         (when (incremental-update-ready? container)
+           (pixi/update-link-distance! container (:link-distance opts)))))
      [(:link-distance opts)])
     (hooks/use-effect!
      (fn []
        (when-let [container (hooks/deref container-ref)]
-         (pixi/update-edge-display! container
-                                    (:show-arrows? opts)
-                                    (:show-edge-labels? opts))))
+         (when (incremental-update-ready? container)
+           (pixi/update-edge-display! container
+                                      (:show-arrows? opts)
+                                      (:show-edge-labels? opts)))))
      [(:show-arrows? opts) (:show-edge-labels? opts)])
     [:div.graph-canvas
      {:ref container-ref
