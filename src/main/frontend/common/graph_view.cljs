@@ -7,6 +7,7 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (defn- build-links
@@ -87,6 +88,19 @@
              (transient {})
              (datoms-for db :avet attr)))))
 
+(defn- entity-value-map-by-id
+  [db attr ids]
+  (if (empty? ids)
+    {}
+    (persistent!
+     (reduce
+      (fn [m id]
+        (if-let [value (:v (first (d/datoms db :eavt id attr)))]
+          (assoc! m id value)
+          m))
+      (transient {})
+      ids))))
+
 (defn- entity-display-title
   [entity]
   (let [title (:block/title entity)]
@@ -99,15 +113,28 @@
       (string/replace #"#?\[\[([^\]]+)\]\]" "$1"))))
 
 (defn- entity-title-map
-  [db ids]
-  (persistent!
-   (reduce
-    (fn [m id]
-      (if-let [title (some-> (d/entity db id) entity-display-title)]
-        (assoc! m id title)
-        m))
-    (transient {})
-    ids)))
+  ([db ids]
+   (entity-title-map db ids true))
+  ([db ids normalize-id-refs?]
+   (persistent!
+    (reduce
+     (fn [m {:keys [db/id block/title]}]
+       (let [contains-ref? (and (string? title)
+                                (string/includes? title "[["))
+             title (if (and normalize-id-refs?
+                            contains-ref?
+                            (re-find db-content/id-ref-pattern title))
+                     (or (some-> (d/entity db id)
+                                 (db-content/recur-replace-uuid-in-block-title 10))
+                         title)
+                     title)]
+         (if (some? title)
+           (assoc! m id (cond-> title
+                          contains-ref?
+                          (string/replace #"#?\[\[([^\]]+)\]\]" "$1")))
+           m)))
+     (transient {})
+     (d/pull-many db [:db/id :block/title] ids)))))
 
 (defn- entity-id-subset-with
   [db attr ids]
@@ -140,17 +167,22 @@
       (assoc :icon icon))))
 
 (defn- build-node-context
-  [db node-ids]
-  (let [title-by-id (entity-title-map db node-ids)
+  ([db node-ids]
+   (build-node-context db node-ids true))
+  ([db node-ids normalize-id-refs?]
+   (let [title-by-id (entity-title-map db node-ids normalize-id-refs?)
         title-missing-ids (set/difference node-ids (set (keys title-by-id)))
         name-by-id (if (empty? title-missing-ids)
                      {}
-                     (entity-value-map db :block/name title-missing-ids))]
+                     (entity-value-map db :block/name title-missing-ids))
+        uuid-by-id (entity-value-map db :block/uuid node-ids)
+        icon-by-id (entity-value-map db :logseq.property/icon node-ids)
+        created-at-by-id (entity-value-map db :block/created-at node-ids)]
     {:title-by-id title-by-id
      :name-by-id name-by-id
-     :uuid-by-id (entity-value-map db :block/uuid node-ids)
-     :icon-by-id (entity-value-map db :logseq.property/icon node-ids)
-     :created-at-by-id (entity-value-map db :block/created-at node-ids)}))
+     :uuid-by-id uuid-by-id
+     :icon-by-id icon-by-id
+     :created-at-by-id created-at-by-id})))
 
 (defn- hidden-or-recycled?
   [entity]
@@ -245,6 +277,19 @@
     :entity
     entity-id))
 
+(defn- graph-link-node-id-map
+  [db mode entity-ids node-id-set]
+  (case mode
+    :entity
+    (into {} (map (juxt identity identity)) entity-ids)
+
+    :page
+    (let [direct-page-ids (set/intersection (set entity-ids) node-id-set)
+          child-ids (set/difference (set entity-ids) direct-page-ids)
+          page-by-child-id (entity-value-map db :block/page child-ids)]
+      (merge (into {} (map (juxt identity identity)) direct-page-ids)
+             page-by-child-id))))
+
 (defn- property-link-title
   [db property-ident]
   (or (some-> (d/entity db property-ident) :block/title)
@@ -263,22 +308,33 @@
 
 (defn- property-ref-link-tuples
   [db node-id-set source-mode target-mode]
-  (let [node-id-set (set node-id-set)]
-    (->> (ref-property-idents db)
-         (mapcat
-          (fn [property-ident]
-            (let [label (property-link-title db property-ident)]
-              (keep
-               (fn [{source-entity-id :e target-entity-id :v}]
-                 (let [source-id (graph-link-node-id db source-mode source-entity-id)
-                       target-id (graph-link-node-id db target-mode target-entity-id)]
+  (let [node-id-set (set node-id-set)
+        raw-links (->> (ref-property-idents db)
+                       (mapcat
+                        (fn [property-ident]
+                          (let [label (property-link-title db property-ident)]
+                            (map (fn [{source-entity-id :e target-entity-id :v}]
+                                   [source-entity-id target-entity-id label])
+                                 (datoms-for db :avet property-ident)))))
+                       vec)
+        source-id-by-entity-id (graph-link-node-id-map db
+                                                       source-mode
+                                                       (map first raw-links)
+                                                       node-id-set)
+        target-id-by-entity-id (graph-link-node-id-map db
+                                                       target-mode
+                                                       (map second raw-links)
+                                                       node-id-set)]
+    (->> raw-links
+         (keep (fn [[source-entity-id target-entity-id label]]
+                 (let [source-id (get source-id-by-entity-id source-entity-id)
+                       target-id (get target-id-by-entity-id target-entity-id)]
                    (when (and source-id
                               target-id
                               (not= source-id target-id)
                               (contains? node-id-set source-id)
                               (contains? node-id-set target-id))
-                     [source-id target-id label])))
-               (datoms-for db :avet property-ident)))))
+                     [source-id target-id label]))))
          distinct
          vec)))
 
@@ -340,8 +396,8 @@
                            vec)
             object-id-set (set (map first tag-links))
             node-ids (set/union tag-id-set object-id-set)
-            context (build-node-context db node-ids)
             page-ids (entity-id-subset-with db :block/name object-id-set)
+            context (build-node-context db node-ids false)
             tags (mapv #(scalar-node context % "tag" true) tag-id-set)
             objects (mapv #(scalar-node context % "object" (contains? page-ids %))
                           object-id-set)
@@ -462,17 +518,19 @@
 
 (defn- page-relation-links
   [db with-journal? page-id->tag-idents]
-  (keep
-   (fn [{block-id :e ref-page-id :v}]
-     (let [block (d/entity db block-id)
-           page (:block/page block)
-           page-id (:db/id page)]
-       (when (and page
-                  (or with-journal?
-                      (not (contains? (get page-id->tag-idents page-id)
-                                      :logseq.class/Journal))))
-         [page-id ref-page-id])))
-   (d/datoms db :avet :block/refs)))
+  (let [ref-datoms (vec (d/datoms db :avet :block/refs))
+        page-id-by-block-id (entity-value-map db
+                                              :block/page
+                                              (set (map :e ref-datoms)))]
+    (keep
+     (fn [{block-id :e ref-page-id :v}]
+       (let [page-id (get page-id-by-block-id block-id)]
+         (when (and page-id
+                    (or with-journal?
+                        (not (contains? (get page-id->tag-idents page-id)
+                                        :logseq.class/Journal))))
+           [page-id ref-page-id])))
+     ref-datoms)))
 
 (defn- property-page?
   [tag-idents]
@@ -671,54 +729,90 @@
                                    name-datoms)
       (let [dark? (dark-theme? theme)
             orphan-pages? (show-orphan-pages? orphan-pages?)
-            full-pages (vec (ldb/get-all-pages db))
-            page-id-set (set (map :db/id full-pages))
+            name-page-ids (set (map :e name-datoms))
+            hidden-name-page-ids (set/union (entity-ids-with db :logseq.property/hide? true)
+                                            (entity-ids-with db :logseq.property/deleted-at))
+            ident-by-name-page-id (entity-value-map-by-id db :db/ident name-page-ids)
+            name-datoms (vec (remove (fn [{page-id :e}]
+                                       (or (contains? hidden-name-page-ids page-id)
+                                           (contains? db-class/internal-tags
+                                                      (get ident-by-name-page-id page-id))))
+                                     name-datoms))
+            page-id-set (set (map :e name-datoms))
+            title-by-id (entity-title-map db page-id-set)
+            uuid-by-id (entity-value-map db :block/uuid page-id-set)
+            icon-by-id (entity-value-map db :logseq.property/icon page-id-set)
+            created-at-by-id (entity-value-map db :block/created-at page-id-set)
             tagged-pages (vec (page-tag-links (tagged-page-links db) page-id-set))
             rendered-tagged-pages (vec (rendered-page-tag-links tagged-pages page-id-set))
             property-link-tuples (property-ref-link-tuples db page-id-set :page :page)
             tag-id->ident (tag-ident-by-id db (set (map second tagged-pages)))
             page-id->tag-idents (build-page-id->tag-idents tagged-pages tag-id->ident)
             relation (page-relation-links db journal? page-id->tag-idents)
-            tags (set (map second rendered-tagged-pages))
-            created-ats (keep :block/created-at full-pages)
             links (concat relation rendered-tagged-pages property-link-tuples)
             linked (set (mapcat (juxt first second) links))
             build-in-pages (->> sqlite-create-graph/built-in-pages-names
                                 (map string/lower-case)
                                 set)
+            excluded-page-ids (entity-ids-with db :logseq.property/exclude-from-graph-view true)
+            visible-page-id? (fn [page-id page-name tag-idents linked-page-ids]
+                               (and (not (contains? hidden-name-page-ids page-id))
+                                    (not (property-page? tag-idents))
+                                    (or journal?
+                                        (not (contains? tag-idents :logseq.class/Journal)))
+                                    (or excluded-pages?
+                                        (not (contains? excluded-page-ids page-id)))
+                                    (or builtin-pages?
+                                        (not (contains? build-in-pages page-name)))
+                                    (or orphan-pages?
+                                        (contains? linked-page-ids page-id))))
             links (map (fn [[x y label]] [(str x) (str y) label]) links)
             page-links (reduce (fn [m [k v]] (-> (update m k inc)
                                                  (update v inc))) {} links)
             links (build-links links)
+            created-ats (vals created-at-by-id)
             created-at-min (if (seq created-ats) (apply min created-ats) 0)
             created-at-max (if (seq created-ats) (apply max created-ats) 0)
             created-at-cutoff (when created-at-filter
                                 (+ created-at-min created-at-filter))
             nodes (reduce
-                   (fn [nodes page]
-                     (let [tag-idents (get page-id->tag-idents (:db/id page) #{})]
+                   (fn [nodes {page-id :e page-name :v}]
+                     (let [created-at (get created-at-by-id page-id)
+                           tag-idents (get page-id->tag-idents page-id #{})]
                        (if (or (and created-at-cutoff
-                                    (> (:block/created-at page) created-at-cutoff))
-                               (not (all-pages-visible-page?
-                                     {:journal? journal?
-                                      :orphan-pages? orphan-pages?
-                                      :builtin-pages? builtin-pages?
-                                      :excluded-pages? excluded-pages?
-                                      :build-in-pages build-in-pages
-                                      :linked-page-ids linked}
-                                     page
-                                     tag-idents)))
+                                    created-at
+                                    (> created-at created-at-cutoff))
+                               (not (visible-page-id?
+                                     page-id
+                                     page-name
+                                     tag-idents
+                                     linked)))
                          nodes
-                         (if-let [node (build-page-node dark?
-                                                        nil
-                                                        page-links
-                                                        tags
-                                                        page
-                                                        tag-idents)]
-                           (conj nodes node)
-                           nodes))))
+                         (let [page-title (get title-by-id page-id page-name)]
+                           (if (some? page-title)
+                             (let [kind (page-kind tag-idents)
+                                   color (page-graph-node-color dark? kind false)
+                                   n (get page-links (str page-id) 1)
+                                   size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
+                               (conj nodes
+                                     (cond->
+                                      {:id (str page-id)
+                                       :db-id page-id
+                                       :uuid (some-> (get uuid-by-id page-id) str)
+                                       :page? true
+                                       :label page-title
+                                       :kind kind
+                                       :size size
+                                       :color color
+                                       :block/created-at created-at}
+                                       (nil? created-at)
+                                       (dissoc :block/created-at)
+
+                                       (contains? icon-by-id page-id)
+                                       (assoc :icon (get icon-by-id page-id)))))
+                             nodes)))))
                    []
-                   full-pages)]
+                   name-datoms)]
         (-> {:nodes nodes
              :links links}
             normalize-page-name
