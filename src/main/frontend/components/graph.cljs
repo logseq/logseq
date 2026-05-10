@@ -282,6 +282,12 @@
                 (disj open-groups group-id)
                 (conj open-groups group-id))))))
 
+(defn- settings-close-group
+  [settings group-id]
+  (update settings :open-groups
+          (fn [open-groups]
+            (disj (or open-groups #{}) group-id))))
+
 (defn- settings-group
   [{:keys [settings set-settings! id title meta children]}]
   (let [open? (contains? (:open-groups settings) id)]
@@ -294,11 +300,12 @@
       [:span.graph-settings-group-title
        [:span.graph-settings-group-chevron
         (ui/icon "chevron-right" {:size 16})]
-       [:span title]]
+      [:span title]]
       (when meta
         [:span.graph-settings-group-meta meta])]
-     [:div.graph-settings-group-body
-      [:div.graph-settings-group-body-inner children]]]))
+     (when open?
+       [:div.graph-settings-group-body
+        [:div.graph-settings-group-body-inner children]])]))
 
 (defn- view-mode-tab-label
   [label loading?]
@@ -853,7 +860,10 @@
         switch-view-mode! (fn [mode]
                             (when (not= mode view-mode)
                               (set-selected-nodes! [])
-                              (set-settings! (assoc settings :view-mode mode))))]
+                              (set-settings! (fn [settings]
+                                               (-> settings
+                                                   (assoc :view-mode mode)
+                                                   (settings-close-group :displayed-tags))))))]
     (use-global-graph-effects!
      {:repo repo :theme theme :view-mode view-mode :retry-token retry-token
       :settings settings :settings-state settings-state :graph-data-by-mode graph-data-by-mode
