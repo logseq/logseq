@@ -610,26 +610,26 @@
      :search ["--content"]}},
    :tags [:upsert :search],
    :extends :non-sync/graph-json-env}
-  {:id "qmd-init-and-qsearch-json",
+  {:id "qmd-and-qsearch-json",
    :setup
-   ["python3 - <<'PY'\nimport base64, pathlib\np = pathlib.Path('{{tmp-dir}}/fake-bin/qmd')\np.parent.mkdir(parents=True, exist_ok=True)\np.write_bytes(base64.b64decode('IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwppbXBvcnQganNvbgppbXBvcnQgb3MKaW1wb3J0IHBhdGhsaWIKaW1wb3J0IHJlCmltcG9ydCBzeXMKCmFyZ3MgPSBzeXMuYXJndlsxOl0Kc3RhdGUgPSBwYXRobGliLlBhdGgob3MuZW52aXJvblsnUU1EX0ZBS0VfU1RBVEUnXSkKCmlmIGFyZ3MgPT0gWyctLWhlbHAnXToKICAgIHByaW50KCdxbWQgaGVscCcpCiAgICBzeXMuZXhpdCgwKQoKaWYgYXJnc1s6Ml0gPT0gWydjb2xsZWN0aW9uJywgJ3Nob3cnXToKICAgIGlmIG5vdCBzdGF0ZS5leGlzdHMoKToKICAgICAgICBwcmludCgnQ29sbGVjdGlvbiBub3QgZm91bmQnLCBmaWxlPXN5cy5zdGRlcnIpCiAgICAgICAgc3lzLmV4aXQoMSkKICAgIHByaW50KCdDb2xsZWN0aW9uOiAnICsgYXJnc1syXSkKICAgIHByaW50KCcgIFBhdGg6ICAgICAnICsgc3RhdGUucmVhZF90ZXh0KCkuc3RyaXAoKSkKICAgIHByaW50KCcgIFBhdHRlcm46ICAqKi8qLm1kJykKICAgIHN5cy5leGl0KDApCgppZiBhcmdzWzoyXSA9PSBbJ2NvbGxlY3Rpb24nLCAnYWRkJ106CiAgICBzdGF0ZS53cml0ZV90ZXh0KGFyZ3NbMl0pCiAgICBwcmludCgnY3JlYXRlZCcpCiAgICBzeXMuZXhpdCgwKQoKaWYgYXJnc1s6MV0gPT0gWyd1cGRhdGUnXToKICAgIHByaW50KCd1cGRhdGVkJykKICAgIHN5cy5leGl0KDApCgppZiBhcmdzWzoxXSA9PSBbJ3F1ZXJ5J106CiAgICByb290ID0gcGF0aGxpYi5QYXRoKHN0YXRlLnJlYWRfdGV4dCgpLnN0cmlwKCkpCiAgICByb3dzID0gW10KICAgIGZvciBwYXRoIGluIHJvb3Qucmdsb2IoJyoubWQnKToKICAgICAgICB0ZXh0ID0gcGF0aC5yZWFkX3RleHQoZW5jb2Rpbmc9J3V0ZjgnKQogICAgICAgIG1hdGNoID0gcmUuc2VhcmNoKHInPCEtLSBpZDogKFxkKykgLS0+JywgdGV4dCkKICAgICAgICBpZiBtYXRjaDoKICAgICAgICAgICAgcm93cy5hcHBlbmQoewogICAgICAgICAgICAgICAgJ3Njb3JlJzogMSwKICAgICAgICAgICAgICAgICdmaWxlJzogJ3FtZDovL2N1c3RvbS8nICsgcGF0aC5uYW1lLAogICAgICAgICAgICAgICAgJ3NuaXBwZXQnOiAnLSBxbWQgdGFyZ2V0IDwhLS0gaWQ6ICcgKyBtYXRjaC5ncm91cCgxKSArICcgLS0+JywKICAgICAgICAgICAgfSkKICAgICAgICAgICAgYnJlYWsKICAgIHByaW50KGpzb24uZHVtcHMocm93cykpCiAgICBzeXMuZXhpdCgwKQoKcHJpbnQoJ3VuZXhwZWN0ZWQgYXJnczogJyArIHJlcHIoYXJncyksIGZpbGU9c3lzLnN0ZGVycikKc3lzLmV4aXQoMikK'))\np.chmod(0o755)\nPY"
+   ["python3 - <<'PY'\nimport base64, pathlib\np = pathlib.Path('{{tmp-dir}}/fake-bin/qmd')\np.parent.mkdir(parents=True, exist_ok=True)\np.write_bytes(base64.b64decode('IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwppbXBvcnQganNvbgppbXBvcnQgb3MKaW1wb3J0IHBhdGhsaWIKaW1wb3J0IHJlCmltcG9ydCBzeXMKCmFyZ3MgPSBzeXMuYXJndlsxOl0Kc3RhdGUgPSBwYXRobGliLlBhdGgob3MuZW52aXJvblsnUU1EX0ZBS0VfU1RBVEUnXSkKCmlmIGFyZ3MgPT0gWyctLWhlbHAnXToKICAgIHByaW50KCdxbWQgaGVscCcpCiAgICBzeXMuZXhpdCgwKQoKaWYgYXJnc1s6Ml0gPT0gWydjb2xsZWN0aW9uJywgJ3Nob3cnXToKICAgIGlmIG5vdCBzdGF0ZS5leGlzdHMoKToKICAgICAgICBwcmludCgnQ29sbGVjdGlvbiBub3QgZm91bmQnLCBmaWxlPXN5cy5zdGRlcnIpCiAgICAgICAgc3lzLmV4aXQoMSkKICAgIHByaW50KCdDb2xsZWN0aW9uOiAnICsgYXJnc1syXSkKICAgIHByaW50KCcgIFBhdGg6ICAgICAnICsgc3RhdGUucmVhZF90ZXh0KCkuc3RyaXAoKSkKICAgIHByaW50KCcgIFBhdHRlcm46ICAqKi8qLm1kJykKICAgIHN5cy5leGl0KDApCgppZiBhcmdzWzoyXSA9PSBbJ2NvbGxlY3Rpb24nLCAnYWRkJ106CiAgICBzdGF0ZS53cml0ZV90ZXh0KGFyZ3NbMl0pCiAgICBwcmludCgnY3JlYXRlZCcpCiAgICBzeXMuZXhpdCgwKQoKaWYgYXJnc1s6MV0gPT0gWydlbWJlZCddOgogICAgcHJpbnQoJ2VtYmVkZGVkJykKICAgIHN5cy5leGl0KDApCgppZiBhcmdzWzoxXSA9PSBbJ3VwZGF0ZSddOgogICAgcHJpbnQoJ3VwZGF0ZWQnKQogICAgc3lzLmV4aXQoMCkKCmlmIGFyZ3NbOjFdID09IFsncXVlcnknXToKICAgIHJvb3QgPSBwYXRobGliLlBhdGgoc3RhdGUucmVhZF90ZXh0KCkuc3RyaXAoKSkKICAgIHJvd3MgPSBbXQogICAgZm9yIHBhdGggaW4gcm9vdC5yZ2xvYignKi5tZCcpOgogICAgICAgIHRleHQgPSBwYXRoLnJlYWRfdGV4dChlbmNvZGluZz0ndXRmOCcpCiAgICAgICAgbWF0Y2ggPSByZS5zZWFyY2gocic8IS0tIGlkOiAoXGQrKSAtLT4nLCB0ZXh0KQogICAgICAgIGlmIG1hdGNoOgogICAgICAgICAgICByb3dzLmFwcGVuZCh7CiAgICAgICAgICAgICAgICAnc2NvcmUnOiAxLAogICAgICAgICAgICAgICAgJ2ZpbGUnOiAncW1kOi8vY3VzdG9tLycgKyBwYXRoLm5hbWUsCiAgICAgICAgICAgICAgICAnc25pcHBldCc6ICctIHFtZCB0YXJnZXQgPCEtLSBpZDogJyArIG1hdGNoLmdyb3VwKDEpICsgJyAtLT4nLAogICAgICAgICAgICB9KQogICAgICAgICAgICBicmVhawogICAgcHJpbnQoanNvbi5kdW1wcyhyb3dzKSkKICAgIHN5cy5leGl0KDApCgpwcmludCgndW5leHBlY3RlZCBhcmdzOiAnICsgcmVwcihhcmdzKSwgZmlsZT1zeXMuc3RkZXJyKQpzeXMuZXhpdCgyKQo='))\np.chmod(0o755)\nPY"
     "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page QmdSearchPage --content \"qmd target\" >/dev/null"],
    :cmds
-   ["QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json qmd init --graph {{graph-arg}} --collection custom"
-    "QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json qsearch qmd target --graph {{graph-arg}} --collection custom --no-rerank"],
+   ["QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json qmd --graph {{graph-arg}}"
+    "QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json qsearch qmd target --graph {{graph-arg}} --no-rerank"],
    :expect
    {:exit 0,
     :stdout-json-paths {[:status] "ok"},
     :stdout-contains ["qmd target"]},
    :covers
-   {:commands ["qmd init" "qsearch"],
+   {:commands ["qmd" "qsearch"],
     :options
     {:global ["--config" "--graph" "--root-dir" "--output"],
-     :qmd ["--collection"]
-     :qsearch ["--collection" "--no-rerank"]}},
+     :qmd []
+     :qsearch ["--no-rerank"]}},
    :tags [:qmd :search],
    :extends :non-sync/graph-json-env}
-  {:id "qmd-init-and-qsearch-human-page-groups",
+  {:id "qmd-and-qsearch-human-page-groups",
    :setup
    ["python3 - <<'PY'
 import pathlib
@@ -663,6 +663,10 @@ if args[:2] == ['collection', 'add']:
     print('created')
     sys.exit(0)
 
+if args[:1] == ['embed']:
+    print('embedded')
+    sys.exit(0)
+
 if args[:1] == ['update']:
     print('updated')
     sys.exit(0)
@@ -692,20 +696,20 @@ PY"
     "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name qmd-human-prop --public true >/dev/null"
     "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page QmdHumanPage --content \"qmd target\" --update-tags '[\"QmdHumanTag\"]' --update-properties '{:qmd-human-prop \"rich value\"}' >/dev/null"],
    :cmds
-   ["QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-human-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json qmd init --graph {{graph-arg}} --collection custom >/dev/null"
+   ["QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-human-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json qmd --graph {{graph-arg}} >/dev/null"
     "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json graph switch --graph {{graph-arg}} >/dev/null"
-    "QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-human-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human qsearch qmd target --collection custom --no-rerank"],
+    "QMD_FAKE_STATE={{tmp-dir-arg}}/qmd-human-state PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human qsearch qmd target --no-rerank"],
    :expect
    {:exit 0,
     :stdout-contains ["QmdHumanPage" "qmd target #QmdHumanTag" "qmd-human-prop: rich value" "└──"],
     :stdout-not-contains ["QmdHumanPage (1 match)" "PAGE-TITLE" "Count:"]},
    :covers
-   {:commands ["upsert tag" "upsert property" "qmd init" "graph switch" "qsearch"],
+   {:commands ["upsert tag" "upsert property" "qmd" "graph switch" "qsearch"],
     :options
     {:global ["--config" "--graph" "--root-dir" "--output"],
      :upsert ["--name" "--target-page" "--content" "--update-tags" "--update-properties"],
-     :qmd ["--collection"]
-     :qsearch ["--collection" "--no-rerank"]}},
+     :qmd []
+     :qsearch ["--no-rerank"]}},
    :tags [:qmd :search],
    :extends :non-sync/graph-json-env}
   {:id "search-page-json",

@@ -22,26 +22,21 @@
 (def ^:private qsearch-context-lookback 50)
 (def ^:private qsearch-context-lookahead 10)
 
-(def ^:private qmd-common-spec
-  {:index {:desc "QMD index name"}
-   :collection {:desc "QMD collection name"}})
-
-(def ^:private qmd-init-spec
-  qmd-common-spec)
+(def ^:private qmd-spec
+  {})
 
 (def ^:private qsearch-spec
-  (merge qmd-common-spec
-         {:limit {:desc "Limit results"
-                  :alias :n
-                  :coerce :long}
-          :no-rerank {:desc "Skip QMD reranking"
-                      :coerce :boolean}}))
+  {:limit {:desc "Limit results"
+           :alias :n
+           :coerce :long}
+   :no-rerank {:desc "Skip QMD reranking"
+               :coerce :boolean}})
 
 (def entries
-  [(core/command-entry ["qmd" "init"] :qmd-init
+  [(core/command-entry ["qmd"] :qmd
                        "Initialize QMD for the graph Markdown Mirror"
-                       qmd-init-spec
-                       {:examples ["logseq qmd init --graph my-graph"]})
+                       qmd-spec
+                       {:examples ["logseq qmd --graph my-graph"]})
    (core/command-entry ["qsearch"] :qsearch
                        "Search graph Markdown Mirror with QMD"
                        qsearch-spec
@@ -75,12 +70,6 @@
                   (graph-dir/repo->encoded-graph-dir-name repo)
                   "mirror"
                   "markdown"))
-
-(defn- qmd-args
-  [index args]
-  (cond-> []
-    (seq index) (into ["--index" index])
-    true (into args)))
 
 (defn <run-qmd
   [args]
@@ -124,8 +113,8 @@
             (:out result) (assoc :stdout (:out result)))})
 
 (defn- <ensure-qmd!
-  [index]
-  (p/let [result (<run-qmd (qmd-args index ["--help"]))]
+  []
+  (p/let [result (<run-qmd ["--help"])]
     (if (zero? (:exit result))
       {:ok? true}
       {:ok? false
@@ -155,19 +144,17 @@
   [message result]
   (qmd-error :qmd-command-failed message result))
 
-(defn build-init-action
-  [options repo]
+(defn build-action
+  [_options repo]
   (if-not (seq repo)
     {:ok? false
      :error {:code :missing-repo
-             :message "repo is required for qmd init"}}
+             :message "repo is required for qmd"}}
     {:ok? true
-     :action {:type :qmd-init
+     :action {:type :qmd
               :repo repo
               :graph (core/repo->graph repo)
-              :collection (or (:collection options)
-                              (default-collection-name repo))
-              :index (:index options)}}))
+              :collection (default-collection-name repo)}}))
 
 (defn build-search-action
   [options args repo]
@@ -193,14 +180,54 @@
                 :graph (core/repo->graph repo)
                 :query query
                 :limit (:limit options)
-                :collection (or (:collection options)
-                                (default-collection-name repo))
-                :index (:index options)
+                :collection (default-collection-name repo)
                 :no-rerank (true? (:no-rerank options))}})))
 
-(defn execute-qmd-init
+(defn- collection-show-result->action
+  [action mirror-dir* show-result]
+  (if-let [existing-path (parse-collection-path (:out show-result))]
+    (if (same-path? existing-path mirror-dir*)
+      {:status :ok
+       :collection-action :existing}
+      {:status :error
+       :error {:code :qmd-collection-path-mismatch
+               :message "QMD collection exists for a different path"
+               :collection (:collection action)
+               :expected-path mirror-dir*
+               :actual-path existing-path}})
+    {:status :error
+     :error {:code :qmd-collection-show-invalid
+             :message "Unable to read QMD collection path"
+             :collection (:collection action)}}))
+
+(defn- collection-add-result->action
+  [add-result]
+  (if (zero? (:exit add-result))
+    {:status :ok
+     :collection-action :created}
+    (qmd-command-failed "qmd collection add failed" add-result)))
+
+(defn- <ensure-collection!
+  [action mirror-dir*]
+  (p/let [show-result (<run-qmd ["collection" "show" (:collection action)])]
+    (if (zero? (:exit show-result))
+      (collection-show-result->action action mirror-dir* show-result)
+      (p/let [add-result (<run-qmd ["collection" "add" mirror-dir*
+                                    "--name" (:collection action)
+                                    "--mask" markdown-glob])]
+        (collection-add-result->action add-result)))))
+
+(defn- <run-qmd-step!
+  [args message data-key]
+  (p/let [result (<run-qmd args)]
+    (if (zero? (:exit result))
+      {:status :ok
+       data-key :completed}
+      (qmd-command-failed message result))))
+
+(defn execute-qmd
   [action config]
-  (p/let [qmd-check (<ensure-qmd! (:index action))]
+  (p/let [qmd-check (<ensure-qmd!)]
     (if-not (:ok? qmd-check)
       (qmd-error :qmd-not-found
                  "qmd executable is required"
@@ -208,40 +235,27 @@
       (p/let [cfg (cli-server/ensure-server! config (:repo action))
               _ (transport/invoke cfg :thread-api/markdown-mirror-regenerate [(:repo action)])
               mirror-dir* (mirror-dir cfg (:repo action))
-              show-result (<run-qmd (qmd-args (:index action)
-                                              ["collection" "show" (:collection action)]))]
-        (if (zero? (:exit show-result))
-          (if-let [existing-path (parse-collection-path (:out show-result))]
-            (if (same-path? existing-path mirror-dir*)
-              (p/let [update-result (<run-qmd (qmd-args (:index action) ["update"]))]
-                (if (zero? (:exit update-result))
+              collection-result (<ensure-collection! action mirror-dir*)]
+        (if (= :error (:status collection-result))
+          collection-result
+          (p/let [embed-result (<run-qmd-step! ["embed"]
+                                               "qmd embed failed"
+                                               :embed)]
+            (if (= :error (:status embed-result))
+              embed-result
+              (p/let [update-result (<run-qmd-step! ["update"]
+                                                    "qmd update failed"
+                                                    :update)]
+                (if (= :error (:status update-result))
+                  update-result
                   {:status :ok
                    :data {:repo (:repo action)
                           :collection (:collection action)
                           :mirror-dir mirror-dir*
-                          :action :updated}}
-                  (qmd-command-failed "qmd update failed" update-result)))
-              {:status :error
-               :error {:code :qmd-collection-path-mismatch
-                       :message "QMD collection exists for a different path"
-                       :collection (:collection action)
-                       :expected-path mirror-dir*
-                       :actual-path existing-path}})
-            {:status :error
-             :error {:code :qmd-collection-show-invalid
-                     :message "Unable to read QMD collection path"
-                     :collection (:collection action)}})
-          (p/let [add-result (<run-qmd (qmd-args (:index action)
-                                                 ["collection" "add" mirror-dir*
-                                                  "--name" (:collection action)
-                                                  "--mask" markdown-glob]))]
-            (if (zero? (:exit add-result))
-              {:status :ok
-               :data {:repo (:repo action)
-                      :collection (:collection action)
-                      :mirror-dir mirror-dir*
-                      :action :created}}
-              (qmd-command-failed "qmd collection add failed" add-result))))))))
+                          :qmd-installed? true
+                          :collection-action (:collection-action collection-result)
+                          :embed (:embed embed-result)
+                          :update (:update update-result)}})))))))))
 
 (defn parse-qmd-json-output
   [output]
@@ -360,12 +374,11 @@
       snippet)))
 
 (defn- qmd-get-args
-  [action file start-line line-count]
-  (qmd-args (:index action)
-            ["get" (str file ":" start-line) "-l" (str line-count)]))
+  [file start-line line-count]
+  ["get" (str file ":" start-line) "-l" (str line-count)])
 
 (defn- <expand-qmd-result-snippet
-  [action result]
+  [_action result]
   (let [file (:file result)
         line (qmd-result-line result)
         snippet (:snippet result)]
@@ -380,7 +393,7 @@
                           snippet-line-count
                           qsearch-context-lookahead)]
         (p/catch
-         (p/let [get-result (<run-qmd (qmd-get-args action file start-line line-count))]
+         (p/let [get-result (<run-qmd (qmd-get-args file start-line line-count))]
            (if (zero? (:exit get-result))
              (assoc result :snippet (expanded-snippet result (:out get-result)))
              result))
@@ -441,7 +454,6 @@
             :data {:items items
                    :missing-ids missing-ids
                    :qmd {:collection (:collection action)
-                         :index (:index action)
                          :result-count result-count}}}
      human-data (assoc :human {:qsearch human-data}))))
 
@@ -467,8 +479,8 @@
                    :items []}))))
 
 (defn- qsearch-args
-  [{:keys [query collection limit no-rerank index]}]
-  (cond-> (qmd-args index ["query" query "--json" "-c" collection])
+  [{:keys [query collection limit no-rerank]}]
+  (cond-> ["query" query "--json" "-c" collection]
     limit (into ["-n" (str limit)])
     no-rerank (conj "--no-rerank")))
 
@@ -491,7 +503,7 @@
                 {:status :error
                  :error {:code :qmd-no-block-ids
                          :message "QMD results did not include Markdown Mirror block ids"
-                         :hint "Run `logseq qmd init [--graph <graph>]` and retry"}}
+                         :hint "Run `logseq qmd [--graph <graph>]` and retry"}}
 
                 :else
                 (let [result-by-id (qmd-result-by-id results)]
