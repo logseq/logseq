@@ -261,6 +261,88 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest page-mirror-preserves-numbered-list-markers-status-and-tags-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Ordered"}
+                                     :blocks [{:block/title "first"
+                                               :build/tags [:Project]
+                                               :build/properties {:logseq.property/status :logseq.property/status.todo
+                                                                  :logseq.property/order-list-type "number"}
+                                               :build/children [{:block/title "child"}]}
+                                              {:block/title "second"
+                                               :build/properties {:logseq.property/order-list-type "number"}}]}]})
+          page (db-test/find-page-by-title @conn "Ordered")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Ordered.md"))]
+                      (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                  "1. TODO first #Project\n"
+                                  "  - child\n"
+                                  "2. second")
+                             content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-does-not-treat-numbered-content-lines-as-blocks-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Numbered Content"}
+                                     :blocks [{:block/title "intro\n1. continuation"
+                                               :build/tags [:Project]}
+                                              {:block/title "1. code line"
+                                               :build/tags [:Snippet]
+                                               :build/properties {:logseq.property.node/display-type :code}}
+                                              {:block/title "second"
+                                               :build/tags [:Next]
+                                               :build/properties {:logseq.property/status :logseq.property/status.todo}}]}]})
+          page (db-test/find-page-by-title @conn "Numbered Content")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Numbered Content.md"))]
+                      (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                  "- intro #Project\n"
+                                  "  1. continuation\n"
+                                  "- ``` #Snippet\n"
+                                  "  1. code line\n"
+                                  "  ```\n"
+                                  "- TODO second #Next")
+                             content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-renders-embedded-node-content-and-tags-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          target-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Source"}
+                                     :blocks [{:block/title ""
+                                               :block/uuid embed-uuid
+                                               :build/keep-uuid? true}]}
+                                    {:page {:block/title "Target Page"}
+                                     :blocks [{:block/title "Target"
+                                               :block/uuid target-uuid
+                                               :build/keep-uuid? true
+                                               :build/tags [:Project]
+                                               :build/children [{:block/title "Target child"}]}]}]})
+          embed-eid (:db/id (d/entity @conn [:block/uuid embed-uuid]))
+          target-eid (:db/id (d/entity @conn [:block/uuid target-uuid]))
+          _ (d/transact! conn [{:db/id embed-eid :block/link target-eid}])
+          page (db-test/find-page-by-title @conn "Source")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Source.md"))]
+                      (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                  "- Target #Project\n"
+                                  "  - Target child")
+                             content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest page-mirror-exports-page-property-values-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
