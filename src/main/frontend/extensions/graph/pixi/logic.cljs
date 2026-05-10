@@ -454,22 +454,24 @@
              m))
          {}
          layouted-nodes)]
-    (keep
-     (fn [{:keys [source target] :as link}]
-       (cond
-         (contains? tag-id-set target)
-         (when-let [source-id (or (get display-id-by-source-and-cluster [source target])
-                                  (when (contains? node-id-set source) source))]
-           (assoc link :source source-id :target target))
+    (into
+     []
+     (keep
+      (fn [{:keys [source target] :as link}]
+        (cond
+          (contains? tag-id-set target)
+          (when-let [source-id (or (get display-id-by-source-and-cluster [source target])
+                                   (when (contains? node-id-set source) source))]
+            (assoc link :source source-id :target target))
 
-         (contains? tag-id-set source)
-         (when-let [target-id (or (get display-id-by-source-and-cluster [target source])
-                                  (when (contains? node-id-set target) target))]
-           (assoc link :source source :target target-id))
+          (contains? tag-id-set source)
+          (when-let [target-id (or (get display-id-by-source-and-cluster [target source])
+                                   (when (contains? node-id-set target) target))]
+            (assoc link :source source :target target-id))
 
-         (and (contains? node-id-set source)
-              (contains? node-id-set target))
-         link))
+          (and (contains? node-id-set source)
+               (contains? node-id-set target))
+          link)))
      links)))
 
 (defn- node-radius
@@ -556,6 +558,10 @@
 
 (def large-graph-render-node-limit 12000)
 
+(def all-pages-large-graph-draw-edge-limit 3600)
+
+(def all-pages-large-graph-render-node-limit 2200)
+
 (def regular-graph-draw-edge-limit 28000)
 
 (def ^:private tag-force-node-limit 900)
@@ -570,18 +576,38 @@
       :fast
       :force)))
 
+(defn- large-graph-threshold
+  [view-mode]
+  (if (= (normalize-view-mode view-mode) :all-pages)
+    all-pages-fast-layout-threshold
+    large-graph-fast-layout-threshold))
+
 (defn draw-edge-limit
-  [node-count link-count _view-mode]
+  [node-count link-count view-mode]
   (min link-count
-       (if (>= node-count large-graph-fast-layout-threshold)
+       (cond
+         (and (= (normalize-view-mode view-mode) :all-pages)
+              (>= node-count (large-graph-threshold view-mode)))
+         all-pages-large-graph-draw-edge-limit
+
+         (>= node-count (large-graph-threshold view-mode))
          large-graph-draw-edge-limit
+
+         :else
          regular-graph-draw-edge-limit)))
 
 (defn render-node-limit
-  [node-count _view-mode]
+  [node-count view-mode]
   (min node-count
-       (if (>= node-count large-graph-fast-layout-threshold)
+       (cond
+         (and (= (normalize-view-mode view-mode) :all-pages)
+              (>= node-count (large-graph-threshold view-mode)))
+         all-pages-large-graph-render-node-limit
+
+         (>= node-count (large-graph-threshold view-mode))
          large-graph-render-node-limit
+
+         :else
          node-count)))
 
 (defn- point-cross

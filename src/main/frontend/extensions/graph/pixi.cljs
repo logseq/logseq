@@ -1606,7 +1606,13 @@
                                             dark?
                                             {:link-distance link-distance
                                              :grid-layout? grid-layout?}))
-        display-links* (atom (logic/display-links links @layouted-nodes*))
+        scene-link-limit (logic/draw-edge-limit (count @layouted-nodes*)
+                                                (count links)
+                                                view-mode)
+        scene-links (if (> (count links) scene-link-limit)
+                      (take scene-link-limit links)
+                      links)
+        display-links* (atom (logic/display-links scene-links @layouted-nodes*))
         all-node-id-set (set (map :id @layouted-nodes*))
         visible-node-ids* (atom (visible-node-id-set
                                  @layouted-nodes*
@@ -1822,7 +1828,7 @@
                                     (reset! layouted-nodes* next-layouted-nodes)
                                     (reset! layout-by-id*
                                             (into {} (map (fn [node] [(:id node) node]) next-layouted-nodes)))
-                                    (reset! display-links* (logic/display-links links next-layouted-nodes))
+                                    (reset! display-links* (logic/display-links scene-links next-layouted-nodes))
                                     (reset! tag-node-index*
                                             (index-layouted-nodes
                                              (filter #(and (visible-node? visible-node-ids* %)
