@@ -257,6 +257,12 @@
             (js->clj parsed :keywordize-keys true)
             (recur (string/index-of output "[" (inc start)))))))))
 
+(defn- qmd-json-parse-failed
+  [result]
+  (qmd-error :qmd-json-parse-failed
+             "Unable to parse QMD JSON output"
+             result))
+
 (defn extract-block-ids
   [results]
   (->> (or results [])
@@ -472,39 +478,43 @@
           qmd-result (<run-qmd (qsearch-args action))]
     (if-not (zero? (:exit qmd-result))
       (qmd-command-failed "qmd query failed" qmd-result)
-      (let [results (vec (or (parse-qmd-json-output (:out qmd-result)) []))
-            result-count (count results)]
-        (p/let [results (<expand-qmd-result-snippets action results)]
-          (let [ids (extract-block-ids results)]
-            (cond
-              (empty? results)
-              (qsearch-ok-data action 0 [] [])
+      (if-let [parsed-results (parse-qmd-json-output (:out qmd-result))]
+        (let [results (vec parsed-results)
+              result-count (count results)]
+          (p/let [results (<expand-qmd-result-snippets action results)]
+            (let [ids (extract-block-ids results)]
+              (cond
+                (empty? results)
+                (qsearch-ok-data action 0 [] [])
 
-              (not (seq ids))
-              {:status :error
-               :error {:code :qmd-no-block-ids
-                       :message "QMD results did not include Markdown Mirror block ids"
-                       :hint "Run `logseq qmd init [--graph <graph>]` and retry"}}
+                (not (seq ids))
+                {:status :error
+                 :error {:code :qmd-no-block-ids
+                         :message "QMD results did not include Markdown Mirror block ids"
+                         :hint "Run `logseq qmd init [--graph <graph>]` and retry"}}
 
-              :else
-              (let [result-by-id (qmd-result-by-id results)]
-                (p/let [entities (p/all
-                                  (map (fn [id]
-                                         (transport/invoke cfg :thread-api/pull
-                                                           [(:repo action) qsearch-pull-selector id]))
-                                       ids))
-                        pairs (mapv vector ids entities)
-                        items (->> pairs
-                                   (keep (fn [[id entity]]
-                                           (when (qsearch-entity-present? entity)
-                                             (normalize-qsearch-item entity
-                                                                     (get result-by-id id)))))
-                                   vec)
-                        missing-ids (->> pairs
-                                         (keep (fn [[id entity]]
-                                                 (when-not (qsearch-entity-present? entity) id)))
-                                         vec)
-                        items (<normalize-qsearch-item-refs cfg (:repo action) items)
-                        human-data (when (human-output? config)
-                                     (<qsearch-human-data cfg action entities))]
-                  (qsearch-ok-data action result-count items missing-ids human-data))))))))))
+                :else
+                (let [result-by-id (qmd-result-by-id results)]
+                  (p/let [entities (p/all
+                                    (map (fn [id]
+                                           (transport/invoke cfg :thread-api/pull
+                                                             [(:repo action) qsearch-pull-selector id]))
+                                         ids))
+                          pairs (mapv vector ids entities)
+                          items (->> pairs
+                                     (keep (fn [[id entity]]
+                                             (when (qsearch-entity-present? entity)
+                                               (normalize-qsearch-item entity
+                                                                       (get result-by-id id)))))
+                                     vec)
+                          missing-ids (->> pairs
+                                           (keep (fn [[id entity]]
+                                                   (when-not (qsearch-entity-present? entity) id)))
+                                           vec)
+                          items (<normalize-qsearch-item-refs cfg (:repo action) items)
+                          human-data (when (human-output? config)
+                                       (<qsearch-human-data cfg action entities))]
+                    (qsearch-ok-data action result-count items missing-ids human-data)))))))
+        (if (string/blank? (:out qmd-result))
+          (qsearch-ok-data action 0 [] [])
+          (qmd-json-parse-failed qmd-result))))))

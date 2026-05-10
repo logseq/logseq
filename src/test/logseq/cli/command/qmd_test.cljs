@@ -752,6 +752,28 @@
         (p/catch (fn [e] (is false (str "unexpected error: " e))))
         (p/finally done))))
 
+(deftest test-execute-qsearch-errors-on-malformed-qmd-json
+  (async done
+    (-> (p/with-redefs [qmd-command/<run-qmd
+                        (fn [_]
+                          (p/resolved {:exit 0
+                                       :out "QMD finished without JSON output"
+                                       :err ""}))
+                        cli-server/ensure-server! (fn [config _repo] config)]
+          (qmd-command/execute-qsearch
+           {:type :qsearch
+            :repo "logseq_db_demo"
+            :query "alpha"
+            :collection "custom"}
+           {}))
+        (p/then (fn [result]
+                  (is (= :error (:status result)))
+                  (is (= :qmd-json-parse-failed (get-in result [:error :code])))
+                  (is (string/includes? (or (get-in result [:error :message]) "")
+                                        "parse QMD JSON"))))
+        (p/catch (fn [e] (is false (str "unexpected error: " e))))
+        (p/finally done))))
+
 (deftest test-execute-qsearch-errors-when-qmd-results-have-no-block-ids
   (async done
     (-> (p/with-redefs [qmd-command/<run-qmd

@@ -335,6 +335,48 @@
       comment-text
       (str content " " comment-text))))
 
+(defn- content-first-line
+  [content]
+  (-> (or content "")
+      string/split-lines
+      first
+      (or "")
+      string/trim))
+
+(defn- block-first-line-fragment
+  [block]
+  (content-first-line (:block/title block)))
+
+(defn- code-fence-block-line?
+  [content]
+  (string/starts-with? (string/trim (or content "")) "```"))
+
+(defn- normalize-rendered-match-text
+  [content]
+  (-> (or content "")
+      string/lower-case
+      (string/replace ref-or-tag-re "$1[[]]")
+      (string/replace simple-hashtag-re "$1#[[]]")
+      (string/replace #"\s+" " ")
+      string/trim))
+
+(defn- rendered-line-matches-block?
+  [block-info content]
+  (when block-info
+    (let [content (or content "")
+          fragment (:first-line-fragment block-info)
+          content* (normalize-rendered-match-text content)
+          fragment* (normalize-rendered-match-text fragment)]
+      (cond
+        (:code-block? block-info)
+        (code-fence-block-line? content)
+
+        (string/blank? fragment)
+        (string/blank? (string/trim content))
+
+        :else
+        (string/includes? content* fragment*)))))
+
 (defn- code-block?
   [block]
   (or (= :code (:logseq.property.node/display-type block))
@@ -344,6 +386,7 @@
 (defn- block-line-info
   [db block marker]
   {:db/id (:db/id block)
+   :first-line-fragment (block-first-line-fragment block)
    :code-block? (code-block? block)
    :status-marker (when (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
                     (some-> (:logseq.property/status block) status-marker))
@@ -433,31 +476,54 @@
            [block-line-info' & more-block-line-infos] line-infos
            lines initial-lines
            seen-block? false
-           property-indent nil]
+           property-indent nil
+           in-code-block? false]
       (if (nil? line)
         (string/join "\n" lines)
-        (if (property-value-line? line property-indent)
+        (cond
+          in-code-block?
           (recur more
                  (cons block-line-info' more-block-line-infos)
                  (conj lines line)
                  seen-block?
-                 property-indent)
-          (if (re-matches markdown-block-line-re line)
-            (let [lines' (cond-> lines
-                           (and insert-blank-before-first-block?
-                                (not seen-block?)) (conj "")
-                           true (into (decorate-block-line db block-line-info' line options)))]
+                 property-indent
+                 (not (code-fence-block-line? line)))
+
+          (property-value-line? line property-indent)
+          (recur more
+                 (cons block-line-info' more-block-line-infos)
+                 (conj lines line)
+                 seen-block?
+                 property-indent
+                 false)
+
+          :else
+          (if-let [[_ _ title] (re-matches markdown-block-line-re line)]
+            (if (rendered-line-matches-block? block-line-info' title)
+              (let [lines' (cond-> lines
+                             (and insert-blank-before-first-block?
+                                  (not seen-block?)) (conj "")
+                             true (into (decorate-block-line db block-line-info' line options)))]
+                (recur more
+                       more-block-line-infos
+                       lines'
+                       true
+                       nil
+                       (and (:code-block? block-line-info')
+                            (code-fence-block-line? title))))
               (recur more
-                     more-block-line-infos
-                     lines'
-                     true
-                     nil))
+                     (cons block-line-info' more-block-line-infos)
+                     (conj lines line)
+                     seen-block?
+                     property-indent
+                     false))
             (let [property-indent' (property-line-indent line)]
               (recur more
                      (cons block-line-info' more-block-line-infos)
                      (conj lines line)
                      seen-block?
-                     property-indent'))))))))
+                     property-indent'
+                     false))))))))
 
 (defn- add-page-id-to-rendered-content
   [db page content options]
