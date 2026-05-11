@@ -378,7 +378,9 @@
     (and (= command :graph-export) (not (seq import-export-type)))
     (missing-type-result summary)
 
-    (and (= command :graph-export) (not (seq (:file opts))))
+    (and (= command :graph-export)
+         (not= "sqlite" import-export-type)
+         (not (seq (:file opts))))
     (missing-file-result summary)
 
     (and (= command :graph-import) (not (seq import-export-type)))

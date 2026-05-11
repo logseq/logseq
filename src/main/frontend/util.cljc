@@ -103,9 +103,6 @@
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
-#?(:cljs (defonce base64string-to-unit8array utils/base64ToUint8Array))
-#?(:cljs (defonce uint8array-to-base64string utils/uint8ArrayToBase64))
-
 #?(:cljs (def string-join-path common-util/string-join-path))
 
 #?(:cljs

@@ -44,8 +44,9 @@
           :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db :thread-api/db-sync-recreate-lock
           :thread-api/db-sync-rehydrate-large-titles :thread-api/db-sync-import-prepare :thread-api/db-sync-import-rows-chunk
           :thread-api/db-sync-import-finalize :thread-api/release-access-handles :thread-api/db-exists
-          :thread-api/export-db-base64 :thread-api/export-client-ops-db-base64 :thread-api/backup-db-sqlite
-          :thread-api/import-db-base64 :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
+          :thread-api/export-db-binary
+          :thread-api/export-client-ops-db-binary :thread-api/backup-db-sqlite
+          :thread-api/import-db-binary :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
           :thread-api/search-truncate-tables :thread-api/search-build-blocks-indice :thread-api/search-build-blocks-indice-in-worker
           :thread-api/search-build-pages-indice :thread-api/apply-outliner-ops :thread-api/sync-app-state
           :thread-api/markdown-mirror-set-enabled :thread-api/markdown-mirror-flush :thread-api/markdown-mirror-regenerate
@@ -233,7 +234,6 @@
               (vreset! thread-api/*thread-apis
                        (assoc thread-apis-prev
                               :thread-api/create-or-open-db (fn [_repo _opts] (p/resolved nil))
-                              :thread-api/export-db-base64 (fn [_repo] (p/resolved nil))
                               :thread-api/db-sync-rehydrate-large-titles (fn [_repo _graph-id] (p/resolved nil))))
               (-> (p/with-redefs [rtc-log-and-state/rtc-log (fn [& _] nil)
                                   client-op/update-graph-uuid (fn [& _] nil)
@@ -607,11 +607,11 @@
            (reset! db-sync/*repo->latest-remote-tx latest-tx-prev)
            (reset! db-sync/*repo->latest-remote-checksum latest-checksum-prev)))))))
 
-(deftest thread-api-export-client-ops-db-base64-checkpoints-and-exports-client-ops-file-test
+(deftest thread-api-export-client-ops-db-binary-checkpoints-and-exports-client-ops-file-test
   (async done
     (restoring-worker-state
      (fn []
-       (let [export-client-ops-db-base64 (@thread-api/*thread-apis :thread-api/export-client-ops-db-base64)
+       (let [export-client-ops-db-binary (@thread-api/*thread-apis :thread-api/export-client-ops-db-binary)
              sql-calls (atom [])
              export-calls (atom [])
              expected-data (js/Uint8Array. #js [1 2 3])
@@ -628,26 +628,26 @@
                                                       (when (= :client-ops which-db)
                                                         #js {:exec (fn [sql]
                                                                      (swap! sql-calls conj sql))}))]
-           (-> (export-client-ops-db-base64 test-repo)
+           (-> (export-client-ops-db-binary test-repo)
                (p/then (fn [result]
                          (is (= ["PRAGMA wal_checkpoint(TRUNCATE)"] @sql-calls))
                          (is (= 1 (count @export-calls)))
                          (is (contains? #{"client-ops/db.sqlite"
                                           "client-ops-/db.sqlite"}
                                         (first @export-calls)))
-                         (is (string? result))
+                         (is (instance? js/Uint8Array result))
                          (is (= [1 2 3]
-                                (vec (js/Uint8Array. (.from js/Buffer result "base64")))))
+                                (vec result)))
                          (done)))
                (p/catch (fn [error]
                           (is false (str error))
                           (done))))))))))
 
-(deftest thread-api-export-client-ops-db-base64-supports-flat-client-ops-filename-test
+(deftest thread-api-export-client-ops-db-binary-supports-flat-client-ops-filename-test
   (async done
     (restoring-worker-state
      (fn []
-       (let [export-client-ops-db-base64 (@thread-api/*thread-apis :thread-api/export-client-ops-db-base64)
+       (let [export-client-ops-db-binary (@thread-api/*thread-apis :thread-api/export-client-ops-db-binary)
              sql-calls (atom [])
              export-calls (atom [])
              expected-data (js/Uint8Array. #js [9 8 7])
@@ -666,23 +666,23 @@
                                                       (when (= :client-ops which-db)
                                                         #js {:exec (fn [sql]
                                                                      (swap! sql-calls conj sql))}))]
-           (-> (export-client-ops-db-base64 test-repo)
+           (-> (export-client-ops-db-binary test-repo)
                (p/then (fn [result]
                          (is (= ["PRAGMA wal_checkpoint(TRUNCATE)"] @sql-calls))
                          (is (contains? (set @export-calls) "client-ops-db.sqlite"))
-                         (is (string? result))
+                         (is (instance? js/Uint8Array result))
                          (is (= [9 8 7]
-                                (vec (js/Uint8Array. (.from js/Buffer result "base64")))))
+                                (vec result)))
                          (done)))
                (p/catch (fn [error]
                           (is false (str error))
                           (done))))))))))
 
-(deftest thread-api-export-client-ops-db-base64-supports-normalized-browser-client-ops-path-test
+(deftest thread-api-export-client-ops-db-binary-supports-normalized-browser-client-ops-path-test
   (async done
     (restoring-worker-state
      (fn []
-       (let [export-client-ops-db-base64 (@thread-api/*thread-apis :thread-api/export-client-ops-db-base64)
+       (let [export-client-ops-db-binary (@thread-api/*thread-apis :thread-api/export-client-ops-db-binary)
              export-calls (atom [])
              expected-data (js/Uint8Array. #js [4 5 6])
              expected-buffer (.-buffer expected-data)
@@ -699,12 +699,12 @@
          (with-redefs [worker-state/get-sqlite-conn (fn [_repo which-db]
                                                       (when (= :client-ops which-db)
                                                         #js {:exec (fn [_sql] nil)}))]
-           (-> (export-client-ops-db-base64 test-repo)
+           (-> (export-client-ops-db-binary test-repo)
                (p/then (fn [result]
                          (is (contains? (set @export-calls) "/client-ops-/db.sqlite"))
-                         (is (string? result))
+                         (is (instance? js/Uint8Array result))
                          (is (= [4 5 6]
-                                (vec (js/Uint8Array. (.from js/Buffer result "base64")))))
+                                (vec result)))
                          (done)))
                (p/catch (fn [error]
                           (is false (str error))

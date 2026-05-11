@@ -921,7 +921,7 @@
                                 :else
                                 (done)))))))))
 
-(deftest db-worker-node-import-db-base64
+(deftest db-worker-node-import-db-binary
   (async done
          (let [daemon-a (atom nil)
                daemon-b (atom nil)
@@ -945,15 +945,15 @@
                                     :block/updated-at now}]
                                   {}
                                   nil])
-                       export-base64 (invoke host port "thread-api/export-db-base64" [repo-a])]
-                 (is (string? export-base64))
-                 (is (pos? (count export-base64)))
+                       export-binary (invoke host port "thread-api/export-db-binary" [repo-a])]
+                 (is (instance? js/Uint8Array export-binary))
+                 (is (pos? (.-byteLength export-binary)))
                  (p/let [_ ((:stop! @daemon-a))
                          {:keys [host port stop!]}
                          (start-daemon! {:root-dir data-dir
                                          :repo repo-b})
                          _ (reset! daemon-b {:stop! stop!})
-                         _ (invoke host port "thread-api/import-db-base64" [repo-b export-base64])
+                         _ (invoke host port "thread-api/import-db-binary" [repo-b export-binary])
                          _ (invoke host port "thread-api/create-or-open-db" [repo-b {}])
                          result (invoke host port "thread-api/q"
                                         [repo-b
@@ -982,7 +982,7 @@
                                 :else
                                 (done)))))))))
 
-(deftest db-worker-node-export-client-ops-db-base64
+(deftest db-worker-node-export-client-ops-db-binary
   (async done
          (let [daemon (atom nil)
                data-dir (node-helper/create-tmp-dir "db-worker-export-client-ops")
@@ -992,14 +992,14 @@
                                        :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
-                       export-base64 (invoke host port "thread-api/export-client-ops-db-base64" [repo])
-                       decoded (js/Buffer.from export-base64 "base64")]
-                 (is (string? export-base64))
-                 (is (pos? (count export-base64)))
+                       export-binary (invoke host port "thread-api/export-client-ops-db-binary" [repo])
+                       decoded (js/Buffer.from export-binary)]
+                 (is (instance? js/Uint8Array export-binary))
+                 (is (pos? (.-byteLength export-binary)))
                  (is (= "SQLite format 3\u0000"
                         (.toString (.subarray decoded 0 16) "utf8"))))
                (p/catch (fn [e]
-                          (println "[db-worker-node-test] export-client-ops-db-base64 error:" e)
+                          (println "[db-worker-node-test] export-client-ops-db-binary error:" e)
                           (is false (str e))))
                (p/finally (fn []
                             (if-let [stop! (:stop! @daemon)]
@@ -1033,14 +1033,14 @@
                        backup-result (invoke host port "thread-api/backup-db-sqlite" [repo-a backup-path])
                        _ (is (= backup-path (:path backup-result)))
                        _ (is (fs/existsSync backup-path))
-                       backup-base64 (.toString (fs/readFileSync backup-path) "base64")]
-                 (is (string? backup-base64))
-                 (is (pos? (count backup-base64)))
+                       backup-binary (fs/readFileSync backup-path)]
+                 (is (instance? js/Uint8Array backup-binary))
+                 (is (pos? (.-byteLength backup-binary)))
                  (p/let [_ ((:stop! @daemon-a))
                          {:keys [host port stop!]} (start-daemon! {:root-dir data-dir
                                                                    :repo repo-b})
                          _ (reset! daemon-b {:stop! stop!})
-                         _ (invoke host port "thread-api/import-db-base64" [repo-b backup-base64])
+                         _ (invoke host port "thread-api/import-db-binary" [repo-b backup-binary])
                          _ (invoke host port "thread-api/create-or-open-db" [repo-b {}])
                          result (invoke host port "thread-api/q"
                                         [repo-b
@@ -1146,14 +1146,14 @@
                                        :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
-                       export-base64 (invoke host port "thread-api/export-db-base64" [repo])
+                       export-binary (invoke host port "thread-api/export-db-binary" [repo])
                        lock-contents (js->clj (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
                                               :keywordize-keys true)
                        tampered-lock (assoc lock-contents
                                             :pid (inc (:pid lock-contents))
                                             :lock-id "non-owner-lock")
                        _ (fs/writeFileSync lock-file (js/JSON.stringify (clj->js tampered-lock)))
-                       {:keys [status body]} (invoke-raw host port "thread-api/import-db-base64" [repo export-base64])
+                       {:keys [status body]} (invoke-raw host port "thread-api/import-db-binary" [repo export-binary])
                        parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
                  (is (= 409 status))
                  (is (= false (:ok parsed)))
@@ -1208,8 +1208,8 @@
                        lock-contents (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
                        lock-id (gobj/get lock-contents "lock-id")
                        _ (is (string? lock-id))
-                       export-base64 (invoke host port "thread-api/export-db-base64" [repo])
-                       {:keys [status body]} (invoke-raw host port "thread-api/import-db-base64" [repo export-base64])
+                       export-binary (invoke host port "thread-api/export-db-binary" [repo])
+                       {:keys [status body]} (invoke-raw host port "thread-api/import-db-binary" [repo export-binary])
                        parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
                  (is (= 200 status))
                  (is (= true (:ok parsed))))
@@ -1231,12 +1231,12 @@
                                        :repo repo})
                        _ (reset! daemon {:stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
-                       export-base64 (invoke host port "thread-api/export-db-base64" [repo])
+                       export-binary (invoke host port "thread-api/export-db-binary" [repo])
                        lock-contents (js->clj (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
                                               :keywordize-keys true)
                        replaced-lock (assoc lock-contents :lock-id "replaced-lock-id")
                        _ (fs/writeFileSync lock-file (js/JSON.stringify (clj->js replaced-lock)))
-                       {:keys [status body]} (invoke-raw host port "thread-api/import-db-base64" [repo export-base64])
+                       {:keys [status body]} (invoke-raw host port "thread-api/import-db-binary" [repo export-binary])
                        parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
                  (is (= 409 status))
                  (is (= false (:ok parsed)))
