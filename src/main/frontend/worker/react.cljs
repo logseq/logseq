@@ -41,6 +41,9 @@
             (= journal-tag-id (:db/id tag)))
           (:block/tags (d/entity db eid)))))
 
+(def ^:private block-query-affecting-properties
+  #{:logseq.property/order-list-type})
+
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
   [{:keys [tx-data db-before db-after]}]
@@ -77,7 +80,10 @@
         recycle-roots? (some (fn [datom]
                                (= :logseq.property/deleted-at (:a datom)))
                              tx-data)
-        other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
+        other-blocks (->> (filter (fn [datom]
+                                    (or (= "block" (namespace (:a datom)))
+                                        (contains? block-query-affecting-properties (:a datom))))
+                                  tx-data)
                           (map :e))
         blocks (-> (concat blocks other-blocks) distinct)
         block-entities (keep (fn [block-id]
