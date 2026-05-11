@@ -1,12 +1,12 @@
 (ns frontend.mobile.camera
-  (:require ["@capacitor/camera" :refer [Camera CameraResultType]]
+  (:require ["/frontend/utils" :as utils]
+            ["@capacitor/camera" :refer [Camera CameraResultType]]
             [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
-            [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -52,7 +52,7 @@
                   (let [filename (str (date/get-date-time-string-2) ".jpeg")
                         base64string (gobj/get photo "base64String")]
                     (when (seq base64string)
-                      (js/File. #js [(util/base64string-to-unit8array base64string)]
+                      (js/File. #js [(utils/base64ToUint8Array base64string)]
                                 filename #js {:type "image/jpeg"}))))))
       (p/catch (fn [error]
                  (log/error :file/write-failed {:error error})

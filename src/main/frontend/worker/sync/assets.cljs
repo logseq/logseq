@@ -330,6 +330,13 @@
                             :base base
                             :graph-id graph-id})))))
 
+(defn log-request-asset-download-failed!
+  [repo asset-uuid error]
+  (log/error :db-sync/request-asset-download-failed
+             {:repo repo
+              :asset-uuid asset-uuid
+              :error error}))
+
 (defn request-asset-download!
   [repo asset-uuid {:keys [current-client-f enqueue-asset-task-f broadcast-rtc-state!-f]}]
   (when-let [client (current-client-f repo)]
@@ -350,16 +357,10 @@
                           _ (when missing-local?
                               (download-remote-asset! repo graph-id asset-uuid asset-type))
                           _ (when missing-local?
-                              (when-let [target-ent (d/entity @conn [:block/uuid asset-uuid])]
-                                (ldb/transact!
-                                 conn
-                                 [[:db/retract (:db/id target-ent)
-                                   :logseq.property.asset/remote-metadata]]
-                                 {:persist-op? true})))
-                          _ (when missing-local?
                               (client-op/remove-asset-op repo asset-uuid))
                           _ (when missing-local?
                               (broadcast-rtc-state!-f client))]
                     nil)
                   (p/catch (fn [e]
-                             (js/console.error e)))))))))))
+                             (log-request-asset-download-failed! repo asset-uuid e)
+                             (p/rejected e)))))))))))

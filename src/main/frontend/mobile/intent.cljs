@@ -1,5 +1,6 @@
 (ns frontend.mobile.intent
-  (:require ["@capacitor/action-sheet" :refer [ActionSheet]]
+  (:require ["/frontend/utils" :as utils]
+            ["@capacitor/action-sheet" :refer [ActionSheet]]
             ["@capacitor/filesystem" :refer [Filesystem]]
             ["@capacitor/share" :refer [^js Share]]
             ["path" :as node-path]
@@ -114,7 +115,7 @@
   (p/let [basename (node-path/basename url)
           file (<filesystem-read-file url)
           file-base64-str (some-> file (.-data))
-          file (some-> file-base64-str (util/base64string-to-unit8array)
+          file (some-> file-base64-str (utils/base64ToUint8Array)
                        (vector) (clj->js) (js/File. basename #js {}))
           result (editor-handler/db-based-save-assets!
                   (state/get-current-repo) [file] {})]
@@ -176,7 +177,7 @@
               _path (assets-handler/get-asset-path basename)
               file (<filesystem-read-file url)
               file-base64-str (some-> file (.-data))
-              file (some-> file-base64-str (util/base64string-to-unit8array)
+              file (some-> file-base64-str (utils/base64ToUint8Array)
                            (vector) (clj->js) (js/File. basename #js {}))
               result (editor-handler/db-based-save-assets!
                       (state/get-current-repo) [file] {})]

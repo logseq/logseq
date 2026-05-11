@@ -53,17 +53,48 @@
           path (util/node-path.join path "package.json")]
       (fs/write-plain-text-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
 
+(defn- storage-dir
+  [root-dir sub-root]
+  (util/node-path.normalize (util/node-path.join root-dir sub-root)))
+
+(defn- sub-path?
+  [root-dir path]
+  (let [relative (.relative util/node-path root-dir path)
+        parent-dir-segment? (or (= relative "..")
+                                (string/starts-with? relative (str ".." (.-sep util/node-path))))]
+    (or (string/blank? relative)
+        (and (not parent-dir-segment?)
+             (not (.isAbsolute util/node-path relative))))))
+
+(defn- assert-storage-path!
+  [root-dir path action]
+  (when-not (sub-path? root-dir path)
+    (log/info :debug path)
+    (throw (js/Error. (str action " file denied")))))
+
+(defn- storage-file-path
+  [root-dir file action]
+  (let [path (util/node-path.normalize (util/node-path.join root-dir file))]
+    (assert-storage-path! root-dir path action)
+    path))
+
+(defn- plugin-storage-root
+  [assets?]
+  (if (true? assets?)
+    (config/get-current-repo-assets-root)
+    (plugin-handler/get-ls-dotdir-root)))
+
+(defn- plugin-storage-sub-root
+  [plugin-id]
+  (util/node-path.join "storages" (util/node-path.basename plugin-id)))
+
 (defn- write_rootdir_file
   [file content sub-root root-dir]
   (p/let [repo           ""
-          path           (util/node-path.join root-dir sub-root)
+          path           (storage-dir root-dir sub-root)
           exist?         (fs/file-exists? path "")
           _              (when-not exist? (fs/mkdir-recur! path))
-          user-path      (util/node-path.join path file)
-          sub-dir?       (string/starts-with? user-path path)
-          _              (when-not sub-dir?
-                           (log/info :debug user-path)
-                           (throw (js/Error. "write file denied")))
+          user-path      (storage-file-path path file "write")
           user-path-root (util/node-path.dirname user-path)
           exist?         (fs/file-exists? user-path-root "")
           _              (when-not exist? (fs/mkdir-recur! user-path-root))
@@ -83,10 +114,8 @@
 
 (defn- read_rootdir_file
   [file sub-root root-dir]
-  (p/let [path      (util/node-path.join root-dir sub-root)
-          user-path (util/node-path.join path file)
-          sub-dir?  (string/starts-with? user-path path)
-          _         (when-not sub-dir? (log/info :debug user-path) (throw (js/Error. "read file denied")))
+  (p/let [path      (storage-dir root-dir sub-root)
+          user-path (storage-file-path path file "read")
           exist?    (fs/file-exists? "" user-path)
           _         (when-not exist? (log/info :debug user-path) (throw (js/Error. "file not existed")))
           content   (fs/read-file "" user-path)]
@@ -105,10 +134,8 @@
 (defn- unlink_rootdir_file!
   [file sub-root root-dir]
   (p/let [repo      ""
-          path      (util/node-path.join root-dir sub-root)
-          user-path (util/node-path.join path file)
-          sub-dir?  (string/starts-with? user-path path)
-          _         (when-not sub-dir? (log/info :debug user-path) (throw (js/Error. "access file denied")))
+          path      (storage-dir root-dir sub-root)
+          user-path (storage-file-path path file "access")
           exist?    (fs/file-exists? "" user-path)
           _         (when-not exist? (log/info :debug user-path) (throw (js/Error. "file not existed")))
           _         (fs/unlink! repo user-path {})]))
@@ -123,65 +150,73 @@
   (when-let [root-dir (config/get-current-repo-assets-root)]
     (unlink_rootdir_file! file sub-root root-dir)))
 
+(defn- clear_rootdir_files!
+  [sub-root root-dir]
+  (let [path (storage-dir root-dir sub-root)]
+    (if (util/electron?)
+      (p/let [exist? (fs/file-exists? path)
+              ^js files (when exist? (ipc/ipc :listdir path))
+              files (when (js-iterable? files) (bean/->clj files))
+              _ (p/all
+                 (map (fn [file-path]
+                        (let [file-path (util/node-path.normalize file-path)]
+                          (assert-storage-path! path file-path "access")
+                          (fs/unlink! "" file-path {})))
+                      files))]
+        nil)
+      (fs/rmdir! path))))
+
 (def write_user_tmp_file
   (fn [file content]
     (write_dotdir_file file content "tmp")))
 
 (def write_plugin_storage_file
   (fn [plugin-id file content assets?]
-    (let [plugin-id (util/node-path.basename plugin-id)
-          sub-root  (util/node-path.join "storages" plugin-id)]
+    (let [sub-root (plugin-storage-sub-root plugin-id)]
       (if (true? assets?)
         (write_assetsdir_file file content sub-root)
         (write_dotdir_file file content sub-root)))))
 
 (def read_plugin_storage_file
   (fn [plugin-id file assets?]
-    (let [plugin-id (util/node-path.basename plugin-id)
-          sub-root  (util/node-path.join "storages" plugin-id)]
+    (let [sub-root (plugin-storage-sub-root plugin-id)]
       (if (true? assets?)
         (read_assetsdir_file file sub-root)
         (read_dotdir_file file sub-root)))))
 
 (def unlink_plugin_storage_file
   (fn [plugin-id file assets?]
-    (let [plugin-id (util/node-path.basename plugin-id)
-          sub-root  (util/node-path.join "storages" plugin-id)]
+    (let [sub-root (plugin-storage-sub-root plugin-id)]
       (if (true? assets?)
         (unlink_assetsdir_file! file sub-root)
         (unlink_dotdir_file! file sub-root)))))
 
 (def exist_plugin_storage_file
   (fn [plugin-id file assets?]
-    (p/let [root      (if (true? assets?)
-                        (config/get-current-repo-assets-root)
-                        (plugin-handler/get-ls-dotdir-root))
-            plugin-id (util/node-path.basename plugin-id)
-            exist?    (fs/file-exists?
-                       (util/node-path.join root "storages" plugin-id)
-                       file)]
-      exist?)))
+    (p/let [root      (plugin-storage-root assets?)
+            sub-root  (plugin-storage-sub-root plugin-id)
+            exist?    (when root
+                        (let [path      (storage-dir root sub-root)
+                              user-path (storage-file-path path file "access")]
+                          (fs/file-exists? "" user-path)))]
+      (boolean exist?))))
 
 (def clear_plugin_storage_files
   (fn [plugin-id assets?]
-    (p/let [root      (if (true? assets?)
-                        (config/get-current-repo-assets-root)
-                        (plugin-handler/get-ls-dotdir-root))
-            plugin-id (util/node-path.basename plugin-id)]
-      (fs/rmdir! (util/node-path.join root "storages" plugin-id)))))
+    (p/let [root     (plugin-storage-root assets?)
+            sub-root (plugin-storage-sub-root plugin-id)]
+      (when root
+        (clear_rootdir_files! sub-root root)))))
 
 (def list_plugin_storage_files
   (fn [plugin-id assets?]
-    (p/let [root       (if (true? assets?)
-                         (config/get-current-repo-assets-root)
-                         (plugin-handler/get-ls-dotdir-root))
-            plugin-id  (util/node-path.basename plugin-id)
-            files-path (util/node-path.join root "storages" plugin-id)
-            ^js files  (ipc/ipc :listdir files-path)]
-      (when (js-iterable? files)
+    (p/let [root       (plugin-storage-root assets?)
+            sub-root   (plugin-storage-sub-root plugin-id)
+            files-path (when root (storage-dir root sub-root))
+            ^js files  (when files-path (ipc/ipc :listdir files-path))]
+      (when (and files-path (js-iterable? files))
         (bean/->js
-         (map #(some-> (string/replace-first % files-path "")
-                       (string/replace #"^/+" "")) files))))))
+         (map #(.relative util/node-path files-path %) files))))))
 
 (def load_user_preferences
   (fn []

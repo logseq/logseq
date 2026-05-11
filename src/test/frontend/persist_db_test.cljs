@@ -945,7 +945,7 @@
              (set! state/<invoke-db-worker original-invoke)
              (done)))))))
 
-(deftest browser-export-db-on-electron-triggers-worker-base64-export-then-local-backup
+(deftest browser-export-db-on-electron-triggers-local-backup-without-worker-export
   (async done
     (let [ipc-calls (atom [])
           worker-export-calls (atom [])
@@ -959,15 +959,12 @@
       (set! state/<invoke-db-worker
             (fn [qkw & _]
               (swap! worker-export-calls conj qkw)
-              (case qkw
-                :thread-api/export-db-base64 (p/resolved "c3FsaXRlLWJ5dGVz")
-                (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
+              (p/rejected (ex-info "unexpected worker call" {:qkw qkw}))))
       (-> (protocol/<export-db (browser/->InBrowser) "logseq_db_graph_a" {})
           (p/then (fn [_]
                     (is (= [[:db-export "logseq_db_graph_a" false]]
                            @ipc-calls))
-                    (is (= [:thread-api/export-db-base64]
-                           @worker-export-calls))))
+                    (is (empty? @worker-export-calls))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally
@@ -977,7 +974,34 @@
              (set! state/<invoke-db-worker original-invoke)
              (done)))))))
 
-(deftest browser-import-db-uses-base64-thread-api
+(deftest browser-export-db-return-data-uses-binary-thread-api
+  (async done
+    (let [worker-calls (atom [])
+          payload (js/Uint8Array. #js [1 2 3])
+          original-electron? util/electron?
+          original-invoke state/<invoke-db-worker]
+      (set! util/electron? (constantly false))
+      (set! state/<invoke-db-worker
+            (fn [qkw & args]
+              (swap! worker-calls conj (into [qkw] args))
+              (case qkw
+                :thread-api/export-db-binary (p/resolved payload)
+                :thread-api/export-db-base64 (p/rejected (ex-info "base64 export should not run" {}))
+                (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
+      (-> (protocol/<export-db (browser/->InBrowser) "logseq_db_graph_a" {:return-data? true})
+          (p/then (fn [result]
+                    (is (identical? payload result))
+                    (is (= [[:thread-api/export-db-binary "logseq_db_graph_a"]]
+                           @worker-calls))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally
+           (fn []
+             (set! util/electron? original-electron?)
+             (set! state/<invoke-db-worker original-invoke)
+             (done)))))))
+
+(deftest browser-import-db-uses-binary-thread-api
   (async done
     (let [worker-import-calls (atom [])
           original-invoke state/<invoke-db-worker
@@ -986,11 +1010,11 @@
             (fn [qkw & args]
               (swap! worker-import-calls conj [qkw args])
               (case qkw
-                :thread-api/import-db-base64 (p/resolved nil)
+                :thread-api/import-db-binary (p/resolved nil)
                 (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))) )
       (-> (protocol/<import-db (browser/->InBrowser) "logseq_db_graph_a" payload)
           (p/then (fn [_]
-                    (is (= [[:thread-api/import-db-base64 ["logseq_db_graph_a" "c3FsaXRlLWJ5dGVz"]]]
+                    (is (= [[:thread-api/import-db-binary ["logseq_db_graph_a" payload]]]
                            @worker-import-calls))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
@@ -1008,11 +1032,11 @@
             (fn [qkw & args]
               (swap! worker-import-calls conj [qkw args])
               (case qkw
-                :thread-api/import-db-base64 (p/resolved nil)
+                :thread-api/import-db-binary (p/resolved nil)
                 (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
       (-> (protocol/<import-db (browser/->InBrowser) "logseq_db_graph_a" payload)
           (p/then (fn [_]
-                    (is (= [[:thread-api/import-db-base64 ["logseq_db_graph_a" "c3FsaXRlLWJ5dGVz"]]]
+                    (is (= [[:thread-api/import-db-binary ["logseq_db_graph_a" payload]]]
                            @worker-import-calls))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))

@@ -101,7 +101,7 @@
             :search/q ""}]
      (swap! state/state merge m)
      (when config/lsp-enabled? (state/reset-plugin-search-engines)))
-   (when (and clear-search-mode? (not= (state/get-search-mode) :graph))
+   (when clear-search-mode?
      (state/set-search-mode! :global))))
 
 (defn rebuild-indices!

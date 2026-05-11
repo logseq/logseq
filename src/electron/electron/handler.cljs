@@ -244,6 +244,10 @@
     (db/ensure-graph-dir! repo)
     (db/backup-db-via-worker! repo (.-id window) {:force-backup? force-backup?})))
 
+(defmethod handle :db-export-as [window [_ repo filename]]
+  (when-let [repo (canonical-repo repo)]
+    (db/export-db-to-export-dir-via-worker! repo (.-id window) filename)))
+
 (defmethod handle :db-get [_window [_ repo]]
   (when-let [repo (canonical-repo repo)]
     (logger/warn ::db-get-compat
