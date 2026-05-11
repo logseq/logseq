@@ -59,9 +59,11 @@
 
 (defn- sub-path?
   [root-dir path]
-  (let [relative (.relative util/node-path root-dir path)]
+  (let [relative (.relative util/node-path root-dir path)
+        parent-dir-segment? (or (= relative "..")
+                                (string/starts-with? relative (str ".." (.-sep util/node-path))))]
     (or (string/blank? relative)
-        (and (not (string/starts-with? relative ".."))
+        (and (not parent-dir-segment?)
              (not (.isAbsolute util/node-path relative))))))
 
 (defn- assert-storage-path!
