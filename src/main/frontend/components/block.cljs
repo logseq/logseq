@@ -2162,7 +2162,8 @@
                  (and heading-level
                       (<= heading-level 6)
                       heading-level)
-                 (pu/lookup block :logseq.property/heading))
+                 (pu/lookup block :logseq.property/heading)
+                 (:block.temp/heading block))
         heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
                (keyword (str "h" heading ".block-title-wrap.as-heading"
