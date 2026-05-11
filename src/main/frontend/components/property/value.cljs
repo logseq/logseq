@@ -1531,10 +1531,11 @@
   [block property value opts]
   (let [*el (hooks/use-ref nil)
         show-grid! (fn [target]
-                     (shui/popup-show! target
-                                       (fn [] (asset-grid-popup-content block property opts))
-                                       {:align "start"
-                                        :auto-focus? true}))]
+                     (when-not config/publishing?
+                       (shui/popup-show! target
+                                         (fn [] (asset-grid-popup-content block property opts))
+                                         {:align "start"
+                                          :auto-focus? true})))]
     (shui/trigger-as
      :div.jtrigger.flex.flex-1.w-full
      {:ref *el
@@ -1542,7 +1543,8 @@
       :on-key-down (fn [e]
                      (case (util/ekey e)
                        ("Backspace" "Delete")
-                       (delete-block-property! block property)
+                       (when-not config/publishing?
+                         (delete-block-property! block property))
                        nil))}
      (if (and value (:db/id value))
        (let [value-asset-type (:logseq.property.asset/type value)
@@ -1576,7 +1578,7 @@
             :on-click (fn [e]
                         (util/stop e)
                         (show-grid! (or (.-currentTarget e) (rum/deref *el))))}
-           "Swap")])
+           (t :asset/swap))])
        [:div.w-full.cursor-pointer
         {:on-click (fn [e]
                      (util/stop e)

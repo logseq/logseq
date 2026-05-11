@@ -71,6 +71,7 @@
  :asset/selected-directories "Selected directories:"
  :asset/show-file-in-folder "Show file in folder"
  :asset/size-too-large "Asset size shouldn't be larger than 100M"
+ :asset/swap "Swap"
  :asset/syncing "Syncing"
  :asset/title-label "Asset title:"
  :asset/transfer-placeholder "{1} asset..."
