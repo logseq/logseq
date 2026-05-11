@@ -358,6 +358,38 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-removes-pre-block-marker-and-missing-block-refs
+  (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        target-uuid #uuid "22222222-2222-2222-2222-222222222222"]
+    (p/let [source-file (write-temp-graph-file
+                         "pages/A.md"
+                         (str "Plain pre-block\n"
+                              "- Missing ref ((" missing-uuid "))\n"
+                              "- Existing ref ((" target-uuid "))\n"))
+            target-file (write-temp-graph-file
+                         "pages/Z.md"
+                         (str "- Target block\n"
+                              "  id:: " target-uuid "\n"))
+            conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            _ (import-files-to-db [source-file target-file] conn {})
+            missing-block (db-test/find-block-by-content @conn #"Missing ref")
+            existing-block (db-test/find-block-by-content @conn #"Existing ref")
+            target-block (db-test/find-block-by-content @conn "Target block")]
+      (is (empty? (filter #(= :block/pre-block? (:a %))
+                          (d/datoms @conn :eavt)))
+          "Legacy pre-block markers are never transacted")
+      (is (= "Missing ref" (:block/title missing-block))
+          "Missing OG block refs are removed from imported content")
+      (is (empty? (:block/refs missing-block))
+          "Missing OG block refs are removed from imported refs")
+      (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
+          "Missing OG block refs do not leave placeholder entities")
+      (is (= [(:db/id target-block)] (mapv :db/id (:block/refs existing-block)))
+          "Existing block refs are preserved, including forward refs from later files")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
 (deftest update-asset-links-in-block-title
   (are [x y]
        (= y (@#'gp-exporter/update-asset-links-in-block-title (first x) {(second x) "UUID"} (atom {})))

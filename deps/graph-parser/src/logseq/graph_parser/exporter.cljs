@@ -2350,7 +2350,9 @@
 (defn- <build-blocks-tx
   [conn blocks pre-blocks per-file-state tx-options]
   (p/loop [tx-data []
-           blocks (remove :block/pre-block? blocks)]
+           blocks (->> blocks
+                       (remove :block/pre-block?)
+                       (map #(dissoc % :block/pre-block?)))]
     (if-let [block (first blocks)]
       (p/let [block-tx-data (<build-block-tx @conn block pre-blocks per-file-state
                                              tx-options)]
@@ -2449,6 +2451,58 @@
                                :level :error
                                :ex-data {:path path :error error}})))))
 
+(defn- remove-block-ref-from-title
+  [title block-uuid]
+  (when (string? title)
+    (-> title
+        (string/replace (block-ref/->block-ref block-uuid) "")
+        (string/replace #" {2,}" " ")
+        string/trim)))
+
+(defn- placeholder-block-ref?
+  [entity]
+  (and (:block/uuid entity)
+       (nil? (:block/title entity))))
+
+(defn- cleanup-missing-block-refs-tx
+  [db]
+  (let [missing-ref-datoms
+        (->> (d/datoms db :aevt :block/refs)
+             (keep (fn [datom]
+                     (let [ref-entity (d/entity db (:v datom))]
+                       (when (placeholder-block-ref? ref-entity)
+                         {:source-id (:e datom)
+                          :ref-id (:v datom)
+                          :ref-uuid (:block/uuid ref-entity)})))))
+        refs-by-source-id (group-by :source-id missing-ref-datoms)
+        retract-ref-tx
+        (mapcat (fn [[source-id refs]]
+                  (map (fn [{:keys [ref-id]}]
+                         [:db/retract source-id :block/refs ref-id])
+                       refs))
+                refs-by-source-id)
+        update-title-tx
+        (keep (fn [[source-id refs]]
+                (let [source (d/entity db source-id)
+                      title (:block/title source)
+                      title' (reduce remove-block-ref-from-title title (map :ref-uuid refs))]
+                  (when (and (string? title') (not= title title'))
+                    [:db/add source-id :block/title title'])))
+              refs-by-source-id)
+        retract-placeholder-tx
+        (->> missing-ref-datoms
+             (map (juxt :ref-id :ref-uuid))
+             distinct
+             (map (fn [[ref-id ref-uuid]]
+                    [:db/retract ref-id :block/uuid ref-uuid])))]
+    (concat retract-ref-tx update-title-tx retract-placeholder-tx)))
+
+(defn- cleanup-missing-block-refs!
+  [conn]
+  (let [tx (cleanup-missing-block-refs-tx @conn)]
+    (when (seq tx)
+      (d/transact! conn tx))))
+
 (defn export-doc-files
   "Exports all user created files i.e. under journals/ and pages/.
    Recommended to use build-doc-options and pass that as options"
@@ -2468,6 +2522,7 @@
           (when-not (>= i (dec (count doc-files)))
             (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
                      (inc i))))
+        (p/then #(cleanup-missing-block-refs! conn))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
                                  :level :error
