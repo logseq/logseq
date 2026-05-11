@@ -651,7 +651,9 @@
         (when (and (integer? heading-level)
                    (<= 1 heading-level 6))
           heading-level))
-      (heading-value->level (pu/lookup block :logseq.property/heading) level)))
+      (heading-value->level (or (pu/lookup block :logseq.property/heading)
+                                (:block.temp/heading block))
+                            level)))
 
 (defn- heading-icon-size
   [heading-level]

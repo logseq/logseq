@@ -15,6 +15,7 @@
             [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]
@@ -78,6 +79,24 @@
   (some->> (find-template-by-title db title)
            ordered-children
            (mapv block-tree-with-properties)))
+
+(defn- block-status
+  [db content]
+  (:logseq.property/status (db-test/find-block-by-content db content)))
+
+(defn- status-content
+  [db content]
+  (db-property/closed-value-content (block-status db content)))
+
+(defn- status-closed-value-contents
+  [db]
+  (set (map db-property/closed-value-content
+            (db-property/get-closed-property-values db :logseq.property/status))))
+
+(defn- status-closed-value-content-frequencies
+  [db]
+  (frequencies (map db-property/closed-value-content
+                    (db-property/get-closed-property-values db :logseq.property/status))))
 
 
 (defn- build-graph-files
@@ -218,6 +237,105 @@
     (is (= "\"CachyOS <admin@cachyos.org>\""
            (:block/title (db-test/find-block-by-content @conn #"CachyOS")))
         "Email addresses inside quotes are preserved during import")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-repeated-deadline-and-scheduled
+  (p/let [file (write-temp-graph-file
+                 "pages/repeated-tasks.md"
+                 (str "- TODO wish [[name]] a happy birthday\n"
+                      "  SCHEDULED: <2025-11-01 Sat 08:00 .+1y>\n"
+                      "- TODO prepare weekly report\n"
+                      "  DEADLINE: <2025-11-07 Fri +2w>\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (let [birthday-properties (db-test/readable-properties
+                               (db-test/find-block-by-content @conn #"happy birthday"))
+          report-properties (db-test/readable-properties
+                             (db-test/find-block-by-content @conn #"weekly report"))
+          birthday-scheduled (:logseq.property/scheduled birthday-properties)
+          birthday-date (js/Date. birthday-scheduled)]
+      (is (= 20251101 (date-time-util/ms->journal-day birthday-scheduled))
+          "Repeated scheduled timestamp keeps its scheduled date")
+      (is (= [8 0] [(.getHours birthday-date) (.getMinutes birthday-date)])
+          "Repeated scheduled timestamp keeps its time")
+      (is (= {:logseq.property.repeat/repeated? true
+              :logseq.property.repeat/temporal-property :logseq.property/scheduled
+              :logseq.property.repeat/recur-frequency 1
+              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.year}
+             (select-keys birthday-properties
+                          [:logseq.property.repeat/repeated?
+                           :logseq.property.repeat/temporal-property
+                           :logseq.property.repeat/recur-frequency
+                           :logseq.property.repeat/recur-unit]))
+          "Repeated scheduled timestamp keeps its repeat properties")
+      (is (= {:logseq.property/deadline 20251107
+              :logseq.property.repeat/repeated? true
+              :logseq.property.repeat/temporal-property :logseq.property/deadline
+              :logseq.property.repeat/recur-frequency 2
+              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}
+             (-> report-properties
+                 (update :logseq.property/deadline date-time-util/ms->journal-day)
+                 (select-keys [:logseq.property/deadline
+                               :logseq.property.repeat/repeated?
+                               :logseq.property.repeat/temporal-property
+                               :logseq.property.repeat/recur-frequency
+                               :logseq.property.repeat/recur-unit])))
+          "Repeated deadline timestamp keeps its repeat properties")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
+(deftest-async import-preserves-legacy-task-markers-as-status-choices
+  (p/let [file (write-temp-graph-file
+                 "pages/tasks.md"
+                 "- TODO todo item\n- LATER later item\n- NOW now item\n- DOING doing item\n- WAIT waiting item\n- WAITING waiting full item\n- IN-PROGRESS in-progress item\n- DONE done item\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (is (= :logseq.property/status.todo
+           (:db/ident (block-status @conn "todo item")))
+        "TODO still imports to the built-in Todo status")
+    (is (= :logseq.property/status.doing
+           (:db/ident (block-status @conn "doing item")))
+        "DOING still imports to the built-in Doing status")
+    (is (= :logseq.property/status.done
+           (:db/ident (block-status @conn "done item")))
+        "DONE still imports to the built-in Done status")
+    (is (= :logseq.property/status.todo
+           (:db/ident (block-status @conn "later item")))
+        "LATER imports to the built-in Todo status")
+    (is (= :logseq.property/status.doing
+           (:db/ident (block-status @conn "now item")))
+        "NOW imports to the built-in Doing status")
+    (is (= "WAIT" (status-content @conn "waiting item"))
+        "WAIT imports as its own status choice")
+    (is (= "WAITING" (status-content @conn "waiting full item"))
+        "WAITING imports as its own status choice")
+    (is (= "IN-PROGRESS" (status-content @conn "in-progress item"))
+        "IN-PROGRESS imports as its own status choice")
+    (is (set/subset? #{"WAIT" "WAITING" "IN-PROGRESS"}
+                     (status-closed-value-contents @conn))
+        "Custom imported markers are added to Status closed values")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-custom-task-marker-across-multiple-files
+  (p/let [first-file (write-temp-graph-file
+                       "pages/custom-status-a.md"
+                       "- WAITING first custom status item\n")
+          second-file (write-temp-graph-file
+                        "pages/custom-status-b.md"
+                        "- WAITING second custom status item\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [first-file second-file] conn {})]
+    (is (= "WAITING" (status-content @conn "first custom status item"))
+        "Custom status marker imports from the first file")
+    (is (= "WAITING" (status-content @conn "second custom status item"))
+        "Custom status marker imports from the second file")
+    (is (= 1 (get (status-closed-value-content-frequencies @conn) "WAITING"))
+        "Custom status closed value is shared across imported files")
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
@@ -1151,7 +1269,21 @@
           files (mapv #(path/path-join file-graph-dir %) ["journals/2024_02_07.md"
                                                           "journals/2026_01_27.md"])
           conn (db-test/create-conn)
-          _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})]
+          _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})
+          namespaced-file (write-temp-graph-file
+                           "pages/namespace-inline-tag.md"
+                           "- #parent/child\n")
+          namespaced-conn (db-test/create-conn)
+          _ (import-files-to-db [namespaced-file] namespaced-conn {:remove-inline-tags? false :convert-all-tags? true})
+          [block tag] (->> (d/q '[:find ?b ?t
+                                  :where
+                                  [?b :block/tags ?t]
+                                  [?b :block/page]
+                                  [?t :db/ident :user.class/parent___child]]
+                                @namespaced-conn)
+                           first
+                           (map #(d/entity @namespaced-conn %)))
+          raw-title (:block/title block)]
 
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
@@ -1160,7 +1292,15 @@
         "block with tag preserves inline tag")
     (is (string/includes? (:block/title (db-test/find-block-by-content @conn #"block with multi word tag"))
                           "#[[another test]]")
-        "block with multi word tag preserves inline tag")))
+        "block with multi word tag preserves inline tag")
+    (testing "namespaced inline tag on first line is preserved as inline tag"
+      (is (some? block)
+          "imported first-line namespaced tag block")
+      (is (string? raw-title)
+          "imported block has raw title")
+      (when (string? raw-title)
+        (is (ldb/inline-tag? raw-title tag)
+            "first-line namespaced tag is stored as an inline tag")))))
 
 (deftest-async export-files-with-ignored-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
