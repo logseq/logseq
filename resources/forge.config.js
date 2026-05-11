@@ -48,7 +48,7 @@ module.exports = {
         language: 1033,
         manufacturer: 'Logseq',
         appUserModelId: 'com.logseq.logseq-og',
-        upgradeCode: "3778eb84-a0ce-4109-9120-5d4315e0d7de",
+        upgradeCode: "fefe66fc-d1dd-445e-aa76-12c593d13a4d",
         ui: {
           enabled: false,
           chooseDirectory: true,
