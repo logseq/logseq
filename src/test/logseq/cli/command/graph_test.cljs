@@ -366,6 +366,7 @@
                stop-calls (atom [])
                restart-calls (atom [])
                root-dir (node-helper/create-tmp-dir "cli-backup-restore-flow")
+               sqlite-payload (js/Buffer.from "sqlite" "utf8")
                backup-db-path (node-path/join root-dir
                                               "graphs"
                                               (graph-dir/repo->encoded-graph-dir-name "logseq_db_demo")
@@ -385,7 +386,7 @@
                                                            (p/resolved (assoc config :base-url "http://example")))
                                transport/read-input (fn [{:keys [format path]}]
                                                       (swap! read-calls conj [format path])
-                                                      (js/Buffer.from "sqlite" "utf8"))
+                                                      sqlite-payload)
                                transport/invoke (fn [_ method args]
                                                   (swap! invoke-calls conj [method args])
                                                   (p/resolved {:ok true}))]
@@ -413,7 +414,7 @@
                      (is (= :sqlite read-format))
                      (is (and (string? read-path)
                               (string/includes? read-path expected-segment))))
-                   (is (= [[:thread-api/import-db-base64 ["logseq_db_demo-restored" "c3FsaXRl"]]]
+                   (is (= [[:thread-api/import-db-binary ["logseq_db_demo-restored" sqlite-payload]]]
                           @invoke-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))

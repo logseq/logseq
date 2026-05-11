@@ -2359,6 +2359,13 @@
       (is (false? (:ok? result)))
       (is (= :missing-file (get-in result [:error :code])))))
 
+  (testing "graph export sqlite can omit file and use graph export directory"
+    (let [result (commands/parse-args ["graph" "export" "--type" "sqlite"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-export (:command result)))
+      (is (= "sqlite" (get-in result [:options :type])))
+      (is (nil? (get-in result [:options :file])))))
+
   (testing "graph export accepts global output format and still requires file"
     (let [result (commands/parse-args ["graph" "export" "--type" "edn" "--output" "json"])]
       (is (false? (:ok? result)))
@@ -4252,9 +4259,7 @@
                                                            (assoc config :base-url "http://127.0.0.1:9999"))
                                transport/invoke (fn [_ method args]
                                                   (swap! invoke-calls conj [method args])
-                                                  (if (= method :thread-api/export-db-base64)
-                                                    "c3FsaXRl"
-                                                    {:exported true}))
+                                                  {:exported true})
                                transport/write-output (fn [opts]
                                                         (swap! write-calls conj opts))]
                  (p/let [edn-result (commands/execute {:type :graph-export
@@ -4273,19 +4278,32 @@
                                                           :export-type "sqlite"
                                                           :file "/tmp/export.sqlite"
                                                           :allow-missing-graph true}
-                                                         {})]
+                                                         {})
+                         sqlite-default-result (commands/execute {:type :graph-export
+                                                                  :repo "logseq_db_demo"
+                                                                  :graph "demo"
+                                                                  :export-type "sqlite"
+                                                                  :allow-missing-graph true}
+                                                                 {:root-dir "/tmp/logseq"})]
                    (is (= :ok (:status edn-result)))
                    (is (= :ok (:status sqlite-result)))
+                   (is (= :ok (:status sqlite-default-result)))
                    (is (= "edn" (get-in edn-result [:context :export-type])))
                    (is (= "/tmp/export.edn" (get-in edn-result [:context :file])))
                    (is (= "sqlite" (get-in sqlite-result [:context :export-type])))
                    (is (= "/tmp/export.sqlite" (get-in sqlite-result [:context :file])))
-                   (is (= [[:thread-api/export-edn ["logseq_db_demo" {:export-type :graph
-                                                                      :graph-options {:include-timestamps? true
-                                                                                      :exclude-built-in-pages? true
-                                                                                      :exclude-namespaces #{:user :project}}}]]
-                           [:thread-api/backup-db-sqlite ["logseq_db_demo" "/tmp/export.sqlite"]]]
-                          @invoke-calls))
+                   (let [default-sqlite-path (get-in @invoke-calls [2 1 1])]
+                     (is (= [[:thread-api/export-edn ["logseq_db_demo" {:export-type :graph
+                                                                        :graph-options {:include-timestamps? true
+                                                                                        :exclude-built-in-pages? true
+                                                                                        :exclude-namespaces #{:user :project}}}]]
+                             [:thread-api/backup-db-sqlite ["logseq_db_demo" "/tmp/export.sqlite"]]
+                             [:thread-api/backup-db-sqlite ["logseq_db_demo" default-sqlite-path]]]
+                            @invoke-calls))
+                     (is (string/includes? default-sqlite-path "/tmp/logseq/graphs/demo/export/demo_"))
+                     (is (string/ends-with? default-sqlite-path ".sqlite"))
+                     (is (= (str "wrote " default-sqlite-path)
+                            (get-in sqlite-default-result [:data :message]))))
                    (is (= 1 (count @write-calls)))
                    (is (= {:format :edn
                            :path "/tmp/export.edn"
@@ -4299,7 +4317,8 @@
          (let [invoke-calls (atom [])
                read-calls (atom [])
                stop-calls (atom [])
-               restart-calls (atom [])]
+               restart-calls (atom [])
+               sqlite-payload (js/Buffer.from "sqlite" "utf8")]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] [])
                                cli-server/stop-server! (fn [_ repo] (swap! stop-calls conj repo) (p/resolved {:ok? true}))
                                cli-server/restart-server! (fn [_ repo] (swap! restart-calls conj repo) (p/resolved {:ok? true}))
@@ -4308,7 +4327,7 @@
                                                       (swap! read-calls conj [format path])
                                                       (if (= format :edn)
                                                         {:page "Import Page"}
-                                                        (js/Buffer.from "sqlite" "utf8")))
+                                                        sqlite-payload))
                                transport/invoke (fn [_ method args]
                                                   (swap! invoke-calls conj [method args])
                                                   {:ok true})]
@@ -4322,7 +4341,7 @@
                    (is (= "/tmp/import.sqlite" (get-in sqlite-result [:context :input])))
                    (is (= [[:edn "/tmp/import.edn"] [:sqlite "/tmp/import.sqlite"]] @read-calls))
                    (is (= [[:thread-api/import-edn ["logseq_db_demo" {:page "Import Page"}]]
-                           [:thread-api/import-db-base64 ["logseq_db_demo" "c3FsaXRl"]]]
+                           [:thread-api/import-db-binary ["logseq_db_demo" sqlite-payload]]]
                           @invoke-calls))
                    (is (= ["logseq_db_demo" "logseq_db_demo"] @stop-calls))
                    (is (= ["logseq_db_demo" "logseq_db_demo"] @restart-calls))))
