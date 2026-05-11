@@ -2465,7 +2465,10 @@
                                 (some? (mldoc/extract-first-query-from-ast body))))))
           [:div.block-body
            (let [body (block/trim-break-lines! (:block.temp/ast-body block))
-                 uuid (:block/uuid block)]
+                 uuid (:block/uuid block)
+                 raw-content (or (:block/raw-title block) (:block/title block) "")
+                 deprecated-org-quote? (boolean (re-find #"(?i)^\s*#\+BEGIN_QUOTE" (str raw-content)))
+                 config (if deprecated-org-quote? (assoc config :deprecated-org-quote? true) config)]
              (for [[idx child] (medley/indexed body)]
                (when-let [block (markup-element-cp config child)]
                  (rum/with-key (block-child block)
@@ -4391,8 +4394,10 @@
       ["Example" l]
       [:pre.pre-wrap-white-space
        (join-lines l)]
-      ["Quote" _l]
-      [:div.warning (t :block/deprecated-quote)]
+      ["Quote" l]
+      (if (:deprecated-org-quote? config)
+        [:div.warning (t :block/deprecated-quote)]
+        [:blockquote.ls-blockquote (markup-elements-cp config l)])
       ["Raw_Html" content]
       (when (not html-export?)
         [:div.raw_html.inline-block
