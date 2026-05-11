@@ -8,9 +8,17 @@
                           :block/title "Name"
                           :logseq.property/type :default}]
         columns (views/build-columns {} mock-properties {:with-object-name? false
-                                                          :add-tags-column? false})]
+                                                         :add-tags-column? false})]
     ;; Without built-in title column, user 'Name' property should exist
     (is (some #(= :user.property/name-abc (:id %)) columns))))
+
+(deftest build-columns-should-include-page-column-when-requested
+  (let [columns (views/build-columns {} [] {:add-tags-column? false
+                                            :add-page-column? true})]
+    (is (some #(= :block/page (:id %)) columns))
+    (is (false? (:sortable? (some #(when (= :block/page (:id %)) %) columns))))
+    (is (not (some #(= :block/page (:id %))
+                   (views/build-columns {} [] {:add-tags-column? false}))))))
 
 (deftest sort-columns-should-deduplicate-ordered-ids
   "Reproduces db-test#837 amplification: When ordered-column-ids contains
