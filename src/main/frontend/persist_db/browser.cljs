@@ -147,15 +147,18 @@
                         "&publishing=" config/publishing?))
            _ (set-worker-fs worker)
            wrapped-worker* (Comlink/wrap worker)
-           wrapped-worker (fn [qkw direct-pass? & args]
-                            (p/let [result (.remoteInvoke ^js wrapped-worker*
-                                                          (str (namespace qkw) "/" (name qkw))
-                                                          direct-pass?
-                                                          (if direct-pass?
-                                                            (into-array args)
-                                                            (ldb/write-transit-str args)))]
-                              (if direct-pass?
-                                result
+           wrapped-worker (fn [qkw & args]
+                            (if (contains? #{:thread-api/export-db-binary
+                                             :thread-api/export-client-ops-db-binary
+                                             :thread-api/import-db-binary}
+                                           qkw)
+                              (let [method (str (namespace qkw) "/" (name qkw))]
+                                (if (= :thread-api/import-db-binary qkw)
+                                  (.remoteInvokeBinary ^js wrapped-worker* method (first args) (second args))
+                                  (.remoteInvokeBinary ^js wrapped-worker* method (first args))))
+                              (p/let [result (.remoteInvoke ^js wrapped-worker*
+                                                            (str (namespace qkw) "/" (name qkw))
+                                                            (ldb/write-transit-str args))]
                                 (ldb/read-transit-str result))))
            t1 (util/time-ms)]
        (reset! state/*db-worker-thread worker)
@@ -198,10 +201,20 @@
       (log/error :sqlite-error error)
       (notification/show! (t :storage/sqlitedb-error error) :error))))
 
+(defn- <sync-markdown-mirror-setting!
+  [repo]
+  (if (and (util/electron?) repo)
+    (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled
+                             repo
+                             (true? (:feature/markdown-mirror? (state/get-graph-config repo))))
+    (p/resolved nil)))
+
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo opts]
-    (state/<invoke-db-worker :thread-api/create-or-open-db repo opts))
+    (p/let [result (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
+            _ (<sync-markdown-mirror-setting! repo)]
+      result))
 
   (<list-db [_this]
     (-> (state/<invoke-db-worker :thread-api/list-db)
@@ -214,24 +227,24 @@
     (state/<invoke-db-worker :thread-api/release-access-handles repo))
 
   (<fetch-initial-data [_this repo opts]
-    (-> (p/let [_ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
+    (-> (p/let [_ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)
+                _ (<sync-markdown-mirror-setting! repo)]
           (state/<invoke-db-worker :thread-api/get-initial-data repo opts))
         (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]
-    (-> (p/let [data (state/<invoke-db-worker-direct-pass :thread-api/export-db repo)]
-          (when data
-            (if (:return-data? opts)
-              data
-              (<export-db! repo))))
+    (-> (if (util/electron?)
+          (<export-db! repo)
+          (p/let [data (state/<invoke-db-worker :thread-api/export-db-binary repo)]
+            (when (:return-data? opts)
+              data)))
         (p/catch (fn [error]
                    (log/error :export-db-error repo error "SQLiteDB save error")
                    (notification/show! (t :storage/sqlitedb-save-error error) :error) {}))))
 
   (<import-db [_this repo data]
     (->
-     (p/let [result-str (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)]
-       (ldb/read-transit-str result-str))
+     (state/<invoke-db-worker :thread-api/import-db-binary repo data)
      (p/catch (fn [error]
                 (log/error :import-db-error repo error "SQLiteDB import error")
                 (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))

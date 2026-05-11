@@ -144,15 +144,6 @@
 (defn path-join
   "Join path segments, or URL base and path segments"
   [base & segments]
-  (cond
-    ;; For debugging
-    ; (nil? base)
-    ; (js/console.log "path join with nil global directory" segments)
-    (= base "")
-    (js/console.error "BUG: should not join with empty dir" segments)
-    :else
-    nil)
-
   (if (is-file-url? base)
     (apply url-join base segments)
     (let [rejoined-path (apply path-join-internal base segments)]

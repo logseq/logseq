@@ -58,6 +58,16 @@
   @apply sm:py-8 py-2 sm:pl-8 sm:pr-4;
 }
 
+#main-content-container[data-is-margin-less-pages='true'] {
+  padding: 0 !important;
+  justify-content: stretch;
+}
+
+#main-content-container[data-is-margin-less-pages='true'] > .cp__sidebar-main-content {
+  max-width: none;
+  width: 100%;
+}
+
 .left-sidebar-inner {
   &.as-container {
     @apply relative h-full pt-3 overflow-y-auto overflow-x-hidden transition-transform;
@@ -692,6 +702,14 @@
 
 .cp__sidebar-main-content[data-is-margin-less-pages='true'] {
   padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.cp__sidebar-main-content[data-is-margin-less-pages='true'] > div {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 @supports not (overflow-y: overlay) {

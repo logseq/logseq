@@ -1,7 +1,8 @@
 (ns frontend.worker.sync.client-op
   "Store client sync metadata and ops in sqlite tables.
    DataScript client-op storage is deprecated and unsupported."
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.worker.state :as worker-state]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -436,17 +437,23 @@
         (when (and (uuid? block-uuid)
                    (qualified-keyword? attr)
                    (string? value))
-          (sqlite-run! store
-                       (str "insert into sync_conflicts "
-                            "(block_uuid, attr, value, remote_t, created_at) "
-                            "values (?, ?, ?, ?, ?) "
-                            "on conflict(block_uuid, attr, value) do update set "
-                            "remote_t = excluded.remote_t")
-                       [(str block-uuid)
-                        (qualified-kw->str attr)
-                        value
-                        remote-t
-                        now]))))))
+          (let [attr-str (qualified-kw->str attr)]
+            (sqlite-run! store
+                         "delete from sync_conflicts where block_uuid = ? and attr = ?"
+                         [(str block-uuid) attr-str])
+            (when-not (string/blank? value)
+              (sqlite-run! store
+                           (str "insert into sync_conflicts "
+                                "(block_uuid, attr, value, remote_t, created_at) "
+                                "values (?, ?, ?, ?, ?) "
+                                "on conflict(block_uuid, attr, value) do update set "
+                                "remote_t = excluded.remote_t, "
+                                "created_at = excluded.created_at")
+                           [(str block-uuid)
+                            attr-str
+                            value
+                            remote-t
+                            now]))))))))
 
 (defn get-sync-conflicts
   [repo block-uuid]

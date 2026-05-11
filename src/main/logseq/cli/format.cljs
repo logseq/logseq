@@ -7,6 +7,7 @@
             [logseq.cli.humanize :as cli-humanize]
             [logseq.cli.output-mode :as output-mode]
             [logseq.cli.style :as style]
+            [logseq.cli.tree-text :as tree-text]
             [logseq.common.util :as common-util]
             ["string-width" :default string-width]))
 
@@ -191,6 +192,7 @@
     :search-page "Use: logseq search page --content <query>"
     :search-property "Use: logseq search property --content <query>"
     :search-tag "Use: logseq search tag --content <query>"
+    :qsearch "Use: logseq qsearch <query> [--graph <graph>]"
     "Use: logseq search <block|page|property|tag> --content <query>"))
 
 (defn- error-hint
@@ -202,12 +204,16 @@
     :missing-tag-name "Use --name <tag-name>"
     :missing-query "Use --query <edn>"
     :missing-query-text (missing-search-query-hint command)
+    :qmd-no-block-ids "Run `logseq qmd [--graph <graph>]` and retry"
     :unknown-query "Use `logseq query list` to see available queries"
     :ambiguous-tag-name "Retry with --id <tag-id>"
     :ambiguous-property-name "Retry with --id <property-id>"
     :root-dir-permission "Check filesystem permissions or set LOGSEQ_CLI_ROOT_DIR"
     :server-owned-by-other "Retry from the process owner that started the server"
     :server-start-timeout-orphan "Check and stop lingering db-worker-node processes, then retry"
+    :server-revision-mismatch "Logseq will restart revision-mismatched db-worker-node servers automatically; retry after stopping any lingering server manually"
+    :server-revision-mismatch-restart-failed "Logseq tried to restart a revision-mismatched db-worker-node server and failed. Stop the server manually, then retry"
+    :server-revision-mismatch-after-restart "Logseq restarted db-worker-node, but the replacement still reports a different revision. Check the installed Logseq build and retry"
     nil))
 
 (defn- format-candidates
@@ -414,6 +420,150 @@
   ([items now-ms title-max-display-width]
    (format-list-dynamic items now-ms list-node-columns {:title-max-display-width title-max-display-width
                                                          :truncate-cell-max-lines list-human-cell-max-lines})))
+
+(defn- qsearch-item-id
+  [item]
+  (or (:db/id item) (:id item)))
+
+(defn- qsearch-page-entity
+  [item]
+  (let [page (:block/page item)
+        page-id (:block/page-id item)
+        page-title (:block/page-title item)]
+    (cond
+      (map? page) page
+      (or page-id page-title)
+      (cond-> {}
+        page-id (assoc :db/id page-id)
+        page-title (assoc :block/title page-title))
+      :else
+      {:block/title "Unknown Page"})))
+
+(defn- qsearch-page-label
+  [page]
+  (or (:block/title page)
+      (:block/name page)
+      (some-> (:block/uuid page) str)
+      (some-> (:db/id page) str)
+      "Unknown Page"))
+
+(defn- qsearch-page-key
+  [page]
+  (if-let [id (:db/id page)]
+    [:db/id id]
+    [:label (qsearch-page-label page)]))
+
+(defn- dedupe-qsearch-items
+  [items]
+  (second
+   (reduce (fn [[seen acc] item]
+             (let [id (qsearch-item-id item)]
+               (if (and id (contains? seen id))
+                 [seen acc]
+                 [(cond-> seen id (conj id))
+                  (conj acc item)])))
+           [#{} []]
+           (or items []))))
+
+(defn- append-qsearch-group-item
+  [{:keys [groups by-key] :as state} item]
+  (let [page (qsearch-page-entity item)
+        page-key (qsearch-page-key page)
+        group-idx (get by-key page-key)
+        item* (cond-> item
+                (nil? (:db/id item)) (assoc :db/id (qsearch-item-id item)))]
+    (if (some? group-idx)
+      (update-in state [:groups group-idx :items] conj item*)
+      (let [group {:page page
+                   :items [item*]}
+            group-idx (count groups)]
+        (-> state
+            (update :groups conj group)
+            (assoc-in [:by-key page-key] group-idx))))))
+
+(defn- qsearch-page-groups
+  [items]
+  (:groups
+   (reduce append-qsearch-group-item
+           {:groups [] :by-key {}}
+           (dedupe-qsearch-items items))))
+
+(defn- qsearch-group->text
+  [{:keys [property-titles property-value-labels uuid->label]} {:keys [page items]}]
+  (let [root (assoc page :block/children (vec items))]
+    (tree-text/tree->text {:root root
+                           :property-titles property-titles
+                           :property-value-labels property-value-labels
+                           :uuid->label uuid->label})))
+
+(def ^:private ansi-or-text-pattern
+  #"\u001b\[[0-9;]*m|[^\u001b]+")
+
+(def ^:private regex-special-chars
+  #{\. \* \+ \? \^ \$ \{ \} \( \) \| \[ \] \\})
+
+(defn- escape-regex
+  [value]
+  (->> value
+       str
+       (map (fn [ch]
+              (if (contains? regex-special-chars ch)
+                (str "\\" ch)
+                (str ch))))
+       (apply str)))
+
+(defn- qsearch-highlight-terms
+  [query]
+  (->> (string/split (or query "") #"\s+")
+       (map string/trim)
+       (remove string/blank?)
+       (sort-by count >)
+       (map escape-regex)
+       distinct
+       vec))
+
+(defn- highlight-qsearch-query
+  [text query]
+  (let [terms (qsearch-highlight-terms query)]
+    (if (seq terms)
+      (let [pattern (js/RegExp. (string/join "|" terms) "gi")
+            highlight-segment (fn [segment]
+                                (if (re-matches style/ansi-pattern segment)
+                                  segment
+                                  (string/replace segment pattern
+                                                  (fn [match]
+                                                    (style/yellow match)))))]
+        (->> (re-seq ansi-or-text-pattern text)
+             (map highlight-segment)
+             (apply str)))
+      text)))
+
+(defn- format-qsearch
+  [data human-data _now-ms _title-max-display-width]
+  (let [render-items (if (and (map? human-data)
+                              (contains? human-data :items))
+                       (:items human-data)
+                       (:items data))
+        groups (qsearch-page-groups render-items)
+        body (if (seq groups)
+               (string/join "\n\n" (map #(qsearch-group->text human-data %) groups))
+               "No matches")
+        missing-ids (vec (or (:missing-ids data) []))]
+    (highlight-qsearch-query
+     (cond-> body
+       (seq missing-ids)
+       (str "\nMissing ids: " (string/join ", " missing-ids)))
+     (:query human-data))))
+
+(defn- format-qmd
+  [{:keys [collection mirror-dir collection-action embed]
+    update-status :update}]
+  (string/join "\n"
+               [(str "QMD ready: " (or collection "-"))
+                (str "Mirror: " (or mirror-dir "-"))
+                (str "Collection: " (name (or collection-action :unknown)))
+                (str "Embed: " (name (or embed :unknown)))
+                (str "Update: " (name (or update-status :unknown)))]))
 
 (defn- normalize-asset-type
   [value]
@@ -794,6 +944,19 @@
     :sync-grant-access (str "Sync access granted: " email " (repo: " repo ")")
     "Sync updated"))
 
+(defn- format-sync-asset-download
+  [{:keys [repo]} {:keys [asset-uuid download-requested? checksum-status hint]}]
+  (cond
+    (= :mismatch checksum-status)
+    (str (or hint "Local asset checksum mismatched; requested re-download.")
+         " " asset-uuid)
+
+    (false? download-requested?)
+    (str "Sync asset already downloaded: " asset-uuid " (repo: " repo ")")
+
+    :else
+    (str "Sync asset download requested: " asset-uuid " (repo: " repo ")")))
+
 (defn- format-sync-config-get
   [{:keys [key value]}]
   (let [display-value (if (contains? #{:auth-token :e2ee-password} key)
@@ -922,15 +1085,27 @@
   [{:keys [src]}]
   (str "Removed backup: " (or src "-")))
 
+(defn- format-graph-create-enable-sync
+  [{:keys [graph stages]}]
+  (string/join "\n"
+               ["Graph created and sync enabled"
+                (str "  Graph: " (or graph "-"))
+                (str "  Create: " (if (contains? stages :create) "ok" "-"))
+                (str "  Sync upload: " (if (contains? stages :upload) "ok" "-"))
+                (str "  Sync start: " (if (contains? stages :start) "ok" "-"))]))
+
 (defn- format-graph-action
-  [command {:keys [graph]}]
-  (let [verb (case command
-               :graph-create "Created"
-               :graph-switch "Switched to"
-               :graph-remove "Removed"
-               :graph-validate "Validated"
-               "Updated")]
-    (str verb " graph " (pr-str graph))))
+  [command {:keys [graph]} data]
+  (if (and (= command :graph-create)
+           (map? (:stages data)))
+    (format-graph-create-enable-sync data)
+    (let [verb (case command
+                 :graph-create "Created"
+                 :graph-switch "Switched to"
+                 :graph-remove "Removed"
+                 :graph-validate "Validated"
+                 "Updated")]
+      (str verb " graph " (pr-str graph)))))
 
 (defn- quote-cli-arg
   [value]
@@ -976,7 +1151,7 @@
         :graph-backup-remove (format-graph-backup-remove context)
         :graph-info (format-graph-info data now-ms)
         (:graph-create :graph-switch :graph-remove :graph-validate)
-        (format-graph-action command context)
+        (format-graph-action command context data)
         :server-list (format-server-list (:servers data)
                                          (get-in human [:server-list :revision-mismatch]))
         :server-cleanup (format-server-cleanup data)
@@ -986,6 +1161,7 @@
         :sync-remote-graphs (format-sync-remote-graphs (:graphs data))
         (:sync-start :sync-stop :sync-upload :sync-download :sync-ensure-keys :sync-grant-access)
         (format-sync-action command context)
+        :sync-asset-download (format-sync-asset-download context data)
         :sync-config-get (format-sync-config-get data)
         :sync-config-set (format-sync-config-set data)
         :sync-config-unset (format-sync-config-unset data)
@@ -999,6 +1175,8 @@
         :list-asset (format-list-asset (:items data) now-ms list-title-max-display-width)
         (:search-block :search-page :search-property :search-tag)
         (format-list-page (:items data) now-ms)
+        :qmd (format-qmd data)
+        :qsearch (format-qsearch data (get-in human [:qsearch]) now-ms list-title-max-display-width)
         :upsert-block (format-upsert-block context (:result data))
         :upsert-page (format-upsert-page context (:result data))
         :upsert-task (format-upsert-task context (:result data))

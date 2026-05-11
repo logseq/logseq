@@ -60,3 +60,27 @@
         conn (d/conn-from-datoms initial-data schema)]
     (is (some? (db-test/find-page-by-title @conn "page1"))
         "Restores recently updated page")))
+
+(deftest get-block-and-children-has-children-flag
+  (testing "Top-level block with children has :block.temp/has-children? true"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "test-page"}
+                  :blocks [{:block/title "parent"
+                            :build/children
+                            [{:block/title "child1"}
+                             {:block/title "child2"}]}]}])
+          parent-block (db-test/find-block-by-content @conn "parent")
+          result (common-initial-data/get-block-and-children
+                  @conn (:block/uuid parent-block) {:children? false})]
+      (is (true? (:block.temp/has-children? (:block result)))
+          "Top-level block with children should have :block.temp/has-children? true")))
+
+  (testing "Top-level block without children has :block.temp/has-children? false"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "test-page2"}
+                  :blocks [{:block/title "leaf-block"}]}])
+          leaf-block (db-test/find-block-by-content @conn "leaf-block")
+          result (common-initial-data/get-block-and-children
+                  @conn (:block/uuid leaf-block) {:children? false})]
+      (is (false? (:block.temp/has-children? (:block result)))
+          "Top-level block without children should have :block.temp/has-children? false"))))

@@ -33,6 +33,23 @@ allprojects {
     }
 }
 
+// Force compileSdk 36 for all subprojects to match dependency requirements
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                def currentSdk = compileSdkVersion
+                def currentSdkInt = currentSdk instanceof String ?
+                    currentSdk.replace('android-', '') as int :
+                    currentSdk as int
+                if (currentSdkInt < 36) {
+                    compileSdkVersion 36
+                }
+            }
+        }
+    }
+}
+
 task clean(type: Delete) {
     delete rootProject.buildDir
 }

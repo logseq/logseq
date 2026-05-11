@@ -3,9 +3,11 @@
             [cljs.test :refer [async deftest is]]
             [electron.backup-file :as backup-file]
             [electron.db :as electron-db]
+            [electron.db-worker :as db-worker]
             [frontend.test.node-helper :as node-helper]
             [goog.object :as gobj]
             [logseq.cli.common.graph :as cli-common-graph]
+            [logseq.cli.transport :as cli-transport]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.backup :as sqlite-backup]
             [promesa.core :as p]
@@ -152,6 +154,61 @@
                 (is (= "worker-copy" content))
                 (is (= backups-path (:backups-dir opts)))
                 (is (= true (:force-backup? opts))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest export-db-via-worker-writes-directly-to-destination-file
+  (async done
+    (let [graphs-dir (node-helper/create-tmp-dir "electron-db-export-direct")
+          export-dir (node-helper/create-tmp-dir "electron-db-export-direct-dst")
+          db-name "logseq_db_demo"
+          dst-path (node-path/join export-dir "export.sqlite")
+          runtime {:runtime true}
+          worker-calls (atom [])
+          backup-calls (atom [])]
+      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+                          db-worker/ensure-runtime! (fn [repo window-id]
+                                                      (swap! worker-calls conj [:ensure-runtime repo window-id])
+                                                      (p/resolved runtime))
+                          cli-transport/invoke (fn [runtime' method args]
+                                                 (swap! worker-calls conj [:invoke runtime' method args])
+                                                 (fs/writeFileSync dst-path "sqlite-copy")
+                                                 (p/resolved {:path dst-path}))
+                          backup-file/backup-file (fn [& args]
+                                                    (swap! backup-calls conj args)
+                                                    (p/resolved nil))]
+            (p/let [result (electron-db/export-db-via-worker! db-name 7 dst-path)]
+              (is (= {:path dst-path} result))
+              (is (= "sqlite-copy" (fs/readFileSync dst-path "utf8")))
+              (is (= [[:ensure-runtime db-name 7]
+                      [:invoke runtime :thread-api/backup-db-sqlite [db-name dst-path]]]
+                     @worker-calls))
+              (is (empty? @backup-calls))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest export-db-to-export-dir-via-worker-writes-under-graph-export-dir
+  (async done
+    (let [graphs-dir (node-helper/create-tmp-dir "electron-db-export-dir")
+          db-name "logseq_db_demo"
+          runtime {:runtime true}
+          worker-calls (atom [])]
+      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+                          db-worker/ensure-runtime! (fn [repo window-id]
+                                                      (swap! worker-calls conj [:ensure-runtime repo window-id])
+                                                      (p/resolved runtime))
+                          cli-transport/invoke (fn [_runtime method args]
+                                                 (swap! worker-calls conj [:invoke method args])
+                                                 (p/resolved {:path (second args)}))]
+            (p/let [result (electron-db/export-db-to-export-dir-via-worker!
+                            db-name 7 "../export.sqlite")]
+              (let [expected-path (node-path/join graphs-dir "demo" "export" "export.sqlite")]
+                (is (= expected-path (:path result)))
+                (is (= [[:ensure-runtime db-name 7]
+                        [:invoke :thread-api/backup-db-sqlite [db-name expected-path]]]
+                       @worker-calls)))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))

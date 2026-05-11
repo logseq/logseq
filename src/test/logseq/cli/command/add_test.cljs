@@ -11,7 +11,7 @@
 (deftest test-today-page-title-uses-default-time-zone
   (async done
     (let [formatted-args* (atom nil)]
-      (-> (p/with-redefs [transport/invoke (fn [_ method _ _args]
+      (-> (p/with-redefs [transport/invoke (fn [_ method _args]
                                              (if (= method :thread-api/pull)
                                                (p/resolved {:logseq.property.journal/title-format "yyyy-MM-dd"})
                                                (p/rejected (ex-info "unexpected method" {:method method}))))
@@ -97,7 +97,7 @@
       (is (= ["3.14" "1e5"] (:page-refs result))))))
 
 (def ^:private mock-transport-invoke
-  (fn [_ method _ args]
+  (fn [_ method args]
     (case method
       ;; pull-tag-by-name uses :thread-api/q
       :thread-api/q
@@ -130,7 +130,7 @@
   (testing "resolves integer id refs to uuid+title maps"
     (async done
            (let [page-uuid (random-uuid)
-                 mock-invoke (fn [_ _ _ args]
+                 mock-invoke (fn [_ _ args]
                                (let [[_ _ lookup] args]
                                  (p/resolved
                                   (cond
@@ -198,7 +198,7 @@
 
 (deftest test-resolve-date-page-id-rejects-invalid-date
   (async done
-         (let [mock-invoke (fn [_ _ _ args]
+         (let [mock-invoke (fn [_ _ args]
                              (let [[_ _ lookup] args]
                                (p/resolved
                                 (if (= lookup :logseq.class/Journal)
@@ -236,7 +236,7 @@
    :logseq.property/public? true})
 
 (def ^:private selector-mock-transport-invoke
-  (fn [_ method _ args]
+  (fn [_ method args]
     (case method
       :thread-api/q
       (let [[_ [_ name-arg]] args]

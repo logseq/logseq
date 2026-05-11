@@ -1,13 +1,12 @@
 (ns logseq.cli.commands-test
-  (:require [cljs.test :refer [async deftest is testing]]
-            [babashka.cli :as cli]
+  (:require [babashka.cli :as cli]
+            [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
             [logseq.cli.command.query :as query-command]
             [logseq.cli.command.server :as server-command]
-            [logseq.db.frontend.rules :as rules]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.command.sync :as sync-command]
             [logseq.cli.command.upsert :as upsert-command]
@@ -15,6 +14,7 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
+            [logseq.db.frontend.rules :as rules]
             [promesa.core :as p]))
 
 (defn- strip-ansi
@@ -85,6 +85,7 @@
       (is (string/includes? plain-summary "upsert asset"))
       (is (string/includes? plain-summary "remove"))
       (is (string/includes? plain-summary "query"))
+      (is (string/includes? plain-summary "qsearch"))
       (is (string/includes? plain-summary "search"))
       (is (string/includes? plain-summary "show"))
       (is (string/includes? plain-summary "doctor"))
@@ -98,6 +99,7 @@
       (is (string/includes? plain-summary "completion"))
       (is (string/includes? plain-summary "example"))
       (is (not (string/includes? plain-summary "example upsert")))
+      (is (string/includes? plain-summary "qmd"))
       (is (string/includes? plain-summary "skill"))
       (is (not (string/includes? plain-summary "skill show")))
       (is (string/includes? plain-summary "Path to CLI root dir (default ~/logseq)"))
@@ -119,6 +121,7 @@
       (is (contains-bold? summary "remove property"))
       (is (contains-bold? summary "query"))
       (is (contains-bold? summary "query list"))
+      (is (contains-bold? summary "qsearch"))
       (is (contains-bold? summary "search block"))
       (is (contains-bold? summary "search page"))
       (is (contains-bold? summary "search property"))
@@ -138,6 +141,7 @@
       (is (contains-bold? summary "completion"))
       (is (contains-bold? summary "example"))
       (is (not (contains-bold? summary "example upsert")))
+      (is (contains-bold? summary "qmd"))
       (is (contains-bold? summary "skill"))
       (is (not (contains-bold? summary "skill show")))
       (is (contains-bold? summary "--help"))
@@ -158,6 +162,85 @@
           plain-summary (strip-ansi summary)]
       (is (string/includes? plain-summary "Global options:"))
       (is (string/includes? plain-summary "Command options:")))))
+
+(deftest test-qmd-and-qsearch-parse
+  (testing "qmd parses as graph-scoped command"
+    (let [result (commands/parse-args ["qmd" "--graph" "demo"])]
+      (is (true? (:ok? result)))
+      (is (= :qmd (:command result)))
+      (is (= "demo" (get-in result [:options :graph])))))
+
+  (testing "qmd can omit graph so build-action can use the current graph"
+    (let [parsed (commands/parse-args ["qmd"])
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? parsed)))
+      (is (true? (:ok? result)))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= "demo" (get-in result [:action :graph])))))
+
+  (testing "qmd without graph or current graph fails at build-action"
+    (let [parsed (commands/parse-args ["qmd"])
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? parsed)))
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
+
+  (testing "qsearch accepts positional query text"
+    (let [result (commands/parse-args ["qsearch" "markdown" "mirror" "--graph" "demo" "-n" "10" "--no-rerank"])]
+      (is (true? (:ok? result)))
+      (is (= :qsearch (:command result)))
+      (is (= ["markdown" "mirror"] (:args result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= 10 (get-in result [:options :limit])))
+      (is (true? (get-in result [:options :no-rerank])))))
+
+  (testing "qsearch can omit graph so build-action can use the current graph"
+    (let [parsed (commands/parse-args ["qsearch" "markdown" "mirror"])
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? parsed)))
+      (is (true? (:ok? result)))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= "demo" (get-in result [:action :graph])))))
+
+  (testing "qsearch requires query text"
+    (let [result (commands/parse-args ["qsearch" "--graph" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-query-text (get-in result [:error :code])))))
+
+  (testing "qsearch without graph or current graph fails at build-action"
+    (let [result (commands/parse-args ["qsearch" "markdown" "mirror"])]
+      (is (true? (:ok? result)))
+      (let [action-result (commands/build-action result {})]
+        (is (false? (:ok? action-result)))
+        (is (= :missing-repo (get-in action-result [:error :code]))))))
+
+  (testing "qsearch rejects unknown options after positional query"
+    (let [result (commands/parse-args ["qsearch" "markdown" "--unknown" "--graph" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "qmd and qsearch reject manual QMD collection and index options"
+    (doseq [args [["qmd" "--graph" "demo" "--collection" "custom"]
+                  ["qmd" "--graph" "demo" "--index" "custom-index"]
+                  ["qsearch" "markdown" "--graph" "demo" "--collection" "custom"]
+                  ["qsearch" "markdown" "--graph" "demo" "--index" "custom-index"]]]
+      (let [result (commands/parse-args args)]
+        (is (false? (:ok? result)) (pr-str args))
+        (is (= :invalid-options (get-in result [:error :code])) (pr-str args)))))
+
+  (testing "qmd and qsearch help omit internal collection and index options"
+    (doseq [args [["qmd" "--help"]
+                  ["qsearch" "--help"]]]
+      (let [result (commands/parse-args args)
+            summary (strip-ansi (:summary result))]
+        (is (true? (:help? result)) (pr-str args))
+        (is (not (string/includes? summary "--collection")) (pr-str args))
+        (is (not (string/includes? summary "--index")) (pr-str args)))))
+
+  (testing "qmd rejects obsolete positional subcommands"
+    (let [result (commands/parse-args ["qmd" "init" "--graph" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
 (deftest test-parse-args-help-groups-primary
   (testing "graph/list/upsert/server groups show subcommands"
@@ -197,8 +280,8 @@
               ["search block" "search page" "search property" "search tag"]
               ["search block" "search page" "search property" "search tag"]]
              ["example"
-              ["example upsert" "example upsert page" "example show"]
-              ["example upsert" "example show"]]]]
+              ["example graph" "example graph export" "example upsert" "example upsert page" "example show"]
+              ["example graph" "example upsert" "example show"]]]]
       (let [result (binding [style/*color-enabled?* true]
                      (commands/parse-args [group]))
             summary (:summary result)
@@ -351,15 +434,14 @@
   (testing "example query executes (not group help)"
     (let [result (commands/parse-args ["example" "query"])]
       (is (= :example (:command result)))
-      (is (not (:help? result)))))
-
-  )
+      (is (not (:help? result))))))
 
 (deftest test-parse-args-example-selectors
   (testing "example supports exact selectors"
     (doseq [args [["example" "upsert" "page"]
                   ["example" "show"]
-                  ["example" "search" "block"]]]
+                  ["example" "search" "block"]
+                  ["example" "graph" "export"]]]
       (let [result (commands/parse-args args)]
         (is (true? (:ok? result)))
         (is (= :example (:command result))))))
@@ -367,13 +449,14 @@
   (testing "example supports prefix selectors"
     (doseq [args [["example" "upsert"]
                   ["example" "list"]
-                  ["example" "query"]]]
+                  ["example" "query"]
+                  ["example" "graph"]]]
       (let [result (commands/parse-args args)]
         (is (true? (:ok? result)))
         (is (= :example (:command result))))))
 
   (testing "example rejects uncovered selectors"
-    (let [result (commands/parse-args ["example" "graph"])]
+    (let [result (commands/parse-args ["example" "sync"])]
       (is (false? (:ok? result)))
       (is (= :unknown-command (get-in result [:error :code]))))))
 
@@ -639,6 +722,21 @@
                   "88   ├── Child A\n"
                   "3    │   └── Grand\n"
                   "1000 └── Child B")
+             (strip-ansi output))))))
+
+(deftest test-tree->text-linked-display-marker-keeps-id-alignment
+  (testing "show tree text renders link display marker after the db/id and tree glyph prefix"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 42
+                            :block/title "Target"
+                            :show/linked-display? true
+                            :block/children [{:db/id 7
+                                              :block/title "Child"}]}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (string/includes? output (style/dim "→ ")))
+      (is (= (str "42 → Target\n"
+                  "7  └── Child")
              (strip-ansi output))))))
 
 (deftest test-tree->text-multiline
@@ -956,7 +1054,7 @@
   (async done
          (let [selectors (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ selector _] args]
                                                                        (swap! selectors conj selector)
@@ -1003,7 +1101,7 @@
   (async done
          (let [method-calls (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
-                               transport/invoke (fn [_ method _ _]
+                               transport/invoke (fn [_ method _]
                                                   (swap! method-calls conj method)
                                                   (case method
                                                     :thread-api/pull (p/resolved {:db/id 1
@@ -1027,7 +1125,7 @@
   (async done
          (let [method-calls (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
-                               transport/invoke (fn [_ method _ _]
+                               transport/invoke (fn [_ method _]
                                                   (swap! method-calls conj method)
                                                   (case method
                                                     :thread-api/pull (p/resolved {:db/id 1
@@ -1050,7 +1148,7 @@
 (deftest test-show-id-only-entity-is-not-found
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/pull (p/resolved {:db/id 212})
                                                   :thread-api/q (p/resolved [])
@@ -1355,7 +1453,7 @@
 (deftest test-list-execute-default-sort-updated-at
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/cli-list-pages [{:db/id 11 :block/title "Page C" :block/updated-at 30}
                                                                               {:db/id 7 :block/title "Page B" :block/updated-at 10}
@@ -1385,7 +1483,7 @@
 (deftest test-list-execute-default-limit-returns-newest-records
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/cli-list-pages (mapv (fn [id]
                                                                                      {:db/id id
@@ -1402,7 +1500,7 @@
 (deftest test-list-execute-default-sort-respects-order-and-explicit-sort
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/cli-list-pages [{:db/id 3 :block/title "Beta" :block/updated-at 20}
                                                                               {:db/id 2 :block/title "Gamma" :block/updated-at 5}
@@ -1421,7 +1519,7 @@
 (deftest test-list-property-execute-supports-cardinality-sort-and-fields
   (async done
          (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/cli-list-properties [{:db/id 30
                                                                                     :block/title "Gamma"
@@ -1452,7 +1550,7 @@
   (async done
          (let [calls* (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (swap! calls* conj {:method method :args args})
                                                   (case method
                                                     :thread-api/pull
@@ -1487,7 +1585,7 @@
          (let [list-calls* (atom [])
                upsert-calls* (atom [])]
            (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (let [repo (first args)]
                                                     (cond
                                                       (= method :thread-api/q)
@@ -1604,9 +1702,7 @@
   (testing "remove block rejects invalid id vector"
     (let [result (commands/parse-args ["remove" "block" "--id" "[1 \"no\"]"])]
       (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
-
-  )
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
 (deftest test-verb-subcommand-parse-upsert-entity
   (testing "upsert tag parses with name"
@@ -2080,11 +2176,17 @@
       (is (true? (:ok? result)))
       (is (= false (get-in result [:options :ref-id-footer])))))
 
-  (testing "show help lists linked references and ref-id-footer options"
+  (testing "show parses page-hierarchy option"
+    (let [result (commands/parse-args ["show" "--page" "Home" "--page-hierarchy" "true"])]
+      (is (true? (:ok? result)))
+      (is (= true (get-in result [:options :page-hierarchy])))))
+
+  (testing "show help lists linked references, ref-id-footer, and page-hierarchy options"
     (let [summary (:summary (binding [style/*color-enabled?* true]
                               (commands/parse-args ["show" "--help"])))]
       (is (string/includes? (strip-ansi summary) "--linked-references"))
-      (is (string/includes? (strip-ansi summary) "--ref-id-footer")))))
+      (is (string/includes? (strip-ansi summary) "--ref-id-footer"))
+      (is (string/includes? (strip-ansi summary) "--page-hierarchy")))))
 
 (deftest test-verb-subcommand-parse-debug
   (testing "debug pull parses with id"
@@ -2169,12 +2271,41 @@
              (get-in result [:options :query])))
       (is (= "[\"Hello\"]" (get-in result [:options :inputs]))))))
 
-(deftest test-verb-subcommand-parse-graph-import-export
+(deftest test-verb-subcommand-parse-graph-create-enable-sync
   (testing "graph create requires --graph even with positional args"
     (let [result (commands/parse-args ["graph" "create" "demo"])]
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
+  (testing "graph create parses enable-sync"
+    (let [result (commands/parse-args ["graph" "create"
+                                       "--graph" "demo"
+                                       "--enable-sync"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-create (:command result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= true (get-in result [:options :enable-sync])))))
+
+  (testing "graph create parses enable-sync e2ee password"
+    (let [result (commands/parse-args ["graph" "create"
+                                       "--graph" "demo"
+                                       "--enable-sync"
+                                       "--e2ee-password" "pw"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-create (:command result)))
+      (is (= true (get-in result [:options :enable-sync])))
+      (is (= "pw" (get-in result [:options :e2ee-password])))))
+
+  (testing "graph create rejects e2ee password without enable-sync"
+    (let [result (commands/parse-args ["graph" "create"
+                                       "--graph" "demo"
+                                       "--e2ee-password" "pw"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? (strip-ansi (get-in result [:error :message]))
+                            "--e2ee-password requires --enable-sync")))))
+
+(deftest test-verb-subcommand-parse-graph-import-export
   (testing "graph export parses with type and file"
     (let [result (commands/parse-args ["graph" "export"
                                        "--type" "edn"
@@ -2183,6 +2314,19 @@
       (is (= :graph-export (:command result)))
       (is (= "edn" (get-in result [:options :type])))
       (is (= "export.edn" (get-in result [:options :file])))))
+
+  (testing "graph export parses EDN-only options"
+    (let [result (commands/parse-args ["graph" "export"
+                                       "--type" "edn"
+                                       "--file" "export.edn"
+                                       "--include-timestamps"
+                                       "--exclude-built-in-pages"
+                                       "--exclude-namespaces" "user,project"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-export (:command result)))
+      (is (= true (get-in result [:options :include-timestamps])))
+      (is (= true (get-in result [:options :exclude-built-in-pages])))
+      (is (= "user,project" (get-in result [:options :exclude-namespaces])))))
 
   (testing "graph import parses with type, input, and repo"
     (let [result (commands/parse-args ["graph" "import"
@@ -2195,6 +2339,16 @@
       (is (= "import.sqlite" (get-in result [:options :input])))
       (is (= "demo" (get-in result [:options :graph])))))
 
+  (testing "graph export rejects EDN-only options for sqlite"
+    (let [result (commands/parse-args ["graph" "export"
+                                       "--type" "sqlite"
+                                       "--file" "export.sqlite"
+                                       "--include-timestamps"
+                                       "--exclude-built-in-pages"
+                                       "--exclude-namespaces" "user,project"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
   (testing "graph export requires type"
     (let [result (commands/parse-args ["graph" "export" "--file" "export.edn"])]
       (is (false? (:ok? result)))
@@ -2204,6 +2358,13 @@
     (let [result (commands/parse-args ["graph" "export" "--type" "edn"])]
       (is (false? (:ok? result)))
       (is (= :missing-file (get-in result [:error :code])))))
+
+  (testing "graph export sqlite can omit file and use graph export directory"
+    (let [result (commands/parse-args ["graph" "export" "--type" "sqlite"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-export (:command result)))
+      (is (= "sqlite" (get-in result [:options :type])))
+      (is (nil? (get-in result [:options :file])))))
 
   (testing "graph export accepts global output format and still requires file"
     (let [result (commands/parse-args ["graph" "export" "--type" "edn" "--output" "json"])]
@@ -2217,6 +2378,15 @@
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
+  (testing "graph import rejects unknown type"
+    (let [result (commands/parse-args ["graph" "import"
+                                       "--type" "zip"
+                                       "--input" "import.zip"
+                                       "--graph" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
+
+(deftest test-verb-subcommand-parse-sync-graph-requirements
   (testing "sync download requires graph"
     (let [result (commands/parse-args ["sync" "download"])]
       (is (false? (:ok? result)))
@@ -2230,6 +2400,48 @@
       (is (true? (:ok? enabled)))
       (is (= true (get-in enabled [:options :progress])))))
 
+  (testing "sync asset download parses db id selector"
+    (let [result (commands/parse-args ["sync" "asset" "download" "--graph" "demo" "--id" "123"])]
+      (is (true? (:ok? result)))
+      (is (= :sync-asset-download (:command result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= 123 (get-in result [:options :id])))))
+
+  (testing "sync asset download parses uuid selector"
+    (let [asset-uuid "11111111-1111-1111-1111-111111111111"
+          result (commands/parse-args ["sync" "asset" "download" "--graph" "demo" "--uuid" asset-uuid])]
+      (is (true? (:ok? result)))
+      (is (= :sync-asset-download (:command result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= asset-uuid (get-in result [:options :uuid])))))
+
+  (testing "sync asset download rejects invalid uuid selector"
+    (let [result (commands/parse-args ["sync" "asset" "download" "--graph" "demo" "--uuid" "asset-uuid"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "sync asset download can use current graph"
+    (let [parsed (commands/parse-args ["sync" "asset" "download" "--id" "123"])
+          result (when (:ok? parsed)
+                   (commands/build-action parsed {:graph "demo"}))]
+      (is (true? (:ok? parsed)))
+      (is (true? (:ok? result)))
+      (is (= {:type :sync-asset-download
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :id 123}
+             (:action result)))))
+
+  (testing "sync asset download requires one selector"
+    (let [missing-selector (commands/parse-args ["sync" "asset" "download" "--graph" "demo"])
+          conflicting-selectors (commands/parse-args ["sync" "asset" "download" "--graph" "demo"
+                                                      "--id" "123"
+                                                      "--uuid" "11111111-1111-1111-1111-111111111111"])]
+      (is (false? (:ok? missing-selector)))
+      (is (= :invalid-options (get-in missing-selector [:error :code])))
+      (is (false? (:ok? conflicting-selectors)))
+      (is (= :invalid-options (get-in conflicting-selectors [:error :code])))))
+
   (testing "sync ensure-keys accepts e2ee-password option"
     (let [result (commands/parse-args ["sync" "ensure-keys" "--e2ee-password" "pw"])]
       (is (true? (:ok? result)))
@@ -2240,16 +2452,9 @@
     (let [result (commands/parse-args ["sync" "ensure-keys" "--upload-keys"])]
       (is (true? (:ok? result)))
       (is (= :sync-ensure-keys (:command result)))
-      (is (= true (get-in result [:options :upload-keys])))))
+      (is (= true (get-in result [:options :upload-keys]))))))
 
-  (testing "graph import rejects unknown type"
-    (let [result (commands/parse-args ["graph" "import"
-                                       "--type" "zip"
-                                       "--input" "import.zip"
-                                       "--graph" "demo"])]
-      (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
-
+(deftest test-verb-subcommand-parse-server-cleanup
   (testing "server status is removed and parses as unknown command"
     (let [result (commands/parse-args ["server" "status" "--graph" "demo"])]
       (is (false? (:ok? result)))
@@ -2273,7 +2478,7 @@
       (is (= :graph-backup-list (:command result)))))
 
   (testing "graph backup create parses with optional name"
-    (let [result (commands/parse-args ["graph" "backup" "create" "--name" "nightly"]) ]
+    (let [result (commands/parse-args ["graph" "backup" "create" "--name" "nightly"])]
       (is (true? (:ok? result)))
       (is (= :graph-backup-create (:command result)))
       (is (= "nightly" (get-in result [:options :name])))))
@@ -2281,7 +2486,7 @@
   (testing "graph backup create with name carries source and naming components"
     (let [result (commands/parse-args ["graph" "backup" "create"
                                        "--graph" "demo"
-                                       "--name" "nightly"]) ]
+                                       "--name" "nightly"])]
       (is (true? (:ok? result)))
       (is (= "demo" (get-in result [:options :graph])))
       (is (= "nightly" (get-in result [:options :name])))))
@@ -2289,7 +2494,7 @@
   (testing "graph backup restore parses with --src and --dst"
     (let [result (commands/parse-args ["graph" "backup" "restore"
                                        "--src" "demo-nightly"
-                                       "--dst" "demo-restored"]) ]
+                                       "--dst" "demo-restored"])]
       (is (true? (:ok? result)))
       (is (= :graph-backup-restore (:command result)))
       (is (= "demo-nightly" (get-in result [:options :src])))
@@ -2347,6 +2552,49 @@
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
+  (testing "plain graph-create requires a missing local graph"
+    (let [parsed {:ok? true :command :graph-create :options {:graph "demo"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :invoke (get-in result [:action :type])))
+      (is (= :thread-api/create-or-open-db (get-in result [:action :method])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= "demo" (get-in result [:action :graph])))
+      (is (= true (get-in result [:action :allow-missing-graph])))
+      (is (= true (get-in result [:action :require-missing-graph])))
+      (is (= "demo" (get-in result [:action :persist-repo])))))
+
+  (testing "graph-create enable-sync builds orchestration action"
+    (let [parsed {:ok? true
+                  :command :graph-create
+                  :options {:graph "demo"
+                            :enable-sync true}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= {:type :graph-create-enable-sync
+              :command :graph-create
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :method :thread-api/create-or-open-db
+              :args ["logseq_db_demo" {}]
+              :allow-missing-graph true
+              :require-missing-graph true
+              :persist-repo "demo"
+              :enable-sync true
+              :e2ee-password nil}
+             (:action result)))))
+
+  (testing "graph-create enable-sync forwards e2ee password without printing fields"
+    (let [parsed {:ok? true
+                  :command :graph-create
+                  :options {:graph "demo"
+                            :enable-sync true
+                            :e2ee-password "pw"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :graph-create-enable-sync (get-in result [:action :type])))
+      (is (= "pw" (get-in result [:action :e2ee-password])))))
+
   (testing "graph-switch uses graph name"
     (let [parsed {:ok? true :command :graph-switch :options {:graph "demo"}}
           result (commands/build-action parsed {})]
@@ -2367,15 +2615,28 @@
       (is (true? (:ok? result)))
       (is (= :graph-export (get-in result [:action :type])))))
 
+  (testing "graph export builds normalized EDN graph-options"
+    (let [parsed {:ok? true
+                  :command :graph-export
+                  :options {:type "edn"
+                            :file "export.edn"
+                            :include-timestamps true
+                            :exclude-built-in-pages true
+                            :exclude-namespaces " user, project ,,user "}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= {:include-timestamps? true
+              :exclude-built-in-pages? true
+              :exclude-namespaces #{:user :project}}
+             (get-in result [:action :graph-options])))))
+
   (testing "graph import requires repo"
     (let [parsed {:ok? true
                   :command :graph-import
                   :options {:type "edn" :input "import.edn"}}
           result (commands/build-action parsed {})]
       (is (false? (:ok? result)))
-      (is (= :missing-repo (get-in result [:error :code])))))
-
-)
+      (is (= :missing-repo (get-in result [:error :code]))))))
 
 (deftest test-build-action-graph-backup
   (testing "graph backup list resolves source repo from --graph"
@@ -3030,7 +3291,7 @@
                        :name "Quote"}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q (if @created?*
                                                                     [{:db/id 4242
@@ -3060,7 +3321,7 @@
                        :name "Home"}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ _args]
+                               transport/invoke (fn [_ method _args]
                                                   (case method
                                                     ;; pull-tag-by-name finds no tag (only a page exists)
                                                     :thread-api/q (if @created?*
@@ -3088,7 +3349,7 @@
                        :name "Quote"}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q [{:db/id 4242
                                                                     :block/name "quote"
@@ -3117,7 +3378,7 @@
                                 :db/cardinality :db.cardinality/many}}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q (if @created?*
                                                                     [{:db/id 654
@@ -3151,7 +3412,7 @@
                        :id 4242}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (if (= lookup 4242)
@@ -3184,7 +3445,7 @@
                tag-uuid (uuid "00000000-0000-0000-0000-000000004242")]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (if (= lookup 4242)
@@ -3221,7 +3482,7 @@
                        :name "  #QUOTE "}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (if (= lookup 4242)
@@ -3258,7 +3519,7 @@
                        :name "Project Renamed"}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (if (= lookup 4242)
@@ -3292,7 +3553,7 @@
                        :name "Project Renamed"}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (if (= lookup 4242)
@@ -3324,7 +3585,7 @@
   (async done
          (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ args]
+                             transport/invoke (fn [_ method args]
                                                 (case method
                                                   :thread-api/pull (let [[_ _ lookup] args]
                                                                      (case lookup
@@ -3382,7 +3643,7 @@
                                                           (p/resolved (cond (= tags [:tag/new]) [{:db/id 101}]
                                                                             :else nil)))
                                add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (swap! property-lookups* conj lookup)
@@ -3424,7 +3685,7 @@
                                                                             :else nil)))
                                add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
                                add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q (let [[_ [_query input]] args]
                                                                     (if (= input "home")
@@ -3471,7 +3732,7 @@
                                add-command/resolve-tags (fn [_ _ _] (p/resolved nil))
                                add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
                                add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q (let [[_ [_query input]] args]
                                                                     (if (= input "home")
@@ -3515,7 +3776,7 @@
                                add-command/resolve-tags (fn [_ _ _] (p/resolved nil))
                                add-command/resolve-properties (fn [_ _ _ & _] (p/resolved nil))
                                add-command/resolve-property-identifiers (fn [_ _ _ & _] (p/resolved nil))
-                               transport/invoke (fn [_ method _ _]
+                               transport/invoke (fn [_ method _]
                                                   (case method
                                                     :thread-api/q [{:db/id 21
                                                                     :block/name "c1"
@@ -3542,7 +3803,7 @@
          (let [action {:type :upsert-page :mode :update :repo "demo" :id 50}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ _]
+                               transport/invoke (fn [_ method _]
                                                   (case method
                                                     :thread-api/pull {:db/id 50
                                                                       :block/name "home"
@@ -3565,7 +3826,7 @@
   (async done
          (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/pull {:db/id 50
                                                                     :block/uuid (uuid "00000000-0000-0000-0000-0000000000ee")
@@ -3607,7 +3868,7 @@
                                add-command/resolve-tags (fn [_ _ _] (p/resolved nil))
                                add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
                                add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (cond
@@ -3628,7 +3889,7 @@
          (let [ops* (atom [])]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/cli-list-tags [{:db/id 1 :block/title "Quote"}]
                                                     :thread-api/cli-list-properties [{:db/id 2 :block/title "owner"}]
@@ -3658,7 +3919,7 @@
   (async done
          (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/q [{:db/id 11
                                                                   :block/title "Recycled"
@@ -3679,7 +3940,7 @@
                page-uuid (uuid "00000000-0000-0000-0000-00000000abcd")]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q (let [[_ [_query input]] args]
                                                                     (if (= input "home")
@@ -3707,7 +3968,7 @@
   (async done
          (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/q [{:db/id 21
                                                                   :block/name "c1"
@@ -3735,7 +3996,7 @@
                page-uuid (uuid "00000000-0000-0000-0000-00000000abce")]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
                                                                        (if (= lookup 10)
@@ -3760,7 +4021,7 @@
   (async done
          (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ _]
+                             transport/invoke (fn [_ method _]
                                                 (case method
                                                   :thread-api/cli-list-tags [{:db/id 1 :block/title "Quote"}
                                                                              {:db/id 2 :block/title "QUOTE"}]
@@ -3791,7 +4052,7 @@
                                                                             :else nil)))
                                add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
                                add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method args]
                                                   (swap! calls* conj {:method method :args args})
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
@@ -3806,7 +4067,7 @@
                  (p/let [result (commands/execute action {})]
                    (is (= :ok (:status result)))
                    (is (= [[:save-block [{:block/uuid (uuid "00000000-0000-0000-0000-000000000001")
-                                           :block/title "Updated heading"} {}]]
+                                          :block/title "Updated heading"} {}]]
                            [:move-blocks [[(uuid "00000000-0000-0000-0000-000000000001")]
                                           (uuid "00000000-0000-0000-0000-000000000002")
                                           {:sibling? false :bottom? true}]]
@@ -3835,7 +4096,7 @@
   (async done
          (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                             transport/invoke (fn [_ method _ [repo [query-text query-input]]]
+                             transport/invoke (fn [_ method [repo [query-text query-input]]]
                                                 (is (= :thread-api/q method))
                                                 (is (= "logseq_db_demo" repo))
                                                 (is (= "quote" query-input))
@@ -3929,14 +4190,14 @@
 (deftest test-execute-graph-import-rejects-existing-graph
   (async done
          (let [{:keys [action]} (graph-command/build-import-action "logseq_db_demo" "sqlite" "/tmp/test-db.sqlite")]
-           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
-                              cli-server/ensure-server! (fn [_ _]
-                                                          (throw (ex-info "should not start server" {})))]
-                (p/let [result (commands/execute action {})]
-                  (is (= :error (:status result)))
-                  (is (= :graph-exists (get-in result [:error :code])))))
-              (p/catch (fn [e] (is false (str "unexpected error: " e))))
-              (p/finally done)))))
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])]
+                 cli-server/ensure-server! (fn [_ _]
+                                             (throw (ex-info "should not start server" {})))
+                 (p/let [result (commands/execute action {})]
+                   (is (= :error (:status result)))
+                   (is (= :graph-exists (get-in result [:error :code])))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-graph-import-edn-allows-existing-graph
   (async done
@@ -3946,7 +4207,7 @@
                                cli-server/restart-server! (fn [_ _] (p/resolved {:ok? true}))
                                cli-server/ensure-server! (fn [config _] (assoc config :base-url "http://example"))
                                transport/read-input (fn [_] {:page "Test"})
-                               transport/invoke (fn [_ _ _ _] {:ok true})]
+                               transport/invoke (fn [_ _ _] {:ok true})]
                  (p/let [result (commands/execute action {})]
                    (is (= :ok (:status result))
                        "edn import into existing graph should succeed")))
@@ -3996,30 +4257,58 @@
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [config _]
                                                            (assoc config :base-url "http://127.0.0.1:9999"))
-                               transport/invoke (fn [_ method direct-pass? args]
-                                                  (swap! invoke-calls conj [method direct-pass? args])
-                                                  (if (= method :thread-api/export-db-base64)
-                                                    "c3FsaXRl"
-                                                    {:exported true}))
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
+                                                  {:exported true})
                                transport/write-output (fn [opts]
                                                         (swap! write-calls conj opts))]
-                 (p/let [edn-result (commands/execute {:type :graph-export :repo "logseq_db_demo" :graph "demo" :export-type "edn" :file "/tmp/export.edn" :allow-missing-graph true} {})
-                         sqlite-result (commands/execute {:type :graph-export :repo "logseq_db_demo" :graph "demo" :export-type "sqlite" :file "/tmp/export.sqlite" :allow-missing-graph true} {})]
+                 (p/let [edn-result (commands/execute {:type :graph-export
+                                                       :repo "logseq_db_demo"
+                                                       :graph "demo"
+                                                       :export-type "edn"
+                                                       :graph-options {:include-timestamps? true
+                                                                       :exclude-built-in-pages? true
+                                                                       :exclude-namespaces #{:user :project}}
+                                                       :file "/tmp/export.edn"
+                                                       :allow-missing-graph true}
+                                                      {})
+                         sqlite-result (commands/execute {:type :graph-export
+                                                          :repo "logseq_db_demo"
+                                                          :graph "demo"
+                                                          :export-type "sqlite"
+                                                          :file "/tmp/export.sqlite"
+                                                          :allow-missing-graph true}
+                                                         {})
+                         sqlite-default-result (commands/execute {:type :graph-export
+                                                                  :repo "logseq_db_demo"
+                                                                  :graph "demo"
+                                                                  :export-type "sqlite"
+                                                                  :allow-missing-graph true}
+                                                                 {:root-dir "/tmp/logseq"})]
                    (is (= :ok (:status edn-result)))
                    (is (= :ok (:status sqlite-result)))
+                   (is (= :ok (:status sqlite-default-result)))
                    (is (= "edn" (get-in edn-result [:context :export-type])))
                    (is (= "/tmp/export.edn" (get-in edn-result [:context :file])))
                    (is (= "sqlite" (get-in sqlite-result [:context :export-type])))
                    (is (= "/tmp/export.sqlite" (get-in sqlite-result [:context :file])))
-                   (is (= [[:thread-api/export-edn false ["logseq_db_demo" {:export-type :graph}]]
-                           [:thread-api/export-db-base64 true ["logseq_db_demo"]]]
-                          @invoke-calls))
-                   (is (= 2 (count @write-calls)))
-                   (let [[edn-write sqlite-write] @write-calls]
-                     (is (= {:format :edn :path "/tmp/export.edn" :data {:exported true}} edn-write))
-                     (is (= :sqlite (:format sqlite-write)))
-                     (is (= "/tmp/export.sqlite" (:path sqlite-write)))
-                     (is (= "sqlite" (.toString (:data sqlite-write) "utf8"))))))
+                   (let [default-sqlite-path (get-in @invoke-calls [2 1 1])]
+                     (is (= [[:thread-api/export-edn ["logseq_db_demo" {:export-type :graph
+                                                                        :graph-options {:include-timestamps? true
+                                                                                        :exclude-built-in-pages? true
+                                                                                        :exclude-namespaces #{:user :project}}}]]
+                             [:thread-api/backup-db-sqlite ["logseq_db_demo" "/tmp/export.sqlite"]]
+                             [:thread-api/backup-db-sqlite ["logseq_db_demo" default-sqlite-path]]]
+                            @invoke-calls))
+                     (is (string/includes? default-sqlite-path "/tmp/logseq/graphs/demo/export/demo_"))
+                     (is (string/ends-with? default-sqlite-path ".sqlite"))
+                     (is (= (str "wrote " default-sqlite-path)
+                            (get-in sqlite-default-result [:data :message]))))
+                   (is (= 1 (count @write-calls)))
+                   (is (= {:format :edn
+                           :path "/tmp/export.edn"
+                           :data {:exported true}}
+                          (first @write-calls)))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
@@ -4028,7 +4317,8 @@
          (let [invoke-calls (atom [])
                read-calls (atom [])
                stop-calls (atom [])
-               restart-calls (atom [])]
+               restart-calls (atom [])
+               sqlite-payload (js/Buffer.from "sqlite" "utf8")]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] [])
                                cli-server/stop-server! (fn [_ repo] (swap! stop-calls conj repo) (p/resolved {:ok? true}))
                                cli-server/restart-server! (fn [_ repo] (swap! restart-calls conj repo) (p/resolved {:ok? true}))
@@ -4037,8 +4327,8 @@
                                                       (swap! read-calls conj [format path])
                                                       (if (= format :edn)
                                                         {:page "Import Page"}
-                                                        (js/Buffer.from "sqlite" "utf8")))
-                               transport/invoke (fn [_ method _ args]
+                                                        sqlite-payload))
+                               transport/invoke (fn [_ method args]
                                                   (swap! invoke-calls conj [method args])
                                                   {:ok true})]
                  (p/let [edn-result (commands/execute {:type :graph-import :repo "logseq_db_demo" :graph "demo" :import-type "edn" :input "/tmp/import.edn" :allow-missing-graph true} {})
@@ -4051,7 +4341,7 @@
                    (is (= "/tmp/import.sqlite" (get-in sqlite-result [:context :input])))
                    (is (= [[:edn "/tmp/import.edn"] [:sqlite "/tmp/import.sqlite"]] @read-calls))
                    (is (= [[:thread-api/import-edn ["logseq_db_demo" {:page "Import Page"}]]
-                           [:thread-api/import-db-base64 ["logseq_db_demo" "c3FsaXRl"]]]
+                           [:thread-api/import-db-binary ["logseq_db_demo" sqlite-payload]]]
                           @invoke-calls))
                    (is (= ["logseq_db_demo" "logseq_db_demo"] @stop-calls))
                    (is (= ["logseq_db_demo" "logseq_db_demo"] @restart-calls))))
@@ -4158,9 +4448,9 @@
                               "test-repo" config)]
            (is (true? (:ok? action-result)))
            (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
-                                transport/invoke (fn [_ _method _ args]
-                                                   (reset! captured-args (second args))
-                                                   (p/resolved []))]
+                               transport/invoke (fn [_ _method args]
+                                                  (reset! captured-args (second args))
+                                                  (p/resolved []))]
                  (query-command/execute-query (:action action-result) config))
                (p/then (fn [_]
                          (let [args @captured-args

@@ -109,14 +109,14 @@
                              (throw (ex-info (name tag) data))) )
                   asset-id (str asset-uuid)
                   put-url (sync-large-title/asset-url base graph-id asset-id asset-type)
-                  asset-file (try
+                  asset-bytes (->
                                (<read-asset-bytes repo asset-id asset-type)
-                               (catch :default e
-                                 (log/info :read-asset e)
-                                 (throw (ex-info "read-asset failed"
-                                                 {:type :rtc.exception/read-asset-failed}
-                                                 e))))
-                  asset-bytes (if aes-key (->uint8 asset-file) asset-file)
+                               (p/catch (fn [e]
+                                          (log/error :read-asset-failed e)
+                                          (throw (ex-info "read-asset failed"
+                                                          {:type :rtc.exception/read-asset-failed}
+                                                          e)))))
+                  asset-bytes (if aes-key (->uint8 asset-bytes) asset-bytes)
                   payload (if (not aes-key)
                             asset-bytes
                             (p/let [encrypted-bytes (crypt/<encrypt-uint8array aes-key asset-bytes)]
@@ -313,16 +313,8 @@
                   asset-file
                   (if (not aes-key)
                     body
-                    (try
-                      (let [asset-file-untransited (ldb/read-transit-str (.decode (js/TextDecoder.) body))]
-                        (crypt/<decrypt-uint8array aes-key asset-file-untransited))
-                      (catch js/SyntaxError _
-                        body)
-                      (catch :default e
-                        ;; if decrypt failed, write origin-body
-                        (if (= "decrypt-uint8array" (ex-message e))
-                          body
-                          (throw e)))))]
+                    (let [asset-file-untransited (ldb/read-transit-str (.decode (js/TextDecoder.) body))]
+                      (crypt/<decrypt-uint8array aes-key asset-file-untransited)))]
             (<write-asset-bytes! repo asset-id asset-type asset-file))
           (p/catch
            (fn [e]
@@ -337,6 +329,13 @@
                             :asset-type asset-type
                             :base base
                             :graph-id graph-id})))))
+
+(defn log-request-asset-download-failed!
+  [repo asset-uuid error]
+  (log/error :db-sync/request-asset-download-failed
+             {:repo repo
+              :asset-uuid asset-uuid
+              :error error}))
 
 (defn request-asset-download!
   [repo asset-uuid {:keys [current-client-f enqueue-asset-task-f broadcast-rtc-state!-f]}]
@@ -358,16 +357,10 @@
                           _ (when missing-local?
                               (download-remote-asset! repo graph-id asset-uuid asset-type))
                           _ (when missing-local?
-                              (when-let [target-ent (d/entity @conn [:block/uuid asset-uuid])]
-                                (ldb/transact!
-                                 conn
-                                 [[:db/retract (:db/id target-ent)
-                                   :logseq.property.asset/remote-metadata]]
-                                 {:persist-op? true})))
-                          _ (when missing-local?
                               (client-op/remove-asset-op repo asset-uuid))
                           _ (when missing-local?
                               (broadcast-rtc-state!-f client))]
                     nil)
                   (p/catch (fn [e]
-                             (js/console.error e)))))))))))
+                             (log-request-asset-download-failed! repo asset-uuid e)
+                             (p/rejected e)))))))))))

@@ -1,6 +1,9 @@
 (ns logseq.cli.command.sync
   "Sync-related CLI commands."
-  (:require [clojure.string :as string]
+  (:require ["crypto" :as crypto]
+            ["fs" :as fs]
+            ["path" :as node-path]
+            [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.cli.auth :as cli-auth]
             [logseq.cli.command.core :as core]
@@ -10,6 +13,7 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.cognito-config :as cognito-config]
+            [logseq.common.graph-dir :as graph-dir]
             [promesa.core :as p]))
 
 (def ^:private sync-grant-access-spec
@@ -29,6 +33,14 @@
               :coerce :boolean}
    :e2ee-password {:desc "Verify and persist E2EE password before download"
                    :coerce :string}})
+
+(def ^:private sync-asset-download-spec
+  {:id {:desc "Target asset node db/id"
+        :coerce :long}
+   :uuid {:desc "Target asset block UUID"
+          :coerce :string
+          :validate {:pred (comp parse-uuid str)
+                     :ex-msg (constantly "Option uuid must be a valid UUID string")}}})
 
 (def ^:private sync-ensure-keys-spec
   {:e2ee-password {:desc "Verify and persist E2EE password before ensuring user RSA keys"
@@ -51,6 +63,9 @@
                        {:examples ["logseq sync download --graph my-graph"
                                    "logseq sync download --graph my-graph --progress"
                                    "logseq sync download --graph my-graph --e2ee-password \"my-secret\""]})
+   (core/command-entry ["sync" "asset" "download"] :sync-asset-download "Download remote asset" sync-asset-download-spec
+                       {:examples ["logseq sync asset download --graph my-graph --id 123"
+                                   "logseq sync asset download --graph my-graph --uuid <asset-uuid>"]})
    (core/command-entry ["sync" "remote-graphs"] :sync-remote-graphs "List remote graphs" {})
    (core/command-entry ["sync" "ensure-keys"] :sync-ensure-keys "Ensure user RSA keys for sync/e2ee" sync-ensure-keys-spec
                        {:examples ["logseq sync ensure-keys"
@@ -77,12 +92,14 @@
   #{:sync-start
     :sync-upload
     :sync-download
+    :sync-asset-download
     :sync-remote-graphs
     :sync-ensure-keys
     :sync-grant-access})
 
 (def ^:private sync-start-timeout-ms 10000)
 (def ^:private sync-start-poll-interval-ms 1000)
+(def ^:private sync-upload-timeout-ms (* 30 60 1000))
 (def ^:private sync-download-timeout-ms (* 30 60 1000))
 
 (def ^:private sync-start-skipped-states
@@ -96,6 +113,7 @@
   {:sync-start [:ws-url]
    :sync-upload [:http-base]
    :sync-download [:http-base]
+   :sync-asset-download [:http-base]
    :sync-grant-access [:http-base]})
 
 (defn- config-value-present?
@@ -133,6 +151,11 @@
   (when (seq (some-> line str string/trim))
     (println line)))
 
+(defn- sync-upload-invoke-config
+  [cfg]
+  (assoc cfg :timeout-ms (max 0 (or (:sync-upload-timeout-ms cfg)
+                                    sync-upload-timeout-ms))))
+
 (defn- sync-download-invoke-config
   [cfg]
   (assoc cfg :timeout-ms (max 0 (or (:sync-download-timeout-ms cfg)
@@ -153,6 +176,18 @@
     :where
     [?e :db/ident :logseq.kv/graph-rtc-e2ee?]
     [?e :kv/value ?v]])
+
+(def ^:private asset-tag-ident
+  :logseq.class/Asset)
+
+(def ^:private sync-asset-pull-selector
+  [:db/id
+   :block/uuid
+   {:block/tags [:db/ident]}
+   :logseq.property.asset/type
+   :logseq.property.asset/checksum
+   :logseq.property.asset/remote-metadata
+   :logseq.property.asset/external-url])
 
 (defn- missing-repo
   [label]
@@ -224,8 +259,8 @@
     (p/resolved nil)
     (-> (p/let [refresh-token (ensure-refresh-token! config)
                 _ (if (seq e2ee-password)
-                    (transport/invoke cfg :thread-api/verify-and-save-e2ee-password false [refresh-token e2ee-password])
-                    (transport/invoke cfg :thread-api/get-e2ee-password false [refresh-token]))]
+                    (transport/invoke cfg :thread-api/verify-and-save-e2ee-password [refresh-token e2ee-password])
+                    (transport/invoke cfg :thread-api/get-e2ee-password [refresh-token]))]
           nil)
         (p/catch (fn [error]
                    (if (missing-e2ee-password-diagnostic? error)
@@ -298,6 +333,27 @@
               :progress (:progress options)
               :progress-explicit? (contains? options :progress)
               :e2ee-password (:e2ee-password options)}}))
+
+(defn- build-sync-asset-download-action
+  [options repo]
+  (let [id (:id options)
+        asset-uuid (some-> (:uuid options) string/trim)
+        id? (some? id)
+        has-uuid? (seq asset-uuid)]
+    (cond
+      (not (seq repo))
+      (missing-repo "sync asset download")
+
+      (not= 1 (count (filter true? [id? (boolean has-uuid?)])))
+      (invalid-options "exactly one of --id or --uuid is required")
+
+      :else
+      {:ok? true
+       :action (cond-> {:type :sync-asset-download
+                        :repo repo
+                        :graph (core/repo->graph repo)}
+                 id? (assoc :id id)
+                 has-uuid? (assoc :uuid asset-uuid))})))
 
 (defn- build-sync-ensure-keys-action
   [options]
@@ -390,6 +446,9 @@
     :sync-download
     (build-sync-download-action options repo)
 
+    :sync-asset-download
+    (build-sync-asset-download-action options repo)
+
     :sync-remote-graphs
     {:ok? true
      :action {:type :sync-remote-graphs}}
@@ -467,23 +526,184 @@
   [cfg config]
   (let [auth-state (worker-auth-state config)]
     (p/let [_ (when (seq auth-state)
-                (transport/invoke cfg :thread-api/sync-app-state false [auth-state]))
-            _ (transport/invoke cfg :thread-api/set-db-sync-config false [(sync-config config)])]
+                (transport/invoke cfg :thread-api/sync-app-state [auth-state]))
+            _ (transport/invoke cfg :thread-api/set-db-sync-config [(sync-config config)])]
       nil)))
 
 (defn- invoke-with-repo
   [config repo method args]
   (p/let [cfg (cli-server/ensure-server! config repo)
           _ (<sync-worker-runtime! cfg config)
-          result (transport/invoke cfg method false args)]
+          result (transport/invoke cfg method args)]
     result))
+
+(defn- asset-download-error
+  [code message action extra]
+  {:status :error
+   :error (merge {:code code
+                  :message message
+                  :repo (:repo action)
+                  :graph (:graph action)}
+                 extra)})
+
+(defn- sync-asset-lookup-ref
+  [{:keys [id] :as action}]
+  (let [asset-uuid (:uuid action)]
+    (if (some? id)
+      id
+      [:block/uuid (uuid asset-uuid)])))
+
+(defn- resolve-sync-asset
+  [cfg action]
+  (transport/invoke cfg :thread-api/pull
+                    [(:repo action)
+                     sync-asset-pull-selector
+                     (sync-asset-lookup-ref action)]))
+
+(defn- asset-tag?
+  [tag]
+  (cond
+    (= asset-tag-ident tag) true
+    (map? tag) (= asset-tag-ident (:db/ident tag))
+    :else false))
+
+(defn- validate-sync-asset
+  [action asset]
+  (let [asset-uuid (:block/uuid asset)
+        asset-type (:logseq.property.asset/type asset)
+        checksum (:logseq.property.asset/checksum asset)]
+    (cond
+      (nil? asset)
+      (asset-download-error :asset-not-found "asset not found" action nil)
+
+      (not-any? asset-tag? (:block/tags asset))
+      (asset-download-error :not-asset "selected entity is not an asset" action {:asset-id (:db/id asset)})
+
+      (not (seq (some-> asset-uuid str string/trim)))
+      (asset-download-error :asset-uuid-missing "asset uuid is missing" action {:asset-id (:db/id asset)})
+
+      (not (seq (some-> asset-type str string/trim)))
+      (asset-download-error :asset-type-missing "asset type is missing" action {:asset-id (:db/id asset)
+                                                                                :asset-uuid asset-uuid})
+
+      (not (seq (some-> checksum str string/trim)))
+      (asset-download-error :asset-checksum-missing "asset checksum is missing" action {:asset-id (:db/id asset)
+                                                                                        :asset-uuid asset-uuid})
+
+      (nil? (:logseq.property.asset/remote-metadata asset))
+      (asset-download-error :asset-not-remote "asset remote metadata is missing" action {:asset-id (:db/id asset)
+                                                                                         :asset-uuid asset-uuid})
+
+      (seq (some-> (:logseq.property.asset/external-url asset) str string/trim))
+      (asset-download-error :external-asset "external URL assets cannot be downloaded through sync" action {:asset-id (:db/id asset)
+                                                                                                             :asset-uuid asset-uuid})
+
+      :else
+      {:status :ok
+       :asset asset})))
+
+(defn- sync-active?
+  [status]
+  (and (= :open (:ws-state status))
+       (seq (some-> (:graph-id status) str string/trim))))
+
+(defn- sync-not-started-error
+  [action status]
+  (asset-download-error :sync-not-started
+                        "sync is not started for this graph"
+                        action
+                        {:status status
+                         :hint (str "Run logseq sync start --graph " (:graph action) " first.")}))
+
+(defn- asset-file-exists?
+  [path]
+  (and (seq path)
+       (fs/existsSync path)))
+
+(defn- asset-file-checksum
+  [path]
+  (-> (.createHash crypto "sha256")
+      (.update (fs/readFileSync path))
+      (.digest "hex")))
+
+(defn- graph-asset-file-path
+  [config repo asset-uuid asset-type]
+  (if-let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)]
+    (node-path/join (cli-server/graphs-dir config)
+                    graph-dir-name
+                    "assets"
+                    (str asset-uuid "." asset-type))
+    (throw (ex-info "invalid repo"
+                    {:code :invalid-repo
+                     :repo repo}))))
+
+(defn- asset-download-result-data
+  [asset download-requested? checksum-status extra]
+  (cond-> {:asset-uuid (str (:block/uuid asset))
+           :asset-type (:logseq.property.asset/type asset)
+           :download-requested? download-requested?
+           :checksum-status checksum-status}
+    (some? (:db/id asset)) (assoc :asset-id (:db/id asset))
+    (seq extra) (merge extra)))
+
+(defn- local-asset-checksum-status
+  [config action asset]
+  (let [asset-path (graph-asset-file-path config
+                                          (:repo action)
+                                          (:block/uuid asset)
+                                          (:logseq.property.asset/type asset))]
+    (if-not (asset-file-exists? asset-path)
+      {:checksum-status :missing}
+      (let [local-checksum (asset-file-checksum asset-path)]
+        (if (= local-checksum (:logseq.property.asset/checksum asset))
+          {:checksum-status :match}
+          {:checksum-status :mismatch
+           :local-path asset-path
+           :local-checksum local-checksum})))))
+
+(defn- remove-local-asset-file!
+  [path]
+  (when (asset-file-exists? path)
+    (fs/rmSync path #js {:force true})))
+
+(defn- request-asset-download-result
+  [cfg action asset checksum-status extra]
+  (p/let [_ (transport/invoke cfg :thread-api/db-sync-request-asset-download
+                              [(:repo action) (:block/uuid asset)])]
+    {:status :ok
+     :data (asset-download-result-data asset true checksum-status extra)}))
+
+(defn- execute-sync-asset-download*
+  [cfg config action asset]
+  (let [validation (validate-sync-asset action asset)]
+    (if (= :error (:status validation))
+      (p/resolved validation)
+      (p/let [status (transport/invoke cfg :thread-api/db-sync-status [(:repo action)])]
+        (if-not (sync-active? status)
+          (sync-not-started-error action status)
+          (let [{:keys [checksum-status local-path]} (local-asset-checksum-status config action asset)]
+            (case checksum-status
+              :match
+              {:status :ok
+               :data (asset-download-result-data asset false :match {:skipped-reason :already-downloaded})}
+
+              :mismatch
+              (do
+                (remove-local-asset-file! local-path)
+                (request-asset-download-result cfg
+                                               action
+                                               asset
+                                               :mismatch
+                                               {:hint "Local asset checksum mismatched; requested re-download."}))
+
+              (request-asset-download-result cfg action asset :missing nil))))))))
 
 (defn- invoke-global
   [config method args]
   (let [base-url (:base-url config)]
     (if (seq base-url)
       (p/let [_ (<sync-worker-runtime! config config)]
-        (transport/invoke config method false args))
+        (transport/invoke config method args))
       (p/let [repo (or (core/resolve-repo (:graph config))
                        (p/let [graphs (cli-server/list-graphs config)]
                          (some-> graphs first core/resolve-repo)))
@@ -492,7 +712,7 @@
                     (p/rejected (ex-info "graph name is required"
                                          {:code :missing-graph})))
               _ (<sync-worker-runtime! cfg config)]
-        (transport/invoke cfg method false args)))))
+        (transport/invoke cfg method args)))))
 
 (defn- download-config
   [config]
@@ -500,7 +720,7 @@
 
 (defn- ensure-empty-download-db!
   [cfg repo]
-  (p/let [non-empty-entity-count (transport/invoke cfg :thread-api/q false [repo [sync-download-non-empty-query]])]
+  (p/let [non-empty-entity-count (transport/invoke cfg :thread-api/q [repo [sync-download-non-empty-query]])]
     (when (and (number? non-empty-entity-count)
                (pos? non-empty-entity-count))
       (throw (ex-info "graph db is not empty"
@@ -573,16 +793,17 @@
   [cfg config {:keys [e2ee-password]}]
   (if (seq e2ee-password)
     (p/let [refresh-token (ensure-refresh-token! config)
-            _ (transport/invoke cfg :thread-api/verify-and-save-e2ee-password false [refresh-token e2ee-password])]
+            _ (transport/invoke cfg :thread-api/verify-and-save-e2ee-password [refresh-token e2ee-password])]
       nil)
     (p/resolved nil)))
 
 (defn- execute-sync-upload
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              upload-cfg (sync-upload-invoke-config cfg)
               _ (<sync-worker-runtime! cfg config)
-              _ (<verify-and-save-e2ee-password-on-worker-if-provided! cfg config action)
-              result (transport/invoke cfg :thread-api/db-sync-upload-graph false [(:repo action)])]
+              _ (<verify-and-save-e2ee-password-on-worker-if-provided! upload-cfg config action)
+              result (transport/invoke upload-cfg :thread-api/db-sync-upload-graph [(:repo action)])]
         {:status :ok
          :data (if (map? result)
                  result
@@ -670,7 +891,7 @@
                                     (fn [event-type payload]
                                       (when-let [message (download-progress-message graph-id event-type payload)]
                                         (print-progress-line! message)))))
-                      result (-> (transport/invoke download-cfg :thread-api/db-sync-download-graph-by-id false
+                      result (-> (transport/invoke download-cfg :thread-api/db-sync-download-graph-by-id
                                                    [(:repo action) graph-id (:graph-e2ee? remote-graph)])
                                  (p/finally (fn []
                                               (when-let [close! (:close! events-sub)]
@@ -698,7 +919,7 @@
   (-> (p/let [config' (resolve-runtime-config! action config)
               cfg (cli-server/ensure-server! config' (:repo action))
               _ (<sync-worker-runtime! cfg config')
-              result (transport/invoke cfg :thread-api/db-sync-status false [(:repo action)])]
+              result (transport/invoke cfg :thread-api/db-sync-status [(:repo action)])]
         {:status :ok
          :data result})
       (p/catch (fn [error]
@@ -713,9 +934,9 @@
           (missing-sync-config-error (:type action) missing-keys)
           (p/let [cfg (cli-server/ensure-server! start-config (:repo action))
                   _ (<sync-worker-runtime! cfg start-config)
-                  graph-e2ee? (transport/invoke cfg :thread-api/q false [(:repo action) [graph-e2ee-query]])
+                  graph-e2ee? (transport/invoke cfg :thread-api/q [(:repo action) [graph-e2ee-query]])
                   _ (<ensure-e2ee-password-available! cfg start-config action (true? graph-e2ee?))
-                  _ (transport/invoke cfg :thread-api/db-sync-start false [(:repo action)])
+                  _ (transport/invoke cfg :thread-api/db-sync-start [(:repo action)])
                   result (wait-sync-start-ready start-config (:repo action) action)]
             result)))
       (p/catch (fn [error]
@@ -748,6 +969,21 @@
         (if (seq missing-keys)
           (missing-sync-config-error (:type action) missing-keys)
           (execute-sync-download action config')))
+      (p/catch (fn [error]
+                 (exception->error error {:repo (:repo action)
+                                          :graph (:graph action)})))))
+
+(defn- run-sync-asset-download
+  [action config]
+  (-> (p/let [config' (resolve-runtime-config! action config)
+              missing-keys (missing-required-sync-config-keys (:type action) config')]
+        (if (seq missing-keys)
+          (missing-sync-config-error (:type action) missing-keys)
+          (let [config* (assoc config' :http-base (effective-sync-config-value config' :http-base))]
+            (p/let [cfg (cli-server/ensure-server! config* (:repo action))
+                    _ (<sync-worker-runtime! cfg config*)
+                    asset (resolve-sync-asset cfg action)]
+              (execute-sync-asset-download* cfg config* action asset)))))
       (p/catch (fn [error]
                  (exception->error error {:repo (:repo action)
                                           :graph (:graph action)})))))
@@ -827,6 +1063,7 @@
     :sync-stop (run-sync-stop action config)
     :sync-upload (run-sync-upload action config)
     :sync-download (run-sync-download action config)
+    :sync-asset-download (run-sync-asset-download action config)
     :sync-remote-graphs (run-sync-remote-graphs action config)
     :sync-ensure-keys (run-sync-ensure-keys action config)
     :sync-grant-access (run-sync-grant-access action config)

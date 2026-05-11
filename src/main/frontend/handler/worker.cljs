@@ -90,7 +90,7 @@
 
 (defn- <invoke-worker-thread-api
   [wrapped-worker qkw & args]
-  (apply wrapped-worker qkw false args))
+  (apply wrapped-worker qkw args))
 
 (defn- ui-request-error->payload
   [error]

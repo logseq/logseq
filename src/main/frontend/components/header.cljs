@@ -31,6 +31,7 @@
             [frontend.version :refer [version]]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.common.version :as build-version]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -43,12 +44,14 @@
 (rum/defc home-button
   < {:key-fn #(identity "home-button")}
   []
-  (shui/button-ghost-icon :home
-                          {:title (t :nav/home)
-                           :on-click #(do
-                                        (when (mobile-util/native-iphone?)
-                                          (state/set-left-sidebar-open! false))
-                                        (route-handler/redirect-to-home!))}))
+  (ui/tooltip
+   (shui/button-ghost-icon :home
+                           {:on-click #(do
+                                         (when (mobile-util/native-iphone?)
+                                           (state/set-left-sidebar-open! false))
+                                         (route-handler/redirect-to-home!))})
+   (t :nav/home)
+   {:trigger-props {:as-child true}}))
 
 (rum/defcs rtc-collaborators <
   rum/reactive
@@ -106,7 +109,7 @@
   (let [ua (.-userAgent js/navigator)
         safe-ua (string/replace ua #"[^_/a-zA-Z0-9\.\(\)]+" " ")
         platform (str "App Version: " version "\n"
-                      "Git Revision: " config/REVISION "\n"
+                      "Git Revision: " (build-version/revision) "\n"
                       "Platform: " safe-ua "\n"
                       "Language: " (.-language js/navigator) "\n"
                       "Plugins: " (string/join ", " (map (fn [[k v]]

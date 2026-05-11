@@ -514,3 +514,28 @@ export function base64ToUint8Array (base64String) {
     return null
   }
 }
+
+export function uint8ArrayToBase64 (uint8Array) {
+  try {
+    let bytes = null
+    if (uint8Array instanceof Uint8Array) {
+      bytes = uint8Array
+    } else if (ArrayBuffer.isView(uint8Array)) {
+      bytes = new Uint8Array(uint8Array.buffer, uint8Array.byteOffset, uint8Array.byteLength)
+    } else if (uint8Array instanceof ArrayBuffer) {
+      bytes = new Uint8Array(uint8Array)
+    } else {
+      throw new TypeError('Expected Uint8Array, TypedArray, or ArrayBuffer')
+    }
+
+    let binary = ''
+    const len = bytes.byteLength
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i])
+    }
+    return btoa(binary)
+  } catch (e) {
+    console.error('Error converting Uint8Array to base64:', e)
+    return null
+  }
+}

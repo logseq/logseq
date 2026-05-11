@@ -467,10 +467,10 @@
   (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
     (if (and (seq repo) (seq graph-id) (seq base))
       (let [stage* (atom :init)
-            import-id* (atom nil)]
-        (-> (p/let [log-f (fn [payload]
-                            (rtc-log-and-state/rtc-log :rtc.log/download payload))
-                    _ (log-f {:sub-type :download-progress
+            import-id* (atom nil)
+            log-f (fn [payload]
+                    (rtc-log-and-state/rtc-log :rtc.log/download payload))]
+        (-> (p/let [_ (log-f {:sub-type :download-progress
                               :graph-uuid graph-id
                               :message "Preparing graph snapshot download"})
                     _ (reset! stage* :fetch-pull)
@@ -486,6 +486,9 @@
                     snapshot-resp (fetch-json (str base "/sync/" graph-id "/snapshot/download")
                                               {:method "GET"}
                                               :sync/snapshot-download)
+                    _ (when graph-e2ee?
+                        (reset! stage* :prepare-e2ee)
+                        (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
                     _ (reset! stage* :fetch-snapshot-stream)
                     resp (js/fetch (:url snapshot-resp)
                                    (clj->js (with-auth-headers {:method "GET"})))
@@ -526,6 +529,9 @@
             (p/catch (fn [error]
                        (when-let [import-id @import-id*]
                          (clear-import-state! import-id))
+                       (log-f {:sub-type :download-completed
+                               :graph-uuid graph-id
+                               :message "Graph snapshot download failed"})
                        (log/error :db-sync/download-graph-by-id-failed
                                   {:repo repo
                                    :graph-id graph-id
@@ -533,7 +539,9 @@
                                    :stage @stage*
                                    :error error
                                    :error-stack (when (instance? js/Error error)
-                                                  (.-stack error))})
+                                                  (.-stack error))
+                                   :error-cause (when (instance? js/Error error)
+                                                  (some-> (.-cause error) (.-message)))})
                        (throw (ex-info "db-sync download failed"
                                       {:repo repo
                                        :graph-id graph-id
@@ -541,7 +549,9 @@
                                        :stage @stage*
                                        :error-message (or (ex-message error)
                                                            (when (instance? js/Error error)
-                                                             (.-message error)))}
+                                                             (.-message error)))
+                                       :error-cause (when (instance? js/Error error)
+                                                      (some-> (.-cause error) (.-message)))}
                                        error))))))
       (p/rejected (ex-info "db-sync missing graph download info"
                            {:repo repo

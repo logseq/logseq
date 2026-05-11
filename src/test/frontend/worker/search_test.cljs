@@ -1,6 +1,7 @@
 (ns frontend.worker.search-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.worker.search :as search]
             [logseq.db :as ldb]))
 
@@ -191,7 +192,7 @@
 
 (deftest search-blocks-aux-bind-count
   (testing "namespace match SQL keeps bind count aligned"
-    (let [sql "select id, page, title, rank from blocks_fts where title match ? or title match ? order by rank limit ?"
+    (let [sql "select id, page, title, rank from blocks_fts where title match ? or title match ? limit ?"
           result (#'search/search-blocks-aux (checking-db) sql "a/b" "a/b" nil 10 true)]
       (is (some? result))
       (is (empty? result))))
@@ -208,22 +209,258 @@
       (is (some? result))
       (is (empty? result)))))
 
-(deftest fuse-constructor-interop
-  (testing "Fuse constructor remains usable for build/search/add/remove across export shapes"
-    (let [ctor search/fuse
-          indice (ctor. (clj->js [{:id "1" :title "alpha beta"}])
-                        (clj->js {:keys ["title"]
-                                  :shouldSort true
-                                  :tokenize true
-                                  :distance 1024
-                                  :threshold 0.5
-                                  :minMatchCharLength 1}))]
-      (.add indice (clj->js {:id "2" :title "gamma"}))
-      (.remove indice (fn [page] (= "2" (aget page "id"))))
-      (let [result (js->clj (.search indice "alpha" (clj->js {:limit 5})) :keywordize-keys true)]
-        (is (some? ctor))
-        (is (= 1 (count result)))
-        (is (= "alpha beta" (get-in result [0 :item :title])))))))
+(deftest search-blocks-large-graph-benchmark-regression
+  (testing "cmd-k and autocomplete queries must not scan the full Datascript graph while typing"
+    (let [calls (atom [])
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")
+                                bind (aget opts "bind")
+                                expected (sql-placeholder-count sql)
+                                actual (count bind)]
+                            (swap! calls conj sql)
+                            (when-not (= expected actual)
+                              (throw (js/Error. (str "Bind index " (inc expected) " is out of range."))))
+                            #js []))}]
+      (is (empty? (search/search-blocks (atom :large-db) db "alpha" {:limit 10})))
+      (is (not-any? #(string/includes? % "order by rank") @calls)))))
+
+(deftest search-blocks-fuzzy-matches-from-search-db
+  (testing "subsequence fuzzy matching comes from the search db without an in-memory index"
+    (let [calls (atom [])
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")
+                                bind (js->clj (aget opts "bind"))]
+                            (swap! calls conj {:sql sql :bind bind})
+                            (if (and (string/includes? sql "lower(title) like ?")
+                                     (= "%n%w%p%" (first bind)))
+                              (clj->js [["67e55044-10b1-426f-9247-bb680e5fe0c8"
+                                         "67e55044-10b1-426f-9247-bb680e5fe0c8"
+                                         "New Project"]])
+                              #js [])))}]
+      (with-redefs [search/combine-results (fn [_db results] results)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      result)]
+        (let [result (vec (search/search-blocks (atom :large-db) db "nwp" {:limit 10}))]
+          (is (= [{:id "67e55044-10b1-426f-9247-bb680e5fe0c8"
+                   :page "67e55044-10b1-426f-9247-bb680e5fe0c8"
+                   :title "New Project"}]
+                 (mapv #(select-keys % [:id :page :title]) result)))
+          (is (pos? (:keyword-score (first result)))))
+        (is (some #(= ["%n%w%p%" 40] (:bind %)) @calls))))))
+
+(deftest search-blocks-fuzzy-prioritizes-page-candidates
+  (testing "large graphs keep page rows first without sorting the whole blocks table"
+    (let [page-id "67e55044-10b1-426f-9247-bb680e5fe0c8"
+          block-id "8f14e45f-ea6e-4be8-b53f-bf0f2ca8a5db"
+          calls (atom [])
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")]
+                            (swap! calls conj sql)
+                            (cond
+                              (string/includes? sql "title = ? COLLATE NOCASE")
+                              #js []
+
+                              (and (string/includes? sql "id = page")
+                                   (string/includes? sql "lower(title) like ?"))
+                              (clj->js [[page-id page-id "New Project"]])
+
+                              :else
+                              (clj->js [[block-id page-id "New Project task"]]))))}]
+      (with-redefs [search/combine-results (fn [_db results] results)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      result)]
+        (let [result (vec (search/search-blocks (atom :large-db) db "nwp" {:limit 10}))]
+          (is (some #(= page-id (:id %)) result))
+          (is (= page-id (:id (first result))))
+          (is (some #(string/includes? % "id = page") @calls))
+          (is (not-any? #(string/includes? % "order by id = page desc") @calls)))))))
+
+(deftest search-blocks-skips-fuzzy-for-multi-term-keyword-hits
+  (testing "exact multi-term FTS hits do not pay a broad fuzzy LIKE scan"
+    (let [page-id "29089538-74f7-44b6-954b-494ca9e82182"
+          calls (atom [])
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")]
+                            (swap! calls conj sql)
+                            (cond
+                              (string/includes? sql "lower(title) like ?")
+                              (throw (js/Error. "fuzzy LIKE should not run"))
+
+                              (string/includes? sql "title match ?")
+                              (clj->js [[page-id page-id "Page-10000" -16 nil]])
+
+                              :else
+                              #js [])))}]
+      (with-redefs [search/combine-results (fn [_db results] results)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      result)]
+        (let [result (vec (search/search-blocks (atom :large-db)
+                                                db
+                                                "page 10000"
+                                                {:limit 10}))]
+          (is (= [{:id page-id
+                   :page page-id
+                   :title "Page-10000"}]
+                 (mapv #(select-keys % [:id :page :title]) result)))
+          (is (some #(string/includes? % "title match ?") @calls))
+          (is (not-any? #(string/includes? % "lower(title) like ?") @calls)))))))
+
+(defn- test-uuid-string
+  [n]
+  (let [hex (.toString n 16)]
+    (str "00000000-0000-0000-0000-"
+         (subs (str "000000000000" hex) (count hex)))))
+
+(deftest search-blocks-skips-fts-for-enough-exact-title-hits
+  (testing "very common exact titles avoid expensive FTS scans"
+    (let [calls (atom [])
+          exact-rows (mapv (fn [n]
+                             [(test-uuid-string n)
+                              (test-uuid-string 999)
+                              "Block"])
+                           (range 100 200))
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")]
+                            (swap! calls conj sql)
+                            (cond
+                              (string/includes? sql "title = ? COLLATE NOCASE")
+                              (clj->js exact-rows)
+
+                              (string/includes? sql "title match ?")
+                              (throw (js/Error. "FTS should not run"))
+
+                              (string/includes? sql "lower(title) like ?")
+                              (throw (js/Error. "fuzzy LIKE should not run"))
+
+                              :else
+                              #js [])))}]
+      (with-redefs [search/combine-results (fn [_db results] results)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      result)]
+        (let [result (vec (search/search-blocks (atom :large-db)
+                                                db
+                                                "block"
+                                                {:limit 10
+                                                 :search-limit 100}))]
+          (is (= 10 (count result)))
+          (is (every? #(= "Block" (:title %)) result))
+          (is (some #(string/includes? % "title = ? COLLATE NOCASE") @calls))
+          (is (not-any? #(string/includes? % "title match ?") @calls))
+          (is (not-any? #(string/includes? % "lower(title) like ?") @calls)))))))
+
+(deftest combine-results-large-result-benchmark
+  (testing "large search result sets combine without quadratic scans and keep page boost ranking"
+    (let [ids (mapv test-uuid-string (range 1 2501))
+          page-id (ids 42)
+          keyword-results (map-indexed
+                           (fn [idx id]
+                             {:id id
+                              :title (str "Result " idx)
+                              :keyword-score (if (= id page-id) 0.5 1.0)})
+                           ids)
+          blocks (into {}
+                       (map-indexed
+                        (fn [idx id]
+                          [id {:db/id idx
+                               :block/uuid (uuid id)
+                               :block/title (str "Result " idx)
+                               :page? (= id page-id)}])
+                        ids))]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? :page?]
+        (let [started (system-time)
+              result (doall (search/combine-results :db keyword-results))
+              elapsed-ms (- (system-time) started)]
+          (is (< elapsed-ms 60)
+              (str "combine-results should stay fast for large result sets, took " elapsed-ms "ms"))
+          (is (= (count ids) (count result)))
+          (is (= page-id (:id (first result)))
+              "page boost should still rank matching pages ahead of equally relevant blocks"))))))
+
+(deftest search-blocks-applies-final-limit
+  (testing "cmd-k only materializes the requested number of combined results"
+    (let [rows (mapv (fn [n]
+                       {:id (test-uuid-string n)
+                        :page (test-uuid-string n)
+                        :title (str "logseq result " n)
+                        :keyword-score 1})
+                     (range 1 101))]
+      (with-redefs [search/combine-results (fn [_db results]
+                                             (doall results)
+                                             rows)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      result)]
+        (is (= 10
+               (count (search/search-blocks (atom :large-db)
+                                            (checking-db)
+                                            "logseq"
+                                            {:limit 10 :enable-snippet? false}))))))))
+
+(deftest search-blocks-can-return-matched-count
+  (testing "cmd-k can show total matched nodes while returning the first page only"
+    (let [rows (mapv (fn [n]
+                       {:id (test-uuid-string n)
+                        :page (test-uuid-string n)
+                        :title (str "logseq result " n)
+                        :keyword-score 1})
+                     (range 1 101))
+          blocks (into {}
+                       (map (fn [{:keys [id title]}]
+                              [id {:db/id id
+                                   :block/uuid (uuid id)
+                                   :block/title title}])
+                            rows))]
+      (with-redefs [search/combine-results (fn [_db results]
+                                             (doall results)
+                                             rows)
+                    d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    ldb/page? (constantly false)
+                    ldb/built-in? (constantly false)]
+        (let [result (search/search-blocks (atom :large-db)
+                                           (checking-db)
+                                           "logseq"
+                                           {:limit 10
+                                            :enable-snippet? false
+                                            :include-matched-count? true})]
+          (is (= 10 (count (:items result))))
+          (is (= 100 (:matched-count result))))))))
+
+(deftest search-result-omits-empty-optional-fields
+  (testing "search responses avoid serializing nil optional fields for every row"
+    (let [block-id #uuid "00000000-0000-0000-0000-000000000123"
+          block {:db/id 1
+                 :block/uuid block-id
+                 :block/title "logseq result"}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (when (= id block-id)
+                                 block))
+                    ldb/page? (constantly false)
+                    ldb/built-in? (constantly false)]
+        (let [result (#'search/search-result->block-result
+                      (atom :db)
+                      "logseq"
+                      nil
+                      {:enable-snippet? false}
+                      {:id (str block-id)
+                       :page (str block-id)
+                       :title "logseq result"})]
+          (is (= "logseq result" (:block/title result)))
+          (is (not (contains? result :block/parent)))
+          (is (not (contains? result :block/tags)))
+          (is (not (contains? result :logseq.property/icon)))
+          (is (not (contains? result :alias))))))))
 
 (deftest upsert-blocks-batches-rows-into-single-sql-statement
   (let [calls (atom [])

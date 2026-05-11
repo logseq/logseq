@@ -18,9 +18,6 @@
 
 (defonce publishing? common-config/PUBLISHING)
 
-(goog-define REVISION "unknown")
-(defonce revision REVISION)
-
 ;; this is a feature flag to enable the account tab
 ;; when it launches (when pro plan launches) it should be removed
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
@@ -178,7 +175,7 @@
   #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})
 
 (def image-formats
-  #{:png :jpg :jpeg :bmp :gif :webp :svg :heic})
+  #{:png :jpg :jpeg :bmp :gif :webp :svg :heic :avif :cr2})
 
 (def audio-formats
   #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})

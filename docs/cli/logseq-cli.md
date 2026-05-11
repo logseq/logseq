@@ -18,7 +18,9 @@ pnpm db-worker-node:release:bundle
 Desktop + CLI shared semantics:
 - Electron desktop and CLI are expected to use the same `db-worker-node` and lock-file protocol for a graph.
 - Disk SQLite under `~/logseq/graphs` is the source of truth; OPFS periodic export is not part of the desktop primary write path.
-- If a daemon already exists for the graph, CLI reuses it via lock-file discovery instead of starting a second writer.
+- If a daemon already exists for the graph and reports the same revision as the requester, CLI reuses it via lock-file discovery instead of starting a second writer.
+- If the discovered daemon reports a different revision, startup stops that exact server, starts a replacement from the requester's bundled runtime, and only returns a usable endpoint after the replacement reports the expected revision.
+- A proven revision mismatch may be stopped across owner sources for the same repo/root-dir. Matching-revision servers keep the normal owner boundary.
 - If lock ownership is invalid or stale, startup cleans stale lock state before retrying.
 - Lock metadata includes an `owner-source` value (`cli`, `electron`, `unknown`) and lifecycle actions enforce owner boundaries.
 - `server stop` and `server restart` are owner-aware: CLI can only stop/restart servers it owns (or legacy `unknown` ownership).
@@ -110,11 +112,18 @@ Timeouts:
 Graph commands:
 - `graph list` - list all db graphs
 - `graph create --graph <name>` - create a new db graph and switch to it
+  - Fails with `graph-exists` if a local graph with the same name already exists
+  - `--enable-sync` creates the graph, switches to it, uploads it to Logseq Sync, and starts sync in one command
+  - `--e2ee-password <password>` is accepted only with `--enable-sync` and uses the same password verification path as `sync upload` and `sync start`
 - `graph switch --graph <name>` - switch current graph
 - `graph remove --graph <name>` - remove a graph
 - `graph validate --graph <name>` - validate graph data
 - `graph info [--graph <name>]` - show graph metadata (defaults to current graph)
 - `graph export --type edn|sqlite --file <path> [--graph <name>]` - export a graph to EDN or SQLite
+  - EDN export also accepts `--include-timestamps`, `--exclude-built-in-pages`, and `--exclude-namespaces <csv>`
+  - `--exclude-namespaces` trims CSV tokens, ignores empty tokens, removes duplicates, and can reduce backend export validation strictness
+  - SQLite export writes the snapshot directly to the destination path through `db-worker-node` instead of round-tripping a base64 payload through the CLI
+  - EDN-only export flags are rejected when `--type sqlite` is selected
 - `graph import --type edn|sqlite --input <path> --graph <name>` - import a graph from EDN or SQLite (new graph only)
 - `graph backup list` - list backup snapshots under `<root-dir>/graphs/<graph>/backup`
 - `graph backup create [--graph <name>] [--name <label>]` - create a backup snapshot for the selected graph
@@ -129,7 +138,7 @@ Backup scope note:
 
 Server commands:
 - `server list` - list running db-worker-node servers
-- `server cleanup` - terminate revision-mismatched CLI-owned db-worker-node servers discovered from lock files in the current root-dir
+- `server cleanup` - manually terminate revision-mismatched CLI-owned db-worker-node servers discovered from lock files in the current root-dir
 - `server start --graph <name>` - start db-worker-node for a graph
 - `server stop --graph <name>` - stop db-worker-node for a graph
 - `server restart --graph <name>` - restart db-worker-node for a graph
@@ -183,9 +192,12 @@ logseq skill install --global
 Server ownership behavior:
 - `server stop` and `server restart` can return `server-owned-by-other` if the daemon was started by another owner source.
 - `server start` can return `server-start-timeout-orphan` when lock creation times out and orphan matching processes are detected.
+- Normal connection startup compares the discovered server revision with the local requester revision. Missing revision is treated as mismatch.
+- On revision mismatch, startup attempts one graceful-first restart of the exact discovered server for the same repo/root-dir, even if the stale server has a different owner source. If the replacement still reports a different revision, startup fails fast and does not return an incompatible endpoint.
+- Manual `server stop` and `server restart` keep owner protections; cross-owner stop is only used by the automatic revision-mismatch startup path after the target mismatch is proven.
 - `server list` human output includes both `OWNER` and `REVISION` columns.
 - `server list` prints a compatibility warning in human output when any server revision string is not exactly equal to the local CLI revision string.
-- `server cleanup` checks discovered servers in the current root-dir, treats `revision != local CLI revision` (including missing revision) as mismatch, and attempts graceful-first termination only for `:owner-source :cli` targets.
+- `server cleanup` remains a manual maintenance command. It checks discovered servers in the current root-dir, treats `revision != local CLI revision` (including missing revision) as mismatch, and attempts graceful-first termination only for `:owner-source :cli` targets.
 - `server cleanup` structured output includes `checked`, `mismatched`, `eligible`, `skipped-owner`, `killed`, and `failed` summaries.
 - Structured output (`--output json|edn`) includes per-server `revision` data but does not include human warning text.
 
@@ -195,6 +207,8 @@ Sync commands:
 - `sync stop --graph <name>` - stop db-sync client on a graph daemon
 - `sync upload --graph <name>` - upload local graph snapshot to remote
 - `sync download --graph <name> [--progress true|false] [--e2ee-password <password>]` - download remote graph `<name>` into a same-name local graph directory
+- `sync asset download --graph <name> --id <asset-db-id>` - request one remote asset download by the `ID` shown by `list asset`
+- `sync asset download --graph <name> --uuid <asset-uuid>` - request one remote asset download by asset block UUID
 - `sync remote-graphs [--graph <name>]` - list remote graphs visible to the current login context
 - `sync ensure-keys [--graph <name>]` - ensure user RSA keys for sync/e2ee
 - `sync grant-access --graph <name> --graph-id <uuid> --email <email>` - grant encrypted graph access to a user
@@ -232,6 +246,17 @@ Sync download behavior:
 - If the target graph DB is not empty at download time, the CLI returns `graph-db-not-empty` and aborts before import.
 - For e2ee remote graphs, provide `--e2ee-password` on `sync download` (or persist once via `sync start --e2ee-password`).
 - If e2ee password is required but missing, `sync start`, `sync download`, and `sync status` return `e2ee-password-not-found` with a hint to provide `--e2ee-password`.
+
+Sync asset download behavior:
+- `sync asset download` requires `--graph` and exactly one of `--id` or `--uuid`.
+- `--id` selects the asset node by the Datascript db/id shown as `ID` in `list asset` human output.
+- `--uuid` selects the asset block UUID for scripts that already track UUIDs.
+- The command requires sync to already be running for the graph. If the graph's sync client is not active, it returns `sync-not-started` with a hint to run `logseq sync start --graph <name>` first.
+- The command uses the existing worker asset request API (`:thread-api/db-sync-request-asset-download`) and returns immediately after the worker accepts the enqueue request.
+- Before enqueueing, the CLI checks the local `assets/<asset-uuid>.<asset-type>` file. If the file exists and its checksum matches asset metadata, the command reports `download-requested? false` and skips the request.
+- If the local file exists but its checksum mismatches, the command reports `checksum-status mismatch`, prints a mismatch hint in human output, and requests a re-download.
+- The first version does not accept `--e2ee-password`; persist E2EE password state with existing `sync start` or `sync download` flows before requesting asset download.
+- Structured output includes asset identity and status fields such as `asset-id`, `asset-uuid`, `asset-type`, `download-requested?`, `checksum-status`, `skipped-reason`, and `hint` when applicable. It intentionally omits local filesystem paths.
 
 Sync config persistence:
 - `sync config set/unset` writes non-auth sync config to the CLI config file selected by `--config`.
@@ -281,10 +306,12 @@ Inspect and edit commands:
 - `search page --content <query>` - search pages by `:block/name` (case-insensitive substring)
 - `search property --content <query>` - search properties by `:block/title` (Property entities only)
 - `search tag --content <query>` - search tags by `:block/title` (Tag entities only)
+- `qsearch <query>` - search QMD Markdown Mirror output and render matched Logseq blocks grouped by page in human output; uses the current graph when `--graph` is omitted
 - `query --query <edn> [--inputs <edn-vector>]` - run a Datascript query against the graph
 - `query --name <query-name> [--inputs <edn-vector>]` - run a named query (built-in or from `cli.edn`)
 - `query list` - list available named queries
-- `show --page <name> [--level <n>]` - show page tree
+- `show --page <name> [--level <n>]` - show page content tree
+  - Use `--page-hierarchy true` to display child pages connected through page hierarchy instead of normal page content blocks.
 - `show --uuid <uuid> [--level <n>]` - show block tree
 - `show --id <id> [--level <n>]` - show block tree by db/id
 
@@ -383,6 +410,7 @@ JSON key migration (flat -> namespaced):
   - `doctor-server-revision-mismatch`: one or more discovered servers use a different revision than the local CLI revision (warning). Follow the printed remediation command for each affected graph: `logseq server restart --graph <name>`.
   - If bundled runtime startup fails with missing-module or missing-file errors, rebuild with `pnpm db-worker-node:release:bundle` and confirm `dist/db-worker-node.js` exists and every path listed in `dist/db-worker-node-assets.json` is present next to it.
 - `query` human output returns a plain string (the query result rendered via `pr-str`), which is convenient for pipelines like `logseq query ... | xargs logseq show --id`.
+- `qsearch` human output is page grouped. Each group renders the page id/title as the tree root and the matched blocks below it with the same tree-style id column and block details used by `show`, including visible tags and properties. When colors are enabled, query terms are highlighted case-insensitively after the final human text is rendered. JSON and EDN output keep the structured `:items`, `:missing-ids`, and `:qmd` payload.
 - Built-in named queries currently include `block-search`, `task-search`, `recent-updated`, `list-status`, and `list-priority`. Use `query list` to see the full set for your config.
 - Show output resolves block reference UUIDs inside text, replacing `[[<uuid>]]` with the referenced block content. Nested references are resolved recursively up to 10 levels to avoid excessive expansion. For example: `[[<uuid1>]]` → `[[some text [[<uuid2>]]]]` and then `<uuid2>` is also replaced.
 - When `show` targets an ordinary block (`--id` or `--uuid`), human output prepends one breadcrumb line (`page > ... > nearest parent`) above the root block line. Each segment is display-width truncated to `24` with `…`.
@@ -426,6 +454,7 @@ node ./dist/logseq.js upsert block --target-page TestPage --content "hello world
 node ./dist/logseq.js move --uuid <uuid> --target-page TargetPage
 node ./dist/logseq.js search block --content "hello"
 node ./dist/logseq.js show --page TestPage --output json
+node ./dist/logseq.js show --page Foo --page-hierarchy true
 node ./dist/logseq.js debug pull --graph demo --ident :logseq.class/Tag --output json
 node ./dist/logseq.js server list
 node ./dist/logseq.js doctor

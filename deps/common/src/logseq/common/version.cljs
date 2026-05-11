@@ -1,5 +1,5 @@
-(ns logseq.cli.version
-  "Build metadata for logseq-cli.")
+(ns logseq.common.version
+  "Version metadata helpers for build time and revision strings.")
 
 (goog-define BUILD_TIME "unknown")
 (goog-define REVISION "dev")

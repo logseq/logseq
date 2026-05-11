@@ -25,6 +25,7 @@
             [goog.dom :as gdom]
             [logseq.api.block :as api-block]
             [logseq.api.db-based :as db-based-api]
+            [logseq.api.plugin :as api-plugin]
             [logseq.common.path :as path]
             [logseq.outliner.property :as outliner-property]
             [logseq.common.util.date-time :as date-time-util]
@@ -162,11 +163,18 @@
   page-handler/rename!)
 
 (defn open_in_right_sidebar
-  [block-id-or-uuid]
-  (editor-handler/open-block-in-sidebar!
-   (if (number? block-id-or-uuid)
-     block-id-or-uuid
-     (sdk-utils/uuid-or-throw-error block-id-or-uuid))))
+  [block-id-or-uuid-or-key]
+  (if (or (number? block-id-or-uuid-or-key)
+        (util/uuid-string? block-id-or-uuid-or-key))
+    (editor-handler/open-block-in-sidebar!
+      (if (number? block-id-or-uuid-or-key)
+        block-id-or-uuid-or-key
+        (sdk-utils/uuid-or-throw-error block-id-or-uuid-or-key)))
+    (when-let [pid (api-plugin/get-caller-plugin-id)]
+      (state/sidebar-add-block!
+        (state/get-current-repo)
+        (keyword pid (str block-id-or-uuid-or-key))
+        :plugin))))
 
 (defn new_block_uuid []
   (str (db/new-block-id)))

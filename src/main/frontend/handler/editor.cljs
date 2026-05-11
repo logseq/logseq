@@ -384,6 +384,50 @@
   []
   (commands/restore-state))
 
+(defn- start-pending-new-block!
+  []
+  (state/set-state! :editor/pending-new-block {:typed-text ""}))
+
+(defn- pending-new-block
+  []
+  @(:editor/pending-new-block @state/state))
+
+(defn- pending-new-block?
+  []
+  (some? (pending-new-block)))
+
+(defn- append-pending-new-block-text!
+  [text]
+  (when (pending-new-block?)
+    (state/update-state! :editor/pending-new-block
+                         #(update % :typed-text str text))))
+
+(defn- queue-pending-new-block-tab!
+  [indent?]
+  (when (pending-new-block?)
+    (state/update-state! :editor/pending-new-block
+                         #(assoc % :tab-indent? indent?))))
+
+(defn- clear-pending-new-block!
+  []
+  (state/set-state! :editor/pending-new-block nil))
+
+(declare get-new-container-id)
+
+(defn- edit-pending-new-block!
+  [next-block sibling?]
+  (let [pending (pending-new-block)
+        next-block' (db/entity [:block/uuid (:block/uuid next-block)])
+        {:keys [typed-text tab-indent?]} pending
+        container-id (get-new-container-id :insert {:sibling? sibling?})]
+    (p/do!
+     (when (some? tab-indent?)
+       (block-handler/indent-outdent-blocks! [next-block'] tab-indent? nil))
+     (edit-block! next-block' (count typed-text)
+                  {:container-id container-id
+                   :custom-content (str typed-text (:block/title next-block'))})
+     (clear-pending-new-block!))))
+
 (defn get-state
   []
   (let [[{:keys [on-hide block block-id block-parent-id format sidebar?]} id config] (state/get-editor-args)
@@ -476,7 +520,7 @@
    (->
     (when (not config/publishing?)
       (when-let [state (get-state)]
-        (state/set-state! :editor/async-unsaved-chars "")
+        (start-pending-new-block!)
         (let [{:keys [block value config]} state
               value (if (string? block-value) block-value value)
               block-id (:block/uuid block)
@@ -509,20 +553,14 @@
                           :else
                           insert-new-block-aux!)
               [result-promise sibling? next-block] (insert-fn (assoc config :right-sibling right-sibling) block'' value)
-              edit-block-f (fn []
-                             (let [next-block' (db/entity [:block/uuid (:block/uuid next-block)])
-                                   pos 0
-                                   unsaved-chars @(:editor/async-unsaved-chars @state/state)
-                                   container-id (get-new-container-id :insert {:sibling? sibling?})]
-                               (edit-block! next-block' (+ pos (count unsaved-chars))
-                                            {:container-id container-id
-                                             :custom-content (str unsaved-chars (:block/title next-block'))})))]
+              edit-block-f #(edit-pending-new-block! next-block sibling?)]
           (p/do!
            (state/set-state! :editor/edit-block-fn edit-block-f)
            result-promise
            (clear-when-saved!)))))
-    (p/finally (fn []
-                 (state/set-state! :editor/async-unsaved-chars nil))))))
+    (p/catch (fn [e]
+               (clear-pending-new-block!)
+               (throw e))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid
@@ -1542,6 +1580,8 @@
   [q & [{:keys [nlp-pages? page-only?]}]]
   (p/let [block (state/get-edit-block)
           result (search/block-search (state/get-current-repo) q {:built-in? false
+                                                                  :limit 20
+                                                                  :search-limit 100
                                                                   :enable-snippet? false
                                                                   :page-only? page-only?})
           matched (remove (fn [b] (= (:block/uuid b) (:block/uuid block))) result)
@@ -1599,12 +1639,40 @@
                  (>= pos 1))
         (util/nth-safe value pos)))))
 
+(defn- get-focused-root-block
+  []
+  (let [page (state/get-current-page)]
+    (when (and page (util/uuid-string? page))
+      (db/entity [:block/uuid (parse-uuid page)]))))
+
+(defn- focused-root-block?
+  [block root-block]
+  (and block root-block
+       (= (:db/id block) (:db/id root-block))))
+
+(defn- outdent-past-focused-root?
+  [block root-block]
+  (= (:db/id (:block/parent block)) (:db/id root-block)))
+
+(defn- block-eligible-for-indent-outdent?
+  [block indent? root-block]
+  (and block
+       (not (focused-root-block? block root-block))
+       (or indent?
+           (not (outdent-past-focused-root? block root-block)))))
+
+(defn- block-eligible-for-move-up-down?
+  [block root-block]
+  (and block
+       (not (focused-root-block? block root-block))))
+
 (defn move-up-down
   [up?]
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
     (let [edit-block-id (:block/uuid (state/get-edit-block))
+          root-block (get-focused-root-block)
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
                              result (ui-outliner-tx/transact!
@@ -1616,20 +1684,25 @@
       (if edit-block-id
         (when-let [block (db/entity [:block/uuid edit-block-id])]
           (let [blocks [(assoc block :block/title (state/get-edit-content))]
+                blocks (filter #(block-eligible-for-move-up-down? % root-block) blocks)
                 container-id (get-new-container-id (if up? :move-up :move-down) {})]
-            (p/do!
-             (save-current-block!)
-             (move-nodes blocks)
-             (if container-id
-               (state/set-editing-block-id! [container-id edit-block-id])
-               (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
-                 (.focus input)
-                 (util/scroll-editor-cursor input))))))
+            (when (seq blocks)
+              (p/do!
+               (save-current-block!)
+               (move-nodes blocks)
+               (if container-id
+                 (state/set-editing-block-id! [container-id edit-block-id])
+                 (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
+                   (.focus input)
+                   (util/scroll-editor-cursor input)))))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
-                  blocks (map db/entity lookup-refs)]
-              (move-nodes blocks))))))))
+                  blocks (->> lookup-refs
+                              (map db/entity)
+                              (filter #(block-eligible-for-move-up-down? % root-block)))]
+              (when (seq blocks)
+                (move-nodes blocks)))))))))
 
 (defn get-selected-ordered-blocks
   []
@@ -1642,8 +1715,12 @@
 (defn on-tab
   "`direction` = :left | :right."
   [direction]
-  (let [blocks (get-selected-ordered-blocks)]
-    (block-handler/indent-outdent-blocks! blocks (= direction :right) nil)))
+  (let [blocks (get-selected-ordered-blocks)
+        indent? (= direction :right)
+        root-block (get-focused-root-block)
+        blocks (filter #(block-eligible-for-indent-outdent? % indent? root-block) blocks)]
+    (when (seq blocks)
+      (block-handler/indent-outdent-blocks! blocks indent? nil))))
 
 (defn- get-link [format link label]
   (let [link (or link "")
@@ -2486,16 +2563,23 @@
     (when block
       (let [node block-container
             prev-container-id (get-node-container-id node)
-            container-id (get-new-container-id (if indent? :indent :outdent) {})]
-        (p/do!
-         (block-handler/indent-outdent-blocks! [block] indent? save-current-block!)
-         (when (and (not= prev-container-id container-id) container-id)
-           (state/set-editing-block-id! [container-id (:block/uuid block)])))))))
+            container-id (get-new-container-id (if indent? :indent :outdent) {})
+            root-block (get-focused-root-block)]
+        (when (block-eligible-for-indent-outdent? block indent? root-block)
+          (p/do!
+           (block-handler/indent-outdent-blocks! [block] indent? save-current-block!)
+           (when (and (not= prev-container-id container-id) container-id)
+             (state/set-editing-block-id! [container-id (:block/uuid block)]))))))))
 
 (defn keydown-tab-handler
   [direction]
   (fn [e]
     (cond
+      (pending-new-block?)
+      (do
+        (util/stop e)
+        (queue-pending-new-block-tab! (not (= :left direction))))
+
       (state/editing?)
       (when-not (state/get-editor-action)
         (util/stop e)
@@ -2543,12 +2627,10 @@
           (util/stop e)
           (notification/show! (t :page.validation/name-no-hash) :warning))
         ;; stop accepting edits if the new block is not created yet
-        (some? @(:editor/async-unsaved-chars @state/state))
+        (pending-new-block?)
         (do
           (when (= 1 (count (str key)))
-            (state/update-state! :editor/async-unsaved-chars
-                                 (fn [s]
-                                   (str s key))))
+            (append-pending-new-block-text! key))
           (util/stop e))
 
         (contains? #{"ArrowLeft" "ArrowRight"} key)
@@ -2622,34 +2704,88 @@
         :else
         nil))))
 
-(defn- input-page-ref?
-  [k current-pos blank-selected? last-key-code]
-  (and blank-selected?
-       (contains? keycode/left-square-brackets-keys k)
-       (= (:key last-key-code) k)
-       (> current-pos 0)))
+(def ^:private block-ref-trigger-keys
+  (conj keycode/left-square-brackets-keys "Process"))
+
+(defn- block-ref-trigger-key?
+  [k]
+  (contains? block-ref-trigger-keys k))
+
+(defn- replacement-edit
+  [value replacement {:keys [start end]}]
+  {:value (str (subs value 0 start) replacement (subs value end))
+   :pos (+ start 2)})
+
+(defn- double-left-trigger-edit
+  [value current-pos left replacement]
+  (let [start (- current-pos (* 2 (count left)))]
+    (when (and (>= start 0)
+               (= (subs value start current-pos) (str left left)))
+      (replacement-edit value replacement {:start start :end current-pos}))))
+
+(def ^:private fullwidth-block-ref-patterns
+  #{"【【"
+    "【【】"
+    "【【】】"
+    "【】【"
+    "【】【】"})
+
+(defn- fullwidth-block-ref-trigger-range
+  [value current-pos]
+  (let [min-start (max 0 (- current-pos 4))
+        ;; Patterns can extend up to 3 chars past cursor (e.g. cursor at pos 1 in "【【】】").
+        ;; Use +4 so the full 4-char pattern is always reachable.
+        max-end (min (count value) (+ current-pos 4))
+        candidates (for [start (range min-start current-pos)
+                         end (range current-pos (inc max-end))
+                         :let [text (subs value start end)]
+                         :when (contains? fullwidth-block-ref-patterns text)]
+                     {:start start
+                      :end end})]
+    (when (seq candidates)
+      (apply max-key #(- (:end %) (:start %)) candidates))))
+
+(defn- fullwidth-block-ref-trigger-edit
+  [value current-pos]
+  (when-let [range (fullwidth-block-ref-trigger-range value current-pos)]
+    (replacement-edit value page-ref/left-and-right-brackets range)))
+
+(defn- block-ref-trigger-edit
+  [value current-pos k]
+  (or (fullwidth-block-ref-trigger-edit value current-pos)
+      (when (contains? keycode/left-square-brackets-keys k)
+        (double-left-trigger-edit value current-pos "[" page-ref/left-and-right-brackets))))
+
+(defn- apply-bracket-trigger!
+  [input {:keys [value pos]} command-step]
+  (state/set-block-content-and-last-pos! (.-id input) value pos)
+  (commands/handle-step command-step)
+  (cursor/move-cursor-to input pos)
+  (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
 (defn- default-case-for-keyup-handler
   [input current-pos k code is-processed?]
-  (let [last-key-code (state/get-last-key-code)
-        blank-selected? (string/blank? (util/get-selected-text))
+  (let [blank-selected? (string/blank? (util/get-selected-text))
         non-enter-processed? (and is-processed? ;; #3251
                                   (not= code keycode/enter-code))  ;; #3459
-        editor-action (state/get-editor-action)]
-    (if (and (= editor-action :page-search-hashtag)
-             (input-page-ref? k current-pos blank-selected? last-key-code))
-      (do
-        (commands/handle-step [:editor/input page-ref/right-brackets {:last-pattern :skip-check
-                                                                      :backward-pos 2}])
-        (commands/handle-step [:editor/search-page])
-        (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
-      (when (and (not editor-action) (not non-enter-processed?))
+        editor-action (state/get-editor-action)
+        value (gobj/get input "value")
+        block-ref-trigger? (and blank-selected? (block-ref-trigger-key? k))
+        block-ref-edit (when block-ref-trigger?
+                         (block-ref-trigger-edit value current-pos k))]
+    (if (and (= editor-action :page-search-hashtag) block-ref-edit)
+      (apply-bracket-trigger! input block-ref-edit [:editor/search-page-hashtag])
+      (when-not editor-action
         (cond
-         ;; When you type text inside square brackets
-          (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
+          (and block-ref-edit
+               (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
+          (apply-bracket-trigger! input block-ref-edit [:editor/search-page])
+
+          ;; When you type text inside square brackets
+          (and (not non-enter-processed?)
+               (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
                (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
           (let [orig-pos (cursor/get-caret-pos input)
-                value (gobj/get input "value")
                 square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) page-ref/left-brackets)
                 pos (+ square-pos 2)
                 _ (state/set-editor-last-pos! pos)
@@ -2659,27 +2795,6 @@
                                :editor/search-page)]
             (commands/handle-step [command-step])
             (state/set-editor-action-data! {:pos pos}))
-
-         ;; Handle non-ascii square brackets
-          (and (input-page-ref? k current-pos blank-selected? last-key-code)
-               (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
-          (do
-            (commands/handle-step [:editor/input page-ref/left-and-right-brackets {:backward-truncate-number 2
-                                                                                   :backward-pos 2}])
-            (commands/handle-step [:editor/search-page])
-            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
-
-         ;; Handle non-ascii parentheses
-          (and blank-selected?
-               (contains? keycode/left-paren-keys k)
-               (= (:key last-key-code) k)
-               (> current-pos 0)
-               (not (wrapped-by? input block-ref/left-parens block-ref/right-parens)))
-          (do
-            (commands/handle-step [:editor/input block-ref/left-and-right-parens {:backward-truncate-number 2
-                                                                                  :backward-pos 2}])
-            (commands/handle-step [:editor/search-block :reference])
-            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
           :else
           nil)))))
@@ -2753,7 +2868,7 @@
                                      :key k
                                      :shift? (.-shiftKey e)}))
         (when-not (state/get-editor-action)
-          (state/set-editor-last-pos! current-pos))))))
+          (state/set-editor-last-pos! (cursor/pos input)))))))
 
 (defn editor-on-click!
   [id]

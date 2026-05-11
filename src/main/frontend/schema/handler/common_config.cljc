@@ -49,8 +49,6 @@
               [:or :string :keyword]
               :string]]
     [:ref/default-open-blocks-level :int]
-    [:graph/settings [:map-of :keyword [:or :boolean :int :nil]]]
-    [:graph/forcesettings [:map-of :keyword :int]]
     [:mobile/photo [:map
                     [:allow-editing? {:optional true} :boolean]
                     [:quality {:optional true} :int]]]

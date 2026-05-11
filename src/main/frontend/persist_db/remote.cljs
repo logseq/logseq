@@ -86,44 +86,49 @@
               {:close! (fn []
                          (.close es))})
             {:close! (fn [] nil)}))]
-  (assoc opts
-         :fetch-fn (or fetch-fn default-fetch-fn)
-         :open-sse-fn (or open-sse-fn default-open-sse-fn)
-         :schedule-fn (or schedule-fn (fn [f delay-ms]
-                                        (js/setTimeout f delay-ms)))
-         :reconnect-delay-ms (or reconnect-delay-ms 1000))))
+    (assoc opts
+           :fetch-fn (or fetch-fn default-fetch-fn)
+           :open-sse-fn (or open-sse-fn default-open-sse-fn)
+           :schedule-fn (or schedule-fn (fn [f delay-ms]
+                                          (js/setTimeout f delay-ms)))
+           :reconnect-delay-ms (or reconnect-delay-ms 1000))))
 
 (defn invoke!
-  [{:keys [base-url auth-token fetch-fn]} method direct-pass? args]
+  [{:keys [base-url auth-token fetch-fn on-invoke-success on-invoke-failure]} method args]
   (let [payload (js/JSON.stringify
-                 (clj->js (if direct-pass?
-                            {:method method
-                             :directPass true
-                             :args args}
-                            {:method method
-                             :directPass false
-                             :argsTransit (ldb/write-transit-str args)})))]
-    (p/let [{:keys [status body]}
-            (fetch-fn {:method "POST"
-                       :url (invoke-url base-url)
-                       :headers (base-headers auth-token)
-                       :body payload})
-            parsed (parse-response-body body)]
-      (if (<= 200 status 299)
-        (if direct-pass?
-          (:result parsed)
-          (ldb/read-transit-str (:resultTransit parsed)))
-        (let [error (:error parsed)]
-          (throw (ex-info (or (:message error) "db-worker invoke failed")
-                          (cond-> {:status status
-                                   :code (normalize-code (:code error))}
-                            error (assoc :error error)))))))))
+                 (clj->js {:method method
+                           :argsTransit (ldb/write-transit-str args)}))]
+    (->
+     (p/let [{:keys [status body]}
+             (fetch-fn {:method "POST"
+                        :url (invoke-url base-url)
+                        :headers (base-headers auth-token)
+                        :body payload})
+             parsed (parse-response-body body)]
+       (if (<= 200 status 299)
+         (let [result (ldb/read-transit-str (:resultTransit parsed))]
+           (when on-invoke-success
+             (on-invoke-success method args result))
+           result)
+         (let [error (:error parsed)]
+           (throw (ex-info (or (:message error) "db-worker invoke failed")
+                           (cond-> {:status status
+                                    :code (normalize-code (:code error))}
+                             error (assoc :error error)))))))
+     (p/catch (fn [error]
+                (when on-invoke-failure
+                  (on-invoke-failure method args error))
+                (throw error))))))
 
 (defn connect-events!
-  [{:keys [base-url auth-token event-handler open-sse-fn schedule-fn reconnect-delay-ms]} wrapped-worker]
+  [{:keys [base-url auth-token event-handler open-sse-fn schedule-fn reconnect-delay-ms on-event-error]} wrapped-worker]
   (let [connected? (atom true)
         buffer (atom "")
         subscription (atom nil)
+        close-subscription! (fn []
+                              (when-let [close! (:close! @subscription)]
+                                (close!))
+                              (reset! subscription nil))
         dispatch! (fn [event-str]
                     (when-let [line (data-line event-str)]
                       (let [event (parse-response-body line)
@@ -146,14 +151,17 @@
                                                 (reset! buffer next-buffer)
                                                 (dispatch! event-str)
                                                 (recur))))))
-                          :on-error (fn [_error]
+                          :on-error (fn [error]
                                       (when @connected?
-                                        (schedule-fn open! reconnect-delay-ms)))}))))]
+                                        (close-subscription!)
+                                        (when on-event-error
+                                          (on-event-error error))
+                                        (when @connected?
+                                          (schedule-fn open! reconnect-delay-ms))))}))))]
       (open!)
       {:disconnect! (fn []
                       (reset! connected? false)
-                      (when-let [close! (:close! @subscription)]
-                        (close!))
+                      (close-subscription!)
                       nil)})))
 
 (defn- method->str
@@ -163,28 +171,27 @@
 (defrecord InRemote [client wrapped-worker disconnect!]
   protocol/PersistentDB
   (<new [_this repo opts]
-    (invoke! client "thread-api/create-or-open-db" false [repo opts]))
+    (invoke! client "thread-api/create-or-open-db" [repo opts]))
 
   (<list-db [_this]
-    (invoke! client "thread-api/list-db" false []))
+    (invoke! client "thread-api/list-db" []))
 
   (<unsafe-delete [_this repo]
-    (invoke! client "thread-api/unsafe-unlink-db" false [repo]))
+    (invoke! client "thread-api/unsafe-unlink-db" [repo]))
 
   (<release-access-handles [_this repo]
-    (invoke! client "thread-api/release-access-handles" false [repo]))
+    (invoke! client "thread-api/release-access-handles" [repo]))
 
   (<fetch-initial-data [_this repo opts]
-    (p/let [_ (invoke! client "thread-api/create-or-open-db" false [repo opts])]
-      (invoke! client "thread-api/get-initial-data" false [repo opts])))
+    (p/let [_ (invoke! client "thread-api/create-or-open-db" [repo opts])]
+      (invoke! client "thread-api/get-initial-data" [repo opts])))
 
   (<export-db [_this repo _opts]
-    (invoke! client "thread-api/export-db" true [repo]))
+    (invoke! client "thread-api/export-db-binary" [repo]))
 
   (<import-db [_this repo data]
     (->
-     (p/let [result-str (invoke! client "thread-api/import-db" true [repo data])]
-       (ldb/read-transit-str result-str))
+     (invoke! client "thread-api/import-db-binary" [repo data])
      (p/catch (fn [error]
                 (log/error :import-db-error repo error "SQLiteDB import error")
                 (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))
@@ -192,8 +199,8 @@
 (defn start!
   [{:keys [base-url auth-token event-handler] :as opts}]
   (let [client (create-client (assoc opts :base-url base-url :auth-token auth-token))
-        wrapped-worker (fn [qkw direct-pass? & args]
-                         (invoke! client (method->str qkw) direct-pass? args))
+        wrapped-worker (fn [qkw & args]
+                         (invoke! client (method->str qkw) args))
         {:keys [disconnect!]} (connect-events! (assoc client
                                                       :event-handler event-handler
                                                       :auth-token auth-token)

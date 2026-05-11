@@ -1,9 +1,14 @@
 (ns frontend.handler.export-test
   (:require [cljs.test :refer [are async deftest is testing use-fixtures]]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
+            [frontend.handler.export :as export]
             [frontend.handler.export.text :as export-text]
+            [frontend.handler.notification :as notification]
+            [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
+            [frontend.util :as util]
             [promesa.core :as p]))
 
 (def test-files
@@ -15,7 +20,11 @@
         uuid-5 #uuid "708f7836-c1e2-4212-bd26-b53c7e9f1449"
         uuid-6 #uuid "de7724d5-b045-453d-a643-31b81d310071"
         uuid-p3 #uuid "de13830f-9691-4074-a0d6-cc8ab9cf9074"
-        uuid-7 #uuid "f81f4f64-578a-42ff-8741-19adac45f42a"]
+        uuid-7 #uuid "f81f4f64-578a-42ff-8741-19adac45f42a"
+        uuid-p5 #uuid "9dfeae55-c426-4957-8de9-40ff71c622f0"
+        uuid-8 #uuid "c370c72d-97b8-45f1-8a87-184e1a77792c"
+        uuid-9 #uuid "253c84fb-bf6f-4936-8370-4662930c8e6d"
+        uuid-10 #uuid "e6741341-2426-4c46-b09f-6aec73a4357b"]
     [{:page {:block/title "page1"}
       :blocks
       [{:block/title "1"
@@ -57,7 +66,25 @@
       [{:block/title "issue"
         :build/keep-uuid? true
         :block/uuid uuid-7
-        :build/properties {:user.property/reproducible-steps "Switch to a password protected graph"}}]}]))
+        :build/properties {:user.property/reproducible-steps "Switch to a password protected graph"}}]}
+      {:page {:block/title "page5"
+              :block/uuid uuid-p5}
+       :blocks
+       [{:block/title "Heading block"
+         :build/keep-uuid? true
+         :block/uuid uuid-8
+         :build/properties {:logseq.property/heading 2}}
+        {:block/title "quote line 1\nquote line 2"
+         :build/keep-uuid? true
+         :block/uuid uuid-9
+         :build/tags [:logseq.class/Quote-block]
+         :build/properties {:logseq.property.node/display-type :quote}}
+        {:block/title "(println \"hi\")\n(+ 1 2)"
+         :build/keep-uuid? true
+         :block/uuid uuid-10
+         :build/tags [:logseq.class/Code-block]
+         :build/properties {:logseq.property.node/display-type :code
+                            :logseq.property.code/lang "clojure"}}]}]))
 
 (use-fixtures :once
   {:before (fn []
@@ -70,6 +97,81 @@
 (use-fixtures :each
   {:before (fn []
              (state/set-current-repo! test-helper/test-db))})
+
+(deftest export-sqlite-db-on-electron-uses-worker-file-export
+  (async done
+    (let [ipc-calls (atom [])
+          notification-calls (atom [])
+          persist-export-calls (atom [])
+          original-electron? util/electron?
+          original-ipc ipc/ipc
+          original-notification-show! notification/show!
+          original-export-db persist-db/<export-db]
+      (set! util/electron? (constantly true))
+      (set! ipc/ipc (fn [& args]
+                      (swap! ipc-calls conj args)
+                      (p/resolved {:path "/tmp/export.sqlite"})))
+      (set! notification/show! (fn [& args]
+                                 (swap! notification-calls conj args)))
+      (set! persist-db/<export-db (fn [& args]
+                                    (swap! persist-export-calls conj args)
+                                    (p/rejected (ex-info "renderer export should not run" {}))))
+      (-> (export/export-repo-as-sqlite-db! "logseq_db_big_graph")
+          (p/then (fn [_]
+                    (is (empty? @persist-export-calls))
+                    (is (= 1 (count @ipc-calls)))
+                    (let [[method repo filename] (first @ipc-calls)]
+                      (is (= :db-export-as method))
+                      (is (= "logseq_db_big_graph" repo))
+                      (is (string/ends-with? filename ".sqlite")))
+                    (is (= [["SQLite DB exported to /tmp/export.sqlite." :success false]]
+                           @notification-calls))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally
+           (fn []
+             (set! util/electron? original-electron?)
+             (set! ipc/ipc original-ipc)
+             (set! notification/show! original-notification-show!)
+             (set! persist-db/<export-db original-export-db)
+             (done)))))))
+
+(deftest export-sqlite-db-on-web-uses-file-system-writable-when-available
+  (async done
+    (let [writes (atom [])
+          picker-calls (atom [])
+          original-electron? util/electron?
+          original-export-db persist-db/<export-db
+          original-picker (.-showSaveFilePicker js/window)
+          payload (js/Uint8Array. #js [1 2 3])]
+      (set! util/electron? (constantly false))
+      (set! persist-db/<export-db (fn [repo opts]
+                                    (is (= "logseq_db_big_graph" repo))
+                                    (is (= {:return-data? true} opts))
+                                    (p/resolved payload)))
+      (set! (.-showSaveFilePicker js/window)
+            (fn [opts]
+              (swap! picker-calls conj opts)
+              (p/resolved #js {:createWritable
+                               (fn []
+                                 (p/resolved #js {:write (fn [data]
+                                                           (swap! writes conj [:write data])
+                                                           (p/resolved nil))
+                                                  :close (fn []
+                                                           (swap! writes conj [:close])
+                                                           (p/resolved nil))}))})))
+      (-> (export/export-repo-as-sqlite-db! "logseq_db_big_graph")
+          (p/then (fn [_]
+                    (is (= 1 (count @picker-calls)))
+                    (is (= [[:write payload] [:close]] @writes))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally
+           (fn []
+             (set! util/electron? original-electron?)
+             (set! persist-db/<export-db original-export-db)
+             (set! (.-showSaveFilePicker js/window) original-picker)
+             (done)))))))
 
 (deftest export-blocks-as-markdown-without-properties
   (are [expect block-uuid-s]
@@ -106,6 +208,21 @@
           (export-text/export-blocks-as-markdown
            (state/get-current-repo)
            [(uuid "f81f4f64-578a-42ff-8741-19adac45f42a")]
+           {:remove-options #{:property}})))))
+
+(deftest export-page-as-markdown-preserves-semantic-block-formatting
+  (is (= (string/trim "
+- ## Heading block
+- > quote line 1
+  > quote line 2
+- ```clojure
+  (println \"hi\")
+  (+ 1 2)
+  ```")
+         (string/trim
+          (export-text/export-blocks-as-markdown
+           (state/get-current-repo)
+           [(uuid "9dfeae55-c426-4957-8de9-40ff71c622f0")]
            {:remove-options #{:property}})))))
 
 (deftest export-blocks-as-markdown-level<N

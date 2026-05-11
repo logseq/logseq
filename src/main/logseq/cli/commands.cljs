@@ -10,6 +10,7 @@
             [logseq.cli.command.example :as example-command]
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
+            [logseq.cli.command.qmd :as qmd-command]
             [logseq.cli.command.query :as query-command]
             [logseq.cli.command.remove :as remove-command]
             [logseq.cli.command.search :as search-command]
@@ -97,6 +98,7 @@
                upsert-command/entries
                remove-command/entries
                query-command/entries
+               qmd-command/entries
                search-command/entries
                show-command/entries
                doctor-command/entries
@@ -133,6 +135,45 @@
           {:args args :id-from-stdin? false}))
       {:args args :id-from-stdin? false})
     {:args args :id-from-stdin? false}))
+
+(def ^:private qsearch-value-options
+  #{"--graph" "-g" "--root-dir" "--config" "--timeout-ms" "--output" "-o"
+    "--limit" "-n"})
+
+(def ^:private qsearch-flag-options
+  #{"--no-rerank" "--verbose" "-v" "--profile" "--help" "-h"})
+
+(defn- normalize-qsearch-args
+  [args]
+  (if (= "qsearch" (first args))
+    (loop [remaining (vec (rest args))
+           option-tokens []
+           query-tokens []]
+      (if-let [token (first remaining)]
+        (cond
+          (contains? qsearch-value-options token)
+          (let [value (second remaining)]
+            (recur (subvec remaining (if value 2 1))
+                   (cond-> (conj option-tokens token)
+                     value (conj value))
+                   query-tokens))
+
+          (contains? qsearch-flag-options token)
+          (recur (subvec remaining 1)
+                 (conj option-tokens token)
+                 query-tokens)
+
+          (string/starts-with? token "-")
+          (recur (subvec remaining 1)
+                 (conj option-tokens token)
+                 query-tokens)
+
+          :else
+          (recur (subvec remaining 1)
+                 option-tokens
+                 (conj query-tokens token)))
+        (vec (concat ["qsearch"] option-tokens query-tokens))))
+    args))
 
 (defn- unknown-command-message
   [{:keys [dispatch wrong-input]}]
@@ -186,9 +227,6 @@
 
 (def ^:private upsert-validation-commands
   #{:upsert-block :upsert-page :upsert-task :upsert-tag :upsert-property :upsert-asset})
-
-(def ^:private search-validation-commands
-  #{:search-block :search-page :search-property :search-tag})
 
 (def ^:private list-validation-commands
   #{:list-page :list-tag :list-property :list-task :list-node :list-asset})
@@ -290,20 +328,29 @@
          (not (seq (some-> (:name opts) string/trim))))
     (missing-query-result summary)
 
-    (and (search-validation-commands command)
+    (and (contains? #{:search-block :search-page :search-property :search-tag} command)
          (seq args))
     (command-core/invalid-options-result summary (legacy-search-query-guidance cmds))
 
-    (and (search-validation-commands command)
+    (and (contains? #{:search-block :search-page :search-property :search-tag} command)
          (not (seq (some-> (:content opts) str string/trim))))
     (assoc (missing-query-text-result summary) :command command)
+
+    (and (= :qsearch command)
+         (not (seq args)))
+    (assoc (missing-query-text-result summary) :command command)
+
+    (and (= :qmd command)
+         (seq args))
+    (command-core/invalid-options-result summary "qmd does not accept positional arguments")
 
     :else
     nil))
 
 (defn- validate-option-contracts
   [summary {:keys [command list-invalid-options-message remove-invalid-options-message
-                   show-invalid-options-message debug-invalid-options-message]}]
+                   show-invalid-options-message debug-invalid-options-message
+                   graph-invalid-options-message]}]
   (cond
     (and (list-validation-commands command)
          list-invalid-options-message)
@@ -312,6 +359,9 @@
     (and (remove-validation-commands command)
          remove-invalid-options-message)
     (command-core/invalid-options-result summary remove-invalid-options-message)
+
+    graph-invalid-options-message
+    (command-core/invalid-options-result summary graph-invalid-options-message)
 
     (and (= command :show) show-invalid-options-message)
     (command-core/invalid-options-result summary show-invalid-options-message)
@@ -328,7 +378,9 @@
     (and (= command :graph-export) (not (seq import-export-type)))
     (missing-type-result summary)
 
-    (and (= command :graph-export) (not (seq (:file opts))))
+    (and (= command :graph-export)
+         (not= "sqlite" import-export-type)
+         (not (seq (:file opts))))
     (missing-file-result summary)
 
     (and (= command :graph-import) (not (seq import-export-type)))
@@ -353,9 +405,14 @@
          (not (seq (:graph opts))))
     (missing-graph-result summary)
 
-    (and (= command :sync-download)
+    (and (= :sync-download command)
          (not (seq (:graph opts))))
     (missing-graph-result summary)
+
+    (and (= command :sync-asset-download)
+         (not= 1 (count (filter true? [(some? (:id opts))
+                                       (boolean (seq (some-> (:uuid opts) string/trim)))]))))
+    (command-core/invalid-options-result summary "exactly one of --id or --uuid is required")
 
     (and (= command :completion)
          completion-shell-error)
@@ -401,6 +458,8 @@
                                      (show-command/invalid-options? opts))
      :debug-invalid-options-message (when (= command :debug-pull)
                                       (debug-command/invalid-options? opts))
+     :graph-invalid-options-message (when (contains? #{:graph-create :graph-export} command)
+                                      (graph-command/invalid-options? command opts))
      :import-export-type (graph-command/normalize-import-export-type (:type opts))
      :completion-shell-error (when (= command :completion)
                                (completion-shell-error-message completion-shell))}))
@@ -414,7 +473,8 @@
   [summary {:keys [command opts args cmds spec long-desc examples]}]
   (let [opts (-> opts
                  command-core/normalize-opts
-                 (#(list-command/normalize-options command %)))
+                 (#(list-command/normalize-options command %))
+                 (#(graph-command/normalize-options command %)))
         args (vec args)
         cmd-summary (command-core/command-summary {:cmds cmds
                                                    :spec spec
@@ -483,7 +543,7 @@
   [raw-args]
   (let [summary (command-core/top-level-summary table)
         {:keys [opts args]} (command-core/parse-leading-global-opts raw-args)
-        {:keys [args id-from-stdin?]} (inject-stdin-id-arg (vec args))
+        {:keys [args id-from-stdin?]} (inject-stdin-id-arg (normalize-qsearch-args (vec args)))
         group-path (group-help-path args)]
     (cond
       (:version opts)
@@ -590,7 +650,7 @@
 
         :graph-export
         (let [export-type (graph-command/normalize-import-export-type (:type options))]
-          (graph-command/build-export-action repo export-type (:file options)))
+          (graph-command/build-export-action repo export-type (:file options) options))
 
         :graph-import
         (let [import-repo (command-core/resolve-repo (:graph options))
@@ -605,6 +665,12 @@
 
         (:search-block :search-page :search-property :search-tag)
         (search-command/build-action command options repo)
+
+        :qmd
+        (qmd-command/build-action options repo)
+
+        :qsearch
+        (qmd-command/build-search-action options args repo)
 
         :upsert-block
         (upsert-command/build-block-action options args repo)
@@ -643,7 +709,7 @@
         (doctor-command/build-action options)
 
         (:sync-status :sync-start :sync-stop :sync-upload :sync-download
-         :sync-remote-graphs :sync-ensure-keys :sync-grant-access
+         :sync-asset-download :sync-remote-graphs :sync-ensure-keys :sync-grant-access
          :sync-config-set :sync-config-get :sync-config-unset)
         (sync-command/build-action command options args repo)
 
@@ -689,6 +755,7 @@
                          :graph-backup-restore (graph-command/execute-graph-backup-restore action config)
                          :graph-backup-remove (graph-command/execute-graph-backup-remove action config)
                          :invoke (graph-command/execute-invoke action config)
+                         :graph-create-enable-sync (graph-command/execute-graph-create-enable-sync action config)
                          :graph-remove (graph-command/execute-graph-remove action config)
                          :graph-switch (graph-command/execute-graph-switch action config)
                          :graph-info (graph-command/execute-graph-info action config)
@@ -704,6 +771,8 @@
                          :search-page (search-command/execute-search-page action config)
                          :search-property (search-command/execute-search-property action config)
                          :search-tag (search-command/execute-search-tag action config)
+                         :qmd (qmd-command/execute-qmd action config)
+                         :qsearch (qmd-command/execute-qsearch action config)
                          :upsert-block (upsert-command/execute-upsert-block action config)
                          :upsert-page (upsert-command/execute-upsert-page action config)
                          :upsert-task (upsert-command/execute-upsert-task action config)
@@ -732,7 +801,7 @@
                          :server-stop (server-command/execute-stop action config)
                          :server-restart (server-command/execute-restart action config)
                          (:sync-status :sync-start :sync-stop :sync-upload :sync-download
-                          :sync-remote-graphs :sync-ensure-keys :sync-grant-access
+                          :sync-asset-download :sync-remote-graphs :sync-ensure-keys :sync-grant-access
                           :sync-config-set :sync-config-get :sync-config-unset)
                          (sync-command/execute action config)
                          (:login :logout)
@@ -749,4 +818,5 @@
                                              :status :priority
                                              :src :dst :backup-name
                                              :export-type :file :import-type :input
+                                             :enable-sync
                                              :graph-id :email :config-key :config-value])))))

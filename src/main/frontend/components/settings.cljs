@@ -30,6 +30,7 @@
             [frontend.version :as fv]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
+            [logseq.common.version :as build-version]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -79,18 +80,19 @@
                :else
                nil)]
 
-       [:div.text-sm.cursor
-        {:title (t :settings.general/revision config/revision)
-         :on-click (fn []
-                     (notification/show! [:div
-                                          [:span (t :settings.general/current-revision-label)]
-                                          [:a {:target "_blank"
-                                               :style {:margin-inline-start "0.25rem"}
-                                               :href (str "https://github.com/logseq/logseq/commit/" config/revision)}
-                                           config/revision]]
-                                         :info
-                                         false))}
-        version]
+       (let [revision (build-version/revision)]
+         [:div.text-sm.cursor
+          {:title (t :settings.general/revision revision)
+           :on-click (fn []
+                       (notification/show! [:div
+                                            [:span (t :settings.general/current-revision-label)]
+                                            [:a {:target "_blank"
+                                                 :style {:margin-inline-start "0.25rem"}
+                                                 :href (str "https://github.com/logseq/logseq/commit/" revision)}
+                                             revision]]
+                                           :info
+                                           false))}
+          version])
 
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"
@@ -743,6 +745,50 @@
    {:left-label (t :settings.features/enable-flashcards)
     :action (flashcards-enabled-switcher enable-flashcards?)}))
 
+(rum/defcs markdown-mirror-row < rum/reactive
+  (rum/local false ::regenerating?)
+  [state t]
+  (let [repo (state/get-current-repo)
+        enabled? (true? (:feature/markdown-mirror? (when repo (state/sub [:config repo]))))
+        *regenerating? (::regenerating? state)
+        regenerate! (fn []
+                      (when (and repo @state/*db-worker (not @*regenerating?))
+                        (reset! *regenerating? true)
+                        (-> (state/<invoke-db-worker :thread-api/markdown-mirror-regenerate repo)
+                            (p/then (fn [_]
+                                      (notification/show!
+                                       (t :settings.features/markdown-mirror-regenerate-success)
+                                       :success)))
+                            (p/catch (fn [error]
+                                       (log/error :markdown-mirror/regenerate-failed
+                                                  {:repo repo
+                                                   :error error})
+                                       (notification/show!
+                                        (t :settings.features/markdown-mirror-regenerate-error (str error))
+                                        :error)))
+                            (p/finally #(reset! *regenerating? false)))))]
+    (toggle
+     "markdown-mirror"
+     (t :settings.features/markdown-mirror)
+     enabled?
+     #(let [next-enabled? (not enabled?)
+            repo (state/get-current-repo)]
+        (config-handler/set-config! :feature/markdown-mirror? next-enabled?)
+        (when (and repo @state/*db-worker)
+          (-> (state/<invoke-db-worker :thread-api/markdown-mirror-set-enabled repo next-enabled?)
+              (p/catch (fn [error]
+                         (log/error :markdown-mirror/settings-sync-failed
+                                    {:repo repo
+                                     :error error}))))))
+     [:div.flex.items-center.gap-2.flex-wrap
+      [:span.text-sm.opacity-50 (t :settings.features/markdown-mirror-desc)]
+      (ui/button
+       (t :settings.features/markdown-mirror-regenerate)
+       :icon "refresh"
+       :class "text-sm"
+       :disabled @*regenerating?
+       :on-click regenerate!)])))
+
 (defn https-user-agent-row [agent-opts]
   (row-with-button-action
    {:left-label (t :settings.advanced/network-proxy)
@@ -1054,6 +1100,8 @@
        (plugin-system-switcher-row))
      (when (util/electron?)
        (http-server-switcher-row))
+     (when (util/electron?)
+       (markdown-mirror-row t))
      (flashcards-switcher-row enable-flashcards?)
      (when-not web-platform?
        [:div.mt-1.sm:mt-0.sm:col-span-2

@@ -307,12 +307,23 @@
 ;; TODO: use rum/use-effect instead
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
-           (let [result (atom nil)]
-             (search-blocks! state result)
-             (assoc state ::result result)))
+           (let [result (atom nil)
+                 [debounced-search stop-search!] (util/cancelable-debounce search-blocks! 150)]
+             (debounced-search state result)
+             (assoc state
+                    ::result result
+                    ::debounced-search debounced-search
+                    ::stop-search! stop-search!)))
    :did-update (fn [state]
-                 (search-blocks! state (::result state))
-                 state)}
+                 (let [[_edit-block _ _ q] (:rum/args state)]
+                   (if (string/blank? q)
+                     (reset! (::result state) nil)
+                     ((::debounced-search state) state (::result state))))
+                 state)
+   :will-unmount (fn [state]
+                   (when-let [stop-search! (::stop-search! state)]
+                     (stop-search!))
+                   state)}
   [state _edit-block input id q format selected-text]
   (let [result (->> (rum/react (get state ::result))
                     (remove (fn [b] (nil? (:block/uuid b)))))

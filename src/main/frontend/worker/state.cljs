@@ -10,7 +10,7 @@
 (defn <invoke-main-thread
   [qkw & args]
   (if-let [main-thread @*main-thread]
-    (apply main-thread qkw false args)
+    (apply main-thread qkw args)
     (p/rejected (ex-info "main thread is not available in db-worker"
                          {:method qkw}))))
 

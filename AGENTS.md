@@ -46,3 +46,6 @@
 - New properties should be added to `logseq.db.frontend.property/built-in-properties`.
 - Avoid creating new class or property unless you have to.
 - Avoid shadow var, e.g. `bytes` should be named as `payload`.
+- Avoid using `js/Buffer` in browser related code.
+- Git commits should include a concise summary.
+- When deleting properties in db migration, those properties should be added to `logseq.db-sync.tx-sanitize/migration-deleted-attrs`

@@ -12,11 +12,13 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [promesa.core :as p]))
 
 (rum/defc references-aux
   [page-entity config]
   (let [filters (db-reference/get-filters page-entity)
+        open-blocks-level (state/get-ref-open-blocks-level)
         reference-filter (fn [{:keys [ref-pages-count]}]
                            (shui/button
                             {:title (t :reference/page-filter)
@@ -47,7 +49,10 @@
       :show-items-count? true
       :additional-actions [reference-filter]
       :columns (views/build-columns config [] {})
-      :config config})))
+      :config config
+      :foldable-options (when (and (:linked-refs-section? config)
+                                   (zero? open-blocks-level))
+                          {:default-collapsed? true})})))
 
 (rum/defc references-cp < rum/reactive db-mixins/query
   [entity config]
@@ -77,11 +82,10 @@
   (when-let [id (:db/id entity)]
     (let [[has-references? set-has-references!] (hooks/use-state nil)]
       (hooks/use-effect!
-       #(c.m/run-task*
-         (m/sp
-           (let [result (c.m/<? (state/<invoke-db-worker :thread-api/block-refs-check
-                                                         (state/get-current-repo) id {:unlinked? true}))]
-             (set-has-references! result))))
+       (fn []
+         (p/let [result (state/<invoke-db-worker :thread-api/block-refs-check
+                                                 (state/get-current-repo) id {:unlinked? true})]
+           (set-has-references! result)))
        [])
       (when has-references?
         (let [config (assoc config :highlight-query (:block/title entity))]

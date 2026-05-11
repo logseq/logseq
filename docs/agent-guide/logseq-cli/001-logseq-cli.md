@@ -100,6 +100,7 @@ The top-level help groups commands into graph inspection/editing, graph manageme
 - `sync stop`
 - `sync upload`
 - `sync download`
+- `sync asset download`
 - `sync remote-graphs`
 - `sync ensure-keys`
 - `sync grant-access`
@@ -298,6 +299,10 @@ Graph management commands use `--graph` or the configured current graph, dependi
 - `graph validate --graph <name> [--fix]` delegates validation to the worker.
 - `graph info --graph <name>` reads graph metadata and `logseq.kv/*` values; human output redacts sensitive KV keys matching token/secret/password.
 - `graph export --graph <name> --type edn|sqlite --file <path>` exports EDN graph data or a SQLite snapshot.
+  - For `--type edn`, the CLI also accepts `--include-timestamps`, `--exclude-built-in-pages`, and `--exclude-namespaces <csv>`.
+  - `--exclude-namespaces` is normalized as trimmed CSV values with empty segments removed and duplicates collapsed; the worker receives the final value as a keyword set.
+  - `--exclude-namespaces` intentionally reduces some backend export validation strictness because excluded ontology namespaces cannot be validated the same way.
+  - For `--type sqlite`, the CLI rejects those EDN-only flags and invokes `:thread-api/backup-db-sqlite` so the worker writes the snapshot directly to the requested file path.
 - `graph import --graph <name> --type edn|sqlite --input <path>` imports EDN or SQLite data. SQLite import requires the target graph to be missing; EDN import can target a graph action that the worker can open.
 
 Graph backups are SQLite snapshot helpers under the graph's backup directory:
@@ -315,7 +320,7 @@ Backups store `db.sqlite` under `<root-dir>/graphs/<encoded-graph>/backup/<encod
 
 Sync commands live in `command/sync.cljs`.
 
-Authenticated sync actions are `sync start`, `sync upload`, `sync download`, `sync remote-graphs`, `sync ensure-keys`, and `sync grant-access`; they resolve runtime auth from `auth.json` unless token data is already present in runtime config. `sync status`, `sync stop`, and `sync config` commands do not require the CLI login resolution path in the same way.
+Authenticated sync actions are `sync start`, `sync upload`, `sync download`, `sync asset download`, `sync remote-graphs`, `sync ensure-keys`, and `sync grant-access`; they resolve runtime auth from `auth.json` unless token data is already present in runtime config. `sync status`, `sync stop`, and `sync config` commands do not require the CLI login resolution path in the same way.
 
 Current sync commands:
 
@@ -324,12 +329,16 @@ Current sync commands:
 - `sync stop --graph <name>` stops db-sync for a graph worker.
 - `sync upload --graph <name> [--e2ee-password <password>]` uploads the local graph snapshot.
 - `sync download --graph <name> [--progress true|false] [--e2ee-password <password>]` downloads a remote graph into a new local graph. It creates an empty DB, requires the local graph to be missing, checks that the target DB is empty, uses a 30-minute download timeout by default, and cleans up a newly created graph on failure.
+- `sync asset download --graph <name> --id <asset-db-id>` requests one remote asset download by the `ID` shown by `list asset`.
+- `sync asset download --graph <name> --uuid <asset-uuid>` requests one remote asset download by asset block UUID.
 - `sync remote-graphs` lists remote graphs visible to the current login context.
 - `sync ensure-keys [--e2ee-password <password>] [--upload-keys]` ensures user RSA keys; `--upload-keys` asks the worker to ensure server-side presence.
 - `sync grant-access --graph <name> --graph-id <uuid> --email <email>` grants graph access to an email.
 - `sync config set|get|unset ws-url|http-base` manages non-auth sync config keys in `cli.edn`.
 
-Sync config defaults are `wss://api.logseq.io/sync/%s` for `:ws-url` and `https://api.logseq.io` for `:http-base`. Missing required endpoint values for start/upload/download/grant-access return `:missing-sync-config`.
+Sync config defaults are `wss://api.logseq.io/sync/%s` for `:ws-url` and `https://api.logseq.io` for `:http-base`. Missing required endpoint values for start/upload/download/asset-download/grant-access return `:missing-sync-config`.
+
+`sync asset download` reuses the existing db-worker-node asset request API `:thread-api/db-sync-request-asset-download`; it does not add a dedicated worker API. The command requires sync to already be active for the graph and returns `:sync-not-started` with `logseq sync start --graph <graph>` guidance when the worker sync client is inactive. Before enqueueing, it resolves the asset node, verifies asset UUID/type/checksum/remote metadata, rejects external URL assets, checks the local `assets/<asset-uuid>.<asset-type>` file, skips matching checksums, and requests a re-download on checksum mismatch. It returns immediately after enqueue and does not return local filesystem paths. This first version intentionally does not accept `--e2ee-password`.
 
 For E2EE graphs, `--e2ee-password` verifies and persists the password through worker sync crypt logic. Missing required E2EE password state returns `:e2ee-password-not-found` with a hint to provide `--e2ee-password`.
 

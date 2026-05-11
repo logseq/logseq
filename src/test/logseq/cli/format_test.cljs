@@ -602,6 +602,191 @@
     (is (= "logseq.class/Tag" (get-in parsed-json [:data :items 0 :db/ident])))
     (is (= :logseq.class/Tag (get-in parsed-edn [:data :items 0 :db/ident])))))
 
+(deftest test-human-output-qmd
+  (let [created (format/format-result {:status :ok
+                                       :command :qmd
+                                       :data {:repo "logseq_db_demo"
+                                              :qmd-installed? true
+                                              :collection "custom"
+                                              :mirror-dir "/tmp/root/graphs/demo/mirror/markdown"
+                                              :collection-action :created
+                                              :embed :completed
+                                              :update :completed}}
+                                      {:output-format nil})
+        updated (format/format-result {:status :ok
+                                       :command :qmd
+                                       :data {:repo "logseq_db_demo"
+                                              :qmd-installed? true
+                                              :collection "custom"
+                                              :mirror-dir "/tmp/root/graphs/demo/mirror/markdown"
+                                              :collection-action :existing
+                                              :embed :completed
+                                              :update :completed}}
+                                      {:output-format nil})]
+    (is (string/includes? created "QMD ready: custom"))
+    (is (string/includes? created "Collection: created"))
+    (is (string/includes? created "Embed: completed"))
+    (is (string/includes? created "Update: completed"))
+    (is (string/includes? created "/tmp/root/graphs/demo/mirror/markdown"))
+    (is (string/includes? updated "Collection: existing"))))
+
+(deftest test-human-output-qsearch
+  (testing "renders page groups with show-like rows instead of a list table"
+    (let [result (style/strip-ansi
+                  (format/format-result {:status :ok
+                                         :command :qsearch
+                                         :data {:items [{:db/id 3
+                                                         :block/title "alpha target"
+                                                         :block/page-id 1
+                                                         :block/page-title "Home"
+                                                         :qmd/rank 1
+                                                         :qmd/score 0.75
+                                                         :qmd/file "qmd://custom/pages/Home.md"}
+                                                        {:db/id 4
+                                                         :block/title "beta target"
+                                                         :block/page-id 1
+                                                         :block/page-title "Home"
+                                                         :qmd/rank 2
+                                                         :qmd/score 0.6
+                                                         :qmd/file "qmd://custom/pages/Home.md"}]
+                                                :missing-ids [5]
+                                                :qmd {:collection "custom"
+                                                      :result-count 2}}}
+                                        {:output-format nil}))]
+      (is (not (string/includes? result "Home (2 matches)")))
+      (is (string/includes? result "1 Home"))
+      (is (string/includes? result "3 ├── alpha target"))
+      (is (string/includes? result "4 └── beta target"))
+      (is (string/includes? result "Missing ids: 5"))
+      (is (not (string/includes? result "RANK")))
+      (is (not (string/includes? result "PAGE-TITLE")))
+      (is (not (string/includes? result "SCORE")))
+      (is (not (string/includes? result "Count: 2")))))
+
+  (testing "orders page groups by first qmd hit and keeps hit order inside each page"
+    (let [result (style/strip-ansi
+                  (format/format-result {:status :ok
+                                         :command :qsearch
+                                         :data {:items [{:db/id 11
+                                                         :block/title "release target"
+                                                         :block/page-id 10
+                                                         :block/page-title "Projects"
+                                                         :qmd/rank 1}
+                                                        {:db/id 3
+                                                         :block/title "alpha target"
+                                                         :block/page-id 1
+                                                         :block/page-title "Home"
+                                                         :qmd/rank 2}
+                                                        {:db/id 12
+                                                         :block/title "second release target"
+                                                         :block/page-id 10
+                                                         :block/page-title "Projects"
+                                                         :qmd/rank 3}]
+                                                :missing-ids []
+                                                :qmd {:collection "custom"
+                                                      :result-count 3}}}
+                                        {:output-format nil}))
+          projects-idx (string/index-of result "10 Projects")
+          home-idx (string/index-of result "1 Home")
+          first-project-hit-idx (string/index-of result "11 ├── release target")
+          second-project-hit-idx (string/index-of result "12 └── second release target")]
+      (is (some? projects-idx))
+      (is (some? home-idx))
+      (is (< projects-idx home-idx))
+      (is (not (string/includes? result "Projects (2 matches)")))
+      (is (not (string/includes? result "Home (1 match)")))
+      (is (< first-project-hit-idx second-project-hit-idx))))
+
+  (testing "deduplicates repeated block ids before rendering"
+    (let [result (style/strip-ansi
+                  (format/format-result {:status :ok
+                                         :command :qsearch
+                                         :data {:items [{:db/id 3
+                                                         :block/title "alpha target"
+                                                         :block/page-id 1
+                                                         :block/page-title "Home"
+                                                         :qmd/rank 1}
+                                                        {:db/id 3
+                                                         :block/title "alpha target"
+                                                         :block/page-id 1
+                                                         :block/page-title "Home"
+                                                         :qmd/rank 2}]
+                                                :missing-ids []
+                                                :qmd {:collection "custom"
+                                                      :result-count 2}}}
+                                        {:output-format nil}))]
+      (is (= 1 (count (re-seq #"alpha target" result))))
+      (is (not (string/includes? result "Home (1 match)")))
+      (is (string/includes? result "1 Home")))))
+
+(deftest test-human-output-qsearch-render-details
+  (let [result (style/strip-ansi
+                (format/format-result {:status :ok
+                                       :command :qsearch
+                                       :data {:items [{:db/id 3
+                                                       :block/title "alpha target"
+                                                       :block/page-id 1
+                                                       :block/page-title "Home"
+                                                       :qmd/rank 1}]
+                                              :missing-ids []
+                                              :qmd {:collection "custom"
+                                                    :result-count 1}}
+                                       :human {:qsearch
+                                               {:items [{:db/id 3
+                                                         :block/title "alpha target"
+                                                         :block/page {:db/id 1
+                                                                      :block/title "Home"}
+                                                         :block/tags [{:db/id 20
+                                                                       :block/title "Project"}]
+                                                         :user.property/priority "P1"}]
+                                                :property-titles {:user.property/priority "Priority"}
+                                                :property-value-labels {}
+                                                :uuid->label {}}}}
+                                      {:output-format nil}))]
+    (is (string/includes? result "3 └── alpha target #Project"))
+    (is (string/includes? result "Priority: P1"))
+    (is (not (string/includes? result "PAGE-TITLE")))
+    (is (not (string/includes? result "Count: 1")))))
+
+(deftest test-human-output-qsearch-highlights-query
+  (let [result (binding [style/*color-enabled?* true]
+                 (format/format-result {:status :ok
+                                        :command :qsearch
+                                        :data {:items [{:db/id 3
+                                                        :block/title "Alpha target"
+                                                        :block/page-id 1
+                                                        :block/page-title "Home"
+                                                        :qmd/rank 1}]
+                                               :missing-ids []
+                                               :qmd {:collection "custom"
+                                                     :result-count 1}}
+                                        :human {:qsearch {:query "alpha TARGET"}}}
+                                       {:output-format nil}))
+        highlighted-alpha (binding [style/*color-enabled?* true]
+                            (style/yellow "Alpha"))
+        highlighted-target (binding [style/*color-enabled?* true]
+                             (style/yellow "target"))
+        plain (style/strip-ansi result)]
+    (is (= (str "1 Home\n"
+                "3 └── Alpha target")
+           plain))
+    (is (re-find style/ansi-pattern result))
+    (is (string/includes? result highlighted-alpha))
+    (is (string/includes? result highlighted-target))))
+
+(deftest test-structured-output-qsearch
+  (let [payload {:status :ok
+                 :command :qsearch
+                 :data {:items [{:db/id 3
+                                 :block/title "alpha"
+                                 :qmd/rank 1}]
+                        :missing-ids [5]
+                        :qmd {:collection "custom"}}}
+        json-result (format/format-result payload {:output-format :json})
+        edn-result (format/format-result payload {:output-format :edn})]
+    (is (string/includes? json-result "\"qmd/rank\""))
+    (is (string/includes? edn-result ":qmd/rank"))))
+
 (deftest test-list-property-json-edn-cardinality-shape
   (testing "list property json keeps namespaced db/cardinality while edn stays unchanged"
     (let [base-result {:status :ok
@@ -769,7 +954,43 @@
                                                   :input "/tmp/import.sqlite"}
                                         :data {:message "Imported sqlite from /tmp/import.sqlite"}}
                                        {:output-format nil})]
-      (is (= "Imported sqlite from /tmp/import.sqlite" result)))))
+      (is (= "Imported sqlite from /tmp/import.sqlite" result))))
+
+  (testing "graph create enable-sync renders a multi-line stage summary"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-create
+                                        :context {:graph "demo"
+                                                  :repo "logseq_db_demo"
+                                                  :enable-sync true
+                                                  :e2ee-password "pw"}
+                                        :data {:graph "demo"
+                                               :repo "logseq_db_demo"
+                                               :stages {:create {:result {:created? true}}
+                                                        :upload {:graph-id "graph-uuid"}
+                                                        :start {:ws-state :open}}}}
+                                       {:output-format nil})]
+      (is (= "Graph created and sync enabled\n  Graph: demo\n  Create: ok\n  Sync upload: ok\n  Sync start: ok"
+             result))
+      (is (not (string/includes? result "pw")))))
+
+  (testing "graph create enable-sync JSON exposes structured stage data without password"
+    (let [token "secret-password"
+          output (format/format-result {:status :ok
+                                        :command :graph-create
+                                        :context {:graph "demo"
+                                                  :repo "logseq_db_demo"
+                                                  :enable-sync true
+                                                  :e2ee-password token}
+                                        :data {:graph "demo"
+                                               :repo "logseq_db_demo"
+                                               :stages {:create {:result {:created? true}}
+                                                        :upload {:graph-id "graph-uuid"}
+                                                        :start {:ws-state :open}}}}
+                                       {:output-format :json})
+          parsed (js->clj (js/JSON.parse output) :keywordize-keys true)]
+      (is (= "demo" (get-in parsed [:data :graph])))
+      (is (= "graph-uuid" (get-in parsed [:data :stages :upload :graph-id])))
+      (is (not (string/includes? output token))))))
 
 (deftest test-human-output-graph-backup
   (testing "graph backup list renders metadata table"
@@ -914,7 +1135,72 @@
                                         :context {:repo "demo-graph"}}
                                        {:output-format nil})]
       (is (string/includes? result "Sync download"))
-      (is (string/includes? result "demo-graph")))))
+      (is (string/includes? result "demo-graph"))))
+
+  (testing "sync asset download renders requested output"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-asset-download
+                                        :context {:repo "demo-graph"}
+                                        :data {:asset-id 123
+                                               :asset-uuid "asset-uuid"
+                                               :asset-type "png"
+                                               :download-requested? true
+                                               :checksum-status :missing}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Sync asset download requested"))
+      (is (string/includes? result "asset-uuid"))
+      (is (string/includes? result "demo-graph"))
+      (is (not (string/includes? result "local-path")))))
+
+  (testing "sync asset download renders checksum mismatch hint"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-asset-download
+                                        :context {:repo "demo-graph"}
+                                        :data {:asset-id 123
+                                               :asset-uuid "asset-uuid"
+                                               :asset-type "png"
+                                               :download-requested? true
+                                               :checksum-status :mismatch
+                                               :hint "Local asset checksum mismatched; requested re-download."}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Local asset checksum mismatched"))
+      (is (string/includes? result "asset-uuid"))
+      (is (not (string/includes? result "local-path")))))
+
+  (testing "sync asset download renders skipped output"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-asset-download
+                                        :context {:repo "demo-graph"}
+                                        :data {:asset-id 123
+                                               :asset-uuid "asset-uuid"
+                                               :asset-type "png"
+                                               :download-requested? false
+                                               :checksum-status :match
+                                               :skipped-reason :already-downloaded}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Sync asset already downloaded"))
+      (is (string/includes? result "asset-uuid"))
+      (is (not (string/includes? result "local-path")))))
+
+  (testing "sync asset download structured output keeps raw data"
+    (let [data {:asset-id 123
+                :asset-uuid "asset-uuid"
+                :asset-type "png"
+                :download-requested? false
+                :checksum-status :match
+                :skipped-reason :already-downloaded}
+          json-result (format/format-result {:status :ok
+                                             :command :sync-asset-download
+                                             :data data}
+                                            {:output-format :json})
+          edn-result (format/format-result {:status :ok
+                                            :command :sync-asset-download
+                                            :data data}
+                                           {:output-format :edn})]
+      (is (string/includes? json-result "download-requested?"))
+      (is (string/includes? edn-result ":download-requested?"))
+      (is (not (string/includes? json-result "local-path")))
+      (is (not (string/includes? edn-result "local-path"))))))
 
 (deftest test-human-output-sync-config-get-ws-url
   (testing "sync config get ws-url renders value in human output"
@@ -1392,6 +1678,55 @@
       (is (string/includes? result "2"))
       (is (string/includes? result "Quote"))
       (is (string/includes? result "QUOTE")))))
+
+(deftest test-server-revision-mismatch-error-formatting
+  (testing "revision mismatch restart failure includes recovery hint"
+    (let [result (format/format-result {:status :error
+                                        :command :server-start
+                                        :error {:code :server-revision-mismatch-restart-failed
+                                                :message "db-worker-node revision mismatch and restart failed"
+                                                :repo "logseq_db_demo"
+                                                :expected-revision "expected-rev"
+                                                :actual-revision "old-rev"
+                                                :owner-source :electron}}
+                                       {:output-format nil})]
+      (is (= (str "Error (server-revision-mismatch-restart-failed): db-worker-node revision mismatch and restart failed\n"
+                  "Hint: Logseq tried to restart a revision-mismatched db-worker-node server and failed. Stop the server manually, then retry")
+             result))))
+
+  (testing "revision mismatch after restart includes fail-fast hint"
+    (let [result (format/format-result {:status :error
+                                        :command :server-start
+                                        :error {:code :server-revision-mismatch-after-restart
+                                                :message "db-worker-node revision still does not match after restart"
+                                                :repo "logseq_db_demo"
+                                                :expected-revision "expected-rev"
+                                                :actual-revision "wrong-rev"
+                                                :owner-source :cli}}
+                                       {:output-format nil})]
+      (is (= (str "Error (server-revision-mismatch-after-restart): db-worker-node revision still does not match after restart\n"
+                  "Hint: Logseq restarted db-worker-node, but the replacement still reports a different revision. Check the installed Logseq build and retry")
+             result))))
+
+  (testing "revision mismatch structured output preserves revision fields"
+    (let [payload {:status :error
+                   :command :server-start
+                   :error {:code :server-revision-mismatch-after-restart
+                           :message "db-worker-node revision still does not match after restart"
+                           :repo "logseq_db_demo"
+                           :expected-revision "expected-rev"
+                           :actual-revision "wrong-rev"
+                           :owner-source :cli}}
+          json-result (format/format-result payload {:output-format :json})
+          edn-result (format/format-result payload {:output-format :edn})
+          json-parsed (js->clj (js/JSON.parse json-result) :keywordize-keys true)
+          edn-parsed (reader/read-string edn-result)]
+      (is (= "expected-rev" (get-in json-parsed [:error :expected-revision])))
+      (is (= "wrong-rev" (get-in json-parsed [:error :actual-revision])))
+      (is (= "cli" (get-in json-parsed [:error :owner-source])))
+      (is (= "expected-rev" (get-in edn-parsed [:error :expected-revision])))
+      (is (= "wrong-rev" (get-in edn-parsed [:error :actual-revision])))
+      (is (= :cli (get-in edn-parsed [:error :owner-source]))))))
 
 (deftest test-human-output-doctor
   (testing "doctor renders concise check summary"

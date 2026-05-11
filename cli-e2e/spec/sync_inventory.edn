@@ -9,5 +9,6 @@
   :sync
   {:commands ["sync upload"
               "sync download"
+              "sync asset download"
               "sync status"]
    :options []}}}

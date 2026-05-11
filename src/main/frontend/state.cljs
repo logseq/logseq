@@ -64,24 +64,14 @@
   (->> (m/watch *db-worker)
        (m/eduction (map some?))))
 
-(defn- <invoke-db-worker*
-  [qkw direct-pass? args-list]
+(defn <invoke-db-worker
+  "invoke db-worker thread api"
+  [qkw & args]
   (let [worker @*db-worker]
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
       (throw (ex-info "db-worker has not been initialized" {})))
-    (apply worker qkw direct-pass? args-list)))
-
-(defn <invoke-db-worker
-  "invoke db-worker thread api"
-  [qkw & args]
-  (<invoke-db-worker* qkw false args))
-
-(defn <invoke-db-worker-direct-pass
-  "invoke db-worker thread api.
-  But directly pass args to db-worker, and result from db-worker as well."
-  [qkw & args]
-  (<invoke-db-worker* qkw true args))
+    (apply worker qkw args)))
 
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
@@ -107,10 +97,9 @@
       :db/restoring?           nil
 
       :search/q                              ""
-      :search/mode                           nil ; nil -> global mode, :graph -> add graph filter, etc.
+      :search/mode                           nil
       :search/args                           nil
       :search/result                         nil
-      :search/graph-filters                  []
       :search/engines                        {}
       :search/index-build                    {:running? false
                                               :repo nil
@@ -172,7 +161,7 @@
       :block/component-editing-mode?         false
       :editor/op                             (atom nil)
       :editor/start-pos                      (atom nil)
-      :editor/async-unsaved-chars            (atom nil)
+      :editor/pending-new-block              (atom nil)
       :editor/hidden-editors                 #{} ;; page names
 
       :editor/action                         (atom nil)
@@ -631,14 +620,6 @@ Similar to re-frame subscriptions"
    (enable-flashcards? (get-current-repo)))
   ([repo]
    (not (false? (:feature/enable-flashcards? (sub-config repo))))))
-
-(defn graph-settings
-  []
-  (:graph/settings (sub-config)))
-
-(defn graph-forcesettings
-  []
-  (:graph/forcesettings (sub-config)))
 
 ;; Enable by default
 (defn show-brackets?
@@ -1641,24 +1622,6 @@ Similar to re-frame subscriptions"
 (defn clear-search-result!
   []
   (set-search-result! nil))
-
-(defn add-graph-search-filter!
-  [q]
-  (when-not (string/blank? q)
-    (update-state! :search/graph-filters
-                   (fn [value]
-                     (vec (distinct (conj value q)))))))
-
-(defn remove-search-filter!
-  [q]
-  (when-not (string/blank? q)
-    (update-state! :search/graph-filters
-                   (fn [value]
-                     (remove #{q} value)))))
-
-(defn clear-search-filters!
-  []
-  (set-state! :search/graph-filters []))
 
 (defn get-search-mode
   []
