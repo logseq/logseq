@@ -88,7 +88,7 @@ module.exports = {
       name: 'electron-forge-maker-appimage',
       platforms: ['linux'],
       config: {
-        mimeType: ["x-scheme-handler/logseq"]
+        mimeType: ["x-scheme-handler/logseq-og"]
       }
     }
   ],
