@@ -221,6 +221,52 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-repeated-deadline-and-scheduled
+  (p/let [file (write-temp-graph-file
+                 "pages/repeated-tasks.md"
+                 (str "- TODO wish [[name]] a happy birthday\n"
+                      "  SCHEDULED: <2025-11-01 Sat 08:00 .+1y>\n"
+                      "- TODO prepare weekly report\n"
+                      "  DEADLINE: <2025-11-07 Fri +2w>\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (let [birthday-properties (db-test/readable-properties
+                               (db-test/find-block-by-content @conn #"happy birthday"))
+          report-properties (db-test/readable-properties
+                             (db-test/find-block-by-content @conn #"weekly report"))
+          birthday-scheduled (:logseq.property/scheduled birthday-properties)
+          birthday-date (js/Date. birthday-scheduled)]
+      (is (= 20251101 (date-time-util/ms->journal-day birthday-scheduled))
+          "Repeated scheduled timestamp keeps its scheduled date")
+      (is (= [8 0] [(.getHours birthday-date) (.getMinutes birthday-date)])
+          "Repeated scheduled timestamp keeps its time")
+      (is (= {:logseq.property.repeat/repeated? true
+              :logseq.property.repeat/temporal-property :logseq.property/scheduled
+              :logseq.property.repeat/recur-frequency 1
+              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.year}
+             (select-keys birthday-properties
+                          [:logseq.property.repeat/repeated?
+                           :logseq.property.repeat/temporal-property
+                           :logseq.property.repeat/recur-frequency
+                           :logseq.property.repeat/recur-unit]))
+          "Repeated scheduled timestamp keeps its repeat properties")
+      (is (= {:logseq.property/deadline 20251107
+              :logseq.property.repeat/repeated? true
+              :logseq.property.repeat/temporal-property :logseq.property/deadline
+              :logseq.property.repeat/recur-frequency 2
+              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}
+             (-> report-properties
+                 (update :logseq.property/deadline date-time-util/ms->journal-day)
+                 (select-keys [:logseq.property/deadline
+                               :logseq.property.repeat/repeated?
+                               :logseq.property.repeat/temporal-property
+                               :logseq.property.repeat/recur-frequency
+                               :logseq.property.repeat/recur-unit])))
+          "Repeated deadline timestamp keeps its repeat properties")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
 (deftest update-asset-links-in-block-title
   (are [x y]
        (= y (@#'gp-exporter/update-asset-links-in-block-title (first x) {(second x) "UUID"} (atom {})))
