@@ -93,19 +93,26 @@
   (some #{color} built-in-colors))
 
 (rum/defc menu-background-color
-  [add-bgcolor-fn rm-bgcolor-fn]
-  [:div.flex.flex-row.justify-between.py-1.px-2.items-center
-   [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
-    (for [color built-in-colors]
-      [:a
-       {:key (str "key-" color)
-        :title (t (keyword "color" color))
-        :on-click #(add-bgcolor-fn color)}
-       [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
-    [:a
-     {:title (t :ui/remove-background)
-      :on-click rm-bgcolor-fn}
-     [:div.heading-bg.remove "-"]]]])
+  ([add-bgcolor-fn rm-bgcolor-fn]
+   (menu-background-color ::unknown add-bgcolor-fn rm-bgcolor-fn))
+  ([current-color add-bgcolor-fn rm-bgcolor-fn]
+   (let [known-color? (not= current-color ::unknown)
+         active-ring "0 0 0 2px var(--lx-gray-12, var(--ls-primary-text-color))"]
+     [:div.flex.flex-row.justify-between.py-1.px-2.items-center
+      [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
+       (for [color built-in-colors]
+         [:a
+          {:key (str "key-" color)
+           :title (t (keyword "color" color))
+           :on-click #(add-bgcolor-fn color)}
+          [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")
+                                    :box-shadow (when (and known-color? (= current-color color))
+                                                  active-ring)}}]])
+       [:a
+        {:title (t :ui/remove-background)
+         :on-click rm-bgcolor-fn}
+        [:div.heading-bg.remove {:style {:box-shadow (when (and known-color? (nil? current-color))
+                                                       active-ring)}} "-"]]]])))
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -929,31 +936,28 @@
      (for [i (range 1 7)]
        (rum/with-key (button
                       ""
-                      :disabled? (and (some? heading) (= heading i))
                       :icon (str "h-" i)
                       :title (t :editor/heading i)
-                      :class "to-heading-button"
+                      :class (str "to-heading-button" (when (= heading i) " is-active"))
                       :on-click #(add-heading-fn i)
-                      :intent "link"
+                      :intent (when-not (= heading i) "link")
                       :small? true)
          (str "key-h-" i)))
      (button
       ""
       :icon "h-auto"
-      :disabled? (and (some? heading) (true? heading))
-      :class "to-heading-button"
+      :class (str "to-heading-button" (when (true? heading) " is-active"))
       :title (t :editor/auto-heading)
       :on-click auto-heading-fn
-      :intent "link"
+      :intent (when-not (true? heading) "link")
       :small? true)
      (button
       ""
       :icon "heading-off"
-      :disabled? (and (some? heading) (not heading))
-      :class "to-heading-button"
+      :class (str "to-heading-button" (when (false? heading) " is-active"))
       :title (t :editor/remove-heading)
       :on-click rm-heading-fn
-      :intent "link"
+      :intent (when-not (false? heading) "link")
       :small? true)]]))
 
 (rum/defc tooltip
