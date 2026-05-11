@@ -1,14 +1,14 @@
 (ns electron.git
   (:require ["dugite" :refer [GitProcess]]
             [goog.object :as gobj]
+            [electron.configs :as cfgs]
             [electron.state :as state]
             [electron.utils :as utils]
             [electron.logger :as logger]
             [promesa.core :as p]
             [clojure.string :as string]
             ["fs-extra" :as fs]
-            ["path" :as node-path]
-            ["os" :as os]))
+            ["path" :as node-path]))
 
 (def log-error (partial logger/error "[Git]"))
 
@@ -17,7 +17,7 @@
   (when-let [graph-path (some-> graph-path
                                 (string/replace "/" "_")
                                 (string/replace ":" "comma"))]
-    (let [dir (.join node-path (.homedir os) ".logseq" "git" graph-path ".git")]
+    (let [dir (.join node-path (utils/get-ls-dotdir-root) "git" graph-path ".git")]
       (. fs ensureDirSync dir)
       dir)))
 
@@ -57,10 +57,11 @@
       (when (and (fs/existsSync p)
                  (.isFile (fs/statSync p)))
         (let [content (string/trim (.toString (fs/readFileSync p)))
-              dir-path (string/replace content "gitdir: " "")]
+              dir-path (string/replace content "gitdir: " "")
+              normalized-dir-path (string/replace dir-path "\\" "/")]
           (when (and content
                      (string/starts-with? content "gitdir:")
-                     (string/includes? content ".logseq/")
+                     (string/includes? normalized-dir-path (str "/" cfgs/dot-dir-name "/"))
                      (not (fs/existsSync dir-path)))
             (fs/unlinkSync p)))))
     (catch :default e

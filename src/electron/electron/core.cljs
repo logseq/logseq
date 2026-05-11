@@ -11,9 +11,9 @@
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
+            [electron.configs :as cfgs]
             [electron.fs-watcher :as fs-watcher]
             ["path" :as node-path]
-            ["os" :as os]
             ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
             ["electron-deeplink" :refer [Deeplink]]
             [electron.state :as state]
@@ -30,7 +30,7 @@
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
 (defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/"))
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
-(defonce PLUGINS_ROOT (.join node-path (.homedir os) ".logseq/plugins"))
+(defonce PLUGINS_ROOT (.join node-path cfgs/dot-root "plugins"))
 
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))

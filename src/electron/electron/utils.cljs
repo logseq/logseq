@@ -53,10 +53,9 @@
 
 (defn get-ls-dotdir-root
   []
-  (let [lg-dir (node-path/join (.getPath app "home") ".logseq")]
-    (when-not (fs/existsSync lg-dir)
-      (fs/mkdirSync lg-dir))
-    (fix-win-path! lg-dir)))
+  (when-not (fs/existsSync cfgs/dot-root)
+    (fs/mkdirSync cfgs/dot-root))
+  (fix-win-path! cfgs/dot-root))
 
 (defn get-ls-default-plugins
   []

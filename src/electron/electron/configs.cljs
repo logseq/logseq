@@ -6,7 +6,8 @@
             [electron.logger :as logger]))
 
 ;; FIXME: move configs.edn to where it should be
-(defonce dot-root (.join node-path (.getPath app "home") ".logseq"))
+(defonce dot-dir-name ".logseq-og")
+(defonce dot-root (.join node-path (.getPath app "home") dot-dir-name))
 (defonce cfg-root (.getPath app "userData"))
 (defonce cfg-path (.join node-path cfg-root "configs.edn"))
 

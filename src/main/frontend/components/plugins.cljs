@@ -607,7 +607,7 @@
                              #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                 (js/apis.openPath (str root "/preferences.json")))}}
                   {:title   [:span.flex.items-center.whitespace-nowrap.gap-1
-                             (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq"]]
+                             (ui/icon "bug") (t :plugin/open-logseq-dir) [:code "~/.logseq-og"]]
                    :options {:on-click
                              #(p/let [root (plugin-handler/get-ls-dotdir-root)]
                                 (js/apis.openPath root))}}])

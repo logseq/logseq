@@ -9,7 +9,6 @@
             ["electron-window-state" :as windowStateKeeper]
             ["fs" :as fs]
             ["fs-extra" :as fs-extra]
-            ["os" :as os]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [cljs.reader :as reader]
@@ -221,7 +220,7 @@
   []
   (let [dir (if utils/ci?
               (.resolve node-path js/__dirname "../tmp/graphs")
-              (.join node-path (.homedir os) ".logseq" "graphs"))]
+              (.join node-path cfgs/dot-root "graphs"))]
     (fs-extra/ensureDirSync dir)
     dir))
 
