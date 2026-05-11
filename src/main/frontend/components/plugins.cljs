@@ -335,6 +335,29 @@
   #(plugin-handler/open-readme!
     url item (if (or repo webPkg) remote-readme-display local-markdown-display)))
 
+(defn- plugin-thumb-icon-src
+  [id icon market?]
+  (when-not (string/blank? icon)
+    (if market?
+      (plugin-handler/pkg-asset id icon)
+      icon)))
+
+(defn- plugin-thumb-icon-view
+  [src load-failed? on-error]
+  (if (and src (not load-failed?))
+    [:img.icon {:src src
+                :on-error on-error}]
+    svg/folder))
+
+(rum/defcs plugin-thumb-icon <
+  (rum/local false ::load-failed?)
+  [state id icon market?]
+  (let [*load-failed? (::load-failed? state)
+        src            (plugin-thumb-icon-src id icon market?)]
+    (plugin-thumb-icon-view src @*load-failed?
+                            (fn [_]
+                              (reset! *load-failed? true)))))
+
 (rum/defc plugin-item-card < rum/static
   [t {:keys [id name title version url description author icon iir repo sponsors webPkg] :as item}
    disabled? market? *search-key has-other-pending?
@@ -354,9 +377,7 @@
 
      [:div.l.link-block.cursor-pointer
       {:on-click (get-open-plugin-readme-handler url item repo)}
-      (if (and icon (not (string/blank? icon)))
-        [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
-        svg/folder)
+      (plugin-thumb-icon id icon market?)
 
       (when (and (not market?) unpacked?)
         [:span.flex.justify-center.text-xs.text-error.pt-2 (t :plugin/unpacked)])]
