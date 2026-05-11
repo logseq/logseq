@@ -15,6 +15,7 @@
             [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]
@@ -78,6 +79,24 @@
   (some->> (find-template-by-title db title)
            ordered-children
            (mapv block-tree-with-properties)))
+
+(defn- block-status
+  [db content]
+  (:logseq.property/status (db-test/find-block-by-content db content)))
+
+(defn- status-content
+  [db content]
+  (db-property/closed-value-content (block-status db content)))
+
+(defn- status-closed-value-contents
+  [db]
+  (set (map db-property/closed-value-content
+            (db-property/get-closed-property-values db :logseq.property/status))))
+
+(defn- status-closed-value-content-frequencies
+  [db]
+  (frequencies (map db-property/closed-value-content
+                    (db-property/get-closed-property-values db :logseq.property/status))))
 
 
 (defn- build-graph-files
@@ -266,6 +285,59 @@
           "Repeated deadline timestamp keeps its repeat properties")
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
+
+(deftest-async import-preserves-legacy-task-markers-as-status-choices
+  (p/let [file (write-temp-graph-file
+                 "pages/tasks.md"
+                 "- TODO todo item\n- LATER later item\n- NOW now item\n- DOING doing item\n- WAIT waiting item\n- WAITING waiting full item\n- IN-PROGRESS in-progress item\n- DONE done item\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (is (= :logseq.property/status.todo
+           (:db/ident (block-status @conn "todo item")))
+        "TODO still imports to the built-in Todo status")
+    (is (= :logseq.property/status.doing
+           (:db/ident (block-status @conn "doing item")))
+        "DOING still imports to the built-in Doing status")
+    (is (= :logseq.property/status.done
+           (:db/ident (block-status @conn "done item")))
+        "DONE still imports to the built-in Done status")
+    (is (= :logseq.property/status.todo
+           (:db/ident (block-status @conn "later item")))
+        "LATER imports to the built-in Todo status")
+    (is (= :logseq.property/status.doing
+           (:db/ident (block-status @conn "now item")))
+        "NOW imports to the built-in Doing status")
+    (is (= "WAIT" (status-content @conn "waiting item"))
+        "WAIT imports as its own status choice")
+    (is (= "WAITING" (status-content @conn "waiting full item"))
+        "WAITING imports as its own status choice")
+    (is (= "IN-PROGRESS" (status-content @conn "in-progress item"))
+        "IN-PROGRESS imports as its own status choice")
+    (is (set/subset? #{"WAIT" "WAITING" "IN-PROGRESS"}
+                     (status-closed-value-contents @conn))
+        "Custom imported markers are added to Status closed values")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-custom-task-marker-across-multiple-files
+  (p/let [first-file (write-temp-graph-file
+                       "pages/custom-status-a.md"
+                       "- WAITING first custom status item\n")
+          second-file (write-temp-graph-file
+                        "pages/custom-status-b.md"
+                        "- WAITING second custom status item\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [first-file second-file] conn {})]
+    (is (= "WAITING" (status-content @conn "first custom status item"))
+        "Custom status marker imports from the first file")
+    (is (= "WAITING" (status-content @conn "second custom status item"))
+        "Custom status marker imports from the second file")
+    (is (= 1 (get (status-closed-value-content-frequencies @conn) "WAITING"))
+        "Custom status closed value is shared across imported files")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
 
 (deftest update-asset-links-in-block-title
   (are [x y]
