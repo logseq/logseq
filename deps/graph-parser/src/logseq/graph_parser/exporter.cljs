@@ -445,11 +445,53 @@
   (or (entity-util/page? entity)
       (contains? #{"page" "journal"} (:block/type entity))))
 
+(declare ->property-value-tx-m)
+
+(defn- deadline-scheduled-date-int
+  [value]
+  (if (map? value) (:date-int value) value))
+
+(defn- deadline-scheduled-time-ms
+  [value]
+  (let [date-int (deadline-scheduled-date-int value)
+        date (date-time-util/int->local-date date-int)
+        {:keys [hour] timestamp-min :min} (when (map? value) (:time value))]
+    (when hour
+      (.setHours date hour (or timestamp-min 0) 0 0))
+    (tc/to-long date)))
+
+(def ^:private repeat-recur-units
+  {"Minute" :logseq.property.repeat/recur-unit.minute
+   "Hour" :logseq.property.repeat/recur-unit.hour
+   "Day" :logseq.property.repeat/recur-unit.day
+   "Week" :logseq.property.repeat/recur-unit.week
+   "Month" :logseq.property.repeat/recur-unit.month
+   "Year" :logseq.property.repeat/recur-unit.year})
+
+(defn- repeat-properties
+  [temporal-property value]
+  (when-let [[_ unit frequency] (and (map? value) (:repetition value))]
+    (let [unit-ident (get repeat-recur-units (first unit))]
+      (assert unit-ident (str "Unknown repeat unit: " (pr-str unit)))
+      {:logseq.property.repeat/repeated? true
+       :logseq.property.repeat/temporal-property temporal-property
+       :logseq.property.repeat/recur-frequency frequency
+       :logseq.property.repeat/recur-unit unit-ident})))
+
+(defn- build-repeat-properties
+  [block properties]
+  (let [pvalue-tx-m (->property-value-tx-m (dissoc block :block/page) properties (constantly nil) {})
+        pvalues-tx (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))]
+    {:block-properties (merge properties
+                              (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+     :properties-tx pvalues-tx}))
+
 (defn- find-or-create-deadline-scheduled-value
   "Given a :block/scheduled or :block/deadline value, creates the datetime property value
    and any optional journal tx associated with that value"
-  [date-int page-names-to-uuids user-config]
-  (let [title (date-time-util/int->journal-title date-int (get-date-formatter user-config))
+  [value page-names-to-uuids user-config]
+  (let [date-int (deadline-scheduled-date-int value)
+        title (date-time-util/int->journal-title date-int (get-date-formatter user-config))
         existing-journal-page (some->> title
                                        common-util/page-name-sanity-lc
                                        (get @page-names-to-uuids)
@@ -460,26 +502,34 @@
                                       :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
                                       :block/journal-day date-int)))
                          (assoc :block/tags #{:logseq.class/Journal}))
-        time-long (tc/to-long (date-time-util/int->local-date date-int))]
+        time-long (deadline-scheduled-time-ms value)]
     {:property-value time-long
      :journal-tx (when-not existing-journal-page [journal-page])}))
 
 (defn- update-block-deadline-and-scheduled
   "Converts :block/deadline and :block/scheduled to their new logseq properties."
   [block page-names-to-uuids {:keys [user-config]}]
-  (let [{deadline-value :property-value deadline-tx :journal-tx}
-        (when (:block/deadline block)
-          (find-or-create-deadline-scheduled-value (:block/deadline block) page-names-to-uuids user-config))
+  (let [deadline (:block/deadline block)
+        scheduled (:block/scheduled block)
+        {deadline-value :property-value deadline-tx :journal-tx}
+        (when deadline
+          (find-or-create-deadline-scheduled-value deadline page-names-to-uuids user-config))
         {scheduled-value :property-value scheduled-tx :journal-tx}
-        (when (:block/scheduled block)
-          (find-or-create-deadline-scheduled-value (:block/scheduled block) page-names-to-uuids user-config))]
+        (when scheduled
+          (find-or-create-deadline-scheduled-value scheduled page-names-to-uuids user-config))
+        repeat-properties' (merge (repeat-properties :logseq.property/deadline deadline)
+                                  (repeat-properties :logseq.property/scheduled scheduled))
+        {repeat-block-properties :block-properties repeat-properties-tx :properties-tx}
+        (build-repeat-properties block repeat-properties')]
     {:block
      (cond-> (dissoc block :block/deadline :block/scheduled :block/repeated?)
        (some? deadline-value)
        (assoc :logseq.property/deadline deadline-value)
        (some? scheduled-value)
-       (assoc :logseq.property/scheduled scheduled-value))
-     :properties-tx (distinct (concat deadline-tx scheduled-tx))}))
+       (assoc :logseq.property/scheduled scheduled-value)
+       (seq repeat-block-properties)
+       (merge repeat-block-properties))
+     :properties-tx (distinct (concat deadline-tx scheduled-tx repeat-properties-tx))}))
 
 (defn- text-with-refs?
   "Detects if a property value has text with refs e.g. `#Logseq is #awesome`
