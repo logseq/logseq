@@ -2,7 +2,6 @@
   "Remote `PersistentDB` implementation for Electron renderer via db-worker-node HTTP and SSE."
   (:require [clojure.string :as string]
             [frontend.persist-db.protocol :as protocol]
-            [frontend.util :as util]
             [logseq.db :as ldb]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
@@ -188,13 +187,11 @@
       (invoke! client "thread-api/get-initial-data" [repo opts])))
 
   (<export-db [_this repo _opts]
-    (p/let [base64 (invoke! client "thread-api/export-db-base64" [repo])]
-      (some-> base64 util/base64string-to-unit8array)))
+    (invoke! client "thread-api/export-db-binary" [repo]))
 
   (<import-db [_this repo data]
     (->
-     (p/let [base64 (util/uint8array-to-base64string data)]
-       (invoke! client "thread-api/import-db-base64" [repo base64]))
+     (invoke! client "thread-api/import-db-binary" [repo data])
      (p/catch (fn [error]
                 (log/error :import-db-error repo error "SQLiteDB import error")
                 (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))

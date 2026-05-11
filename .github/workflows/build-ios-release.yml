@@ -90,6 +90,9 @@ jobs:
       - name: Prepare iOS build
         run: pnpm exec cap sync ios
 
+      - name: Verify iOS web fonts
+        run: pnpm test:ios-web-fonts
+
       - name: Build and upload iOS app
         run: fastlane beta
         working-directory: ./ios/App

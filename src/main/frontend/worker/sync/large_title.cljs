@@ -37,6 +37,20 @@
        (string? (:asset-uuid value))
        (string? (:asset-type value))))
 
+(defn- find-large-title-object-eid
+  [db obj]
+  (some (fn [datom]
+          (when (= obj (:v datom))
+            (:e datom)))
+        (d/datoms db :avet large-title-object-attr)))
+
+(defn- resolve-large-title-item-eid
+  [db {:keys [e obj]}]
+  (or (when (number? e)
+        e)
+      (some-> (d/entity db e) :db/id)
+      (find-large-title-object-eid db obj)))
+
 (defn asset-url
   [base graph-id asset-uuid asset-type]
   (str base "/assets/" graph-id "/" asset-uuid "." asset-type))
@@ -160,12 +174,16 @@
                     (fail-fast-f :db-sync/missing-field {:repo repo :field :aes-key}))]
           (p/all
            (mapv (fn [{:keys [e obj]}]
-                   (p/let [title (download-fn repo graph-id* obj aes-key*)]
-                     (ldb/transact! conn*
-                                    [[:db/add e :block/title title]]
-                                    {:rtc-tx? true
-                                     :persist-op? false
-                                     :op :large-title-rehydrate})))
+                   (let [eid (resolve-large-title-item-eid @conn* {:e e :obj obj})]
+                     (when-not eid
+                       (fail-fast-f :db-sync/large-title-entity-missing
+                                     {:repo repo :e e :obj obj}))
+                     (p/let [title (download-fn repo graph-id* obj aes-key*)]
+                       (ldb/transact! conn*
+                                      [[:db/add eid :block/title title]]
+                                      {:rtc-tx? true
+                                       :persist-op? false
+                                       :op :large-title-rehydrate}))))
                  items)))))))
 
 (defn offload-large-titles-in-datoms-batch

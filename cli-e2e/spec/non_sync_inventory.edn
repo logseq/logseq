@@ -117,6 +117,7 @@
    :options ["--id"
              "--uuid"
              "--page"
+             "--page-hierarchy"
              "--linked-references"
              "--level"
              "stdin:--id"]}
