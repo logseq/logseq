@@ -65,25 +65,35 @@ and handles unexpected failure."
 
 (defonce *blocks-ast-cache (volatile! (cache/lru-cache-factory {} :threshold 5000)))
 
+(defn- markdown-heading-level
+  [content]
+  (when-let [heading (some->> content
+                              string/triml
+                              (re-find #"^(#{1,6})\s+"))]
+    (count (second heading))))
+
 (defn- parse-title-and-body-helper
-  [_format content]
+  [_format raw-content content]
   (let [parse-config (mldoc/get-default-config :markdown)
         ast (->> (format/to-edn content parse-config)
                  (map first))
-        title (when (gp-block/heading-block? (first ast))
-                (:title (second (first ast))))
+        heading (when (gp-block/heading-block? (first ast))
+                  (second (first ast)))
+        title (:title heading)
+        heading-level (markdown-heading-level raw-content)
         body (vec (if title (rest ast) ast))
         body (drop-while gp-property/properties-ast? body)]
     (cond->
      (if (seq body) {:block.temp/ast-body body} {})
       title
-      (assoc :block.temp/ast-title title))))
+      (assoc :block.temp/ast-title title
+             :block.temp/heading heading-level))))
 
 (def ^:private cached-parse-title-and-body-helper
   (common.cache/cache-fn
    *blocks-ast-cache
-   (fn [format content]
-     [[format content] [format content]])
+   (fn [format raw-content content]
+     [[format raw-content content] [format raw-content content]])
    parse-title-and-body-helper))
 
 (defn parse-title-and-body
@@ -95,8 +105,9 @@ and handles unexpected failure."
                                   (:block/title block)))))
   ([_block-uuid format content]
    (when-not (string/blank? content)
-     (let [content (str common-config/block-pattern " " (string/triml content))]
-       (cached-parse-title-and-body-helper format content)))))
+     (let [raw-content content
+           content (str common-config/block-pattern " " (string/triml content))]
+       (cached-parse-title-and-body-helper format raw-content content)))))
 
 (defn break-line-paragraph?
   [[typ break-lines]]
