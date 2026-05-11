@@ -27,11 +27,24 @@
   ;; Create files that are recognized
   (fs/writeFileSync "tmp/test-graph/pages/foo.md" "")
   (fs/writeFileSync "tmp/test-graph/journals/2023_05_09.md" "")
+  (fs/mkdirSync (node-path/join "tmp/test-graph" "mirror" "markdown-notes") #js {:recursive true})
+  (fs/mkdirSync (node-path/join "tmp/test-graph" "mirror" "markdown2") #js {:recursive true})
+  (fs/writeFileSync "tmp/test-graph/mirror/markdown-notes/foo.md" "")
+  (fs/writeFileSync "tmp/test-graph/mirror/markdown2/foo.md" "")
   ;; Create files that are ignored
   (fs/mkdirSync (node-path/join "tmp/test-graph" "logseq" "bak"))
   (fs/mkdirSync (node-path/join "tmp/test-graph" "mirror" "markdown" "pages") #js {:recursive true})
   (fs/writeFileSync "tmp/test-graph/logseq/bak/baz.md" "")
   (fs/writeFileSync "tmp/test-graph/logseq/.gitignore" "")
   (fs/writeFileSync "tmp/test-graph/mirror/markdown/pages/foo.md" "")
-  (is (= ["tmp/test-graph/journals/2023_05_09.md" "tmp/test-graph/pages/foo.md"]
+  (is (= ["tmp/test-graph/journals/2023_05_09.md"
+          "tmp/test-graph/mirror/markdown-notes/foo.md"
+          "tmp/test-graph/mirror/markdown2/foo.md"
+          "tmp/test-graph/pages/foo.md"]
          (common-graph/get-files "tmp/test-graph"))))
+
+(deftest ignored-markdown-mirror-path-honors-directory-boundary-test
+  (is (common-graph/ignored-path? "tmp/test-graph" "tmp/test-graph/mirror/markdown"))
+  (is (common-graph/ignored-path? "tmp/test-graph" "tmp/test-graph/mirror/markdown/pages/foo.md"))
+  (is (not (common-graph/ignored-path? "tmp/test-graph" "tmp/test-graph/mirror/markdown-notes/foo.md")))
+  (is (not (common-graph/ignored-path? "tmp/test-graph" "tmp/test-graph/mirror/markdown2/foo.md"))))

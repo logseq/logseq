@@ -48,8 +48,9 @@
           :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db :thread-api/db-sync-recreate-lock
           :thread-api/db-sync-rehydrate-large-titles :thread-api/db-sync-import-prepare :thread-api/db-sync-import-rows-chunk
           :thread-api/db-sync-import-finalize :thread-api/release-access-handles :thread-api/db-exists
-          :thread-api/export-db-base64 :thread-api/export-client-ops-db-base64 :thread-api/backup-db-sqlite
-          :thread-api/import-db-base64 :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
+          :thread-api/export-db-binary
+          :thread-api/export-client-ops-db-binary :thread-api/backup-db-sqlite
+          :thread-api/import-db-binary :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
           :thread-api/search-truncate-tables :thread-api/search-build-blocks-indice :thread-api/search-build-blocks-indice-in-worker
           :thread-api/search-build-pages-indice :thread-api/apply-outliner-ops :thread-api/sync-app-state
           :thread-api/markdown-mirror-set-enabled :thread-api/markdown-mirror-flush :thread-api/markdown-mirror-regenerate
@@ -174,12 +175,12 @@
     (is (= "" (resolve-initial-config "")))
     (is (= "{:foo true}" (resolve-initial-config "{:foo true}")))))
 
-(deftest import-db-base64-uses-active-pool-after-close-db
+(deftest import-db-binary-uses-active-pool-after-close-db
   (async done
     (->
      (restoring-worker-state
       (fn []
-        (let [import-db! (get @thread-api/*thread-apis :thread-api/import-db-base64)
+        (let [import-db! (get @thread-api/*thread-apis :thread-api/import-db-binary)
               imported-pool-ids (atom [])
               pool-seq (atom 0)
               make-pool (fn [id]
@@ -189,8 +190,7 @@
                             (set! (.-unpauseVfs pool) (fn [] (set! (.-paused pool) false)))
                             pool))
               existing-pool (make-pool "existing-pool")
-              sqlite-data (.encode (js/TextEncoder.) "SQLite format 3")
-              sqlite-base64 (.toString (js/Buffer.from sqlite-data) "base64")]
+              sqlite-data (.encode (js/TextEncoder.) "SQLite format 3")]
           (reset! worker-state/*opfs-pools {test-repo existing-pool})
           (let [platform' (build-test-platform
                            {:import-db (fn [pool _path _data]
@@ -205,7 +205,7 @@
                            :install-opfs-pool (fn [_sqlite _pool-name]
                                                 (let [id (str "new-pool-" (swap! pool-seq inc))]
                                                   (p/resolved (make-pool id))))))))
-          (-> (import-db! test-repo sqlite-base64)
+          (-> (import-db! test-repo sqlite-data)
               (p/then (fn [_]
                         (is (= ["new-pool-1"] @imported-pool-ids))))
               (p/catch (fn [error]
@@ -1097,21 +1097,20 @@
                         (is false (str "unexpected error: " e))))
              (p/finally done)))))))
 
-;; ---- export-db-base64 thread-api test ----
+;; ---- export-db-binary thread-api test ----
 
-(deftest export-db-base64-returns-base64-string
+(deftest export-db-binary-returns-uint8array
   (async done
     (restoring-worker-state
      (fn []
-       (let [export-db! (get @thread-api/*thread-apis :thread-api/export-db-base64)
+       (let [export-db! (get @thread-api/*thread-apis :thread-api/export-db-binary)
              checkpoint-calls (atom [])]
          (reset! worker-state/*sqlite-conns {test-repo {:db (fake-db)}})
          (with-redefs [db-core/checkpoint-db! (fn [repo db]
                                                 (swap! checkpoint-calls conj [repo db]))]
            (-> (export-db! test-repo)
                (p/then (fn [result]
-                         ;; Result should be a base64 string (or nil if export fails)
-                         (is (or (string? result) (nil? result)))))
+                         (is (or (instance? js/Uint8Array result) (nil? result)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done))))))))

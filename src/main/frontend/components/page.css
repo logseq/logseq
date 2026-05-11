@@ -39,28 +39,6 @@
   height: 20px;
 }
 
-.graph-filters {
-  width: 200px;
-  background: var(--ls-secondary-background-color);
-}
-
-.graph-filters ul {
-  margin-left: 0;
-}
-
-.graph-filters li {
-  list-style: none;
-  margin: 0;
-}
-
-.graph-layout {
-  background: var(--ls-secondary-background-color);
-}
-
-.search-filter-close svg {
-  transform: scale(0.7);
-}
-
 .ls-page-title {
   @apply rounded-sm;
 

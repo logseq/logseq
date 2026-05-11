@@ -60,6 +60,7 @@
 
 (def ^:private backup-root-dir-name "backup")
 (def ^:private backup-db-file-name "db.sqlite")
+(def ^:private export-root-dir-name "export")
 
 (def entries
   [(core/command-entry ["graph" "list"] :graph-list "List graphs" {}
@@ -375,6 +376,23 @@
                     graph-dir-name
                     backup-root-dir-name)))
 
+(defn- export-root-path
+  [config repo]
+  (when-let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)]
+    (node-path/join (cli-server/graphs-dir config)
+                    graph-dir-name
+                    export-root-dir-name)))
+
+(defn- default-sqlite-export-path
+  [config repo]
+  (when-let [export-root (export-root-path config repo)]
+    (node-path/join export-root
+                    (str (graph-dir/graph-dir-key->encoded-dir-name
+                          (graph-dir/repo->graph-dir-key repo))
+                         "_"
+                         (quot (.now js/Date) 1000)
+                         ".sqlite"))))
+
 (defn- backup-dir-name
   [backup-name]
   (graph-dir/graph-dir-key->encoded-dir-name backup-name))
@@ -620,6 +638,9 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               export-type (:export-type action)
+              file (or (:file action)
+                       (when (= export-type "sqlite")
+                         (default-sqlite-export-path config (:repo action))))
               payload (cond-> {:export-type :graph}
                         (seq (:graph-options action))
                         (assoc :graph-options (:graph-options action)))
@@ -630,15 +651,15 @@
               _ (case export-type
                   "edn"
                   (transport/write-output {:format :edn
-                                           :path (:file action)
+                                           :path file
                                            :data export-result})
                   "sqlite"
                   (transport/invoke cfg
                                     :thread-api/backup-db-sqlite
-                                    [(:repo action) (:file action)])
+                                    [(:repo action) file])
                   (throw (ex-info "unsupported export type" {:export-type export-type})))]
         {:status :ok
-         :data {:message (str "wrote " (:file action))}})))
+         :data {:message (str "wrote " file)}})))
 
 (defn execute-graph-import
   [action config]
@@ -652,13 +673,10 @@
                            "edn" (transport/read-input {:format :edn :path (:input action)})
                            "sqlite" (transport/read-input {:format :sqlite :path (:input action)})
                            (throw (ex-info "unsupported import type" {:import-type import-type})))
-              payload (if (= import-type "sqlite")
-                        (.toString (js/Buffer.from input-data) "base64")
-                        input-data)
               method (if (= import-type "sqlite")
-                       :thread-api/import-db-base64
+                       :thread-api/import-db-binary
                        :thread-api/import-edn)
-              _ (transport/invoke cfg method [(:repo action) payload])
+              _ (transport/invoke cfg method [(:repo action) input-data])
               _ (cli-server/restart-server! config (:repo action))]
         {:status :ok
          :data {:new-graph? new-graph?

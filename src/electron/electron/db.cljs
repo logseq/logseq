@@ -87,6 +87,22 @@
                                     :thread-api/backup-db-sqlite
                                     [db-name dst-path]))))))
 
+(defn export-db-via-worker!
+  [db-name window-id dst-path]
+  (let [_ (ensure-graph-dir! db-name)]
+    (p/let [_ (fs/ensureDirSync (node-path/dirname dst-path))
+            runtime (db-worker/ensure-runtime! db-name window-id)]
+      (cli-transport/invoke runtime
+                            :thread-api/backup-db-sqlite
+                            [db-name dst-path]))))
+
+(defn export-db-to-export-dir-via-worker!
+  [db-name window-id filename]
+  (let [export-dir (node-path/join (ensure-graph-dir! db-name) "export")
+        dst-path (node-path/join export-dir (node-path/basename filename))]
+    (p/let [result (export-db-via-worker! db-name window-id dst-path)]
+      (assoc result :path dst-path))))
+
 (defn- active-repo-window-ids
   []
   (let [repo->window-ids (reduce-kv (fn [m window-id repo]

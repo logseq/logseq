@@ -1,9 +1,14 @@
 (ns frontend.handler.export-test
   (:require [cljs.test :refer [are async deftest is testing use-fixtures]]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
+            [frontend.handler.export :as export]
             [frontend.handler.export.text :as export-text]
+            [frontend.handler.notification :as notification]
+            [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
+            [frontend.util :as util]
             [promesa.core :as p]))
 
 (def test-files
@@ -92,6 +97,81 @@
 (use-fixtures :each
   {:before (fn []
              (state/set-current-repo! test-helper/test-db))})
+
+(deftest export-sqlite-db-on-electron-uses-worker-file-export
+  (async done
+    (let [ipc-calls (atom [])
+          notification-calls (atom [])
+          persist-export-calls (atom [])
+          original-electron? util/electron?
+          original-ipc ipc/ipc
+          original-notification-show! notification/show!
+          original-export-db persist-db/<export-db]
+      (set! util/electron? (constantly true))
+      (set! ipc/ipc (fn [& args]
+                      (swap! ipc-calls conj args)
+                      (p/resolved {:path "/tmp/export.sqlite"})))
+      (set! notification/show! (fn [& args]
+                                 (swap! notification-calls conj args)))
+      (set! persist-db/<export-db (fn [& args]
+                                    (swap! persist-export-calls conj args)
+                                    (p/rejected (ex-info "renderer export should not run" {}))))
+      (-> (export/export-repo-as-sqlite-db! "logseq_db_big_graph")
+          (p/then (fn [_]
+                    (is (empty? @persist-export-calls))
+                    (is (= 1 (count @ipc-calls)))
+                    (let [[method repo filename] (first @ipc-calls)]
+                      (is (= :db-export-as method))
+                      (is (= "logseq_db_big_graph" repo))
+                      (is (string/ends-with? filename ".sqlite")))
+                    (is (= [["SQLite DB exported to /tmp/export.sqlite." :success false]]
+                           @notification-calls))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally
+           (fn []
+             (set! util/electron? original-electron?)
+             (set! ipc/ipc original-ipc)
+             (set! notification/show! original-notification-show!)
+             (set! persist-db/<export-db original-export-db)
+             (done)))))))
+
+(deftest export-sqlite-db-on-web-uses-file-system-writable-when-available
+  (async done
+    (let [writes (atom [])
+          picker-calls (atom [])
+          original-electron? util/electron?
+          original-export-db persist-db/<export-db
+          original-picker (.-showSaveFilePicker js/window)
+          payload (js/Uint8Array. #js [1 2 3])]
+      (set! util/electron? (constantly false))
+      (set! persist-db/<export-db (fn [repo opts]
+                                    (is (= "logseq_db_big_graph" repo))
+                                    (is (= {:return-data? true} opts))
+                                    (p/resolved payload)))
+      (set! (.-showSaveFilePicker js/window)
+            (fn [opts]
+              (swap! picker-calls conj opts)
+              (p/resolved #js {:createWritable
+                               (fn []
+                                 (p/resolved #js {:write (fn [data]
+                                                           (swap! writes conj [:write data])
+                                                           (p/resolved nil))
+                                                  :close (fn []
+                                                           (swap! writes conj [:close])
+                                                           (p/resolved nil))}))})))
+      (-> (export/export-repo-as-sqlite-db! "logseq_db_big_graph")
+          (p/then (fn [_]
+                    (is (= 1 (count @picker-calls)))
+                    (is (= [[:write payload] [:close]] @writes))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally
+           (fn []
+             (set! util/electron? original-electron?)
+             (set! persist-db/<export-db original-export-db)
+             (set! (.-showSaveFilePicker js/window) original-picker)
+             (done)))))))
 
 (deftest export-blocks-as-markdown-without-properties
   (are [expect block-uuid-s]

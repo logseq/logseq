@@ -116,16 +116,17 @@
 (defn top-level-summary
   [table]
   (let [groups [{:title "Graph Inspect and Edit"
-                 :commands #{"list" "upsert" "remove" "query" "search" "show"}}
+                 :commands #{"list" "upsert" "remove" "query" "qsearch" "search" "show"}}
                 {:title "Graph Management"
                  :commands #{"graph" "server" "doctor" "sync"}}
                 {:title "Authentication"
                  :commands #{"login" "logout"}}
                 {:title "Utilities"
-                 :commands #{"completion" "debug" "example" "skill"}
+                 :commands #{"completion" "debug" "example" "qmd" "skill"}
                  :top-level-only? true
                  :desc-overrides {"debug" "Pull raw entity data for debugging"
                                   "example" "Show command examples"
+                                  "qmd" "Initialize and manage QMD search"
                                   "skill" "Show/install built-in logseq-cli skill"}}]
         to-top-level-entries (fn [entries commands desc-overrides]
                                (->> commands

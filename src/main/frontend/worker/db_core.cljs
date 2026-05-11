@@ -410,7 +410,9 @@
 (defn- <create-or-open-db!
   [repo {:keys [config datoms sync-download-graph? creating-remote-graph?] :as opts}]
   (when creating-remote-graph?
-    (client-op/update-local-tx repo 0))
+    (when (and (worker-state/get-sqlite-conn repo :client-ops)
+               (nil? (client-op/get-local-tx repo)))
+      (client-op/update-local-tx repo 0)))
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)]
@@ -454,6 +456,9 @@
         (swap! *client-ops-conns assoc repo client-ops-conn)
         (when-not @*publishing?
           (client-op/ensure-sqlite-schema! client-ops-db))
+        (when creating-remote-graph?
+          (when (nil? (client-op/get-local-tx repo))
+            (client-op/update-local-tx repo 0)))
         (ensure-client-ops-cleanup-timer! repo)
         (let [initial-tx-report (when-not (or initial-data-exists?
                                               (seq datoms)
@@ -620,7 +625,22 @@
 ;; [graph service]
 (defonce *service (atom []))
 
-(defonce fns {"remoteInvoke" thread-api/remote-function})
+(defn- remote-binary-function
+  [qualified-kw-str & args]
+  (let [qkw (keyword qualified-kw-str)]
+    (vswap! thread-api/*profile update qkw inc)
+    (if-let [f (@thread-api/*thread-apis qkw)]
+      (p/let [result (apply f args)]
+        (if (instance? js/Uint8Array result)
+          (let [transfer-fn (get-in (platform/current) [:storage :transfer])]
+            (if (fn? transfer-fn)
+              (transfer-fn result #js [(.-buffer result)])
+              result))
+          result))
+      (throw (ex-info (str "not found thread-api: " qualified-kw-str) {})))))
+
+(defonce fns {"remoteInvoke" thread-api/remote-function
+              "remoteInvokeBinary" remote-binary-function})
 
 (defn- start-db!
   [repo {:keys [close-other-db?]
@@ -725,7 +745,10 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [block-id (:block/uuid (d/entity @conn id))]
       (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
-           (map (fn [b] (d/pull @conn '[*] (:db/id b))))))))
+           (map (fn [b]
+                  (-> (into {} b)
+                      (assoc :db/id (:db/id b)
+                             :block/title (:block/title b)))))))))
 
 (def-thread-api :thread-api/set-context
   [context]
@@ -870,15 +893,14 @@
   [repo]
   (<db-exists? repo))
 
-(def-thread-api :thread-api/export-db-base64
+(def-thread-api :thread-api/export-db-binary
   [repo]
   (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
     (checkpoint-db! repo db))
   (p/let [data (<export-db-file repo)]
-    (when data
-      (worker-util/uint8array-to-base64string data))))
+    (->uint8array data)))
 
-(def-thread-api :thread-api/export-client-ops-db-base64
+(def-thread-api :thread-api/export-client-ops-db-binary
   [repo]
   (when-let [^js db (worker-state/get-sqlite-conn repo :client-ops)]
     (checkpoint-db! repo db))
@@ -897,10 +919,9 @@
                       (str "/" client-ops-repo-path)
                       (str "client-ops" repo-path)
                       (str "/client-ops" repo-path)
-                      (str "client-ops-" repo-path)]]
-    (p/let [payload (<export-db-file-with-paths repo export-paths)]
-      (when payload
-        (worker-util/uint8array-to-base64string payload)))))
+                      (str "client-ops-" repo-path)
+                      (str "/client-ops-" repo-path)]]
+    (<export-db-file-with-paths repo export-paths)))
 
 (def-thread-api :thread-api/backup-db-sqlite
   [repo dst-path]
@@ -918,11 +939,10 @@
       (p/let [_ (backup-db-fn db dst-path)]
         {:path dst-path}))))
 
-(def-thread-api :thread-api/import-db-base64
-  [repo base64]
+(def-thread-api :thread-api/import-db-binary
+  [repo data]
   (when-not (string/blank? repo)
-    (p/let [data (worker-util/base64string-to-unit8array base64)
-            _ (close-db! repo)
+    (p/let [_ (close-db! repo)
             pool (<get-opfs-pool repo)
             _ (<import-db pool data)
             _ (start-db! repo {:import-type :sqlite-db})]
@@ -1365,6 +1385,9 @@
          (let [[_graph service] @*service
                method-k (keyword (first args))]
            (cond
+             (= k "remoteInvokeBinary")
+             (apply f args)
+
              (= :thread-api/create-or-open-db method-k)
              ;; because shared-service operates at the graph level,
              ;; creating a new database or switching to another one requires re-initializing the service.

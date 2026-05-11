@@ -618,6 +618,112 @@
                             (reset! worker-state/*state old-state)
                             (done)))))))
 
+(deftest decrypt-private-key-capacitor-missing-native-secret-prompts-and-saves-test
+  (async done
+         (let [old-state @worker-state/*state
+               fail-calls (atom [])
+               decrypt-calls (atom [])
+               ui-calls (atom [])
+               save-calls (atom [])]
+           (reset! worker-state/*state (assoc old-state :auth/refresh-token "refresh-token"))
+           (-> (p/with-redefs [platform/current (fn [] {:env {:runtime :browser
+                                                              :owner-source :capacitor}})
+                               platform/read-secret-text (fn [_platform' _key]
+                                                           (p/rejected (ex-info "should-not-read-worker-secret" {})))
+                               platform/save-secret-text! (fn [_platform' _key _text]
+                                                            (p/rejected (ex-info "should-not-save-worker-secret" {})))
+                               platform/read-text! (fn [_platform' _path]
+                                                     (p/rejected (ex-info "should-not-read-browser-file" {})))
+                               ui-request/<request (fn [action payload & _opts]
+                                                     (swap! ui-calls conj {:action action
+                                                                           :payload payload})
+                                                     (case action
+                                                       :native-get-e2ee-password
+                                                       (p/resolved {:supported? true
+                                                                    :encrypted-text nil})
+
+                                                       :request-e2ee-password
+                                                       (p/resolved {:password "ui-password"})
+
+                                                       :native-save-e2ee-password
+                                                       (do
+                                                         (swap! save-calls conj payload)
+                                                         (p/resolved {:supported? true}))))
+                               sync-crypt/fail-missing-e2ee-password! (fn [data]
+                                                                       (swap! fail-calls conj data)
+                                                                       (throw (ex-info "missing-e2ee-password" data)))
+                               ldb/read-transit-str (fn [_] :encrypted-private-key)
+                               crypt/<decrypt-private-key (fn [password encrypted-private-key]
+                                                            (swap! decrypt-calls conj [password encrypted-private-key])
+                                                            (p/resolved :private-key))
+                               crypt/<encrypt-text-by-text-password (fn [refresh-token password]
+                                                                      {:cipher [refresh-token password]})
+                               ldb/write-transit-str pr-str]
+                 (#'sync-crypt/<decrypt-private-key "encrypted-private-key-str"))
+               (p/then (fn [private-key]
+                         (is (= :private-key private-key))
+                         (is (= [{:action :native-get-e2ee-password
+                                  :payload {:key "logseq-encrypted-password"}}
+                                 {:action :request-e2ee-password
+                                  :payload {:reason :decrypt-user-rsa-private-key}}
+                                 {:action :native-save-e2ee-password
+                                  :payload {:key "logseq-encrypted-password"
+                                            :encrypted-text (pr-str {:cipher ["refresh-token" "ui-password"]})}}]
+                                @ui-calls))
+                         (is (= [["ui-password" :encrypted-private-key]] @decrypt-calls))
+                         (is (= [{:key "logseq-encrypted-password"
+                                  :encrypted-text (pr-str {:cipher ["refresh-token" "ui-password"]})}]
+                                @save-calls))
+                         (is (empty? @fail-calls))))
+               (p/catch (fn [e]
+                          (is false (str e " ui-calls=" (pr-str @ui-calls)))))
+               (p/finally (fn []
+                            (reset! worker-state/*state old-state)
+                            (done)))))))
+
+(deftest decrypt-private-key-capacitor-wrong-ui-password-prompts-once-test
+  (async done
+         (let [old-state @worker-state/*state
+               ui-calls (atom [])
+               save-calls (atom [])]
+           (reset! worker-state/*state (assoc old-state :auth/refresh-token "refresh-token"))
+           (-> (p/with-redefs [platform/current (fn [] {:env {:runtime :browser
+                                                              :owner-source :capacitor}})
+                               ui-request/<request (fn [action payload & _opts]
+                                                     (swap! ui-calls conj {:action action
+                                                                           :payload payload})
+                                                     (case action
+                                                       :native-get-e2ee-password
+                                                       (p/resolved {:supported? true
+                                                                    :encrypted-text nil})
+
+                                                       :request-e2ee-password
+                                                       (p/resolved {:password "wrong-password"})
+
+                                                       :native-save-e2ee-password
+                                                       (do
+                                                         (swap! save-calls conj payload)
+                                                         (p/resolved {:supported? true}))))
+                               ldb/read-transit-str (fn [_] :encrypted-private-key)
+                               crypt/<decrypt-private-key (fn [_password _encrypted-private-key]
+                                                            (p/rejected (ex-info "decrypt-private-key" {})))
+                               crypt/<encrypt-text-by-text-password (fn [_refresh-token _password]
+                                                                      {:cipher "should-not-save"})]
+                 (#'sync-crypt/<decrypt-private-key "encrypted-private-key-str"))
+               (p/then (fn [_]
+                         (is false "expected decrypt-private-key failure")))
+               (p/catch (fn [e]
+                          (is (= "decrypt-private-key" (ex-message e)))
+                          (is (= [{:action :native-get-e2ee-password
+                                   :payload {:key "logseq-encrypted-password"}}
+                                  {:action :request-e2ee-password
+                                   :payload {:reason :decrypt-user-rsa-private-key}}]
+                                 @ui-calls))
+                          (is (empty? @save-calls))))
+               (p/finally (fn []
+                            (reset! worker-state/*state old-state)
+                            (done)))))))
+
 (deftest ensure-graph-aes-key-uses-platform-kv-adapters-test
   (async done
          (let [fetch-prev js/fetch

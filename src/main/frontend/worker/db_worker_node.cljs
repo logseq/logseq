@@ -195,7 +195,7 @@
 
 (def ^:private write-methods
   #{:thread-api/transact
-    :thread-api/import-db-base64
+    :thread-api/import-db-binary
     :thread-api/backup-db-sqlite
     :thread-api/import-edn
     :thread-api/unsafe-unlink-db

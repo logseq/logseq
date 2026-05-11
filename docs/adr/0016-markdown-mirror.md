@@ -202,16 +202,23 @@ builds do not have the same graph-directory filesystem guarantees.
 ## Markdown Content
 1. Reuse the existing page-to-Markdown export pipeline used by worker export
    APIs instead of introducing a separate renderer-side serializer.
-2. The mirror output should match normal Markdown export semantics for page
-   content.
-3. Mirror files do not include Logseq-internal mirror metadata in the Markdown
-   body.
-4. Mirror files include block and page property drawers, including user
-   properties, with rendered property values.
-5. Assets are referenced as normal exported Markdown references. This ADR does
+2. The mirror output uses the Logseq Markdown syntax described in
+   `docs/logseq-markdown-syntax.md`.
+3. Mirror files always include a page `id:: <uuid>` line so the file can be
+   associated with its DB page without encoding the uuid in the file name.
+4. Blocks are Markdown list items that use `-`.
+5. User-visible page and block properties are Markdown list items that use `*`
+   and keep the Logseq property marker, for example `* owner:: [[Alice]]`.
+6. Open default property values are exported as nested value blocks below the
+   property key. Closed values remain inline with the property key.
+7. Node property values are exported as Logseq page references, for example
+   `[[Node title]]`, rather than block reference syntax.
+8. Task status is encoded on the block line, for example `- TODO ship`, and is
+   not exported as a separate property list item.
+9. Assets are referenced as normal exported Markdown references. This ADR does
    not copy assets into `mirror/markdown/`.
-6. Page references remain in Logseq wiki-link form, for example `[[Foo]]`.
-7. Ambiguous page references caused by duplicate page titles are an accepted
+10. Page references remain in Logseq wiki-link form, for example `[[Foo]]`.
+11. Ambiguous page references caused by duplicate page titles are an accepted
    limitation of Markdown Mirror. Do not rewrite page references to uuid-based
    links or relative Markdown links in this ADR.
 
@@ -269,6 +276,7 @@ bb dev:test -v frontend.worker.markdown-mirror-test/same-title-pages-write-disti
 bb dev:test -v frontend.worker.markdown-mirror-test/page-references-remain-wiki-links-test
 bb dev:test -v frontend.worker.markdown-mirror-test/page-mirror-exports-property-values-test
 bb dev:test -v frontend.worker.markdown-mirror-test/page-mirror-exports-page-property-values-test
+bb dev:test -v frontend.worker.markdown-mirror-test/page-mirror-exports-node-property-values-as-page-refs-test
 bb dev:test -v frontend.worker.markdown-mirror-test/full-regeneration-writes-existing-non-built-in-non-property-pages-test
 bb dev:test -v frontend.worker.markdown-mirror-test/invalid-filename-characters-are-normalized-test
 bb dev:test -v frontend.worker.markdown-mirror-test/windows-reserved-filename-fails-with-diagnostic-test

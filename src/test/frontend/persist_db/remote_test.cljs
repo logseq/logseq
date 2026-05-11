@@ -166,23 +166,24 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
-(deftest remote-export-db-uses-base64-thread-api
+(deftest remote-export-db-uses-binary-thread-api
   (async done
     (let [calls (atom [])
           client {:base-url "http://127.0.0.1:9101"}
-          db (remote/->InRemote client nil nil)]
+          db (remote/->InRemote client nil nil)
+          payload (js/Uint8Array. #js [1 2 3])]
       (-> (p/with-redefs [remote/invoke! (fn [client' method args]
                                           (swap! calls conj [client' method args])
-                                          (p/resolved "c3FsaXRlLWJ5dGVz"))]
+                                          (p/resolved payload))]
             (p/let [result (protocol/<export-db db "graph-a" {:return-data? true})]
-              (is (= [client "thread-api/export-db-base64" ["graph-a"]]
+              (is (= [client "thread-api/export-db-binary" ["graph-a"]]
                      (first @calls)))
-              (is (= "sqlite-bytes" (.toString (js/Buffer.from result) "utf8")))))
+              (is (identical? payload result))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
-(deftest remote-import-db-uses-base64-thread-api
+(deftest remote-import-db-uses-binary-thread-api
   (async done
     (let [calls (atom [])
           client {:base-url "http://127.0.0.1:9101"}
@@ -192,7 +193,7 @@
                                           (swap! calls conj [client' method args])
                                           (p/resolved nil))]
             (p/let [_ (protocol/<import-db db "graph-a" payload)]
-              (is (= [client "thread-api/import-db-base64" ["graph-a" "c3FsaXRlLWJ5dGVz"]]
+              (is (= [client "thread-api/import-db-binary" ["graph-a" payload]]
                      (first @calls)))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))

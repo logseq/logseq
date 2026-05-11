@@ -1519,15 +1519,93 @@
           (assoc :asset-blocks-tx asset-blocks)))
       (p/resolved {:block block}))))
 
+(defn- quote-node->markdown
+  "Converts a Quote AST node to markdown, preserving nested quote structure.
+   Content at depth=0 (used for Quote-block titles) has no outer prefix — the
+   Quote-block display-type provides the outermost blockquote styling.
+   Content at depth>=1 (used for mixed blocks) gets '> ' prefix at each level."
+  [quote-node opts depth]
+  (let [inner-elements (second quote-node)
+        parts (for [el inner-elements
+                    :let [el-type (first el)]]
+                (cond
+                  (= "Quote" el-type)
+                  ;; Nested quote: recurse one level deeper
+                  (quote-node->markdown el opts (inc depth))
+                  :else
+                  ;; Other content (Paragraph, Src, etc.): extract as text
+                  (let [text (ast->text el opts)]
+                    (if (pos? depth)
+                      (->> (string/split-lines text)
+                           (map #(str "> " %))
+                           (string/join "\n"))
+                      text))))]
+    (string/join "\n" (remove string/blank? parts))))
+
 (defn- handle-quotes
-  "If a block contains a quote, convert block to #Quote node"
+  "Handles blocks containing markdown blockquotes or #+BEGIN_QUOTE:
+   - Pure quote blocks (empty heading + all body elements are Quote nodes):
+     convert to #Quote-block with quote content as title. Nested quotes are
+     preserved using '> ' markdown prefix at each nesting level.
+   - Blocks where the title contains #+BEGIN_QUOTE and has Quote body elements
+     but are not pure quote blocks: retain as regular block with '> ' prefix
+     added to quote content so it renders as a blockquote in the DB graph."
   [block opts]
-  (if-let [ast-block (first (filter #(= "Quote" (first %)) (:block.temp/ast-blocks block)))]
-    (merge block
-           {:block/title (ast->text ast-block opts)
-            :logseq.property.node/display-type :quote
-            :block/tags [:logseq.class/Quote-block]})
-    block))
+  (let [ast-blocks (:block.temp/ast-blocks block)
+        heading (first (filter #(= "Heading" (first %)) ast-blocks))
+        heading-title (when heading (get-in (second heading) [:title]))
+        heading-empty? (or (nil? heading) (empty? heading-title))
+        body-elements (remove #(= "Heading" (first %)) ast-blocks)
+        all-body-quotes? (and (seq body-elements) (every? #(= "Quote" (first %)) body-elements))
+        has-quote-body? (some #(= "Quote" (first %)) body-elements)
+        org-quote? (boolean (re-find #"(?i)#\+BEGIN_QUOTE" (str (:block/title block))))]
+    (cond
+      (and heading-empty? all-body-quotes?)
+      ;; Pure quote block: convert to Quote-block with depth=0.
+      ;; The Quote-block display-type provides the visual blockquote styling, so
+      ;; no '> ' prefix is added to content. Nested '>>' gets '> ' prefix via
+      ;; recursion into depth=1 inside quote-node->markdown.
+      (let [combined-title (->> body-elements
+                                (map #(quote-node->markdown % opts 0))
+                                (remove string/blank?)
+                                (string/join "\n"))]
+        (merge block
+               {:block/title combined-title
+                :logseq.property.node/display-type :quote
+                :block/tags [:logseq.class/Quote-block]}))
+
+      (and has-quote-body? org-quote?)
+      ;; Mixed block with #+BEGIN_QUOTE: keep as regular block but add '> ' prefix
+      ;; to quote content so it renders as a blockquote in the DB graph.
+      ;; ast-blocks body is accumulated in reverse file order by extract-blocks
+      ;; (due to (reverse ast) + conj). Restore file order: keep the Heading
+      ;; first, then reverse the rest back to original file position order.
+      ;; After a Quote element, use a blank line as separator before any following
+      ;; content: unlike #+BEGIN_QUOTE/#+END_QUOTE delimiters, the markdown '>'
+      ;; blockquote ends at the first blank line, so a blank line is required to
+      ;; prevent subsequent non-quote text from being absorbed into the blockquote.
+      (let [ordered-blocks (into [(first ast-blocks)] (reverse (rest ast-blocks)))
+            tagged-parts (->> ordered-blocks
+                              (map (fn [el]
+                                     {:quote? (= "Quote" (first el))
+                                      :text   (case (first el)
+                                                "Heading" (let [title (get-in (second el) [:title])]
+                                                            (when (seq title)
+                                                              (ast->text ["Paragraph" title] opts)))
+                                                "Quote" (quote-node->markdown el opts 1)
+                                                (ast->text el opts))}))
+                              (remove #(string/blank? (:text %))))
+            combined (first (reduce (fn [[result prev-quote?] {:keys [quote? text]}]
+                                      [(if (string/blank? result)
+                                         text
+                                         (str result (if prev-quote? "\n\n" "\n") text))
+                                       quote?])
+                                    ["" false]
+                                    tagged-parts))]
+        (assoc block :block/title combined))
+
+      :else
+      block)))
 
 (defn- handle-math
   "If a block's entire content is a single displayed math formula, convert to #Math node.

@@ -1,6 +1,7 @@
 (ns logseq.db-sync.node-server-test
   (:require [cljs.test :refer [async deftest is]]
             [logseq.db-sync.node.server :as node-server]
+            [logseq.db-sync.platform.node :as platform-node]
             [logseq.db-sync.worker.auth :as auth]
             [promesa.core :as p]))
 
@@ -44,6 +45,49 @@
                      (p/let [body (.json response)]
                        (is (= 500 (.-status response)))
                        (is (= "server error" (aget body "error")))))))
+               (p/then
+                (fn []
+                  (if-let [stop! @stop-server!]
+                    (-> (stop!)
+                        (p/then (fn [] (done)))
+                        (p/catch (fn [error]
+                                   (is false (str error))
+                                   (done))))
+                    (done))))
+               (p/catch
+                (fn [error]
+                  (if-let [stop! @stop-server!]
+                    (-> (stop!)
+                        (p/then (fn []
+                                  (is false (str error))
+                                  (done)))
+                        (p/catch (fn [stop-error]
+                                   (is false (str error))
+                                   (is false (str stop-error))
+                                   (done))))
+                    (do
+                      (is false (str error))
+                      (done)))))))))
+
+(deftest node-server-request-origin-uses-configured-base-url-host-test
+  (async done
+         (let [stop-server! (atom nil)
+               request-opts (atom [])
+               original-request-from-node platform-node/request-from-node]
+           (-> (p/with-redefs [platform-node/request-from-node
+                               (fn [req opts]
+                                 (swap! request-opts conj opts)
+                                 (original-request-from-node req opts))]
+                 (p/let [{:keys [port stop!]} (node-server/start! {:port 0
+                                                                   :base-url "https://sync.example.test:9443"
+                                                                   :data-dir (str "tmp/db-sync-node-server-base-url-test/" (random-uuid))})
+                         _ (reset! stop-server! stop!)
+                         response (js/fetch (str "http://localhost:" port "/health"))]
+                   (is (= 200 (.-status response)))
+                   (is (some #(= {:scheme "https"
+                                  :host "sync.example.test:9443"}
+                                %)
+                             @request-opts))))
                (p/then
                 (fn []
                   (if-let [stop! @stop-server!]
