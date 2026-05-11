@@ -339,6 +339,25 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-first-block-auto-heading-property
+  (p/let [file (write-temp-graph-file
+                 "journals/2025_05_01.md"
+                 "Auto heading\nheading:: true\n- Body\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})
+          block (db-test/find-block-by-content @conn #"Auto heading")]
+    (is (= "Auto heading" (:block/title block))
+        "The legacy heading property line is not kept in the block title")
+    (is (true? (:logseq.property/heading block))
+        "The legacy heading property is imported as the DB heading property")
+    (is (not (contains? block :block/pre-block?))
+        "Auto-heading pre-blocks are normal blocks and do not keep the legacy pre-block flag")
+    (is (not (contains? block :block/macros))
+        "Empty legacy macro metadata is not imported")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest update-asset-links-in-block-title
   (are [x y]
        (= y (@#'gp-exporter/update-asset-links-in-block-title (first x) {(second x) "UUID"} (atom {})))

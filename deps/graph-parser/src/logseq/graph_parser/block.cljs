@@ -624,6 +624,11 @@
                                              user-config)
                                             (map :block/title))
                          pre-block? (if (:heading properties) false true)
+                         format (or (:block/format first-block) :markdown)
+                         content (if pre-block?
+                                   content
+                                   (gp-property/remove-properties format content))
+                         macros (extract-macros-from-ast body)
                          block {:block/uuid id
                                 :block/title content
                                 :block/level 1
@@ -631,9 +636,12 @@
                                 :block/properties-order (vec properties-order)
                                 :block/properties-text-values properties-text-values
                                 :block/invalid-properties invalid-properties
-                                :block/pre-block? pre-block?
-                                :block/macros (extract-macros-from-ast body)
                                 :block.temp/ast-body body}
+                         block (cond-> block
+                                 pre-block?
+                                 (assoc :block/pre-block? true)
+                                 (seq macros)
+                                 (assoc :block/macros macros))
                          {:keys [tags refs]}
                          (with-page-block-refs {:body body :refs property-refs} db date-formatter {})]
                      (cond-> block
