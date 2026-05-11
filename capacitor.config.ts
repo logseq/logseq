@@ -4,7 +4,7 @@ import fs from 'fs'
 const version = fs.readFileSync('static/package.json', 'utf8').match(/"version": "(.*?)"/)?.at(1) ?? '0.0.0'
 
 const config: CapacitorConfig = {
-  appId: 'com.logseq.app',
+  appId: 'com.logseq.og',
   appName: 'Logseq OG',
   bundledWebRuntime: false,
   webDir: 'public',
@@ -27,11 +27,11 @@ const config: CapacitorConfig = {
     }
   },
   android: {
-    appendUserAgent: `Logseq/${version} (Android)`
+    appendUserAgent: `Logseq OG/${version} (Android)`
   },
   ios: {
     scheme: 'Logseq',
-    appendUserAgent: `Logseq/${version} (iOS)`
+    appendUserAgent: `Logseq OG/${version} (iOS)`
   },
   cordova: {
     staticPlugins: [

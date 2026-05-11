@@ -35,7 +35,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>CFBundleURLName</key>
-			<string>com.logseq.logseq</string>
+			<string>com.logseq.og</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>logseq-og</string>
@@ -70,7 +70,7 @@
 	<string>We will access your album when you choose a photo, and embed it in your note.</string>
 	<key>NSUbiquitousContainers</key>
 	<dict>
-		<key>iCloud.com.logseq.logseq</key>
+		<key>iCloud.com.logseq.og</key>
 		<dict>
 			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
 			<true/>

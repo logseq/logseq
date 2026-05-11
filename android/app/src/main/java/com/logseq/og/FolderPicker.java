@@ -1,4 +1,4 @@
-package com.logseq.app;
+package com.logseq.og;
 
 import android.content.ContentResolver;
 import android.content.Context;

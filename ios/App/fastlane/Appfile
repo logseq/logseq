@@ -1,4 +1,4 @@
-app_identifier("com.logseq.logseq") # The bundle identifier of your app
+app_identifier("com.logseq.og") # The bundle identifier of your app
 apple_id("dev@logseq.com") # Your Apple Developer Portal username
 
 itc_team_id("123783177") # App Store Connect Team ID
