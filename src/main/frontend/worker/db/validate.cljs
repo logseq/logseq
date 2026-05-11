@@ -24,11 +24,11 @@
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
                            (some? (:block/pre-block? entity))
-                           [:db/retract (:db/id entity) :block/pre-block?]
+                           [[:db/retract (:db/id entity) :block/pre-block?]]
                            (some? (:logseq.property.embedding/hnsw-label entity))
-                           [:db/retract (:db/id entity) :logseq.property.embedding/hnsw-label]
+                           [[:db/retract (:db/id entity) :logseq.property.embedding/hnsw-label]]
                            (some? (:logseq.property.embedding/hnsw-label-updated-at entity))
-                           [:db/retract (:db/id entity) :logseq.property.embedding/hnsw-label-updated-at]
+                           [[:db/retract (:db/id entity) :logseq.property.embedding/hnsw-label-updated-at]]
                            (and (= "External URL" (:block/title entity))
                                 (nil? (:block/tags entity)))
                            [[:db/retractEntity (:db/id entity)]]
