@@ -678,6 +678,38 @@
                           (is false (str error))
                           (done))))))))))
 
+(deftest thread-api-export-client-ops-db-base64-supports-normalized-browser-client-ops-path-test
+  (async done
+    (restoring-worker-state
+     (fn []
+       (let [export-client-ops-db-base64 (@thread-api/*thread-apis :thread-api/export-client-ops-db-base64)
+             export-calls (atom [])
+             expected-data (js/Uint8Array. #js [4 5 6])
+             expected-buffer (.-buffer expected-data)
+             fake-pool #js {}
+             platform' (assoc-in (build-test-platform)
+                                 [:storage :export-file]
+                                 (fn [_pool path]
+                                   (swap! export-calls conj path)
+                                   (if (= "/client-ops-/db.sqlite" path)
+                                     (p/resolved expected-buffer)
+                                     (p/rejected (ex-info "missing path" {:path path})))))]
+         (platform/set-platform! platform')
+         (reset! worker-state/*opfs-pools {test-repo fake-pool})
+         (with-redefs [worker-state/get-sqlite-conn (fn [_repo which-db]
+                                                      (when (= :client-ops which-db)
+                                                        #js {:exec (fn [_sql] nil)}))]
+           (-> (export-client-ops-db-base64 test-repo)
+               (p/then (fn [result]
+                         (is (contains? (set @export-calls) "/client-ops-/db.sqlite"))
+                         (is (string? result))
+                         (is (= [4 5 6]
+                                (vec (js/Uint8Array. (.from js/Buffer result "base64")))))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done))))))))))
+
 (deftest thread-api-db-core-registers-all-thread-apis-test
   (let [missing (->> expected-db-core-thread-apis
                      (remove #(contains? @thread-api/*thread-apis %))
