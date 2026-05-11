@@ -52,7 +52,7 @@
                         ;; first block is a heading, Markdown users prefer to remove the `-` before the content
                         markdown-top-heading? (and markdown?
                                                    (= parent page left)
-                                                   heading)
+                                                   (number? heading))
                         [prefix spaces-tabs]
                         (cond
                           (= format :org)
