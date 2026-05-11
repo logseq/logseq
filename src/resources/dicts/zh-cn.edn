@@ -607,6 +607,7 @@
  :export/remove-tags "移除 #标签"
  :export/save-to-file "保存到文件"
  :export/sqlite-db "导出 SQLite 数据库"
+ :export/sqlite-db-exported "SQLite 数据库已导出到 {1}。"
  :export/title "导出"
  :export/transparent-background "透明背景"
  :export/view-nodes-data-copied "已复制视图节点数据！"

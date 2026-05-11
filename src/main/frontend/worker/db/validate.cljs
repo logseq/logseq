@@ -23,6 +23,12 @@
                      (fn [{:keys [entity dispatch-key]}]
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
+                           (some? (:logseq.property/parent entity))
+                           [[:db/retract (:db/id entity) :logseq.property/parent]]
+                           (some? (:hide? entity))
+                           [[:db/retract (:db/id entity) :hide?]]
+                           (some? (:public? entity))
+                           [[:db/retract (:db/id entity) :public?]]
                            (some? (:block/pre-block? entity))
                            [[:db/retract (:db/id entity) :block/pre-block?]]
                            (some? (:logseq.property.embedding/hnsw-label entity))

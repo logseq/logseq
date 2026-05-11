@@ -1,6 +1,7 @@
 (ns ^:no-doc frontend.handler.export
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -105,16 +106,31 @@
 
 (defn export-repo-as-sqlite-db!
   [repo]
-  (->
-   (p/let [data (persist-db/<export-db repo {:return-data? true})
-           filename (file-name repo "sqlite")
-           url (js/URL.createObjectURL (js/Blob. #js [data]))]
-     (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
-       (.setAttribute anchor "href" url)
-       (.setAttribute anchor "download" filename)
-       (.click anchor)))
-   (p/catch (fn [error]
-              (js/console.error error)))))
+  (let [filename (file-name repo "sqlite")]
+    (->
+     (if (util/electron?)
+       (p/let [result (ipc/ipc :db-export-as repo filename)
+               path (or (:path result) (some-> result .-path))]
+         (when path
+           (notification/show! (t :export/sqlite-db-exported path) :success false)))
+       (p/let [data (persist-db/<export-db repo {:return-data? true})]
+         (if (fn? (.-showSaveFilePicker js/window))
+           (p/let [handle (.showSaveFilePicker
+                           js/window
+                           #js {:suggestedName filename
+                                :types #js [#js {:description "SQLite"
+                                                 :accept #js {"application/vnd.sqlite3" #js [".sqlite"]}}]})
+                   writable (.createWritable handle)
+                   _ (.write writable data)]
+             (.close writable))
+           (let [url (js/URL.createObjectURL (js/Blob. #js [data]))]
+             (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
+               (.setAttribute anchor "href" url)
+               (.setAttribute anchor "download" filename)
+               (.click anchor))))))
+     (p/catch (fn [error]
+                (when-not (= "AbortError" (.-name error))
+                  (js/console.error error)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Export to roam json ;;

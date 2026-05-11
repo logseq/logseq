@@ -148,10 +148,18 @@
            _ (set-worker-fs worker)
            wrapped-worker* (Comlink/wrap worker)
            wrapped-worker (fn [qkw & args]
-                            (p/let [result (.remoteInvoke ^js wrapped-worker*
-                                                          (str (namespace qkw) "/" (name qkw))
-                                                          (ldb/write-transit-str args))]
-                              (ldb/read-transit-str result)))
+                            (if (contains? #{:thread-api/export-db-binary
+                                             :thread-api/export-client-ops-db-binary
+                                             :thread-api/import-db-binary}
+                                           qkw)
+                              (let [method (str (namespace qkw) "/" (name qkw))]
+                                (if (= :thread-api/import-db-binary qkw)
+                                  (.remoteInvokeBinary ^js wrapped-worker* method (first args) (second args))
+                                  (.remoteInvokeBinary ^js wrapped-worker* method (first args))))
+                              (p/let [result (.remoteInvoke ^js wrapped-worker*
+                                                            (str (namespace qkw) "/" (name qkw))
+                                                            (ldb/write-transit-str args))]
+                                (ldb/read-transit-str result))))
            t1 (util/time-ms)]
        (reset! state/*db-worker-thread worker)
        (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
@@ -225,20 +233,18 @@
         (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]
-    (-> (p/let [base64 (state/<invoke-db-worker :thread-api/export-db-base64 repo)
-                data (some-> base64 util/base64string-to-unit8array)]
-          (when data
-            (if (:return-data? opts)
-              data
-              (<export-db! repo))))
+    (-> (if (util/electron?)
+          (<export-db! repo)
+          (p/let [data (state/<invoke-db-worker :thread-api/export-db-binary repo)]
+            (when (:return-data? opts)
+              data)))
         (p/catch (fn [error]
                    (log/error :export-db-error repo error "SQLiteDB save error")
                    (notification/show! (t :storage/sqlitedb-save-error error) :error) {}))))
 
   (<import-db [_this repo data]
     (->
-     (p/let [base64 (util/uint8array-to-base64string data)]
-       (state/<invoke-db-worker :thread-api/import-db-base64 repo base64))
+     (state/<invoke-db-worker :thread-api/import-db-binary repo data)
      (p/catch (fn [error]
                 (log/error :import-db-error repo error "SQLiteDB import error")
                 (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))

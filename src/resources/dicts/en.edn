@@ -610,6 +610,7 @@
  :export/remove-tags "remove #tags"
  :export/save-to-file "Save to file"
  :export/sqlite-db "Export SQLite DB"
+ :export/sqlite-db-exported "SQLite DB exported to {1}."
  :export/title "Export"
  :export/transparent-background "Transparent background"
  :export/view-nodes-data-copied "Copied view nodes' data!"
