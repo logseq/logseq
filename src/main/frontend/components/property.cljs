@@ -233,6 +233,7 @@
                  :property "letter-p"
                  :page "page"
                  :node "point-filled"
+                 :asset "letter-a"
                  "letter-t"))]
     (ui/icon icon {:class "opacity-50"
                    :size 15})))
