@@ -1197,7 +1197,21 @@
           files (mapv #(path/path-join file-graph-dir %) ["journals/2024_02_07.md"
                                                           "journals/2026_01_27.md"])
           conn (db-test/create-conn)
-          _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})]
+          _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})
+          namespaced-file (write-temp-graph-file
+                           "pages/namespace-inline-tag.md"
+                           "- #parent/child\n")
+          namespaced-conn (db-test/create-conn)
+          _ (import-files-to-db [namespaced-file] namespaced-conn {:remove-inline-tags? false :convert-all-tags? true})
+          [block tag] (->> (d/q '[:find ?b ?t
+                                  :where
+                                  [?b :block/tags ?t]
+                                  [?b :block/page]
+                                  [?t :db/ident :user.class/parent___child]]
+                                @namespaced-conn)
+                           first
+                           (map #(d/entity @namespaced-conn %)))
+          raw-title (:block/title block)]
 
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
@@ -1206,7 +1220,15 @@
         "block with tag preserves inline tag")
     (is (string/includes? (:block/title (db-test/find-block-by-content @conn #"block with multi word tag"))
                           "#[[another test]]")
-        "block with multi word tag preserves inline tag")))
+        "block with multi word tag preserves inline tag")
+    (testing "namespaced inline tag on first line is preserved as inline tag"
+      (is (some? block)
+          "imported first-line namespaced tag block")
+      (is (string? raw-title)
+          "imported block has raw title")
+      (when (string? raw-title)
+        (is (ldb/inline-tag? raw-title tag)
+            "first-line namespaced tag is stored as an inline tag")))))
 
 (deftest-async export-files-with-ignored-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
