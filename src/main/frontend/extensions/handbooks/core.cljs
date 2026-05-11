@@ -606,7 +606,7 @@
           [:a.flex.items-center
            {:aria-label "Copy topic link" :tabIndex "0"
             :on-click   (fn []
-                          (let [s (str "logseq://handbook/" (:key (second active-pane-state)))]
+                          (let [s (str "logseq-og://handbook/" (:key (second active-pane-state)))]
                             (util/copy-to-clipboard! s)
                             (notification/show!
                               [:div [:strong.block "Handbook link copied!"]

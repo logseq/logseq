@@ -9,9 +9,9 @@ module.exports = {
     appBundleId: "com.logseq.logseq-og",
     protocols: [
       {
-        "protocol": "logseq",
-        "name": "logseq",
-        "schemes": "logseq"
+        "protocol": "logseq-og",
+        "name": "logseq-og",
+        "schemes": "logseq-og"
       }
     ],
     osxSign: {

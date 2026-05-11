@@ -36,7 +36,7 @@
 (if ENABLE-FILE-SYNC-PRODUCTION
   (do (def FILE-SYNC-PROD? true)
       (def LOGIN-URL
-        "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+        "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq-og%3A%2F%2Fauth-callback")
       (def API-DOMAIN "api.logseq.com")
       (def WS-URL "wss://ws.logseq.com/file-sync?graphuuid=%s")
       (def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/")
@@ -50,7 +50,7 @@
 
   (do (def FILE-SYNC-PROD? false)
       (def LOGIN-URL
-        "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+        "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq-og%3A%2F%2Fauth-callback")
       (def API-DOMAIN "api-dev.logseq.com")
       (def WS-URL "wss://ws-dev.logseq.com/file-sync?graphuuid=%s")
       (def COGNITO-IDP "https://cognito-idp.us-east-2.amazonaws.com/")

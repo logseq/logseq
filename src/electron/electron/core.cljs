@@ -24,7 +24,7 @@
             [logseq.publishing.export :as publish-export]))
 
 ;; Keep same as main/frontend.util.url
-(defonce LSP_SCHEME "logseq")
+(defonce LSP_SCHEME "logseq-og")
 (defonce FILE_LSP_SCHEME "lsp")
 (defonce FILE_ASSETS_SCHEME "assets")
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
