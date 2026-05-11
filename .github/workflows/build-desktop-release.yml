@@ -18,7 +18,7 @@ on:
       git-ref:
         description: "Release Git Ref (Which branch or tag to build?)"
         required: true
-        default: "master"
+        default: "version/file"
       is-draft:
         description: 'Draft Release? (Beta/Release only, Nightly will always be a non-draft)'
         type: boolean
