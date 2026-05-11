@@ -167,7 +167,7 @@
 
 (defn- set-app-menu! []
   (let [about-fn (fn []
-                   (.showMessageBox dialog (clj->js {:title "Logseq"
+                   (.showMessageBox dialog (clj->js {:title "Logseq OG"
                                                      :icon (node-path/join js/__dirname "icons/logseq.png")
                                                      :message (str "Version " updater/electron-version)})))
         template (if mac?
