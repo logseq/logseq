@@ -27,6 +27,22 @@
 (def ^:private entity-op-kinds
   #{:db/add :db/retract :db/cas :db.fn/cas})
 
+(def ^:private migration-deleted-attrs
+  #{:block/path-refs
+    :block/pre-block?
+    :logseq.property.embedding/hnsw-label
+    :logseq.property.embedding/hnsw-label-updated-at})
+
+(defn- strip-migration-deleted-attrs
+  [tx-data]
+  (keep (fn [item]
+          (when-not (and (vector? item)
+                         (<= 4 (count item))
+                         (contains? entity-op-kinds (first item))
+                         (contains? migration-deleted-attrs (nth item 2)))
+            item))
+        tx-data))
+
 (def ^:private encrypted-attrs
   #{:block/title :block/name})
 
@@ -83,7 +99,7 @@
    (sanitize-tx db tx-data nil))
   ([db tx-data {:keys [drop-missing-retract-ops?]
                 :or {drop-missing-retract-ops? false}}]
-   (let [tx-data* (cond->> tx-data
+   (let [tx-data* (cond->> (strip-migration-deleted-attrs tx-data)
                     drop-missing-retract-ops?
                     (remove (fn [item]
                               (and (retract-entity-op? item)

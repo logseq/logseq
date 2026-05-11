@@ -370,7 +370,7 @@
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Code-block]] @conn))))
       (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Math-block]] @conn))))
       (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Template]] @conn))))
-      (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
+      (is (= 6 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
       (is (= 7 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
@@ -801,15 +801,41 @@
             "Zotero imported pdf area highlight links to correct asset"))
 
       ;; Quotes
-      (is (= {:block/tags [:logseq.class/Quote-block]
-              :logseq.property.node/display-type :quote}
-             (db-test/readable-properties (db-test/find-block-by-content @conn #"Saito"))))
+      (is (string/starts-with? (:block/title (db-test/find-block-by-content @conn #"Saito")) "From Inception:\n> Saito:")
+          "Mixed #+BEGIN_QUOTE block: heading retained and quote content prefixed with '>'")
+      (is (nil? (:logseq.property.node/display-type (db-test/find-block-by-content @conn #"Saito")))
+          "Mixed #+BEGIN_QUOTE block is not converted to a Quote-block")
       (is (= "markdown quote\n[[wut]]\nline 3"
              (:block/title (db-test/find-block-by-content @conn #"markdown quote")))
           "Markdown quote imports as full multi-line quote")
-      (is (= "*Italic* ~~Strikethrough~~ ^^Highlight^^ #[[foo]]\n**Learn Datalog Today** is an interactive tutorial designed to teach you the [Datomic](http://datomic.com/) dialect of [Datalog](http://en.wikipedia.org/wiki/Datalog). Datalog is a declarative **database query language** with roots in logic programming. Datalog has similar expressive power as [SQL](http://en.wikipedia.org/wiki/Sql)."
-             (:block/title (db-test/find-block-by-content @conn #"Learn Datalog")))
-          "Imports full quote with various ast types"))
+      (is (string/starts-with? (:block/title (db-test/find-block-by-content @conn #"Learn Datalog"))
+                                "Test of various ast types:\n> *Italic*")
+          "Mixed #+BEGIN_QUOTE block retains heading and quote content in block title")
+      (is (= "Blockquotes\n> Nested Blockquotes"
+             (:block/title (db-test/find-block-by-content @conn #"Nested Blockquotes")))
+          "Nested '>> quote' is preserved as '> ' prefix in Quote-block title")
+      (is (= :quote (:logseq.property.node/display-type (db-test/find-block-by-content @conn #"Nested Blockquotes")))
+          "Nested markdown quote block is tagged as Quote-block")
+      (is (= "it's a\n\norg blockquote"
+             (:block/title (db-test/find-block-by-content @conn #"org blockquote")))
+          "#+BEGIN_QUOTE pure block title has no '> ' prefix — display-type provides blockquote styling")
+      (is (= :quote (:logseq.property.node/display-type (db-test/find-block-by-content @conn #"org blockquote")))
+          "#+BEGIN_QUOTE pure block is tagged as Quote-block")
+      (is (= "> Blockquotes\n> and\n\nsomething else"
+             (:block/title (db-test/find-block-by-content @conn #"Blockquotes\n> and")))
+          "Mixed #+BEGIN_QUOTE at start of block: quote content prefixed with '>' and blank line separates following text")
+      (is (nil? (:logseq.property.node/display-type (db-test/find-block-by-content @conn #"Blockquotes\n> and")))
+          "Mixed #+BEGIN_QUOTE block at start is not converted to a Quote-block")
+      (let [block (db-test/find-block-by-content @conn #"Question 1")]
+        (is (string/includes? (:block/title block) "\n>> nested")
+            "Mixed markdown quote block preserves nested quote depth")
+        (is (nil? (:logseq.property.node/display-type block))
+            "Mixed markdown quote block is not converted to a Quote-block"))
+      (let [block (db-test/find-block-by-content @conn #"Question 2")]
+        (is (string/includes? (:block/title block) "> Question 3")
+            "Mixed markdown quote child block preserves separated quote lines")
+        (is (string/includes? (:block/title block) "> Answer 3")
+            "Mixed markdown quote child block preserves quote content after blank quote line")))
 
     (testing "embeds"
       (is (= {:block/title ""}

@@ -3,6 +3,7 @@
   (:refer-clojure :exclude [run!])
   (:require [lambdaisland.glogi :as log]
             [logseq.cli.command.core :as command-core]
+            [logseq.cli.command.skill :as skill-command]
             [logseq.cli.commands :as commands]
             [logseq.cli.config :as config]
             [logseq.cli.format :as format]
@@ -59,6 +60,20 @@
       (parsed-output-format parsed)
       (parse-argv-output-format args)))
 
+(defn- global-help-info?
+  [args parsed]
+  (and (:help? parsed)
+       (empty? (:args (command-core/parse-leading-global-opts args)))))
+
+(defn- maybe-append-installed-skill-warning
+  [args parsed summary]
+  (if-not (global-help-info? args parsed)
+    summary
+    (let [warning (-> (skill-command/installed-skill-update-status {})
+                      skill-command/format-installed-skill-warning)]
+      (cond-> summary
+        (seq warning) (str warning)))))
+
 (defn- format-opts
   [args parsed cfg result]
   (if-let [mode (resolve-output-format args parsed cfg result)]
@@ -106,7 +121,8 @@
      (cond
        (:help? parsed)
        (p/resolved
-        (let [mode (resolve-output-format args parsed nil nil)]
+        (let [mode (resolve-output-format args parsed nil nil)
+              summary (maybe-append-installed-skill-warning args parsed (:summary parsed))]
           (attach-profile-lines
            profile-session
            parsed
@@ -115,9 +131,9 @@
                       (profile/time! profile-session "cli.format-result"
                                      (fn []
                                        (format/format-result {:status :ok
-                                                              :data {:message (:summary parsed)}}
+                                                              :data {:message summary}}
                                                              {:output-format mode})))
-                      (:summary parsed))})))
+                      summary)})))
 
        (not (:ok? parsed))
        (p/resolved

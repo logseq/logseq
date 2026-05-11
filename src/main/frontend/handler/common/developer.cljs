@@ -213,25 +213,28 @@
 
 (defn ^:export export-client-ops-sqlite
   []
-  (if-let [repo (state/get-current-repo)]
-    (-> (state/<invoke-db-worker :thread-api/export-client-ops-db-base64 repo)
-        (p/then (fn [data]
-                  (if-let [payload (some-> data util/base64string-to-unit8array)]
-                    (let [filename (client-ops-export-file-name repo)
-                          blob (js/Blob. #js [payload] (clj->js {:type "application/octet-stream"}))]
-                      (utils/saveToFile blob filename "sqlite")
+  (if (and util/web-platform? (not (util/electron?)))
+    (if-let [repo (state/get-current-repo)]
+      (-> (state/<invoke-db-worker :thread-api/export-client-ops-db-binary repo)
+          (p/then (fn [data]
+                    (if (instance? js/Uint8Array data)
+                      (let [filename (client-ops-export-file-name repo)
+                            blob (js/Blob. #js [data] (clj->js {:type "application/octet-stream"}))]
+                        (utils/saveToFile blob filename "sqlite")
+                        (notification/show!
+                         (t :graph.diagnostics/client-ops-export-success filename)
+                         :success
+                         false))
                       (notification/show!
-                       (t :graph.diagnostics/client-ops-export-success filename)
-                       :success
-                       false))
-                    (notification/show!
-                     (t :graph.diagnostics/client-ops-export-invalid-payload-warning
-                        (pr-str (type data)))
-                     :warning))))
+                       (t :graph.diagnostics/client-ops-export-invalid-payload-warning
+                          (pr-str (type data)))
+                       :warning))))
         (p/catch (fn [error]
                    (js/console.error "export-client-ops-sqlite failed:" error)
                    (notification/show! (t :graph.diagnostics/client-ops-export-failed-error) :error))))
-    (notification/show! (t :graph.diagnostics/no-graph-warning) :warning)))
+      (notification/show! (t :graph.diagnostics/no-graph-warning) :warning))
+    (notification/show! (t :graph.diagnostics/client-ops-export-invalid-payload-warning "web app only")
+                        :warning)))
 
 (defn import-chosen-graph
   [repo]
