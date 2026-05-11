@@ -359,6 +359,25 @@
     (sort > tags))
    (string/trim)))
 
+(defn- replace-namespaced-tags-with-id-refs
+  [content tags]
+  (->>
+   (reduce
+    (fn [content tag]
+      (if (ns-util/namespace-page? (:block/name tag))
+        (let [id-ref (page-ref/->page-ref (:block/uuid tag))]
+          (-> content
+              (common-util/replace-ignore-case
+               (str "#" (:block/name tag))
+               (str "#" id-ref))
+              (common-util/replace-ignore-case
+               (str "#" (page-ref/->page-ref (:block/name tag)))
+               (str "#" id-ref))))
+        content))
+    content
+    (sort-by (comp count :block/name) > tags))
+   (string/trim)))
+
 (defn- update-block-tags
   [block db {:keys [remove-inline-tags?] :as user-options} per-file-state all-idents]
   (let [block'
@@ -375,6 +394,10 @@
                       (->> original-tags
                            (filter convert-tag?')
                            (map :block/title)))
+              (not remove-inline-tags?)
+              (update :block/title
+                      replace-namespaced-tags-with-id-refs
+                      (filter convert-tag?' original-tags))
               true
               (update :block/title
                       db-content/replace-tags-with-id-refs
