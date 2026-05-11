@@ -54,6 +54,7 @@
   (b/new-blocks ["b3" ""])
   (util/input-command "Node embed")
   (util/press-seq "Page embed" {:delay 60})
+  (w/wait-for "#ac-0.menu-link:has-text('Page embed')")
   (k/press "Enter" {:delay 60})
   (util/exit-edit)
   (b/new-blocks ["b4"])

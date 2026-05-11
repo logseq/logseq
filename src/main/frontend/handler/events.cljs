@@ -24,6 +24,7 @@
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.events.rtc-error :as rtc-error]
             [frontend.handler.export :as export]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
@@ -57,13 +58,6 @@
 (defmulti handle first)
 
 (defonce ^:private *search-index-build-timeout (atom nil))
-(def ^:private decrypt-aes-key-failed-notification
-  "Failed to decrypt this graph.")
-
-(defn- decrypt-aes-key-failed?
-  [error]
-  (string/includes? (or (ex-message error) (str error)) "decrypt-aes-key"))
-
 (defn- <build-search-index!
   [repo]
   (-> (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
@@ -389,8 +383,8 @@
               (println "RTC download graph failed, error:")
               (log/error :rtc-download-graph-failed e)
               (shui/popup-hide! :download-rtc-graph)
-              (when (decrypt-aes-key-failed? e)
-                (notification/show! decrypt-aes-key-failed-notification :error false))))))
+              (when (rtc-error/download-decrypt-failed? e)
+                (notification/show! (t :encryption/wrong-password) :error false))))))
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]

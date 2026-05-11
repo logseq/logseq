@@ -1,16 +1,121 @@
 (ns logseq.cli.command.sync-test
-  (:require [cljs.test :refer [async deftest is testing]]
+  (:require ["crypto" :as crypto]
+            ["fs" :as fs]
+            ["os" :as os]
+            ["path" :as node-path]
+            [cljs.test :refer [async deftest is testing]]
             [logseq.cli.auth :as cli-auth]
             [logseq.cli.command.sync :as sync-command]
             [logseq.cli.common :as cli-common]
             [logseq.cli.config :as cli-config]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
+            [logseq.common.graph-dir :as graph-dir]
             [promesa.core :as p]))
 
 (defn- execute-with-runtime-auth
   [action config]
   (sync-command/execute action (assoc config :id-token "runtime-token")))
+
+(def ^:private sync-asset-repo "logseq_db_demo")
+(def ^:private sync-asset-uuid "11111111-1111-1111-1111-111111111111")
+(def ^:private sync-asset-type "txt")
+
+(defn- temp-root-dir
+  []
+  (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-sync-asset-test-")))
+
+(defn- remove-dir!
+  [path]
+  (when (and (seq path) (fs/existsSync path))
+    (fs/rmSync path #js {:recursive true :force true})))
+
+(defn- sha256
+  [payload]
+  (-> (.createHash crypto "sha256")
+      (.update payload)
+      (.digest "hex")))
+
+(defn- graph-assets-dir
+  [root-dir repo]
+  (node-path/join (cli-server/graphs-dir {:root-dir root-dir})
+                  (graph-dir/repo->encoded-graph-dir-name repo)
+                  "assets"))
+
+(defn- write-local-asset!
+  [root-dir repo asset-uuid asset-type payload]
+  (let [assets-dir (graph-assets-dir root-dir repo)
+        asset-path (node-path/join assets-dir (str asset-uuid "." asset-type))]
+    (fs/mkdirSync assets-dir #js {:recursive true})
+    (fs/writeFileSync asset-path payload)
+    asset-path))
+
+(defn- remote-asset
+  [checksum]
+  {:db/id 123
+   :block/uuid sync-asset-uuid
+   :block/tags [{:db/ident :logseq.class/Asset}]
+   :logseq.property.asset/type sync-asset-type
+   :logseq.property.asset/checksum checksum
+   :logseq.property.asset/remote-metadata {:checksum checksum
+                                           :type sync-asset-type}})
+
+(defn- active-sync-status
+  []
+  {:repo sync-asset-repo
+   :graph-id "graph-id"
+   :ws-state :open
+   :pending-local 0
+   :pending-asset 0
+   :pending-server 0})
+
+(defn- sync-asset-download-action
+  []
+  {:type :sync-asset-download
+   :repo sync-asset-repo
+   :graph "demo"
+   :id 123})
+
+(defn- run-sync-asset-download-scenario
+  [{:keys [asset status local-payload action config]
+    :or {status (active-sync-status)
+         action (sync-asset-download-action)}}]
+  (let [root-dir (temp-root-dir)
+        calls (atom [])
+        config' (merge {:root-dir root-dir
+                        :http-base "https://api.logseq.io"}
+                       config)]
+    (when (some? local-payload)
+      (write-local-asset! root-dir
+                          (:repo action)
+                          (or (:block/uuid asset) sync-asset-uuid)
+                          (or (:logseq.property.asset/type asset) sync-asset-type)
+                          local-payload))
+    (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
+                                                    (swap! calls conj [:ensure-server repo])
+                                                    (p/resolved (assoc config :base-url "http://example")))
+                        transport/invoke (fn [_ method args]
+                                           (swap! calls conj [method args])
+                                           (case method
+                                             :thread-api/pull
+                                             (p/resolved asset)
+
+                                             :thread-api/db-sync-status
+                                             (p/resolved status)
+
+                                             :thread-api/db-sync-request-asset-download
+                                             (p/resolved nil)
+
+                                             (p/resolved nil)))]
+          (p/let [result (execute-with-runtime-auth action config')]
+            {:result result
+             :calls @calls}))
+        (p/finally (fn []
+                     (remove-dir! root-dir))))))
+
+(defn- called-method?
+  [calls method]
+  (boolean (some #(= method (first %)) calls)))
 
 (deftest test-build-action-validation
   (testing "sync status requires repo"
@@ -91,6 +196,190 @@
       (is (= :invalid-options (get-in missing-graph-id [:error :code])))
       (is (false? (:ok? missing-email)))
       (is (= :invalid-options (get-in missing-email [:error :code]))))))
+
+(deftest test-build-sync-asset-download-action-validation
+  (testing "sync asset download builds action with db id selector"
+    (let [result (sync-command/build-action :sync-asset-download {:id 123} [] "logseq_db_demo")]
+      (is (true? (:ok? result)))
+      (is (= {:type :sync-asset-download
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :id 123}
+             (:action result)))))
+
+  (testing "sync asset download builds action with uuid selector"
+    (let [result (sync-command/build-action :sync-asset-download {:uuid sync-asset-uuid} [] "logseq_db_demo")]
+      (is (true? (:ok? result)))
+      (is (= {:type :sync-asset-download
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :uuid sync-asset-uuid}
+             (:action result)))))
+
+  (testing "sync asset download requires repo"
+    (let [result (sync-command/build-action :sync-asset-download {:id 123} [] nil)]
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
+
+  (testing "sync asset download requires one selector"
+    (let [result (sync-command/build-action :sync-asset-download {} [] "logseq_db_demo")]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "sync asset download rejects conflicting selectors"
+    (let [result (sync-command/build-action :sync-asset-download {:id 123
+                                                                  :uuid sync-asset-uuid}
+                                            []
+                                            "logseq_db_demo")]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
+
+(deftest test-execute-sync-asset-download-uses-uuid-lookup-value
+  (async done
+         (let [checksum (sha256 "remote asset payload")
+               action {:type :sync-asset-download
+                       :repo sync-asset-repo
+                       :graph "demo"
+                       :uuid sync-asset-uuid}]
+           (-> (run-sync-asset-download-scenario {:asset (remote-asset checksum)
+                                                  :action action})
+               (p/then (fn [{:keys [calls]}]
+                         (is (some #(and (= :thread-api/pull (first %))
+                                         (= [:block/uuid (uuid sync-asset-uuid)]
+                                            (get-in % [1 2])))
+                                   calls))
+                         (is (some #(= [:thread-api/db-sync-request-asset-download
+                                        [sync-asset-repo sync-asset-uuid]]
+                                      %)
+                                   calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-asset-download-requests-missing-local-file
+  (async done
+         (let [checksum (sha256 "remote asset payload")]
+           (-> (run-sync-asset-download-scenario {:asset (remote-asset checksum)})
+               (p/then (fn [{:keys [result calls]}]
+                         (is (= :ok (:status result)))
+                         (is (= {:asset-id 123
+                                 :asset-uuid sync-asset-uuid
+                                 :asset-type sync-asset-type
+                                 :download-requested? true
+                                 :checksum-status :missing}
+                                (:data result)))
+                         (is (called-method? calls :thread-api/sync-app-state))
+                         (is (called-method? calls :thread-api/set-db-sync-config))
+                         (is (called-method? calls :thread-api/pull))
+                         (is (called-method? calls :thread-api/db-sync-status))
+                         (is (some #(= [:thread-api/db-sync-request-asset-download
+                                        [sync-asset-repo sync-asset-uuid]]
+                                      %)
+                                   calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-asset-download-skips-matching-local-file
+  (async done
+         (let [payload "local asset payload"
+               checksum (sha256 payload)]
+           (-> (run-sync-asset-download-scenario {:asset (remote-asset checksum)
+                                                  :local-payload payload})
+               (p/then (fn [{:keys [result calls]}]
+                         (is (= :ok (:status result)))
+                         (is (= {:asset-id 123
+                                 :asset-uuid sync-asset-uuid
+                                 :asset-type sync-asset-type
+                                 :download-requested? false
+                                 :checksum-status :match
+                                 :skipped-reason :already-downloaded}
+                                (:data result)))
+                         (is (not (contains? (:data result) :local-path)))
+                         (is (not (called-method? calls :thread-api/db-sync-request-asset-download)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-asset-download-requests-mismatched-local-file
+  (async done
+         (let [checksum (sha256 "remote asset payload")]
+           (-> (run-sync-asset-download-scenario {:asset (remote-asset checksum)
+                                                  :local-payload "corrupted local payload"})
+               (p/then (fn [{:keys [result calls]}]
+                         (is (= :ok (:status result)))
+                         (is (= 123 (get-in result [:data :asset-id])))
+                         (is (= sync-asset-uuid (get-in result [:data :asset-uuid])))
+                         (is (= sync-asset-type (get-in result [:data :asset-type])))
+                         (is (= true (get-in result [:data :download-requested?])))
+                         (is (= :mismatch (get-in result [:data :checksum-status])))
+                         (let [hint (get-in result [:data :hint])]
+                           (is (string? hint))
+                           (is (boolean (when (string? hint)
+                                          (re-find #"checksum" hint)))))
+                         (is (not (contains? (:data result) :local-path)))
+                         (is (some #(= [:thread-api/db-sync-request-asset-download
+                                        [sync-asset-repo sync-asset-uuid]]
+                                      %)
+                                   calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-asset-download-requires-active-sync
+  (async done
+         (let [checksum (sha256 "remote asset payload")]
+           (-> (run-sync-asset-download-scenario {:asset (remote-asset checksum)
+                                                  :status {:repo sync-asset-repo
+                                                           :graph-id "graph-id"
+                                                           :ws-state :stopped}})
+               (p/then (fn [{:keys [result calls]}]
+                         (is (= :error (:status result)))
+                         (is (= :sync-not-started (get-in result [:error :code])))
+                         (is (= "Run logseq sync start --graph demo first."
+                                (get-in result [:error :hint])))
+                         (is (not (called-method? calls :thread-api/db-sync-request-asset-download)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-asset-download-validates-asset-metadata
+  (async done
+         (let [checksum (sha256 "remote asset payload")
+               base-asset (remote-asset checksum)
+               cases [{:label "missing asset"
+                       :asset nil
+                       :code :asset-not-found}
+                      {:label "non asset"
+                       :asset (assoc base-asset :block/tags [])
+                       :code :not-asset}
+                      {:label "missing uuid"
+                       :asset (dissoc base-asset :block/uuid)
+                       :code :asset-uuid-missing}
+                      {:label "missing type"
+                       :asset (dissoc base-asset :logseq.property.asset/type)
+                       :code :asset-type-missing}
+                      {:label "missing checksum"
+                       :asset (dissoc base-asset :logseq.property.asset/checksum)
+                       :code :asset-checksum-missing}
+                      {:label "missing remote metadata"
+                       :asset (dissoc base-asset :logseq.property.asset/remote-metadata)
+                       :code :asset-not-remote}
+                      {:label "external asset"
+                       :asset (assoc base-asset :logseq.property.asset/external-url "https://example.com/a.txt")
+                       :code :external-asset}]]
+           (-> (reduce (fn [chain {:keys [label asset code]}]
+                         (p/then chain
+                                 (fn []
+                                   (p/let [{:keys [result calls]} (run-sync-asset-download-scenario {:asset asset})]
+                                     (is (= :error (:status result)) label)
+                                     (is (= code (get-in result [:error :code])) label)
+                                     (is (not (called-method? calls :thread-api/db-sync-request-asset-download)) label)))))
+                       (p/resolved nil)
+                       cases)
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-sync-start
   (async done

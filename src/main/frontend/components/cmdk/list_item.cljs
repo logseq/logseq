@@ -87,10 +87,12 @@
             :ref (when on-mounted on-mounted)
             :on-click (when on-click on-click)
             :on-mouse-move (when on-mouse-move on-mouse-move)})
-     ;; header
+     ;; header — single-line, overflow hidden so long paths don't push content off screen
      (when header
-       [:div.text-xs.pl-8.font-light.flex.items-center.gap-2.flex-wrap {:class "-mt-1"
-                                                                        :style {:color "var(--lx-gray-11)"}}
+       [:div.text-xs.pl-8.font-light.flex.items-center.gap-2.overflow-hidden.min-w-0 {:class "-mt-1"
+                                                                        :style {:color "var(--lx-gray-11)"
+                                                                                :white-space "nowrap"
+                                                                                :text-overflow "ellipsis"}}
         (highlight-query header)
         header-badge])
      ;; main row
@@ -110,7 +112,7 @@
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
-       [:div {:class "text-sm font-medium text-gray-12 flex items-center gap-2 flex-wrap"}
+       [:div {:class "cp__cmdk-item-main-text text-sm font-medium text-gray-12 flex items-center gap-2 flex-wrap"}
         (block-handler/block-title-with-icon source-block
                                              (highlight-query text)
                                              icon-component/icon)

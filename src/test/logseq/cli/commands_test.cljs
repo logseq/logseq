@@ -85,6 +85,7 @@
       (is (string/includes? plain-summary "upsert asset"))
       (is (string/includes? plain-summary "remove"))
       (is (string/includes? plain-summary "query"))
+      (is (string/includes? plain-summary "qsearch"))
       (is (string/includes? plain-summary "search"))
       (is (string/includes? plain-summary "show"))
       (is (string/includes? plain-summary "doctor"))
@@ -98,6 +99,7 @@
       (is (string/includes? plain-summary "completion"))
       (is (string/includes? plain-summary "example"))
       (is (not (string/includes? plain-summary "example upsert")))
+      (is (string/includes? plain-summary "qmd"))
       (is (string/includes? plain-summary "skill"))
       (is (not (string/includes? plain-summary "skill show")))
       (is (string/includes? plain-summary "Path to CLI root dir (default ~/logseq)"))
@@ -119,6 +121,7 @@
       (is (contains-bold? summary "remove property"))
       (is (contains-bold? summary "query"))
       (is (contains-bold? summary "query list"))
+      (is (contains-bold? summary "qsearch"))
       (is (contains-bold? summary "search block"))
       (is (contains-bold? summary "search page"))
       (is (contains-bold? summary "search property"))
@@ -138,6 +141,7 @@
       (is (contains-bold? summary "completion"))
       (is (contains-bold? summary "example"))
       (is (not (contains-bold? summary "example upsert")))
+      (is (contains-bold? summary "qmd"))
       (is (contains-bold? summary "skill"))
       (is (not (contains-bold? summary "skill show")))
       (is (contains-bold? summary "--help"))
@@ -158,6 +162,85 @@
           plain-summary (strip-ansi summary)]
       (is (string/includes? plain-summary "Global options:"))
       (is (string/includes? plain-summary "Command options:")))))
+
+(deftest test-qmd-and-qsearch-parse
+  (testing "qmd parses as graph-scoped command"
+    (let [result (commands/parse-args ["qmd" "--graph" "demo"])]
+      (is (true? (:ok? result)))
+      (is (= :qmd (:command result)))
+      (is (= "demo" (get-in result [:options :graph])))))
+
+  (testing "qmd can omit graph so build-action can use the current graph"
+    (let [parsed (commands/parse-args ["qmd"])
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? parsed)))
+      (is (true? (:ok? result)))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= "demo" (get-in result [:action :graph])))))
+
+  (testing "qmd without graph or current graph fails at build-action"
+    (let [parsed (commands/parse-args ["qmd"])
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? parsed)))
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
+
+  (testing "qsearch accepts positional query text"
+    (let [result (commands/parse-args ["qsearch" "markdown" "mirror" "--graph" "demo" "-n" "10" "--no-rerank"])]
+      (is (true? (:ok? result)))
+      (is (= :qsearch (:command result)))
+      (is (= ["markdown" "mirror"] (:args result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= 10 (get-in result [:options :limit])))
+      (is (true? (get-in result [:options :no-rerank])))))
+
+  (testing "qsearch can omit graph so build-action can use the current graph"
+    (let [parsed (commands/parse-args ["qsearch" "markdown" "mirror"])
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? parsed)))
+      (is (true? (:ok? result)))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= "demo" (get-in result [:action :graph])))))
+
+  (testing "qsearch requires query text"
+    (let [result (commands/parse-args ["qsearch" "--graph" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-query-text (get-in result [:error :code])))))
+
+  (testing "qsearch without graph or current graph fails at build-action"
+    (let [result (commands/parse-args ["qsearch" "markdown" "mirror"])]
+      (is (true? (:ok? result)))
+      (let [action-result (commands/build-action result {})]
+        (is (false? (:ok? action-result)))
+        (is (= :missing-repo (get-in action-result [:error :code]))))))
+
+  (testing "qsearch rejects unknown options after positional query"
+    (let [result (commands/parse-args ["qsearch" "markdown" "--unknown" "--graph" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "qmd and qsearch reject manual QMD collection and index options"
+    (doseq [args [["qmd" "--graph" "demo" "--collection" "custom"]
+                  ["qmd" "--graph" "demo" "--index" "custom-index"]
+                  ["qsearch" "markdown" "--graph" "demo" "--collection" "custom"]
+                  ["qsearch" "markdown" "--graph" "demo" "--index" "custom-index"]]]
+      (let [result (commands/parse-args args)]
+        (is (false? (:ok? result)) (pr-str args))
+        (is (= :invalid-options (get-in result [:error :code])) (pr-str args)))))
+
+  (testing "qmd and qsearch help omit internal collection and index options"
+    (doseq [args [["qmd" "--help"]
+                  ["qsearch" "--help"]]]
+      (let [result (commands/parse-args args)
+            summary (strip-ansi (:summary result))]
+        (is (true? (:help? result)) (pr-str args))
+        (is (not (string/includes? summary "--collection")) (pr-str args))
+        (is (not (string/includes? summary "--index")) (pr-str args)))))
+
+  (testing "qmd rejects obsolete positional subcommands"
+    (let [result (commands/parse-args ["qmd" "init" "--graph" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
 (deftest test-parse-args-help-groups-primary
   (testing "graph/list/upsert/server groups show subcommands"
@@ -2093,11 +2176,17 @@
       (is (true? (:ok? result)))
       (is (= false (get-in result [:options :ref-id-footer])))))
 
-  (testing "show help lists linked references and ref-id-footer options"
+  (testing "show parses page-hierarchy option"
+    (let [result (commands/parse-args ["show" "--page" "Home" "--page-hierarchy" "true"])]
+      (is (true? (:ok? result)))
+      (is (= true (get-in result [:options :page-hierarchy])))))
+
+  (testing "show help lists linked references, ref-id-footer, and page-hierarchy options"
     (let [summary (:summary (binding [style/*color-enabled?* true]
                               (commands/parse-args ["show" "--help"])))]
       (is (string/includes? (strip-ansi summary) "--linked-references"))
-      (is (string/includes? (strip-ansi summary) "--ref-id-footer")))))
+      (is (string/includes? (strip-ansi summary) "--ref-id-footer"))
+      (is (string/includes? (strip-ansi summary) "--page-hierarchy")))))
 
 (deftest test-verb-subcommand-parse-debug
   (testing "debug pull parses with id"
@@ -2303,6 +2392,48 @@
       (is (= false (get-in disabled [:options :progress])))
       (is (true? (:ok? enabled)))
       (is (= true (get-in enabled [:options :progress])))))
+
+  (testing "sync asset download parses db id selector"
+    (let [result (commands/parse-args ["sync" "asset" "download" "--graph" "demo" "--id" "123"])]
+      (is (true? (:ok? result)))
+      (is (= :sync-asset-download (:command result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= 123 (get-in result [:options :id])))))
+
+  (testing "sync asset download parses uuid selector"
+    (let [asset-uuid "11111111-1111-1111-1111-111111111111"
+          result (commands/parse-args ["sync" "asset" "download" "--graph" "demo" "--uuid" asset-uuid])]
+      (is (true? (:ok? result)))
+      (is (= :sync-asset-download (:command result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= asset-uuid (get-in result [:options :uuid])))))
+
+  (testing "sync asset download rejects invalid uuid selector"
+    (let [result (commands/parse-args ["sync" "asset" "download" "--graph" "demo" "--uuid" "asset-uuid"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "sync asset download can use current graph"
+    (let [parsed (commands/parse-args ["sync" "asset" "download" "--id" "123"])
+          result (when (:ok? parsed)
+                   (commands/build-action parsed {:graph "demo"}))]
+      (is (true? (:ok? parsed)))
+      (is (true? (:ok? result)))
+      (is (= {:type :sync-asset-download
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :id 123}
+             (:action result)))))
+
+  (testing "sync asset download requires one selector"
+    (let [missing-selector (commands/parse-args ["sync" "asset" "download" "--graph" "demo"])
+          conflicting-selectors (commands/parse-args ["sync" "asset" "download" "--graph" "demo"
+                                                      "--id" "123"
+                                                      "--uuid" "11111111-1111-1111-1111-111111111111"])]
+      (is (false? (:ok? missing-selector)))
+      (is (= :invalid-options (get-in missing-selector [:error :code])))
+      (is (false? (:ok? conflicting-selectors)))
+      (is (= :invalid-options (get-in conflicting-selectors [:error :code])))))
 
   (testing "sync ensure-keys accepts e2ee-password option"
     (let [result (commands/parse-args ["sync" "ensure-keys" "--e2ee-password" "pw"])]

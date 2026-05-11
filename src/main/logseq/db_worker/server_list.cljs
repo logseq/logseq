@@ -1,8 +1,9 @@
 (ns logseq.db-worker.server-list
   "Helpers for the centralized db-worker-node server-list file."
-  (:require [clojure.string :as string]
-            ["fs" :as fs]
-            ["path" :as node-path]))
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [clojure.string :as string]
+            [logseq.common.path :as path]))
 
 (def ^:private write-lock-timeout-ms 2000)
 (def ^:private write-lock-poll-interval-ms 25)
@@ -11,13 +12,13 @@
   [root-dir-path]
   (when-not (seq root-dir-path)
     (throw (js/Error. "root-dir is required")))
-  (node-path/join root-dir-path "server-list"))
+  (path/path-join root-dir-path "server-list"))
 
 (defn lock-path
   [file-path]
   (when-not (seq file-path)
     (throw (js/Error. "server-list file path is required")))
-  (node-path/join (node-path/dirname file-path) "server-list.lock"))
+  (path/path-join (node-path/dirname file-path) "server-list.lock"))
 
 (defn- parse-int
   [value]

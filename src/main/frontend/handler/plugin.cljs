@@ -411,9 +411,12 @@
       true)))
 
 (defn unregister-plugin-slash-command
-  [pid]
-  (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid)])
-  (state/pub-event! [:rebuild-slash-commands-list]))
+  ([pid]
+   (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid)])
+   (state/pub-event! [:rebuild-slash-commands-list]))
+  ([pid cmd]
+   (swap! state/state medley/dissoc-in [:plugin/installed-slash-commands (keyword pid) cmd])
+   (state/pub-event! [:rebuild-slash-commands-list])))
 
 (def keybinding-mode-handler-map
   {:global :shortcut.handler/editor-global
@@ -459,8 +462,14 @@
       true)))
 
 (defn unregister-plugin-simple-command
-  [pid]
-  (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
+  ([pid]
+   (swap! state/state medley/dissoc-in [:plugin/simple-commands (keyword pid)]))
+  ([pid key]
+   (swap! state/state update-in [:plugin/simple-commands (keyword pid)]
+     (fn [commands]
+       (->> commands
+            (remove #(= key (:key (second %))))
+            vec)))))
 
 (defn register-plugin-ui-item
   [pid {:keys [key type] :as opts}]
@@ -1102,11 +1111,11 @@
 (defn call-plugin
   [^js pl type payload]
   (when pl
-    (.call (.-caller pl) (name type) (bean/->js payload))))
+    (.call (.-caller pl) (name type) payload)))
 
 (defn request-callback
-  [^js pl req-id payload]
-  (call-plugin pl :#lsp#request#callback {:requestId req-id :payload payload}))
+  [^js pl req-id ^js payload]
+  (call-plugin pl :#lsp#request#callback #js {:requestId req-id :payload payload}))
 
 (defn op-pinned-toolbar-item!
   [key op]
@@ -1116,6 +1125,17 @@
                        :add conj
                        :remove disj)]
       (save-plugin-preferences! {:pinnedToolbarItems (op-fn pinned (name key))}))))
+
+(defn- remove-pinned-toolbar-items-of-plugin!
+  [pid]
+  (let [prefix (str (name pid) ":")
+        pinned (state/sub [:plugin/preferences :pinnedToolbarItems])
+        pinned (if (sequential? pinned) (vec pinned) [])
+        updated-pinned (->> pinned
+                            (remove #(and (string? %) (string/starts-with? % prefix)))
+                            vec)]
+    (when (not= pinned updated-pinned)
+      (save-plugin-preferences! {:pinnedToolbarItems updated-pinned}))))
 
 (defn hook-lifecycle-fn!
   [type f & args]
@@ -1223,6 +1243,7 @@
                                         (let [pid (keyword pid)]
                                           ;; effects
                                           (unregister-plugin-themes pid)
+                                          (remove-pinned-toolbar-items-of-plugin! pid)
                                           ;; plugins
                                           (swap! state/state medley/dissoc-in [:plugin/installed-plugins pid])
                                           ;; commands

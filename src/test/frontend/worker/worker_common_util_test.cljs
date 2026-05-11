@@ -9,7 +9,7 @@
                ["a:b" "a~3Ab"]
                ["space name" "space name"]
                ["100% legit" "100~25 legit"]
-               ["til~de" "til~7Ede"]
+               ["til~x" "til~7Ex"]
                ["A B/C:D%~E" "A B~2FC~3AD~25~7EE"]]]
     (doseq [[name expected-encoded] cases]
       (let [encoded (worker-util/encode-graph-dir-name name)]

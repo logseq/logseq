@@ -19,25 +19,25 @@ The workflow uses one shared state directory: `<repo>/tmp/logseq-repl/`.
 Start everything with the default Logseq data root (`$LOGSEQ_CLI_ROOT_DIR` or `~/logseq`):
 
 ```bash
-scripts/start-repl.sh --repo demo
+<logseq-repl-skill-dir>/scripts/start-repl.sh --repo demo
 ```
 
 Start everything with an explicit Logseq data root:
 
 ```bash
-scripts/start-repl.sh --repo demo --root-dir ~/logseq
+<logseq-repl-skill-dir>/scripts/start-repl.sh --repo demo --root-dir ~/logseq
 ```
 
 Clean up everything:
 
 ```bash
-scripts/cleanup-repl.sh
+<logseq-repl-skill-dir>/scripts/cleanup-repl.sh
 ```
 
 Verify all REPL targets after startup:
 
 ```bash
-scripts/verify-repls.sh
+<logseq-repl-skill-dir>/scripts/verify-repls.sh
 ```
 
 `start-repl.sh` starts:
@@ -57,13 +57,13 @@ scripts/verify-repls.sh
 Before starting or attaching:
 
 ```bash
-scripts/cleanup-repl.sh
+<logseq-repl-skill-dir>/scripts/cleanup-repl.sh
 ```
 
 Then start all runtimes:
 
 ```bash
-scripts/start-repl.sh --repo demo
+<logseq-repl-skill-dir>/scripts/start-repl.sh --repo demo
 ```
 
 Use `--root-dir <path>` if the target graph lives outside `$LOGSEQ_CLI_ROOT_DIR` or `~/logseq`.
