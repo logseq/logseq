@@ -153,21 +153,33 @@
 
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content
   [_target block-id property-default-value?]
-  (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)]
-    (when-let [block (db/entity [:block/uuid block-id])]
-      (let [heading (or (pu/lookup block :logseq.property/heading)
-                        false)]
-        [:<>
-         (ui/menu-background-color #(property-handler/set-block-property! block-id
-                                                                          :logseq.property/background-color
-                                                                          %)
-                                   #(property-handler/remove-block-property! block-id
-                                                                             :logseq.property/background-color))
+  (let [block (db/entity [:block/uuid block-id])
+        [set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)
+        [heading set-heading!] (rum/use-state (or (pu/lookup block :logseq.property/heading) false))
+        [current-color set-current-color!] (rum/use-state (pu/lookup block :logseq.property/background-color))]
+    (when block
+      [:<>
+       (ui/menu-background-color current-color
+                                 (fn [color]
+                                   (set-current-color! color)
+                                   (property-handler/set-block-property! block-id
+                                                                         :logseq.property/background-color
+                                                                         color))
+                                 (fn []
+                                   (set-current-color! nil)
+                                   (property-handler/remove-block-property! block-id
+                                                                            :logseq.property/background-color)))
 
-         (ui/menu-heading heading
-                          #(editor-handler/set-heading! block-id %)
-                          #(editor-handler/set-heading! block-id true)
-                          #(editor-handler/remove-heading! block-id))
+       (ui/menu-heading heading
+                        (fn [i]
+                          (set-heading! i)
+                          (editor-handler/set-heading! block-id i))
+                        (fn []
+                          (set-heading! true)
+                          (editor-handler/set-heading! block-id true))
+                        (fn []
+                          (set-heading! false)
+                          (editor-handler/remove-heading! block-id)))
 
          (shui/dropdown-menu-separator)
 
@@ -352,7 +364,7 @@
                                                {:created-at (tc/from-long (* (:created-at version) 1000))
                                                 :content (:value version)})
                                              versions))))))}
-               "(Dev) Show block content history")))])]))))
+               "(Dev) Show block content history")))])])))
 
 (rum/defc block-ref-custom-context-menu-content
   [block block-ref-id]

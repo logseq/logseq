@@ -638,6 +638,34 @@
 
 (declare page-reference)
 
+(defn- heading-value->level
+  [heading level]
+  (cond
+    (and (integer? heading) (<= 1 heading 6)) heading
+    (true? heading) (min (inc (or level 0)) 6)
+    :else nil))
+
+(defn- block-heading-level
+  [block level]
+  (or (when-let [heading-level (:block/heading-level block)]
+        (when (and (integer? heading-level)
+                   (<= 1 heading-level 6))
+          heading-level))
+      (heading-value->level (or (pu/lookup block :logseq.property/heading)
+                                (:block.temp/heading block))
+                            level)))
+
+(defn- heading-icon-size
+  [heading-level]
+  (case heading-level
+    1 28
+    2 24
+    3 20
+    4 16
+    5 13
+    6 12
+    14))
+
 (defn <open-page-ref
   [config page-entity e page-name contents-page?]
   (when (not (util/right-click? e))
@@ -695,7 +723,8 @@
         untitled? (when page-name
                     (or (model/untitled-page? (:block/title page-entity))
                         (and (ldb/page? page-entity) (string/blank? (:block/title page-entity)))))
-        show-icon? (:show-icon? config)]
+        show-icon? (:show-icon? config)
+        icon-size (heading-icon-size (:parent-heading config))]
     [:a.relative
      (cond->
       {:tabIndex "0"
@@ -745,7 +774,8 @@
        (let [own-icon (get page-entity :logseq.property/icon)
              emoji? (and (map? own-icon) (= (:type own-icon) :emoji))]
          (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true
-                                                                       :not-text-or-page? true})]
+                                                                       :not-text-or-page? true
+                                                                       :size icon-size})]
            [:span {:class (str "icon-emoji-wrap " (when emoji? "as-emoji"))}
             icon])))
 
@@ -2015,7 +2045,9 @@
                                                         :ignore-children? page-title?
                                                         :page-title? page-title?})
         link? (boolean (:original-block config))
-        icon-size (if collapsed? 12 14)
+        heading-level (when-not collapsed?
+                        (block-heading-level block (:level config)))
+        icon-size (if collapsed? 12 (heading-icon-size heading-level))
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
         with-icon? (and (some? icon)
                         (or (and (db/page? block)
@@ -2156,15 +2188,7 @@
         level (:level config)
         block-ref? (:block-ref? config)
         block-type (or (keyword (pu/lookup block :logseq.property/ls-type)) :default)
-        ;; `heading-level` is for backward compatibility, will remove it in later releases
-        heading-level (:block/heading-level block)
-        heading (or
-                 (and heading-level
-                      (<= heading-level 6)
-                      heading-level)
-                 (pu/lookup block :logseq.property/heading)
-                 (:block.temp/heading block))
-        heading (if (true? heading) (min (inc level) 6) heading)
+        heading (block-heading-level block level)
         elem (if heading
                (keyword (str "h" heading ".block-title-wrap.as-heading"
                              (when block-ref? ".as-inline")))
@@ -2209,7 +2233,9 @@
                          (and (:page-ref? config)
                               (= 1 (count block-ast-title))
                               (= "Link" (ffirst block-ast-title)))
-                         (assoc :node-ref-link-only? true))]
+                         (assoc :node-ref-link-only? true)
+                         (integer? heading)
+                         (assoc :parent-heading heading))]
            (map-inline config' block-ast-title))))))))
 
 (rum/defc block-title-aux
@@ -3885,7 +3911,7 @@
                                   (util/mobile?) 0
                                   page-icon -36
                                   :else -30)})
-         :data-has-heading (some-> block (pu/lookup :logseq.property/heading))
+         :data-has-heading (block-heading-level block level)
          :on-mouse-enter (fn [e]
                            (block-mouse-over e block *control-show? block-id doc-mode?))
          :on-mouse-move (fn [e]
