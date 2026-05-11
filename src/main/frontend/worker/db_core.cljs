@@ -905,7 +905,8 @@
                       (str "/" client-ops-repo-path)
                       (str "client-ops" repo-path)
                       (str "/client-ops" repo-path)
-                      (str "client-ops-" repo-path)]]
+                      (str "client-ops-" repo-path)
+                      (str "/client-ops-" repo-path)]]
     (p/let [payload (<export-db-file-with-paths repo export-paths)]
       (when payload
         (worker-util/uint8array-to-base64string payload)))))
