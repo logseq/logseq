@@ -409,24 +409,59 @@
           block)]
     block'))
 
+(def ^:private built-in-status-markers
+  {"TODO" :logseq.property/status.todo
+   "LATER" :logseq.property/status.todo
+   "NOW" :logseq.property/status.doing
+   "DOING" :logseq.property/status.doing
+   "DONE" :logseq.property/status.done
+   "CANCELED" :logseq.property/status.canceled
+   "CANCELLED" :logseq.property/status.canceled})
+
+(def ^:private custom-status-marker?
+  #{"WAIT" "WAITING" "IN-PROGRESS"})
+
+(defn- find-status-choice-by-content
+  [db marker]
+  (some #(when (= marker (db-property/closed-value-content %)) %)
+        (db-property/get-closed-property-values db :logseq.property/status)))
+
+(defn- build-status-choice-tx
+  [marker block-uuid]
+  (assoc (db-property-build/build-closed-value-block
+          block-uuid
+          :default
+          marker
+          {:db/ident :logseq.property/status}
+          {})
+         :block/order (db-order/gen-key)))
+
+(defn- custom-marker-status-ref
+  [db marker {:keys [import-state custom-status-tx]}]
+  (or (get @(:custom-status-markers import-state) marker)
+      (let [status-ref (if-let [status (find-status-choice-by-content db marker)]
+                         (:db/id status)
+                         (let [block-uuid (common-uuid/gen-uuid)]
+                           (swap! custom-status-tx conj (build-status-choice-tx marker block-uuid))
+                           [:block/uuid block-uuid]))]
+        (swap! (:custom-status-markers import-state) assoc marker status-ref)
+        status-ref)))
+
 (defn- update-block-marker
   "If a block has a marker, convert it to a task object"
-  [block {:keys [log-fn]}]
+  [block db {:keys [log-fn] :as options}]
   (if-let [marker (:block/marker block)]
-    (let [old-to-new {"TODO" :logseq.property/status.todo
-                      "LATER" :logseq.property/status.todo
-                      "IN-PROGRESS" :logseq.property/status.doing
-                      "NOW" :logseq.property/status.doing
-                      "DOING" :logseq.property/status.doing
-                      "DONE" :logseq.property/status.done
-                      "WAIT" :logseq.property/status.backlog
-                      "WAITING" :logseq.property/status.backlog
-                      "CANCELED" :logseq.property/status.canceled
-                      "CANCELLED" :logseq.property/status.canceled}
-          status-ident (or (old-to-new marker)
-                           (do
-                             (log-fn :invalid-todo (str (pr-str marker) " is not a valid marker so setting it to TODO"))
-                             :logseq.property/status.todo))]
+    (let [status-ident (cond
+                         (contains? built-in-status-markers marker)
+                         (built-in-status-markers marker)
+
+                         (custom-status-marker? marker)
+                         (custom-marker-status-ref db marker options)
+
+                         :else
+                         (do
+                           (log-fn :invalid-todo (str (pr-str marker) " is not a valid marker so setting it to TODO"))
+                           :logseq.property/status.todo))]
       (-> block
           (assoc :logseq.property/status status-ident)
           (update :block/title string/replace-first (re-pattern (str marker "\\s*")) "")
@@ -1850,7 +1885,7 @@
                      (handle-embeds page-names-to-uuids walked-ast-blocks (select-keys options [:log-fn]))
                      (handle-quotes (select-keys options [:log-fn]))
                      (handle-math)
-                     (update-block-marker options)
+                     (update-block-marker db options)
                      (update-block-priority options)
                      add-missing-timestamps
                      (dissoc :block/format :block.temp/ast-blocks)
@@ -2105,6 +2140,8 @@
    :all-idents (atom {})
    ;; Set of children pages turned into classes by :property-parent-classes option
    :classes-from-property-parents (atom #{})
+   ;; Map of imported legacy task markers to their Status closed value lookup refs.
+   :custom-status-markers (atom {})
    ;; Map of block uuids to their :block/properties-text-values value.
    ;; Used if a property value changes to :default
    :block-properties-text-values (atom {})
@@ -2120,6 +2157,8 @@
     :upstream-properties (atom {})
     ;; Track per file class tx so that their tx isn't embedded in individual :block/tags and can be post processed
     :classes-tx (atom [])
+    ;; Track per file Status closed values required by imported legacy task markers.
+    :custom-status-tx (atom [])
     :user-options
     (merge user-options
            {:tag-classes (set (map string/lower-case (:tag-classes user-options)))
@@ -2354,6 +2393,7 @@
           classes-tx @(:classes-tx tx-options)
           {:keys [retract-page-tags-tx] pages-tx'' :pages-tx} (clean-extra-invalid-tags @conn pages-tx' classes-tx existing-pages)
           classes-tx' (concat classes-tx retract-page-tags-tx)
+          custom-status-tx @(:custom-status-tx tx-options)
           ;; Build indices
           pages-index (->> (map #(select-keys % [:block/uuid]) pages-tx'')
                            (concat (map #(select-keys % [:block/uuid]) classes-tx))
@@ -2368,7 +2408,7 @@
           blocks-index (set/union (set block-ids) (set block-refs-ids))
           ;; Order matters. pages-index and blocks-index needs to come before their corresponding tx for
           ;; uuids to be valid. Also upstream-properties-tx comes after blocks-tx to possibly override blocks
-          tx (concat pages-index page-properties-tx property-page-properties-tx pages-tx'' classes-tx' blocks-index blocks-tx)
+          tx (concat pages-index page-properties-tx property-page-properties-tx pages-tx'' classes-tx' custom-status-tx blocks-index blocks-tx)
           tx' (common-util/fast-remove-nils tx)
           ;; _ (prn :tx-counts (map #(vector %1 (count %2))
           ;;                        [:pages-index :page-properties-tx :property-page-properties-tx :pages-tx' :classes-tx :blocks-index :blocks-tx]
