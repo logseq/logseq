@@ -3,5 +3,5 @@
     <string name="app_name">Logseq OG</string>
     <string name="title_activity_main">Logseq OG</string>
     <string name="package_name">com.logseq.og</string>
-    <string name="custom_url_scheme">com.logseq.og</string>
+    <string name="custom_url_scheme">logseq-og</string>
 </resources>
