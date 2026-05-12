@@ -15,6 +15,7 @@
             [frontend.util :as util]
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
+            [logseq.graph-parser.text :as text]
             [logseq.outliner.op]
             [promesa.core :as p]))
 
@@ -57,6 +58,35 @@
   [block]
   (not (contains? #{:code :math} (:logseq.property.node/display-type block))))
 
+(defn- markdown-hashtag-link-target
+  [target]
+  (when (and (string? target)
+             (string/starts-with? target "#"))
+    (let [page-name (-> target (subs 1) text/page-ref-un-brackets!)]
+      (when-not (string/blank? page-name)
+        page-name))))
+
+(defn- tag-page?
+  [page]
+  (some #(= :logseq.class/Tag (:db/ident %)) (:block/tags page)))
+
+(defn- existing-markdown-hashtag-link-refs
+  [ast]
+  (->> ast
+       (tree-seq coll? seq)
+       (keep (fn [form]
+               (when (and (vector? form)
+                          (= "Link" (first form))
+                          (map? (second form)))
+                 (let [[url-type target] (:url (second form))]
+                   (when (= "Search" url-type)
+                     (when-let [page (some-> target markdown-hashtag-link-target db/get-page)]
+                       (when (tag-page? page)
+                         page)))))))
+       (map #(select-keys % [:db/id :block/uuid :block/title :block/name :db/ident :block/tags]))
+       (remove nil?)
+       (util/distinct-by-last-wins :block/uuid)))
+
 (defn wrap-parse-block
   [{:block/keys [title level] :as block}]
   (let [block (or (and (:db/id block) (db/entity (:db/id block)))
@@ -73,18 +103,22 @@
                       first-elem-type (first (ffirst ast))
                       block-with-title? (mldoc/block-with-title? first-elem-type)
                       content' (str common-config/block-pattern (if block-with-title? " " "\n") title)
+                      hashtag-link-refs (existing-markdown-hashtag-link-refs ast)
                       parsed-block (block/parse-block (assoc block :block/title content'))
                       block' (-> (merge block
-                                         parsed-block
-                                         {:block/title title}
-                                         (when heading-level
-                                           {:logseq.property/heading heading-level}))
+                                        parsed-block
+                                        {:block/title title}
+                                        (when heading-level
+                                          {:logseq.property/heading heading-level}))
                                  (dissoc :block/format))]
                   (update block' :block/refs
                           (fn [refs]
-                            (-> refs
-                                remove-non-existed-refs!
-                                (use-cached-refs! block))))))
+                            (->> (concat (-> refs
+                                             remove-non-existed-refs!
+                                             (use-cached-refs! block))
+                                         hashtag-link-refs)
+                                 (remove nil?)
+                                 (util/distinct-by-last-wins :block/uuid))))))
         title' (db-content/title-ref->id-ref (or (get block :block/title) title) (:block/refs block))
         result (-> block
                    (merge (if level {:block/level level} {}))
