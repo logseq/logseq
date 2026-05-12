@@ -26,11 +26,19 @@
   ;; Question: what's the best way to close all the popups?
   ;; close popup, exit editing
   ;; (repl/pause)
-  (util/search title)
-  (let [create-page-item (loc/filter ".search-results > div"
-                                     :has-text (str "Create page called '" title "'"))]
-    (w/wait-for create-page-item)
-    (w/click (.first create-page-item)))
+  (try
+    (util/search title)
+    (let [create-page-item (loc/filter ".search-results > div"
+                                       :has-text (str "Create page called '" title "'"))]
+      (w/wait-for create-page-item)
+      (w/click (.first create-page-item)))
+    (catch TimeoutError _e
+      (k/esc)
+      (util/search title)
+      (let [create-page-item (loc/filter ".search-results > div"
+                                         :has-text (str "Create page called '" title "'"))]
+        (w/wait-for create-page-item)
+        (w/click (.first create-page-item)))))
   (util/wait-editor-visible))
 
 (defn delete-page
