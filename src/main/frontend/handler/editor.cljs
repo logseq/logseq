@@ -1486,6 +1486,7 @@
    "~" "~"
    "*" "*"
    "_" "_"
+   "$" "$"
    "^" "^"
    "=" "="
    "/" "/"
@@ -1497,7 +1498,7 @@
           (keys autopair-map)))
 
 (def autopair-when-selected
-  #{"*" "^" "_" "=" "+" "/"})
+  #{"*" "$" "^" "_" "=" "+" "/"})
 
 (def delete-map
   (assoc autopair-map
@@ -1506,9 +1507,9 @@
 
 (defn- autopair
   [input-id prefix _format _option]
-  (let [value (get autopair-map prefix)
+  (let [suffix (get autopair-map prefix)
         selected (util/get-selected-text)
-        postfix (str selected value)
+        postfix (str selected suffix)
         value (str prefix postfix)
         input (gdom/getElement input-id)]
     (when value
