@@ -96,7 +96,7 @@
     ;; Safari doesn't support look behind, don't use
     ;; TODO: parse via mldoc
     (string/replace content
-                    (re-pattern (str "(?i)(^|\\s)(" (common-util/escape-regex-chars page-name) ")(?=[,\\.]*($|\\s))"))
+                    (re-pattern (str "(?i)(^|\\s|\\()(" (common-util/escape-regex-chars page-name) ")(?=[,\\.\\)]*($|\\s|\\)))"))
                     ;;    case_insense^    ^lhs   ^_grp2                       look_ahead^         ^_grp3
                     (fn [[_match lhs _grp2 _grp3]]
                       (str lhs r)))))
