@@ -1244,6 +1244,29 @@ Similar to re-frame subscriptions"
     (set-edit-content! edit-input-id content)
     (set-editor-last-pos! new-pos)))
 
+(defn- apply-theme-to-dom!
+  "Synchronously stamp `data-theme` + body classes onto the document
+   so CSS variables re-resolve to the new theme *before* the state
+   mutation below triggers React subscribers. Without this, subscribers
+   that compute hex values from CSS vars at render time (e.g. avatar
+   fallback colors via `colors/read-bg-var` → `getComputedStyle`)
+   would re-render with the OLD theme's resolved vars because
+   `theme.cljs`'s `use-effect!` only sets these attributes *after*
+   the render commit. That effect remains as a safety net (it's
+   idempotent — same setAttribute) and continues to handle the
+   plugin-hook + custom-theme side effects."
+  [mode]
+  (when (exists? js/document)
+    (let [^js doc js/document.documentElement
+          ^js cls (.-classList doc)
+          ^js cls-body (.-classList js/document.body)]
+      (.setAttribute doc "data-theme" mode)
+      (if (= mode "dark")
+        (do (.add cls "dark")
+            (doto cls-body (.remove "white-theme" "light-theme") (.add "dark-theme")))
+        (do (.remove cls "dark")
+            (doto cls-body (.remove "dark-theme") (.add "white-theme" "light-theme")))))))
+
 (defn set-theme-mode!
   ([mode] (set-theme-mode! mode (:ui/system-theme? @state)))
   ([mode system-theme?]
@@ -1253,6 +1276,7 @@ Similar to re-frame subscriptions"
        (util/set-theme-dark)))
    (when (mobile-util/native-platform?)
      (mobile-util/set-native-interface-style! mode system-theme?))
+   (apply-theme-to-dom! mode)
    (set-state! :ui/theme mode)
    (storage/set :ui/theme mode)))
 

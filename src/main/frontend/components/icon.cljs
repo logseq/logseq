@@ -478,6 +478,15 @@
         ;; the design rationale (subscribing to the per-tx atom is
         ;; what catches retractions; `model/sub-block` doesn't).
         _latest-tx (state/sub :db/latest-transacted-entity-uuids)
+        ;; Re-render on theme toggle so `avatar-fallback-style` re-
+        ;; samples `--ls-primary-background-color` from the new
+        ;; cascade. The avatar's inline `style` is computed in JS
+        ;; from a `getComputedStyle` snapshot — without a Rum
+        ;; subscription on `:ui/theme`, the snapshot stays frozen
+        ;; after a theme toggle (state.cljs:1283) and the avatar
+        ;; renders with the previous theme's surface tone until
+        ;; some unrelated re-render fires.
+        _theme (state/sub :ui/theme)
         asset-entity (when (and asset-uuid (string? asset-uuid))
                        (try (db/entity [:block/uuid (uuid asset-uuid)])
                             (catch :default _ nil)))
@@ -893,7 +902,16 @@
 
 (rum/defc get-node-icon-cp < rum/reactive db-mixins/query
   [node-entity opts]
-  (let [;; Get fresh entity using db/sub-block to make it reactive to property changes
+  (let [;; Re-render on theme toggle so the bare-avatar branch inside
+        ;; `(icon ...)` (text/letters/emoji avatars) re-samples the
+        ;; live `--ls-primary-background-color` via `read-bg-var`
+        ;; when computing `avatar-fallback-style`. Without this sub,
+        ;; the inline `style` hexes baked in at the previous render
+        ;; stay frozen across theme toggles — none of the other
+        ;; subscriptions in this component (`:ui/icon-hover-preview`,
+        ;; `model/sub-block`) tick on `:ui/theme` changes.
+        _theme (state/sub :ui/theme)
+        ;; Get fresh entity using db/sub-block to make it reactive to property changes
         fresh-entity (when-let [db-id (:db/id node-entity)]
                        (or (model/sub-block db-id) node-entity))
         entity (or fresh-entity node-entity)
