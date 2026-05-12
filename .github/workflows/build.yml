@@ -133,7 +133,7 @@ jobs:
           path: |
             ~/.m2/repository
             ~/.gitlibs
-          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
+          key: ${{ runner.os }}-clojure-deps-cli-e2e-${{ hashFiles('deps.edn') }}
           restore-keys: ${{ runner.os }}-clojure-deps-
 
       - name: Fetch Clojure deps
