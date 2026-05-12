@@ -49,7 +49,17 @@
           (do (.add cls "dark") (doto cls-body (.remove "white-theme" "light-theme") (.add "dark-theme")))
           (do (.remove cls "dark") (doto cls-body (.remove "dark-theme") (.add "white-theme" "light-theme"))))
         (ui/apply-custom-theme-effect! theme)
-        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme}))
+        (plugin-handler/hook-plugin-app :theme-mode-changed {:mode theme})
+        ;; Force a full reactive re-render after the data-theme attribute
+        ;; is on <html>. A handful of render paths (avatar fallback
+        ;; muted-tint, contrast-adjusted icon colors) compute hex values
+        ;; from CSS variables via getComputedStyle at render time — their
+        ;; inline `style="..."` snapshots would otherwise stay frozen
+        ;; with the previous theme until something unrelated triggered a
+        ;; re-render. Theme toggle is a rare user-initiated action; the
+        ;; one-frame reconciliation cost is imperceptible. Same pattern
+        ;; as language change (settings.cljs:298).
+        (ui-handler/re-render-root!))
      [theme])
 
     ;; theme color

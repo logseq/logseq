@@ -478,15 +478,6 @@
         ;; the design rationale (subscribing to the per-tx atom is
         ;; what catches retractions; `model/sub-block` doesn't).
         _latest-tx (state/sub :db/latest-transacted-entity-uuids)
-        ;; Re-render on theme toggle so `avatar-fallback-style` re-
-        ;; samples `--ls-primary-background-color` from the new
-        ;; cascade. The avatar's inline `style` is computed in JS
-        ;; from a `getComputedStyle` snapshot — without a Rum
-        ;; subscription on `:ui/theme`, the snapshot stays frozen
-        ;; after a theme toggle (state.cljs:1283) and the avatar
-        ;; renders with the previous theme's surface tone until
-        ;; some unrelated re-render fires.
-        _theme (state/sub :ui/theme)
         asset-entity (when (and asset-uuid (string? asset-uuid))
                        (try (db/entity [:block/uuid (uuid asset-uuid)])
                             (catch :default _ nil)))
@@ -654,7 +645,6 @@
 
                (and (map? normalized) (= :text (:type normalized)) (get-in normalized [:data :value]))
                (let [text-value (get-in normalized [:data :value])
-                     text-color (get-in normalized [:data :color])
                      text-align (get-in normalized [:data :alignment])
                      display-text (if (> (count text-value) 8)
                                     (subs text-value 0 8)
@@ -678,11 +668,17 @@
                      y2 (+ 50 (/ line-spacing 2))
                      ;; SVG text-anchor from alignment
                      anchor (case text-align "left" "start" "right" "end" "middle")
-                     x (case text-align "left" 8 "right" 92 50)
-                     fill (or text-color "currentColor")]
+                     x (case text-align "left" 8 "right" 92 50)]
+                 ;; Fill inherits via `currentColor` so the outer `color?`
+                 ;; wrapper's contrast-adjusted color (icon.cljs:772-789,
+                 ;; same `colors/adjust-for-contrast` path tabler icons
+                 ;; use) actually reaches the text. Previously this branch
+                 ;; baked the raw user-picked hex directly into `:fill`,
+                 ;; which bypassed the wrapper's adjustment — a `#000000`
+                 ;; pick rendered as invisible black on dark themes.
                  [:svg {:viewBox "0 0 100 100"
                         :width size :height size
-                        :style {:fill fill
+                        :style {:fill "currentColor"
                                 :flex-shrink 0}}
                   (if multi-line?
                     (list
@@ -902,16 +898,7 @@
 
 (rum/defc get-node-icon-cp < rum/reactive db-mixins/query
   [node-entity opts]
-  (let [;; Re-render on theme toggle so the bare-avatar branch inside
-        ;; `(icon ...)` (text/letters/emoji avatars) re-samples the
-        ;; live `--ls-primary-background-color` via `read-bg-var`
-        ;; when computing `avatar-fallback-style`. Without this sub,
-        ;; the inline `style` hexes baked in at the previous render
-        ;; stay frozen across theme toggles — none of the other
-        ;; subscriptions in this component (`:ui/icon-hover-preview`,
-        ;; `model/sub-block`) tick on `:ui/theme` changes.
-        _theme (state/sub :ui/theme)
-        ;; Get fresh entity using db/sub-block to make it reactive to property changes
+  (let [;; Get fresh entity using db/sub-block to make it reactive to property changes
         fresh-entity (when-let [db-id (:db/id node-entity)]
                        (or (model/sub-block db-id) node-entity))
         entity (or fresh-entity node-entity)
@@ -6970,14 +6957,6 @@
   trigger only reflects previews from a Default-Icon-scoped picker."
   [icon-value preview-target-db-id icon-props & [property]]
   (let [property (or property :logseq.property/icon)
-        ;; Re-render on theme toggle so the inline `style="background-
-        ;; color:#...;color:#..."` produced by `avatar-fallback-style`
-        ;; recomputes against the new theme's CSS variables. The
-        ;; page-title (`block.cljs:3223`) routes through `icon-picker`
-        ;; → this trigger and bypasses `get-node-icon-cp` entirely, so
-        ;; the `:ui/theme` sub on get-node-icon-cp (icon.cljs:913)
-        ;; doesn't cover the page-title path.
-        _theme (state/sub :ui/theme)
         preview (when preview-target-db-id (state/sub :ui/icon-hover-preview))
         preview-active? (and preview
                              (icon-preview-matches? preview preview-target-db-id property))
