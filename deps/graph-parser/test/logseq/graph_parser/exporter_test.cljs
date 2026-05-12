@@ -98,6 +98,25 @@
   (frequencies (map db-property/closed-value-content
                     (db-property/get-closed-property-values db :logseq.property/status))))
 
+(defn- blocks-by-title
+  [db title]
+  (->> (d/q '[:find [?b ...]
+              :in $ ?title
+              :where
+              [?b :block/page]
+              [?b :block/title ?title]]
+            db title)
+       (map #(d/entity db %))))
+
+(defn- report-retracts-block-uuid?
+  [tx-report block-uuid]
+  (boolean
+   (some (fn [datom]
+           (and (= :block/uuid (:a datom))
+                (= block-uuid (:v datom))
+                (false? (:added datom))))
+         (:tx-data tx-report))))
+
 
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
@@ -338,6 +357,84 @@
         "Custom status closed value is shared across imported files")
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
+
+(deftest-async import-removes-pre-block-marker-and-missing-block-refs
+  (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        target-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        empty-title-property-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        empty-title-parent-uuid #uuid "44444444-4444-4444-4444-444444444444"]
+    (p/let [source-file (write-temp-graph-file
+                         "pages/A.md"
+                         (str "Plain pre-block\n"
+                              "- Missing ref ((" missing-uuid "))\n"
+                              "- Existing ref ((" target-uuid "))\n"
+                              "- ((" empty-title-property-uuid "))\n"
+                              "  heading:: true\n"
+                              "  background-color:: yellow\n"
+                              "- ((" empty-title-parent-uuid "))\n"
+                              "  - Child survives\n"))
+            target-file (write-temp-graph-file
+                         "pages/Z.md"
+                         (str "- Target block\n"
+                              "  id:: " target-uuid "\n"))
+            conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            _ (import-files-to-db [source-file target-file] conn {})
+            missing-block (db-test/find-block-by-content @conn #"Missing ref")
+            existing-block (db-test/find-block-by-content @conn #"Existing ref")
+            target-block (db-test/find-block-by-content @conn "Target block")
+            empty-title-blocks (blocks-by-title @conn "")
+            empty-title-property-block (some #(when (:logseq.property/heading %) %) empty-title-blocks)
+            empty-title-parent-block (some #(when (some (fn [child]
+                                                          (= "Child survives" (:block/title child)))
+                                                        (ordered-children %))
+                                             %)
+                                           empty-title-blocks)]
+      (is (empty? (filter #(= :block/pre-block? (:a %))
+                          (d/datoms @conn :eavt)))
+          "Legacy pre-block markers are never transacted")
+      (is (= "Missing ref" (:block/title missing-block))
+          "Missing OG block refs are removed from imported content")
+      (is (empty? (:block/refs missing-block))
+          "Missing OG block refs are removed from imported refs")
+      (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
+          "Missing OG block refs do not leave placeholder entities")
+      (is (nil? (d/entity @conn [:block/uuid empty-title-property-uuid]))
+          "Missing OG block refs in empty-title property blocks do not leave placeholder entities")
+      (is (nil? (d/entity @conn [:block/uuid empty-title-parent-uuid]))
+          "Missing OG block refs in empty-title parent blocks do not leave placeholder entities")
+      (is (= 2 (count empty-title-blocks))
+          "Blocks whose titles become empty after cleanup are preserved")
+      (is (true? (:logseq.property/heading empty-title-property-block))
+          "Empty-title blocks keep imported heading properties")
+      (is (= "yellow"
+             (:logseq.property/background-color (db-test/readable-properties empty-title-property-block)))
+          "Empty-title blocks keep imported background colors")
+      (is (= ["Child survives"] (mapv :block/title (ordered-children empty-title-parent-block)))
+          "Empty-title parent blocks keep their children")
+      (is (= [(:db/id target-block)] (mapv :db/id (:block/refs existing-block)))
+          "Existing block refs are preserved, including forward refs from later files")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
+(deftest-async export-doc-files-propagates-missing-block-ref-cleanup-report
+  (let [missing-uuid #uuid "55555555-5555-5555-5555-555555555555"
+        tx-reports (atom [])]
+    (p/let [file (write-temp-graph-file
+                  "pages/A.md"
+                  (str "- Missing ref ((" missing-uuid "))\n"))
+            conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            doc-options (gp-exporter/build-doc-options
+                         {:macros {} :file/name-format :triple-lowbar}
+                         (merge default-export-options
+                                {:user-options {:convert-all-tags? false}
+                                 :on-tx-report #(swap! tx-reports conj %)}))
+            _ (gp-exporter/export-doc-files conn [{:path file}] <read-file doc-options)]
+      (is (some #(report-retracts-block-uuid? % missing-uuid) @tx-reports)
+          "Missing block ref cleanup tx-report is propagated to import callers")
+      (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
+          "Missing OG block ref placeholder is removed"))))
 
 (deftest update-asset-links-in-block-title
   (are [x y]
