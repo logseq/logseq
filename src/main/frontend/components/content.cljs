@@ -163,7 +163,9 @@
                                             icon-data))
                                          (shui/popup-hide! id))
                             :icon-value current-icon
-                            :del-btn? (some? current-icon)}))
+                            :del-btn? (some? current-icon)
+                            :preview-target-db-id (:db/id block)
+                            :property :logseq.property/icon}))
                         {:align :start
                          :id :ls-icon-picker
                          :content-props {:class "ls-icon-picker"

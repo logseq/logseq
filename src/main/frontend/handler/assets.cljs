@@ -154,18 +154,11 @@
            (path/prepend-protocol "file:" full-path))
 
          :else
-         (do
-           (js/console.log "[DEBUG <make-asset-url] reading" (pr-str {:repo-dir repo-dir :path path :local? local-asset?}))
-           (-> (p/let [binary (fs/read-file-raw repo-dir path {})
-                       _ (js/console.log "[DEBUG <make-asset-url] read OK, binary size:" (when binary (.-byteLength binary)))
-                       svg? (string/ends-with? path ".svg")
-                       type (if svg? "image/svg+xml" "image")
-                       blob (js/Blob. (array binary) (clj->js {:type type}))]
-                 (when blob (js/URL.createObjectURL blob)))
-               (p/catch (fn [err]
-                          (js/console.error "[DEBUG <make-asset-url] read-file-raw FAILED"
-                                            (pr-str {:repo-dir repo-dir :path path :error (str err)}))
-                          (throw err))))))))))
+         (p/let [binary (fs/read-file-raw repo-dir path {})
+                 svg? (string/ends-with? path ".svg")
+                 type (if svg? "image/svg+xml" "image")
+                 blob (js/Blob. (array binary) (clj->js {:type type}))]
+           (when blob (js/URL.createObjectURL blob))))))))
 
 (defn get-file-checksum
   [^js file]

@@ -54,15 +54,6 @@
        (keep parse-line)
        (into (sorted-map))))
 
-(defn- format-pairs
-  "Format the sorted map into one `key value` pair per line, indented to
-   align with the open brace at column 3 (`(def^:export named-colors{`)."
-  [pairs]
-  (->> pairs
-       (map (fn [[nm hx]]
-              (str "   " (pr-str nm) " " (pr-str hx))))
-       (str/join "\n")))
-
 (def ^:private file-template
   "(ns frontend.colors.named
   \"XKCD color survey dataset (~949 colors).

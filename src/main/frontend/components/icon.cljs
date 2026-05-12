@@ -279,6 +279,13 @@
 (def ^:private worker-not-ready-max-retries 15)
 (def ^:private worker-not-ready-delay-ms 500)
 
+;; Grid column counts. Used by the virtualized icon grid, section
+;; `:cols` declarations, and the diagonal-wave row/col indices. Single
+;; source of truth so the layout, virtualization, and color wave all
+;; stay in lockstep.
+(def ^:private icon-grid-cols 9)
+(def ^:private custom-tab-cols 3)
+
 (defn- <load-asset-url!
   "Resolve an asset blob URL, retrying on transient failures (e.g. db-worker not ready).
    When asset-type is nil and :try-extensions? is true, tries common image extensions.
@@ -294,56 +301,47 @@
     (reset! *error false)
     (if (and (not asset-type) try-extensions?)
       ;; Unknown extension — try common ones sequentially
-      (do
-        (js/console.log "[DEBUG <load-asset-url!] trying extensions" (pr-str {:uuid asset-uuid :load-id load-id}))
-        (letfn [(try-ext [exts attempt]
-                  (if (empty? exts)
-                    (when-not (stale?)
-                      (js/console.error "[DEBUG <load-asset-url!] all extensions failed" (pr-str {:uuid asset-uuid :load-id load-id}))
-                      (reset! *error true))
-                    (let [ext (first exts)
-                          file (str asset-uuid "." ext)
-                          asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
-                      (-> (assets-handler/<make-asset-url asset-path)
-                          (p/then (fn [url]
-                                    (when-not (stale?)
-                                      (js/console.log "[DEBUG <load-asset-url!] OK via ext" (pr-str {:uuid asset-uuid :ext ext :load-id load-id :url (subs (str url) 0 80)}))
-                                      (reset! *error false)
-                                      (reset! *url url))))
-                          (p/catch (fn [err]
-                                     (if (stale?)
-                                       (js/console.log "[DEBUG <load-asset-url!] stale, aborting" (pr-str {:uuid asset-uuid :load-id load-id}))
-                                       ;; Worker-not-ready: retry the same ext on a tighter cadence
-                                       ;; with a wider budget. Other errors fall through to next ext.
-                                       (if (and (worker-not-ready-err? err)
-                                                (< attempt worker-not-ready-max-retries))
-                                         (js/setTimeout #(try-ext exts (inc attempt)) worker-not-ready-delay-ms)
-                                         (try-ext (rest exts) 0)))))))))]
-          (try-ext common-image-extensions 0)))
+      (letfn [(try-ext [exts attempt]
+                (if (empty? exts)
+                  (when-not (stale?)
+                    (reset! *error true))
+                  (let [ext (first exts)
+                        file (str asset-uuid "." ext)
+                        asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
+                    (-> (assets-handler/<make-asset-url asset-path)
+                        (p/then (fn [url]
+                                  (when-not (stale?)
+                                    (reset! *error false)
+                                    (reset! *url url))))
+                        (p/catch (fn [err]
+                                   (when-not (stale?)
+                                     ;; Worker-not-ready: retry the same ext on a tighter cadence
+                                     ;; with a wider budget. Other errors fall through to next ext.
+                                     (if (and (worker-not-ready-err? err)
+                                              (< attempt worker-not-ready-max-retries))
+                                       (js/setTimeout #(try-ext exts (inc attempt)) worker-not-ready-delay-ms)
+                                       (try-ext (rest exts) 0)))))))))]
+        (try-ext common-image-extensions 0))
       ;; Known extension — retry with delay on failure
       (let [file (str asset-uuid "." asset-type)
             asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
-        (js/console.log "[DEBUG <load-asset-url!]" (pr-str {:uuid asset-uuid :type asset-type :path asset-path :load-id load-id}))
         (letfn [(attempt [n]
                   (-> (assets-handler/<make-asset-url asset-path)
                       (p/then (fn [url]
                                 (when-not (stale?)
-                                  (js/console.log "[DEBUG <load-asset-url!] OK" (pr-str {:uuid asset-uuid :attempt n :load-id load-id :url (subs (str url) 0 80)}))
                                   (reset! *error false)
                                   (reset! *url url))))
                       (p/catch (fn [err]
-                                 (if (stale?)
-                                   (js/console.log "[DEBUG <load-asset-url!] stale, aborting" (pr-str {:uuid asset-uuid :load-id load-id}))
+                                 (when-not (stale?)
                                    (let [worker-not-ready? (worker-not-ready-err? err)
                                          budget (if worker-not-ready? worker-not-ready-max-retries max-retries)
                                          next-delay (if worker-not-ready? worker-not-ready-delay-ms delay-ms)]
-                                     (js/console.error "[DEBUG <load-asset-url!] FAILED" (pr-str {:uuid asset-uuid :attempt n :max budget :worker-not-ready? worker-not-ready? :load-id load-id :error (str err)}))
                                      (if (< n budget)
                                        (js/setTimeout #(attempt (inc n)) next-delay)
                                        (reset! *error true))))))))]
           (attempt 0))))))
 
-(rum/defcs image-icon-cp < rum/reactive
+(rum/defcs image-icon-cp < rum/reactive db-mixins/query
   (rum/local nil ::url)
   (rum/local false ::error)
   (rum/local nil ::loaded-uuid)
@@ -378,8 +376,26 @@
    Tries common extensions if asset-type is unknown.
    Accepts optional :on-click-error callback in opts for error state clicks."
   [state asset-uuid _asset-type-arg opts]
-  (let [url @(::url state)
-        error? @(::error state)
+  (let [;; Reactive existence check. `model/sub-block` cannot drive
+        ;; this — the worker's affected-keys pipeline
+        ;; (worker/react.cljs:63-67) calls `(d/entity db-after id)`,
+        ;; which returns nil for retracted entities, so no
+        ;; `[::block id]` is emitted and subscriptions on retracted
+        ;; entities never fire. Subscribe to
+        ;; `:db/latest-transacted-entity-uuids` instead — set at
+        ;; modules/outliner/pipeline.cljs:56-58 after every main-thread
+        ;; tx, carrying the `:deleted-ids` uuid set. Any tx flips the
+        ;; atom, we re-render, and the follow-up `db/entity` returns
+        ;; nil → fallback / placeholder renders. Self-healing: if a
+        ;; same-uuid asset is later recreated, the next tx re-renders
+        ;; and the entity lookup hydrates.
+        _latest-tx (state/sub :db/latest-transacted-entity-uuids)
+        asset-entity (when (and asset-uuid (string? asset-uuid))
+                       (try (db/entity [:block/uuid (uuid asset-uuid)])
+                            (catch :default _ nil)))
+        asset-missing? (and asset-uuid (string? asset-uuid) (nil? asset-entity))
+        url @(::url state)
+        error? (or @(::error state) asset-missing?)
         size (or (:size opts) 20)
         on-click-error (:on-click-error opts)]
     (cond
@@ -428,7 +444,7 @@
       [:span.ui__icon.image-icon.bg-gray-04.animate-pulse
        {:style {:width size :height size}}])))
 
-(rum/defcs avatar-image-cp < rum/reactive
+(rum/defcs avatar-image-cp < rum/reactive db-mixins/query
   (rum/local nil ::url)
   (rum/local false ::error)
   (rum/local nil ::loaded-for)
@@ -457,8 +473,16 @@
                  state)}
   "Renders an avatar with an image, with initials as fallback.
    Uses shui/avatar for circular display with object-fit: cover."
-  [state _asset-uuid _asset-type avatar-data opts]
-  (let [url @(::url state)
+  [state asset-uuid _asset-type avatar-data opts]
+  (let [;; Reactive existence check — see `image-icon-cp` above for
+        ;; the design rationale (subscribing to the per-tx atom is
+        ;; what catches retractions; `model/sub-block` doesn't).
+        _latest-tx (state/sub :db/latest-transacted-entity-uuids)
+        asset-entity (when (and asset-uuid (string? asset-uuid))
+                       (try (db/entity [:block/uuid (uuid asset-uuid)])
+                            (catch :default _ nil)))
+        asset-missing? (and asset-uuid (string? asset-uuid) (nil? asset-entity))
+        url (when-not asset-missing? @(::url state))
         ;; Size from opts, default to 20px
         size (or (:size opts) 20)
         ;; Fallback data from avatar
@@ -480,7 +504,18 @@
                                                :bg explicit-bg
                                                :color explicit-color})]
     (shui/avatar
-     {:style {:width size :height size}
+     {;; Force-remount when the asset transitions present <-> missing.
+      ;; Radix's Avatar primitive tracks image-loading status in
+      ;; context. Once Avatar.Image reports "loaded", that status
+      ;; sticks even after Avatar.Image unmounts — Avatar.Fallback
+      ;; reads the status and stays hidden because it thinks the
+      ;; image is still loaded. Toggling the key on `asset-missing?`
+      ;; forces a fresh mount with a clean status machine, so the
+      ;; fallback renders the moment the asset disappears (and the
+      ;; image is shown afresh if the asset is re-created or hydrates
+      ;; lazily later).
+      :key (if asset-missing? "no-image" "with-image")
+      :style {:width size :height size}
       :data-shape (name shape)}
      ;; Image (shows when loaded, circular with cover fit)
      (when url
@@ -557,11 +592,6 @@
             [letters digits]
             ;; Fallback: midpoint
             [(subs text 0 mid) (subs text mid)]))))))
-
-;; Forward declaration: defined near renderable-icon? below; used by `icon`
-;; to defensively skip avatar/image asset rendering when the referenced
-;; asset block has been deleted.
-(declare asset-uuid->entity)
 
 (defn icon
   [icon' & [opts]]
@@ -1123,31 +1153,6 @@
 
     :else nil))
 
-(defn- asset-uuid->entity
-  "Resolve an asset-uuid (string) to a block entity, or nil if the asset
-   was deleted leaving a dangling reference in someone's icon data."
-  [asset-uuid]
-  (when (and (string? asset-uuid) (not (string/blank? asset-uuid)))
-    (try
-      (db/entity [:block/uuid (uuid asset-uuid)])
-      (catch :default _ nil))))
-
-(defn- heal-dangling-asset-icon
-  "If icon-value references a deleted asset, return a healed icon-value.
-   - :avatar → strip :asset-uuid/:asset-type, degrades to the text-only avatar
-   - :image  → return nil (no text fallback; icon is effectively gone)
-   Returns ::no-change if nothing to heal."
-  [icon-value]
-  (if-not (map? icon-value)
-    ::no-change
-    (let [asset-uuid (get-in icon-value [:data :asset-uuid])]
-      (cond
-        (not asset-uuid) ::no-change
-        (asset-uuid->entity asset-uuid) ::no-change
-        (= :avatar (:type icon-value))
-        (update icon-value :data dissoc :asset-uuid :asset-type)
-        :else nil))))
-
 (defn renderable-icon?
   "True when icon-value would produce a visible element via `icon`. For :icon type
    this includes verifying that the underlying Tabler component actually exists,
@@ -1529,10 +1534,6 @@
                                    file-name-without-ext*)
            checksum (assets-handler/get-file-checksum file)
            existing-asset (some->> checksum (db-async/<get-asset-with-checksum repo))]
-     (js/console.log "[DEBUG save-image-asset!]"
-                     (pr-str {:file-name file-name :checksum (subs (str checksum) 0 16)
-                              :existing? (some? existing-asset)
-                              :existing-uuid (when existing-asset (str (:block/uuid existing-asset)))}))
      (if existing-asset
        ;; Reuse existing asset — skip file write and block creation
        existing-asset
@@ -1542,18 +1543,11 @@
                asset-class (db/entity :logseq.class/Asset)
                block-id (ldb/new-block-id)
                extra-props (source-meta->properties source-meta)]
-         (js/console.log "[DEBUG save-image-asset!] creating"
-                         (pr-str {:block-id block-id :ext ext :size size
-                                  :repo-dir repo-dir :asset-dir asset-dir-rpath
-                                  :write-path (str asset-dir-rpath "/" block-id "." ext)
-                                  :source-meta? (some? extra-props)}))
          (when (and ext asset-class)
            ;; Write file to disk
            (p/let [_ (let [file-path (str block-id "." ext)
                            file-rpath (str asset-dir-rpath "/" file-path)]
-                       (js/console.log "[DEBUG save-image-asset!] writing file" file-rpath)
                        (write-asset-file! repo repo-dir file file-rpath))
-                   _ (js/console.log "[DEBUG save-image-asset!] file written OK, creating block...")
                    ;; Create block using api-insert-new-block! (same approach as tag tables)
                    block (editor-handler/api-insert-new-block!
                           file-name-without-ext
@@ -1565,12 +1559,7 @@
                                                :logseq.property.asset/size size}
                                               extra-props)
                            :edit-block? false})]
-             (let [entity (db/entity [:block/uuid (:block/uuid block)])]
-               (js/console.log "[DEBUG save-image-asset!] done"
-                               (pr-str {:block-uuid (str (:block/uuid block))
-                                        :entity-found? (some? entity)
-                                        :entity-type (:logseq.property.asset/type entity)}))
-               entity))))))))
+             (db/entity [:block/uuid (:block/uuid block)]))))))))
 
 (defn <save-url-asset!
   "Download image from URL and save as asset. Returns promise with asset entity.
@@ -1606,6 +1595,7 @@
 ;; The legacy "Always add without asking" preference is meaningless now that
 ;; clicks commit directly. Drop the lingering localStorage key once per app
 ;; load so it doesn't sit around as a footgun for future debugging.
+#_:clj-kondo/ignore
 (defonce ^:private web-image-skip-confirm-cleanup
   (try (storage/remove "ls-web-image-skip-confirm") (catch :default _ nil)))
 
@@ -2079,7 +2069,7 @@
      (when (or (not collapsible?) expanded?)
        (if virtual-list?
          (let [total (count icon-items)
-               step 9
+               step icon-grid-cols
                rows (quot total step)
                mods (mod total step)
                rows (if (zero? mods) rows (inc rows))
@@ -2108,7 +2098,7 @@
          [:div.its
           (map-indexed
            (fn [i item]
-             (render-fn item (assoc opts :wave {:r (quot i 9) :c (mod i 9)})))
+             (render-fn item (assoc opts :wave {:r (quot i icon-grid-cols) :c (mod i icon-grid-cols)})))
            icon-items)]))]))
 
 (rum/defc emojis-cp < rum/static
@@ -2486,15 +2476,8 @@
                       *error (::error state)
                       asset-type (:logseq.property.asset/type asset)
                       asset-uuid (:block/uuid asset)]
-                  (js/console.log "[DEBUG image-asset-item mount]"
-                                  (pr-str {:uuid asset-uuid :type asset-type
-                                           :title (:block/title asset)
-                                           :has-uuid? (some? asset-uuid)
-                                           :has-type? (some? asset-type)}))
-                  (if (and asset-uuid asset-type)
-                    (<load-asset-url! *url *error asset-uuid asset-type {})
-                    (js/console.warn "[DEBUG image-asset-item mount] SKIPPED — missing uuid or type"
-                                     (pr-str {:uuid asset-uuid :type asset-type}))))
+                  (when (and asset-uuid asset-type)
+                    (<load-asset-url! *url *error asset-uuid asset-type {})))
                 state)}
   "Renders a single image asset thumbnail in the asset picker grid.
    When avatar-context is provided, renders circular previews and returns avatar data.
@@ -3069,8 +3052,6 @@
                 (let [*loaded-assets (::loaded-assets state)
                       *loading? (::loading? state)
                       sync-assets (get-image-assets)]
-                  (js/console.log "[DEBUG asset-picker mount] sync-assets count:" (count sync-assets)
-                                  "sample:" (pr-str (map #(select-keys % [:block/uuid :logseq.property.asset/type :block/title]) (take 3 sync-assets))))
                   ;; Use sync data as immediate placeholder (avoids spinner if we have partial data)
                   (when (seq sync-assets)
                     (reset! *loaded-assets sync-assets)
@@ -3078,13 +3059,10 @@
                   ;; Always fire async query to ensure complete asset list
                   (-> (<get-image-assets)
                       (p/then (fn [async-assets]
-                                (js/console.log "[DEBUG asset-picker mount] async-assets count:" (count async-assets)
-                                                "sample:" (pr-str (map #(select-keys % [:block/uuid :logseq.property.asset/type :block/title]) (take 3 async-assets))))
                                 (when @*asset-picker-open?
                                   (reset! *loaded-assets (vec async-assets))
                                   (reset! *loading? false))))
-                      (p/catch (fn [err]
-                                 (js/console.error "[DEBUG asset-picker mount] async query FAILED:" (str err))
+                      (p/catch (fn [_err]
                                  (when @*asset-picker-open?
                                    (reset! *loading? false))))))
 
@@ -3215,8 +3193,8 @@
              :id (str "avatar-" (or page-title "page"))
              :label (or page-title "")
              :data {:value (derive-avatar-initials (or page-title ""))
-                    :backgroundColor "#6B7280"
-                    :color "#6B7280"}})
+                    :backgroundColor (colors/variable :gray :09)
+                    :color (colors/variable :gray :09)}})
         ;; Child components read `(some? avatar-context)` to decide circle vs
         ;; square; flip that live from the active tab.
         effective-avatar-context (when avatar-mode? synthesized-avatar-context)
@@ -3687,7 +3665,9 @@
        [:div.search-input
         (shui/tabler-icon "search" {:size 16 :class "ls-icon-search"})
         (shui/input
-         {:placeholder "Search images"
+         {:type "search"
+          :aria-label "Search images"
+          :placeholder "Search images"
           :value search-q
           :auto-focus true
           :ref *search-input-ref
@@ -3968,7 +3948,7 @@
                 ;; dismisses the entire menu — matching the standard
                 ;; "click an item to commit and dismiss" pattern.
                 close-fallback-menu! (fn []
-                                       (state/set-state! :ui/icon-hover-preview nil)
+                                       (dissoc-icon-preview-field! preview-base-target :icon)
                                        (reset! (::fallback-menu-open? state) false))
                 set-fallback-letters! (fn []
                                         (on-chosen* nil
@@ -4651,7 +4631,7 @@
       {:items [{:type :custom-text :id "custom-text"}
                {:type :custom-avatar :id "custom-avatar"}
                {:type :custom-image :id "custom-image"}]
-       :sections [{:start 0 :count 3 :cols 3}]}
+       :sections [{:start 0 :count 3 :cols custom-tab-cols}]}
 
       ;; Search results active. Tabs are content-type categories — keep the
       ;; query persistent across tabs but only show matches that fit the
@@ -4666,13 +4646,13 @@
                             (seq (:emojis result))
                             (get section-states "Emojis" true))
                    (:emojis result))
-          :cols 9}
+          :cols icon-grid-cols}
          {:label "Icons"
           :items (when (and tab-allows-icons?
                             (seq (:icons result))
                             (get section-states "Icons" true))
                    (:icons result))
-          :cols 9}))
+          :cols icon-grid-cols}))
 
       ;; All tab: recently used + emojis + icons (non-virtualized, limited items)
       (= tab :all)
@@ -4681,7 +4661,7 @@
         :items (when (get section-states "Recently used" true)
                  (->> (get-used-items)
                       (remove #(#{:text :avatar} (:type %)))))
-        :cols 9}
+        :cols icon-grid-cols}
        {:label "Emojis"
         :items (when (get section-states "Emojis" true)
                  (->> (take 32 emojis)
@@ -4689,14 +4669,14 @@
                              {:type :emoji :id (:id emoji)
                               :label (or (:name emoji) (:id emoji))
                               :data {:value (:id emoji)}}))))
-        :cols 9}
+        :cols icon-grid-cols}
        {:label "Icons"
         :items (when (get section-states "Icons" true)
                  (->> (take 48 (get-tabler-icons))
                       (map (fn [icon-name]
                              {:type :icon :id (str "icon-" icon-name)
                               :label icon-name :data {:value icon-name}}))))
-        :cols 9})
+        :cols icon-grid-cols})
 
       ;; Emojis tab: full emoji list
       (= tab :emoji)
@@ -4705,7 +4685,7 @@
                                :label (or (:name emoji) (:id emoji))
                                :data {:value (:id emoji)}})
                             emojis))]
-        {:items items :sections [{:start 0 :count (count items) :cols 9}]})
+        {:items items :sections [{:start 0 :count (count items) :cols icon-grid-cols}]})
 
       ;; Icons tab: full icon list
       (= tab :icon)
@@ -4713,7 +4693,7 @@
                               {:type :icon :id (str "icon-" icon-name)
                                :label icon-name :data {:value icon-name}})
                             (get-tabler-icons)))]
-        {:items items :sections [{:start 0 :count (count items) :cols 9}]})
+        {:items items :sections [{:start 0 :count (count items) :cols icon-grid-cols}]})
 
       :else {:items [] :sections []})))
 
@@ -5628,8 +5608,8 @@
                           (.focus btn))))}))]]))
 
 (rum/defc recents-lane
-  "Horizontal row of up to 6 recently-used custom colors. Header label
-   matches existing pane-section typography (12px Inter Medium muted).
+  "Horizontal row of recently-used custom colors (cap: `frontend.handler.icon-color/max-recents`).
+   Header label matches existing pane-section typography (12px Inter Medium muted).
 
    Keyboard model: roving tabindex (one Tab stop into the row, arrows
    rove within). ArrowUp leaves to the hex input; ArrowDown wraps to
@@ -6803,6 +6783,8 @@
             {:auto-focus true
              :class "icon-search-input"
              :ref *input-ref
+             :type "search"
+             :aria-label "Search emojis, icons, and assets"
              :placeholder "Search emojis, icons, assets..."
              :default-value ""
              :on-focus #(do (reset! *focus-region :search)

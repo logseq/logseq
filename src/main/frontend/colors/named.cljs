@@ -960,12 +960,6 @@
 (def ^:private by-hex
   (into {} (map (fn [[n h]] [h n])) named-colors))
 
-(defn name->hex
-  "Look up a normalized color name (lowercase, single-spaced). Returns
-   6-char hex without '#' or nil."
-  [s]
-  (get named-colors s))
-
 (defn hex->name
   "Reverse lookup: 6-char lowercase hex (no '#') -> canonical name or nil."
   [h]

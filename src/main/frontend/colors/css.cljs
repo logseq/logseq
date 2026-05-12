@@ -157,12 +157,6 @@
    "yellow" "ffff00"
    "yellowgreen" "9acd32"})
 
-(defn name->hex
-  "Look up a CSS named color (lowercase, no spaces). Returns 6-char hex
-   without '#' or nil."
-  [s]
-  (get css-colors s))
-
 ;; Reverse lookup: hex (6-char lowercase, no '#') -> canonical CSS name.
 ;; Built once at namespace load. For aliased pairs (gray/grey, aqua/cyan,
 ;; magenta/fuchsia, etc.) the LAST one in the alphabetical map wins —

@@ -126,27 +126,6 @@
                      (if (= 1 (count s)) (str "0" s) s)))]
     (str "#" (hh (to-byte r)) (hh (to-byte g)) (hh (to-byte b)))))
 
-(defn rgb-string->hex
-  "Parse a CSS-serialized color string of the form `rgb(r, g, b)` or
-   `rgba(r, g, b, a)` into a lowercase \"#rrggbb\" hex string. Channel
-   values may be integers (0..255) or percentages (\"50%\"). The alpha
-   channel is dropped — useful for surface colors where alpha is opaque
-   in practice. Returns nil for any unrecognized input."
-  [s]
-  (when (string? s)
-    (let [trimmed (-> s string/trim string/lower-case)
-          m (or (re-matches #"^rgba?\(\s*([\d.%]+)\s*,\s*([\d.%]+)\s*,\s*([\d.%]+)(?:\s*,\s*[\d.%]+)?\s*\)$"
-                            trimmed)
-                (re-matches #"^rgba?\(\s*([\d.%]+)\s+([\d.%]+)\s+([\d.%]+)(?:\s*/\s*[\d.%]+)?\s*\)$"
-                            trimmed))]
-      (when m
-        (let [parse-ch (fn [token]
-                         (if (string/ends-with? token "%")
-                           (-> token (subs 0 (dec (count token))) js/parseFloat (/ 100.0))
-                           (-> token js/parseFloat (/ 255.0))))
-              [_ r g b] m]
-          (rgb->hex [(parse-ch r) (parse-ch g) (parse-ch b)]))))))
-
 (defn srgb->linear
   "sRGB gamma decode (IEC 61966-2-1) for a single channel in [0..1]."
   [c]

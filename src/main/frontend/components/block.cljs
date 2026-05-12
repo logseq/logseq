@@ -3236,10 +3236,6 @@
 
                                                                                        :else
                                                                                        (select-keys icon [:id :type :color]))]
-                                                                       (js/console.log "[DEBUG icon on-chosen]"
-                                                                                       (pr-str {:block-db-id (:db/id block)
-                                                                                                :icon-type (:type icon)
-                                                                                                :icon-data icon-data}))
                                                                        (db-property-handler/set-block-property!
                                                                         (:db/id block)
                                                                         :logseq.property/icon
