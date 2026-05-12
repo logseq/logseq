@@ -2658,6 +2658,11 @@
           (util/stop e)
           (cursor/move-cursor-forward input))
 
+        (and (= "$" key) (string/blank? (util/get-selected-text)))
+        (do
+          (util/stop e)
+          (commands/simple-insert! input-id "$$" {:backward-pos 1}))
+
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
         nil
 
@@ -2693,10 +2698,6 @@
         (let [sym ";"]
           (double-chars-typed? value pos key sym))
         (state/pub-event! [:editor/new-property])
-
-        (let [sym "$"]
-          (double-chars-typed? value pos key sym))
-        (commands/simple-insert! input-id "$$" {:backward-pos 2})
 
         (let [sym "^"]
           (double-chars-typed? value pos key sym))

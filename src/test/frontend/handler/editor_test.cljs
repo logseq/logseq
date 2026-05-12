@@ -219,6 +219,31 @@
       (is (= 8 @cursor-pos))
       (is (= [8 12] @selection-range)))))
 
+(deftest keydown-not-matched-handler-inserts-dollar-pair-without-selection
+  (let [content (atom nil)
+        cursor-pos (atom nil)
+        input #js {:id "edit-block-test"
+                   :value "inline "}
+        event #js {:key "$"
+                   :ctrlKey false
+                   :metaKey false}]
+    (with-redefs [state/get-edit-input-id (constantly "edit-block-test")
+                  state/get-input (constantly input)
+                  state/get-editor-action (constantly nil)
+                  state/set-state! (constantly nil)
+                  state/set-block-content-and-last-pos! (fn [_input-id value' pos']
+                                                          (reset! content value')
+                                                          (reset! cursor-pos pos'))
+                  gdom/getElement (constantly input)
+                  util/get-selected-text (constantly "")
+                  util/stop (constantly nil)
+                  cursor/pos (constantly 7)
+                  cursor/move-cursor-to (fn [_ pos' & _]
+                                          (reset! cursor-pos pos'))]
+      ((editor/keydown-not-matched-handler :markdown) event nil)
+      (is (= "inline $$" @content))
+      (is (= 8 @cursor-pos)))))
+
 (defn- handle-last-input-handler
   "Spied version of editor/handle-last-input"
   [{:keys [value cursor-pos]}]
