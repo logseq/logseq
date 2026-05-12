@@ -1,6 +1,7 @@
 (ns logseq.e2e.editor-basic-test
   (:require
    [clojure.set :as set]
+   [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
    [jsonista.core :as json]
    [logseq.e2e.assert :as assert]
@@ -9,8 +10,7 @@
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
-   [wally.main :as w]
-   [wally.repl :as repl]))
+   [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -117,6 +117,84 @@
         (util/exit-edit)
         (let [{:keys [delta] :as alignment} (multiline-heading-control-alignment title true)]
           (is (<= delta 3) (assoc alignment :heading heading)))))))
+
+(defn- select-blocks-while-scrolling!
+  [block-count]
+  (w/eval-js
+   (format
+    "(async () => {
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const blocks = Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)')).slice(0, %d);
+
+      if (blocks.length !== %d) {
+        throw new Error(`Expected %d blocks, got ${blocks.length}`);
+      }
+
+      const firstContent = blocks[0].querySelector('.block-content');
+      firstContent.scrollIntoView({ block: 'center' });
+      await nextFrame();
+
+      const firstRect = firstContent.getBoundingClientRect();
+      const clientX = Math.floor(firstRect.left + 24);
+      const clientY = Math.floor(firstRect.top + Math.min(20, firstRect.height / 2));
+      const pointerInit = {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX,
+        clientY
+      };
+
+      firstContent.dispatchEvent(new PointerEvent('pointerdown', pointerInit));
+      await delay(100);
+
+      let previousTarget = firstContent;
+      for (const block of blocks.slice(1)) {
+        block.scrollIntoView({ block: 'center' });
+        await nextFrame();
+
+        const target = block.querySelector('.block-main-container');
+        previousTarget.dispatchEvent(new MouseEvent('mouseout', {
+          ...pointerInit,
+          relatedTarget: target
+        }));
+        target.dispatchEvent(new MouseEvent('mouseover', {
+          ...pointerInit,
+          relatedTarget: previousTarget
+        }));
+        previousTarget = target;
+        await delay(30);
+      }
+
+      document.querySelector('#app-container-wrapper')?.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        clientX,
+        clientY
+      }));
+
+      return Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block.selected'))
+        .map((block) => block.textContent.trim());
+    })();"
+    block-count
+    block-count
+    block-count)))
+
+(deftest copy-blocks-selected-while-scrolling
+  (testing "copy includes blocks selected by dragging while the page scrolls"
+    (let [blocks (mapv #(format "scroll-copy-block-%02d" %) (range 1 26))]
+      (b/new-blocks blocks)
+      (util/exit-edit)
+      (is (= (count blocks)
+             (count (select-blocks-while-scrolling! (count blocks)))))
+      (b/copy)
+      (let [clipboard (w/clipboard-text)]
+        (doseq [block blocks]
+          (is (string/includes? clipboard block)))))))
 
 (deftest drag-and-drop-asset-does-not-create-blank-asset
   (testing "dragging and dropping a file should keep non-empty asset title"

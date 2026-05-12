@@ -12,6 +12,7 @@
             [electron.ipc :as ipc]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.block.macros :as block-macros]
+            [frontend.components.block.selection :as block-selection]
             [frontend.components.icon :as icon-component]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
@@ -3437,12 +3438,17 @@
 
 (defn- block-mouse-over
   [^js e block *control-show? block-id doc-mode?]
-  (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))
+  (let [last-client-y (some-> @*block-last-mouse-event (.-clientY))
+        client-y (.-clientY e)
         block-dom-node (util/rec-get-node (.-target e) "ls-block")]
     (reset! *control-show? true)
-    (when (and mouse-moving?
-               (not @*dragging?)
-               (not= (:block/uuid block) (:block/uuid (state/get-edit-block))))
+    (when (block-selection/select-on-hover?
+           {:last-client-y last-client-y
+            :client-y client-y
+            :dragging? @*dragging?
+            :editing-same-block? (= (:block/uuid block)
+                                    (:block/uuid (state/get-edit-block)))
+            :active-selection? (seq (state/get-selection-blocks))})
       (.preventDefault e)
       (when-let [parent (gdom/getElement block-id)]
         (let [node (.querySelector parent ".bullet-container")]
