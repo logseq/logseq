@@ -45,7 +45,7 @@
 (def ^:private block-query-affecting-attrs
   #{:logseq.property/order-list-type})
 
-(def ^:private order-list-sibling-affecting-attrs
+(def ^:private order-list-affecting-attrs
   #{:block/parent :block/page :block/order :logseq.property/order-list-type})
 
 (defn- block-attr?
@@ -57,17 +57,13 @@
   (or (block-attr? attr)
       (contains? block-query-affecting-attrs attr)))
 
-(defn- property-value->content-string
-  [value]
-  (cond
-    (string? value) value
-    (keyword? value) (name value)
-    :else (db-property/property-value-content value)))
+(defn- block-key
+  [block]
+  [::block (:db/id block)])
 
 (defn- order-list-type
   [block]
-  (some-> (db-property/lookup block :logseq.property/order-list-type)
-          property-value->content-string))
+  (db-property/lookup block :logseq.property/order-list-type))
 
 (defn- sibling-entities
   [block]
@@ -95,9 +91,10 @@
 
 (defn- collect-right-order-list-sibling-keys
   [siblings target-order-list-type]
-  (->> siblings
-       (take-while #(= target-order-list-type (order-list-type %)))
-       (mapv (fn [sibling] [::block (:db/id sibling)]))))
+  (when target-order-list-type
+    (->> siblings
+         (take-while #(= target-order-list-type (order-list-type %)))
+         (map block-key))))
 
 (defn- affected-right-order-list-sibling-keys
   [db block-id]
@@ -105,10 +102,20 @@
     (let [right-siblings (right-ordered-siblings block)
           right-sibling (first right-siblings)]
       (concat
-       (when-let [type (order-list-type block)]
-         (collect-right-order-list-sibling-keys right-siblings type))
-       (when-let [right-type (order-list-type right-sibling)]
-         (collect-right-order-list-sibling-keys right-siblings right-type))))))
+       (collect-right-order-list-sibling-keys right-siblings (order-list-type block))
+       (collect-right-order-list-sibling-keys right-siblings (order-list-type right-sibling))))))
+
+(defn- affected-order-list-descendant-keys
+  [db block-id]
+  (when-let [block (and db (d/entity db block-id))]
+    (letfn [(collect [parent]
+              (when-let [parent-list-type (order-list-type parent)]
+                (mapcat
+                 (fn [child]
+                   (when (= parent-list-type (order-list-type child))
+                     (cons (block-key child) (collect child))))
+                 (:block/_parent parent))))]
+      (collect block))))
 
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
@@ -148,10 +155,10 @@
                              tx-data)
         other-blocks (->> (filter (fn [datom] (block-query-affecting-attr? (:a datom))) tx-data)
                           (map :e))
-        order-list-sibling-affected-blocks (->> (filter (fn [datom]
-                                                          (contains? order-list-sibling-affecting-attrs (:a datom))) tx-data)
-                                                (map :e)
-                                                (distinct))
+        order-list-affected-blocks (->> (filter (fn [datom]
+                                                  (contains? order-list-affecting-attrs (:a datom))) tx-data)
+                                        (map :e)
+                                        (distinct))
         blocks (-> (concat blocks other-blocks) distinct)
         block-entities (keep (fn [block-id]
                                (let [block-id (if (and (string? block-id) (common-util/uuid-string? block-id))
@@ -192,8 +199,10 @@
                         (fn [block-id]
                           (concat
                            (affected-right-order-list-sibling-keys db-before block-id)
-                           (affected-right-order-list-sibling-keys db-after block-id)))
-                        order-list-sibling-affected-blocks)
+                           (affected-right-order-list-sibling-keys db-after block-id)
+                           (affected-order-list-descendant-keys db-before block-id)
+                           (affected-order-list-descendant-keys db-after block-id)))
+                        order-list-affected-blocks)
 
                        (keep
                         (fn [tag]

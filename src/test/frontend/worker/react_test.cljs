@@ -61,6 +61,26 @@
       (is (some #{[:frontend.worker.react/block (:db/id block-2)]} affected))
       (is (some #{[:frontend.worker.react/block (:db/id block-3)]} affected)))))
 
+(deftest affected-keys-order-list-descendants
+  (testing "changing ordered-list parent type affects nested ordered-list descendants"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Test"}
+                  :blocks [{:block/title "Parent"
+                            :build/properties {:logseq.property/order-list-type "number"}
+                            :build/children [{:block/title "Child"
+                                              :build/properties {:logseq.property/order-list-type "number"}
+                                              :build/children [{:block/title "Grandchild"
+                                                                :build/properties {:logseq.property/order-list-type "number"}}]}]}]}])
+          parent (db-test/find-block-by-content @conn "Parent")
+          child (db-test/find-block-by-content @conn "Child")
+          grandchild (db-test/find-block-by-content @conn "Grandchild")
+          tx-report (d/transact! conn
+                                 [[:db/retract (:db/id parent) :logseq.property/order-list-type
+                                   (:db/id (:logseq.property/order-list-type parent))]])
+          affected (worker-react/get-affected-queries-keys tx-report)]
+      (is (some #{[:frontend.worker.react/block (:db/id child)]} affected))
+      (is (some #{[:frontend.worker.react/block (:db/id grandchild)]} affected)))))
+
 (deftest affected-keys-journals-when-journal-recycled
   (testing "recycling a journal page should refresh journals query key"
     (let [conn (db-test/create-conn-with-blocks
