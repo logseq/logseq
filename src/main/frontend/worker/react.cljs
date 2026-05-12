@@ -3,7 +3,6 @@
   (:require [cljs.spec.alpha :as s]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]))
 
 ;;; keywords specs for reactive query, used by `react/q` calls
