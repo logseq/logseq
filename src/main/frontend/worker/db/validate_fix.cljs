@@ -173,7 +173,7 @@
             invalid-alias-datoms))))
 
 (defn- invalid-location-tx-data
-  [db entity dispatch-key entity-id remove-block-path-refs-fn]
+  [db entity entity-id remove-block-path-refs-fn]
   (cond
     (:block/level entity)
     [[:db/retract entity-id :block/level]]
@@ -267,7 +267,7 @@
   (when-let [entity-id (or error-entity-id (resolve-entity-id db entity))]
     (let [current-entity (d/entity db entity-id)]
       (or (invalid-fragment-tx-data db current-entity entity dispatch-key entity-id)
-          (invalid-location-tx-data db current-entity dispatch-key entity-id (:remove-block-path-refs-fn opts))
+          (invalid-location-tx-data db current-entity entity-id (:remove-block-path-refs-fn opts))
           (invalid-block-tx-data db current-entity dispatch-key entity-id)))))
 
 (defn- class-as-properties-tx-data
