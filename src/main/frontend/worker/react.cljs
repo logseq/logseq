@@ -58,9 +58,17 @@
   (or (block-attr? attr)
       (contains? block-query-affecting-attrs attr)))
 
+(defn- property-value->content-string
+  [value]
+  (cond
+    (string? value) value
+    (keyword? value) (name value)
+    :else (db-property/property-value-content value)))
+
 (defn- order-list-type
   [block]
-  (some-> (db-property/lookup block :logseq.property/order-list-type) str))
+  (some-> (db-property/lookup block :logseq.property/order-list-type)
+          property-value->content-string))
 
 (defn- collect-right-order-list-siblings
   [block target-order-list-type]
