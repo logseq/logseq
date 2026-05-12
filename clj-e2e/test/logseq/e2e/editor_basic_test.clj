@@ -2,6 +2,7 @@
   (:require
    [clojure.set :as set]
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [jsonista.core :as json]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
@@ -39,6 +40,83 @@
     })();"
            (pr-str file-name)
            (pr-str file-type))))
+
+(defn- multiline-heading-control-alignment
+  [title icon?]
+  (-> (w/eval-js
+       (format
+        "(async () => {
+          const title = %s;
+          const icon = %s;
+          const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const block = Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)'))
+            .find((block) => block.textContent.includes(title));
+
+          if (!block) {
+            throw new Error(`Block not found: ${title}`);
+          }
+
+          const wrapper = block.querySelector('.block-content-wrapper');
+          const bullet = block.querySelector('.bullet-container');
+          const heading = block.querySelector('.block-title-wrap.as-heading');
+
+          if (!wrapper || !bullet || !heading) {
+            throw new Error('Expected heading block with bullet controls');
+          }
+
+          if (icon) {
+            await window.logseq.api.set_block_icon(block.getAttribute('blockid'), 'tabler-icon', 'star');
+            for (let i = 0; i < 20; i++) {
+              await nextFrame();
+              if (block.querySelector('.bullet-container .icon-cp-container')) {
+                break;
+              }
+            }
+          }
+
+          wrapper.style.maxWidth = '160px';
+          await nextFrame();
+
+          const control = icon ? block.querySelector('.bullet-container .icon-cp-container') : bullet;
+          if (!control) {
+            throw new Error('Expected heading icon control');
+          }
+
+          const controlRect = control.getBoundingClientRect();
+          const headingRect = heading.getBoundingClientRect();
+          const lineHeight = Number.parseFloat(window.getComputedStyle(heading).lineHeight);
+          const firstLineCenterY = headingRect.top + (lineHeight / 2);
+          const controlCenterY = controlRect.top + (controlRect.height / 2);
+
+          return JSON.stringify({
+            controlCenterY,
+            firstLineCenterY,
+            delta: Math.abs(controlCenterY - firstLineCenterY)
+          });
+        })();"
+        (json/write-value-as-string title)
+        (json/write-value-as-string icon?)))
+      (json/read-value json/keyword-keys-object-mapper)))
+
+(deftest multiline-heading-centers-bullet-on-first-heading-line
+  (testing "wrapped heading block bullet stays centered with the first visual heading line"
+    (doseq [heading (map #(str "h" %) (range 1 7))]
+      (let [title (format "Multiline %s heading bullet should center on the first visual heading line" heading)]
+        (b/new-block title)
+        (util/input-command heading)
+        (util/exit-edit)
+        (let [{:keys [delta] :as alignment} (multiline-heading-control-alignment title false)]
+          (is (<= delta 3) (assoc alignment :heading heading)))))))
+
+(deftest multiline-heading-centers-icon-on-first-heading-line
+  (testing "wrapped heading block icon stays centered with the first visual heading line"
+    (doseq [heading (map #(str "h" %) (range 1 7))]
+      (let [title (format "Multiline %s heading icon should center on the first visual heading line" heading)]
+        (b/new-block title)
+        (util/input-command heading)
+        (util/exit-edit)
+        (let [{:keys [delta] :as alignment} (multiline-heading-control-alignment title true)]
+          (is (<= delta 3) (assoc alignment :heading heading)))))))
 
 (deftest drag-and-drop-asset-does-not-create-blank-asset
   (testing "dragging and dropping a file should keep non-empty asset title"
