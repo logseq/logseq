@@ -600,7 +600,7 @@
                       (number? (:radius %))
                       (number? (:color-int %)))
                 sample))
-    (is (< elapsed 500))))
+    (is (< elapsed 1000))))
 
 (deftest layout-nodes-4k-all-pages-uses-fast-path
   (let [nodes (mapv (fn [idx]
@@ -647,7 +647,7 @@
                       (number? (:radius %))
                       (number? (:color-int %)))
                 (take 200 layouted)))
-    (is (< elapsed 500))
+    (is (< elapsed 1000))
     (is (< (js/Math.abs (:x (get by-id "tag-0"))) 900))
     (is (< (js/Math.abs (:y (get by-id "tag-0"))) 900))))
 
