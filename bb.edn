@@ -161,6 +161,9 @@
   dev:test
   logseq.tasks.dev/test
 
+  dev:run-test-namespaces
+  logseq.tasks.dev/run-test-namespaces
+
   dev:test-no-worker
   logseq.tasks.dev/test-no-worker
 
