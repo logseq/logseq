@@ -146,7 +146,7 @@
     (let [canvas (js/document.createElement "canvas")]
       (.getContext canvas "2d"))))
 
-(declare normalize-icon derive-initials derive-avatar-initials
+(declare normalize-icon derive-initials derive-avatar-initials derive-abbreviated
          <search-wikipedia-image <save-url-asset! open-image-asset-picker!
          ;; Used by `asset-picker`'s avatar fallback sub-picker — declared
          ;; up front because `icon-search` itself is defined far below
