@@ -105,9 +105,6 @@
   (atom nil))
 (def *move-to (atom nil))
 
-;; TODO: dynamic
-(defonce max-depth-of-links 5)
-
 ;; TODO:
 ;; add `key`
 
