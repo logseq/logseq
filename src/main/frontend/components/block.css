@@ -635,7 +635,6 @@
 
   &[data-has-heading="3"], &:has(textarea.h3) {
     --ls-heading-control-icon-size: 20px;
-    align-items: center;
 
     .block-content-or-editor-wrap {
       .positioned-properties {
@@ -646,17 +645,14 @@
 
   &[data-has-heading="4"], &:has(textarea.h4) {
     --ls-heading-control-icon-size: 16px;
-    align-items: center;
   }
 
   &[data-has-heading="5"], &:has(textarea.h5) {
     --ls-heading-control-icon-size: 13px;
-    align-items: center;
   }
 
   &[data-has-heading="6"], &:has(textarea.h6) {
     --ls-heading-control-icon-size: 12px;
-    align-items: center;
   }
 }
 
