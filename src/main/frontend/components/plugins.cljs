@@ -1094,14 +1094,19 @@
                                                   (subs @*search-key 1))]
                                (filter #(= author (:author %)) filtered-pkgs)
                                (let [low-case-search (string/lower-case @*search-key)
+                                     min-description-search-length 3
+                                     max-description-matches 30
                                      fuzzy-title-matches (search/fuzzy-search
                                                     filtered-pkgs @*search-key
                                                     :limit 30
                                                     :extract-fn :title)
-                                     precise-description-matches (filter #(some-> (:description %)
-                                                                                   string/lower-case
-                                                                                   (string/includes? low-case-search))
-                                                                         filtered-pkgs)]
+                                     precise-description-matches (if (>= (count low-case-search) min-description-search-length)
+                                                                   (->> filtered-pkgs
+                                                                        (filter #(some-> (:description %)
+                                                                                         string/lower-case
+                                                                                         (string/includes? low-case-search)))
+                                                                        (take max-description-matches))
+                                                                   [])]
                                  (-> (concat fuzzy-title-matches precise-description-matches)
                                      (distinct))))
                              filtered-pkgs)
