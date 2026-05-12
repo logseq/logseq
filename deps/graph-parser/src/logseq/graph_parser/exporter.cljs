@@ -2464,6 +2464,7 @@
   (when (string? title)
     (-> title
         (string/replace (block-ref/->block-ref block-uuid) "")
+        (string/replace (page-ref/->page-ref block-uuid) "")
         (string/replace #" {2,}" " ")
         string/trim)))
 
