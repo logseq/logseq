@@ -1,6 +1,7 @@
 (ns logseq.e2e.editor-basic-test
   (:require
    [clojure.set :as set]
+   [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
    [jsonista.core :as json]
    [logseq.e2e.assert :as assert]
@@ -9,8 +10,7 @@
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
-   [wally.main :as w]
-   [wally.repl :as repl]))
+   [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -117,6 +117,368 @@
         (util/exit-edit)
         (let [{:keys [delta] :as alignment} (multiline-heading-control-alignment title true)]
           (is (<= delta 3) (assoc alignment :heading heading)))))))
+
+(defn- select-blocks-while-scrolling!
+  [block-count]
+  (w/eval-js
+   (format
+    "(async () => {
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const blocks = Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)')).slice(0, %d);
+
+      if (blocks.length !== %d) {
+        throw new Error(`Expected %d blocks, got ${blocks.length}`);
+      }
+
+      const firstContent = blocks[0].querySelector('.block-content');
+      firstContent.scrollIntoView({ block: 'center' });
+      await nextFrame();
+
+      const firstRect = firstContent.getBoundingClientRect();
+      const clientX = Math.floor(firstRect.left + 24);
+      const clientY = Math.floor(firstRect.top + Math.min(20, firstRect.height / 2));
+      const pointerInit = {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX,
+        clientY
+      };
+
+      firstContent.dispatchEvent(new PointerEvent('pointerdown', pointerInit));
+      await delay(100);
+
+      let previousTarget = firstContent;
+      for (const block of blocks.slice(1)) {
+        block.scrollIntoView({ block: 'center' });
+        await nextFrame();
+
+        const target = block.querySelector('.block-main-container');
+        previousTarget.dispatchEvent(new MouseEvent('mouseout', {
+          ...pointerInit,
+          relatedTarget: target
+        }));
+        target.dispatchEvent(new MouseEvent('mouseover', {
+          ...pointerInit,
+          relatedTarget: previousTarget
+        }));
+        previousTarget = target;
+        await delay(30);
+      }
+
+      document.querySelector('#app-container-wrapper')?.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        clientX,
+        clientY
+      }));
+
+      return Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block.selected'))
+        .map((block) => block.textContent.trim());
+    })();"
+    block-count
+    block-count
+    block-count)))
+
+(defn- enable-virtualized-rendering!
+  []
+  (w/eval-js
+   "() => {
+      history.replaceState(null, '', location.pathname + location.hash);
+    }")
+  (w/refresh)
+  (assert/assert-graph-loaded?))
+
+(defn- select-block-titles-while-scrolling!
+  [blocks]
+  (w/eval-js
+   (format
+    "(async () => {
+      const blockTitles = %s;
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const scrollContainer = document.querySelector('#main-content-container');
+
+      const blockByTitle = (title) => Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)'))
+        .find((block) => block.textContent.includes(title));
+
+      const scrollToBlock = async (title) => {
+        for (let i = 0; i < 80; i++) {
+          const block = blockByTitle(title);
+          if (block) {
+            block.scrollIntoView({ block: 'center' });
+            await nextFrame();
+            return block;
+          }
+          scrollContainer.scrollTop += 260;
+          await nextFrame();
+        }
+        throw new Error(`Could not find mounted block ${title}`);
+      };
+
+      if (!document.querySelector('[data-virtuoso-scroller]')) {
+        throw new Error('Expected virtualized list scroller');
+      }
+
+      const firstBlock = await scrollToBlock(blockTitles[0]);
+      const firstContent = firstBlock.querySelector('.block-content');
+      const firstRect = firstContent.getBoundingClientRect();
+      const clientX = Math.floor(firstRect.left + 24);
+      const clientY = Math.floor(firstRect.top + Math.min(20, firstRect.height / 2));
+      const pointerInit = {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX,
+        clientY
+      };
+
+      firstContent.dispatchEvent(new PointerEvent('pointerdown', pointerInit));
+      await delay(100);
+
+      let previousTarget = firstContent;
+      for (const title of blockTitles.slice(1)) {
+        const block = await scrollToBlock(title);
+        const target = block.querySelector('.block-main-container');
+        if (previousTarget.isConnected) {
+          previousTarget.dispatchEvent(new MouseEvent('mouseout', {
+            ...pointerInit,
+            relatedTarget: target
+          }));
+        }
+        target.dispatchEvent(new MouseEvent('mouseover', {
+          ...pointerInit,
+          relatedTarget: previousTarget
+        }));
+        previousTarget = target;
+        await delay(30);
+      }
+
+      document.querySelector('#app-container-wrapper')?.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        clientX,
+        clientY
+      }));
+
+      return Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block.selected'))
+        .map((block) => block.textContent.trim());
+    })();"
+    (json/write-value-as-string blocks))))
+
+(defn- insert-current-page-blocks!
+  [blocks]
+  (w/eval-js
+   (format
+    "(async () => {
+      const page = await window.logseq.api.get_current_page();
+      await window.logseq.api.insert_batch_block(
+        page.uuid,
+        %s.map((content) => ({ content })),
+        { sibling: false }
+      );
+      await window.logseq.api.exit_editing_mode(false);
+      window.logseq.api.push_state('page', { name: page.uuid }, null);
+    })();"
+    (json/write-value-as-string blocks))))
+
+(defn- select-block-range-with-fast-scroll!
+  [blocks]
+  (w/eval-js
+   (format
+    "(async () => {
+      const blockTitles = %s;
+      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const scrollContainer = document.querySelector('#main-content-container');
+
+      const blockByTitle = (title) => Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)'))
+        .find((block) => block.textContent.includes(title));
+
+      const scrollToBlock = async (title, step) => {
+        for (let i = 0; i < 120; i++) {
+          const block = blockByTitle(title);
+          if (block) {
+            block.scrollIntoView({ block: 'center' });
+            await nextFrame();
+            return block;
+          }
+          scrollContainer.scrollTop += step;
+          await nextFrame();
+        }
+        throw new Error(`Could not find mounted block ${title}`);
+      };
+
+      if (!document.querySelector('[data-virtuoso-scroller]')) {
+        throw new Error('Expected virtualized list scroller');
+      }
+
+      scrollContainer.scrollTop = 0;
+      await nextFrame();
+
+      const firstBlock = await scrollToBlock(blockTitles[0], -1000);
+      const firstContent = firstBlock.querySelector('.block-content');
+      const firstRect = firstContent.getBoundingClientRect();
+      const clientX = Math.floor(firstRect.left + 24);
+      const clientY = Math.floor(firstRect.top + Math.min(20, firstRect.height / 2));
+      const pointerInit = {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX,
+        clientY
+      };
+
+      firstContent.dispatchEvent(new PointerEvent('pointerdown', pointerInit));
+      await delay(100);
+
+      await scrollToBlock(blockTitles[blockTitles.length - 1], 1400);
+      await delay(200);
+
+      document.querySelector('#app-container-wrapper')?.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+        clientX,
+        clientY
+      }));
+
+      return ((await window.logseq.api.get_selected_blocks()) || [])
+        .map((block) => block.title || block.content);
+    })();"
+    (json/write-value-as-string blocks))))
+
+(defn- seed-journals!
+  [journals]
+  (w/eval-js
+   (format
+    "(async () => {
+      const journals = %s;
+
+      for (const journal of journals) {
+        const page = await window.logseq.api.create_journal_page(journal.date);
+        await window.logseq.api.insert_batch_block(
+          page.uuid,
+          journal.blocks.map((content) => ({ content })),
+          { sibling: false }
+        );
+      }
+
+      await window.logseq.api.exit_editing_mode(false);
+      window.logseq.api.push_state('all-journals', null, null);
+    })();"
+    (json/write-value-as-string journals))))
+
+(defn- multiline-heading-bullet-alignment
+  [title]
+  (-> (w/eval-js
+       (format
+        "(async () => {
+          const title = %s;
+          const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const block = Array.from(document.querySelectorAll('.ls-page-blocks .page-blocks-inner .ls-block:not(.block-add-button)'))
+            .find((block) => block.textContent.includes(title));
+
+          if (!block) {
+            throw new Error(`Block not found: ${title}`);
+          }
+
+          const wrapper = block.querySelector('.block-content-wrapper');
+          const bullet = block.querySelector('.bullet-container');
+          const heading = block.querySelector('.block-title-wrap.as-heading');
+
+          if (!wrapper || !bullet || !heading) {
+            throw new Error('Expected heading block with bullet controls');
+          }
+
+          wrapper.style.maxWidth = '160px';
+          await nextFrame();
+
+          const bulletRect = bullet.getBoundingClientRect();
+          const headingRect = heading.getBoundingClientRect();
+          const lineHeight = Number.parseFloat(window.getComputedStyle(heading).lineHeight);
+          const firstLineCenterY = headingRect.top + (lineHeight / 2);
+          const bulletCenterY = bulletRect.top + (bulletRect.height / 2);
+
+          return JSON.stringify({
+            bulletCenterY,
+            firstLineCenterY,
+            delta: Math.abs(bulletCenterY - firstLineCenterY)
+          });
+        })();"
+        (json/write-value-as-string title)))
+      (json/read-value json/keyword-keys-object-mapper)))
+
+(deftest copy-blocks-selected-while-scrolling
+  (testing "copy includes blocks selected by dragging while the page scrolls"
+    (let [blocks (mapv #(format "scroll-copy-block-%02d" %) (range 1 26))]
+      (b/new-blocks blocks)
+      (util/exit-edit)
+      (is (= (count blocks)
+             (count (select-blocks-while-scrolling! (count blocks)))))
+      (b/copy)
+      (let [clipboard (w/clipboard-text)]
+        (doseq [block blocks]
+          (is (string/includes? clipboard block)))))))
+
+(deftest multiline-heading-keeps-bullet-on-first-line
+  (testing "heading block bullet aligns with the first line when the heading wraps"
+    (doseq [heading (map #(str "h" %) (range 1 7))]
+      (let [title (format "Multiline %s heading bullet should stay on the first visual line" heading)]
+        (b/new-block title)
+        (util/input-command heading)
+        (util/exit-edit)
+        (let [{:keys [delta] :as alignment} (multiline-heading-bullet-alignment title)]
+          (is (<= delta 3) (assoc alignment :heading heading)))))))
+
+(deftest copy-blocks-selected-while-scrolling-virtualized-list
+  (testing "copy includes virtualized blocks selected by dragging while the page scrolls"
+    (let [blocks (mapv #(format "virtual-scroll-copy-block-%02d" %) (range 1 31))]
+      (b/new-blocks blocks)
+      (util/exit-edit)
+      (enable-virtualized-rendering!)
+      (is (pos? (count (select-block-titles-while-scrolling! blocks))))
+      (b/copy)
+      (let [clipboard (w/clipboard-text)]
+        (doseq [block blocks]
+          (is (string/includes? clipboard block)))))))
+
+(deftest copy-blocks-selected-after-fast-scroll-virtualized-list
+  (testing "copy includes virtualized blocks selected after fast scrolling a long page"
+    (let [blocks (mapv #(format "fast-scroll-copy-block-%03d" %) (range 1 101))]
+      (insert-current-page-blocks! blocks)
+      (enable-virtualized-rendering!)
+      (is (set/subset? (set blocks)
+                       (set (select-block-range-with-fast-scroll! blocks))))
+      (b/copy)
+      (let [clipboard (w/clipboard-text)]
+        (doseq [block blocks]
+          (is (string/includes? clipboard block)))))))
+
+(deftest copy-blocks-selected-while-scrolling-journals-list
+  (testing "copy includes blocks selected across virtualized journals while scrolling"
+    (let [journals (mapv (fn [idx]
+                           {:date (format "2026-02-%02dT00:00:00.000Z" idx)
+                            :blocks (mapv #(format "journal-%02d-scroll-copy-block-%02d" idx %)
+                                          (range 1 31))})
+                         (range 1 5))
+          blocks (mapcat :blocks (reverse journals))]
+      (seed-journals! journals)
+      (w/wait-for "#journals [data-virtuoso-scroller]")
+      (is (pos? (count (select-block-titles-while-scrolling! blocks))))
+      (b/copy)
+      (let [clipboard (w/clipboard-text)]
+        (doseq [block blocks]
+          (is (string/includes? clipboard block)))))))
 
 (deftest drag-and-drop-asset-does-not-create-blank-asset
   (testing "dragging and dropping a file should keep non-empty asset title"
