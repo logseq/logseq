@@ -33,3 +33,13 @@
            :dragging? false
            :editing-same-block? true
            :active-selection? true}))
+
+(deftest block-id-range-uses-ordered-block-ids
+  (are [expected start-block-id end-block-id]
+       (= expected
+          (selection/block-id-range [:a :b :c :d] start-block-id end-block-id))
+    {:direction :down :block-ids [:b :c :d]} :b :d
+    {:direction :up :block-ids [:d :c :b]} :d :b
+    {:direction :down :block-ids [:c]} :c :c
+    nil :missing :c
+    nil :a :missing))
