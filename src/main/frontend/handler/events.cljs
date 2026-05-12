@@ -320,9 +320,11 @@
      (editor-handler/save-current-block!))
    (when-not update-current-block?
      (p/delay 16))
-   (let [block (db/entity (:db/id block))
-         block-type (:logseq.property.node/display-type block)
-         block-title (:block/title block)
+   (let [db-block (db/entity (:db/id block))
+         block-type (:logseq.property.node/display-type db-block)
+         block-title (:block/title db-block)
+         requested-title? (contains? block :block/title)
+         requested-title (:block/title block)
          latest-code-lang (or lang
                               (:kv/value (db/entity :logseq.kv/latest-code-lang)))
          turn-type! #(if (and (= (keyword type) :code) latest-code-lang)
@@ -331,20 +333,24 @@
                         {:logseq.property.node/display-type (keyword type)
                          :logseq.property.code/lang latest-code-lang})
                        (db-property-handler/set-block-property!
-                        (:block/uuid %) :logseq.property.node/display-type (keyword type)))]
-     (p/let [block (if (or (not (nil? block-type))
-                           (and (not update-current-block?) (not (string/blank? block-title))))
-                     (p/let [result (ui-outliner-tx/transact!
-                                     {:outliner-op :insert-blocks}
-                                     ;; insert a new block
-                                     (let [[_p _ block'] (editor-handler/insert-new-block-aux! {} block "")]
-                                       (turn-type! block')))]
-                       (when-let [id (:block/uuid (first (:blocks result)))]
-                         (db/entity [:block/uuid id])))
-                     (p/do!
-                      (turn-type! block)
-                      (db/entity [:block/uuid (:block/uuid block)])))]
-       (js/setTimeout #(editor-handler/edit-block! block :max) 100)))))
+                        (:block/uuid %) :logseq.property.node/display-type (keyword type)))
+         apply-requested-title! #(when (and update-current-block?
+                                            requested-title?
+                                            (not= requested-title (:block/title %)))
+                                   (editor-handler/save-block! (state/get-current-repo) % requested-title))]
+     (p/let [converted-block (if (or (not (nil? block-type))
+                                     (and (not update-current-block?) (not (string/blank? block-title))))
+                               (p/let [result (ui-outliner-tx/transact!
+                                               {:outliner-op :insert-blocks}
+                                               ;; insert a new block
+                                               (let [[_p _ block'] (editor-handler/insert-new-block-aux! {} db-block "")]
+                                                 (turn-type! block')))]
+                                 (when-let [id (:block/uuid (first (:blocks result)))]
+                                   (db/entity [:block/uuid id])))
+                               (p/let [_ (apply-requested-title! db-block)
+                                       _ (turn-type! db-block)]
+                                 (db/entity [:block/uuid (:block/uuid db-block)])))]
+       (js/setTimeout #(editor-handler/edit-block! converted-block :max) 100)))))
 
 (defmethod handle :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
