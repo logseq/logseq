@@ -1,7 +1,6 @@
 (ns frontend.worker.db.validate-fix
   "Script-safe DB validation repairs shared by worker validation and dev tasks."
-  (:require [clojure.string :as string]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
@@ -81,8 +80,7 @@
        (or (:logseq.property.recycle/original-order entity)
            (:logseq.property.recycle/original-page entity)
            (:logseq.property.recycle/original-parent entity)
-           (:logseq.property/deleted-at entity)
-           (string/includes? (pr-str entity) ":logseq.property.recycle/"))))
+           (:logseq.property/deleted-at entity))))
 
 (defn- invalid-orphan-fragment?
   [entity dispatch-key]
@@ -90,9 +88,7 @@
        (not (block-missing-uuid? entity))
        (or (:logseq.property.embedding/hnsw-label-updated-at entity)
            (:logseq.property/deleted-at entity)
-           (:block/uuid entity)
-           (string/includes? (pr-str entity) ":logseq.property.embedding/hnsw-label-updated-at")
-           (string/includes? (pr-str entity) ":logseq.property/deleted-at"))))
+           (:block/uuid entity))))
 
 (defn- invalid-fragment-error?
   [{:keys [entity dispatch-key]}]
