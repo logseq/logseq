@@ -17,6 +17,13 @@
   fixtures/new-logseq-page
   fixtures/validate-graph)
 
+(defn- choose-move-target!
+  [target]
+  (w/fill "input[placeholder=\"Move blocks to\"]" target)
+  (let [result (.first (w/get-by-test-id target))]
+    (assert/assert-is-visible result)
+    (w/click result)))
+
 (defn- drag-and-drop-file!
   [file-name file-type]
   (w/eval-js
@@ -80,10 +87,7 @@
     (b/new-blocks ["b1" "b2" "b3"])
     (b/select-blocks 3)
     (k/press "ControlOrMeta+Shift+m")
-    (w/fill "input[placeholder=\"Move blocks to\"]" "Target page")
-    (w/wait-for (w/get-by-test-id "Target page"))
-    (.focus (w/-query ".cp__cmdk-search-input"))
-    (k/enter)
+    (choose-move-target! "Target page")
     (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 0)))
 
 (deftest move-blocks-cmdk
@@ -93,11 +97,7 @@
     (b/new-blocks ["b1" "b2" "b3"])
     (b/select-blocks 3)
     (util/search-and-click "Move blocks to")
-    (w/fill "input[placeholder=\"Move blocks to\"]" "Target page 2")
-    (w/wait-for (w/get-by-test-id "Target page 2"))
-    (.focus (w/-query ".cp__cmdk-search-input"))
-    (k/arrow-down)
-    (k/enter)
+    (choose-move-target! "Target page 2")
     (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 0)))
 
 (deftest move-pages-to-library
