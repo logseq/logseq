@@ -5,6 +5,7 @@
             [clojure.walk :as w]
             [dommy.core :as dom]
             [frontend.commands :as commands]
+            [frontend.components.block.selection :as block-selection]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -1171,8 +1172,38 @@
       (state/set-block-op-type! :cut)
       (delete-block-aux! block))))
 
+(defn- selection-node-block-id
+  [node]
+  (let [id (cond
+             (string? node)
+             (some-> node
+                     (string/replace #"^ls-block-" ""))
+
+             (some-> node .-getAttribute)
+             (or (dom/attr node "blockid")
+                 (some-> node (dom/attr "id") (string/replace #"^ls-block-" ""))))]
+    (when (util/uuid-string? id)
+      (uuid id))))
+
+(defn- selection-node-for-block-id
+  [block-id]
+  (or (first (dom/sel (util/format "[blockid='%s']" block-id)))
+      (let [node (.createElement js/document "div")]
+        (.setAttribute node "blockid" (str block-id))
+        (.setAttribute node "id" (str "ls-block-" block-id))
+        node)))
+
+(defn- selection-blocks-by-block-ids
+  [block-ids start-node end-node]
+  (when-let [range (and (seq block-ids)
+                        (block-selection/block-id-range block-ids
+                                                        (selection-node-block-id start-node)
+                                                        (selection-node-block-id end-node)))]
+    {:direction (:direction range)
+     :blocks (mapv selection-node-for-block-id (:block-ids range))}))
+
 (defn highlight-selection-area!
-  [end-block-id block-dom-element & {:keys [append?]}]
+  [end-block-id block-dom-element & {:keys [append? block-ids]}]
   (when-let [start-node (state/get-selection-start-block-or-first)]
     (let [end-block-node block-dom-element
           select-direction (state/get-selection-direction)
@@ -1180,7 +1211,9 @@
           last-node (last selected-blocks)
           latest-visible-block (or last-node start-node)
           latest-block-id (when latest-visible-block (.-id latest-visible-block))]
-      (if (and start-node end-block-node)
+      (if-let [{:keys [blocks direction]} (selection-blocks-by-block-ids block-ids start-node end-block-node)]
+        (state/exit-editing-and-set-selected-blocks! blocks direction)
+        (if (and start-node end-block-node)
         (let [blocks (util/get-nodes-between-two-nodes start-node end-block-node "ls-block")
               direction (util/get-direction-between-two-nodes start-node end-block-node "ls-block")
               blocks (if (= direction :up) (reverse blocks) blocks)]
@@ -1196,7 +1229,7 @@
                   (if (and select-direction (not= direction select-direction))
                     (state/drop-selection-blocks-starts-with! end-block-node)
                     (state/conj-selection-block! blocks direction)))
-              (state/exit-editing-and-set-selected-blocks! blocks direction))))))))
+              (state/exit-editing-and-set-selected-blocks! blocks direction)))))))))
 
 (defonce *action-bar-timeout (atom nil))
 
