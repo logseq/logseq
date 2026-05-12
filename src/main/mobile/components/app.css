@@ -26,7 +26,7 @@ html.is-ios {
 html.is-native-android {
   #app-container-wrapper {
     padding-top: 56px;
-    padding-bottom: 0;
+    padding-bottom: 36px;
   }
 }
 html.is-native-ios body,
