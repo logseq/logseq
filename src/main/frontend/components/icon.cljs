@@ -6970,6 +6970,14 @@
   trigger only reflects previews from a Default-Icon-scoped picker."
   [icon-value preview-target-db-id icon-props & [property]]
   (let [property (or property :logseq.property/icon)
+        ;; Re-render on theme toggle so the inline `style="background-
+        ;; color:#...;color:#..."` produced by `avatar-fallback-style`
+        ;; recomputes against the new theme's CSS variables. The
+        ;; page-title (`block.cljs:3223`) routes through `icon-picker`
+        ;; → this trigger and bypasses `get-node-icon-cp` entirely, so
+        ;; the `:ui/theme` sub on get-node-icon-cp (icon.cljs:913)
+        ;; doesn't cover the page-title path.
+        _theme (state/sub :ui/theme)
         preview (when preview-target-db-id (state/sub :ui/icon-hover-preview))
         preview-active? (and preview
                              (icon-preview-matches? preview preview-target-db-id property))
