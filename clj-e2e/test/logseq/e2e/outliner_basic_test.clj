@@ -15,6 +15,12 @@
   fixtures/new-logseq-page
   fixtures/validate-graph)
 
+(defn- block-text-position
+  [text]
+  (let [locator (w/find-one-by-text "span" text)]
+    (assert/assert-is-visible locator)
+    (first (util/bounding-xy locator))))
+
 (defn create-test-page-and-insert-blocks []
   ;; a page block and a child block
   (is (= 2 (util/blocks-count)))
@@ -34,7 +40,7 @@
     (k/arrow-up)
     (b/indent)
     (util/exit-edit)
-    (let [[x1 x2 x3] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b1" "b2" "b3"])]
+    (let [[x1 x2 x3] (map block-text-position ["b1" "b2" "b3"])]
       (is (< x1 x2 x3))))
 
   (testing "unindent a block with its children"
@@ -44,7 +50,7 @@
     (k/arrow-up)
     (b/outdent)
     (util/exit-edit)
-    (let [[x2 x3 x4 x5] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4" "b5"])]
+    (let [[x2 x3 x4 x5] (map block-text-position ["b2" "b3" "b4" "b5"])]
       (is (and (= x2 x4) (= x3 x5) (< x2 x3))))))
 
 (defn indent-outdent-embed-page []
@@ -61,7 +67,7 @@
   (b/outdent)
   (b/indent)
   (util/exit-edit)
-  (let [[x2 x3 x4] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4"])]
+  (let [[x2 x3 x4] (map block-text-position ["b2" "b3" "b4"])]
     (is (= x2 x4))
     (is (< x3 x2))))
 
