@@ -1,6 +1,7 @@
 (ns logseq.outliner.recycle-test
   (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.recycle :as recycle]))
@@ -48,3 +49,39 @@
     (is (some? (d/entity @conn [:block/uuid (:block/uuid page)])))
     (is (nil? (d/entity @conn [:block/uuid parent-uuid])))
     (is (nil? (d/entity @conn [:block/uuid child-uuid])))))
+
+(deftest permanently-delete-recycled-block-removes-corresponding-view-history
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "target"}]}])
+        target (db-test/find-block-by-content @conn "target")
+        target-uuid (:block/uuid target)
+        view-uuid (random-uuid)
+        target-history-uuid (random-uuid)
+        view-history-uuid (random-uuid)
+        now (common-util/time-ms)
+        _ (d/transact! conn [{:block/uuid view-uuid
+                              :block/title "target view"
+                              :block/created-at now
+                              :block/updated-at now
+                              :logseq.property/view-for (:db/id target)
+                              :logseq.property.view/type :logseq.property.view/type.table
+                              :logseq.property.view/feature-type :linked-references}
+                             {:block/uuid target-history-uuid
+                              :block/created-at now
+                              :block/updated-at now
+                              :logseq.property.history/block (:db/id target)
+                              :logseq.property.history/property (:db/id (d/entity @conn :logseq.property/status))
+                              :logseq.property.history/scalar-value "Todo"}
+                             {:block/uuid view-history-uuid
+                              :block/created-at now
+                              :block/updated-at now
+                              :logseq.property.history/block [:block/uuid view-uuid]
+                              :logseq.property.history/property (:db/id (d/entity @conn :logseq.property/status))
+                              :logseq.property.history/scalar-value "List"}])]
+    (ldb/transact! conn (recycle/recycle-blocks-tx-data @conn [target] {}) {:outliner-op :delete-blocks})
+    (is (true? (recycle/permanently-delete! conn target-uuid)))
+    (is (nil? (d/entity @conn [:block/uuid target-uuid])))
+    (is (nil? (d/entity @conn [:block/uuid view-uuid])))
+    (is (nil? (d/entity @conn [:block/uuid target-history-uuid])))
+    (is (nil? (d/entity @conn [:block/uuid view-history-uuid])))))
