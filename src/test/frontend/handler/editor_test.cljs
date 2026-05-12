@@ -189,7 +189,7 @@
                                 :cursor-pos 2
                                 :key "a"}))))
 
-(deftest keydown-not-matched-handler-wraps-selected-text-with-dollar-marker
+(deftest keydown-not-matched-handler-wraps-selected-text-with-single-dollar
   (let [content (atom nil)
         cursor-pos (atom nil)
         selection-range (atom nil)
@@ -219,11 +219,12 @@
       (is (= 8 @cursor-pos))
       (is (= [8 12] @selection-range)))))
 
-(deftest keydown-not-matched-handler-inserts-dollar-pair-without-selection
+(defn- keydown-dollar-without-selection-result
+  [{:keys [value cursor-pos]}]
   (let [content (atom nil)
-        cursor-pos (atom nil)
+        cursor-pos' (atom nil)
         input #js {:id "edit-block-test"
-                   :value "inline "}
+                   :value value}
         event #js {:key "$"
                    :ctrlKey false
                    :metaKey false}]
@@ -233,16 +234,26 @@
                   state/set-state! (constantly nil)
                   state/set-block-content-and-last-pos! (fn [_input-id value' pos']
                                                           (reset! content value')
-                                                          (reset! cursor-pos pos'))
+                                                          (reset! cursor-pos' pos'))
                   gdom/getElement (constantly input)
                   util/get-selected-text (constantly "")
                   util/stop (constantly nil)
-                  cursor/pos (constantly 7)
+                  cursor/pos (constantly cursor-pos)
                   cursor/move-cursor-to (fn [_ pos' & _]
-                                          (reset! cursor-pos pos'))]
+                                          (reset! cursor-pos' pos'))]
       ((editor/keydown-not-matched-handler :markdown) event nil)
-      (is (= "inline $$" @content))
-      (is (= 8 @cursor-pos)))))
+      {:content @content
+       :cursor-pos @cursor-pos'})))
+
+(deftest keydown-not-matched-handler-expands-dollar-delimiters-without-selection
+  (is (= {:content "inline $$"
+          :cursor-pos 8}
+         (keydown-dollar-without-selection-result {:value "inline "
+                                                   :cursor-pos 7})))
+  (is (= {:content "inline $$$$"
+          :cursor-pos 9}
+         (keydown-dollar-without-selection-result {:value "inline $$"
+                                                   :cursor-pos 8}))))
 
 (defn- handle-last-input-handler
   "Spied version of editor/handle-last-input"

@@ -2649,6 +2649,11 @@
              (= "#" (util/nth-safe value (dec pos))))
         (state/clear-editor-action!)
 
+        (and (= "$" key) (string/blank? (util/get-selected-text)))
+        (do
+          (util/stop e)
+          (commands/simple-insert! input-id "$$" {:backward-pos 1}))
+
         (and (contains? (set/difference (set (keys reversed-autopair-map))
                                         #{"`"})
                         key)
@@ -2656,11 +2661,6 @@
         (do
           (util/stop e)
           (cursor/move-cursor-forward input))
-
-        (and (= "$" key) (string/blank? (util/get-selected-text)))
-        (do
-          (util/stop e)
-          (commands/simple-insert! input-id "$$" {:backward-pos 1}))
 
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
         nil
