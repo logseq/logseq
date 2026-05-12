@@ -44,6 +44,23 @@
           tx-data (db-property/normalize-sorted-entities-block-order sorted-entities)]
       (is (empty? tx-data)))))
 
+(deftest empty-value-test
+  (testing "empty placeholders and blank property value blocks are empty"
+    (is (true? (db-property/empty-value? nil)))
+    (is (true? (db-property/empty-value? :logseq.property/empty-placeholder)))
+    (is (true? (db-property/empty-value? {:db/ident :logseq.property/empty-placeholder})))
+    (is (true? (db-property/empty-value? {:block/title ""
+                                          :logseq.property/created-from-property {:db/id 1}})))
+    (is (true? (db-property/empty-value? {:logseq.property/value " "
+                                          :logseq.property/created-from-property {:db/id 1}}))))
+
+  (testing "normal scalar and entity values are not empty"
+    (is (false? (db-property/empty-value? false)))
+    (is (false? (db-property/empty-value? 0)))
+    (is (false? (db-property/empty-value? {:block/title "todo"
+                                           :logseq.property/created-from-property {:db/id 1}})))
+    (is (false? (db-property/empty-value? {:db/id 1})))))
+
 (deftest reaction-built-in-properties
   (let [props db-property/built-in-properties]
     (testing "entries exist"

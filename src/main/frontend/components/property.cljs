@@ -633,6 +633,29 @@
     :recycled-only-property-ids #{}}
    properties))
 
+(defn- hide-property-for-display?
+  [property property-value {:keys [show-empty-and-hidden-properties?
+                                   state-hide-empty-properties?
+                                   publishing?]}]
+  (boolean
+   (cond
+     show-empty-and-hidden-properties?
+     false
+     (:logseq.property/hide? property)
+     true
+     publishing?
+     (and (not= :logseq.property/empty-placeholder (:db/ident property-value))
+          (db-property/empty-value? property-value))
+     state-hide-empty-properties?
+     (and (not= :logseq.property/empty-placeholder (:db/ident property-value))
+          (db-property/empty-value? property-value))
+     (and (:logseq.property/hide-empty-value property)
+          (not= :logseq.property/empty-placeholder (:db/ident property-value))
+          (db-property/empty-value? property-value))
+     true
+     :else
+     false)))
+
 (rum/defc ordered-properties
   [block properties* sorted-property-entities opts]
   (let [[properties set-properties!] (hooks/use-state properties*)
@@ -763,34 +786,14 @@
                                   (remove (fn [[id _]] (classes-properties-set id))))
         state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))
         ;; This section produces own-properties and full-hidden-properties
-        hide-with-property-id (fn [property-id]
-                                (let [property (db/entity property-id)]
-                                  (boolean
-                                   (cond
-                                     show-empty-and-hidden-properties?
-                                     false
-                                     state-hide-empty-properties?
-                                     (nil? (get properties property-id))
-                                     (and (:logseq.property/hide-empty-value property)
-                                          (nil? (get properties property-id)))
-                                     true
-                                     :else
-                                     (boolean (:logseq.property/hide? property))))))
-        property-hide-f (cond
-                          config/publishing?
-                          ;; Publishing is read only so hide all blank properties as they
-                          ;; won't be edited and distract from properties that have values
-                          (fn [[property-id property-value]]
-                            (or (nil? property-value)
-                                (hide-with-property-id property-id)))
-                          state-hide-empty-properties?
-                          (fn [[property-id property-value]]
-                            ;; User's selection takes precedence over config
-                            (if (:logseq.property/hide? (db/entity property-id))
-                              (hide-with-property-id property-id)
-                              (nil? property-value)))
-                          :else
-                          (comp hide-with-property-id first))
+        hide-property? (fn [[property-id property-value]]
+                         (hide-property-for-display?
+                          (db/entity property-id)
+                          property-value
+                          {:show-empty-and-hidden-properties? show-empty-and-hidden-properties?
+                           :state-hide-empty-properties? state-hide-empty-properties?
+                           :publishing? config/publishing?}))
+        property-hide-f hide-property?
         {block-hidden-properties true
          block-own-properties' false} (group-by property-hide-f block-own-properties)
         class-properties (loop [classes all-classes

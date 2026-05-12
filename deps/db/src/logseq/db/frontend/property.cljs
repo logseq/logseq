@@ -772,6 +772,35 @@
   (or (:block/title ent)
       (:logseq.property/value ent)))
 
+(defn empty-value?
+  "True when `value` represents an empty property value in DB graph UI semantics."
+  [value]
+  (cond
+    (nil? value)
+    true
+
+    (= :logseq.property/empty-placeholder value)
+    true
+
+    (string? value)
+    (string/blank? value)
+
+    (or (= :logseq.property/empty-placeholder (:db/ident value))
+        (:logseq.property/created-from-property value))
+    (let [content (property-value-content value)]
+      (boolean
+       (or (= :logseq.property/empty-placeholder (:db/ident value))
+           (and (:logseq.property/created-from-property value)
+                (or (nil? content)
+                    (and (string? content) (string/blank? content)))))))
+
+    (and (coll? value) (not (map? value)))
+    (or (empty? value)
+        (every? empty-value? value))
+
+    :else
+    false))
+
 (defn get-closed-value-entity-by-name
   "Given a property, finds one of its closed values by name or nil if none
   found. Works for all closed value types"

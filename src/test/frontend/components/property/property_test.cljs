@@ -1,5 +1,5 @@
 (ns frontend.components.property.property-test
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs.test :refer [deftest is testing]]
             [frontend.components.property :as property-component]))
 
 (deftest sanitize-property-values-for-display-filters-recycled-entity-values-test
@@ -33,3 +33,34 @@
     (is (nil? (:user.property/nodes properties)))
     (is (= #{:user.property/nodes}
            recycled-only-property-ids))))
+
+(deftest hide-property-for-display-test
+  (testing "show all overrides hidden and empty property settings"
+    (is (false?
+         (#'property-component/hide-property-for-display?
+          {:logseq.property/hide? true}
+          "value"
+          {:show-empty-and-hidden-properties? true
+           :state-hide-empty-properties? true}))))
+
+  (testing "hide by default takes precedence over global empty-property hiding"
+    (is (true?
+         (#'property-component/hide-property-for-display?
+          {:logseq.property/hide? true}
+          "value"
+          {:state-hide-empty-properties? true}))))
+
+  (testing "hide empty value treats blank property value blocks as empty"
+    (is (true?
+         (#'property-component/hide-property-for-display?
+          {:logseq.property/hide-empty-value true}
+          {:block/title ""
+           :logseq.property/created-from-property {:db/id 1}}
+          {}))))
+
+  (testing "explicit empty placeholders stay visible"
+    (is (false?
+         (#'property-component/hide-property-for-display?
+          {:logseq.property/hide-empty-value true}
+          {:db/ident :logseq.property/empty-placeholder}
+          {:state-hide-empty-properties? true})))))

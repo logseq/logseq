@@ -427,6 +427,33 @@
     (is (= [:user.property/p1 :user.property/p2 :user.property/p3]
            (map :db/ident (:classes-properties (outliner-property/get-block-classes-properties @conn (:db/id block))))))))
 
+(deftest get-block-positioned-properties-hides-empty-text-values
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:p1 {:logseq.property/type :default
+                                 :logseq.property/ui-position :block-below
+                                 :build/properties {:logseq.property/hide-empty-value true}}}
+               :classes {:c1 {:build/class-properties [:p1]}}
+               :pages-and-blocks
+               [{:page {:block/title "p1"}
+                 :blocks [{:block/title "o1"
+                           :build/tags [:c1]
+                           :build/properties {:p1 ""}}]}]})
+        block (db-test/find-block-by-content @conn "o1")]
+    (is (= []
+           (map :db/ident
+                (outliner-property/get-block-positioned-properties @conn (:db/id block) :block-below))))))
+
+(deftest get-block-positioned-properties-keeps-explicit-empty-placeholders
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "p1"}
+                :blocks [{:block/title "o1"
+                          :block.temp/property-keys [:logseq.property/priority]
+                          :build/properties {:logseq.property/priority :logseq.property/empty-placeholder}}]}])
+        block (db-test/find-block-by-content @conn "o1")]
+    (is (= [:logseq.property/priority]
+           (map :db/ident
+                (outliner-property/get-block-positioned-properties @conn (:db/id block) :block-left))))))
+
 (deftest extends-cycle
   (testing "Fail when creating a cycle of extends"
     (let [conn (db-test/create-conn-with-blocks

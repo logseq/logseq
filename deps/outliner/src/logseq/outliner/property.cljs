@@ -817,7 +817,9 @@
       (and
        (= property-position position)
        (not (and (:logseq.property/hide-empty-value property)
-                 (nil? (get block property-id))))
+                 (not= :logseq.property/empty-placeholder
+                       (:db/ident (get block property-id)))
+                 (db-property/empty-value? (get block property-id))))
        (not (:logseq.property/hide? property))
        (not (and
              (= property-position :block-below)
