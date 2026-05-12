@@ -3506,7 +3506,7 @@
             :dragging? @*dragging?
             :editing-same-block? (= (:block/uuid block)
                                     (:block/uuid (state/get-edit-block)))
-            :active-selection? (seq (state/get-selection-blocks))})
+            :active-selection? (boolean (seq (state/get-selection-blocks)))})
       (.preventDefault e)
       (when-let [parent (gdom/getElement block-id)]
         (let [node (.querySelector parent ".bullet-container")]
