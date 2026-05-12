@@ -90,6 +90,59 @@ jobs:
       - name: Run ClojureScript tests
         run: pnpm cljs:run-test
 
+  cli-e2e:
+    name: CLI E2E tests
+    strategy:
+      matrix:
+        operating-system: [ubuntu-22.04]
+
+    runs-on: ${{ matrix.operating-system }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@13.5
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Clojure cache
+        uses: actions/cache@v4
+        id: clojure-deps
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
+          restore-keys: ${{ runner.os }}-clojure-deps-
+
+      - name: Fetch Clojure deps
+        if: steps.clojure-deps.outputs.cache-hit != 'true'
+        run: clojure -A:cljs -P
+
+      - name: Fetch pnpm deps
+        run: pnpm install --frozen-lockfile
+
       - name: Run CLI E2E tests
         run: bb dev:cli-e2e --jobs 1 --verbose
 
