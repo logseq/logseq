@@ -70,25 +70,46 @@
   (some-> (db-property/lookup block :logseq.property/order-list-type)
           property-value->content-string))
 
-(defn- collect-right-order-list-siblings
-  [block target-order-list-type]
-  (loop [sibling (ldb/get-right-sibling block)
-         result []]
-    (if (and sibling (= target-order-list-type (order-list-type sibling)))
-      (recur (ldb/get-right-sibling sibling)
-             (conj result [::block (:db/id sibling)]))
-      result)))
+(defn- sibling-entities
+  [block]
+  (cond
+    (:block/parent block)
+    (some-> (:block/parent block) :block/_parent)
+
+    (:block/page block)
+    (some-> (:block/page block) :block/_page)
+
+    :else
+    nil))
+
+(defn- ordered-siblings
+  [block]
+  (some->> (sibling-entities block)
+           (sort-by :block/order)))
+
+(defn- right-ordered-siblings
+  [block]
+  (when-let [siblings (seq (ordered-siblings block))]
+    (->> siblings
+         (drop-while #(not= (:db/id %) (:db/id block)))
+         rest)))
+
+(defn- collect-right-order-list-sibling-keys
+  [siblings target-order-list-type]
+  (->> siblings
+       (take-while #(= target-order-list-type (order-list-type %)))
+       (mapv (fn [sibling] [::block (:db/id sibling)]))))
 
 (defn- affected-right-order-list-sibling-keys
   [db block-id]
   (when-let [block (and db (d/entity db block-id))]
-    (let [right-sibling (ldb/get-right-sibling block)]
+    (let [right-siblings (right-ordered-siblings block)
+          right-sibling (first right-siblings)]
       (concat
        (when-let [type (order-list-type block)]
-         (collect-right-order-list-siblings block type))
+         (collect-right-order-list-sibling-keys right-siblings type))
        (when-let [right-type (order-list-type right-sibling)]
-         (cons [::block (:db/id right-sibling)]
-               (collect-right-order-list-siblings right-sibling right-type)))))))
+         (collect-right-order-list-sibling-keys right-siblings right-type))))))
 
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
