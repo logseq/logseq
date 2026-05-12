@@ -2,7 +2,9 @@
   "Compute reactive query affected keys"
   (:require [cljs.spec.alpha :as s]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]))
 
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block
@@ -41,6 +43,45 @@
             (= journal-tag-id (:db/id tag)))
           (:block/tags (d/entity db eid)))))
 
+(def ^:private block-query-affecting-attrs
+  #{:logseq.property/order-list-type})
+
+(def ^:private order-list-sibling-affecting-attrs
+  #{:block/parent :block/page :block/order :logseq.property/order-list-type})
+
+(defn- block-attr?
+  [attr]
+  (= "block" (namespace attr)))
+
+(defn- block-query-affecting-attr?
+  [attr]
+  (or (block-attr? attr)
+      (contains? block-query-affecting-attrs attr)))
+
+(defn- order-list-type
+  [block]
+  (some-> (db-property/lookup block :logseq.property/order-list-type) str))
+
+(defn- collect-right-order-list-siblings
+  [block target-order-list-type]
+  (loop [sibling (ldb/get-right-sibling block)
+         result []]
+    (if (and sibling (= target-order-list-type (order-list-type sibling)))
+      (recur (ldb/get-right-sibling sibling)
+             (conj result [::block (:db/id sibling)]))
+      result)))
+
+(defn- affected-right-order-list-sibling-keys
+  [db block-id]
+  (when-let [block (and db (d/entity db block-id))]
+    (let [right-sibling (ldb/get-right-sibling block)]
+      (concat
+       (when-let [type (order-list-type block)]
+         (collect-right-order-list-siblings block type))
+       (when-let [right-type (order-list-type right-sibling)]
+         (cons [::block (:db/id right-sibling)]
+               (collect-right-order-list-siblings right-sibling right-type)))))))
+
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
   [{:keys [tx-data db-before db-after]}]
@@ -77,8 +118,12 @@
         recycle-roots? (some (fn [datom]
                                (= :logseq.property/deleted-at (:a datom)))
                              tx-data)
-        other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
+        other-blocks (->> (filter (fn [datom] (block-query-affecting-attr? (:a datom))) tx-data)
                           (map :e))
+        order-list-sibling-affected-blocks (->> (filter (fn [datom]
+                                                          (contains? order-list-sibling-affecting-attrs (:a datom))) tx-data)
+                                                (map :e)
+                                                (distinct))
         blocks (-> (concat blocks other-blocks) distinct)
         block-entities (keep (fn [block-id]
                                (let [block-id (if (and (string? block-id) (common-util/uuid-string? block-id))
@@ -114,6 +159,13 @@
                           [[::block-reactions target-id]
                            [::block target-id]])
                         reaction-targets)
+
+                       (mapcat
+                        (fn [block-id]
+                          (concat
+                           (affected-right-order-list-sibling-keys db-before block-id)
+                           (affected-right-order-list-sibling-keys db-after block-id)))
+                        order-list-sibling-affected-blocks)
 
                        (keep
                         (fn [tag]
