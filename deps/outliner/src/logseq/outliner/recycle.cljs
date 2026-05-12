@@ -4,6 +4,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.common.delete-blocks :as delete-blocks]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]))
 
@@ -104,6 +105,10 @@
   (some-> deleted-by-uuid
           (#(d/entity db [:block/uuid %]))
           :db/id))
+
+(defn- with-delete-cleanup-tx
+  [db tx-data]
+  (distinct (concat tx-data (delete-blocks/update-refs-history db tx-data {}))))
 
 (defn recycle-blocks-tx-data
   [db blocks {:keys [deleted-by-uuid now-ms]}]
@@ -232,15 +237,17 @@
 (defn ^:api permanently-delete-tx-data
   [db root]
   (when (and root (recycled? root))
-    (->> (if (ldb/page? root)
-           (keep (fn [id]
-                   (some-> (d/entity db id) :block/uuid))
-                 (page-tree-ids db root))
-           (keep :block/uuid (block-subtree db root)))
-         (map (fn [block-uuid]
-                [:db/retractEntity [:block/uuid block-uuid]]))
-         distinct
-         seq)))
+    (some->> (if (ldb/page? root)
+               (keep (fn [id]
+                       (some-> (d/entity db id) :block/uuid))
+                     (page-tree-ids db root))
+               (keep :block/uuid (block-subtree db root)))
+             (map (fn [block-uuid]
+                    [:db/retractEntity [:block/uuid block-uuid]]))
+             distinct
+             seq
+             (with-delete-cleanup-tx db)
+             seq)))
 
 (defn ^:api permanently-delete!
   [conn root-uuid]
@@ -265,7 +272,9 @@
                (if (ldb/page? entity)
                  (map (fn [id] [:db/retractEntity id]) (page-tree-ids db entity))
                  (map (fn [node] [:db/retractEntity (:db/id node)]) (block-subtree db entity)))))
-     distinct)))
+     distinct
+     seq
+     (with-delete-cleanup-tx db))))
 
 (defn ^:api gc!
   [conn opts]
