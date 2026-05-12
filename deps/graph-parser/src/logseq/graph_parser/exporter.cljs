@@ -2350,7 +2350,9 @@
 (defn- <build-blocks-tx
   [conn blocks pre-blocks per-file-state tx-options]
   (p/loop [tx-data []
-           blocks (remove :block/pre-block? blocks)]
+           blocks (->> blocks
+                       (remove :block/pre-block?)
+                       (map #(dissoc % :block/pre-block?)))]
     (if-let [block (first blocks)]
       (p/let [block-tx-data (<build-block-tx @conn block pre-blocks per-file-state
                                              tx-options)]
@@ -2449,11 +2451,64 @@
                                :level :error
                                :ex-data {:path path :error error}})))))
 
+(defn- remove-block-ref-from-title
+  [title block-uuid]
+  (when (string? title)
+    (-> title
+        (string/replace (block-ref/->block-ref block-uuid) "")
+        (string/replace #" {2,}" " ")
+        string/trim)))
+
+(defn- placeholder-block-ref?
+  [entity]
+  (and (:block/uuid entity)
+       (nil? (:block/title entity))))
+
+(defn- cleanup-missing-block-refs-tx
+  [db]
+  (let [missing-ref-datoms
+        (->> (d/datoms db :aevt :block/refs)
+             (keep (fn [datom]
+                     (let [ref-entity (d/entity db (:v datom))]
+                       (when (placeholder-block-ref? ref-entity)
+                         {:source-id (:e datom)
+                          :ref-id (:v datom)
+                          :ref-uuid (:block/uuid ref-entity)})))))
+        refs-by-source-id (group-by :source-id missing-ref-datoms)
+        retract-ref-tx
+        (mapcat (fn [[source-id refs]]
+                  (map (fn [{:keys [ref-id]}]
+                         [:db/retract source-id :block/refs ref-id])
+                       refs))
+                refs-by-source-id)
+        update-title-tx
+        (keep (fn [[source-id refs]]
+                (let [source (d/entity db source-id)
+                      title (:block/title source)
+                      title' (reduce remove-block-ref-from-title title (map :ref-uuid refs))]
+                  (when (and (string? title') (not= title title'))
+                    [:db/add source-id :block/title title'])))
+              refs-by-source-id)
+        retract-placeholder-tx
+        (->> missing-ref-datoms
+             (map (juxt :ref-id :ref-uuid))
+             distinct
+             (map (fn [[ref-id ref-uuid]]
+                    [:db/retract ref-id :block/uuid ref-uuid])))]
+    (concat retract-ref-tx update-title-tx retract-placeholder-tx)))
+
+(defn- cleanup-missing-block-refs!
+  [conn]
+  (let [tx (cleanup-missing-block-refs-tx @conn)]
+    (when (seq tx)
+      (d/transact! conn tx))))
+
 (defn export-doc-files
   "Exports all user created files i.e. under journals/ and pages/.
    Recommended to use build-doc-options and pass that as options"
-  [conn *doc-files <read-file {:keys [notify-user set-ui-state]
-                               :or {set-ui-state (constantly nil) notify-user prn}
+  [conn *doc-files <read-file {:keys [notify-user set-ui-state on-tx-report]
+                               :or {set-ui-state (constantly nil) notify-user prn
+                                    on-tx-report (constantly nil)}
                                :as options}]
   (set-ui-state [:graph/importing-state :total] (count *doc-files))
   (let [doc-files (mapv #(assoc %1 :idx %2)
@@ -2468,6 +2523,10 @@
           (when-not (>= i (dec (count doc-files)))
             (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
                      (inc i))))
+        (p/then (fn [_]
+                  (p/let [tx-report (cleanup-missing-block-refs! conn)
+                          _ (when tx-report (on-tx-report tx-report))]
+                    tx-report)))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
                                  :level :error
@@ -2653,7 +2712,7 @@
        :user-options (merge {:remove-inline-tags? true :convert-all-tags? true} (:user-options options))
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
-      (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat]))))
+      (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat :on-tx-report]))))
 
 (defn- move-top-parent-pages-to-library
   [conn repo-or-conn]
