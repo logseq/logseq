@@ -117,6 +117,21 @@
                  (:block/_parent parent))))]
       (collect block))))
 
+(defn- affected-block-keys
+  [block]
+  (let [page-id (or
+                 (when (:block/name block) (:db/id block))
+                 (:db/id (:block/page block)))
+        blocks [(when-let [parent-id (:db/id (:block/parent block))]
+                  [::block parent-id])
+                [::block (:db/id block)]]
+        refs (->> (keep (fn [ref]
+                          (when-not (= (:db/id ref) page-id)
+                            [[::refs (:db/id ref)]
+                             [::block (:db/id ref)]])) (:block/refs block))
+                  (apply concat))]
+    (concat blocks refs)))
+
 (defn get-affected-queries-keys
   "Get affected queries through transaction datoms."
   [{:keys [tx-data db-before db-after]}]
@@ -167,20 +182,7 @@
                                  (d/entity db-after block-id))) blocks)
         affected-keys (concat
                        (mapcat
-                        (fn [block]
-                          (let [page-id (or
-                                         (when (:block/name block) (:db/id block))
-                                         (:db/id (:block/page block)))
-                                blocks [(when-let [parent-id (:db/id (:block/parent block))]
-                                          [::block parent-id])
-                                        [::block (:db/id block)]]
-                                block-refs (:block/refs block)
-                                refs (->> (keep (fn [ref]
-                                                  (when-not (= (:db/id ref) page-id)
-                                                    [[::refs (:db/id ref)]
-                                                     [::block (:db/id ref)]])) block-refs)
-                                          (apply concat))]
-                            (concat blocks refs)))
+                        affected-block-keys
                         block-entities)
 
                        (mapcat
