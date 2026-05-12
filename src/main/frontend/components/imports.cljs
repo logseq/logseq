@@ -366,6 +366,8 @@
           _ (repo-handler/new-db! graph-name {:file-graph-import? true})
           repo (state/get-current-repo)
           db-conn (db/get-db repo false)
+          on-tx-report (fn [tx-report]
+                         (db-browser/transact! repo (:tx-data tx-report) (:tx-meta tx-report)))
           options {:user-options
                    (merge
                     (dissoc user-options :graph-name)
@@ -389,13 +391,15 @@
                                         (db-editor-handler/save-file! path content))
                    ;; asset file options
                    :<read-and-copy-asset #(read-and-copy-asset repo (config/get-repo-dir repo) %1 %2 %3)
+                   :on-tx-report on-tx-report
                    ;; doc file options
                    ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
                    :<export-file (fn <export-file [conn m opts]
                                    (p/let [tx-reports
                                            (gp-exporter/<add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
                                      (doseq [tx-report tx-reports]
-                                       (db-browser/transact! repo (:tx-data tx-report) (:tx-meta tx-report)))))}
+                                       (when tx-report
+                                         (on-tx-report tx-report)))))}
           {:keys [files import-state]} (gp-exporter/export-file-graph repo db-conn config-file *files options)]
     (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
     (state/set-state! :graph/importing nil)

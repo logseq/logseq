@@ -2506,8 +2506,9 @@
 (defn export-doc-files
   "Exports all user created files i.e. under journals/ and pages/.
    Recommended to use build-doc-options and pass that as options"
-  [conn *doc-files <read-file {:keys [notify-user set-ui-state]
-                               :or {set-ui-state (constantly nil) notify-user prn}
+  [conn *doc-files <read-file {:keys [notify-user set-ui-state on-tx-report]
+                               :or {set-ui-state (constantly nil) notify-user prn
+                                    on-tx-report (constantly nil)}
                                :as options}]
   (set-ui-state [:graph/importing-state :total] (count *doc-files))
   (let [doc-files (mapv #(assoc %1 :idx %2)
@@ -2522,7 +2523,10 @@
           (when-not (>= i (dec (count doc-files)))
             (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
                      (inc i))))
-        (p/then #(cleanup-missing-block-refs! conn))
+        (p/then (fn [_]
+                  (p/let [tx-report (cleanup-missing-block-refs! conn)
+                          _ (when tx-report (on-tx-report tx-report))]
+                    tx-report)))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
                                  :level :error
@@ -2708,7 +2712,7 @@
        :user-options (merge {:remove-inline-tags? true :convert-all-tags? true} (:user-options options))
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
-      (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat]))))
+      (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat :on-tx-report]))))
 
 (defn- move-top-parent-pages-to-library
   [conn repo-or-conn]
