@@ -45,35 +45,56 @@
          tx))
      refs)))
 
+(defn- block-entity?
+  [entity]
+  (and (:block/uuid entity)
+       (:block/page entity)
+       (not (entity-util/page? entity))))
+
+(defn- retracted-entities
+  [db txs]
+  (->> txs
+       (keep (fn [tx]
+               (when (and (vector? tx)
+                          (contains? #{:db.fn/retractEntity :db/retractEntity} (first tx)))
+                 (d/entity db (second tx)))))
+       (common-util/distinct-by :db/id)))
+
+(defn- direct-cleanup-tx
+  [entities]
+  (let [retracted-blocks (filter block-entity? entities)
+        reaction-entities (->> entities
+                               (mapcat :logseq.property.reaction/_target)
+                               (common-util/distinct-by :db/id))
+        retract-reactions-tx (map (fn [reaction] [:db/retractEntity (:db/id reaction)])
+                                  reaction-entities)
+        retracted-tx (build-retracted-tx retracted-blocks)
+        history-entities (->> entities
+                              (mapcat (fn [entity]
+                                        (concat (:logseq.property.history/_block entity)
+                                                (:logseq.property.history/_ref-value entity))))
+                              (common-util/distinct-by :db/id))
+        retract-history-tx (map (fn [history] [:db/retractEntity (:db/id history)])
+                                history-entities)
+        delete-views (->> entities
+                          (mapcat :logseq.property/_view-for)
+                          (map (fn [view] [:db/retractEntity (:db/id view)])))]
+    (vec (concat retracted-tx delete-views retract-history-tx retract-reactions-tx))))
+
+(defn- build-cleanup-tx
+  [db txs]
+  (loop [pending-entities (retracted-entities db txs)
+         seen-ids #{}
+         cleanup-tx []]
+    (if-let [entities (seq (remove #(contains? seen-ids (:db/id %))
+                                   pending-entities))]
+      (let [seen-ids' (into seen-ids (map :db/id) entities)
+            next-tx (direct-cleanup-tx entities)]
+        (recur (retracted-entities db next-tx) seen-ids' (into cleanup-tx next-tx)))
+      (distinct cleanup-tx))))
+
 (defn update-refs-history
   "When an entity is deleted, related property history, views and reactions
    are deleted"
   [db txs _opts]
-  (let [retracted-ids (keep (fn [tx]
-                              (when (and (vector? tx)
-                                         (contains? #{:db.fn/retractEntity :db/retractEntity} (first tx)))
-                                (second tx))) txs)
-        retracted-entities (map #(d/entity db %) retracted-ids)]
-    (when (seq retracted-ids)
-      (let [retracted-blocks (remove entity-util/page? retracted-entities)
-            reaction-entities (->> retracted-entities
-                                   (mapcat :logseq.property.reaction/_target)
-                                   (common-util/distinct-by :db/id))
-            retract-reactions-tx (map (fn [reaction] [:db/retractEntity (:db/id reaction)])
-                                      reaction-entities)
-            retracted-tx (build-retracted-tx retracted-blocks)
-            history-entities (->> retracted-entities
-                                  (mapcat (fn [e]
-                                            (concat (:logseq.property.history/_block e)
-                                                    (:logseq.property.history/_ref-value e))))
-                                  (common-util/distinct-by :db/id))
-            retract-history-tx (map (fn [history] [:db/retractEntity (:db/id history)])
-                                    history-entities)
-            delete-views (->>
-                          (mapcat
-                           (fn [item]
-                             (let [block (d/entity db (:db/id item))]
-                               (:logseq.property/_view-for block)))
-                           retracted-entities)
-                          (map (fn [b] [:db/retractEntity (:db/id b)])))]
-        (concat retracted-tx delete-views retract-history-tx retract-reactions-tx)))))
+  (seq (build-cleanup-tx db txs)))
