@@ -124,15 +124,19 @@
          [:db/retract (:e datom) (:a datom) (:v datom)])
        (d/datoms db :eavt db-id)))
 
+(defn- permanently-delete-entity-ids
+  [db root]
+  (if (ldb/page? root)
+    (page-tree-ids db root)
+    (map :db/id (block-subtree db root))))
+
 (defn- permanently-delete-entity-tx-data
   [db root]
-  (->> (if (ldb/page? root)
-         (page-tree-ids db root)
-         (map :db/id (block-subtree db root)))
-       (mapcat #(retract-entity-tx-data db %))
-       seq
-       (with-delete-cleanup-tx db)
-       seq))
+  (let [entity-ids (permanently-delete-entity-ids db root)
+        retract-entities-tx (map (fn [id] [:db/retractEntity id]) entity-ids)
+        retract-datoms-tx (mapcat #(retract-entity-tx-data db %) entity-ids)]
+    (seq (distinct (concat retract-datoms-tx
+                           (delete-blocks/update-refs-history db retract-entities-tx {}))))))
 
 (defn recycle-blocks-tx-data
   [db blocks {:keys [deleted-by-uuid now-ms]}]

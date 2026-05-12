@@ -15,6 +15,10 @@
     (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
     conn))
 
+(deftest validate-db-result-returns-nil-errors-for-valid-db
+  (let [conn (create-db-graph-conn)]
+    (is (nil? (:errors (validate-fix/validate-db-result @conn))))))
+
 (deftest validate-db-repairs-block-missing-uuid
   (let [conn (create-db-graph-conn)
         page-uuid (random-uuid)
