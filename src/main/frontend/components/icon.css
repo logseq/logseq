@@ -94,11 +94,14 @@
     > .x {
       @apply flex items-center justify-center;
       @apply absolute right-2 top-1/2 -translate-y-1/2;
-      @apply w-5 h-5 rounded-full;
-      @apply opacity-60 hover:opacity-100;
-      @apply transition-opacity duration-150;
-      background-color: var(--rx-gray-06);
-      color: var(--rx-gray-11);
+      @apply w-5 h-5 rounded-full cursor-pointer;
+      @apply transition-colors duration-150;
+      background-color: var(--rx-gray-07);
+      color: var(--rx-gray-12);
+    }
+
+    > .x:hover {
+      background-color: var(--rx-gray-08);
     }
 
     .ui__input {
@@ -873,7 +876,7 @@
 
 /* Search input matching icon picker */
 .asset-picker-search {
-  @apply py-1;
+  @apply py-1 pr-3;
   @apply flex-shrink-0;
   background-color: var(--lx-gray-03);
   /* Grey line at bottom of header section, matching icon picker */
@@ -891,7 +894,39 @@
       @apply focus:bg-gray-03 !h-8;
       box-shadow: none !important;
     }
+
+    /* Rounded-circle clear button — mirrors the icon-search affordance
+       (icon.css:94-104). Higher contrast than the icon-search variant
+       (gray-07 → gray-08 on hover, gray-12 glyph) because it sits on
+       the asset-picker's slightly lighter input background. */
+    > .x {
+      @apply flex items-center justify-center;
+      @apply absolute right-2 top-1/2 -translate-y-1/2;
+      @apply w-5 h-5 rounded-full cursor-pointer;
+      @apply transition-colors duration-150;
+      background-color: var(--rx-gray-07);
+      color: var(--rx-gray-12);
+    }
+
+    > .x:hover {
+      background-color: var(--rx-gray-08);
+    }
   }
+}
+
+/* `:type "search"` (added for semantics + mobile keyboard hint) makes
+   WebKit/Chrome render a native blue cancel-X inside the input. The
+   icon picker already provides its own rounded-circle clear button
+   (`a.x` at icon.cljs:6842 in icon-search; clearing in asset-picker
+   happens via Escape). Hide the native chrome so we have a single,
+   on-brand clear affordance. */
+.cp__emoji-icon-picker input[type="search"]::-webkit-search-cancel-button,
+.asset-picker input[type="search"]::-webkit-search-cancel-button,
+.cp__emoji-icon-picker input[type="search"]::-webkit-search-decoration,
+.asset-picker input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
 }
 
 /* Grid layout - 5 columns for larger, scannable images */
@@ -1959,9 +1994,14 @@
      The expanded-state gradient (`::before`) layers on top — its peak
      opacity is capped at 0.55 so this veil still reads through under
      the gradient. */
-  background:
-    linear-gradient(rgb(0 0 0 / 0.15), rgb(0 0 0 / 0.15)),
-    var(--lx-gray-02, var(--rx-gray-02));
+  /* Solid theme-token background — no alpha veil. Resting state uses
+     gray-01 (the most-recessed surface in the gray scale, page-bg-ish
+     in both themes) so the banner reads as "tucked into" the popover
+     rather than a competing surface. Hover lifts one step to gray-02
+     via `:has()` below; the transition is on background-color so
+     state changes interpolate cleanly across light + dark themes. */
+  background-color: var(--lx-gray-01, var(--rx-gray-01));
+  transition: background-color 120ms cubic-bezier(0.32, 0.72, 0, 1);
   border-bottom: 1px solid var(--lx-gray-05, var(--rx-gray-05));
   isolation: isolate;
   /* Isolate the band's layout from siblings: when the rail expands or
@@ -1982,6 +2022,53 @@
 
 .avatar-customize-zone[data-expanded="true"] {
   --avatar-size: 56px;
+}
+
+/* Whole-row click target. Invisible overlay sitting above the resting
+   row so the entire avatar-customize-zone surface (edge to edge,
+   including its 18px horizontal padding) is one accessible <button>.
+   Spans only the collapsed row's height; the Reset/Done rail and the
+   expanded controls sit below and are reached without going through
+   this trigger. Mounted only in the collapsed state
+   (the `when-not expanded?` guard in the component), so there's no
+   nested-interactive risk when the chips render below.
+
+   Hover deepens the existing dark veil (zone's base is gray-02 +
+   rgba(0,0,0,0.15)) rather than lifting it — fits the zone's
+   "quietly-recessed banner" design intent. Compatible with both light
+   and dark themes via a theme-portable black overlay. */
+.cb-row-trigger {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px; /* matches collapsed .cb-content min-height */
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  z-index: 1;   /* above the visual content layer for clicks */
+  transition: background-color 120ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.cb-row-trigger:focus-visible {
+  /* Inset outline so the focus ring stays within the zone boundary
+     instead of bleeding past the popover edge. */
+  outline: 2px solid var(--lx-accent-09, var(--rx-accent-09));
+  outline-offset: -2px;
+}
+
+/* Hover state: lift the zone two steps up the gray scale (gray-01 →
+   gray-03). Solid color, no alpha layer — both themes get a clean
+   shift. Driven by `:has()` on the invisible row-trigger so the
+   hover fires off the actual click target, not off ambient hovers
+   of the rail-wrap or the avatar tile. */
+.avatar-customize-zone:has(.cb-row-trigger:hover) {
+  background-color: var(--lx-gray-03, var(--rx-gray-03));
+}
+
+/* Brighten the Edit label when the row is hovered. */
+.avatar-customize-zone:has(.cb-row-trigger:hover) .banner-edit {
+  color: var(--lx-gray-12, var(--rx-gray-12));
 }
 
 /* Gradient lives on a pseudo-element so opacity can crossfade independently
@@ -2045,14 +2132,12 @@
   gap: 14px;
 }
 
-/* Avatar trigger — the only click target that toggles expand/collapse.
-   Resets the native button chrome so the avatar reads as a plain tile.
-   The trigger animates width/height in lock with --avatar-size so the
-   avatar morphs from 18px (compact banner) to 56px (expanded tile)
-   inside `contain: layout`. */
+/* Avatar tile — decorative preview, no longer interactive. The single
+   click target is `.cb-row-trigger` (invisible overlay) which spans
+   the whole resting row. The tile still morphs width/height in lock
+   with --avatar-size so the avatar grows from 20px (compact banner)
+   to 56px (expanded tile) inside `contain: layout`. */
 .cb-avatar-trigger {
-  all: unset;
-  cursor: pointer;
   flex-shrink: 0;
   width: var(--avatar-size);
   height: var(--avatar-size);
@@ -2070,12 +2155,6 @@
      can confuse some compositors into spurious layer creation. */
   transition: width 200ms cubic-bezier(0.32, 0.72, 0, 1),
               height 200ms cubic-bezier(0.32, 0.72, 0, 1);
-
-  &:focus-visible {
-    outline: 2px solid var(--lx-accent-09, var(--rx-accent-09));
-    outline-offset: 2px;
-    border-radius: 12px;
-  }
 
   .preview-avatar {
     position: relative;
@@ -2152,15 +2231,12 @@
   min-width: 0;
 }
 
-/* Compact banner — resting state. 32px-tall row, the *entire row* is a
-   single click target (`<button>`) that toggles the expanded customize
-   panel. Layout: state-as-label on the left (`Default · Letters,
-   circle`), decorative chevron-down on the right (rotates 180° on
-   expand). Avatar tile is a parallel click target with the same toggle
-   behavior — both routes converge on `aria-expanded`. */
+/* Compact banner — resting state visual layer. 32px-tall row showing
+   state-as-label on the left (`Default · Letters, circle`) and a
+   muted "Edit" affordance on the right. NOT a click target — the
+   single accessible button is `.cb-row-trigger` (overlay) which
+   covers the avatar + this banner together. */
 .avatar-customize-zone .cb-banner {
-  all: unset;
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2173,12 +2249,6 @@
      the avatar shrinking. */
   opacity: 1;
   transition: opacity 80ms cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-.avatar-customize-zone .cb-banner:focus-visible {
-  outline: 2px solid var(--lx-accent-09, var(--rx-accent-09));
-  outline-offset: 2px;
-  border-radius: 4px;
 }
 
 .avatar-customize-zone[data-expanded="true"] .cb-banner {
@@ -2225,20 +2295,21 @@
   font-weight: 400;
 }
 
-/* Chevron — decorative cue that the row expands. Rotates 180° on
-   expand. Not a separate click target; the parent `<button>` owns the
-   action. */
-.avatar-customize-zone .cb-banner .banner-chevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* "Edit" affordance — right-aligned muted text. Replaces the earlier
+   chevron-down (which falsely implied "popover opens below" or
+   "stays-visible disclosure that rotates"; this row morphs in place
+   and the banner content fades out entirely on expand, so a rotating
+   chevron never lived long enough to read as feedback). The label is
+   muted by default and brightens when the user hovers the row (via
+   the sibling-combinator rule on `.cb-row-trigger:hover`). */
+.avatar-customize-zone .cb-banner .banner-edit {
   flex-shrink: 0;
-  color: var(--lx-gray-11, var(--rx-gray-11));
-  transition: transform 200ms cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-.avatar-customize-zone[data-expanded="true"] .cb-banner .banner-chevron {
-  transform: rotate(180deg);
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--lx-gray-09, var(--rx-gray-09));
+  transition: color 120ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .avatar-customize-zone .preview-title {

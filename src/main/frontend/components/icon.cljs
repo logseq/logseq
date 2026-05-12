@@ -3755,7 +3755,17 @@
                                                           (.closest ".asset-picker"))]
                                  (when-let [btn (.querySelector cnt ".is-ghost-highlighted")]
                                    (util/stop e)
-                                   (.click btn)))))))})]]]
+                                   (.click btn)))))))})
+        ;; Rounded-circle clear button (matches icon-search). Visible
+        ;; only when the input has content; shares the same on-brand
+        ;; affordance instead of letting the browser render its native
+        ;; cancel-X (hidden via CSS).
+        (when-not (string/blank? search-q)
+          [:a.x {:on-click (fn [_]
+                             (reset! *search-q "")
+                             (update-web-query! "")
+                             (some-> (rum/deref *search-input-ref) (.focus)))}
+           (shui/tabler-icon "x" {:size 14})])]]]
 
      ;; Body - scrollable content area with top/bottom margin
      (let [;; Get recently used asset UUIDs and resolve to asset entities
@@ -4091,35 +4101,44 @@
             ;; conditional render would mount/unmount on toggle and CSS would
             ;; have nothing to interpolate from.
             [:div.avatar-customize-zone {:data-expanded (when expanded? "true")}
+             ;; Single click target spanning the resting row (avatar +
+             ;; meta + Edit). Sits as an invisible overlay above
+             ;; `.cb-content` so the avatar and banner text remain a
+             ;; clean visual layer underneath while clicks anywhere on
+             ;; the row hit one accessible-named <button>. Disabled
+             ;; (pointer-events: none, opacity: 0) in the expanded
+             ;; state so the dropdown chips inside `.cb-rows` are
+             ;; reachable without being nested under a parent button.
+             ;; aria-controls links to the expanded panel id below.
+             (when-not expanded?
+               [:button.cb-row-trigger
+                {:type "button"
+                 :on-click #(swap! (::customize-expanded? state) not)
+                 :aria-label (str scope-label " · " descriptor ". Customize avatar.")
+                 :aria-expanded expanded?
+                 :aria-controls "asset-picker-cb-rows"}])
              [:div.cb-content
-              [:button.cb-avatar-trigger
-               {:type "button"
-                :on-click #(swap! (::customize-expanded? state) not)
-                :aria-label "Customize avatar"
-                :aria-expanded expanded?}
+              [:div.cb-avatar-trigger
+               {:aria-hidden "true"}
                [:div.preview-avatar
                 (icon fallback-preview-icon {:size 56})]]
               [:div.cb-meta-stage
-               ;; Resting state: the entire banner is one click target
-               ;; that toggles the expanded customize panel. Layout:
-               ;;   [scope · descriptor]               [chevron-down]
-               ;; State-as-label — `Default · Letters, circle` /
-               ;; `Custom · Briefcase, rounded`. Avatar tile remains a
-               ;; second click target with the same toggle behavior; the
-               ;; chevron rotates 180° on expand.
-               [:button.cb-banner
-                {:type "button"
-                 :on-click #(swap! (::customize-expanded? state) not)
-                 :aria-label "Customize avatar"
-                 :aria-expanded expanded?
-                 :tab-index (if expanded? -1 0)}
+               ;; Resting state: visible banner content. Click target
+               ;; lives on `.cb-row-trigger` above (covers this entire
+               ;; row). `.cb-banner` is now a presentation-only div —
+               ;; not interactive, no aria-expanded — so the row reads
+               ;; as one button to assistive tech.
+               [:div.cb-banner
+                {:aria-hidden "true"}
                 [:div.banner-text
                  [:span.banner-scope scope-label]
                  [:span.banner-sep "·"]
                  [:span.banner-descriptor descriptor]]
-                [:span.banner-chevron
-                 (shui/tabler-icon "chevron-down" {:size 12})]]
+                [:span.banner-edit "Edit"]]
                [:div.cb-rows
+                {:id "asset-picker-cb-rows"
+                 :role "region"
+                 :aria-label "Avatar customization options"}
                 [:div.cb-row
                  [:span.cb-label "Shape"]
                  (shui/dropdown-menu
