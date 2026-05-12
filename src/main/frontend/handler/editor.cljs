@@ -1486,6 +1486,7 @@
    "~" "~"
    "*" "*"
    "_" "_"
+   "$" "$"
    "^" "^"
    "=" "="
    "/" "/"
@@ -1501,14 +1502,13 @@
 
 (def delete-map
   (assoc autopair-map
-         "$" "$"
          ":" ":"))
 
 (defn- autopair
   [input-id prefix _format _option]
-  (let [value (get autopair-map prefix)
+  (let [suffix (get autopair-map prefix)
         selected (util/get-selected-text)
-        postfix (str selected value)
+        postfix (str selected suffix)
         value (str prefix postfix)
         input (gdom/getElement input-id)]
     (when value
@@ -2649,6 +2649,11 @@
              (= "#" (util/nth-safe value (dec pos))))
         (state/clear-editor-action!)
 
+        (and (= "$" key) (string/blank? (util/get-selected-text)))
+        (do
+          (util/stop e)
+          (commands/simple-insert! input-id "$$" {:backward-pos 1}))
+
         (and (contains? (set/difference (set (keys reversed-autopair-map))
                                         #{"`"})
                         key)
@@ -2692,10 +2697,6 @@
         (let [sym ";"]
           (double-chars-typed? value pos key sym))
         (state/pub-event! [:editor/new-property])
-
-        (let [sym "$"]
-          (double-chars-typed? value pos key sym))
-        (commands/simple-insert! input-id "$$" {:backward-pos 2})
 
         (let [sym "^"]
           (double-chars-typed? value pos key sym))
