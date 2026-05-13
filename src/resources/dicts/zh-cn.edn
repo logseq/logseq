@@ -713,6 +713,7 @@
  :graph/removed "已移除图谱“{1}”"
  :graph/removed-and-redirecting "已移除图谱“{1}”。正在跳转到图谱“{2}”"
  :graph/removed-from-sync "此图谱已从 Logseq Sync 中移除。"
+ :graph/reset-view "重置图谱视图"
  :graph/retry "重试"
  :graph/search-tags "搜索标签"
  :graph/select-all-tags "全选"
