@@ -9,13 +9,14 @@
 (defonce *tab (atom "home"))
 (defn set-tab! [tab]
   (let [prev @*tab]
-    ;; When leaving the search tab, clear its stack so reopening starts fresh.
-    (when (and (= prev "search")
-               (not= tab "search"))
-      (reset! *search-input "")
-      (mobile-nav/reset-stack-history! "search"))
-    (reset! *tab tab)
-    (mobile-nav/switch-stack! tab)))
+    (when-not (= prev tab)
+      ;; When leaving the search tab, clear its stack so reopening starts fresh.
+      (when (and (= prev "search")
+                 (not= tab "search"))
+        (reset! *search-input "")
+        (mobile-nav/reset-stack-history! "search"))
+      (reset! *tab tab)
+      (mobile-nav/switch-stack! tab))))
 (defn use-tab [] (r/use-atom *tab))
 
 (defonce *popup-data (atom nil))

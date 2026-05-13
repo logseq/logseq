@@ -7,7 +7,6 @@ import android.util.Log
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,7 +33,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -55,14 +53,14 @@ object ComposeHost {
     fun applyNavigation(navigationType: String?, path: String?) {
         val type = (navigationType ?: "push").lowercase()
         val safePath = path?.takeIf { it.isNotBlank() } ?: "/"
-        navEvents.tryEmit(NavigationEvent(type, safePath))
+        if (!navEvents.tryEmit(NavigationEvent(type, safePath))) {
+            Log.w("ComposeHost", "Dropped navigation event: type=$type path=$safePath")
+        }
     }
 
     fun renderWithSystemInsets(
         activity: Activity,
-        webView: WebView,
-        onBackRequested: () -> Unit,
-        onExit: () -> Unit = { activity.finish() }
+        webView: WebView
     ) {
         WebViewSnapshotManager.registerWindow(activity.window)
         val root = activity.findViewById<FrameLayout>(android.R.id.content)
@@ -76,9 +74,7 @@ object ComposeHost {
             setContent {
                 ComposeNavigationHost(
                     navEvents = navEvents,
-                    webView = webView,
-                    onBackRequested = onBackRequested,
-                    onExit = onExit
+                    webView = webView
                 )
             }
         }
@@ -105,9 +101,7 @@ private fun routeFor(path: String): String =
 @Composable
 private fun ComposeNavigationHost(
     navEvents: SharedFlow<NavigationEvent>,
-    webView: WebView,
-    onBackRequested: () -> Unit,
-    onExit: () -> Unit
+    webView: WebView
 ) {
     val navController = rememberNavController()
 
@@ -273,9 +267,7 @@ private fun HandleNavigationEvents(
                 }
 
                 "pop" -> {
-                    if (!navController.popBackStack()) {
-                        // Already at root; nothing to pop.
-                    }
+                    navController.popBackStack()
                 }
 
                 "reset" -> {

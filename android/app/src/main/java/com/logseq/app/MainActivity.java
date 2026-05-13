@@ -6,24 +6,20 @@ import android.content.Context;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.os.Bundle;
-import android.webkit.ValueCallback;
 import android.webkit.WebView;
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.EdgeToEdge;
+import androidx.core.content.ContextCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
-import com.getcapacitor.PluginCall;
-import com.getcapacitor.JSObject;
 import com.getcapacitor.BridgeActivity;
-import androidx.activity.OnBackPressedDispatcher;
 import android.util.Log;
 import android.view.View;
 
 import java.util.Timer;
 import java.util.TimerTask;
 
-import ee.forgr.capacitor_navigation_bar.CapgoNavigationBarPlugin;
-
 public class MainActivity extends BridgeActivity {
-    private NavigationCoordinator navigationCoordinator = new NavigationCoordinator();
+    private final NavigationCoordinator navigationCoordinator = new NavigationCoordinator();
     private BroadcastReceiver routeChangeReceiver;
 
     @Override
@@ -46,13 +42,15 @@ public class MainActivity extends BridgeActivity {
 
         applyLogseqTheme();
 
-        // Let Compose host the WebView with system bar padding for safe areas and handle back.
-        ComposeHost.INSTANCE.renderWithSystemInsets(this, webView, () -> {
-            sendJsBack(webView);
-            return null;
-        }, () -> {
-            finish();
-            return null;
+        // Let Compose host the WebView with system bar padding for safe areas.
+        // Android back is still delegated to JS from the Activity back dispatcher.
+        ComposeHost.INSTANCE.renderWithSystemInsets(this, webView);
+
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                handleNativeBack();
+            }
         });
 
         routeChangeReceiver = new BroadcastReceiver() {
@@ -66,23 +64,11 @@ public class MainActivity extends BridgeActivity {
             }
         };
         IntentFilter filter = new IntentFilter(UILocal.ACTION_ROUTE_CHANGED);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(routeChangeReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(routeChangeReceiver, filter);
-        }
-
-        // initNavigationBarBgColor();
-
+        ContextCompat.registerReceiver(this, routeChangeReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
         new Timer().schedule(new TimerTask() {
             @Override
             public void run() {
-                bridge.eval("window.dispatchEvent(new Event('sendIntentReceived'))", new ValueCallback<String>() {
-                    @Override
-                    public void onReceiveValue(String s) {
-                        //
-                    }
-                });
+                bridge.eval("window.dispatchEvent(new Event('sendIntentReceived'))", s -> {});
             }
         }, 5000);
     }
@@ -139,23 +125,13 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    public void initNavigationBarBgColor() {
-        CapgoNavigationBarPlugin navigationBarPlugin = new CapgoNavigationBarPlugin();
-        JSObject data = new JSObject();
-        data.put("color", "transparent");
-
-        PluginCall call = new PluginCall(null, null, null, "t", data);
-        navigationBarPlugin.setNavigationBarColor(call);
-    }
-
     @Override
     public void onPause() {
         overridePendingTransition(0, R.anim.byebye);
         super.onPause();
     }
 
-    @Override
-    public void onBackPressed() {
+    private void handleNativeBack() {
         Log.d("onBackPressed", "Debug");
 
         WebView webView = getBridge().getWebView();
@@ -165,9 +141,10 @@ public class MainActivity extends BridgeActivity {
             sendJsBack(webView);
         } else {
             // Fallback if for some reason there is no webview
-            super.onBackPressed();
+            finish();
         }
     }
+
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -175,12 +152,7 @@ public class MainActivity extends BridgeActivity {
         String type = intent.getType();
         if (Intent.ACTION_SEND.equals(action) && type != null) {
             bridge.getActivity().setIntent(intent);
-            bridge.eval("window.dispatchEvent(new Event('sendIntentReceived'))", new ValueCallback<String>() {
-                @Override
-                public void onReceiveValue(String s) {
-                    //
-                }
-            });
+            bridge.eval("window.dispatchEvent(new Event('sendIntentReceived'))", s -> {});
         }
     }
 

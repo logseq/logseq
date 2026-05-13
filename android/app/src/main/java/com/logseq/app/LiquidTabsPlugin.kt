@@ -86,7 +86,7 @@ class LiquidTabsPlugin : Plugin() {
             ensureNav()
             currentTabId?.let { id ->
                 tabsState.find { it.id == id }?.let { tab ->
-                    handleSelection(tab, reselected = false)
+                    handleSelection(tab, reselected = false, notify = false)
                 }
             } ?: hideSearchUi()
             adjustWebViewPadding()
@@ -112,7 +112,7 @@ class LiquidTabsPlugin : Plugin() {
         }
         nav.post {
             val reselected = currentTabId == tab.id
-            handleSelection(tab, reselected)
+            handleSelection(tab, reselected, notify = false)
             call.resolve()
         }
     }
@@ -169,7 +169,7 @@ class LiquidTabsPlugin : Plugin() {
                 currentId = currentTabId,
                 onSelect = { tab ->
                     val reselected = tab.id == currentTabId
-                    handleSelection(tab, reselected)
+                    handleSelection(tab, reselected, notify = true)
                 }
             )
         }
@@ -178,7 +178,7 @@ class LiquidTabsPlugin : Plugin() {
         return nav
     }
 
-    private fun handleSelection(tab: TabSpec, reselected: Boolean) {
+    private fun handleSelection(tab: TabSpec, reselected: Boolean, notify: Boolean) {
         currentTabId = tab.id
         if (tab.role == "search") {
             showSearchUi()
@@ -186,7 +186,9 @@ class LiquidTabsPlugin : Plugin() {
             hideSearchUi()
         }
 
-        notifyListeners("tabSelected", JSObject().put("id", tab.id).put("reselected", reselected))
+        if (notify) {
+            notifyListeners("tabSelected", JSObject().put("id", tab.id).put("reselected", reselected))
+        }
     }
 
     private fun adjustWebViewPadding() {
@@ -539,7 +541,7 @@ class LiquidTabsPlugin : Plugin() {
             val id = obj.optString("id", "")
             if (id.isBlank()) continue
             val title = obj.optString("title", "")
-            val subtitle = obj.optString("subtitle", null)
+            val subtitle = if (obj.has("subtitle") && !obj.isNull("subtitle")) obj.optString("subtitle") else null
             result.add(SearchResult(id, title, subtitle))
         }
         return result
