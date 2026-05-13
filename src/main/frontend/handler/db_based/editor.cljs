@@ -70,6 +70,20 @@
   [page]
   (some #(= :logseq.class/Tag (:db/ident %)) (:block/tags page)))
 
+(defn- ref-dedupe-key
+  [ref]
+  (cond
+    (and (vector? ref) (= :block/uuid (first ref)))
+    [:block/uuid (second ref)]
+
+    (map? ref)
+    (if-let [uuid (:block/uuid ref)]
+      [:block/uuid uuid]
+      ref)
+
+    :else
+    ref))
+
 (defn- existing-markdown-hashtag-link-refs
   [ast]
   (->> ast
@@ -118,7 +132,7 @@
                                              (use-cached-refs! block))
                                          hashtag-link-refs)
                                  (remove nil?)
-                                 (util/distinct-by-last-wins :block/uuid))))))
+                                 (util/distinct-by-last-wins ref-dedupe-key))))))
         title' (db-content/title-ref->id-ref (or (get block :block/title) title) (:block/refs block))
         result (-> block
                    (merge (if level {:block/level level} {}))
