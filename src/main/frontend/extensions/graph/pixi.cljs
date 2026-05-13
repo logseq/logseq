@@ -1673,10 +1673,10 @@
     (.addChild container text)
     (draw-fps-overlay-background! background text dark?)
     {:container container
-     :sync-position! (fn [_width _height]
+     :sync-position! (fn [width height]
                        (let [{:keys [x y]} (logic/fps-overlay-position
-                                            _width
-                                            _height
+                                            width
+                                            height
                                             (.-width text)
                                             (.-height text))]
                          (set! (.-x container) x)
