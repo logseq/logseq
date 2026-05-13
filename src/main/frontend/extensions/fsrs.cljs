@@ -423,11 +423,20 @@
   (let [shown?* (:shown? state)
         shown? (rum/react shown?*)
         toggle! #(swap! shown?* not)
-        [answer cue] (cloze-parse (string/join ", " (:arguments options)))]
+        toggle-key! #(when (contains? #{"Enter" " "} (.-key %))
+                       (util/stop %)
+                       (toggle!))
+        [answer cue] (cloze-parse (string/join ", " (:arguments options)))
+        attrs {:role "button"
+               :tab-index 0
+               :on-click toggle!
+               :on-key-down toggle-key!}]
     (if (or shown? (:show-cloze? config))
-      [:a.cloze-revealed {:on-click toggle!}
-       (util/format "[%s]" answer)]
-      [:a.cloze {:on-click toggle!}
+      [:span.cloze-revealed attrs
+       "["
+       (component-block/inline-title config answer)
+       "]"]
+      [:span.cloze attrs
        (if (string/blank? cue)
          "[...]"
          (str "(" cue ")"))])))
