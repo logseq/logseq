@@ -56,6 +56,10 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Create a PR only when the fetched task block or the user's current request explicitly asks for one.
    - When creating a PR, follow the loaded GitHub publishing workflow for branch, staging, commit, push, and PR creation.
    - Prefer a draft PR unless the task explicitly asks for a ready PR.
+   - After a PR is created, update the fetched root block's `GitHub Url` property to the PR URL before adding the completion summary.
+   - Use the exact property name string key: `logseq upsert block --graph "Lambda RTC" --uuid "$normalized_uuid" --update-properties "{\"GitHub Url\" \"$pr_url\"}"`.
+   - Follow `logseq-cli` write rules and re-run the sync gate immediately before writing to `Lambda RTC`.
+   - Stop if PR creation succeeds but the `GitHub Url` property cannot be updated.
    - Include the PR URL in the final report.
    - Stop if PR creation is explicitly requested but cannot be completed safely.
 
@@ -76,7 +80,7 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Mention the normalized UUID.
    - State that the sync gate passed, including `ws-state`, `pending-local`, and `pending-server`.
    - State that the task status was moved to `doing`, a summary child block was added, and the task status was moved to `review`.
-   - If a PR was explicitly requested and created, include the PR URL. If no PR was requested, do not create one.
+   - If a PR was explicitly requested and created, include the PR URL and state that the `GitHub Url` property was updated. If no PR was requested, do not create one.
    - Summarize the task outcome and any verification performed.
 
 ## Fail-Fast Rules
@@ -86,5 +90,6 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
 - Never silently substitute another graph, block, page, db id, or query result.
 - Never mask invalid sync state with defaults.
 - Never create a pull request unless the fetched task block or the user's current request explicitly asks for one.
+- Never leave a created PR unrecorded on the fetched root block's `GitHub Url` property.
 - Never skip the `doing` status write, completion summary child block, or final `review` status write when the described task completes successfully.
 - Stop on the first command error other than a sync status showing unopened sync, invalid JSON result, missing block, sync timeout, non-idle sync state, or non-actionable task brief.
