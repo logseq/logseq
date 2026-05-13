@@ -36,8 +36,8 @@
                    :on-selection-change (fn [_nodes])
                    :on-rendered (fn [_render-info])))))))
 
-(deftest recent-task-count-rebuilds-pixi-container
+(deftest grid-layout-changes-rebuild-pixi-container
   (let [base-deps (graph/render-container-deps base-opts)]
     (is (not= base-deps
               (graph/render-container-deps
-               (assoc base-opts :visible-recent-task-count 7))))))
+               (assoc base-opts :grid-layout? false))))))
