@@ -26,6 +26,9 @@
 (deftest settings-use-non-grid-tags-layout-by-default
   (is (false? (:grid-layout? (graph/decode-settings {})))))
 
+(deftest settings-show-roomier-task-zoom-by-default
+  (is (= 12 (:visible-recent-task-count (graph/decode-settings {})))))
+
 (deftest settings-roundtrip-keeps-all-tags-sentinel
   (let [settings {:view-mode :tags-and-objects
                   :selected-tag-ids nil
@@ -54,6 +57,7 @@
                   :depth 4
                   :grid-layout? true
                   :link-distance 132
+                  :visible-recent-task-count 7
                   :open-groups #{:layout}}
         encoded (graph/encode-settings settings)
         data (js->clj (js/JSON.parse (js/JSON.stringify encoded)) :keywordize-keys true)
@@ -61,11 +65,13 @@
     (is (= 4 (:depth data)))
     (is (true? (:gridLayout data)))
     (is (= 132 (:linkDistance data)))
+    (is (= 7 (:visibleRecentTaskCount data)))
     (is (not (contains? data :showArrows)))
     (is (not (contains? data :showEdgeLabels)))
     (is (= 4 (:depth decoded)))
     (is (true? (:grid-layout? decoded)))
     (is (= 132 (:link-distance decoded)))
+    (is (= 7 (:visible-recent-task-count decoded)))
     (is (not (contains? decoded :show-arrows?)))
     (is (not (contains? decoded :show-edge-labels?)))))
 
@@ -74,10 +80,12 @@
                                         :showArrows true
                                         :gridLayout true
                                         :linkDistance 999
+                                        :visibleRecentTaskCount 100
                                         :showEdgeLabels false})]
     (is (= 5 (:depth decoded)))
     (is (true? (:grid-layout? decoded)))
     (is (= 180 (:link-distance decoded)))
+    (is (= 24 (:visible-recent-task-count decoded)))
     (is (not (contains? decoded :show-arrows?)))
     (is (not (contains? decoded :show-edge-labels?)))))
 

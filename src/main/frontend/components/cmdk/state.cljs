@@ -1,6 +1,7 @@
 (ns frontend.components.cmdk.state
-  "Persist query and filter group from the last cmdk query"
-  (:require [frontend.storage :as storage]))
+  "State helpers for command palette search."
+  (:require [frontend.storage :as storage]
+            [frontend.util :as util]))
 
 (def cmdk-last-search-storage-key :ls-cmdk-last-search)
 (def cmdk-empty-repo-key "__no-repo__")
@@ -42,6 +43,14 @@
                    (assoc saved (repo-storage-key repo) value)))
     (catch :default _e
       nil)))
+
+(defn consume-open-search-sidebar-keydown!
+  [event open-search!]
+  (when (and (util/meta-key? event)
+             (= "Enter" (.-key event)))
+    (util/stop event)
+    (open-search!)
+    true))
 
 (defn- explicit-mode-filter-group
   [opts search-mode]

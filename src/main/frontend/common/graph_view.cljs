@@ -147,12 +147,13 @@
            (datoms-for db :avet attr))))
 
 (defn- scalar-node
-  [{:keys [title-by-id name-by-id uuid-by-id icon-by-id created-at-by-id]} id kind page?]
+  [{:keys [title-by-id name-by-id uuid-by-id icon-by-id created-at-by-id ident-by-id]} id kind page?]
   (let [title (get title-by-id id)
         name (get name-by-id id)
         uuid (get uuid-by-id id)
         icon (get icon-by-id id)
-        created-at (get created-at-by-id id)]
+        created-at (get created-at-by-id id)
+        ident (get ident-by-id id)]
     (cond->
      {:id (str id)
       :db-id id
@@ -163,6 +164,9 @@
       (some? created-at)
       (assoc :block/created-at created-at)
 
+      (and (= "tag" kind) (some? ident))
+      (assoc :db-ident ident)
+
       (some? icon)
       (assoc :icon icon))))
 
@@ -171,18 +175,96 @@
    (build-node-context db node-ids true))
   ([db node-ids normalize-id-refs?]
    (let [title-by-id (entity-title-map db node-ids normalize-id-refs?)
-        title-missing-ids (set/difference node-ids (set (keys title-by-id)))
-        name-by-id (if (empty? title-missing-ids)
-                     {}
-                     (entity-value-map db :block/name title-missing-ids))
-        uuid-by-id (entity-value-map-by-id db :block/uuid node-ids)
-        icon-by-id (entity-value-map db :logseq.property/icon node-ids)
-        created-at-by-id (entity-value-map db :block/created-at node-ids)]
-    {:title-by-id title-by-id
-     :name-by-id name-by-id
-     :uuid-by-id uuid-by-id
-     :icon-by-id icon-by-id
-     :created-at-by-id created-at-by-id})))
+         title-missing-ids (set/difference node-ids (set (keys title-by-id)))
+         name-by-id (if (empty? title-missing-ids)
+                      {}
+                      (entity-value-map db :block/name title-missing-ids))
+         uuid-by-id (entity-value-map-by-id db :block/uuid node-ids)
+         icon-by-id (entity-value-map db :logseq.property/icon node-ids)
+         created-at-by-id (entity-value-map db :block/created-at node-ids)
+         ident-by-id (entity-value-map-by-id db :db/ident node-ids)]
+     {:title-by-id title-by-id
+      :name-by-id name-by-id
+      :uuid-by-id uuid-by-id
+      :icon-by-id icon-by-id
+      :created-at-by-id created-at-by-id
+      :ident-by-id ident-by-id})))
+
+(defn- task-tag-id?
+  [ident-by-class-id tag-id]
+  (= :logseq.class/Task (get ident-by-class-id tag-id)))
+
+(defn- task-object-id-set
+  [tag-links ident-by-class-id]
+  (persistent!
+   (reduce
+    (fn [task-ids [object-id tag-id]]
+      (cond-> task-ids
+        (task-tag-id? ident-by-class-id tag-id)
+        (conj! object-id)))
+    (transient #{})
+    tag-links)))
+
+(defn- task-status-context
+  [db status-ref-by-id]
+  (let [status-ids (set (vals status-ref-by-id))]
+    {:status-ident-by-id (entity-value-map-by-id db :db/ident status-ids)
+     :status-title-by-id (entity-title-map db status-ids false)}))
+
+(defn- tag-summary
+  [{:keys [title-by-id name-by-id]} ident-by-class-id tag-id]
+  (cond->
+   {:id (str tag-id)
+    :label (or (get title-by-id tag-id)
+               (get name-by-id tag-id)
+               (str tag-id))}
+    (contains? ident-by-class-id tag-id)
+    (assoc :db-ident (get ident-by-class-id tag-id))))
+
+(defn- task-tag-summaries-by-id
+  [tag-links task-ids tag-id-set tag-context ident-by-class-id]
+  (persistent!
+   (reduce
+    (fn [summaries [object-id tag-id]]
+      (cond-> summaries
+        (and (contains? task-ids object-id)
+             (contains? tag-id-set tag-id))
+        (assoc! object-id (conj (get summaries object-id [])
+                                (tag-summary tag-context ident-by-class-id tag-id)))))
+    (transient {})
+    tag-links)))
+
+(defn- task-metadata-by-id
+  [db task-ids tag-links tag-id-set tag-context ident-by-class-id]
+  (if (empty? task-ids)
+    {}
+    (let [status-ref-by-id (entity-value-map db :logseq.property/status task-ids)
+          {:keys [status-ident-by-id status-title-by-id]} (task-status-context db status-ref-by-id)
+          updated-at-by-id (entity-value-map db :block/updated-at task-ids)
+          tags-by-id (task-tag-summaries-by-id tag-links task-ids tag-id-set tag-context ident-by-class-id)]
+      (persistent!
+       (reduce
+        (fn [metadata-by-id task-id]
+          (let [status-id (get status-ref-by-id task-id)
+                status-ident (get status-ident-by-id status-id)
+                status-title (get status-title-by-id status-id)]
+            (assoc! metadata-by-id
+                    task-id
+                    (cond->
+                     {:task? true}
+                      (some? status-ident)
+                      (assoc :task/status-ident status-ident)
+
+                      (some? status-title)
+                      (assoc :task/status-title status-title)
+
+                      (contains? updated-at-by-id task-id)
+                      (assoc :block/updated-at (get updated-at-by-id task-id))
+
+                      (contains? tags-by-id task-id)
+                      (assoc :tags (get tags-by-id task-id))))))
+        (transient {})
+        task-ids)))))
 
 (defn- hidden-or-recycled?
   [entity]
@@ -385,8 +467,17 @@
             node-ids (set/union tag-id-set object-id-set)
             page-ids (entity-id-subset-with db :block/name object-id-set)
             context (build-node-context db node-ids false)
+            task-ids (task-object-id-set tag-links ident-by-class-id)
+            task-metadata (task-metadata-by-id db
+                                               task-ids
+                                               tag-links
+                                               tag-id-set
+                                               context
+                                               ident-by-class-id)
             tags (mapv #(scalar-node context % "tag" true) tag-id-set)
-            objects (mapv #(scalar-node context % "object" (contains? page-ids %))
+            objects (mapv (fn [object-id]
+                            (merge (scalar-node context object-id "object" (contains? page-ids object-id))
+                                   (get task-metadata object-id)))
                           object-id-set)
             nodes (into tags objects)
             node-id-set (set (map :id nodes))

@@ -210,10 +210,61 @@
         labels (node-labels result)]
     (testing "Non-core built-in tags can be selected and rendered"
       (is (contains? labels "Task"))
-      (is (contains? labels "task object")))
+      (is (contains? labels "task object"))
+      (is (= :logseq.class/Task
+             (:db-ident (node-by-label result "Task")))))
     (testing "Core built-in tags stay hidden from displayed tags"
       (is (not (contains? labels "Asset")))
       (is (not (contains? labels "asset object"))))))
+
+(deftest tags-and-objects-task-nodes-include-compact-task-metadata
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Tasks"}
+                 :blocks [{:block/title "write graph detail"
+                           :block/created-at 1000
+                           :block/updated-at 2000
+                           :build/tags [:logseq.class/Task :Project]
+                           :build/properties {:logseq.property/status :logseq.property/status.todo}}]}]
+               :classes {:Project {}}})
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :tags-and-objects})
+        node (node-by-label result "write graph detail")]
+    (is (= true (:task? node)))
+    (is (= :logseq.property/status.todo (:task/status-ident node)))
+    (is (= "Todo" (:task/status-title node)))
+    (is (= 2000 (:block/updated-at node)))
+    (is (= #{{:label "Task" :db-ident :logseq.class/Task}
+             {:label "Project" :db-ident :user.class/Project}}
+           (set (map #(select-keys % [:label :db-ident]) (:tags node)))))))
+
+(deftest tags-and-objects-non-task-nodes-do-not-include-task-metadata
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Objects"}
+                 :blocks [{:block/title "plain object"
+                           :build/tags [:Project]}]}]
+               :classes {:Project {}}})
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :tags-and-objects})
+        node (node-by-label result "plain object")]
+    (is (not (contains? node :task?)))
+    (is (not (contains? node :task/status-ident)))
+    (is (not (contains? node :task/status-title)))
+    (is (not (contains? node :tags)))))
+
+(deftest tags-and-objects-task-nodes-without-status-do-not-get-fake-status
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Tasks"}
+                 :blocks [{:block/title "triage inbox"
+                           :build/tags [:logseq.class/Task]}]}]})
+        result (graph-view/build-graph @conn {:type :global
+                                              :view-mode :tags-and-objects})
+        node (node-by-label result "triage inbox")]
+    (is (= true (:task? node)))
+    (is (not (contains? node :task/status-ident)))
+    (is (not (contains? node :task/status-title)))))
 
 (deftest tags-and-objects-graph-respects-hidden-recycled-and-excluded-visibility
   (let [conn (db-test/create-conn-with-blocks

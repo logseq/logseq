@@ -8,6 +8,7 @@
     overflow: hidden;
     position: relative;
     z-index: 4;
+    background: transparent;
 }
 
 .graph-root {
@@ -652,6 +653,8 @@ html[data-theme='light'] .graph-mode-tab[aria-selected="true"],
 }
 
 .graph-canvas {
+    position: relative;
+    z-index: 1;
     flex: 1 1 auto;
     width: 100%;
     height: 100%;

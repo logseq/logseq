@@ -777,8 +777,13 @@ html[data-theme='dark'] {
   }
 
   .cp__right-sidebar {
+    &-inner,
+    &-topbar {
+      background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-01)));
+    }
+
     .sidebar-item {
-      background-color: var(--lx-gray-03, var(--ls-secondary-background-color));
+      background-color: var(--lx-gray-03, var(--ls-secondary-background-color, var(--rx-gray-03)));
     }
   }
 }

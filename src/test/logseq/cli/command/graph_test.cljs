@@ -1,6 +1,7 @@
 (ns logseq.cli.command.graph-test
   (:require ["fs" :as fs]
             ["path" :as node-path]
+            [cljs.reader :as reader]
             [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
@@ -10,6 +11,7 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.graph-dir :as graph-dir]
+            [logseq.db-worker.graph-backup :as graph-backup]
             [promesa.core :as p]))
 
 (deftest test-graph-validate-result
@@ -264,6 +266,7 @@
                                                            (p/resolved (assoc config :base-url "http://example")))
                                transport/invoke (fn [_ method args]
                                                   (swap! invoke-calls conj [method args])
+                                                  (fs/writeFileSync (second args) "sqlite-copy" "utf8")
                                                   (p/resolved {:path (second args)}))]
                  (p/let [result (commands/execute {:type :graph-backup-create
                                                    :repo "logseq_db_demo"
@@ -273,34 +276,71 @@
                    (is (= :ok (:status result)))
                    (is (= 1 (count @invoke-calls)))
                    (let [[method [repo backup-db-path]] (first @invoke-calls)
-                         expected-segment (node-path/join
-                                           (graph-dir/repo->encoded-graph-dir-name repo)
-                                           "backup"
-                                           (graph-dir/graph-dir-key->encoded-dir-name "demo-nightly-20260101T000000Z")
-                                           "db.sqlite")]
+                         final-db-path (graph-backup/backup-db-path
+                                        (cli-server/graphs-dir {:root-dir root-dir})
+                                        repo
+                                        "demo-nightly-20260101T000000Z")
+                         metadata-path (graph-backup/backup-metadata-path
+                                        (cli-server/graphs-dir {:root-dir root-dir})
+                                        repo
+                                        "demo-nightly-20260101T000000Z")
+                         metadata (reader/read-string (fs/readFileSync metadata-path "utf8"))]
                      (is (= :thread-api/backup-db-sqlite method))
                      (is (= "logseq_db_demo" repo))
                      (is (and (string? backup-db-path)
-                              (string/includes? backup-db-path expected-segment))))))
+                              (string/starts-with? backup-db-path
+                                                   (node-path/dirname final-db-path))))
+                     (is (not= final-db-path backup-db-path))
+                     (is (= final-db-path (get-in result [:data :path])))
+                     (is (= "sqlite-copy" (fs/readFileSync final-db-path "utf8")))
+                     (is (= :cli (:source metadata)))
+                     (is (= "demo-nightly-20260101T000000Z" (:name metadata))))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-graph-backup-create-cleans-reserved-target-after-worker-failure
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "cli-backup-create-cleanup")
+               graphs-dir (cli-server/graphs-dir {:root-dir root-dir})
+               repo "logseq_db_demo"
+               backup-name "demo-failure"
+               backup-dir (graph-backup/backup-dir-path graphs-dir repo backup-name)
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method args]
+                                                  (swap! invoke-calls conj [method args])
+                                                  (fs/writeFileSync (second args) "partial" "utf8")
+                                                  (p/rejected (ex-info "snapshot failed"
+                                                                       {:code :snapshot-failed})))]
+                 (graph-command/execute-graph-backup-create {:repo repo
+                                                             :graph "demo"
+                                                             :backup-name backup-name}
+                                                            {:root-dir root-dir}))
+               (p/then (fn [_]
+                         (is false "expected graph backup create to fail")))
+               (p/catch (fn [e]
+                          (is (= :snapshot-failed (:code (ex-data e))))
+                          (is (= 1 (count @invoke-calls)))
+                          (is (not (fs/existsSync backup-dir)))))
                (p/finally done)))))
 
 (deftest test-execute-graph-backup-list-only-returns-current-graph-backups
   (async done
          (let [root-dir (node-helper/create-tmp-dir "cli-backup-list-scope")
+               graphs-dir (cli-server/graphs-dir {:root-dir root-dir})
                demo-repo "logseq_db_demo"
                other-repo "logseq_db_other"
                demo-backup "demo-nightly"
                other-backup "other-nightly"
-               demo-db-path (node-path/join root-dir
-                                            "graphs"
+               demo-db-path (node-path/join graphs-dir
                                             (graph-dir/repo->encoded-graph-dir-name demo-repo)
                                             "backup"
                                             (graph-dir/graph-dir-key->encoded-dir-name demo-backup)
                                             "db.sqlite")
-               other-db-path (node-path/join root-dir
-                                             "graphs"
+               other-db-path (node-path/join graphs-dir
                                              (graph-dir/repo->encoded-graph-dir-name other-repo)
                                              "backup"
                                              (graph-dir/graph-dir-key->encoded-dir-name other-backup)
@@ -366,9 +406,9 @@
                stop-calls (atom [])
                restart-calls (atom [])
                root-dir (node-helper/create-tmp-dir "cli-backup-restore-flow")
+               graphs-dir (cli-server/graphs-dir {:root-dir root-dir})
                sqlite-payload (js/Buffer.from "sqlite" "utf8")
-               backup-db-path (node-path/join root-dir
-                                              "graphs"
+               backup-db-path (node-path/join graphs-dir
                                               (graph-dir/repo->encoded-graph-dir-name "logseq_db_demo")
                                               "backup"
                                               (graph-dir/graph-dir-key->encoded-dir-name "demo-nightly")

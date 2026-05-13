@@ -799,6 +799,7 @@
  :help/feature "Feature request"
  :help/forum-community "Forum community"
  :help/handbook "Handbook"
+ :help/inline-math-example-prefix "inline"
  :help/learn-more "Learn more"
  :help/markdown-syntax "Markdown syntax"
  :help/open-link-in-sidebar "Open link in sidebar"

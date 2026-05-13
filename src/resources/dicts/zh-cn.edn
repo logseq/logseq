@@ -795,6 +795,7 @@
  :help/feature "功能建议"
  :help/forum-community "论坛讨论"
  :help/handbook "手册"
+ :help/inline-math-example-prefix "行内"
  :help/learn-more "了解更多"
  :help/markdown-syntax "Markdown 语法"
  :help/open-link-in-sidebar "在侧边栏打开"

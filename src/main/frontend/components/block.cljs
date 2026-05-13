@@ -11,7 +11,9 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
+            [frontend.components.block.drop :as block-drop]
             [frontend.components.block.macros :as block-macros]
+            [frontend.components.block.selection :as block-selection]
             [frontend.components.icon :as icon-component]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
@@ -2375,6 +2377,8 @@
         (dom/has-class? target "fn"))
    (dom/has-class? target "image-resize")
    (dom/closest target "a")
+   (dom/closest target ".cloze")
+   (dom/closest target ".cloze-revealed")
    (dom/closest target ".query-table")))
 
 (defn- block-content-on-pointer-down
@@ -3417,32 +3421,82 @@
             (state/set-state! :mobile/show-action-bar? false)
             (state/clear-selection!)))
         ;; handle DataTransfer
-        (let [data-transfer (.-dataTransfer event)
-              transfer-types (set (js->clj (.-types data-transfer)))]
-          (cond
-            (contains? transfer-types "text/plain")
-            (let [text (.getData data-transfer "text/plain")]
-              (editor-handler/api-insert-new-block!
-               text
-               {:block-uuid uuid
-                :edit-block? false
-                :sibling? (= @*move-to' :sibling)
-                :before? (= @*move-to' :top)}))
-
-            :else
-            (prn ::unhandled-drop-data-transfer-type transfer-types)))))
+        (block-drop/handle-data-transfer-drop! event uuid target-block @*move-to')))
     (block-drag-end event *move-to')))
 
 (defonce *block-last-mouse-event (atom nil))
+(defonce *block-scroll-selection-raf (atom nil))
+(defonce *block-last-scroll-top (atom nil))
 
+(defn- remember-block-pointer!
+  [^js e]
+  (reset! *block-last-mouse-event
+          {:client-x (.-clientX e)
+           :client-y (.-clientY e)}))
+
+(defn- visible-selection-boundary-block
+  [selection-block-ids scroll-direction]
+  (let [selection-block-id-set (set (map str selection-block-ids))
+        blocks (->> (dom/sel ".ls-page-blocks .page-blocks-inner .ls-block[blockid]")
+                    (filter #(contains? selection-block-id-set (dom/attr % "blockid"))))]
+    (case scroll-direction
+      :down (last blocks)
+      :up (first blocks)
+      nil)))
+
+(defn- block-under-pointer
+  []
+  (when-let [{:keys [client-x client-y]} @*block-last-mouse-event]
+    (when-let [target (.elementFromPoint js/document client-x client-y)]
+      (util/rec-get-node target "ls-block"))))
+
+(defn- select-block-under-pointer!
+  [selection-block-ids scroll-direction]
+  (when (and (seq selection-block-ids)
+             (or (state/get-selection-start-block)
+                 (seq (state/get-selection-blocks))))
+    (when-let [block-dom-node (or (visible-selection-boundary-block selection-block-ids scroll-direction)
+                                  (block-under-pointer))]
+      (when-let [block-id (.-id block-dom-node)]
+        (when-not (string/blank? block-id)
+          (editor-handler/highlight-selection-area! block-id block-dom-node
+                                                    {:append? true
+                                                     :block-ids selection-block-ids}))))))
+
+(defn- schedule-select-block-under-pointer!
+  [selection-block-ids scroll-container]
+  (when (seq selection-block-ids)
+    (let [scroll-top (some-> scroll-container .-scrollTop)
+          last-scroll-top @*block-last-scroll-top
+          scroll-direction (cond
+                             (and scroll-top last-scroll-top (> scroll-top last-scroll-top)) :down
+                             (and scroll-top last-scroll-top (< scroll-top last-scroll-top)) :up
+                             :else nil)]
+      (reset! *block-last-scroll-top scroll-top)
+      (when-let [raf-id @*block-scroll-selection-raf]
+        (js/cancelAnimationFrame raf-id))
+      (reset! *block-scroll-selection-raf
+              (js/requestAnimationFrame
+               (fn []
+                 (reset! *block-scroll-selection-raf
+                         (js/requestAnimationFrame
+                          (fn []
+                            (reset! *block-scroll-selection-raf nil)
+                            (select-block-under-pointer! selection-block-ids scroll-direction))))))))))
 (defn- block-mouse-over
-  [^js e block *control-show? block-id doc-mode?]
-  (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))
+  [^js e block *control-show? block-id doc-mode? selection-block-ids]
+  (let [last-client-y (:client-y @*block-last-mouse-event)
+        client-y (.-clientY e)
         block-dom-node (util/rec-get-node (.-target e) "ls-block")]
+    (remember-block-pointer! e)
     (reset! *control-show? true)
-    (when (and mouse-moving?
-               (not @*dragging?)
-               (not= (:block/uuid block) (:block/uuid (state/get-edit-block))))
+    (when (block-selection/select-on-hover?
+           {:last-client-y last-client-y
+            :client-y client-y
+            :dragging? @*dragging?
+            :editing-same-block? (= (:block/uuid block)
+                                    (:block/uuid (state/get-edit-block)))
+            :active-selection? (boolean (seq (state/get-selection-blocks)))})
       (.preventDefault e)
       (when-let [parent (gdom/getElement block-id)]
         (let [node (.querySelector parent ".bullet-container")]
@@ -3451,7 +3505,9 @@
       (when (non-dragging? e)
         (when-let [container (gdom/getElement "app-container-wrapper")]
           (dom/add-class! container "blocks-selection-mode"))
-        (editor-handler/highlight-selection-area! block-id block-dom-node {:append? true})))))
+        (editor-handler/highlight-selection-area! block-id block-dom-node
+                                                  {:append? true
+                                                   :block-ids selection-block-ids})))))
 
 (defn- block-mouse-leave
   [*control-show? block-id doc-mode?]
@@ -3913,9 +3969,10 @@
                                   :else -30)})
          :data-has-heading (block-heading-level block level)
          :on-mouse-enter (fn [e]
-                           (block-mouse-over e block *control-show? block-id doc-mode?))
-         :on-mouse-move (fn [e]
-                          (reset! *block-last-mouse-event e))
+                           (block-mouse-over e block *control-show? block-id doc-mode?
+                                             (:selection/block-ids config)))
+           :on-mouse-move (fn [e]
+                            (remember-block-pointer! e))
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
@@ -4606,13 +4663,20 @@
                                       {:top? top?
                                        :bottom? bottom?}))))
         virtualized? (and virtualized? (seq blocks))
+        virtualized-block-ids (when virtualized? (mapv :block/uuid blocks))
+        selection-block-ids (or (:selection/block-ids config)
+                                virtualized-block-ids)
+        scroll-container (or (:scroll-container config)
+                             (if-let [node (js/document.getElementById (:blocks-node-id config))]
+                               (util/app-scroll-container-node node)
+                               (util/app-scroll-container-node)))
+        scroll-container (if (fn? scroll-container)
+                           (scroll-container)
+                           scroll-container)
         *virtualized-ref (hooks/use-ref nil)
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
-                        :custom-scroll-parent (or (:scroll-container config)
-                                                  (if-let [node (js/document.getElementById (:blocks-node-id config))]
-                                                    (util/app-scroll-container-node node)
-                                                    (util/app-scroll-container-node)))
+                        :custom-scroll-parent scroll-container
                         :compute-item-key (fn [idx]
                                             (let [block (nth blocks idx)]
                                               (str (:container-id config) "-" (:db/id block))))
@@ -4625,6 +4689,7 @@
                                               bottom? (= (dec blocks-count) idx)
                                               block (nth blocks idx)
                                               config' (cond-> (assoc config :top? top?)
+                                                        true (assoc :selection/block-ids selection-block-ids)
                                                         (and root-level? defer-root-render?) (assoc :defer-top-index idx)
                                                         (and root-level? defer-root-render?) (assoc :defer-ready-index defer-ready-index)
                                                         (and root-level? defer-root-render?) (assoc :defer-children-render-complete-by-root* *defer-children-render-complete-by-root))]
@@ -4686,6 +4751,14 @@
                     (vreset! *ob ob))))))
            #(some-> @*ob (.disconnect)))))
      [])
+    (hooks/use-effect!
+     (fn []
+       (if (and scroll-container (seq selection-block-ids))
+         (let [handler #(schedule-select-block-under-pointer! selection-block-ids scroll-container)]
+           (.addEventListener scroll-container "scroll" handler #js {:passive true})
+           #(.removeEventListener scroll-container "scroll" handler))
+         (fn [])))
+     [scroll-container selection-block-ids])
 
     [:div.blocks-list-wrap
      {:data-level (or (:level config) 0)
