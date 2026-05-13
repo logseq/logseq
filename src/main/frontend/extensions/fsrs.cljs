@@ -438,6 +438,7 @@
         [answer cue] (cloze-parse (string/join ", " (:arguments options)))
         attrs {:role "button"
                :tab-index 0
+               :aria-pressed shown?
                :on-click toggle!
                :on-key-down toggle-key!}]
     (if (or shown? (:show-cloze? config))
