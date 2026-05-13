@@ -2,7 +2,6 @@
   "Provides SQLite dbs for electron and manages files of those dbs"
   (:require ["fs-extra" :as fs]
             ["path" :as node-path]
-            [electron.backup-file :as backup-file]
             [electron.db-worker :as db-worker]
             [lambdaisland.glogi :as log]
             [logseq.cli.common.graph :as cli-common-graph]
@@ -10,10 +9,13 @@
             [logseq.common.graph-dir :as graph-dir]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.backup :as sqlite-backup]
+            [logseq.db-worker.graph-backup :as graph-backup]
             [promesa.core :as p]))
 
 (def ^:private backup-interval-ms
   (* 60 60 1000))
+
+(def ^:private automatic-backup-keep-versions 12)
 
 (defonce *auto-backup
   (atom {:window->repo {}
@@ -38,36 +40,34 @@
     (when (fs/existsSync db-path)
       (fs/readFileSync db-path))))
 
-(defn- temp-backup-path
-  [backups-path]
-  (node-path/join backups-path
-                  (str ".tmp."
-                       (.now js/Date)
-                       "."
-                       (rand-int 1000000)
-                       ".sqlite")))
+(defn- backup-source
+  [{:keys [force-backup?]}]
+  (if (true? force-backup?)
+    :electron-manual
+    :electron-auto))
+
+(defn- <create-graph-backup!
+  [db-name opts snapshot!]
+  (let [_ (ensure-graph-dir! db-name)
+        source (backup-source opts)]
+    (graph-backup/<create-backup!
+     (cond-> {:graphs-dir (cli-common-graph/get-db-graphs-dir)
+              :repo db-name
+              :backup-name (graph-backup/build-backup-name db-name nil)
+              :source source
+              :snapshot! snapshot!}
+       (= :electron-auto source)
+       (assoc :throttle-ms backup-interval-ms
+              :keep-versions automatic-backup-keep-versions)))))
 
 (defn backup-db-with-sqlite-backup!
   [db-name {:keys [force-backup? sqlite-backup!]}]
-  (let [_ (ensure-graph-dir! db-name)
-        [_db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)
-        backups-path (common-sqlite/get-db-backups-path (cli-common-graph/get-db-graphs-dir) db-name)]
-    (when (fs/existsSync db-path)
-      (let [tmp-path (temp-backup-path backups-path)]
-        (-> (p/let [_ (fs/ensureDirSync backups-path)
-                    _ (sqlite-backup! db-path tmp-path)
-                    payload (fs/readFileSync tmp-path)]
-              (backup-file/backup-file db-name nil nil
-                                       ".sqlite"
-                                       payload
-                                       :backups-dir backups-path
-                                       :keep-versions 12
-                                       :force-backup? force-backup?))
-            (p/finally (fn []
-                         (try
-                           (fs/removeSync tmp-path)
-                           (catch :default _
-                             nil)))))))))
+  (let [[_db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)]
+    (<create-graph-backup!
+     db-name
+     {:force-backup? force-backup?}
+     (fn [dst-path]
+       (sqlite-backup! db-path dst-path)))))
 
 (defn backup-db!
   [db-name opts]
@@ -77,15 +77,14 @@
 
 (defn backup-db-via-worker!
   [db-name window-id opts]
-  (backup-db-with-sqlite-backup!
+  (<create-graph-backup!
    db-name
-   (assoc opts
-          :sqlite-backup!
-          (fn [_src-path dst-path]
-            (p/let [runtime (db-worker/ensure-runtime! db-name window-id)]
-              (cli-transport/invoke runtime
-                                    :thread-api/backup-db-sqlite
-                                    [db-name dst-path]))))))
+   opts
+   (fn [dst-path]
+     (p/let [runtime (db-worker/ensure-runtime! db-name window-id)]
+       (cli-transport/invoke runtime
+                             :thread-api/backup-db-sqlite
+                             [db-name dst-path])))))
 
 (defn export-db-via-worker!
   [db-name window-id dst-path]
