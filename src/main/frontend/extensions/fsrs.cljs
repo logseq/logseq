@@ -432,7 +432,7 @@
                     (when (or (nil? inner-a)
                               (not (.contains (.-currentTarget e) inner-a)))
                       (swap! shown?* not))))
-        toggle-key! #(when (contains? #{"Enter" " "} (.-key %))
+        toggle-key! #(when (contains? #{"Enter" " " "Space" "Spacebar"} (.-key %))
                        (util/stop %)
                        (swap! shown?* not))
         [answer cue] (cloze-parse (string/join ", " (:arguments options)))
