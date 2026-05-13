@@ -4,7 +4,8 @@
    Converts page/block entities into flat segment maps, then applies a
    display-budget algorithm to determine which segments are visible and
    which are folded into an ellipsis."
-  (:require [clojure.string :as string]))
+  (:require [clojure.string :as string]
+            [logseq.db.frontend.content :as db-content]))
 
 ;; ---------------------------------------------------------------------------
 ;; Text normalization
@@ -122,6 +123,15 @@
           cleaned (when line (strip-markdown-markup line))]
       (truncate-segment-text cleaned))))
 
+(defn- entity-display-title
+  [entity raw-title]
+  (or (when (and (string? raw-title)
+                 (re-find db-content/id-ref-pattern raw-title))
+        (db-content/recur-replace-uuid-in-block-title
+         (assoc entity :block/title raw-title)
+         10))
+      raw-title))
+
 ;; ---------------------------------------------------------------------------
 ;; Block type detection
 ;; ---------------------------------------------------------------------------
@@ -192,7 +202,9 @@
   [entity]
   (when entity
     (let [page? (some? (:block/name entity))
-          raw-title (or (:block/raw-title entity) (:block/title entity))
+          raw-title (entity-display-title
+                     entity
+                     (or (:block/raw-title entity) (:block/title entity)))
           ;; DB version: structural type is stored in :logseq.property.node/display-type
           ;; (Code/Quote/Math blocks) or inferred from :block/tags (Query family).
           ;; org-mode markers like #+BEGIN_SRC in raw-title are also recognised as
