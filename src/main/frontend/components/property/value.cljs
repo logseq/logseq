@@ -672,6 +672,20 @@
                           :close-modal? false
                           k f'))))
 
+(defn- add-initial-node-choice
+  [initial-choices new-choice]
+  (let [node-choice-match? (fn [choice]
+                             (let [choice-value (:value choice)
+                                   new-value (:value new-choice)]
+                               (or
+                                (and (:db/id choice-value) (= (:db/id choice-value) (:db/id new-value)))
+                                (and (:block/uuid choice-value) (= (:block/uuid choice-value) (:block/uuid new-value)))
+                                (= choice-value new-value))))
+        initial-choices' (vec initial-choices)]
+    (if (some node-choice-match? initial-choices')
+      initial-choices'
+      (conj initial-choices' new-choice))))
+
 (rum/defc ^:large-vars/cleanup-todo select-node < rum/static
   [property
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
@@ -891,7 +905,7 @@
                                                                                                    :built-in? false})]
                                      (set-result! result))))
                      :add-new-choice! (fn [new-choice]
-                                        (set-initial-choices! (conj (vec initial-choices) new-choice))))
+                                        (set-initial-choices! (add-initial-node-choice initial-choices new-choice))))
         repo (state/get-current-repo)
         classes (:logseq.property/classes property)
         class? (= :class (:logseq.property/type property))

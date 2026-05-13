@@ -65,3 +65,31 @@
                       :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}]
     (is (= (:logseq.property/default-value property)
            (#'property-value/resolved-property-value-for-render loaded-block property false)))))
+
+(deftest add-initial-node-choice-dedupes-existing-db-id-test
+  (let [existing {:value {:db/id 100
+                          :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+                  :label "Existing node"}
+        duplicate {:value {:db/id 100
+                           :block/uuid #uuid "22222222-2222-2222-2222-222222222222"}
+                   :label "Existing node"}]
+    (is (= [existing]
+           (#'property-value/add-initial-node-choice [existing] duplicate)))))
+
+(deftest add-initial-node-choice-dedupes-existing-uuid-test
+  (let [existing {:value {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+                  :label "Existing node"}
+        duplicate {:value {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+                   :label "Existing node"}]
+    (is (= [existing]
+           (#'property-value/add-initial-node-choice [existing] duplicate)))))
+
+(deftest add-initial-node-choice-keeps-distinct-node-with-same-label-test
+  (let [existing {:value {:db/id 100
+                          :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+                  :label "Shared title"}
+        new-choice {:value {:db/id 101
+                            :block/uuid #uuid "22222222-2222-2222-2222-222222222222"}
+                    :label "Shared title"}]
+    (is (= [existing new-choice]
+           (#'property-value/add-initial-node-choice [existing] new-choice)))))
