@@ -674,9 +674,11 @@
 
 (defn- add-initial-node-choice
   [initial-choices new-choice]
-  (let [node-choice-match? (fn [choice]
-                             (let [choice-value (:value choice)
-                                   new-value (:value new-choice)]
+  (let [choice-node-value (fn [choice]
+                            (or (:value choice) choice))
+        node-choice-match? (fn [choice]
+                             (let [choice-value (choice-node-value choice)
+                                   new-value (choice-node-value new-choice)]
                                (or
                                 (and (:db/id choice-value) (= (:db/id choice-value) (:db/id new-value)))
                                 (and (:block/uuid choice-value) (= (:block/uuid choice-value) (:block/uuid new-value)))

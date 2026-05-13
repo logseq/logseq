@@ -84,6 +84,16 @@
     (is (= [existing]
            (#'property-value/add-initial-node-choice [existing] duplicate)))))
 
+(deftest add-initial-node-choice-dedupes-existing-raw-entity-test
+  (let [existing {:db/id 100
+                  :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                  :block/title "Existing node"}
+        duplicate {:value {:db/id 100
+                           :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+                   :label "Existing node"}]
+    (is (= [existing]
+           (#'property-value/add-initial-node-choice [existing] duplicate)))))
+
 (deftest add-initial-node-choice-keeps-distinct-node-with-same-label-test
   (let [existing {:value {:db/id 100
                           :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
