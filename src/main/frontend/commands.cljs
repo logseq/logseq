@@ -1,6 +1,7 @@
 (ns frontend.commands
   "Provides functionality for commands and advanced commands"
   (:require [clojure.string :as string]
+            [frontend.context.i18n :as i18n :refer [interpolate-sentence t t-en]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.extensions.video.youtube :as youtube]
@@ -17,6 +18,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.property :as gp-property]
             [promesa.core :as p]))
 
@@ -27,9 +29,10 @@
 (defonce command-ask "\\")
 (defonce *current-command (atom nil))
 
-(def query-doc
+(defn query-doc
+  []
   [:div {:on-pointer-down (fn [e] (.stopPropagation e))}
-   [:div.font-medium.text-lg.mb-2 "Query examples:"]
+   [:div.font-medium.text-lg.mb-2 (t :query/examples-title)]
    [:ul.mb-1
     [:li.mb-1 [:code "{{query #tag}}"]]
     [:li.mb-1 [:code "{{query [[page]]}}"]]
@@ -39,37 +42,42 @@
     [:li.mb-1 [:code "{{query (and (between -7d +7d) (task Done))}}"]]
     [:li.mb-1 [:code "{{query (property key value)}}"]]
     [:li.mb-1 [:code "{{query (tags #tag)}}"]]]
-
-   [:p "Check more examples at "
-    [:a {:href "https://docs.logseq.com/#/page/queries"
-         :target "_blank"}
-     "Queries documentation"]
-    "."]])
+   [:p
+    (interpolate-sentence
+     (t :query/examples-desc)
+     :links [{:href "https://docs.logseq.com/#/page/queries"
+              :target "_blank"}])]])
 
 (defn link-steps []
   [[:editor/input (str command-trigger "link")]
    [:editor/show-input [{:command :link
                          :id :link
-                         :placeholder "Link"
+                         :placeholder (t :ui/link)
                          :autoFocus true}
                         {:command :link
                          :id :label
-                         :placeholder "Label"}]]])
+                         :placeholder (t :ui/label)}]]])
 
 (defn image-link-steps []
   [[:editor/input (str command-trigger "link")]
    [:editor/show-input [{:command :image-link
                          :id :link
-                         :placeholder "Link"
+                         :placeholder (t :ui/link)
                          :autoFocus true}
                         {:command :image-link
                          :id :label
-                         :placeholder "Label"}]]])
+                         :placeholder (t :ui/label)}]]])
 
 (def *extend-slash-commands (atom []))
 
 (defn register-slash-command [cmd]
   (swap! *extend-slash-commands conj cmd))
+
+(defn- resolve-slash-command
+  [command]
+  (if (fn? command)
+    (command)
+    command))
 
 (defn ->marker
   [marker]
@@ -92,8 +100,7 @@
 
 (defn db-based-statuses
   []
-  (map (fn [e] (:block/title e))
-       (db-pu/get-closed-property-values :logseq.property/status)))
+  (db-pu/get-closed-property-values :logseq.property/status))
 
 (defn db-based-embed-block
   []
@@ -141,39 +148,44 @@
    [:editor/set-property :logseq.property.node/display-type :math]])
 
 (defn get-statuses
-  []
-  (let [result (->>
-                (db-based-statuses)
-                (mapv (fn [command]
-                        (let [icon (case command
-                                     "Canceled" "Cancelled"
-                                     "Doing" "InProgress50"
-                                     command)]
-                          [command (->marker command) (str "Set status to " command) icon]))))]
-    (when (seq result)
-      (map (fn [v] (conj v "TASK STATUS")) result))))
+  ([] (get-statuses t))
+  ([t-fn]
+   (let [group-label (t-fn :editor.slash/group-task-status)
+         result (->>
+                 (db-based-statuses)
+                 (mapv (fn [status]
+                         (let [command (:block/title status)
+                               label (db-property/built-in-display-title status t-fn)
+                               icon (case command
+                                      "Canceled" "Cancelled"
+                                      "Doing" "InProgress50"
+                                      command)]
+                           [label (->marker command) (t-fn :editor.slash/status-desc label) icon]))))]
+     (when (seq result)
+       (map (fn [v] (conj v group-label)) result)))))
 
 (defn db-based-priorities
   []
-  (map (fn [e] (str "Priority " (:block/title e)))
-       (db-pu/get-closed-property-values :logseq.property/priority)))
+  (db-pu/get-closed-property-values :logseq.property/priority))
 
 (defn get-priorities
-  []
-  (let [with-no-priority #(cons ["No priority" (->priority nil) "" :icon/priorityLvlNone] %)
-        result (->>
-                (db-based-priorities)
-                (mapv (fn [item]
-                        (let [command item
-                              item (string/replace item #"^Priority " "")]
-                          [command
-                           (->priority item)
-                           (str "Set priority to " item)
-                           (str "priorityLvl" item)])))
-                (with-no-priority)
-                (vec))]
-    (when (seq result)
-      (map (fn [v] (into v ["PRIORITY"])) result))))
+  ([] (get-priorities t))
+  ([t-fn]
+   (let [group-label (t-fn :editor.slash/group-priority)
+         with-no-priority #(cons [(t-fn :editor.slash/no-priority) (->priority nil) "" :icon/priorityLvlNone] %)
+         result (->>
+                 (db-based-priorities)
+                 (mapv (fn [priority]
+                         (let [value (:block/title priority)
+                               label (db-property/built-in-display-title priority t-fn)]
+                           [(t-fn :editor.slash/priority-label label)
+                            (->priority value)
+                            (t-fn :editor.slash/priority-desc label)
+                            (str "priorityLvl" value)])))
+                 (with-no-priority)
+                 (vec))]
+     (when (seq result)
+       (map (fn [v] (into v [group-label])) result)))))
 
 ;; Credits to roamresearch.com
 
@@ -184,151 +196,188 @@
    [:editor/move-cursor-to-end]])
 
 (defn- headings
-  []
-  (mapv (fn [level]
-          (let [heading (str "Heading " level)]
-            [heading (->heading level) heading (str "h-" level) "Heading"])) (range 1 7)))
+  ([] (headings t))
+  ([t-fn]
+   (into [[(t-fn :editor.slash/normal-text)
+           (->heading nil)
+           (t-fn :editor.slash/normal-text-desc)
+           :icon/text
+           (t-fn :editor.slash/group-heading)]]
+         (mapv (fn [level]
+                 (let [heading (t-fn :editor.slash/heading-label level)]
+                   [heading (->heading level) heading (str "h-" level) (t-fn :editor.slash/group-heading)]))
+               (range 1 7)))))
 
 (defonce *latest-matched-command (atom ""))
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
 
 (defn ^:large-vars/cleanup-todo commands-map
-  [get-page-ref-text]
-  (let [embed-block db-based-embed-block]
-    (->>
-     (concat
-        ;; basic
-      [["Node reference"
-        [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
-         [:editor/search-page]]
-        "Create a backlink to a node (a page or a block)"
-        :icon/pageRef
-        "BASIC"]
-       ["Node embed"
-        (embed-block)
-        "Embed a node here"
-        :icon/blockEmbed]]
+  ([get-page-ref-text] (commands-map get-page-ref-text t))
+  ([get-page-ref-text t-fn]
+   (let [embed-block db-based-embed-block]
+     (->>
+      (concat
+       ;; basic
+       [[(t-fn :editor.slash/node-reference)
+         [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
+          [:editor/search-page]]
+         (t-fn :editor.slash/node-reference-desc)
+         :icon/pageRef
+         (t-fn :editor.slash/group-basic)]
+        [(t-fn :editor.slash/node-embed)
+         (embed-block)
+         (t-fn :editor.slash/node-embed-desc)
+         :icon/blockEmbed]]
 
-        ;; format
-      [["Link" (link-steps) "Create a HTTP link" :icon/link "FORMAT"]
-       ["Image link" (image-link-steps) "Create a HTTP link to a image" :icon/photoLink]
-       (when (state/markdown?)
-         ["Underline" [[:editor/input "<ins></ins>"
-                        {:last-pattern command-trigger
-                         :backward-pos 6}]] "Create a underline text decoration"
-          :icon/underline])
-       ["Code block"
-        (code-block-steps)
-        "Insert code block"
-        :icon/code]
-       ["Quote"
-        (quote-block-steps)
-        "Create a quote block"
-        :icon/quote]
-       ["Math block"
-        (math-block-steps)
-        "Create a latex block"
-        :icon/math]]
+       ;; format
+       [[(t-fn :ui/link) (link-steps) (t-fn :editor.slash/link-desc) :icon/link (t-fn :editor.slash/group-format)]
+        [(t-fn :editor.slash/image-link) (image-link-steps) (t-fn :editor.slash/image-link-desc) :icon/photoLink]
+        (when (state/markdown?)
+          [(t-fn :editor.slash/underline)
+           [[:editor/input "<ins></ins>" {:last-pattern command-trigger :backward-pos 6}]]
+           (t-fn :editor.slash/underline-desc)
+           :icon/underline])
+        [(t-fn :editor.slash/code-block)
+         (code-block-steps)
+         (t-fn :editor.slash/code-block-desc)
+         :icon/code]
+        [(t-fn :class.built-in/quote-block)
+         (quote-block-steps)
+         (t-fn :editor.slash/quote-desc)
+         :icon/quote]
+        [(t-fn :editor.slash/math-block)
+         (math-block-steps)
+         (t-fn :editor.slash/math-block-desc)
+         :icon/math]]
 
-      (headings)
+       (headings t-fn)
 
-      ;; task management
-      (get-statuses)
+       ;; task management
+       (get-statuses t-fn)
 
-      ;; task date
-      [["Deadline"
-        [[:editor/clear-current-slash]
-         [:editor/set-deadline]]
-        ""
-        :icon/calendar-stats
-        "TASK DATE"]
-       ["Scheduled"
-        [[:editor/clear-current-slash]
-         [:editor/set-scheduled]]
-        ""
-        :icon/calendar-month
-        "TASK DATE"]]
+       ;; task date
+       [[(t-fn :property.built-in/deadline)
+         [[:editor/clear-current-slash]
+          [:editor/set-deadline]]
+         ""
+         :icon/calendar-stats
+         (t-fn :editor.slash/group-task-date)]
+        [(t-fn :property.built-in/scheduled)
+         [[:editor/clear-current-slash]
+          [:editor/set-scheduled]]
+         ""
+         :icon/calendar-month
+         (t-fn :editor.slash/group-task-date)]]
 
-      ;; priority
-      (get-priorities)
+       ;; priority
+       (get-priorities t-fn)
 
-      ;; time & date
-      [["Tomorrow"
-        #(get-page-ref-text (date/tomorrow))
-        "Insert the date of tomorrow"
-        :icon/tomorrow
-        "TIME & DATE"]
-       ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday" :icon/yesterday]
-       ["Today" #(get-page-ref-text (date/today)) "Insert the date of today" :icon/calendar]
-       ["Current time" #(date/get-current-time) "Insert current time" :icon/clock]
-       ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here" :icon/calendar-dots]]
+       ;; time & date
+       [[(t-fn :date.nlp/tomorrow)
+         #(get-page-ref-text (db/get-journal-page-title (date/tomorrow)))
+         (t-fn :editor.slash/tomorrow-desc)
+         :icon/tomorrow
+         (t-fn :editor.slash/group-time-and-date)]
+        [(t-fn :date.nlp/yesterday)
+         #(get-page-ref-text (db/get-journal-page-title (date/yesterday)))
+         (t-fn :editor.slash/yesterday-desc)
+         :icon/yesterday]
+        [(t-fn :date.nlp/today)
+         #(get-page-ref-text (db/get-today-journal-title))
+         (t-fn :editor.slash/today-desc)
+         :icon/calendar]
+        [(t-fn :editor.slash/current-time)
+         #(date/get-current-time)
+         (t-fn :editor.slash/current-time-desc)
+         :icon/clock]
+        [(t-fn :editor.slash/date-picker)
+         [[:editor/show-date-picker]]
+         (t-fn :editor.slash/date-picker-desc)
+         :icon/calendar-dots]]
 
-      ;; order list
-      [["Number list"
-        [[:editor/clear-current-slash]
-         [:editor/toggle-own-number-list]]
-        "Number list"
-        :icon/numberedParents
-        "LIST TYPE"]
-       ["Number children" [[:editor/clear-current-slash]
-                           [:editor/toggle-children-number-list]]
-        "Number children"
-        :icon/numberedChildren]]
+       ;; order list
+       [[(t-fn :editor.slash/number-list)
+         [[:editor/clear-current-slash]
+          [:editor/toggle-own-number-list]]
+         (t-fn :editor.slash/number-list)
+         :icon/numberedParents
+         (t-fn :editor.slash/group-list-type)]
+        [(t-fn :editor.slash/number-children)
+         [[:editor/clear-current-slash]
+          [:editor/toggle-children-number-list]]
+         (t-fn :editor.slash/number-children)
+         :icon/numberedChildren]]
 
-      ;; advanced
-      [["Query" (query-steps) query-doc :icon/query "ADVANCED"]
-       ["Advanced Query" (advanced-query-steps) "Create an advanced query block" :icon/query]
-       ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]
-       ["Calculator"
-        (calc-steps)
-        "Insert a calculator" :icon/calculator]
+       ;; advanced
+       [[(t-fn :property.built-in/query) (query-steps) (query-doc) :icon/query (t-fn :editor.slash/group-advanced)]
+        [(t-fn :editor.slash/advanced-query) (advanced-query-steps) (t-fn :editor.slash/advanced-query-desc) :icon/query]
+        [(t-fn :editor.slash/query-function)
+         [[:editor/input "{{function }}" {:backward-pos 2}]]
+         (t-fn :editor.slash/query-function-desc)
+         :icon/queryCode]
+        [(t-fn :editor.slash/calculator)
+         (calc-steps)
+         (t-fn :editor.slash/calculator-desc)
+         :icon/calculator]
+        [(t-fn :editor.slash/upload-asset)
+         [[:editor/click-hidden-file-input :id]]
+         (t-fn :editor.slash/upload-asset-desc)
+         :icon/upload]
+        [(t-fn :class.built-in/template)
+         [[:editor/input command-trigger nil]
+          [:editor/search-template]]
+         (t-fn :editor.slash/template-desc)
+         :icon/template]
+        [(t-fn :editor.slash/embed-html) (->inline "html") "" :icon/htmlEmbed]
+        [(t-fn :editor.slash/embed-video-url)
+         [[:editor/input "{{video }}" {:last-pattern command-trigger :backward-pos 2}]]
+         ""
+         :icon/videoEmbed]
+        [(t-fn :editor.slash/embed-youtube-timestamp) [[:youtube/insert-timestamp]] "" :icon/videoEmbed]
+        [(t-fn :editor.slash/embed-twitter-tweet)
+         [[:editor/input "{{tweet }}" {:last-pattern command-trigger :backward-pos 2}]]
+         ""
+         :icon/xEmbed]
+        [(t-fn :command.editor/add-property)
+         [[:editor/clear-current-slash]
+          [:editor/new-property]]
+         ""
+         :icon/cube-plus]]
 
-       ["Upload an asset"
-        [[:editor/click-hidden-file-input :id]]
-        "Upload file types like image, pdf, docx, etc.)"
-        :icon/upload]
-
-       ["Template" [[:editor/input command-trigger nil]
-                    [:editor/search-template]] "Insert a created template here"
-        :icon/template]
-
-       ["Embed HTML " (->inline "html") "" :icon/htmlEmbed]
-
-       ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern command-trigger
-                                                        :backward-pos 2}]] ""
-        :icon/videoEmbed]
-
-       ["Embed Youtube timestamp" [[:youtube/insert-timestamp]] "" :icon/videoEmbed]
-
-       ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
-                                                            :backward-pos 2}]] ""
-        :icon/xEmbed]
-
-       ["Add new property" [[:editor/clear-current-slash]
-                            [:editor/new-property]] ""
-        :icon/cube-plus]]
-
-      (let [commands (->> @*extend-slash-commands
-                          (remove (fn [command] (when (map? (last command))
-                                                  (false? (:db-graph? (last command)))))))]
-        commands)
+       (let [commands (->> @*extend-slash-commands
+                           (map resolve-slash-command)
+                           (remove (fn [command]
+                                     (when (map? (last command))
+                                       (false? (:db-graph? (last command)))))))]
+         commands)
 
 ;; Allow user to modify or extend, should specify how to extend.
 
-      (state/get-commands)
-      (when-let [plugin-commands (seq (some->> (state/get-plugins-slash-commands)
-                                               (mapv #(vec (concat % [nil :icon/puzzle])))))]
-        (-> plugin-commands (vec) (update 0 (fn [v] (conj v "PLUGINS"))))))
-     (remove nil?)
-     (util/distinct-by-last-wins first))))
+       (state/get-commands)
+       (when-let [plugin-commands (seq (some->> (state/get-plugins-slash-commands)
+                                                (mapv #(vec (concat % [nil :icon/puzzle])))))]
+         (-> plugin-commands
+             (vec)
+             (update 0 (fn [v] (conj v (t-fn :editor.slash/group-plugins)))))))
+      (remove nil?)
+      (util/distinct-by-last-wins first)))))
 
 (defn init-commands!
   [get-page-ref-text]
-  (let [commands (commands-map get-page-ref-text)]
+  (let [commands    (commands-map get-page-ref-text)
+        en-commands (commands-map get-page-ref-text t-en)
+        lang        (or (some-> (:preferred-language @state/state) keyword) :en)
+        zh-cn?      (= lang :zh-CN)
+        commands-with-meta
+        (mapv (fn [cmd en-cmd]
+                (let [m (cond-> {:en-text (first en-cmd)}
+                          zh-cn? (assoc :pinyin-text (search/hanzi->initials (first cmd))))]
+                  (with-meta cmd m)))
+              commands en-commands)]
     (reset! *latest-matched-command "")
-    (reset! *initial-commands commands)
-    (reset! *matched-commands commands)))
+    (reset! *initial-commands commands-with-meta)
+    (reset! *matched-commands commands-with-meta)))
 
 (defn set-matched-commands!
   [command matched-commands]
@@ -496,9 +545,21 @@
   ([text]
    (get-matched-commands text @*initial-commands))
   ([text commands]
-   (search/fuzzy-search commands text
-                        :extract-fn first
-                        :limit 50)))
+   (let [lang        (or (some-> (:preferred-language @state/state) keyword) :en)
+         en?         (= lang :en)
+         zh-cn?      (= lang :zh-CN)
+         extract-fns (cond
+                       en?    [first]
+                       zh-cn? [first
+                               #(-> % meta :en-text)
+                               #(-> % meta :pinyin-text)]
+                       :else  [first
+                               #(-> % meta :en-text)])]
+     (search/fuzzy-search-multi
+      commands
+      text
+      {:extract-fns extract-fns
+       :limit 50}))))
 
 (defmulti handle-step first)
 
@@ -649,7 +710,7 @@
        (contains? #{:scheduled :deadline} type)
        (string/blank? (gobj/get (state/get-input) "value")))
     (do
-      (notification/show! [:div "Please add some content first."] :warning)
+      (notification/show! [:div (t :editor/add-content-first-warning)] :warning)
       (restore-state))
     (do
       (state/set-timestamp-block! nil)

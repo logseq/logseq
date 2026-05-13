@@ -1,21 +1,18 @@
 (ns electron.exceptions
   (:require [electron.logger :as logger]
-            [electron.utils :as utils]
-            [clojure.string :as string]))
+            [electron.utils :as utils]))
 
 (defonce uncaughtExceptionChan "uncaughtException")
-
-(defn show-error-tip
-  [& msg]
-  (utils/send-to-renderer "notification"
-                          {:type    "error"
-                           :payload (string/join "\n" msg)}))
 
 (defn- app-uncaught-handler
   [^js e]
   (let [msg (.-message e)
         stack (.-stack e)]
-    (show-error-tip "[Main Exception]" msg stack))
+    (utils/send-to-renderer "notification"
+                            {:type      "error"
+                             :payload   (str "[Main Exception]\n" msg "\n" stack)
+                             :i18n-key  :electron/main-exception
+                             :i18n-args [msg stack]}))
 
   ;; for debug log
   (logger/error uncaughtExceptionChan (str e)))

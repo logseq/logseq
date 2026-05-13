@@ -1,7 +1,5 @@
 (ns logseq.e2e.graph
-  (:require [clojure.edn :as edn]
-            [clojure.string :as string]
-            [logseq.e2e.assert :as assert]
+  (:require [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
@@ -21,6 +19,12 @@
 (def ^:private e2ee-password-input (str e2ee-password-modal " .ls-toggle-password-input input"))
 (def ^:private e2ee-password-submit (str e2ee-password-modal " button:text(\"Submit\")"))
 (def ^:private cloud-ready-indicator "button.cloud.on.idle")
+(def ^:private new-graph-dialog ".new-graph")
+(def ^:private new-graph-submit (str new-graph-dialog " button:not([disabled]):text(\"Submit\")"))
+(def ^:private rtc-sync-toggle "button#rtc-sync")
+(def ^:private rtc-graph-e2ee-toggle "button#rtc-graph-e2ee")
+(def ^:private e2ee-password-poll-ms 250)
+(def ^:private e2ee-password-prompt-grace-ms 2000)
 
 (defn- input-e2ee-password
   []
@@ -39,33 +43,43 @@
 (defn- maybe-input-e2ee-password
   []
   ;; Password input prompt is optional for accounts with already initialized keys/password.
-  (loop [remaining-ms 20000]
+  ;; Cloud-ready can still be visible from the previous graph right after submit,
+  ;; so wait for it to stay visible briefly before treating it as the terminal state.
+  (loop [remaining-ms 20000
+         cloud-ready-ms 0]
     (cond
       (w/visible? e2ee-password-modal)
       (input-e2ee-password)
 
-      (w/visible? cloud-ready-indicator)
+      (and (>= cloud-ready-ms e2ee-password-prompt-grace-ms)
+           (w/visible? cloud-ready-indicator))
       nil
 
       (<= remaining-ms 0)
       nil
 
       :else
-      (do
-        (util/wait-timeout 250)
-        (recur (- remaining-ms 250))))))
+      (let [cloud-ready? (w/visible? cloud-ready-indicator)]
+        (util/wait-timeout e2ee-password-poll-ms)
+        (recur (- remaining-ms e2ee-password-poll-ms)
+               (if cloud-ready?
+                 (+ cloud-ready-ms e2ee-password-poll-ms)
+                 0))))))
 
 (defn- new-graph-helper
-  [graph-name enable-sync?]
+  [graph-name enable-sync? graph-e2ee?]
   (util/search-and-click "Add a DB graph")
   (w/wait-for "h2:text(\"Create a new graph\")")
   (w/click "input[placeholder=\"your graph name\"]")
   (util/input graph-name)
   (when enable-sync?
-    (w/wait-for "button#rtc-sync" {:timeout 3000})
-    (w/click "button#rtc-sync"))
+    (w/wait-for rtc-sync-toggle {:timeout 3000})
+    (w/click rtc-sync-toggle)
+    (when-not graph-e2ee?
+      (w/wait-for rtc-graph-e2ee-toggle {:timeout 3000})
+      (w/click rtc-graph-e2ee-toggle)))
 
-  (w/click "button:not([disabled]):text(\"Submit\")")
+  (w/click new-graph-submit)
 
   (when enable-sync?
     (maybe-input-e2ee-password)
@@ -76,17 +90,10 @@
   (util/wait-timeout 1000))
 
 (defn new-graph
-  [graph-name enable-sync?]
-  (try
-    (new-graph-helper graph-name enable-sync?)
-    (catch com.microsoft.playwright.TimeoutError e
-      ;; sometimes, 'Use Logseq Sync?' option not showing
-      ;; because of user-group not recv from server yet
-      ;; workaround: try again
-      (if enable-sync?
-        (do (w/click "button.ui__dialog-close")
-            (new-graph-helper graph-name enable-sync?))
-        (throw e)))))
+  ([graph-name enable-sync?]
+   (new-graph graph-name enable-sync? true))
+  ([graph-name enable-sync? graph-e2ee?]
+   (new-graph-helper graph-name enable-sync? graph-e2ee?)))
 
 (defn wait-for-remote-graph
   [graph-name]
@@ -102,7 +109,7 @@
         (.first (w/-query (format "div[data-testid='logseq_db_%s'] .graph-action-btn" graph-name)))]
     (w/click action-btn)
     (w/click ".delete-local-graph-menu-item")
-    (w/click "div[role='alertdialog'] button:text('ok')")))
+    (w/click "div[role='alertdialog'] button:text('Confirm')")))
 
 (defn remove-remote-graph
   [graph-name]
@@ -111,7 +118,7 @@
         (.first (w/-query (format "div[data-testid='logseq_db_%s'] .graph-action-btn" graph-name)))]
     (w/click action-btn)
     (w/click ".delete-remote-graph-menu-item")
-    (w/click "div[role='alertdialog'] button:text('ok')")))
+    (w/click "div[role='alertdialog'] button:text('Confirm')")))
 
 (defn switch-graph
   [to-graph-name wait-sync? need-input-password?]
@@ -127,8 +134,9 @@
   (k/esc)
   (k/esc)
   (util/search-and-click "(Dev) Validate current graph")
-  (assert/assert-is-visible (loc/and ".notifications div.notification-success div" (w/get-by-text "Your graph is valid")))
-  (let [content (.textContent (loc/and ".notifications div.notification-success div" (w/get-by-text "Your graph is valid")))
-        summary (edn/read-string (subs content (string/index-of content "{")))]
-    (w/click ".notifications div.notification-success .ls-icon-x")
-    summary))
+  (assert/assert-is-visible
+   (loc/and ".notifications div.notification-success div"
+            (w/get-by-text "Your graph is valid")))
+  (when (w/visible? ".notifications div.notification-success .ls-icon-x")
+    (w/click ".notifications div.notification-success .ls-icon-x"))
+  {:valid? true})

@@ -61,7 +61,8 @@
     (throw (ex-info "Property is protected and can't be deleted"
                     {:type :notification
                      :payload {:type :error
-                               :message "Property is protected and can't be deleted"
+                               :message "Property is protected and can't be deleted."
+                               :i18n-key :property.validation/protected
                                :entity-idents entity-idents
                                :property property-ident}}))))
 
@@ -72,7 +73,9 @@
                                     ldb/private-tags))]
     (throw (ex-info "Can't remove private tags"
                     {:type :notification
-                     :payload {:message (str "Can't remove private tags: " (string/join ", " private-tags))
+                     :payload {:message (str "Can't remove private tags: " (string/join ", " private-tags) ".")
+                               :i18n-key :class.validation/cant-remove-private-tags
+                               :i18n-args [(string/join ", " private-tags)]
                                :type :error}
                      :property-id :block/tags}))))
 
@@ -81,7 +84,8 @@
   (when (contains? db-malli-schema/required-properties property-ident)
     (throw (ex-info "Can't remove required property"
                     {:type :notification
-                     :payload {:message "Can't remove required property"
+                     :payload {:message "Can't remove required property."
+                               :i18n-key :property.validation/cant-remove-required
                                :type :error}
                      :property-id property-ident}))))
 
@@ -90,6 +94,7 @@
   [entities property-ident]
   (throw-error-if-deleting-protected-property (map :db/ident entities) property-ident)
   (when (= :block/tags property-ident) (throw-error-if-removing-private-tag entities))
+  (outliner-validate/disallow-editing-private-built-in-nodes entities)
   (throw-error-if-deleting-required-property property-ident))
 
 (defn- build-property-value-tx-data
@@ -144,7 +149,9 @@
     (or result
         (throw (ex-info (str "Can't convert \"" v-str "\" to a number")
                         {:type :notification
-                         :payload {:message (str "Can't convert \"" v-str "\" to a number")
+                         :payload {:message (str "Can't convert \"" v-str "\" to a number.")
+                                   :i18n-key :property.validation/cant-convert-to-number
+                                   :i18n-args [v-str]
                                    :type :error}})))))
 
 (defn ^:api convert-property-input-string
@@ -178,14 +185,18 @@
       (and new-type old-ref-type? (not ref-type?))
       (conj [:db/retract (:db/id property) :db/valueType]))))
 
-(defn- update-property
-  [conn db-ident property schema {:keys [property-name properties]}]
+(defn- validate-property-name-update
+  [conn property property-name]
   (when (and (some? property-name) (not= property-name (:block/title property)))
     (outliner-validate/validate-page-title property-name {:node property})
     (outliner-validate/validate-page-title-characters property-name {:node property})
     (outliner-validate/validate-block-title @conn property-name property)
-    (outliner-validate/validate-property-title property-name))
+    (outliner-validate/validate-property-title property-name)))
 
+(defn- update-property
+  [conn db-ident property schema {:keys [property-name properties]}]
+  (validate-property-name-update conn property property-name)
+  (outliner-validate/validate-editing-built-in-property property schema)
   (let [changed-property-attrs
         ;; Only update property if something has changed as we are updating a timestamp
         (cond-> (->> (dissoc schema :db/cardinality)
@@ -213,12 +224,21 @@
                           (mapcat
                            (fn [[property-id v]]
                              (build-property-value-tx-data conn property property-id v)) properties)))
-        many->one? (and (db-property/many? property) (= :one (:db/cardinality schema)))]
+        many->one? (and (db-property/many? property)
+                        ;; For UI calls, :db/cardinality can have :one and :many values
+                        (contains? #{:one :db.cardinality/one} (:db/cardinality schema)))]
     (when (and many->one? (seq (d/datoms @conn :avet db-ident)))
       (throw (ex-info "Disallowed many to one conversion"
                       {:type :notification
                        :payload {:message "This property can't change from multiple values to one value because it has existing data."
+                                 :i18n-key :property.validation/many-to-one
                                  :type :warning}})))
+    (when (and (contains? changed-property-attrs :logseq.property/type)
+               (seq (d/datoms @conn :avet db-ident)))
+      (throw (ex-info "Disallowed type change with existing data"
+                      {:type :notification
+                       :payload {:message "This property's type can't be changed because it has existing data."
+                                 :type :error}})))
     (when (seq tx-data)
       (ldb/transact! conn tx-data {:outliner-op :update-property
                                    :property-id (:db/id property)}))
@@ -249,11 +269,13 @@
     (when-not (m/validate schema value)
       (let [errors (-> (m/explain schema value)
                        (me/humanize))
-            error-msg (str "\"" (:block/title property) "\"" " " (if (coll? errors) (first errors) errors))]
+            error-msg (str "Property validation failed: \"" (:block/title property) "\" " (if (coll? errors) (first errors) errors))]
         (throw
          (ex-info "Schema validation failed"
                   {:type :notification
                    :payload {:message error-msg
+                             :i18n-key :property.validation/invalid-value
+                             :i18n-args [(:block/title property) (if (coll? errors) (first errors) errors)]
                              :type :warning}
                    :property (:db/ident property)
                    :value value
@@ -299,12 +321,16 @@
         new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value')
                           new-block-id
                           (assoc :block/uuid new-block-id))]
-    (ldb/transact! conn [new-value-block] {:outliner-op :insert-blocks})
-    (let [property-id (:db/ident property)]
-      (when (and property-id block)
-        (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
-          (raw-set-block-property! conn block property block-id)))
-      (:block/uuid new-value-block))))
+    (ldb/batch-transact-with-temp-conn!
+     conn
+     {:outliner-op :create-property-text-block}
+     (fn [conn]
+       (ldb/transact! conn [new-value-block] {:outliner-op :insert-blocks})
+       (let [property-id (:db/ident property)]
+         (when (and property-id block)
+           (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
+             (raw-set-block-property! conn block property block-id))))))
+    (:block/uuid new-value-block)))
 
 (defn- get-property-value-eid
   [db property-id raw-value]
@@ -394,13 +420,37 @@
                       v)]
         (find-or-create-property-value conn property-id v')))))
 
+(defn- convert-ref-property-values
+  [conn property-id value property-type {:keys [many?]}]
+  (if-not (and many? (or (sequential? value) (set? value)))
+    (convert-ref-property-value conn property-id value property-type)
+    (try
+      (mapv #(convert-ref-property-value conn property-id % property-type) value)
+      (catch :default e
+        (throw (ex-info "Failed to convert many property values"
+                        (merge
+                         {:property-id property-id
+                          :property-type property-type
+                          :value value
+                          :many? many?
+                          :value-shape (cond
+                                         (vector? value) :vector
+                                         (set? value) :set
+                                         (sequential? value) :seq
+                                         :else :single)}
+                         (ex-data e))
+                        e))))))
+
 (defn- throw-error-if-self-value
   [block value ref?]
-  (when (and ref? (= value (:db/id block)))
-    (throw (ex-info "Can't set this block itself as own property value"
-                    {:type :notification
-                     :payload {:message "Can't set this block itself as own property value"
-                               :type :error}}))))
+  (let [values (if (or (sequential? value) (set? value)) value [value])]
+    (when (and ref?
+               (some #(= % (:db/id block)) values))
+      (throw (ex-info "Can't set this block itself as own property value"
+                      {:type :notification
+                       :payload {:message "Can't set this block itself as own property value."
+                                 :i18n-key :property.validation/cant-set-self-value
+                                 :type :error}})))))
 
 (defn batch-remove-property!
   [conn block-ids property-id]
@@ -420,24 +470,54 @@
                                       :else nil)
                            deleting-entities (filter
                                               (fn [value]
-                                                (and
-                                                 (:logseq.property/created-from-property value)
-                                                 (not (or (entity-util/page? value) (ldb/closed-value? value)))
-                                                 (empty? (set/difference (set (map :e (d/datoms @conn :avet (:db/ident property) (:db/id value)))) block-id-set))))
+                                                (let [value-referrers*
+                                                      (d/q '[:find [?e ...]
+                                                             :in $ ?property-id ?value-id
+                                                             :where
+                                                             [?e ?property-id ?value-id]]
+                                                           @conn
+                                                           (:db/ident property)
+                                                           (:db/id value))
+                                                      value-referrers
+                                                      (cond
+                                                        (nil? value-referrers*)
+                                                        #{}
+
+                                                        (coll? value-referrers*)
+                                                        (set value-referrers*)
+
+                                                        :else
+                                                        #{value-referrers*})]
+                                                  (and
+                                                   (:logseq.property/created-from-property value)
+                                                   (not (or (entity-util/page? value) (ldb/closed-value? value)))
+                                                   (empty? (set/difference value-referrers block-id-set)))))
                                               entities)
-                           ;; Delete property value block if it's no longer used by other blocks
                            retract-blocks-tx (when (seq deleting-entities)
-                                               (:tx-data (outliner-core/delete-blocks @conn deleting-entities)))]
+                                               (:tx-data (outliner-core/delete-blocks @conn deleting-entities {})))]
                        (concat
                         [[:db/retract (:db/id block) (:db/ident property)]]
                         retract-blocks-tx)))
                    blocks)]
           (when (seq txs)
-            (ldb/transact! conn txs {:outliner-op :save-block})))))))
+            (ldb/transact! conn txs
+                           {:outliner-op :batch-remove-property})))))))
+
+(defn- validate-batch-set-property
+  [conn block-eids property-id v]
+  (outliner-validate/disallow-editing-private-built-in-nodes (mapv #(d/entity @conn %) block-eids))
+  (when (= property-id :block/tags)
+    (outliner-validate/validate-tags-property @conn block-eids v))
+  (when (= property-id :logseq.property.class/extends)
+    (outliner-validate/validate-extends-property
+     @conn
+     (if (number? v) (d/entity @conn v) v)
+     (map #(d/entity @conn %) block-eids))))
 
 (defn batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
-   Does no validation of property values."
+   Does no validation of property values. For :many properties, passing a collection
+   replaces existing values in one call, while passing a scalar preserves add-single-value behavior."
   ([conn block-ids property-id v]
    (batch-set-property! conn block-ids property-id v {}))
   ([conn block-ids property-id v options]
@@ -446,23 +526,18 @@
    (if (nil? v)
      (batch-remove-property! conn block-ids property-id)
      (let [block-eids (map ->eid block-ids)
-           _ (when (= property-id :block/tags)
-               (outliner-validate/validate-tags-property @conn block-eids v))
+           _ (validate-batch-set-property conn block-eids property-id v)
            property (d/entity @conn property-id)
-           _ (when (= (:db/ident property) :logseq.property.class/extends)
-               (outliner-validate/validate-extends-property
-                @conn
-                (if (number? v) (d/entity @conn v) v)
-                (map #(d/entity @conn %) block-eids)))
            _ (when (nil? property)
                (throw (ex-info (str "Property " property-id " doesn't exist yet") {:property-id property-id})))
            property-type (get property :logseq.property/type :default)
+           many? (= :db.cardinality/many (:db/cardinality property))
            entity-id? (and (:entity-id? options) (number? v))
            ref? (contains? db-property-type/all-ref-property-types property-type)
            default-url-not-closed? (and (contains? #{:default :url} property-type)
                                         (not (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))))
            v' (if (and ref? (not entity-id?))
-                (convert-ref-property-value conn property-id v property-type)
+                (convert-ref-property-values conn property-id v property-type {:many? many?})
                 v)
            _ (when (nil? v')
                (throw (ex-info "Property value must be not nil" {:v v})))
@@ -472,11 +547,17 @@
                    (if-let [block (d/entity @conn eid)]
                      (let [v' (if (and default-url-not-closed?
                                        (not (and (keyword? v) entity-id?)))
-                                (do
-                                  (when (number? v')
-                                    (throw-error-if-invalid-property-value @conn property v'))
-                                  (let [v (if (number? v') (:block/title (d/entity @conn v')) v')]
-                                    (convert-ref-property-value conn property-id v property-type)))
+                                (let [normalize-default-url-value
+                                      (fn [value]
+                                        (if (number? value)
+                                          (do
+                                            (throw-error-if-invalid-property-value @conn property value)
+                                            (:block/title (d/entity @conn value)))
+                                          value))
+                                      value' (if (and many? (or (sequential? v') (set? v')))
+                                               (mapv normalize-default-url-value v')
+                                               (normalize-default-url-value v'))]
+                                  (convert-ref-property-values conn property-id value' property-type {:many? many?}))
                                 v')]
                        (throw-error-if-self-value block v' ref?)
                        (throw-error-if-invalid-property-value @conn property v')
@@ -484,15 +565,15 @@
                      (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
                  block-eids))]
        (when (seq txs)
-         (ldb/transact! conn txs {:outliner-op :save-block}))))))
+         (ldb/transact! conn txs {:outliner-op :batch-set-property}))))))
 
 (defn remove-block-property!
   [conn eid property-id]
   (throw-error-if-read-only-property property-id)
   (let [eid (->eid eid)
         block (d/entity @conn eid)
-        property (d/entity @conn property-id)]
-    ;; Can skip for extends b/c below tx ensures it has a default value
+        property (d/entity @conn property-id)
+        tx-meta {:outliner-op :remove-block-property}]
     (when-not (= :logseq.property.class/extends property-id)
       (validate-batch-deletion-of-property [block] property-id))
     (when block
@@ -504,25 +585,26 @@
         (ldb/transact! conn
                        [[:db/retract (:db/id block) property-id]
                         [:db/retract (:db/id block) :block/tags :logseq.class/Task]]
-                       {:outliner-op :save-block})
+                       tx-meta)
 
         (and (:logseq.property/default-value property)
              (= (:logseq.property/default-value property) (get block property-id)))
         (ldb/transact! conn
                        [{:db/id (:db/id block)
                          property-id :logseq.property/empty-placeholder}]
-                       {:outliner-op :save-block})
+                       tx-meta)
 
         (and (ldb/class? block) (= property-id :logseq.property.class/extends))
         (ldb/transact! conn
                        [[:db/retract (:db/id block) :logseq.property.class/extends]
                         [:db/add (:db/id block) :logseq.property.class/extends :logseq.class/Root]]
-                       {:outliner-op :save-block})
+                       tx-meta)
 
         (contains? db-property/db-attribute-properties property-id)
         (ldb/transact! conn
                        [[:db/retract (:db/id block) property-id]]
-                       {:outliner-op :save-block})
+                       tx-meta)
+
         :else
         (batch-remove-property! conn [eid] property-id)))))
 
@@ -537,60 +619,75 @@
       (ldb/transact! conn tx-data
                      {:outliner-op :save-block}))))
 
-(defn set-block-property!
+(defn ^:large-vars/cleanup-todo set-block-property!
   "Updates a block property's value for an existing property-id and block.  If
   property is a ref type, automatically handles a raw property value i.e. you
   can pass \"value\" instead of the property value entity. Also handle db
   attributes as properties"
   [conn block-eid property-id v]
-  (throw-error-if-read-only-property property-id)
-  (let [db @conn
-        block-eid (->eid block-eid)
-        _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
-        block (d/entity @conn block-eid)
-        db-attribute? (some? (db-schema/schema property-id))
-        property (d/entity @conn property-id)
-        property-type (get property :logseq.property/type :default)
-        ref? (db-property-type/all-ref-property-types property-type)
-        v' (if ref?
-             (convert-ref-property-value conn property-id v property-type)
-             v)]
-    (when-not (and block property)
-      (throw (ex-info "Set block property failed: block or property doesn't exist"
-                      {:block-eid block-eid
-                       :property-id property-id
-                       :block block
-                       :property property})))
-    (if (nil? v')
-      (remove-block-property! conn block-eid property-id)
-      (do
-        (when (= property-id :block/tags)
-          (outliner-validate/validate-tags-property @conn [block-eid] v'))
-        (when (= property-id :logseq.property.class/extends)
-          (outliner-validate/validate-extends-property @conn v' [block]))
-        (cond
-          db-attribute?
-          (set-block-db-attribute! conn db block property property-id v)
+  (ldb/batch-transact-with-temp-conn!
+   conn
+   {:outliner-op :set-block-property}
+   (fn [conn]
+      (throw-error-if-read-only-property property-id)
+      (let [db @conn
+            block-eid (->eid block-eid)
+            _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
+            block (d/entity @conn block-eid)
+            db-attribute? (some? (db-schema/schema property-id))
+            property (d/entity @conn property-id)
+            property-type (get property :logseq.property/type :default)
+            ref? (db-property-type/all-ref-property-types property-type)
+            v' (if ref?
+                 (convert-ref-property-value conn property-id v property-type)
+                 v)]
+        (when-not (and block property)
+          (throw (ex-info "Set block property failed: block or property doesn't exist"
+                          {:block-eid block-eid
+                           :property-id property-id
+                           :block block
+                           :property property})))
+        (if (nil? v')
+          (remove-block-property! conn block-eid property-id)
+          (do
+            (when (= property-id :block/tags)
+              (outliner-validate/validate-tags-property @conn [block-eid] v'))
+            (when (= property-id :logseq.property.class/extends)
+              (outliner-validate/validate-extends-property @conn v' [block]))
+            (cond
+              db-attribute?
+              (set-block-db-attribute! conn db block property property-id v)
 
-          :else
-          (let [_ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
-                ref? (db-property-type/all-ref-property-types property-type)
-                existing-value (get block property-id)
-                many? (= :db.cardinality/many (:db/cardinality property))
-                value-matches? (if ref?
-                                 (if (and many? (coll? v'))
-                                   (= (set (map :db/id existing-value)) (set v'))
-                                   (= existing-value v'))
-                                 (= existing-value v'))]
-            (throw-error-if-self-value block v' ref?)
-
-            (when-not value-matches?
-              (raw-set-block-property! conn block property v'))))))))
+              :else
+              (let [_ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
+                    ref? (db-property-type/all-ref-property-types property-type)
+                    existing-value (get block property-id)
+                    many? (= :db.cardinality/many (:db/cardinality property))
+                    many-ref-value-ids (fn [value]
+                                         (->> (cond
+                                                (nil? value) []
+                                                (de/entity? value) [value]
+                                                (sequential? value) value
+                                                :else [value])
+                                              (map (fn [item]
+                                                     (if (de/entity? item)
+                                                       (:db/id item)
+                                                       item)))
+                                              set))
+                    value-matches? (if ref?
+                                     (if (and many? (coll? v'))
+                                       (= (many-ref-value-ids existing-value)
+                                          (many-ref-value-ids v'))
+                                       (= existing-value v'))
+                                     (= existing-value v'))]
+                (throw-error-if-self-value block v' ref?)
+                (when-not value-matches?
+                  (raw-set-block-property! conn block property v'))))))))))
 
 (defn upsert-property!
   "Updates property if property-id is given. Otherwise creates a property
-   with the given property-id or :property-name option. When a property is created
-   it is ensured to have a unique :db/ident"
+    with the given property-id or :property-name option. When a property is created
+    it is ensured to have a unique :db/ident"
   [conn property-id schema {:keys [property-name properties] :as opts}]
   (let [db @conn
         db-ident (or property-id
@@ -599,12 +696,14 @@
                             (throw (ex-info (str e)
                                             {:type :notification
                                              :payload {:message "Property failed to create. Please try a different property name."
+                                                       :i18n-key :property/create-error
                                                        :type :error}})))))]
     (assert (qualified-keyword? db-ident))
-    (when (and (contains? #{:checkbox} (:logseq.property/type  schema))
+    (when (and (contains? #{:checkbox} (:logseq.property/type schema))
                (= :db.cardinality/many (:db/cardinality schema)))
-      (throw (ex-info ":checkbox property doesn't allow multiple values" {:property-id property-id
-                                                                          :schema schema})))
+      (throw (ex-info ":checkbox property doesn't allow multiple values"
+                      {:property-id property-id
+                       :schema schema})))
     (if-let [property (and (qualified-keyword? property-id) (d/entity db db-ident))]
       (update-property conn db-ident property schema opts)
       (let [k-name (or (and property-name (name property-name))
@@ -614,40 +713,48 @@
                 (prn "property-id: " property-id ", property-name: " property-name))
         (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
         (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
+        (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}})
         (let [db-id (:db/id properties)
-              opts (cond-> {:title k-name
-                            :properties properties}
-                     (integer? db-id)
-                     (assoc :block-uuid (:block/uuid (d/entity db db-id))))]
-          (ldb/transact! conn
-                         (concat
-                          [(sqlite-util/build-new-property db-ident' schema opts)]
-                          ;; Convert page to property
-                          (when db-id
-                            [[:db/retract db-id :block/tags :logseq.class/Page]]))
+              opts' (cond-> {:title k-name
+                             :properties properties}
+                      (integer? db-id)
+                      (assoc :block-uuid (:block/uuid (d/entity db db-id))))
+              tx-data (concat
+                       [(sqlite-util/build-new-property db-ident' schema opts')]
+                       ;; Convert page to property
+                       (when db-id
+                         [[:db/retract db-id :block/tags :logseq.class/Page]]))]
+          (ldb/transact! conn tx-data
                          {:outliner-op :upsert-property}))
         (d/entity @conn db-ident')))))
 
 (defn batch-delete-property-value!
   "batch delete value when a property has multiple values"
   [conn block-eids property-id property-value]
-  (when-let [property (d/entity @conn property-id)]
-    (when (and (db-property/many? property)
-               (not (some #(= property-id (:db/ident (d/entity @conn %))) block-eids)))
-      (when (= property-id :block/tags)
-        (outliner-validate/validate-tags-property-deletion @conn block-eids property-value))
-      (if (= property-id :block/tags)
-        (let [tx-data (map (fn [id] [:db/retract id property-id property-value]) block-eids)]
-          (ldb/transact! conn tx-data {:outliner-op :save-block}))
-        (doseq [block-eid block-eids]
-          (when-let [block (d/entity @conn block-eid)]
-            (let [current-val (get block property-id)
-                  fv (first current-val)]
-              (if (and (= 1 (count current-val)) (or (= property-value fv) (= property-value (:db/id fv))))
-                (remove-block-property! conn (:db/id block) property-id)
-                (ldb/transact! conn
-                               [[:db/retract (:db/id block) property-id property-value]]
-                               {:outliner-op :save-block})))))))))
+  (let [block-eids (map ->eid block-eids)]
+    (ldb/batch-transact-with-temp-conn!
+     conn
+     {:outliner-op :batch-delete-property-value}
+     (fn [conn]
+       (when-let [property (d/entity @conn property-id)]
+         (when (and (db-property/many? property)
+                    (not (some #(= property-id (:db/ident (d/entity @conn %))) block-eids)))
+           (when (= property-id :block/tags)
+             (outliner-validate/validate-tags-property-deletion @conn block-eids property-value))
+           (if (= property-id :block/tags)
+             (let [tx-data (map (fn [id] [:db/retract id property-id property-value]) block-eids)]
+               (ldb/transact! conn tx-data {:outliner-op :save-block}))
+             (doseq [block-eid block-eids]
+               (when-let [block (d/entity @conn block-eid)]
+                 (let [current-val (get block property-id)
+                       fv (first current-val)]
+                   (if (and (= 1 (count current-val))
+                            (or (= property-value fv)
+                                (= property-value (:db/id fv))))
+                     (remove-block-property! conn (:db/id block) property-id)
+                     (ldb/transact! conn
+                                    [[:db/retract (:db/id block) property-id property-value]]
+                                    {:outliner-op :save-block}))))))))))))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"
@@ -782,20 +889,20 @@
                                                         (:block/uuid b))))
                        (not= id (:block/uuid b))))
                 (entity-plus/lookup-kv-then-entity property :property/closed-values))
-
-          ;; Make sure to update frontend.handler.db-based.property-test when updating ex-info message
           (throw (ex-info "Closed value choice already exists"
                           {:error :value-exists
                            :type :notification
-                           :payload {:message "Choice already exists"
+                           :payload {:message "Choice already exists."
+                                     :i18n-key :property.choice/already-exists
                                      :type :warning}}))
 
           validate-message
-          ;; Make sure to update frontend.handler.db-based.property-test when updating ex-info message
           (throw (ex-info "Invalid property value"
                           {:error :value-invalid
                            :type :notification
-                           :payload {:message validate-message
+                           :payload {:message (str "Invalid choice \"" value' "\" for this property: " validate-message ".")
+                                     :i18n-key :property.choice/invalid
+                                     :i18n-args [value' validate-message]
                                      :type :warning}}))
 
           (nil? resolved-value)
@@ -803,18 +910,20 @@
 
           :else
           (let [tx-data (build-closed-value-tx @conn property resolved-value opts)]
-            (ldb/transact! conn tx-data {:outliner-op :save-block})
-            (when (seq description)
-              (if-let [desc-ent (and id (:logseq.property/description (d/entity db [:block/uuid id])))]
-                (ldb/transact! conn
-                               [(outliner-core/block-with-updated-at {:db/id (:db/id desc-ent)
-                                                                      :block/title description})]
-                               {:outliner-op :save-block})
-                (set-block-property! conn
-                                     ;; new closed value is first in tx-data
-                                     [:block/uuid (or id (:block/uuid (first tx-data)))]
-                                     :logseq.property/description
-                                     description)))))))))
+            (ldb/batch-transact-with-temp-conn!
+             conn
+             {:outliner-op :upsert-closed-value}
+             (fn [conn]
+               (ldb/transact! conn tx-data)
+               (when (seq description)
+                 (if-let [desc-ent (and id (:logseq.property/description (d/entity db [:block/uuid id])))]
+                   (ldb/transact! conn
+                                  [(outliner-core/block-with-updated-at {:db/id (:db/id desc-ent)
+                                                                         :block/title description})])
+                   (set-block-property! conn
+                                        [:block/uuid (or id (:block/uuid (first tx-data)))]
+                                        :logseq.property/description
+                                        description)))))))))))
 
 (defn add-existing-values-to-closed-values!
   "Adds existing values as closed values and returns their new block uuids"
@@ -831,7 +940,7 @@
                                          (map :db/id values))
                   property-tx (outliner-core/block-with-updated-at {:db/id (:db/id property)})]
               (ldb/transact! conn (cons property-tx value-property-tx)
-                             {:outliner-op :save-blocks}))))))))
+                             {:outliner-op :add-existing-values-to-closed-values}))))))))
 
 (defn delete-closed-value!
   "Returns true when deleted or if not deleted displays warning and returns false"
@@ -841,25 +950,31 @@
     (throw (ex-info "empty property-id or value-block-id when delete-closed-value!"
                     {:property-id property-id
                      :value-block-id value-block-id})))
-  (when-let [value-block (d/entity @conn value-block-id)]
-    (if (ldb/built-in? value-block)
-      (throw (ex-info "The choice can't be deleted"
-                      {:type :notification
-                       :payload {:message "The choice can't be deleted because it's built-in."
-                                 :type :warning}}))
-      (let [data (:tx-data (outliner-core/delete-blocks @conn [value-block]))
-            tx-data (conj data (outliner-core/block-with-updated-at
-                                {:db/id property-id}))]
-        (ldb/transact! conn tx-data)))))
+  (let [property (d/entity @conn property-id)]
+    (when-not (ldb/property? property)
+      (throw (ex-info "Invalid property" {:property-id property-id})))
+    (when-let [value-block (d/entity @conn value-block-id)]
+     (if (ldb/built-in? value-block)
+       (throw (ex-info "The choice can't be deleted"
+                       {:type :notification
+                        :payload {:message "The choice can't be deleted because it's built-in."
+                                  :i18n-key :property.choice/cant-delete-built-in
+                                  :type :warning}}))
+       (let [tx-data (conj (:tx-data (outliner-core/delete-blocks @conn [value-block] {}))
+                           (outliner-core/block-with-updated-at {:db/id (:db/id property)}))]
+         (ldb/transact! conn tx-data
+                        {:outliner-op :delete-closed-value}))))))
 
 (defn class-add-property!
   [conn class-id property-id]
   (when-not (contains? #{:logseq.property/empty-placeholder} property-id)
     (when-let [class (d/entity @conn class-id)]
       (if (ldb/class? class)
-        (ldb/transact! conn
-                       [[:db/add (:db/id class) :logseq.property.class/properties property-id]]
-                       {:outliner-op :save-block})
+        (when-let [property (d/entity @conn property-id)]
+          (when (ldb/property? property)
+            (ldb/transact! conn
+                           [[:db/add (:db/id class) :logseq.property.class/properties property-id]]
+                           {:outliner-op :class-add-property})))
         (throw (ex-info "Can't add a property to a block that isn't a class"
                         {:class-id class-id :property-id property-id}))))))
 
@@ -868,6 +983,8 @@
   (when-let [class (d/entity @conn class-id)]
     (when (ldb/class? class)
       (when-let [property (d/entity @conn property-id)]
-        (when-not (ldb/built-in-class-property? class property)
-          (ldb/transact! conn [[:db/retract (:db/id class) :logseq.property.class/properties property-id]]
-                         {:outliner-op :save-block}))))))
+        (when (ldb/property? property)
+          (when-not (ldb/built-in-class-property? class property)
+            (ldb/transact! conn
+                           [[:db/retract (:db/id class) :logseq.property.class/properties property-id]]
+                           {:outliner-op :class-remove-property})))))))

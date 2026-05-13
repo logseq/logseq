@@ -59,11 +59,14 @@
 
   .icon-emoji-wrap {
     position: relative;
-    top: -0.5px;
+    top: 0;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+    vertical-align: middle;
     padding-left: 1px;
 
     &.as-emoji {
-      top: 0.02em;
       padding-right: 1px;
     }
   }
@@ -77,9 +80,18 @@
     }
   }
 
+  &:has(> .icon-emoji-wrap),
+  &:has(> .icon-cp-container) {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: baseline;
+  }
+
   .icon-emoji-wrap em-emoji,
   .icon-cp-container .ui__icon {
-    vertical-align: middle;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
   }
 
   .block-title-wrap.as-heading {
@@ -124,6 +136,71 @@
 .breadcrumb {
   .property-value-inner[data-type], .property-value-inner .select-item {
     display: inline;
+  }
+}
+
+/* Breadcrumb variant layout — stable single-line path summary */
+.breadcrumb.block-parents {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+}
+
+.breadcrumb__segment {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: var(--breadcrumb-segment-max-width, 28ch);
+  vertical-align: middle;
+}
+
+.breadcrumb__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.breadcrumb__segment-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.breadcrumb__overflow {
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Variant-specific max-width budgets */
+.breadcrumb--block-page {
+  --breadcrumb-segment-max-width: 28ch;
+}
+
+.breadcrumb--search-result {
+  --breadcrumb-segment-max-width: 18ch;
+}
+
+.breadcrumb--app-header {
+  --breadcrumb-segment-max-width: 28ch;
+}
+
+.breadcrumb--inline {
+  --breadcrumb-segment-max-width: 22ch;
+}
+
+@media (max-width: 640px) {
+  .breadcrumb--block-page,
+  .breadcrumb--search-result,
+  .breadcrumb--app-header,
+  .breadcrumb--inline {
+    --breadcrumb-segment-max-width: 14ch;
   }
 }
 
@@ -174,6 +251,9 @@
 .block-children-container {
   position: relative;
   margin-left: 29px;
+  /* Keep vertical rhythm stable when a sibling becomes a nested child. */
+  padding-top: 0.125rem;
+  margin-bottom: -0.125rem;
 }
 
 .block-children-left-border {
@@ -263,8 +343,13 @@
   }
 }
 
-.ls-page-title .block-control-wrap {
-  height: initial;
+.block-main-container.is-page-title-row > .block-control-wrap {
+  /* Center the page-title control against the page title's line box.
+     Mobile overrides --ls-page-title-size, so this stays aligned cross-platform. */
+  --ls-page-title-line-height: 1.38;
+  --ls-block-control-size: 24px;
+  @apply relative;
+  top: calc((var(--ls-page-title-size, 32px) * var(--ls-page-title-line-height) - var(--ls-block-control-size)) / 2);
 }
 
 /* Ensure page title has correct font-size in both editing and non-editing mode */
@@ -314,6 +399,10 @@
       .ui__icon.ti svg {
         @apply w-5 h-5;
       }
+    }
+
+    h3&, h4&, h5&, h6& {
+      min-height: 24px;
     }
 
     &.as-inline {
@@ -511,8 +600,39 @@
 
 .block-main-container {
   @apply min-h-[24px];
+  --ls-heading-control-icon-size: 14px;
+
+  > .block-control-wrap.is-with-icon {
+    .bullet-container {
+      width: var(--ls-heading-control-icon-size);
+      min-width: var(--ls-heading-control-icon-size);
+      height: var(--ls-heading-control-icon-size);
+    }
+
+    .icon-cp-container,
+    .ls-icon-color-wrap,
+    .ui__icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+
+    .ls-icon-color-wrap em-emoji,
+    .ui__icon em-emoji {
+      display: block;
+      line-height: 1;
+    }
+
+    .ui__icon.ti svg {
+      width: var(--ls-heading-control-icon-size);
+      height: var(--ls-heading-control-icon-size);
+    }
+  }
 
   &[data-has-heading="1"], &:has(textarea.h1) {
+    --ls-heading-control-icon-size: 28px;
+
     > .block-control-wrap {
       @apply relative top-4;
     }
@@ -525,6 +645,8 @@
   }
 
   &[data-has-heading="2"], &:has(textarea.h2) {
+    --ls-heading-control-icon-size: 24px;
+
     > .block-control-wrap {
       @apply relative top-2.5;
     }
@@ -537,9 +659,7 @@
   }
 
   &[data-has-heading="3"], &:has(textarea.h3) {
-    > .block-control-wrap {
-      @apply relative top-[2px];
-    }
+    --ls-heading-control-icon-size: 20px;
 
     .block-content-or-editor-wrap {
       .positioned-properties {
@@ -548,16 +668,16 @@
     }
   }
 
-  &[data-has-heading="5"] {
-    > .block-control-wrap {
-      @apply relative -top-[1px];
-    }
+  &[data-has-heading="4"], &:has(textarea.h4) {
+    --ls-heading-control-icon-size: 16px;
+  }
+
+  &[data-has-heading="5"], &:has(textarea.h5) {
+    --ls-heading-control-icon-size: 13px;
   }
 
   &[data-has-heading="6"], &:has(textarea.h6) {
-    h6.as-heading, textarea.h6 {
-      @apply pt-1;
-    }
+    --ls-heading-control-icon-size: 12px;
   }
 }
 
@@ -824,6 +944,8 @@
 
   .bullet {
     @apply rounded-full opacity-80;
+    display: block;
+    flex: none;
     width: 0.4em;
     height: 0.4em;
 
@@ -950,14 +1072,16 @@ a.filter svg {
   display: none;
 }
 
-a.cloze {
+.cloze {
   color: var(--ls-cloze-text-color);
+  cursor: pointer;
 }
 
-a.cloze-revealed {
+.cloze-revealed {
   color: var(--ls-cloze-text-color);
   text-decoration: underline;
   text-underline-position: under;
+  cursor: pointer;
 }
 
 .page-property-key {
@@ -1123,8 +1247,8 @@ html.is-mac {
 }
 
 .katex svg {
-  width: initial;
-  height: initial;
+  width: 100%;
+  height: inherit;
 }
 .math-block {
     @apply w-full;
@@ -1139,6 +1263,16 @@ html.is-mac {
 }
 .ls-type-warning svg {
   color: var(--rx-gray-09);
+}
+
+.ls-sync-conflict-warning {
+  @apply bg-yellow-rx-05-alpha text-yellow-rx-08 dark:bg-yellow-rx-07-alpha
+  dark:text-yellow-rx-10 border;
+}
+
+.ls-sync-conflict-warning svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* Page-title icon container: vertically center the trigger button so the
@@ -1157,7 +1291,7 @@ html.is-mac {
    inside this box, so flex-centering puts every type's visual centroid
    at the box midpoint — uniform vertical anchor regardless of the
    element's intrinsic baseline. */
-.ls-page-title .ls-page-icon button {
+.ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1275,8 +1409,20 @@ html.is-mac {
   }
 }
 
-.property-value .ls-resize-image {
-  max-width: 35%;
+.property-value {
+  .ls-resize-image {
+    max-width: 35%;
+  }
+
+  .as-plain-image-link {
+    .ls-resize-image {
+      max-width: 80px;
+    }
+
+    .image-resize {
+      display: none;
+    }
+  }
 }
 
 .recent-block {
@@ -1328,6 +1474,24 @@ html.is-mac {
 
 .asset-transfer-shell {
   @apply relative inline-block w-full;
+}
+
+.block-renderer-container {
+    @apply relative;
+
+    .block-renderer-action-bar {
+        @apply top-1 right-1 absolute z-10 flex items-center opacity-0 transition-opacity;
+    }
+
+    .block-renderer-action-btn {
+        @apply m-1 p-0.5 opacity-70 select-none hover:opacity-90 active:opacity-60;
+    }
+
+    &:hover, &:active, &:focus-within {
+        .block-renderer-action-bar {
+            @apply opacity-100;
+        }
+    }
 }
 
 .asset-transfer-placeholder {

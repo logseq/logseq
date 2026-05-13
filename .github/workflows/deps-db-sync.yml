@@ -27,10 +27,10 @@ defaults:
     working-directory: deps/db-sync
 
 env:
-  CLOJURE_VERSION: '1.11.1.1413'
+  CLOJURE_VERSION: '1.12.4.1618'
   JAVA_VERSION: '21'
   # This is the latest node version we can run.
-  NODE_VERSION: '22'
+  NODE_VERSION: '24'
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
@@ -41,12 +41,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'yarn'
-          cache-dependency-path: deps/db-sync/yarn.lock
+          cache: 'pnpm'
+          cache-dependency-path: deps/db-sync/pnpm-lock.yaml
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -61,11 +66,11 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
-      - name: Fetch yarn deps
-        run: yarn install --frozen-lockfile
+      - name: Fetch pnpm deps
+        run: pnpm install --frozen-lockfile
 
       - name: Run unit tests
-        run: yarn test:node-adapter
+        run: pnpm test:node-adapter
 
   lint:
     runs-on: ubuntu-latest

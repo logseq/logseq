@@ -4,6 +4,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.common.graph-view :as graph-view]
+            [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
@@ -269,7 +270,41 @@ independent of format as format specific heading characters are stripped"
 (defn get-journal-page
   [page-name]
   (when page-name
-    (ldb/get-journal-page (conn/get-db) page-name)))
+    (let [db (conn/get-db)]
+      (or
+       (ldb/get-journal-page db page-name)
+       (when-let [journal-day (date/journal-title->int page-name)]
+         (ldb/get-journal-page-by-day db journal-day))))))
+
+(defn get-journal-page-by-day
+  [journal-day]
+  (when journal-day
+    (ldb/get-journal-page-by-day (conn/get-db) journal-day)))
+
+(defn get-journal-page-title
+  [page-name]
+  (or (:block/title (get-journal-page page-name))
+      page-name))
+
+(defn get-today-journal-page
+  []
+  (get-journal-page-by-day (date/today-journal-day)))
+
+(defn get-today-journal-title
+  []
+  (or (:block/title (get-today-journal-page))
+      (date/today)))
+
+(defn today-journal-page?
+  [page]
+  (let [page (cond
+               (or (string? page) (uuid? page))
+               (get-page page)
+               :else
+               page)]
+    (and (ldb/journal? page)
+         (= (:block/journal-day page)
+            (date/today-journal-day)))))
 
 (defn get-case-page
   [page-name-or-uuid]
@@ -311,6 +346,7 @@ independent of format as format specific heading characters are stripped"
         classes (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
                      (map (fn [d]
                             (db-utils/entity db (:e d))))
+                     (remove ldb/recycled?)
                      (remove (fn [d]
                                (and except-private-tags?
                                     (contains? ldb/private-tags (:db/ident d)))))
@@ -353,7 +389,7 @@ independent of format as format specific heading characters are stripped"
                                         (db-property/plugin-property?)))
                               ldb/built-in?
                               :block/title)
-                        (ldb/get-all-properties db))]
+                        (remove ldb/recycled? (ldb/get-all-properties db)))]
     (cond->> result
       remove-built-in-property?
       ;; remove private built-in properties

@@ -3,16 +3,16 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.plugins-settings :as plugins-settings]
+            [frontend.components.plugin-logs :as plugin-logs]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :refer [interpolate-rich-text interpolate-rich-text-node t]]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.mixins :as mixins]
             [frontend.rum :as rum-utils]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -26,8 +26,34 @@
 
 (declare open-waiting-updates-modal!)
 (defonce PER-PAGE-SIZE 15)
+(defonce DISABLED-PLUGINS-CLEANUP-THRESHOLD 100)
+(defonce DISABLED-PLUGINS-CLEANUP-SNOOZE-MS (* 1000 60 60 24 30))
+(defonce DISABLED-PLUGINS-CLEANUP-NOTIFICATION-ID :lsp-disabled-plugins-cleanup-warning)
+(defonce DISABLED-PLUGINS-CLEANUP-SNOOZED-AT-KEY :lsp-disabled-plugins-cleanup-snoozed-at)
 
 (def *dirties-toggle-items (atom {}))
+
+(defn- handle-installed-themes-key-down
+  [*cursor *total ^js target ^js e]
+  (case (.-keyCode e)
+    38                                           ;; up
+    (do
+      (util/stop e)
+      (reset! *cursor
+              (if (zero? @*cursor)
+                (dec @*total) (dec @*cursor))))
+    40                                           ;; down
+    (do
+      (util/stop e)
+      (reset! *cursor
+              (if (= @*cursor (dec @*total))
+                0 (inc @*cursor))))
+    13                                           ;; enter
+    (do
+      (util/stop e)
+      (when-let [^js active (.querySelector target ".is-active")]
+        (.click active)))
+    nil))
 
 (defn- clear-dirties-states!
   []
@@ -55,10 +81,13 @@
   (rum/local 0 ::cursor)
   (rum/local 0 ::total)
   {:did-mount (fn [state]
-                (let [*themes        (::themes state)
+                 (let [*themes        (::themes state)
                       *cursor        (::cursor state)
                       *total         (::total state)
                       mode           (state/sub :ui/theme)
+                      mode-title     (t (case mode
+                                          "dark" :settings.general/theme-dark
+                                          :settings.general/theme-light))
                       all-themes     (state/sub :plugin/installed-themes)
                       themes         (->> all-themes
                                           (filter #(= (:mode %) mode))
@@ -66,49 +95,33 @@
                       no-mode-themes (->> all-themes
                                           (filter #(= (:mode %) nil))
                                           (sort-by #(:name %))
-                                          (map-indexed (fn [idx opt] (assoc opt :group-first (zero? idx) :group-desc (if (zero? idx) "light & dark themes" nil)))))
+                                          (map-indexed (fn [idx opt] (assoc opt :group-first (zero? idx) :group-desc (if (zero? idx) (t :plugin.themes/light-and-dark) nil)))))
                       selected       (state/sub :plugin/selected-theme)
                       themes         (map-indexed (fn [idx opt]
                                                     (let [selected? (= (:url opt) selected)]
                                                       (when selected? (reset! *cursor (+ idx 1)))
                                                       (assoc opt :mode mode :selected selected?))) (concat themes no-mode-themes))
-                      themes         (cons {:name        (string/join " " ["Default" (string/capitalize mode) "Theme"])
+                      themes         (cons {:name        (t :plugin.themes/default-name (string/capitalize mode-title))
                                             :url         nil
-                                            :description (string/join " " ["Logseq default" mode "theme."])
+                                            :description (t :plugin.themes/default-desc mode-title)
                                             :mode        mode
                                             :selected    (nil? selected)
                                             :group-first true
-                                            :group-desc  (str mode " themes")} themes)]
+                                            :group-desc  (t :plugin.themes/group mode-title)} themes)]
                   (reset! *themes themes)
                   (reset! *total (count themes))
                   state))}
-  (mixins/event-mixin
-   (fn [state]
-     (let [*cursor    (::cursor state)
-           *total     (::total state)
-           ^js target (rum/dom-node state)]
-       (.focus target)
-       (mixins/on-key-down
-        state {38                                           ;; up
-               (fn [^js _e]
-                 (reset! *cursor
-                         (if (zero? @*cursor)
-                           (dec @*total) (dec @*cursor))))
-               40                                           ;; down
-               (fn [^js _e]
-                 (reset! *cursor
-                         (if (= @*cursor (dec @*total))
-                           0 (inc @*cursor))))
-
-               13                                           ;; enter
-               #(when-let [^js active (.querySelector target ".is-active")]
-                  (.click active))}))))
+  {:did-mount (fn [state]
+                (some-> (rum/dom-node state) (.focus))
+                state)}
   [state]
   (let [*cursor (::cursor state)
-        *themes (::themes state)]
+        *themes (::themes state)
+        *total (::total state)]
     [:div.cp__themes-installed
-     {:tab-index -1}
-     [:h1.mb-4.text-2xl.p-1 (t :themes)]
+     {:tab-index -1
+      :on-key-down #(handle-installed-themes-key-down *cursor *total (.-currentTarget %) %)}
+     [:h1.mb-4.text-2xl.p-1 (t :nav/themes)]
      (map-indexed
       (fn [idx opt]
         (let [current-selected? (:selected opt)
@@ -141,9 +154,9 @@
            (fn [^js e]
              (case (keyword (aget e "name"))
                :IllegalPluginPackageError
-               (notification/show! "Illegal Logseq plugin package." :error)
+               (plugin-handler/show-illegal-plugin-package-notification! e)
                :ExistedImportedPluginPackageError
-               (notification/show! (str "Existed plugin package (" (.-message e) ").") :error)
+               (notification/show! (t :plugin/existed-package (.-message e)) :error)
                :default)
              (plugin-handler/reset-unpacked-state))
            reg-handle #(plugin-handler/reset-unpacked-state)]
@@ -158,7 +171,7 @@
    [unpacked-pkg-path])
 
   (when unpacked-pkg-path
-    [:strong.inline-flex.px-3 "Loading ..."]))
+    [:strong.inline-flex.px-3 (t :ui/loading)]))
 
 (rum/defc category-tabs
   [t total-nums category on-action]
@@ -167,14 +180,14 @@
    (ui/button
     [:span.flex.items-center
      (ui/icon "puzzle")
-     (t :plugins) (when (vector? total-nums) (str " (" (first total-nums) ")"))]
+     (t :nav/plugins) (when (vector? total-nums) (str " (" (first total-nums) ")"))]
     :intent "link"
     :on-click #(on-action :plugins)
     :class (if (= category :plugins) "active" ""))
    (ui/button
     [:span.flex.items-center
      (ui/icon "palette")
-     (t :themes) (when (vector? total-nums) (str " (" (last total-nums) ")"))]
+     (t :nav/themes) (when (vector? total-nums) (str " (" (last total-nums) ")"))]
     :intent "link"
     :on-click #(on-action :themes)
     :class (if (= category :themes) "active" ""))])
@@ -245,6 +258,15 @@
           (t :plugin/installing)]
          (t :plugin/install)))]]])
 
+(defn- set-plugin-disabled!
+  [id disabled?]
+  (-> (js-invoke js/LSPluginCore (if disabled? "disable" "enable") id)
+      (p/then (fn []
+                (when-let [^js settings (and disabled?
+                                             (some-> (plugin-handler/get-plugin-inst id) (.-settings)))]
+                  (.set settings "disabled-since" (js/Date.now)))))
+      (p/catch #(js/console.error %))))
+
 (rum/defc card-ctls-of-installed < rum/static
   [id name url sponsors unpacked? disabled?
    installing-or-updating? has-other-pending?
@@ -255,12 +277,15 @@
      [:strong (ui/icon "settings")]
      [:ul.menu-list
       [:li {:on-click #(plugin-handler/open-plugin-settings! id false)} (t :plugin/open-settings)]
+      [:li {:on-click #(plugin-logs/open-plugin-logs! {:pid id :name name})} (t :plugin/open-logs)]
       (when (util/electron?)
         [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)])
       [:li {:on-click #(plugin-handler/open-report-modal! id name)} (t :plugin/report-security)]
       [:li {:on-click
             #(-> (shui/dialog-confirm!
-                  [:b (t :plugin/delete-alert name)])
+                  [:b (t :plugin/delete-alert name)]
+                  {:cancel-label (t :ui/cancel)
+                   :ok-label (t :ui/confirm)})
                  (p/then (fn []
                            (plugin-common-handler/unregister-plugin id)
 
@@ -300,7 +325,7 @@
 
     (ui/toggle (not disabled?)
                (fn []
-                 (js-invoke js/LSPluginCore (if disabled? "enable" "disable") id)
+                 (set-plugin-disabled! id (not disabled?))
                  (when (nil? (get @*dirties-toggle-items (keyword id)))
                    (swap! *dirties-toggle-items assoc (keyword id) (not disabled?))))
                true)]])
@@ -310,12 +335,35 @@
   #(plugin-handler/open-readme!
     url item (if (or repo webPkg) remote-readme-display local-markdown-display)))
 
+(defn- plugin-thumb-icon-src
+  [id icon market?]
+  (when-not (string/blank? icon)
+    (if market?
+      (plugin-handler/pkg-asset id icon)
+      icon)))
+
+(defn- plugin-thumb-icon-view
+  [src load-failed? on-error]
+  (if (and src (not load-failed?))
+    [:img.icon {:src src
+                :on-error on-error}]
+    svg/folder))
+
+(rum/defcs plugin-thumb-icon <
+  (rum/local false ::load-failed?)
+  [state id icon market?]
+  (let [*load-failed? (::load-failed? state)
+        src            (plugin-thumb-icon-src id icon market?)]
+    (plugin-thumb-icon-view src @*load-failed?
+                            (fn [_]
+                              (reset! *load-failed? true)))))
+
 (rum/defc plugin-item-card < rum/static
   [t {:keys [id name title version url description author icon iir repo sponsors webPkg] :as item}
    disabled? market? *search-key has-other-pending?
    installing-or-updating? installed? stat coming-update]
 
-  (let [name (or title name "Untitled")
+  (let [name (or title name (t :ui/untitled))
         web? (not (nil? webPkg))
         unpacked? (and (not web?) (not iir))
         new-version (state/coming-update-new-version? coming-update)]
@@ -329,9 +377,7 @@
 
      [:div.l.link-block.cursor-pointer
       {:on-click (get-open-plugin-readme-handler url item repo)}
-      (if (and icon (not (string/blank? icon)))
-        [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
-        svg/folder)
+      (plugin-thumb-icon id icon market?)
 
       (when (and (not market?) unpacked?)
         [:span.flex.justify-center.text-xs.text-error.pt-2 (t :plugin/unpacked)])]
@@ -356,18 +402,18 @@
                               (reset! *search-key (str "@" author))
                               (.select el))} author]
         [:small {:on-click #(do
-                              (notification/show! "Copied!" :success)
+                              (notification/show! (t :notification/copied) :success)
                               (util/copy-to-clipboard! id))}
          (str "ID: " id)]]]
 
-    ;; Github repo
+    ;; GitHub repo
       [:div.flag.is-top.flex.items-center.space-x-2
        (cond
          (false? (:supportsDB item))
-         [:a.flex.cursor-help {:title "Not supports DB graph"}
+         [:a.flex.cursor-help {:title (t :plugin/does-not-support-db)}
           (shui/tabler-icon "database-off" {:size 17})]
          (true? (:supportsDB item))
-         [:a.flex.cursor-help {:title "Supports DB graph"}
+         [:a.flex.cursor-help {:title (t :plugin/supports-db)}
           (shui/tabler-icon "database-heart" {:size 17})])
        (when repo
          [:a.flex {:target "_blank"
@@ -425,19 +471,19 @@
         *test-input (rum/create-ref)
         disabled?   (or (= (:type opts) "system") (= (:type opts) "direct"))]
     [:div.cp__settings-network-proxy-cnt
-     [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
+     [:h1.mb-2.text-2xl.font-bold (t :settings.advanced/network-proxy)]
      [:div.p-2
-      [:p [:label [:strong (t :type)]
-           (ui/select [{:label "System" :value "system" :selected (= type "system")}
-                       {:label "Direct" :value "direct" :selected (= type "direct")}
-                       {:label "HTTP" :value "http" :selected (= type "http")}
-                       {:label "SOCKS5" :value "socks5" :selected (= type "socks5")}]
+      [:p [:label [:strong (t :ui/type)]
+             (ui/select [{:label (t :plugin.proxy/system) :value "system" :selected (= type "system")}
+                         {:label (t :plugin.proxy/direct) :value "direct" :selected (= type "direct")}
+                         {:label "HTTP" :value "http" :selected (= type "http")}
+                         {:label "SOCKS5" :value "socks5" :selected (= type "socks5")}]
                       (fn [_e value]
                         (set-opts! (assoc opts :type value :protocol value))))]]
       [:p.flex
        [:label.pr-4
         {:class (if disabled? "opacity-50" nil)}
-        [:strong (t :host)]
+        [:strong (t :ui/host)]
         [:input.form-input.is-small
          {:value     (:host opts)
           :disabled  disabled?
@@ -446,7 +492,7 @@
 
        [:label
         {:class (if disabled? "opacity-50" nil)}
-        [:strong (t :port)]
+        [:strong (t :ui/port)]
         [:input.form-input.is-small
          {:value     (:port opts) :type "number" :min 1 :max 65535
           :disabled  disabled?
@@ -471,7 +517,7 @@
          [:option "https://s3.amazonaws.com"]
          [:option "https://clients3.google.com/generate_204"]]]
 
-       (ui/button (if testing? (ui/loading "Testing") "Test URL")
+       (ui/button (if testing? (ui/loading (t :plugin.proxy/testing)) (t :plugin.proxy/test-url))
                   :intent "logseq"
                   :on-click #(let [val (util/trim-safe (.-value (rum/deref *test-input)))]
                                (when (and (not testing?) (not (string/blank? val)))
@@ -480,13 +526,13 @@
                                        (js->clj result :keywordize-keys true))
                                      (p/then (fn [{:keys [code response-ms]}]
                                                (notification/clear! :proxy-net-check)
-                                               (notification/show! (str "Success! Status " code " in " response-ms "ms.") :success)))
+                                               (notification/show! (t :plugin/proxy-check-success code response-ms) :success)))
                                      (p/catch (fn [e]
                                                 (notification/show! (str e) :error false :proxy-net-check)))
                                      (p/finally (fn [] (set-testing?! false)))))))]
 
       [:p.pt-2
-       (ui/button (t :save)
+       (ui/button (t :ui/save)
                   :on-click (fn []
                               (p/let [_ (ipc/ipc :setProxy opts)]
                                 (state/set-state! [:electron/user-cfgs :settings/agent] opts))))]]]))
@@ -498,7 +544,7 @@
         handle-submit! (fn []
                          (set-pending? true)
                          (-> (plugin-handler/load-plugin-from-web-url! url)
-                             (p/then #(do (notification/show! "New plugin registered!" :success)
+                             (p/then #(do (notification/show! (t :plugin/new-registered) :success)
                                           (shui/dialog-close!)))
                              (p/catch #(notification/show! (str %) :error))
                              (p/finally
@@ -512,13 +558,13 @@
                    :auto-focus true})
       [:span.text-gray-10
        (shui/tabler-icon "info-circle" {:size 13})
-       [:span "URLs support both GitHub repositories and local development servers.
-      (For examples: https://github.com/xyhp915/logseq-journals-calendar,
-      http://localhost:8080/<plugin-dir-root>)"]]]
+       [:span (t :plugin.install-from-web-url/supports-note
+                 "https://github.com/xyhp915/logseq-journals-calendar"
+                 "http://localhost:8080/<plugin-dir-root>")]]]
      [:div.flex.justify-end
       (shui/button {:disabled (or pending? (string/blank? url))
                     :on-click handle-submit!}
-                   (if pending? (ui/loading) "Install"))]]))
+                   (if pending? (ui/loading) (t :plugin/install)))]]))
 
 (rum/defc install-from-github-release-container
   []
@@ -527,7 +573,7 @@
         [pending set-pending!] (rum/use-state false)
         *input (rum/use-ref nil)]
     [:div.p-4.flex.flex-col.pb-0
-     (shui/input {:placeholder "GitHub repo url"
+     (shui/input {:placeholder (t :plugin.install-from-web-url/repo-url-placeholder)
                   :value url
                   :ref *input
                   :on-change #(set-url! (util/evalue %))
@@ -536,11 +582,11 @@
       [:label.flex.items-center.gap-2
        (shui/checkbox {:checked (:theme? opts)
                        :on-checked-change #(set-opts! (assoc opts :theme? %))})
-       [:span.opacity-60 "theme?"]]
+       [:span.opacity-60 (t :plugin.install-from-web-url/theme-label)]]
       [:label.flex.items-center.gap-2
        (shui/checkbox {:checked (:effect? opts)
                        :on-checked-change #(set-opts! (assoc opts :effect? %))})
-       [:span.opacity-60 "effect?"]]]
+       [:span.opacity-60 (t :plugin.install-from-web-url/effect-label)]]]
      [:div.flex.justify-end.pt-3
       (shui/button
        {:on-click (fn []
@@ -559,25 +605,190 @@
                                 (p/then #(shui/dialog-close!))
                                 (p/catch #(notification/show! (str %) :error))
                                 (p/finally #(set-pending! false))))
-                          (notification/show! "Invalid GitHub repo url" :error)))))
+                          (notification/show! (t :plugin/invalid-github-repo-url) :error)))))
         :disabled pending}
-       (if pending (ui/loading "Installing") "Install"))]]))
+        (if pending (ui/loading (t :plugin/installing)) (t :plugin/install)))]]))
 
 (rum/defc auto-check-for-updates-control
   []
   (let [[enabled, set-enabled!] (rum/use-state (plugin-handler/get-enabled-auto-check-for-updates?))
-        text (t :plugin/auto-check-for-updates)]
+        text (t :plugin/auto-update-check)]
 
     [:div.flex.items-center.justify-between.px-3.py-2
      {:on-click (fn []
-                  (let [t (not enabled)]
-                    (set-enabled! t)
-                    (plugin-handler/set-enabled-auto-check-for-updates t)
+                  (let [next-enabled (not enabled)]
+                    (set-enabled! next-enabled)
+                    (plugin-handler/set-enabled-auto-check-for-updates next-enabled)
                     (notification/show!
-                     [:span text [:strong.pl-1 (if t "ON" "OFF")] "!"]
-                     (if t :success :info))))}
+                     (into [:span]
+                           (interpolate-rich-text
+                            (t :plugin/auto-update-check-feedback)
+                            [[:strong.pl-1 (t (if next-enabled :ui/on :ui/off))]]))
+                     (if next-enabled :success :info))))}
      [:span.pr-3.opacity-80 text]
      (ui/toggle enabled #() true)]))
+
+(defn- disabled-plugin-sort-key
+  [{:keys [id name title settings]}]
+  (let [disabled-since (:disabled-since settings)
+        plugin-name (or title name id)]
+    [(if (number? disabled-since) 1 0)
+     (or disabled-since 0)
+     (util/safe-lower-case plugin-name)
+     id]))
+
+(defn- plugin-in-category?
+  [category plugin]
+  (case category
+    :all true
+    :plugins (not (:theme plugin))
+    :themes (:theme plugin)))
+
+(defn- get-disabled-plugins-for-removal
+  [category]
+  (->> (vals (state/sub [:plugin/installed-plugins]))
+       (filter #(and (plugin-in-category? category %)
+                     (get-in % [:settings :disabled])))
+       (sort-by disabled-plugin-sort-key)))
+
+(defn- unregister-plugins-sequentially!
+  [plugin-ids]
+  (reduce
+   (fn [chain id]
+     (p/then chain
+             (fn []
+               (p/let [_ (plugin-common-handler/unregister-plugin id)]
+                 (when (util/electron?)
+                   (plugin-config-handler/remove-plugin id))))))
+   (.resolve js/Promise nil)
+   plugin-ids))
+
+(rum/defc bulk-remove-disabled-plugins-container
+  [category]
+  (let [plugins (get-disabled-plugins-for-removal category)
+        plugin-ids (mapv :id plugins)
+        [selected-ids set-selected-ids!] (rum/use-state (set (take 20 plugin-ids)))
+        [pending? set-pending!] (rum/use-state false)
+        selected-plugin-ids (->> plugins
+                                 (map :id)
+                                 (filter selected-ids)
+                                 vec)
+        all-selected? (and (seq plugin-ids)
+                           (= (count selected-plugin-ids) (count plugin-ids)))
+        toggle-selected! (fn [id checked?]
+                           (set-selected-ids!
+                            ((if checked? conj disj) selected-ids id)))
+        remove-selected! (fn []
+                           (when (and (seq selected-plugin-ids)
+                                      (not pending?))
+                             (-> (shui/dialog-confirm!
+                                  [:b (t :plugin/bulk-remove-disabled-delete-alert (count selected-plugin-ids))]
+                                  {:cancel-label (t :ui/cancel)
+                                   :ok-label (t :ui/delete)})
+                                 (p/then (fn []
+                                           (set-pending! true)
+                                           (-> (unregister-plugins-sequentially! selected-plugin-ids)
+                                               (p/then (fn []
+                                                         (notification/show!
+                                                          (t :plugin/bulk-remove-disabled-success (count selected-plugin-ids))
+                                                          :success)
+                                                         (shui/dialog-close!)))
+                                               (p/catch (fn [e]
+                                                          (notification/show! (str e) :error)))
+                                               (p/finally #(set-pending! false))))))))]
+    [:div.p-4.flex.flex-col.gap-3
+     [:h1.text-xl.font-bold (t :plugin/bulk-remove-disabled-title)]
+     (if (seq plugins)
+       [:<>
+        [:p.opacity-70.text-sm (t :plugin/bulk-remove-disabled-desc)]
+        [:ul.max-h-96.overflow-y-auto.flex.flex-col.gap-2.ml-0
+         (for [{:keys [id name title version icon]} plugins
+               :let [selected? (contains? selected-ids id)]]
+           [:li.flex.items-center.gap-3.rounded-md.border.p-2.select-none
+            {:key id
+             :class (str "cursor-pointer "
+                         (if selected?
+                           "border-primary bg-base-3"
+                           "border-transparent bg-base-2 hover:bg-base-3"))
+             :on-click #(when-not pending?
+                          (toggle-selected! id (not selected?)))}
+            (shui/checkbox
+             {:checked selected?
+              :disabled pending?
+              :on-click #(.stopPropagation %)
+              :on-checked-change #(toggle-selected! id (true? %))})
+            [:span.flex.h-10.w-10.shrink-0.items-center.justify-center.overflow-hidden.rounded.bg-base-3
+             (if (and icon (not (string/blank? icon)))
+               [:img {:src icon
+                      :class "h-full w-full object-contain"}]
+               [:span.flex.h-6.w-6.items-center.justify-center.overflow-hidden
+                svg/folder])]
+            [:div.flex-1.overflow-hidden
+             [:div.font-medium.truncate (or title name id)]
+             [:div.text-xs.opacity-60.truncate (str "ID: " id)]]
+            (when version
+              [:small.opacity-50.shrink-0 version])])]
+        [:div.flex.items-center.justify-between.gap-2
+         [:div.flex.gap-2
+          (shui/button {:variant :ghost
+                        :disabled (or pending? all-selected?)
+                        :on-click #(set-selected-ids! (set plugin-ids))}
+                       (t :plugin/bulk-remove-disabled-select-all))
+          (shui/button {:variant :ghost
+                        :disabled (or pending? (empty? selected-plugin-ids))
+                        :on-click #(set-selected-ids! #{})}
+                       (t :plugin/bulk-remove-disabled-clear-selection))]
+         [:div.flex.gap-2
+          (shui/button {:variant :ghost
+                        :disabled pending?
+                        :on-click #(shui/dialog-close!)}
+                       (t :ui/cancel))
+          (shui/button {:disabled (or pending? (empty? selected-plugin-ids))
+                        :on-click remove-selected!}
+                       (if pending?
+                         (ui/loading (t :plugin/uninstall))
+                         (t :plugin/bulk-remove-disabled-confirm (count selected-plugin-ids))))]]]
+       [:div.flex.items-center.justify-center.py-8.opacity-50
+        (t :plugin/bulk-remove-disabled-empty)])]))
+
+(defn- disabled-plugins-cleanup-snoozed?
+  []
+  (let [snoozed-at (storage/get DISABLED-PLUGINS-CLEANUP-SNOOZED-AT-KEY)]
+    (and (number? snoozed-at)
+         (< (- (js/Date.now) snoozed-at) DISABLED-PLUGINS-CLEANUP-SNOOZE-MS))))
+
+(defn- open-bulk-remove-disabled-plugins-dialog!
+  [category]
+  (notification/clear! DISABLED-PLUGINS-CLEANUP-NOTIFICATION-ID)
+  (shui/dialog-open!
+   (fn []
+     (bulk-remove-disabled-plugins-container category))))
+
+(defn- snooze-disabled-plugins-cleanup-warning!
+  []
+  (storage/set DISABLED-PLUGINS-CLEANUP-SNOOZED-AT-KEY (js/Date.now))
+  (notification/clear! DISABLED-PLUGINS-CLEANUP-NOTIFICATION-ID))
+
+(defn- show-disabled-plugins-cleanup-warning!
+  []
+  (let [disabled-count (count (get-disabled-plugins-for-removal :all))]
+    (when (and (>= disabled-count DISABLED-PLUGINS-CLEANUP-THRESHOLD)
+               (not (disabled-plugins-cleanup-snoozed?)))
+      (notification/show!
+       [:div.flex.flex-col.gap-2
+        [:div (t :plugin/disabled-cleanup-warning-title disabled-count)]
+        [:div.opacity-70 (t :plugin/disabled-cleanup-warning-desc)]
+        [:div.flex.gap-2.pt-1
+         (ui/button (t :plugin/disabled-cleanup-warning-clean-now)
+                    :small? true
+                    :on-click #(open-bulk-remove-disabled-plugins-dialog! :all))
+         (ui/button (t :plugin/disabled-cleanup-warning-later)
+                    :small? true
+                    :variant :ghost
+                    :on-click snooze-disabled-plugins-cleanup-warning!)]]
+       :warning
+       false
+       DISABLED-PLUGINS-CLEANUP-NOTIFICATION-ID))))
 
 (rum/defc ^:large-vars/cleanup-todo panel-control-tabs < rum/static
   [search-key *search-key category *category
@@ -699,11 +910,15 @@
       (let [items (concat (if market?
                             [{:title [:span.flex.items-center.gap-1 (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
                               :options {:on-click #(reload-market-fn)}}]
-                            [{:title [:span.flex.items-center.gap-1 (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
-                              :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}])
+                             (concat
+                              [{:title [:span.flex.items-center.gap-1 (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
+                                :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}]
+                              (when (contains? #{:plugins :themes} category)
+                                [{:title [:span.flex.items-center.gap-1 (ui/icon "trash") (t :plugin/bulk-remove-disabled)]
+                                  :options {:on-click #(open-bulk-remove-disabled-plugins-dialog! category)}}])))
 
                           (when (util/electron?)
-                            [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings-page/network-proxy)]
+                            [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings.advanced/network-proxy)]
                               :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}
 
                              {:title   [:span.flex.items-center.gap-1 (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
@@ -878,10 +1093,22 @@
                              (if-let [author (and (string/starts-with? @*search-key "@")
                                                   (subs @*search-key 1))]
                                (filter #(= author (:author %)) filtered-pkgs)
-                               (search/fuzzy-search
-                                filtered-pkgs @*search-key
-                                :limit 30
-                                :extract-fn :title))
+                               (let [low-case-search (string/lower-case @*search-key)
+                                     min-description-search-length 3
+                                     max-description-matches 30
+                                     fuzzy-title-matches (search/fuzzy-search
+                                                    filtered-pkgs @*search-key
+                                                    :limit 30
+                                                    :extract-fn :title)
+                                     precise-description-matches (if (>= (count low-case-search) min-description-search-length)
+                                                                   (->> filtered-pkgs
+                                                                        (filter #(some-> (:description %)
+                                                                                         string/lower-case
+                                                                                         (string/includes? low-case-search)))
+                                                                        (take max-description-matches))
+                                                                   [])]
+                                 (-> (concat fuzzy-title-matches precise-description-matches)
+                                     (distinct))))
                              filtered-pkgs)
         filtered-pkgs      (map #(if-let [stat (get stats (keyword (:id %)))]
                                    (let [downloads (:total_downloads stat)
@@ -927,7 +1154,7 @@
        [:p.flex.justify-center.py-20 svg/loading]
 
        @*error
-       [:p.flex.justify-center.pt-20.opacity-50 (t :plugin/remote-error) (.-message @*error)]
+       [:p.flex.justify-center.pt-20.opacity-50 (t :plugin/remote-error (.-message @*error))]
 
        :else
        [:div.cp__plugins-marketplace-cnt
@@ -1051,7 +1278,7 @@
         (lazy-items-loader load-more-pages!)
         [:div.flex.items-center.justify-center.py-28.flex-col.gap-2.opacity-30
          (shui/tabler-icon "list-search" {:size 40})
-         [:span.text-sm "Nothing Found."]])]]))
+         [:span.text-sm (t :plugin/empty)]])]]))
 
 (rum/defcs waiting-coming-updates
   < rum/reactive
@@ -1093,7 +1320,7 @@
               (ui/tooltip [:span.opacity-30.hover:opacity-80 (ui/icon "info-circle")] [:p notes]))]])]
 
        ;; all done
-       [:div.py-4 [:strong.text-4xl (str "\uD83C\uDF89 " (t :plugin/all-updated))]])
+       [:div.py-4 [:strong.text-4xl (str "🎉 " (t :plugin/update-all-success))]])
 
      ;; actions
      (when (seq updates)
@@ -1142,7 +1369,7 @@
                                (plugin-config-handler/replace-plugins plugins)
                                (shui/dialog-close! "ls-plugins-from-file-modal")))]]
      ;; all done
-     [:div.py-4 [:strong.text-xl (str "\uD83C\uDF89 " (t :plugin.install-from-file/success))]])])
+     [:div.py-4 [:strong.text-xl (str "🎉 " (t :plugin.install-from-file/success))]])])
 
 (defn open-select-theme!
   []
@@ -1223,17 +1450,17 @@
                                                    (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add)))
                                                  true))}})
                       [{:hr true}
-                       {:title (t :plugins)
+                       {:title (t :nav/plugins)
                         :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
                                   :class "extra-item mt-2"}
                         :icon (ui/icon "apps")}
 
-                       {:title (t :themes)
+                       {:title (t :nav/themes)
                         :options {:on-click #(plugin-handler/show-themes-modal!)
                                   :class "extra-item"}
                         :icon (ui/icon "palette")}
 
-                       {:title (t :settings)
+                       {:title (t :nav/settings)
                         :options {:on-click #(plugin-handler/goto-plugins-settings!)
                                   :class "extra-item"}
                         :icon (ui/icon "adjustments")}
@@ -1381,7 +1608,7 @@
       :class (when-not (util/electron?) "web-platform")
       :tab-index "-1"}
 
-     [:h1 (t :plugins)]
+     [:h1 (t :nav/plugins)]
 
      (when (util/electron?)
        [:<>
@@ -1423,6 +1650,7 @@
 (rum/defc updates-notifications-impl
   [check-pending? auto-checking? online?]
   (let [[uid, set-uid] (rum/use-state nil)
+        [cleanup-warning-pending? set-cleanup-warning-pending?!] (rum/use-state false)
         [sub-content, _set-sub-content!] (rum-utils/use-atom *updates-sub-content)
         notify! (fn [content status]
                   (if auto-checking?
@@ -1445,21 +1673,37 @@
      [check-pending? sub-content])
 
     (hooks/use-effect!
+     (fn []
+       (when (and cleanup-warning-pending?
+                  (not auto-checking?))
+         (set-cleanup-warning-pending?! false)
+         (show-disabled-plugins-cleanup-warning!)))
+     [cleanup-warning-pending? auto-checking?])
+
+    (hooks/use-effect!
       ;; scheduler for auto updates
      (fn []
        (when online?
-         (let [last-updates (storage/get :lsp-last-auto-updates)]
-           (when (and (not (false? last-updates))
-                      (or (true? last-updates)
-                          (not (number? last-updates))
-                           ;; interval 12 hours
-                          (> (- (js/Date.now) last-updates) (* 60 60 12 1000))))
-             (let [update-timer (js/setTimeout
-                                 (fn []
-                                   (plugin-handler/auto-check-enabled-for-updates!)
-                                   (storage/set :lsp-last-auto-updates (js/Date.now)))
-                                 (if (util/electron?) 3000 (* 60 1000)))]
-               #(js/clearTimeout update-timer))))))
+         (let [auto-update-delay (if (util/electron?) 3000 (* 60 1000))
+               last-updates (storage/get :lsp-last-auto-updates)
+               should-auto-update? (and (not (false? last-updates))
+                                        (or (true? last-updates)
+                                            (not (number? last-updates))
+                                             ;; interval 12 hours
+                                            (> (- (js/Date.now) last-updates) (* 60 60 12 1000))))
+               cleanup-warning-timer (when-not should-auto-update?
+                                       (js/setTimeout #(set-cleanup-warning-pending?! true)
+                                                      (+ auto-update-delay 1000)))
+               update-timer (when should-auto-update?
+                              (js/setTimeout
+                               (fn []
+                                 (plugin-handler/auto-check-enabled-for-updates!)
+                                 (storage/set :lsp-last-auto-updates (js/Date.now))
+                                 (set-cleanup-warning-pending?! true))
+                               auto-update-delay))]
+           #(do
+              (some-> update-timer (js/clearTimeout))
+              (some-> cleanup-warning-timer (js/clearTimeout))))))
      [online?])
 
     [:<>]))
@@ -1488,7 +1732,7 @@
       (when nav?
         [:aside.md:w-64 {:style {:min-width "10rem"}}
          [:header.cp__settings-header
-          [:h1.cp__settings-modal-title (or title (t :settings-of-plugins))]]
+          [:h1.cp__settings-modal-title (or title (t :plugin.settings/title))]]
          (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)]
            [:ul.settings-plugin-list
             (for [{:keys [id name title icon]} plugins]
@@ -1508,7 +1752,7 @@
         (when-let [^js pl (and focused (= @*cache focused)
                                (plugin-handler/get-plugin-inst focused))]
           (ui/catch-error
-           [:p.warning.text-lg.mt-5 "Settings schema Error!"]
+            [:p.warning.text-lg.mt-5 (t :plugin/settings-schema-error)]
            (plugins-settings/settings-container
             (bean/->clj (.-settingsSchema pl)) pl)))]]]]))
 
@@ -1526,16 +1770,15 @@
   [pid name url]
   [:div
    [:span.block.whitespace-normal
-    "This plugin "
-    [:strong.text-error "#" name]
-    " takes too long to load, affecting the application startup time and
-     potentially causing other plugins to fail to load."]
+    (interpolate-rich-text-node
+     (t :plugin/perf-tip)
+     [[:strong.text-error (str "#" name)]])]
 
    [:path.opacity-50
     [:small [:span.pr-1 (ui/icon "folder")] url]]
 
    [:p
-    (ui/button "Disable now"
+    (ui/button (t :plugin/disable-now)
                :small? true
                :on-click
                (fn []
@@ -1543,9 +1786,10 @@
                      (p/then #(do
                                 (notification/clear! pid)
                                 (notification/show!
-                                 [:span "The plugin "
-                                  [:strong.text-error "#" name]
-                                  " is disabled."] :success
+                                 (interpolate-rich-text-node
+                                  (t :plugin/disable-for-performance-feedback)
+                                  [[:strong.text-error (str "#" name)]])
+                                 :success
                                  true nil 3000 nil)))
                      (p/catch #(js/console.error %)))))]])
 
@@ -1576,9 +1820,38 @@
    (fn []
      [:div.settings-modal.of-plugins
       (focused-settings-content title)])
-   {:label   "plugin-settings-modal"
+   {:label   :plugin-settings-modal
     :align   :start
     :id      "ls-focused-settings-modal"}))
+
+;; tools for user registered host renderers
+(rum/defc renderer-container
+  [{:keys [_pid render] :as opts}]
+  (if (fn? render)
+    [:div.lsp-host-renderer-container
+     (render opts)]
+    [:pre (pr-str opts)]))
+
+(rum/defc renderer-resolver < rum/static
+  [nskey']
+  (when-let [pid (some-> nskey' (namespace))]
+    (let [key (name nskey')
+          [renderer set-renderer!] (rum/use-state nil)]
+
+      (hooks/use-effect!
+       (fn []
+         (try
+           (when-let [renderer (plugin-handler/resolve-hosted-render pid key :sidebar)]
+             (let [r (bean/->clj renderer)
+                   title (:title r)]
+               (when-let [^js dom (and title (js/document.getElementById nskey'))]
+                 (set! (. dom -textContent) title))
+               (set-renderer! r)))
+           (catch js/Error e (js/console.error "Failed to resolve renderer:" nskey' e))))
+       [pid key])
+
+      (when renderer
+        (renderer-container renderer)))))
 
 (defn hook-custom-routes
   [routes]

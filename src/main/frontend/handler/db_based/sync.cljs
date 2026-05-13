@@ -2,17 +2,17 @@
   "DB-sync handler based on Cloudflare Durable Objects."
   (:require [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.malli-schema :as db-sync-schema]
-            [logseq.db-sync.snapshot :as snapshot]
-            [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
 (defn- ws->http-base [ws-url]
@@ -29,98 +29,8 @@
       base)))
 
 (defn http-base []
-  (or config/db-sync-http-base
-      (ws->http-base config/db-sync-ws-url)))
-
-(defn- ->uint8 [data]
-  (cond
-    (instance? js/Uint8Array data) data
-    (instance? js/ArrayBuffer data) (js/Uint8Array. data)
-    (string? data) (.encode (js/TextEncoder.) data)
-    :else (js/Uint8Array. data)))
-
-(defn- gzip-bytes?
-  [^js payload]
-  (and (some? payload)
-       (>= (.-byteLength payload) 2)
-       (= 31 (aget payload 0))
-       (= 139 (aget payload 1))))
-
-(defn- bytes->stream
-  [^js payload]
-  (js/ReadableStream.
-   #js {:start (fn [controller]
-                 (.enqueue controller payload)
-                 (.close controller))}))
-
-(defn- <decompress-gzip-bytes
-  [^js payload]
-  (if (exists? js/DecompressionStream)
-    (p/let [stream (bytes->stream payload)
-            decompressed (.pipeThrough stream (js/DecompressionStream. "gzip"))
-            resp (js/Response. decompressed)
-            buf (.arrayBuffer resp)]
-      (->uint8 buf))
-    (p/rejected (ex-info "gzip decompression not supported"
-                         {:type :db-sync/decompression-not-supported}))))
-
-(defn- <snapshot-response-bytes
-  [^js resp]
-  (p/let [buf (.arrayBuffer resp)
-          chunk (->uint8 buf)]
-    (if (gzip-bytes? chunk)
-      (<decompress-gzip-bytes chunk)
-      chunk)))
-
-(defn- response-body-stream
-  [^js resp]
-  (let [encoding (some-> resp .-headers (.get "content-encoding"))]
-    (cond
-      (nil? (.-body resp))
-      nil
-
-      (= "gzip" encoding)
-      (when (exists? js/DecompressionStream)
-        (.pipeThrough (.-body resp) (js/DecompressionStream. "gzip")))
-
-      :else
-      (.-body resp))))
-
-(defn- <flush-datom-batches!
-  [datoms batch-size on-batch]
-  (p/loop [remaining datoms]
-    (if (>= (count remaining) batch-size)
-      (let [batch (subvec remaining 0 batch-size)
-            rest-datoms (subvec remaining batch-size)]
-        (p/let [_ (on-batch batch)]
-          (p/recur rest-datoms)))
-      remaining)))
-
-(defn- <stream-snapshot-datom-batches!
-  [^js resp batch-size on-batch]
-  (if-let [stream (response-body-stream resp)]
-    (let [reader (.getReader stream)]
-      (p/loop [buffer nil
-               pending []]
-        (p/let [result (.read reader)]
-          (if (.-done result)
-            (let [pending (if (and buffer (pos? (.-byteLength buffer)))
-                            (into pending (snapshot/finalize-datoms-jsonl-buffer buffer))
-                            pending)]
-              (if (seq pending)
-                (p/let [_ (on-batch pending)]
-                  {:chunk-count 1})
-                {:chunk-count 0}))
-            (let [{datoms :datoms next-buffer :buffer} (snapshot/parse-datoms-jsonl-chunk buffer (->uint8 (.-value result)))
-                  pending (into pending datoms)]
-              (p/let [pending (<flush-datom-batches! pending batch-size on-batch)]
-                (p/recur next-buffer pending)))))))
-    (p/let [snapshot-bytes (<snapshot-response-bytes resp)
-            datoms (vec (snapshot/finalize-datoms-jsonl-buffer snapshot-bytes))]
-      (if (seq datoms)
-        (p/let [_ (on-batch datoms)]
-          {:chunk-count 1})
-        {:chunk-count 0}))))
+  (or (config/db-sync-http-base)
+      (ws->http-base (config/db-sync-ws-url))))
 
 (defn- auth-headers []
   (when-let [token (state/get-auth-id-token)]
@@ -134,6 +44,7 @@
 (declare fetch-json)
 
 (declare coerce-http-response)
+(declare <sync-auth-state-to-db-worker!)
 
 (defn fetch-json
   [url opts {:keys [response-schema error-schema] :or {error-schema :error}}]
@@ -206,6 +117,33 @@
     true
     (true? graph-e2ee?)))
 
+(defn- <ensure-download-runtime-bound!
+  [repo]
+  (if (util/electron?)
+    (p/let [_ (persist-db/<fetch-init-data repo {:sync-download-graph? true})
+            _ (<sync-auth-state-to-db-worker!)]
+      nil)
+    (p/resolved nil)))
+
+(defn- <ensure-user-rsa-keys-on-server!
+  [{:keys [server-rsa-keys-exists?]}]
+  (if (not= false server-rsa-keys-exists?)
+    (p/resolved nil)
+    (if @state/*db-worker
+      (-> (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys
+                                    {:ensure-server? true
+                                     :server-rsa-keys-exists? false})
+          (p/catch (fn [error]
+                     (log/error :db-sync/ensure-user-rsa-keys-failed
+                                {:error error
+                                 :reason :server-rsa-keys-missing})
+                     nil)))
+      (do
+        (log/warn :db-sync/ensure-user-rsa-keys-skipped
+                  {:reason :db-worker-not-ready
+                   :server-rsa-keys-exists? server-rsa-keys-exists?})
+        (p/resolved nil)))))
+
 (defn- <wait-for-db-worker-ready!
   []
   (if @state/*db-worker
@@ -229,13 +167,32 @@
   (log/info :db-sync/stop true)
   (state/<invoke-db-worker :thread-api/db-sync-stop))
 
+(defn- sync-app-state-payload
+  []
+  (cond-> (select-keys @state/state [:git/current-repo :config
+                                     :auth/id-token :auth/access-token :auth/refresh-token
+                                     :auth/oauth-token-url :auth/oauth-domain :auth/oauth-client-id
+                                     :user/info])
+    (seq config/OAUTH-DOMAIN)
+    (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
+
+    (seq config/COGNITO-CLIENT-ID)
+    (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)))
+
+(defn- <sync-auth-state-to-db-worker!
+  []
+  (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+          payload (sync-app-state-payload)]
+    (state/<invoke-db-worker :thread-api/sync-app-state payload)))
+
 (defn <rtc-start!
   [repo & {:keys [_stop-before-start?] :as _opts}]
   (p/let [_ (<wait-for-db-worker-ready!)]
     (if (should-start-rtc? repo)
       (do
         (log/info :db-sync/start {:repo repo})
-        (state/<invoke-db-worker :thread-api/db-sync-start repo))
+        (p/let [_ (<sync-auth-state-to-db-worker!)]
+          (state/<invoke-db-worker :thread-api/db-sync-start repo)))
       (do
         (log/info :db-sync/skip-start {:repo repo :reason :graph-not-in-remote-list
                                        :remote-graphs-loading? (:rtc/loading-graphs? @state/state)
@@ -280,42 +237,8 @@
   ([repo graph-e2ee?]
    (<rtc-create-graph! repo graph-e2ee? true))
   ([repo graph-e2ee? graph-ready-for-use?]
-   (let [schema-version (some-> (ldb/get-graph-schema-version (db/get-db)) :major str)
-         graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
-         graph-ready-for-use? (not= false graph-ready-for-use?)
-         base (http-base)]
-     (if base
-       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-               body (coerce-http-request :graphs/create
-                                         {:graph-name (string/replace repo config/db-version-prefix "")
-                                          :schema-version schema-version
-                                          :graph-e2ee? graph-e2ee?
-                                          :graph-ready-for-use? graph-ready-for-use?})
-               result (if (nil? body)
-                        (p/rejected (ex-info "db-sync invalid create-graph body"
-                                             {:repo repo}))
-                        (fetch-json (str base "/graphs")
-                                    {:method "POST"
-                                     :headers {"content-type" "application/json"}
-                                     :body (js/JSON.stringify (clj->js body))}
-                                    {:response-schema :graphs/create}))
-               graph-id (:graph-id result)
-               graph-e2ee? (normalize-graph-e2ee?
-                            (if (contains? result :graph-e2ee?)
-                              (:graph-e2ee? result)
-                              graph-e2ee?))]
-         (if graph-id
-           (p/do!
-            (ldb/transact! repo [(sqlite-util/kv :logseq.kv/db-type "db")
-                                 (sqlite-util/kv :logseq.kv/graph-uuid (uuid graph-id))
-                                 (sqlite-util/kv :logseq.kv/graph-rtc-e2ee? graph-e2ee?)])
-            graph-id)
-           (p/rejected (ex-info "db-sync missing graph id in create response"
-                                {:type :db-sync/invalid-graph
-                                 :response result}))))
-       (p/rejected (ex-info "db-sync missing graph info"
-                            {:type :db-sync/invalid-graph
-                             :base base}))))))
+   (state/<invoke-db-worker :thread-api/db-sync-create-remote-graph
+                            repo graph-e2ee? graph-ready-for-use?)))
 
 (defn <rtc-delete-graph!
   [graph-uuid _schema-version]
@@ -343,54 +266,12 @@
    (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
          base (http-base)]
      (-> (if (and graph-uuid base)
-           (-> (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-                       graph (str config/db-version-prefix graph-name)
-                       pull-resp (fetch-json (str base "/sync/" graph-uuid "/pull")
-                                             {:method "GET"}
-                                             {:response-schema :sync/pull})
-                       remote-tx (:t pull-resp)
-                       _ (when-not (integer? remote-tx)
-                           (throw (ex-info "non-integer remote-tx when downloading graph"
-                                           {:graph graph-name
-                                            :remote-tx remote-tx})))
-                       snapshot-resp (fetch-json (str base "/sync/" graph-uuid "/snapshot/download")
-                                                 {:method "GET"}
-                                                 {:response-schema :sync/snapshot-download})
-                       resp (js/fetch (:url snapshot-resp)
-                                      (clj->js (with-auth-headers {:method "GET"})))
-                       _ (state/pub-event!
-                          [:rtc/log {:type :rtc.log/download
-                                     :sub-type :download-progress
-                                     :graph-uuid graph-uuid
-                                     :message "Start downloading graph snapshot"}])]
-                 (when-not (.-ok resp)
-                   (throw (ex-info "snapshot download failed"
-                                   {:graph graph-name
-                                    :status (.-status resp)})))
-                 (let [import-id* (atom nil)
-                       ensure-import! (fn []
-                                        (if-let [import-id @import-id*]
-                                          (p/resolved import-id)
-                                          (p/let [{:keys [import-id]} (state/<invoke-db-worker :thread-api/db-sync-import-prepare
-                                                                                               graph true graph-uuid graph-e2ee?)]
-                                            (reset! import-id* import-id)
-                                            import-id)))]
-                   (p/let [_ (<stream-snapshot-datom-batches!
-                              resp
-                              25000
-                              (fn [datoms]
-                                (p/let [import-id (ensure-import!)]
-                                  (state/<invoke-db-worker :thread-api/db-sync-import-datoms-chunk
-                                                           datoms graph-uuid import-id))))
-                           _ (state/pub-event!
-                              [:rtc/log {:type :rtc.log/download
-                                         :sub-type :download-completed
-                                         :graph-uuid graph-uuid
-                                         :message "Graph snapshot downloaded"}])
-                           _ (when-let [import-id @import-id*]
-                               (state/<invoke-db-worker :thread-api/db-sync-import-finalize
-                                                        graph graph-uuid remote-tx import-id))]
-                     true))))
+           (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+                   graph (str config/db-version-prefix graph-name)
+                   _ (<ensure-download-runtime-bound! graph)
+                   _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
+                                              graph graph-uuid graph-e2ee?)]
+             true)
            (p/rejected (ex-info "db-sync missing graph info"
                                 {:type :db-sync/invalid-graph
                                  :graph-uuid graph-uuid
@@ -411,6 +292,8 @@
                   resp (fetch-json (str base "/graphs")
                                    {:method "GET"}
                                    {:response-schema :graphs/list})
+                  _ (<ensure-user-rsa-keys-on-server! {:server-rsa-keys-exists?
+                                                       (:user-rsa-keys-exists? resp)})
                   graphs (:graphs resp)
                   result (mapv (fn [graph]
                                  (let [graph-e2ee? (if (contains? graph :graph-e2ee?)
@@ -460,12 +343,12 @@
                _ (when (and repo e2ee?)
                    (state/<invoke-db-worker :thread-api/db-sync-grant-graph-access
                                             repo graph-uuid email))]
-         (notification/show! "Invitation sent!" :success))
+         (notification/show! (t :sync/invitation-sent) :success))
        (p/catch (fn [e]
                   (if (= "user not found" (get-in (ex-data e) [:body :error]))
-                    (notification/show! "User doesn't exist yet." :warning)
+                    (notification/show! (t :sync/user-doesnt-exist-yet) :warning)
                     (do
-                      (notification/show! "Something wrong, please try again." :error)
+                      (notification/show! (t :sync/something-wrong) :error)
                       (log/error :db-sync/invite-email-failed
                                  {:error e
                                   :graph-uuid graph-uuid
@@ -501,14 +384,11 @@
                           :graph-uuid graph-uuid}))))
 
 (defn <rtc-upload-graph!
-  [repo graph-e2ee?]
-  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee? false)]
-    (when (nil? graph-id)
-      (throw (ex-info "graph id doesn't exist when uploading to server" {:repo repo})))
-    (p/do!
-     (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
-     (<get-remote-graphs)
-     (<rtc-start! repo))))
+  [repo _graph-e2ee?]
+  (p/do!
+   (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
+   (<get-remote-graphs)
+   (<rtc-start! repo)))
 
 (defn <rtc-create-graph-and-start-sync!
   [repo graph-e2ee?]

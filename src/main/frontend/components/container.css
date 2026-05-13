@@ -58,6 +58,16 @@
   @apply sm:py-8 py-2 sm:pl-8 sm:pr-4;
 }
 
+#main-content-container[data-is-margin-less-pages='true'] {
+  padding: 0 !important;
+  justify-content: stretch;
+}
+
+#main-content-container[data-is-margin-less-pages='true'] > .cp__sidebar-main-content {
+  max-width: none;
+  width: 100%;
+}
+
 .left-sidebar-inner {
   &.as-container {
     @apply relative h-full pt-3 overflow-y-auto overflow-x-hidden transition-transform;
@@ -642,7 +652,7 @@
     top: 0;
     left: 0;
     right: 0;
-    background-color: or(--ls-right-sidebar-topbar-color, --lx-gray-02, --ls-secondary-background-color, #d8e1e8);
+    background-color: var(--ls-right-sidebar-topbar-color, var(--lx-gray-02, var(--ls-secondary-background-color, #d8e1e8)));
     z-index: 999;
     user-select: none;
     -webkit-app-region: drag;
@@ -744,6 +754,14 @@
 
 .cp__sidebar-main-content[data-is-margin-less-pages='true'] {
   padding: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.cp__sidebar-main-content[data-is-margin-less-pages='true'] > div {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 @supports not (overflow-y: overlay) {
@@ -811,8 +829,13 @@ html[data-theme='dark'] {
   }
 
   .cp__right-sidebar {
+    &-inner,
+    &-topbar {
+      background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-01)));
+    }
+
     .sidebar-item {
-      background-color: var(--lx-gray-03, var(--ls-secondary-background-color));
+      background-color: var(--lx-gray-03, var(--ls-secondary-background-color, var(--rx-gray-03)));
     }
   }
 }

@@ -9,9 +9,9 @@ on:
         default: "main"
 
 env:
-  CLOJURE_VERSION: "1.11.1.1413"
-  NODE_VERSION: "22"
-  JAVA_VERSION: "11"
+  CLOJURE_VERSION: "1.12.4.1618"
+  NODE_VERSION: "24"
+  JAVA_VERSION: "21"
 
 jobs:
   build-and-deploy:
@@ -35,13 +35,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
       - name: Setup Clojure
         uses: DeLaGuardo/setup-clojure@13.5
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
-      - name: Install Yarn deps
-        run: yarn install --frozen-lockfile
+      - name: Install pnpm deps
+        run: pnpm install --frozen-lockfile
 
       - name: Set build environment flags
         run: |
@@ -50,10 +55,10 @@ jobs:
 
       - name: Build web + workers
         run: |
-          yarn gulp:build
-          clojure -M:cljs release app db-worker inference-worker \
+          pnpm gulp:build
+          clojure -M:cljs release app db-worker \
             --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}'
-          yarn webpack-app-build
+          pnpm webpack-app-build
 
           rsync -avz \
             --exclude node_modules \

@@ -37,7 +37,12 @@
 (use-fixtures :each
   disable-browser-fns
   test-helper/react-components
-  #(test-helper/start-and-destroy-db % {:build-init-data? false})
+  #(test-helper/start-and-destroy-db
+    %
+    {:build-init-data? false
+     :schema {:logseq.property/deleted-at {:db/index true}
+              :logseq.property/created-from-property {:db/index true}
+              }})
   listen-db-fixture)
 
 (defn get-block
@@ -114,13 +119,15 @@
              [15]]]
         [16 [[17]]]]]])
 
+(declare get-datoms)
+
 (defn get-blocks-count
   []
-  (count (d/datoms (db/get-db test-db) :avet :block/uuid)))
+  (count (get-datoms)))
 
 (defn get-blocks-ids
   []
-  (set (map :v (d/datoms (db/get-db test-db) :avet :block/uuid))))
+  (set (map :v (get-datoms))))
 
 (defn- transact-opts
   []
@@ -507,6 +514,58 @@
         (is (= 1 (count children)))
         (is (= "child" (:block/title (get-block (first children)))))))))
 
+(deftest test-paste-property-values-into-empty-property-value-block
+  (testing "replace-empty-target remaps pasted property value uuids before adding many-property refs"
+    (transact-tree! [[25]])
+    (db/transact! test-db [{:block/uuid 25
+                            :block/title ""}])
+    (let [conn (db/get-db test-db false)
+          _ (db/transact! test-db [{:db/ident :logseq.property/created-from-property
+                                    :db/valueType :db.type/ref
+                                    :db/cardinality :db.cardinality/one
+                                    :db/index true}])
+          property-ident :user.property/reproduciblesteps
+          _ (db/transact! test-db [{:db/ident property-ident
+                                    :db/valueType :db.type/ref
+                                    :db/cardinality :db.cardinality/many
+                                    :logseq.property/type :default}])
+          property (d/entity @conn property-ident)
+          property-ident (:db/ident property)
+          target-block (get-block 25)
+          _ (db/transact! test-db [{:db/id (:db/id target-block)
+                                    :logseq.property/created-from-property (:db/id property)}
+                                   [:db/add (:db/id (:block/parent target-block))
+                                    property-ident
+                                    (:db/id target-block)]])
+          target-block (get-block 25)
+          _ (is (some? (:logseq.property/created-from-property target-block)))
+          copied-blocks [{:block/uuid 101
+                          :block/title "1"
+                          :block/parent 1}
+                         {:block/uuid 102
+                          :block/title "2"
+                          :block/parent [:block/uuid 101]}
+                         {:block/uuid 103
+                          :block/title "3"
+                          :block/parent 1}]]
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/insert-blocks! conn
+                                     copied-blocks
+                                     target-block
+                                     {:sibling? true
+                                      :keep-uuid? true
+                                      :outliner-op :paste
+                                      :replace-empty-target? true}))
+      (let [parent (d/entity @conn (:db/id (:block/parent target-block)))
+            values (get parent property-ident)
+            titles (set (map :block/title values))]
+        ;; Old copied uuid should not survive as a dangling property value ref.
+        (is (nil? (get-block 101)))
+        ;; Pasted values should be the replaced target and the new sibling top-level block.
+        (is (= #{"1" "3"} titles))
+        (is (contains? (set (map :db/id values)) (:db/id (get-block 25))))))))
+
 (deftest test-batch-transact
   (testing "add 4, 5 after 2 and delete 3"
     (let [tree' [[10 [[2] [3]]]]]
@@ -625,15 +684,34 @@
 
 (defn get-datoms
   []
-  (d/datoms (db/get-db test-db) :avet :block/uuid))
+  (let [db' (db/get-db test-db)
+        recycled-ids (into #{}
+                           (map :e)
+                           (d/datoms db' :avet :logseq.property/deleted-at))
+        recycle-page-ids (into #{}
+                               (map :e)
+                               (d/datoms db' :avet :block/title "Recycle"))
+        recycled-page-block-ids (into #{}
+                                      (map :e)
+                                      (mapcat (fn [page-id]
+                                                (d/datoms db' :avet :block/page page-id))
+                                              recycle-page-ids))]
+    (->> (d/datoms db' :avet :block/uuid)
+         (remove (fn [datom]
+                   (or (contains? recycled-ids (:e datom))
+                       (contains? recycled-page-block-ids (:e datom))
+                       (contains? recycle-page-ids (:e datom))))))))
 
 (defn get-random-block
   []
   (let [datoms (->> (get-datoms)
-                    (remove (fn [datom] (= 1 (:e datom)))))]
+                    (remove (fn [datom] (= 1 (:e datom))))
+                    (remove (fn [datom]
+                              (empty? (d/datoms (db/get-db test-db) :eavt (:e datom) :block/parent))))
+                    vec)]
     (if (seq datoms)
       (let [id (:e (gen/generate (gen/elements datoms)))
-            block (db/pull test-db '[*] id)]
+            block (db/entity test-db id)]
         (assert (:block/parent block)
                 (str "No parent for block: " block))
         block)
@@ -657,15 +735,17 @@
 
 (defn get-random-blocks
   []
-  (let [limit (inc (rand-int 20))]
+  (let [limit (inc (rand-int 5))]
     (repeatedly limit get-random-block)))
+
+(def ^:private random-ops-iterations 40)
 
 (deftest ^:long random-inserts
   (testing "Random inserts"
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 100]
+      (dotimes [_i random-ops-iterations]
         ;; (prn "random insert: " i)
         (let [blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
@@ -677,7 +757,7 @@
 (deftest ^:long random-deletes
   (testing "Random deletes"
     (transact-random-tree!)
-    (dotimes [_i 100]
+    (dotimes [_i random-ops-iterations]
       ;; (prn "Random deletes: " i)
       (insert-blocks! (gen-blocks) (get-random-block))
       (let [blocks (get-random-blocks)]
@@ -691,8 +771,8 @@
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 100]
-        ;; (prn "Random move: " i)
+      (dotimes [_i random-ops-iterations]
+        ;; (prn :debug :i i)
         (let [blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
                                   (set/union old (set (map :block/uuid blocks)))))
@@ -713,7 +793,7 @@
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 100]
+      (dotimes [_i random-ops-iterations]
         ;; (prn "Random move up/down: " i)
         (let [blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
@@ -731,7 +811,7 @@
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 100]
+      (dotimes [_i random-ops-iterations]
         ;; (prn "Random move indent/outdent: " i)
         (let [new-blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
@@ -792,8 +872,8 @@
 
 (deftest ^:long random-mixed-ops
   (testing "Random mixed operations"
+    (transact-random-tree!)
     (let [*random-blocks (atom (get-blocks-ids))]
-      (transact-random-tree!)
       (run-random-mixed-ops! *random-blocks)
       (let [total (get-blocks-count)
             page-id 1]

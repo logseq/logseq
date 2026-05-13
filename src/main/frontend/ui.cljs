@@ -12,7 +12,7 @@
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
@@ -93,19 +93,26 @@
   (some #{color} built-in-colors))
 
 (rum/defc menu-background-color
-  [add-bgcolor-fn rm-bgcolor-fn]
-  [:div.flex.flex-row.justify-between.py-1.px-2.items-center
-   [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
-    (for [color built-in-colors]
-      [:a
-       {:key (str "key-" color)
-        :title (t (keyword "color" color))
-        :on-click #(add-bgcolor-fn color)}
-       [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
-    [:a
-     {:title (t :remove-background)
-      :on-click rm-bgcolor-fn}
-     [:div.heading-bg.remove "-"]]]])
+  ([add-bgcolor-fn rm-bgcolor-fn]
+   (menu-background-color ::unknown add-bgcolor-fn rm-bgcolor-fn))
+  ([current-color add-bgcolor-fn rm-bgcolor-fn]
+   (let [known-color? (not= current-color ::unknown)
+         active-ring "0 0 0 2px var(--lx-gray-12, var(--ls-primary-text-color))"]
+     [:div.flex.flex-row.justify-between.py-1.px-2.items-center
+      [:div.flex.flex-row.justify-between.flex-1.mx-2.mt-2
+       (for [color built-in-colors]
+         [:a
+          {:key (str "key-" color)
+           :title (t (keyword "color" color))
+           :on-click #(add-bgcolor-fn color)}
+          [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")
+                                    :box-shadow (when (and known-color? (= current-color color))
+                                                  active-ring)}}]])
+       [:a
+        {:title (t :ui/remove-background)
+         :on-click rm-bgcolor-fn}
+        [:div.heading-bg.remove {:style {:box-shadow (when (and known-color? (nil? current-color))
+                                                       active-ring)}} "-"]]]])))
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -230,6 +237,8 @@
     [:span.keyboard-shortcut
      (shui/shortcut sequence opts)]))
 
+(def ^:private append-no-padding-class " no-padding")
+
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]
   (if only-child?
@@ -238,7 +247,7 @@
     [:a.flex.justify-between.menu-link
      (cond-> options
        (true? no-padding?)
-       (assoc :class (str class " no-padding"))
+       (assoc :class (str class append-no-padding-class))
 
        true
        (dissoc :no-padding?))
@@ -291,14 +300,12 @@
            [:div.flex-shrink-0.flex {:style {:margin-top -9
                                              :margin-right -18}}
             (button
-             {:button-props {"aria-label" "Close"}
+             {:button-props {"aria-label" (t :ui/close)}
               :variant :ghost
               :class "hover:bg-transparent hover:text-foreground scale-90"
               :on-click (fn []
                           (notification/clear! uid))
               :icon "x"})]]]]]])))
-
-(declare button)
 
 (rum/defc notification-clear-all
   []
@@ -622,7 +629,7 @@
        (shui/shortcut binding {:glow? true})])))
 
 (defn loading
-  ([] (loading (t :loading)))
+  ([] (loading (t :ui/loading)))
   ([content] (loading content nil))
   ([content opts]
    [:div.flex.flex-row.items-center.inline.icon-loading
@@ -757,7 +764,7 @@
        (log/error :exception error)
        (notification/show!
         [:div.flex.flex-col.gap-2
-         [:div (str "Error caught by UI!\n " error)]
+         [:div (t :ui/error-boundary-error error)]
          (str (.-stack error))] `:error)
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]
@@ -774,7 +781,7 @@
     [:h5.text-error.pb-1 title]
     [:a.text-xs.opacity-50.hover:opacity-80
      {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
-      :target "_blank"} "report issue"]]
+      :target "_blank"} (t :bug-report.issue/report-link)]]
    (when content [:pre.m-0.text-sm (str content)])])
 
 (def component-error
@@ -849,25 +856,6 @@
           :checked selected}]
         label])]))
 
-(rum/defcs slider < rum/reactive
-  {:init (fn [state]
-           (assoc state ::value (atom (first (:rum/args state)))))}
-  [state _default-value {max' :max :keys [min on-change]}]
-  (let [*value (::value state)
-        value (rum/react *value)
-        value' (int value)]
-    (assert (int? value'))
-    [:input.cursor-pointer
-     {:type      "range"
-      :value     value'
-      :min       min
-      :max       max'
-      :style     {:width "100%"}
-      :on-change #(let [value (util/evalue %)]
-                    (reset! *value value))
-      :on-pointer-up #(let [value (util/evalue %)]
-                        (on-change value))}]))
-
 (rum/defcs tweet-embed < rum/reactive
   (rum/local true :loading?)
   [state id]
@@ -932,12 +920,19 @@
 
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
-  [shortcut-key _position content]
+  [shortcut-key _position content & [title]]
   (let [shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
-        enabled-tooltip? (state/enable-tooltip?)]
+        enabled-tooltip?  (state/enable-tooltip?)
+        binding           (when shortcut-key (shortcut-dh/shortcut-binding shortcut-key))
+        first-binding     (when (and binding (not (false? binding))) (first binding))]
     (if (and enabled-tooltip? shortcut-tooltip?)
       (tooltip content
-               [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
+               (if title
+                 [:div.flex.flex-col.items-start.gap-1
+                  [:span.text-xs.opacity-80 title]
+                  (when first-binding
+                    (shui/shortcut first-binding {:glow? false}))]
+                 (keyboard-shortcut-from-config shortcut-key))
                {:trigger-props {:as-child true}})
       content)))
 
@@ -1007,33 +1002,28 @@
      (for [i (range 1 7)]
        (rum/with-key (button
                       ""
-                      :disabled? (and (some? heading) (= heading i))
                       :icon (str "h-" i)
-                      :title (t :heading i)
-                      :class "to-heading-button"
+                      :title (t :editor/heading i)
+                      :class (str "to-heading-button" (when (= heading i) " is-active"))
                       :on-click #(add-heading-fn i)
-                      :intent "link"
+                      :intent (when-not (= heading i) "link")
                       :small? true)
          (str "key-h-" i)))
      (button
       ""
       :icon "h-auto"
-      :disabled? (and (some? heading) (true? heading))
-      :icon-props {:extension? true}
-      :class "to-heading-button"
-      :title (t :auto-heading)
+      :class (str "to-heading-button" (when (true? heading) " is-active"))
+      :title (t :editor/auto-heading)
       :on-click auto-heading-fn
-      :intent "link"
+      :intent (when-not (true? heading) "link")
       :small? true)
      (button
       ""
       :icon "heading-off"
-      :disabled? (and (some? heading) (not heading))
-      :icon-props {:extension? true}
-      :class "to-heading-button"
-      :title (t :remove-heading)
+      :class (str "to-heading-button" (when (false? heading) " is-active"))
+      :title (t :editor/remove-heading)
       :on-click rm-heading-fn
-      :intent "link"
+      :intent (when-not (false? heading) "link")
       :small? true)]]))
 
 (rum/defc tooltip
@@ -1058,8 +1048,8 @@
 
 (defn get-month-label
   [n]
-  (some->> n (nth month-values)
-           (name)))
+  (when (number? n)
+    (i18n/locale-format-date (js/Date. 2000 n 1) {:month "long"})))
 
 (rum/defc date-year-month-select
   [{:keys [name value onChange _children]}]
@@ -1081,8 +1071,8 @@
                      :size :sm}
                     (get-month-label value)))
       (shui/dropdown-menu-content
-       (for [[idx month] (medley/indexed month-values)
-             :let [label (clojure.core/name month)]]
+       (for [[idx _month] (medley/indexed month-values)
+             :let [label (get-month-label idx)]]
          (shui/dropdown-menu-checkbox-item
           {:checked (= value idx)
            :on-select (fn []
@@ -1100,6 +1090,8 @@
      :caption-layout "dropdown-buttons"
      :fromYear 1000
      :toYear 3000
+     :formatters {:formatWeekdayName (fn [weekday _]
+                                       (i18n/locale-format-date weekday {:weekday "short"}))}
      :components (cond-> {:Dropdown #(date-year-month-select (bean/bean %))}
                    del-btn? (assoc :Head #(DelDateButton on-delete)))
      :class-names {:months "" :root (when del-btn? "has-del-btn")}
@@ -1132,7 +1124,7 @@
                  (let [value (get-current-hh-mm)]
                    (set! (.-value (gdom/getElement "time-picker")) value)
                    (on-change value)))}
-    "Use current time")])
+    (t :ui/use-current-time))])
 
 (rum/defc nlp-calendar
   [{:keys [selected on-select on-day-click] :as opts}]
@@ -1158,7 +1150,7 @@
 
      (shui/input
       {:type "text"
-       :placeholder "e.g. Next week"
+       :placeholder (t :ui/date-natural-language-placeholder)
        :class "mx-3 mb-3"
        :style {:width "initial"
                :tab-index -1}
@@ -1172,7 +1164,7 @@
                               (if-let [date (and result (doto (goog.date.DateTime.) (.setTime (.getTime result))))]
                                 (let [on-select' (or (:on-select opts) (:on-day-click opts))]
                                   (on-select' date))
-                                (notification/show! (str (pr-str value) " is not a valid date. Please try again") :warning)))))))})]))
+                                (notification/show! (t :date/invalid-date-warning (pr-str value)) :warning)))))))})]))
 
 (comment
   (rum/defc skeleton

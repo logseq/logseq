@@ -1,8 +1,20 @@
 (ns logseq.db-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [datascript.storage :as ds-storage :refer [IStorage]]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
+
+(defrecord InMemoryStorage [*disk]
+  IStorage
+  (-store [_ addr+data-seq _delete-addrs]
+    (doseq [[addr data] addr+data-seq]
+      (vswap! *disk assoc addr data)))
+  (-restore [_ addr]
+    (get @*disk addr)))
+
+(defn- make-storage []
+  (->InMemoryStorage (volatile! {})))
 
 ;;; datoms
 ;;; - 1 <----+
@@ -58,6 +70,16 @@
     (is (= "movie" (:block/title (ldb/get-case-page @conn "movie"))))
     (is (= "Movie" (:block/title (ldb/get-case-page @conn "Movie"))))))
 
+(deftest get-journal-page-by-day
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:build/journal 20260410}}
+                {:page {:build/journal 20260411}}]})]
+    (is (= "Apr 10th, 2026"
+           (:block/title (ldb/get-journal-page-by-day @conn 20260410))))
+    (is (= "Apr 11th, 2026"
+           (:block/title (ldb/get-journal-page-by-day @conn 20260411))))))
+
 (deftest page-exists
   (let [conn (db-test/create-conn-with-blocks
               {:properties
@@ -95,7 +117,7 @@
                         (d/datom 1 :property :v1 (+ tx 2) true)]))
       (is (= :v1 (:property (d/entity @conn 1)))))))
 
-(deftest test-transact-with-temp-conn!
+(deftest test-batch-transact!
   (testing "DB validation should be running after the whole transaction"
     (let [conn (db-test/create-conn)]
       (testing "#Task shouldn't be converted to property"
@@ -104,13 +126,40 @@
                        (db-test/silence-stderr
                         (ldb/transact! conn [{:db/ident :logseq.class/Task
                                               :block/tags :logseq.class/Property}]))))))
-      (ldb/transact-with-temp-conn!
+      (ldb/batch-transact-with-temp-conn!
        conn
        {}
-       (fn [temp-conn _*batch-tx-data]
+       (fn [temp-conn]
          (ldb/transact! temp-conn [{:db/ident :logseq.class/Task
                                     :block/tags :logseq.class/Property}])
          (ldb/transact! temp-conn [[:db/retract :logseq.class/Task :block/tags :logseq.class/Property]]))))))
+
+(deftest test-batch-transact-clears-stale-tx-tail-before-next-store-tail
+  (let [block-uuid #uuid "00000001-2026-0421-0000-000000000000"
+        schema  {:block/uuid {:db/unique :db.unique/identity}}
+        storage (make-storage)
+        conn    (d/create-conn schema {:storage storage})]
+    ;; Valid history: unique value moves to another entity.
+    (d/transact! conn [[:db/add 28446 :block/uuid block-uuid]])
+    (ldb/batch-transact!
+     conn
+     {}
+     (fn [batch-conn]
+       (d/transact! batch-conn [[:db/retract 28446 :block/uuid block-uuid]])
+       (d/transact! batch-conn [[:db/add 28447 :block/uuid block-uuid]])))
+    ;; Next tx uses tail-only persistence.
+    (d/transact! conn [[:db/add 1 :filler "x"]])
+    (let [tail     (get @(:*disk storage) @#'ds-storage/tail-addr)
+          stale?   (some (fn [[e a v _tx]]
+                           (and (= 28446 e)
+                                (= :block/uuid a)
+                                (= block-uuid v)))
+                         (apply concat tail))
+          restored (d/restore-conn storage)]
+      (is (nil? stale?)
+          "stale pre-batch datoms should not leak into tail after batch-transact!")
+      (is (= [28447]
+             (mapv :e (d/datoms @restored :avet :block/uuid block-uuid)))))))
 
 (deftest get-bidirectional-properties
   (testing "disabled by default"
@@ -150,6 +199,22 @@
       (is (= "People" (:title (first results))))
       (is (= ["Alice"]
              (map :block/title (:entities (first results))))))))
+
+(deftest get-bidirectional-properties-ignores-recycled-entities
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:friend {:logseq.property/type :node
+                                     :build/property-classes [:Person]}}
+               :classes {:Person {:build/properties {:logseq.property.class/enable-bidirectional? true}}}
+               :pages-and-blocks
+               [{:page {:block/title "Alice"
+                        :build/tags [:Person]
+                        :build/properties {:friend [:build/page {:block/title "Bob"}]}}}
+                {:page {:block/title "Bob"}}]})
+        alice (db-test/find-page-by-title @conn "Alice")
+        target (db-test/find-page-by-title @conn "Bob")]
+    (d/transact! conn [{:db/id (:db/id alice)
+                        :logseq.property/deleted-at 1}])
+    (is (empty? (ldb/get-bidirectional-properties @conn (:db/id target))))))
 
 (defn- bidirectional-perf-conn
   [n property-titles]

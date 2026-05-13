@@ -10,7 +10,7 @@
 (defn- columns
   []
   (->> [{:id :block/title
-         :name (t :block/name)
+         :name (t :page/name)
          :cell (fn [_table row _column]
                  (component-block/page-cp {:show-non-exists-page? true
                                            :skip-async-load? true
@@ -33,5 +33,4 @@
      (views/view {:view-parent (db/get-page common-config/views-page-name)
                   :view-feature-type :all-pages
                   :show-items-count? true
-                  :columns columns'
-                  :title-key :all-pages/table-title})]))
+                  :columns columns'})]))

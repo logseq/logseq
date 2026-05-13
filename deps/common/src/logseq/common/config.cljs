@@ -33,6 +33,26 @@
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
 
+(defn strip-leading-db-version-prefix
+  "Strip exactly one leading db prefix for user-facing display values."
+  [s]
+  (if (and (string? s)
+           (string/starts-with? s db-version-prefix))
+    (subs s (count db-version-prefix))
+    s))
+
+(defn canonicalize-db-version-repo
+  "Normalize any repo/graph name to exactly one leading db prefix."
+  [s]
+  (when (seq s)
+    (let [s (str s)
+          stripped (loop [name' s]
+                     (if (string/starts-with? name' db-version-prefix)
+                       (recur (subs name' (count db-version-prefix)))
+                       name'))]
+      (str db-version-prefix stripped))))
+
+(defonce default-graphs-dir "~/logseq/graphs")
 (defonce local-assets-dir "assets")
 (defonce unlinked-graphs-dir "Unlinked graphs")
 
@@ -40,6 +60,7 @@
 (defonce views-page-name "$$$views")
 (defonce library-page-name "Library")
 (defonce quick-add-page-name "Quick add")
+(defonce recycle-page-name "Recycle")
 
 (defn local-relative-asset?
   [s]
@@ -73,9 +94,12 @@
 
 (defn img-formats
   []
-  #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})
+  #{:gif :svg :jpeg :ico :png :jpg :bmp :webp :avif :cr2})
 
 (defonce block-pattern "-")
+
+(def unused-in-db-graphs-deprecation
+  "is not used in DB graphs")
 
 (def file-only-config
   "File only config keys that are deprecated in DB graphs along with
@@ -99,7 +123,7 @@
      :srs/initial-interval
      :whiteboards-directory
      :feature/enable-whiteboards?]
-    (repeat "is not used in DB graphs"))
+    (repeat unused-in-db-graphs-deprecation))
    {:preferred-format
     "is not used in DB graphs as there is only markdown mode."
     :property-pages/enabled?

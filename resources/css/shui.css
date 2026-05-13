@@ -452,11 +452,11 @@ kbd.shui-shortcut-key-pressed,
 }
 
 .ui__list-item-highlighted-span {
-  background-color: or(--lx-accent-06, --color-level-4);
+  background-color: var(--lx-accent-06, var(--color-level-4));
 }
 
 .dark .ui__list-item-highlighted-span {
-  background-color: or(--lx-accent-08-alpha, --color-level-4);
+  background-color: var(--lx-accent-08-alpha, var(--color-level-4));
 }
 
 .ui__dropdown-menu-content, div[data-radix-menu-content],

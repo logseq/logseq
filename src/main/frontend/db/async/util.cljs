@@ -57,13 +57,3 @@
                       nil))
                   (js/console.log "<q skipped tx for inputs:" inputs')))))
           result)))))
-
-(defn <pull
-  ([graph id]
-   (<pull graph '[*] id))
-  ([graph selector id]
-   (p/let [result' (state/<invoke-db-worker :thread-api/pull graph selector id)]
-     (when result'
-       (when-let [conn (db-conn/get-db graph false)]
-         (d/transact! conn [result']))
-       result'))))

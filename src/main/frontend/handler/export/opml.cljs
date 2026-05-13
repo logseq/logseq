@@ -1,6 +1,5 @@
 (ns frontend.handler.export.opml
   "export blocks/pages as opml"
-  (:refer-clojure :exclude [map filter mapcat concat remove newline])
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [clojure.zip :as z]

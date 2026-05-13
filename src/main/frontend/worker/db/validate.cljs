@@ -6,6 +6,7 @@
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.shared-service :as shared-service]
             [logseq.db :as ldb]
+            [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.validate :as db-validate]))
 
@@ -15,6 +16,22 @@
     (some->> (first (ldb/page-exists? db title [:logseq.class/Property]))
              (d/entity db))))
 
+(defn- block-missing-uuid?
+  [entity]
+  (and (nil? (:block/uuid entity))
+       (string? (:block/title entity))
+       (:block/page entity)
+       (:block/parent entity)
+       (string? (:block/order entity))
+       (int? (:block/created-at entity))
+       (int? (:block/updated-at entity))))
+
+(defn- normal-page-missing-updated-at?
+  [entity dispatch-key]
+  (and (= dispatch-key :normal-page)
+       (nil? (:block/updated-at entity))
+       (int? (:block/created-at entity))))
+
 (defn- ^:large-vars/cleanup-todo fix-invalid-blocks!
   [conn errors]
   (let [db @conn
@@ -22,17 +39,39 @@
                      (fn [{:keys [entity dispatch-key]}]
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
+                           (some? (:logseq.property/parent entity))
+                           [[:db/retract (:db/id entity) :logseq.property/parent]]
+                           (some? (:hide? entity))
+                           [[:db/retract (:db/id entity) :hide?]]
+                           (some? (:public? entity))
+                           [[:db/retract (:db/id entity) :public?]]
+                           (some? (:block/pre-block? entity))
+                           [[:db/retract (:db/id entity) :block/pre-block?]]
+                           (some? (:logseq.property.embedding/hnsw-label entity))
+                           [[:db/retract (:db/id entity) :logseq.property.embedding/hnsw-label]]
+                           (some? (:logseq.property.embedding/hnsw-label-updated-at entity))
+                           [[:db/retract (:db/id entity) :logseq.property.embedding/hnsw-label-updated-at]]
+                           (normal-page-missing-updated-at? entity dispatch-key)
+                           [[:db/add (:db/id entity) :block/updated-at (:block/created-at entity)]]
                            (and (= "External URL" (:block/title entity))
                                 (nil? (:block/tags entity)))
                            [[:db/retractEntity (:db/id entity)]]
+                           (and (ldb/property? entity)
+                                (some #(= (:db/ident %) :logseq.class/Tag) (:block/tags entity)))
+                           [[:db/retract (:db/id entity) :block/tags :logseq.class/Tag]]
                            (and (:db/ident entity)
                                 (db-class/user-class-namespace? (str (:db/ident entity)))
+                                (not (:logseq.property/built-in? entity))
                                 (not (ldb/class? entity)))
                            [[:db/add (:db/id entity) :block/tags :logseq.class/Tag]
                             [:db/retract (:db/id entity) :block/tags :logseq.class/Page]]
+                           (and (ldb/class? entity) (:kv/value entity))
+                           [[:db/retract (:db/id entity) :kv/value]]
                            (and (ldb/property? entity)
                                 (:logseq.property.class/extends entity))
-                           [[:db/retract (:db/id entity) :logseq.property.class/extends]]
+                           (mapv (fn [class]
+                                   [:db/retract (:db/id entity) :logseq.property.class/extends (:db/id class)])
+                                 (:logseq.property.class/extends entity))
                            (:block/level entity)
                            [[:db/retract (:db/id entity) :block/level]]
                            ;; missing :db/ident
@@ -57,6 +96,8 @@
                            (and (:logseq.property/created-by-ref entity)
                                 (not (de/entity? (:logseq.property/created-by-ref entity))))
                            [[:db/retractEntity (:db/id entity)]]
+                           (block-missing-uuid? entity)
+                           [[:db/add (:db/id entity) :block/uuid (random-uuid)]]
                            (vector? (:logseq.property/value entity))
                            [[:db/retractEntity (:db/id entity)]]
                            (and (:block/tx-id entity) (nil? (:block/title entity)))
@@ -142,7 +183,8 @@
         tx-data (concat fix-tx-data
                         class-as-properties)]
     (when (seq tx-data)
-      (d/transact! conn tx-data {:fix-db? true}))))
+      (let [tx-report (d/transact! conn tx-data {:fix-db? true})]
+        (seq (:tx-data tx-report))))))
 
 (defn- fix-num-prefix-db-idents!
   "Fix invalid db/ident keywords for both classes and properties"
@@ -219,31 +261,56 @@
                    :db/index true}]
                  {:fix-db? true})))
 
-(defn validate-db
-  [conn]
-  (fix-extends-cardinality! conn)
-  (fix-icon-wrong-type! conn)
-  (db-migrate/ensure-built-in-data-exists! conn)
-  (fix-non-closed-values! conn)
-  (fix-num-prefix-db-idents! conn)
-
-  (let [db @conn
-        {:keys [errors datom-count entities]} (db-validate/validate-db! db)
+(defn- validate-db-result
+  [db]
+  (let [{:keys [errors datom-count entities]} (db-validate/validate-db db)
         invalid-entity-ids (distinct (map (fn [e] (:db/id (:entity e))) errors))]
+    {:errors errors
+     :datom-count datom-count
+     :entities entities
+     :invalid-entity-ids invalid-entity-ids}))
 
-    (doseq [error errors]
-      (prn :debug
-           :entity (:entity error)
-           :error (dissoc error :entity)))
+(defn- log-validation-errors!
+  [errors]
+  (doseq [error errors]
+    (prn :debug
+         :entity (:entity error)
+         :error (dissoc error :entity))))
+
+(defn- validate-and-fix-invalid-blocks!
+  [conn]
+  (loop [{:keys [errors] :as result} (validate-db-result @conn)]
+    (log-validation-errors! errors)
+    (if (and (seq errors) (fix-invalid-blocks! conn errors))
+      (recur (validate-db-result @conn))
+      result)))
+
+(defn validate-db
+  [conn & {:keys [fix] :or {fix true}}]
+  (when fix
+    (fix-extends-cardinality! conn)
+    (fix-icon-wrong-type! conn)
+    (db-migrate/ensure-built-in-data-exists! conn)
+    (fix-non-closed-values! conn)
+    (fix-num-prefix-db-idents! conn))
+
+  (let [{:keys [errors datom-count entities invalid-entity-ids]}
+        (if fix
+          (validate-and-fix-invalid-blocks! conn)
+          (let [{:keys [errors] :as result} (validate-db-result @conn)]
+            (log-validation-errors! errors)
+            result))
+        db @conn]
 
     (if errors
       (do
-        (fix-invalid-blocks! conn errors)
         (shared-service/broadcast-to-clients! :log [:db-invalid :error
                                                     {:msg "Validation errors"
                                                      :errors errors}])
         (shared-service/broadcast-to-clients! :notification
-                                              [(str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed.")
+                                              [(str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy."
+                                                    (when fix
+                                                      " Attempting to fix invalid blocks. Run validation again to see if they were fixed."))
                                                :warning false]))
 
       (shared-service/broadcast-to-clients! :notification
@@ -252,3 +319,13 @@
     {:errors errors
      :datom-count datom-count
      :invalid-entity-ids invalid-entity-ids}))
+
+(defn recompute-checksum-diagnostics
+  [_repo conn {:keys [local-checksum remote-checksum] :as _sync-diagnostics}]
+  (let [{:keys [checksum attrs blocks e2ee?]} (sync-checksum/recompute-checksum-diagnostics @conn)]
+    {:recomputed-checksum checksum
+     :local-checksum local-checksum
+     :remote-checksum remote-checksum
+     :e2ee? e2ee?
+     :checksum-attrs attrs
+     :blocks blocks}))

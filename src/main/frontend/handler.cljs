@@ -16,7 +16,6 @@
             [frontend.db.restore :as db-restore]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
-            [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.handler.e2ee]
             [frontend.handler.events :as events]
             [frontend.handler.events.export]
@@ -30,12 +29,11 @@
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.idb :as idb]
+            [frontend.common.idb :as idb]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.persist-db :as persist-db]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -127,10 +125,10 @@
   (let [t1 (util/time-ms)]
     (p/do!
      (idb/start)
+     (get-system-info)
      (plugin-handler/setup!)
      (render))
 
-    (get-system-info)
     (set-global-error-notification!)
 
     (register-components-fns!)
@@ -151,7 +149,7 @@
 
     (p/do!
      (-> (p/let [t2 (util/time-ms)
-                 _ (db-browser/start-db-worker!)
+                 _ (persist-db/<start-runtime!)
                  _ (log/info ::db-worker-spent-time (- (util/time-ms) t2))
                  repos (repo-handler/get-repos)
                  _ (state/set-repos! repos)
@@ -161,9 +159,6 @@
                      (repo-handler/new-db! config/demo-repo)
                      (restore-and-setup! repo))]
            (set-network-watcher!)
-
-           (when (util/electron?)
-             (persist-db/run-export-periodically!))
            (when (mobile-util/native-platform?)
              (state/restore-mobile-theme!)))
          (p/catch (fn [e]
@@ -171,20 +166,7 @@
          (p/finally (fn []
                       (state/set-db-restoring! false)
                       (p/resolve! state/app-ready-promise true)
-                      (log/info ::app-init-spent-time (- (util/time-ms) t1))
-                      (when-not (util/mobile?)
-                        (p/let [webgpu-available? (db-browser/<check-webgpu-available?)]
-                          (log/info :webgpu-available? webgpu-available?)
-                          (when webgpu-available?
-                            (p/do! (db-browser/start-inference-worker!)
-                                   (db-browser/<connect-db-worker-and-infer-worker!)
-                                   (reset! vector-search-flows/*infer-worker-ready true))))
-                        nil)))))))
-
-(defn stop! []
-  (db-browser/stop-workers!)
-  (reset! vector-search-flows/*infer-worker-ready false)
-  (prn "stop!"))
+                      (log/info ::app-init-spent-time (- (util/time-ms) t1))))))))
 
 (defn quit-and-install-new-version!
   []

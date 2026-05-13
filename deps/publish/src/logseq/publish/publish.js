@@ -1,4 +1,4 @@
-import katexPkg from "https://esm.sh/katex@0.16.10?bundle";
+import katexPkg from "https://esm.sh/katex@0.16.38?bundle";
 
 // Core CodeMirror pieces
 import { EditorState } from "https://esm.sh/@codemirror/state@6";
@@ -151,7 +151,7 @@ const getTablerExtIcon = (id) => {
 const renderTablerExtIcon = (el, id) => {
   const iconFn = getTablerExtIcon(id);
   if (!iconFn) return false;
-  const node = iconFn({ size: 14, stroke: 2 });
+  const node = iconFn({ size: 18 });
   if (!node) return false;
   el.textContent = "";
   const domNode = reactNodeToDom(node);

@@ -55,7 +55,7 @@
     (-> (p/let [resp (cli-util/api-fetch api-server-token "logseq.cli.export_edn" [(clj->js opts)])]
           (if (= 200 (.-status resp))
             (p/let [body (.json resp)
-                    export-map (sqlite-util/transit-read (aget body "export-body"))]
+                    export-map (sqlite-util/read-transit-str (aget body "export-body"))]
               (when validate
                 (validate-export export-map options))
               (write-export-edn-map export-map (assoc options :graph (.-graph body))))

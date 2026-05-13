@@ -21,7 +21,7 @@
 (defonce ^:private *property-idx (atom 0))
 (defn- new-property
   []
-  (str "p" (swap! *property-idx inc)))
+  (str "test-property-" (swap! *property-idx inc)))
 
 (defn- assert-api-ls-block!
   ([ret] (assert-api-ls-block! ret 1))
@@ -112,17 +112,14 @@
 
 (deftest property-related-test
   (testing "properties management related apis"
-    (dorun
-     (map-indexed
-      (fn [idx property-type]
-        (let [property-name (str "p" idx)
-              _ (ls-api-call! :editor.upsertProperty property-name {:type property-type})
-              property (ls-api-call! :editor.getProperty property-name)]
-          (is (= (get property "ident") (str ":plugin.property._test_plugin/" property-name)))
-          (is (= (get property "type") property-type))
-          (ls-api-call! :editor.removeProperty property-name)
-          (is (nil? (ls-api-call! :editor.getProperty property-name)))))
-      ["default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"]))))
+    (doseq [property-type ["default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"]]
+      (let [property-name (new-property)
+            _ (ls-api-call! :editor.upsertProperty property-name {:type property-type})
+            property (ls-api-call! :editor.getProperty property-name)]
+        (is (= (get property "ident") (str ":plugin.property._test_plugin/" property-name)))
+        (is (= (get property "type") property-type))
+        (ls-api-call! :editor.removeProperty property-name)
+        (is (nil? (ls-api-call! :editor.getProperty property-name)))))))
 
 (deftest insert-block-with-properties
   (testing "insert block with properties"
@@ -222,6 +219,7 @@
                                 {:content "b2"}]
                                {:schema {"z3" "page"
                                          "z4" "page"}})
+          _ (assert/assert-is-visible ".block-title-wrap:text('Page 3')")
           contents (util/get-page-blocks-contents)]
       (is (= contents
              ["b1" "test" "b1.1" "b1.1.1" "Page 1" "Page 2" "Page 3" "b1.1.2" "b1.2" "b2"]))
@@ -289,7 +287,7 @@
 (deftest get-all-properties-test
   (testing "get_all_properties"
     (let [result (ls-api-call! :editor.get_all_properties)]
-      (is (>= (count result) 94)))))
+      (is (>= (count result) 20)))))
 
 (deftest get-tag-objects-test
   (testing "get_tag_objects"

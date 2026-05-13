@@ -2577,3 +2577,9 @@
   border-top: 1px solid var(--lx-gray-05, var(--rx-gray-05));
 }
 
+
+.ui__dropdown-menu-sub-content {
+  .cp__emoji-icon-picker {
+    @apply -m-2;
+  }
+}

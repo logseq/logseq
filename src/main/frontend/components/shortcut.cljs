@@ -1,7 +1,7 @@
 (ns frontend.components.shortcut
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
@@ -164,7 +164,7 @@
           {:on-click (fn [^js e]
                        (.stopPropagation e)
                        (clear!))
-           :aria-label "Remove filter"}
+           :aria-label (t :keymap/remove-filter)}
           (ui/icon "x" {:size 12})]])
       (when-not has-keystroke?
         [:span.shortcut-input-placeholder (t :keymap/press-keys-to-filter)])]
@@ -298,7 +298,7 @@
       {:on-click (fn []
                    (set-q! "")
                    (js/setTimeout #(some-> (rum/deref *search-ref) (.focus)) 50))
-       :aria-label "Clear search"}
+       :aria-label (t :keymap/clear-search)}
       (ui/icon "x" {:size 12})])])
 
 (defn- open-keystroke-filter!
@@ -340,7 +340,7 @@
         {:on-click (fn [^js e]
                      (.stopPropagation e)
                      (set-keystroke! ""))
-         :aria-label "Clear keystroke filter"}
+         :aria-label (t :keymap/clear-keystroke-filter)}
         (ui/icon "x" {:size 12})]])))
 
 (defn- pane-filter-pills
@@ -364,12 +364,12 @@
      [:button.flex.items-center.icon-link
       {:tab-index -1
        :on-click toggle-categories-fn
-       :aria-label "Toggle categories pane"}
+       :aria-label (t :keymap/toggle-categories-pane)}
       (ui/icon "fold")]
      [:button.flex.items-center.icon-link
       {:tab-index -1
        :on-click refresh-shortcuts-list!
-       :aria-label "Refresh all"}
+       :aria-label (t :keymap/refresh-all)}
       (ui/icon "refresh")]]))
 
 (rum/defc pane-controls
@@ -508,6 +508,11 @@
          ^{:key (str "stroke-" i)}
          (shui/shortcut stroke {:style :compact}))])))
 
+(defn- feedback-inline-label
+  [template replacements]
+  (into [:span]
+        (i18n/interpolate-rich-text template replacements)))
+
 (defn- prefix-conflict-label
   "Render content for a prefix-conflict amber banner with inline keycaps.
    n=1: keycap + quoted name inline. n=2-3: vertical list with keycap + name.
@@ -517,7 +522,7 @@
     (cond
       (= n 1)
       (let [{:keys [binding name]} (first details)]
-        [:<>
+        [:span.shortcut-feedback-inline
          [:span (t :keymap/deactivates-chord)]
          (chord-keycap binding)
          [:span.shortcut-feedback-name (str \u201c name \u201d)]])
@@ -934,10 +939,10 @@
       (for [[idx x] (map-indexed vector current-binding)
             :when (string? x)]
         [:div.shortcut-input-binding {:key x}
-         (shui/shortcut x {:chord-separator (t :keymap/chord-separator)})
+         (shui/shortcut x {:chord-separator "->"})
          (when (#{:idle :accepted :esc-hint :removed :reset} render-state)
            [:button.shortcut-binding-remove
-            {:aria-label "Remove binding"
+            {:aria-label (t :keymap/remove-binding)
              :on-click (fn [^js e]
                          (.stopPropagation e)
                          (let [new-binding (vec (concat (subvec current-binding 0 idx)
@@ -952,10 +957,10 @@
       (when (and (#{:recording :conflict-cross :conflict-same} render-state)
                  (not (string/blank? keystroke)))
         [:div.shortcut-input-binding.shortcut-input-binding--pending
-         (shui/shortcut keystroke)
+         (shui/shortcut keystroke {:chord-separator "->"})
          (when (#{:conflict-cross :conflict-same} render-state)
            [:button.shortcut-binding-remove
-            {:aria-label "Remove binding"
+            {:aria-label (t :keymap/remove-binding)
              :on-click (fn [^js e]
                          (.stopPropagation e)
                          (cancel-fn!))}
@@ -980,8 +985,9 @@
         (case rec-state
           :conflict-cross
           [:div.shortcut-feedback.shortcut-feedback--error
-           [:span (t :keymap/used-by)
-            [:span.shortcut-feedback-name (conflict-action-names (:exact key-conflicts))]]
+           (feedback-inline-label (t :keymap/used-by-action)
+                                  [[:span.shortcut-feedback-name
+                                    (conflict-action-names (:exact key-conflicts))]])
            (ui/tooltip
             (shui/button {:variant :destructive
                           :size :xs
@@ -997,11 +1003,14 @@
           (cond
             (:cross-context? accepted-info)
             [:div.shortcut-feedback.shortcut-feedback--warning
-             [:span (t :keymap/also-used-for)
-              [:span.shortcut-feedback-name
-               (:cross-action-name accepted-info)]
-              (when-let [ctx (:cross-context-label accepted-info)]
-                (str (t :keymap/in-context) ctx))]]
+             (if-let [ctx (:cross-context-label accepted-info)]
+               (feedback-inline-label (t :keymap/also-used-for-action-in-context)
+                                      [[:span.shortcut-feedback-name
+                                        (:cross-action-name accepted-info)]
+                                       [:span ctx]])
+               (feedback-inline-label (t :keymap/also-used-for-action)
+                                      [[:span.shortcut-feedback-name
+                                        (:cross-action-name accepted-info)]]))]
 
             (:prefix-conflicts? accepted-info)
             [:div.shortcut-feedback.shortcut-feedback--warning
@@ -1009,20 +1018,23 @@
              undo-link]
 
             (:from accepted-info)
-            (if-let [prefix-details' (:prefix-details accepted-info)]
+            (let [reassigned-label
+                  (into [:span]
+                        (i18n/interpolate-rich-text
+                         (t :keymap/reassigned-from)
+                         [[:span.shortcut-feedback-name (:from accepted-info)]]))]
+              (if-let [prefix-details' (:prefix-details accepted-info)]
               ;; Post-reassign with prefix info (mixed case)
               [:<>
                [:div.shortcut-feedback.shortcut-feedback--success
-                [:span (t :keymap/reassigned-from)
-                 [:span.shortcut-feedback-name (:from accepted-info)]]
+                reassigned-label
                 undo-link]
                [:div.shortcut-feedback.shortcut-feedback--warning
                 (prefix-conflict-label prefix-details')]]
               ;; Pure reassign, no prefix
               [:div.shortcut-feedback.shortcut-feedback--success
-               [:span (t :keymap/reassigned-from)
-                [:span.shortcut-feedback-name (:from accepted-info)]]
-               undo-link])
+               reassigned-label
+               undo-link]))
 
             :else
             [:div.shortcut-feedback.shortcut-feedback--success
@@ -1418,7 +1430,7 @@
                                (for [b user-binding
                                      :when (string? b)]
                                  [:span {:key b :style {:display "contents"}}
-                                  (shui/shortcut b {:chord-separator (t :keymap/chord-separator)})]))]
+                                  (shui/shortcut b {:chord-separator "->"})]))]
 
                             :else
                             (for [b binding
@@ -1426,4 +1438,4 @@
                               [:span {:key b :style {:display "contents"}}
                                (shui/shortcut (dh/binding-for-display id b)
                                               {:raw-binding [b]
-                                               :chord-separator (t :keymap/chord-separator)})]))]])))))])])]])))
+                                               :chord-separator "->"})]))]])))))])])]])))

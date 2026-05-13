@@ -20,7 +20,7 @@ import android.view.View;
 import java.util.Timer;
 import java.util.TimerTask;
 
-import ee.forgr.capacitor_navigation_bar.NavigationBarPlugin;
+import ee.forgr.capacitor_navigation_bar.CapgoNavigationBarPlugin;
 
 public class MainActivity extends BridgeActivity {
     private NavigationCoordinator navigationCoordinator = new NavigationCoordinator();
@@ -140,7 +140,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     public void initNavigationBarBgColor() {
-        NavigationBarPlugin navigationBarPlugin = new NavigationBarPlugin();
+        CapgoNavigationBarPlugin navigationBarPlugin = new CapgoNavigationBarPlugin();
         JSObject data = new JSObject();
         data.put("color", "transparent");
 

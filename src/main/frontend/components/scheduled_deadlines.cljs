@@ -2,8 +2,10 @@
   (:require [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.content :as content]
+            [frontend.context.i18n :refer [t]]
             [frontend.components.editor :as editor]
             [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -14,7 +16,7 @@
   [page-name]
   (and (date/valid-journal-title? (string/capitalize page-name))
        (not (true? (state/scheduled-deadlines-disabled?)))
-       (= (string/lower-case page-name) (string/lower-case (date/journal-name)))))
+       (db/today-journal-page? page-name)))
 
 (rum/defcs scheduled-and-deadlines < rum/reactive
   {:init (fn [state]
@@ -29,7 +31,7 @@
     (when (seq scheduled-or-deadlines)
       [:div.scheduled-or-deadlines
        (ui/foldable
-        [:div.text-sm.font-medium "Scheduled and Deadline"]
+        [:div.text-sm.font-medium (t :page/scheduled-and-deadline)]
         (fn []
           [:div.scheduled-deadlines.references-blocks.mb-6
            (let [ref-hiccup (block/->hiccup scheduled-or-deadlines

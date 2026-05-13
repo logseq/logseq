@@ -1,11 +1,12 @@
 {
   "name": "@logseq/common",
   "version": "1.0.0",
+  "packageManager": "pnpm@10.33.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v33"
+    "@logseq/nbb-logseq": "git+https://github.com/logseq/nbb-logseq.git#feat-db-v34"
   },
   "scripts": {
-    "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"
+    "test": "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner"
   }
 }

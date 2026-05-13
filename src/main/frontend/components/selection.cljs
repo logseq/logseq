@@ -1,6 +1,7 @@
 (ns frontend.components.selection
   "Block selection"
   (:require [frontend.components.icon :as icon-component]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
@@ -78,7 +79,7 @@
                                                                             :selected-blocks selected-blocks
                                                                             :property-key "Tags"
                                                                             :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
-         (ui/tooltip (ui/icon "hash" {:size 13}) "Set tag"
+         (ui/tooltip (ui/icon "hash" {:size 13}) (t :property/set-tags)
                      {:trigger-props {:class "flex"}}))
         ;; set icon (batch)
         (shui/button
@@ -127,7 +128,7 @@
                                    (on-copy)
                                    (state/clear-selection!)
                                    (state/pub-event! [:editor/hide-action-bar])))
-         "Copy")
+         (t :ui/copy))
         (shui/button
          (assoc button-opts
                 :on-pointer-down (fn [e]
@@ -135,7 +136,7 @@
                                    (state/pub-event! [:editor/new-property {:target (.-target e)
                                                                             :selected-blocks selected-blocks
                                                                             :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
-         "Set property")
+         (t :property/set-property))
         (shui/button
          (assoc button-opts
                 :on-pointer-down (fn [e]
@@ -145,7 +146,7 @@
                                                                             :remove-property? true
                                                                             :select-opts {:show-new-when-not-exact-match? false}
                                                                             :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
-         "Unset property")
+         (t :property/unset-property))
         (when-not (contains? #{:logseq.class/Page} (:db/ident view-parent))
           (shui/button
            (assoc button-opts

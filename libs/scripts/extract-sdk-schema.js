@@ -20,6 +20,8 @@ const OUTPUT_FILE = path.join(DIST_DIR, 'logseq-sdk-schema.json');
 const DECL_FILES = [
   'LSPlugin.d.ts',
   'LSPlugin.user.d.ts',
+  'modules/LSPlugin.Experiments.d.ts',
+  'modules/LSPlugin.Net.d.ts',
 ];
 
 /**
@@ -28,6 +30,7 @@ const DECL_FILES = [
  */
 const TARGET_INTERFACES = [
   'IAppProxy',
+  'ICommandsProxy',
   'IEditorProxy',
   'IDBProxy',
   'IUIProxy',
@@ -36,12 +39,18 @@ const TARGET_INTERFACES = [
   'IAssetsProxy',
 ];
 
+const TARGET_CLASSES = [
+  'LSPluginUser',
+  'LSPluginExperiments',
+  'LSPluginNet',
+];
+
 /**
  * Simple heuristics to determine whether a parameter should be converted via
  * cljs-bean when crossing the JS <-> CLJS boundary.
  */
 const BEAN_TO_JS_REGEX =
-  /(Record<|Array<|Partial<|UIOptions|UIContainerAttrs|StyleString|StyleOptions|object|any|unknown|IHookEvent|BlockEntity|PageEntity|Promise<\s*Record)/i;
+  /(Record<|Array<|Partial<|UIOptions|UIContainerAttrs|StyleString|StyleOptions|NetRequestOptions|object|any|unknown|IHookEvent|BlockEntity|PageEntity|Promise<\s*Record)/i;
 
 const project = new Project({
   compilerOptions: { allowJs: true },
@@ -153,7 +162,7 @@ sourceFiles.forEach((source) => {
 
   source.getClasses().forEach((cls) => {
     const name = cls.getName();
-    if (name !== 'LSPluginUser') {
+    if (!TARGET_CLASSES.includes(name)) {
       return;
     }
 

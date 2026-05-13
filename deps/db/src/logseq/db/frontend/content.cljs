@@ -16,6 +16,16 @@
     ")"
     "\\]\\]")))
 
+(def ^:private id-or-tag-ref-pattern
+  (re-pattern
+   (str
+    "(#?)"
+    "\\[\\["
+    "("
+    common-util/uuid-pattern
+    ")"
+    "\\]\\]")))
+
 (defn content-id-ref->page
   "Convert id ref backs to page name using refs."
   [content refs]
@@ -179,28 +189,70 @@
     (sort-refs tags))
    (string/trim)))
 
+(defn- title-ref-replacement
+  [id->title matched hash-prefix id]
+  (if-let [ref-title (get id->title id)]
+    (if (and (= "#" hash-prefix)
+             (not (string/includes? ref-title " ")))
+      (str "#" ref-title)
+      (str hash-prefix (page-ref/->page-ref ref-title)))
+    matched))
+
+(defn- replace-title-refs-once
+  [content id->title]
+  (string/replace content id-or-tag-ref-pattern
+                  #(apply title-ref-replacement id->title %)))
+
+(defn- ref->title-entry
+  [replace-block-refs? {:block/keys [title]
+                        block-uuid :block/uuid
+                        :as ref}]
+  (when (and block-uuid
+             (string? title)
+             (or replace-block-refs?
+                 (entity-util/page? ref)))
+    [(str block-uuid) title]))
+
+(defn- block-ref-id->title
+  [ent max-depth replace-block-refs?]
+  (loop [frontier (set (:block/refs ent))
+         seen-ids #{}
+         id->title {}
+         depth 0]
+    (if (or (>= depth max-depth)
+            (empty? frontier))
+      id->title
+      (let [refs (filter map? frontier)
+            new-refs (remove (fn [ref]
+                               (contains? seen-ids (:block/uuid ref)))
+                             refs)
+            seen-ids' (into seen-ids (keep :block/uuid) new-refs)
+            id->title' (into id->title
+                             (keep #(ref->title-entry replace-block-refs? %))
+                             new-refs)
+            next-frontier (->> new-refs
+                               (mapcat :block/refs)
+                               (filter map?)
+                               set)]
+        (recur next-frontier seen-ids' id->title' (inc depth))))))
+
 (defn recur-replace-uuid-in-block-title
   "Convert id ref (recursively) backs to page name refs, returns replaced title"
   ([ent]
    (recur-replace-uuid-in-block-title ent 10))
   ([ent max-depth]
-   (if (some->> (:block/title ent) (re-find id-ref-pattern))
-     (let [ref-set (loop [result-refs (:block/refs ent)
-                          current-refs (:block/refs ent)
-                          depth 0]
-                     (if (or (>= depth max-depth) (empty? current-refs))
-                       result-refs
-                       (let [next-refs (set (mapcat :block/refs current-refs))
-                             result-refs' (apply conj result-refs next-refs)]
-                         (if (= (count result-refs') (count result-refs))
-                           result-refs
-                           (recur (apply conj result-refs next-refs) next-refs (inc depth))))))
-           opts {:replace-block-id? true}]
-       (loop [result (id-ref->title-ref (:block/title ent) ref-set opts)
-              last-result nil
-              depth 0]
-         (if (or (>= depth max-depth)
-                 (= last-result result))
-           result
-           (recur (id-ref->title-ref result ref-set opts) result (inc depth)))))
-     (:block/title ent))))
+   (recur-replace-uuid-in-block-title ent max-depth {}))
+  ([ent max-depth {:keys [replace-block-refs?]
+                   :or {replace-block-refs? true}}]
+   (let [title (:block/title ent)]
+     (if (some->> title (re-find id-ref-pattern))
+       (let [id->title (block-ref-id->title ent max-depth replace-block-refs?)]
+         (loop [result title depth 0]
+           (if (or (>= depth max-depth)
+                   (not (re-find id-ref-pattern result)))
+             result
+             (let [next-result (replace-title-refs-once result id->title)]
+               (if (= result next-result)
+                 result
+                 (recur next-result (inc depth)))))))
+       title))))

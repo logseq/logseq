@@ -25,9 +25,12 @@
   [graph-identifier]
   (if (not-empty graph-identifier)
     (send-to-renderer "notification" {:type "error"
-                                      :payload (str "Failed to open link. Cannot match graph identifier `" graph-identifier "` to any linked graph.")})
+                                      :payload (str "Failed to open link. Cannot match graph identifier `" graph-identifier "` to any linked graph.")
+                                      :i18n-key :electron/link-open-failed-no-graph
+                                      :i18n-args [graph-identifier]})
     (send-to-renderer "notification" {:type "error"
-                                      :payload (str "Failed to open link. Missing graph identifier after `logseq://graph/`.")})))
+                                      :payload "Failed to open link. Missing graph identifier after `logseq://graph/`."
+                                      :i18n-key :electron/link-open-failed-missing-graph})))
 
 (defn local-url-handler
   "Given a URL with `graph identifier` as path, `page` (optional) and `block-id`
@@ -86,7 +89,9 @@
       (send-to-focused-renderer "notification" {:type "error"
                                                 :payload (str "Unimplemented x-callback-url action: `"
                                                               action
-                                                              "`.")} win))))
+                                                              "`.")
+                                                :i18n-key :electron/unimplemented-callback
+                                                :i18n-args [action]} win))))
 
 (defn logseq-url-handler
   "win - the main window"
@@ -112,4 +117,6 @@
       (send-to-renderer :notification
                         {:type    "error"
                          :payload (str "Failed to open link. Cannot match `" url-host
-                                       "` to any target.")}))))
+                                       "` to any target.")
+                         :i18n-key :electron/link-open-failed-no-target
+                         :i18n-args [url-host]}))))

@@ -341,4 +341,24 @@ html.is-zoomed-native-ios {
             max-width: 34ch;
         }
     }
+
+    .search-index-progress {
+        @apply flex items-center gap-2 rounded px-2 py-1 text-xs opacity-90;
+        -webkit-app-region: no-drag;
+        background-color: var(--ls-tertiary-background-color);
+    }
+
+    .search-index-progress__text {
+        @apply whitespace-nowrap;
+    }
+
+    .search-index-progress__bar {
+        @apply h-1 w-16 overflow-hidden rounded;
+        background-color: var(--ls-quaternary-background-color);
+    }
+
+    .search-index-progress__bar-fill {
+        @apply h-full transition-all duration-200;
+        background-color: var(--ls-link-text-color);
+    }
 }

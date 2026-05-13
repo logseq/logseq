@@ -66,8 +66,8 @@
   .notification-area {
     @apply border;
 
-    background-color: or(--ls-notification-background, --lx-gray-02, --ls-tertiary-background-color, --rx-gray-03);
-    color: or(--ls-notification-text-color, --lx-gray-11, --ls-primary-text-color, --rx-gray-11);
+    background-color: var(--ls-notification-background, var(--lx-gray-02, var(--ls-tertiary-background-color, var(--rx-gray-03))));
+    color: var(--ls-notification-text-color, var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11))));
 
     &:has(.ls-wrap-widen) {
       @apply w-[680px] max-w-[96vw];
@@ -106,8 +106,8 @@
   }
 
   &-overlay div {
-    --from: or(--ls-modal-overlay-gradient-start, --lx-gray-03, --ls-primary-background-color);
-    --to: or(--ls-modal-overlay-gradient-end, --lx-gray-06, --ls-quaternary-background-color);
+    --from: var(--ls-modal-overlay-gradient-start, var(--lx-gray-03, var(--ls-primary-background-color)));
+    --to: var(--ls-modal-overlay-gradient-end, var(--lx-gray-06, var(--ls-quaternary-background-color)));
     background-image: linear-gradient(to bottom, var(--from), var(--to));
   }
 
@@ -268,7 +268,7 @@ html.is-mobile {
 }
 
 .bg-quaternary {
-  background-color: or(--ls-bg-quaternary, --lx-gray-06, --ls-quaternary-background-color);
+  background-color: var(--ls-bg-quaternary, var(--lx-gray-06, var(--ls-quaternary-background-color)));
 }
 
 .ui__icon {

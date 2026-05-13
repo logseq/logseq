@@ -63,7 +63,7 @@
   []
   [:div.flex-1.overflow-hidden
    [:h1.title
-    (t :all-files)]
+    (t :nav/all-files)]
    (files-all)])
 
 ;; FIXME: misuse of rpath and fpath

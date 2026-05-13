@@ -57,12 +57,34 @@
 
 (defn hidden?
   [page]
-  (boolean
-   (when page
-     (if (string? page)
-       (string/starts-with? page "$$$")
-       (when (or (map? page) (de/entity? page))
-         (:logseq.property/hide? page))))))
+  (letfn [(hidden-parent? [entity seen]
+            (when (and entity
+                       (:db/id entity)
+                       (not (contains? seen (:db/id entity))))
+              (or (:logseq.property/hide? entity)
+                  (:logseq.property/deleted-at entity)
+                  (hidden-parent? (:block/parent entity) (conj seen (:db/id entity))))))]
+    (boolean
+     (when page
+       (if (string? page)
+         (string/starts-with? page "$$$")
+         (when (or (map? page) (de/entity? page))
+           (or (:logseq.property/hide? page)
+               (:logseq.property/deleted-at page)
+               (hidden-parent? (:block/parent page) #{}))))))))
+
+(defn recycled?
+  [entity]
+  (letfn [(recycled-parent? [parent seen]
+            (when (and parent
+                       (:db/id parent)
+                       (not (contains? seen (:db/id parent))))
+              (or (:logseq.property/deleted-at parent)
+                  (recycled-parent? (:block/parent parent) (conj seen (:db/id parent))))))]
+    (boolean
+     (when (or (map? entity) (de/entity? entity))
+       (or (:logseq.property/deleted-at entity)
+           (recycled-parent? (:block/parent entity) #{}))))))
 
 (defn object?
   [node]

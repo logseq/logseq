@@ -1,11 +1,15 @@
 (ns frontend.handler.editor-test
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
+            [frontend.commands :as commands]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
-            [frontend.util.cursor :as cursor]))
+            [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
+            [goog.dom :as gdom]
+            [logseq.outliner.core :as outliner-core]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)
 
@@ -118,6 +122,139 @@
   ;; Reset state
   (state/set-editor-action! nil))
 
+(defn- default-keyup-result
+  [{:keys [value cursor-pos key code action is-processed?]
+    :or {code "KeyA"
+         is-processed? false}}]
+  (let [pos (or cursor-pos (count value))
+        input #js {:id "edit-block-test"
+                   :value value}
+        content (atom nil)
+        cursor-pos' (atom nil)
+        steps (atom [])]
+    (with-redefs [state/get-editor-action (constantly action)
+                  state/set-block-content-and-last-pos! (fn [_input-id value' pos']
+                                                          (reset! content value')
+                                                          (reset! cursor-pos' pos'))
+                  state/set-editor-action-data! (constantly nil)
+                  state/set-editor-last-pos! (fn [pos']
+                                               (reset! cursor-pos' pos'))
+                  state/clear-editor-action! (constantly nil)
+                  util/get-selected-text (constantly "")
+                  cursor/pos (constantly pos)
+                  cursor/get-caret-pos (fn [_] {:pos @cursor-pos'})
+                  cursor/move-cursor-to (fn [_ pos' & _]
+                                          (reset! cursor-pos' pos'))
+                  commands/handle-step (fn [step]
+                                         (swap! steps conj step))]
+      (#'editor/default-case-for-keyup-handler input pos key code is-processed?)
+      {:content @content
+       :cursor-pos @cursor-pos'
+       :steps @steps})))
+
+(deftest default-keyup-handler-normalizes-fullwidth-page-ref-input
+  (doseq [[value cursor-pos expected-content expected-pos]
+          [["【【" 2 "[[]]" 2]
+           ["【【】" 3 "[[]]" 2]
+           ["【】【】" 4 "[[]]" 2]
+           ["【【】】" 2 "[[]]" 2]
+           ;; cursor=1: IME may place cursor early; full pattern must still match
+           ["【【】】" 1 "[[]]" 2]
+           ["abc【【】】def" 5 "abc[[]]def" 5]
+           ["abc【】【】def" 7 "abc[[]]def" 5]]]
+    (is (= {:content expected-content
+            :cursor-pos expected-pos
+            :steps [[:editor/search-page]]}
+           (default-keyup-result {:value value
+                                  :cursor-pos cursor-pos
+                                  :key "Process"
+                                  :is-processed? true}))
+        (str "Normalizes " value " at cursor " cursor-pos))))
+
+(deftest default-keyup-handler-normalizes-hashtag-fullwidth-page-ref-input
+  (is (= {:content "#[[]]"
+          :cursor-pos 3
+          :steps [[:editor/search-page-hashtag]]}
+         (default-keyup-result {:value "#【】【】"
+                                :cursor-pos 5
+                                :key "Process"
+                                :is-processed? true
+                                :action :page-search-hashtag}))))
+
+(deftest default-keyup-handler-ignores-non-page-ref-trigger-key
+  (is (= {:content nil
+          :cursor-pos nil
+          :steps []}
+         (default-keyup-result {:value "【【】】"
+                                :cursor-pos 2
+                                :key "a"}))))
+
+(deftest keydown-not-matched-handler-wraps-selected-text-with-single-dollar
+  (let [content (atom nil)
+        cursor-pos (atom nil)
+        selection-range (atom nil)
+        input #js {:id "edit-block-test"
+                   :value "inline math"
+                   :setSelectionRange (fn [start end]
+                                        (reset! selection-range [start end]))}
+        event #js {:key "$"
+                   :ctrlKey false
+                   :metaKey false}
+        selected "math"]
+    (with-redefs [state/get-edit-input-id (constantly "edit-block-test")
+                  state/get-input (constantly input)
+                  state/get-editor-action (constantly nil)
+                  state/set-state! (constantly nil)
+                  state/set-block-content-and-last-pos! (fn [_input-id value' pos']
+                                                          (reset! content value')
+                                                          (reset! cursor-pos pos'))
+                  gdom/getElement (constantly input)
+                  util/get-selected-text (constantly selected)
+                  util/stop (constantly nil)
+                  cursor/pos (constantly 7)
+                  cursor/move-cursor-to (fn [_ pos' & _]
+                                          (reset! cursor-pos pos'))]
+      ((editor/keydown-not-matched-handler :markdown) event nil)
+      (is (= "inline $math$" @content))
+      (is (= 8 @cursor-pos))
+      (is (= [8 12] @selection-range)))))
+
+(defn- keydown-dollar-without-selection-result
+  [{:keys [value cursor-pos]}]
+  (let [content (atom nil)
+        cursor-pos' (atom nil)
+        input #js {:id "edit-block-test"
+                   :value value}
+        event #js {:key "$"
+                   :ctrlKey false
+                   :metaKey false}]
+    (with-redefs [state/get-edit-input-id (constantly "edit-block-test")
+                  state/get-input (constantly input)
+                  state/get-editor-action (constantly nil)
+                  state/set-state! (constantly nil)
+                  state/set-block-content-and-last-pos! (fn [_input-id value' pos']
+                                                          (reset! content value')
+                                                          (reset! cursor-pos' pos'))
+                  gdom/getElement (constantly input)
+                  util/get-selected-text (constantly "")
+                  util/stop (constantly nil)
+                  cursor/pos (constantly cursor-pos)
+                  cursor/move-cursor-to (fn [_ pos' & _]
+                                          (reset! cursor-pos' pos'))]
+      ((editor/keydown-not-matched-handler :markdown) event nil)
+      {:content @content
+       :cursor-pos @cursor-pos'})))
+
+(deftest keydown-not-matched-handler-expands-dollar-delimiters-without-selection
+  (is (= {:content "inline $$"
+          :cursor-pos 8}
+         (keydown-dollar-without-selection-result {:value "inline "
+                                                   :cursor-pos 7})))
+  (is (= {:content "inline $$$$"
+          :cursor-pos 9}
+         (keydown-dollar-without-selection-result {:value "inline $$"
+                                                   :cursor-pos 8}))))
+
 (defn- handle-last-input-handler
   "Spied version of editor/handle-last-input"
   [{:keys [value cursor-pos]}]
@@ -207,3 +344,83 @@
 
       (editor/save-block! repo block-uuid "# bar")
       (is (= "bar" (:block/title (model/query-block-by-uuid block-uuid)))))))
+
+(deftest block-default-collapsed-respects-ignore-block-collapsed-flag
+  (with-redefs [db/entity (constantly nil)]
+    (is (true? (editor/block-default-collapsed?
+                {:block/collapsed? true}
+                {})))
+    (is (not (editor/block-default-collapsed?
+              {:block/collapsed? true}
+              {:ignore-block-collapsed? true}))
+        "Flashcard review should be able to ignore persisted collapsed state")
+    (is (true? (editor/block-default-collapsed?
+                {:block/collapsed? false}
+                {:ignore-block-collapsed? true
+                 :default-collapsed? true}))
+        "Ignore flag should not disable other default-collapsed rules")))
+
+(deftest load-children-respects-ignore-block-collapsed-flag
+  (is (false? (#'editor/load-children?
+               {:block/collapsed? true}
+               nil
+               false))
+      "Collapsed blocks should not load children by default")
+  (is (true? (#'editor/load-children?
+              {:block/collapsed? true}
+              nil
+              true))
+      "Flashcard answer mode should force loading children for collapsed blocks")
+  (is (true? (#'editor/load-children?
+              {:block/collapsed? true}
+              false
+              false))
+      "Temporary expanded UI state should load children")
+  (is (false? (#'editor/load-children?
+               {:block/collapsed? false}
+               true
+               false))
+      "Temporary collapsed UI state should skip children loading"))
+
+(deftest paste-cut-recycled-block-moves-existing-node-out-of-recycle
+  (test-helper/load-test-files [{:page {:block/title "Page 1"}
+                                 :blocks [{:block/title "source"}]}
+                                {:page {:block/title "Page 2"}
+                                 :blocks [{:block/title "target"}]}])
+  (let [source (test-helper/find-block-by-content "source")
+        target (test-helper/find-block-by-content "target")
+        recycle-page (db/get-page "Recycle")]
+    (outliner-core/delete-blocks! (db/get-db test-helper/test-db false) [source] {})
+    (state/set-block-op-type! :cut)
+    (editor/paste-blocks [{:block/uuid (:block/uuid source)
+                           :block/title "source"}]
+                         {:target-block target
+                          :sibling? true
+                          :keep-uuid? true
+                          :ops-only? true})
+    (let [source' (db/entity [:block/uuid (:block/uuid source)])]
+      (is (= (:db/id (:block/page target)) (:db/id (:block/page source'))))
+      (is (= (:db/id (:block/parent target)) (:db/id (:block/parent source'))))
+      (is (nil? (:logseq.property/deleted-at source')))
+      (is (nil? (:logseq.property.recycle/original-page source')))
+      (is (not= (:db/id recycle-page) (:db/id (:block/page source')))))))
+
+(deftest focused-root-block-operation-guards-test
+  (let [root-block {:db/id 1}
+        focused-root-block {:db/id 1}
+        root-child-block {:db/id 2
+                          :block/parent {:db/id 1}}
+        non-root-block {:db/id 3
+                        :block/parent {:db/id 9}}]
+    (testing "Root block cannot be indented or outdented when focused"
+      (is (false? (#'editor/block-eligible-for-indent-outdent? root-block true focused-root-block)))
+      (is (false? (#'editor/block-eligible-for-indent-outdent? root-block false focused-root-block))))
+    (testing "A direct child of focused root cannot be outdented but can be indented"
+      (is (false? (#'editor/block-eligible-for-indent-outdent? root-child-block false focused-root-block)))
+      (is (true? (#'editor/block-eligible-for-indent-outdent? root-child-block true focused-root-block))))
+    (testing "Non-root blocks keep normal indent/outdent behavior"
+      (is (true? (#'editor/block-eligible-for-indent-outdent? non-root-block true focused-root-block)))
+      (is (true? (#'editor/block-eligible-for-indent-outdent? non-root-block false focused-root-block))))
+    (testing "Root block cannot move up/down when focused"
+      (is (false? (#'editor/block-eligible-for-move-up-down? root-block focused-root-block)))
+      (is (true? (#'editor/block-eligible-for-move-up-down? non-root-block focused-root-block))))))

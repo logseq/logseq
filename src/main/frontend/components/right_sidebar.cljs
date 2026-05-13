@@ -8,18 +8,19 @@
             [frontend.components.page :as page]
             [frontend.components.profiler :as profiler]
             [frontend.components.shortcut-help :as shortcut-help]
-            [frontend.components.vector-search.sidebar :as vector-search]
+            [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.undo-redo.debug-ui :as undo-redo-debug-ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
@@ -33,9 +34,9 @@
   (when-not (util/sm-breakpoint?)
     (ui/with-shortcut :ui/toggle-right-sidebar "left"
       (shui/button-ghost-icon :layout-sidebar-right
-                              {:title (t :right-side-bar/toggle-right-sidebar)
-                               :class "toggle-right-sidebar"
-                               :on-click ui-handler/toggle-right-sidebar!}))))
+                              {:class "toggle-right-sidebar"
+                               :on-click ui-handler/toggle-right-sidebar!})
+      (t :sidebar.right/toggle))))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
@@ -74,7 +75,7 @@
 (rum/defc search-title < rum/reactive
   [*input]
   (let [input (rum/react *input)
-        input' (if (string/blank? input) "Blank input" input)]
+        input' (if (string/blank? input) (t :search/blank-input) input)]
     [:span.overflow-hidden.text-ellipsis input']))
 
 (rum/defc sidebar-search
@@ -112,20 +113,20 @@
       (case (keyword block-type)
         :contents
         (when-let [page (db/get-page "Contents")]
-          [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
+          [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :page/contents)]
            (page-cp repo (str (:block/uuid page)))])
 
         :help
-        [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :right-side-bar/help)] (onboarding/help)]
+        [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :nav/help)] (onboarding/help)]
 
         :page-graph
-        [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :right-side-bar/page-graph)]
+        [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :graph.page/title)]
          (page/page-graph)]
 
         :block-ref
         (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
           (when-let [block (db/entity repo lookup)]
-            [(t :right-side-bar/block-ref)
+            [(t :reference/blocks)
              (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
 
         :block
@@ -134,6 +135,12 @@
         :page
         (block-render)
 
+        :plugin
+        [[:.flex.items-center.page-title
+          (ui/icon "puzzle" {:class "text-md mr-2"})
+          [:h3 {:id db-id} (str db-id)]]
+         (plugins/renderer-resolver db-id)]
+
         :search
         [[:.flex.items-center.page-title
           (ui/icon "search" {:class "text-md mr-2"})
@@ -141,19 +148,20 @@
          (sidebar-search repo block-type init-key db-id *db-id)]
 
         :shortcut-settings
-        [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help/shortcuts)]
+        [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help.shortcuts/label)]
          (shortcut-settings)]
+
         :rtc
         [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
          (rtc-debug-ui/rtc-debug-ui)]
 
+        :undo-redo
+        [[:.flex.items-center (ui/icon "rotate-clockwise" {:class "text-md mr-2"}) "(Dev) Undo/Redo"]
+         (undo-redo-debug-ui/undo-redo-debug-ui)]
+
         :profiler
         [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
          (profiler/profiler)]
-
-        :vector-search
-        [[:.flex.items-center (ui/icon "file-search" {:class "text-md mr-2"}) "(Dev) VectorSearch"]
-         (vector-search/vector-search-sidebar)]
 
         ["" [:span]])))
    (p/catch (fn [error]
@@ -165,6 +173,18 @@
 (defonce *drag-from
   (atom nil))
 
+(defn dev-sidebar-items
+  [developer-mode?]
+  (cond-> []
+    (and developer-mode? (not config/publishing?))
+    (conj {:db-id "rtc" :block-type :rtc :label "(Dev) RTC"})
+
+    developer-mode?
+    (conj {:db-id "undo-redo" :block-type :undo-redo :label "(Dev) Undo/Redo"})
+
+    developer-mode?
+    (conj {:db-id "profiler" :block-type :profiler :label "(Dev) Profiler"})))
+
 (rum/defc actions-menu-content
   [db-id idx type collapsed? block-count]
   (let [multi-items? (> block-count 1)
@@ -172,22 +192,22 @@
         block (when (integer? db-id) (db/entity db-id))
         page? (or (contains? #{:page :contents} type) (ldb/page? block))]
     [:<>
-     (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close))
-     (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-close-others)))
+     (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :sidebar.right/close))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :sidebar.right/close-others)))
      (when multi-items? (menu-item {:on-click (fn []
                                                 (state/clear-sidebar-blocks!)
-                                                (state/hide-right-sidebar!))} (t :right-side-bar/pane-close-all)))
+                                                (state/hide-right-sidebar!))} (t :sidebar.right/close-all)))
      (when (and (not collapsed?) multi-items?) [:hr.menu-separator])
-     (when-not collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-collapse)))
-     (when multi-items? (menu-item {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :right-side-bar/pane-collapse-others)))
-     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :right-side-bar/pane-collapse-all)))
+     (when-not collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :sidebar.right/collapse)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :sidebar.right/collapse-others)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :sidebar.right/collapse-all)))
      (when (and collapsed? multi-items?) [:hr.menu-separator])
-     (when collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand)))
-     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :right-side-bar/pane-expand-all)))
+     (when collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :sidebar.right/expand)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :sidebar.right/expand-all)))
      (when page? [:hr.menu-separator])
      (when page?
        (menu-item {:on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
-                  (t :right-side-bar/pane-open-as-page)))]))
+                  (t :sidebar.right/open-as-page)))]))
 
 (rum/defc drop-indicator
   [idx drag-to]
@@ -257,23 +277,26 @@
              [:div.ml-1.font-medium.text-sm.overflow-hidden.whitespace-nowrap
               title]]
             [:.item-actions.flex.items-center
-             (shui/button
-              {:title (t :right-side-bar/pane-more)
-               :class "px-2 py-2 h-8 w-8 text-muted-foreground"
-               :variant :ghost
-               :on-click #(shui/popup-show!
-                           (.-target %)
-                           (actions-menu-content db-id idx block-type collapsed? block-count)
-                           {:as-dropdown? true
-                            :content-props {:on-click (fn [] (shui/popup-hide!))}})}
-              (ui/icon "dots"))
+             (ui/tooltip
+              (shui/button
+               {:class "px-2 py-2 h-8 w-8 text-muted-foreground"
+                :variant :ghost
+                :on-click #(shui/popup-show!
+                            (.-target %)
+                            (actions-menu-content db-id idx block-type collapsed? block-count)
+                            {:as-dropdown? true
+                             :content-props {:on-click (fn [] (shui/popup-hide!))}})}
+               (ui/icon "dots"))
+              (t :sidebar.right/more))
 
-             (shui/button
-              {:title (t :right-side-bar/pane-close)
-               :variant :ghost
-               :class "px-2 py-2 h-8 w-8 text-muted-foreground"
-               :on-click #(state/sidebar-remove-block! idx)}
-              (ui/icon "x"))]]
+             (ui/tooltip
+              (shui/button
+               {:variant :ghost
+                :class "px-2 py-2 h-8 w-8 text-muted-foreground"
+                :on-click #(state/sidebar-remove-block! idx)}
+               (ui/icon "x"))
+              (t :sidebar.right/close))]
+            ]
 
            [:div {:role "region"
                   :id (str "sidebar-panel-content-" idx)
@@ -292,17 +315,17 @@
                             ::init-key (random-uuid)))}
   [state repo idx db-id block-type block-count]
   (let [drag-from (rum/react *drag-from)
-        drag-to (rum/react *drag-to)]
-    (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-      (sidebar-item-inner db-id {:repo repo
-                                 :idx idx
-                                 :block-type block-type
-                                 :collapsed? collapsed?
-                                 :drag-from drag-from
-                                 :drag-to drag-to
-                                 :block-count block-count
-                                 :*db-id (::db-id state)
-                                 :init-key (::init-key state)}))))
+        drag-to (rum/react *drag-to)
+        collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
+    (sidebar-item-inner db-id {:repo repo
+                               :idx idx
+                               :block-type block-type
+                               :collapsed? collapsed?
+                               :drag-from drag-from
+                               :drag-to drag-to
+                               :block-count block-count
+                               :*db-id (::db-id state)
+                               :init-key (::init-key state)})))
 
 (defn- get-page
   [match]
@@ -314,7 +337,7 @@
                :file
                (get-in match [:path-params :path])
 
-               (date/journal-name))]
+               (db/get-today-journal-title))]
     (when page
       (string/lower-case page))))
 
@@ -386,8 +409,8 @@
                                       ratio (.toFixed (/ offset width) 6)
                                       ratio (if (= handler-position :west) (- 1 ratio) ratio)]
                                   (when (and (> ratio min-ratio) (< ratio max-ratio) (not (zero? keyboard-step)))
-                                    (do (add-resizing-class)
-                                        (set-width! ratio)))))))
+                                    (add-resizing-class)
+                                    (set-width! ratio))))))
              (.on "keyup" remove-resizing-class)))
        #())
      [])
@@ -403,12 +426,26 @@
      {:ref              el-ref
       :role             "separator"
       :aria-orientation "vertical"
-      :aria-label       (t :right-side-bar/separator)
+      :aria-label       (t :sidebar.right/resize-handle)
       :aria-valuemin    (* min-ratio 100)
       :aria-valuemax    (* max-ratio 100)
       :aria-valuenow    50
       :tabIndex         "0"
       :data-expanded    sidebar-open?}]))
+
+(rum/defc plugin-renderer-menu-items
+  [renderers]
+  (for [r renderers]
+    (shui/dropdown-menu-item
+      {:on-click #(state/sidebar-add-block!
+                    (state/get-current-repo)
+                    (keyword (:pid r) (:key r))
+                    :plugin
+                    )}
+      [:div.flex.items-center
+       {:title (str (:pid r))}
+       [:span.pr-1.flex.items-center (shui/tabler-icon "puzzle")]
+       [:strong (:title r)]])))
 
 (rum/defcs sidebar-inner <
   (rum/local false ::anim-finished?)
@@ -417,17 +454,32 @@
                  state)}
   [state repo t blocks]
   (let [*anim-finished? (get state ::anim-finished?)
-        block-count (count blocks)]
+        block-count (count blocks)
+        developer-mode? (state/sub [:ui/developer-mode?])]
     [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
      [:div.cp__right-sidebar-scrollable
       {:on-drag-over util/stop}
       [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center
        [:div.cp__right-sidebar-settings.hide-scrollbar.gap-1 {:key "right-sidebar-settings"}
+        ;; sidebar renderers from plugins
+        (when-let [renderers (and config/lsp-enabled?
+                               (some->> (plugin-handler/get-hosted-renderers)
+                                 (filter #(= (:type %) "sidebar"))
+                                 (seq)))]
+          [:div.text-sm
+           [:button.button.cp__right-sidebar-settings-btn
+            {:on-click (fn [e]
+                         (shui/popup-show! e
+                           (plugin-renderer-menu-items renderers)
+                           {:as-dropdown? true
+                            :content-props {:on-click (fn [] (shui/popup-hide!))}}))}
+            [:span.nu.flex.items-center.opacity-80 (shui/tabler-icon "cube-plus")]]])
+
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                      (state/sidebar-add-block! repo "contents" :contents))}
-          (t :right-side-bar/contents)]]
+          (t :page/contents)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn []
@@ -436,29 +488,19 @@
                                                                         repo
                                                                         page
                                                                         :page-graph)))}
-          (t :right-side-bar/page-graph)]]
+          (t :graph.page/title)]]
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                      (state/sidebar-add-block! repo "help" :help))}
-          (t :right-side-bar/help)]]
+          (t :nav/help)]]
 
-        (when (and (state/sub [:ui/developer-mode?]) (not config/publishing?))
-          [:div.text-sm
-           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                                       (state/sidebar-add-block! repo "rtc" :rtc))}
-            "(Dev) RTC"]])
-        (when (state/sub [:ui/developer-mode?])
-          [:div.text-sm
+        (for [{:keys [db-id block-type label]} (dev-sidebar-items developer-mode?)]
+          [:div.text-sm {:key (str "dev-sidebar-item-" (name block-type))}
            [:button.button.cp__right-sidebar-settings-btn
             {:on-click (fn [_e]
-                         (state/sidebar-add-block! repo "vector-search" :vector-search))}
-            "(Dev) vector-search"]])
-        (when (state/sub [:ui/developer-mode?])
-          [:div.text-sm
-           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                                       (state/sidebar-add-block! repo "profiler" :profiler))}
-            "(Dev) Profiler"]])]]
+                         (state/sidebar-add-block! repo db-id block-type))}
+            label]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (if @*anim-finished?
@@ -467,7 +509,7 @@
              (sidebar-item repo idx db-id block-type block-count)
              (str "sidebar-block-" db-id)))
          [:div.p-4
-          [:span.font-medium.opacity-50 "Loading ..."]])]]]))
+          [:span.font-medium.opacity-50 (t :ui/loading)]])]]]))
 
 (rum/defcs sidebar < rum/reactive
   [state]

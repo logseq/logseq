@@ -1,8 +1,10 @@
 (ns ^:node-only logseq.common.graph
   "This ns provides common fns for a graph directory and only runs in a node environment"
   (:require ["fs" :as fs]
+            ["os" :as os]
             ["path" :as node-path]
             [clojure.string :as string]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]))
 
 (def ^:private win32?
@@ -49,6 +51,11 @@
          (filter #(.isDirectory %))
          (map #(.-name %)))))
 
+(defn- path-at-or-under?
+  [path dir]
+  (or (= path dir)
+      (string/starts-with? path (str dir "/"))))
+
 (defn ignored-path?
   "Given a graph directory and path, returns truthy value on whether the path is
   ignored. Useful for contexts like reading a graph's directory and file watcher
@@ -63,6 +70,7 @@ Rules:
 - Contents in '/logseq/.recycle/' are ignored
 - Contents in '/logseq/bak/' are ignored
 - Contents in  with '/logseq/version-files/' are ignored
+- Contents in '/mirror/markdown/' are ignored
 "
   [dir path]
   (let [dir (path/path-normalize dir)
@@ -70,8 +78,9 @@ Rules:
         rpath (path/trim-dir-prefix dir path)]
     (when (string? path)
       (or
-       (some #(string/starts-with? rpath %)
-             ["." "logseq/.recycle" "logseq/bak" "logseq/version-files"])
+       (string/starts-with? rpath ".")
+       (some #(path-at-or-under? rpath %)
+             ["logseq/.recycle" "logseq/bak" "logseq/version-files" "mirror/markdown"])
        (contains? #{"logseq/graphs-txid.edn" "logseq/pages-metadata.edn"} rpath)
        (some #(string/includes? rpath (str "/" % "/"))
              ["node_modules"])
@@ -97,3 +106,15 @@ Rules:
   (->> (readdir graph-dir)
        (remove (partial ignored-path? graph-dir))
        (filter #(contains? allowed-formats (get-ext %)))))
+
+(defn get-default-graphs-dir
+  "Get default dir for storing graphs by first looking in env var."
+  []
+  (or js/process.env.LOGSEQ_GRAPHS_DIR common-config/default-graphs-dir))
+
+(defn expand-home
+  "Expands path if it starts with '~'"
+  [path]
+  (if (and (seq path) (string/starts-with? path "~"))
+    (node-path/join (os/homedir) (subs path 1))
+    path))

@@ -17,6 +17,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
@@ -31,10 +32,40 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
+            [logseq.outliner.recycle :as outliner-recycle]
             [promesa.core :as p]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
+
+(defn get-recycle-page
+  []
+  (db/get-page common-config/recycle-page-name))
+
+(defn open-recycle!
+  []
+  (when-let [page (get-recycle-page)]
+    (route-handler/redirect-to-page! (:block/uuid page))))
+
+(defn restore-recycled!
+  [root-uuid]
+  (when-let [root (db/entity [:block/uuid root-uuid])]
+    (when-let [tx-data (seq (outliner-recycle/restore-tx-data (db/get-db) root))]
+      (p/do!
+       (ui-outliner-tx/transact!
+        {:outliner-op :restore-recycled}
+        (outliner-op/transact! tx-data nil))
+       true))))
+
+(defn delete-recycled-permanently!
+  [root-uuid]
+  (when-let [root (db/entity [:block/uuid root-uuid])]
+    (when (seq (outliner-recycle/permanently-delete-tx-data (db/get-db) root))
+      (p/do!
+       (ui-outliner-tx/transact!
+        {:outliner-op :recycle-delete-permanently}
+        (outliner-op/recycle-delete-permanently! root-uuid))
+       true))))
 
 (defn <unfavorite-page!
   [page-name]
@@ -104,7 +135,7 @@
 
 (defn update-public-attribute!
   [page value]
-  (db-property-handler/set-block-property! [:block/uuid (:block/uuid page)] :logseq.property/publishing-public? value))
+  (db-property-handler/set-block-property! (:block/uuid page) :logseq.property/publishing-public? value))
 
 (defn get-page-ref-text
   [page]
@@ -148,13 +179,13 @@
             target (first (:block/_alias chosen-result))
             chosen-result (if (and target (not (ldb/class? chosen-result)) (ldb/class? target)) target chosen-result)
             chosen (:block/title chosen-result)
-            class? (or (string/includes? chosen (str (t :new-tag) " "))
+            class? (or (string/includes? chosen (str (t :editor/new-tag) " "))
                        (ldb/class? chosen-result))
             inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete")
                              (not= chosen "Page"))
             chosen (-> chosen
-                       (string/replace-first (str (t :new-tag) " ") "")
-                       (string/replace-first (str (t :new-page) " ") ""))
+                       (string/replace-first (str (t :editor/new-tag) " ") "")
+                       (string/replace-first (str (t :editor/new-page) " ") ""))
             wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
             chosen-last-part (if (text/namespace-page? chosen)
                                (text/get-namespace-last-part chosen)
@@ -196,9 +227,10 @@
                 (throw (ex-info "No chosen item"
                                 {:chosen chosen-result})))
             chosen (:block/title chosen-result)
-            chosen' (string/replace-first chosen (str (t :new-page) " ") "")
+            chosen' (string/replace-first chosen (str (t :editor/new-page) " ") "")
+            nlp-title (or (:nlp-original-title chosen-result) chosen')
             [chosen' chosen-result] (or (when (and (:nlp-date? chosen-result) (not (de/entity? chosen-result)))
-                                          (when-let [result (date/nld-parse chosen')]
+                                          (when-let [result (date/nld-parse nlp-title)]
                                             (let [d (doto (goog.date.DateTime.) (.setTime (.getTime result)))
                                                   gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
                                                   page (date/js-date->journal-title gd)]
@@ -257,18 +289,18 @@
                (not config/publishing?))
       (when-let [title (date/today)]
         (state/set-today! title)
-        (p/let [today-page (util/page-name-sanity-lc title)
-                page (ldb/get-journal-page (db/get-db) (date/today-name))]
+        (p/let [today-page-lc-title (util/page-name-sanity-lc title)
+                page (db/get-today-journal-page)]
           (when-not page
             (p/let [result (<create! title {:redirect? false
                                             :split-namespace? false
                                             :today-journal? true})]
-              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
+              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page-lc-title})
               result)))))))
 
 (defn open-today-in-sidebar
   []
-  (when-let [page (db/get-page (date/today))]
+  (when-let [page (db/get-today-journal-page)]
     (state/sidebar-add-block!
      (state/get-current-repo)
      (:db/id page)
@@ -282,4 +314,4 @@
    (if page-uuid
      (util/copy-to-clipboard!
       (url-util/get-logseq-graph-page-url nil (state/get-current-repo) (str page-uuid)))
-     (notification/show! "No page found to copy" :warning))))
+     (notification/show! (t :page/no-page-found-to-copy) :warning))))

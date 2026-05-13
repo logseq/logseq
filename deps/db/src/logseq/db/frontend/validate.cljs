@@ -27,7 +27,9 @@
   [{:keys [db-after tx-data tx-meta]} {:keys [closed-schema?]}]
   (binding [db-malli-schema/*skip-strict-url-validate?* true]
     (let [changed-ids (->> tx-data (keep :e) distinct)
-          tx-datoms (mapcat #(d/datoms db-after :eavt %) changed-ids)
+          tx-datoms (mapcat (fn [id]
+                              (d/datoms db-after :eavt id))
+                            changed-ids)
           ent-maps* (map (fn [[db-id m]]
                          ;; Add :db/id for debugging
                            (assoc m :db/id db-id))
@@ -36,30 +38,33 @@
           validator (get-schema-validator closed-schema?)]
       (binding [db-malli-schema/*db-for-validate-fns* db-after]
         (let [invalid-ent-maps (remove
-                              ;; remove :db/id as it adds needless declarations to schema
-                                #(validator [(dissoc % :db/id)])
-                                ent-maps)]
-          (if (seq invalid-ent-maps)
-            (do
-              (prn "Invalid datascript entities detected amongst changed entity ids:" changed-ids :tx-meta tx-meta)
-              (let [explainer (get-schema-explainer closed-schema?)
-                    errors (doall
-                            (map
-                             (fn [m]
-                               (let [m' (update m :block/properties (fn [properties]
-                                                                      (map (fn [[p v]]
-                                                                             [(:db/ident p) v])
-                                                                           properties)))
-                                     data {:entity-map m'
-                                           :errors (me/humanize (explainer [(dissoc m :db/id)]))}]
-                                 (try
-                                   (pprint/pprint data)
-                                   (catch :default _e
-                                     (prn data)))
-                                 data))
-                             invalid-ent-maps))]
-
-                [false errors]))
+                                ;; remove :db/id as it adds needless declarations to schema
+                                 #(validator [(dissoc % :db/id)])
+                                 ent-maps)
+              schema-errors
+              (when (seq invalid-ent-maps)
+                (prn "Invalid datascript entities detected amongst changed entity ids:" changed-ids :tx-meta tx-meta)
+                (let [explainer (get-schema-explainer closed-schema?)]
+                  (doall
+                   (map
+                    (fn [m]
+                      (let [m' (update m :block/properties (fn [properties]
+                                                             (map (fn [[p v]]
+                                                                    [(:db/ident p) v])
+                                                                  properties)))
+                            data {:entity-map m'
+                                  :errors (me/humanize (explainer [(dissoc m :db/id)]))}]
+                        (try
+                          (pprint/pprint data)
+                          (catch :default _e
+                            (prn data)))
+                        data))
+                    invalid-ent-maps))))
+              errors (->> schema-errors
+                          (remove nil?)
+                          vec)]
+          (if (seq errors)
+            [false errors]
             [true nil]))))))
 
 (defn- group-errors-by-entity
@@ -82,7 +87,7 @@
                  :dispatch-key (->> (dissoc ent :db/id) (db-malli-schema/entity-dispatch-key db))
                  :errors errors'})))))
 
-(defn validate-db!
+(defn validate-db
   "Validates all the entities of the given db using :eavt datoms. Returns a map
   with info about db being validated. If there are errors, they are placed on
   :errors and grouped by entity"

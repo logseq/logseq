@@ -6,7 +6,7 @@
   (let [[id attr] (:rum/args state)]
     (when (:data-lang attr)
       (when-let [element (js/document.getElementById id)]
-        (js/hljs.highlightBlock element)))))
+        (js/hljs.highlightElement element)))))
 
 (rum/defcs highlight < rum/reactive
   {:did-mount (fn [state]

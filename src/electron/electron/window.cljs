@@ -7,7 +7,10 @@
             [clojure.string :as string]
             [electron.configs :as cfgs]
             [electron.context-menu :as context-menu]
+            [electron.db-worker :as db-worker]
+            [electron.i18n :refer [t]]
             [electron.logger :as logger]
+            [electron.spell-check :as spell-check]
             [electron.state :as state]
             [electron.utils :refer [mac? win32? linux? dev? open] :as utils]))
 
@@ -44,7 +47,6 @@
                       :sandbox                 false
                       :webSecurity             (not dev?)
                       :contextIsolation        true
-                      :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
                        ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
                        ;; to use `scollbar-gutter` after the feature is implemented in browsers.
                       :enableBlinkFeatures     'OverlayScrollbars'
@@ -55,7 +57,9 @@
 
                      linux?
                      (assoc :icon (node-path/join js/__dirname "icons/logseq.png")))
-         win       (BrowserWindow. (clj->js win-opts))]
+         win       (BrowserWindow. (clj->js win-opts))
+         spell-check-enabled? (spell-check/session-spellcheck-enabled? (cfgs/get-item :spell-check))]
+     (spell-check/apply-window-spellcheck! win spell-check-enabled?)
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
                            (clj->js {:urls (array "*://*.youtube.com/*")})
                            (fn [^js details callback]
@@ -84,6 +88,7 @@
 (defn close-handler
   [^js win e]
   (.preventDefault e)
+  (db-worker/release-window! (.-id win))
   (state/close-window! win)
   (let [web-contents (. win -webContents)]
     (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
@@ -126,10 +131,10 @@
         (when-let [^js res (and (fn? default-open)
                                 (.showMessageBoxSync dialog
                                                      #js {:type "warning"
-                                                          :message (str "Are you sure you want to open this link? \n\n" url)
+                                                          :message (t :electron/link-open-confirm url)
                                                           :defaultId 1
                                                           :cancelId 0
-                                                          :buttons #js ["Cancel" "OK"]}))]
+                                                          :buttons #js [(t :electron/cancel) (t :electron/ok)]}))]
           (when (= res 1)
             (default-open url)))))))
 

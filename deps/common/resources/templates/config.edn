@@ -187,21 +187,6 @@
  ;; Default value: 2
  :ref/default-open-blocks-level 2
 
- ;; Graph view configuration.
- ;; Example usage:
- ;; :graph/settings
- ;; {:orphan-pages?   true   ; Default value: true
- ;;  :builtin-pages?  false  ; Default value: false
- ;;  :excluded-pages? false  ; Default value: false
- ;;  :journal?        false} ; Default value: false
-
- ;; Graph view configuration.
- ;; Example usage:
- ;; :graph/forcesettings
- ;; {:link-dist       180    ; Default value: 180
- ;;  :charge-strength -600   ; Default value: -600
- ;;  :charge-range    600}   ; Default value: 600
-
  ;; Mobile photo upload configuration.
  ;; :mobile/photo
  ;; {:allow-editing? true
@@ -246,9 +231,11 @@
  ;; - insert-today?   Insert the capture at the end of today's journal page (boolean).
  ;; - redirect-page?  Redirect to the quick capture page after capturing (boolean).
  ;; - default-page    The default page to capture to if insert-today? is false (string).
+ ;; - prettify-url?   Whether urls to YouTube or X should be wrapped with {{video ...}} or {{twitter ...}}
  ;; :quick-capture-options
  ;; {:insert-today? false           ;; Default value: true
  ;;  :redirect-page? false          ;; Default value: false
- ;;  :default-page "quick capture"} ;; Default page: "quick capture"
+ ;;  :default-page "quick capture"  ;; Default page: "quick capture"
+ ;;  :prettify-url? true}           ;; Default value: true
 
  }

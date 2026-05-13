@@ -23,11 +23,11 @@
     (w/grant-permissions :clipboard-write :clipboard-read)
     (binding [custom-report/*pw-contexts* #{(.context (w/get-page))}
               custom-report/*pw-page->console-logs* (atom {})]
+      (settings/install-init-script! (.context (w/get-page)))
       (w/grant-permissions :clipboard-write :clipboard-read)
       (w/navigate (pw-page/get-test-url port))
       (settings/developer-mode)
-      (w/refresh)
-      (assert/assert-graph-loaded?)
+      (settings/refresh-test-env!)
       (let [p (w/get-page)]
         (.onConsoleMessage p (fn [msg]
                                (when custom-report/*pw-page->console-logs*
@@ -43,6 +43,7 @@
                    :slow-mo @config/*slow-mo}
         p1 (w/make-page page-opts)
         p2 (w/make-page page-opts)]
+    (run! #(settings/install-init-script! (.context @%)) [p1 p2])
     (reset! *page1 p1)
     (reset! *page2 p2)
     (binding [custom-report/*pw-contexts* (set [(.context @p1) (.context @p2)])
@@ -53,8 +54,7 @@
           (w/grant-permissions :clipboard-write :clipboard-read)
           (w/navigate (pw-page/get-test-url (or port @config/*port)))
           (settings/developer-mode)
-          (w/refresh)
-          (assert/assert-graph-loaded?)
+          (settings/refresh-test-env!)
           (let [p (w/get-page)]
             (.onConsoleMessage
              p
@@ -84,6 +84,7 @@
     (w/with-page-open p)              ; use with-page-open to close playwright instance
     (binding [custom-report/*pw-contexts* #{ctx}
               *pw-ctx* ctx]
+      (settings/install-init-script! ctx)
       (f)
       (.close (.browser *pw-ctx*)))))
 
@@ -140,11 +141,11 @@
      2
      #(w/with-page %
         (settings/developer-mode)
-        (w/refresh)
+        (settings/refresh-test-env!)
         (util/login-test-account))
      [@*page1 @*page2])
     (w/with-page @*page1
-      (graph/new-graph graph-name true))
+      (graph/new-graph graph-name true false))
     (w/with-page @*page2
       (graph/wait-for-remote-graph graph-name)
       (graph/switch-graph graph-name true true))

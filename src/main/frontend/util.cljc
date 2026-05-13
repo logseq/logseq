@@ -7,7 +7,6 @@
                      ["@capacitor/clipboard" :as CapacitorClipboard]
                      ["@capacitor/core" :refer [Capacitor]]
                      ["@capacitor/status-bar" :refer [^js StatusBar Style]]
-                     ["grapheme-splitter" :as GraphemeSplitter]
                      ["path-complete-extname" :as pathCompleteExtname]
                      ["semver" :as semver]
                      [cljs-bean.core :as bean]
@@ -104,9 +103,11 @@
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
+;; HSL→hex utility used by frontend.colors for parsing computed CSS colors
+;; (e.g. `hsl(200 7% 8.8%)`) into canonical hex. Re-added when our
+;; icon-picker color math (which reads CSS variables) reintroduced a
+;; dependency on it.
 #?(:cljs (defonce hsl2hex utils/hsl2hex))
-#?(:cljs (defonce base64string-to-unit8array utils/base64ToUint8Array))
-
 #?(:cljs (def string-join-path common-util/string-join-path))
 
 #?(:cljs
@@ -337,10 +338,21 @@
     (.-selectionDirection input)))
 
 #?(:cljs
+   (defonce ^:private ^js grapheme-segmenter
+     (when (gobj/getValueByKeys js/globalThis "Intl" "Segmenter")
+       (js/Intl.Segmenter. "und" #js {:granularity "grapheme"}))))
+
+#?(:cljs
+   (defn- split-grapheme-clusters
+     [s]
+     (if grapheme-segmenter
+       (mapv #(.-segment ^js %) (js/Array.from (.segment grapheme-segmenter s)))
+       (vec (js/Array.from s)))))
+
+#?(:cljs
    (defn split-graphemes
      [s]
-     (let [^js splitter (GraphemeSplitter.)]
-       (.splitGraphemes splitter s))))
+     (split-grapheme-clusters s)))
 
 #?(:cljs
    (defn get-graphemes-pos
@@ -348,8 +360,7 @@
 
       multi-char count as 1, like emoji characters"
      [s from-index]
-     (let [^js splitter (GraphemeSplitter.)]
-       (.countGraphemes splitter (subs s 0 from-index)))))
+     (count (split-grapheme-clusters (subs s 0 from-index)))))
 
 #?(:cljs
    (defn get-line-pos
@@ -358,11 +369,10 @@
 
       multi-char count as 1, like emoji characters"
      [s from-newline-index]
-     (let [^js splitter (GraphemeSplitter.)
-           last-newline-pos (string/last-index-of s \newline (dec from-newline-index))
+     (let [last-newline-pos (string/last-index-of s \newline (dec from-newline-index))
            before-last-newline-length (or last-newline-pos -1)
            last-newline-content (subs s (inc before-last-newline-length) from-newline-index)]
-       (.countGraphemes splitter last-newline-content))))
+       (count (split-grapheme-clusters last-newline-content)))))
 
 #?(:cljs
    (defn stop [e]
@@ -595,9 +605,9 @@
        (if-let [input (and (>= len 2) (<= current-pos len)
                            (.substring input (max (- current-pos 20) 0) current-pos))]
          (try
-           (let [^js splitter (GraphemeSplitter.)
-                 ^js input' (.splitGraphemes splitter input)]
-             (- current-pos (.-length (.pop input'))))
+           (if-let [last-grapheme (peek (split-grapheme-clusters input))]
+             (- current-pos (.-length last-grapheme))
+             (dec current-pos))
            (catch :default e
              (js/console.error e)
              (dec current-pos)))
@@ -612,9 +622,9 @@
        (if-let [input (and (>= len 2) (<= current-pos len)
                            (.substr input current-pos 20))]
          (try
-           (let [^js splitter (GraphemeSplitter.)
-                 ^js input (.splitGraphemes splitter input)]
-             (+ current-pos (.-length (.shift input))))
+           (if-let [first-grapheme (first (split-grapheme-clusters input))]
+             (+ current-pos (.-length first-grapheme))
+             (inc current-pos))
            (catch :default e
              (js/console.error e)
              (inc current-pos)))
@@ -757,6 +767,7 @@
    (defn react
      [ref]
      (when ref
+       #_{:clj-kondo/ignore [:private-call]}
        (if rum/*reactions*
          (rum/react ref)
          @ref))))
@@ -1076,19 +1087,6 @@
        {:y (- (:height viewport-rect) (:bottom target-rect))
         :x (- (:width viewport-rect) (:right target-rect))})))
 
-(def regex-char-esc-smap
-  (let [esc-chars "{}[]()&^%$#!?*.+|\\"]
-    (zipmap esc-chars
-            (map #(str "\\" %) esc-chars))))
-
-(defn regex-escape
-  "Escape all regex meta chars in text."
-  [text]
-  (string/join (replace regex-char-esc-smap text)))
-
-(comment
-  (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
-
 #?(:cljs
    (defn meta-key? [e]
      (if mac?
@@ -1306,15 +1304,19 @@
                          (js/console.error "Web clipboard failed" err)))))))))
 
 #?(:cljs
+   (defn copy-image-blob-to-clipboard
+     [blob]
+     (if (= (.-type blob) "image/png")
+       (write-blob-to-clipboard blob)
+       (image-blob->png blob write-blob-to-clipboard))))
+
+#?(:cljs
    (defn copy-image-to-clipboard
      [src]
      (-> (js/fetch src)
          (.then (fn [data]
                   (-> (.blob data)
-                      (.then (fn [blob]
-                               (if (= (.-type blob) "image/png")
-                                 (write-blob-to-clipboard blob)
-                                 (image-blob->png blob write-blob-to-clipboard))))
+                      (.then copy-image-blob-to-clipboard)
                       (.catch js/console.error)))))))
 
 (defn memoize-last
@@ -1372,3 +1374,19 @@
    (defn rtc-test?
      []
      (string/includes? js/window.location.search "?rtc-test=true")))
+
+#?(:cljs
+   (defn sanitize-port-input
+     "Strips all non-digit characters from a port input string."
+     [value]
+     (some-> value
+             trim-safe
+             (string/replace #"\D" ""))))
+
+#?(:cljs
+   (defn normalize-port-input
+     "Normalizes a port input to a valid port number string (1–65535), or nil."
+     [value]
+     (let [digits (sanitize-port-input value)]
+       (when (seq digits)
+         (str (-> digits js/parseInt (max 1) (min 65535)))))))

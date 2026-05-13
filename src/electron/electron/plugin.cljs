@@ -57,7 +57,7 @@
               endpoint     (api url-suffix)
               ^js res      (fetch endpoint {:timeout (* 1000 5)})
               illegal-text (when-not (= 200 (.-status res)) (.text res))
-              _            (when-not (string/blank? illegal-text) (throw (js/Error. (str "Github API Failed(" (.-status res) ") " illegal-text))))
+              _            (when-not (string/blank? illegal-text) (throw (js/Error. (str "GitHub API Failed(" (.-status res) ") " illegal-text))))
               _            (debug "Release latest:" endpoint ":status" (.-status res))
               res          (response-transform res)
               res          (.json res)
@@ -184,7 +184,7 @@
   includes the following keys:
 * :only-check - When set to true, this only fetches the latest version without installing
 * :plugin-action - When set to 'install', installs the specific :version given
-* :repo - A Github repo, not a logseq repo, e.g. user/repo"
+* :repo - A GitHub repo, not a logseq repo, e.g. user/repo"
   [{:keys [version repo only-check plugin-action] :as item}]
   (if repo
     (let [action          (keyword plugin-action)

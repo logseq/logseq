@@ -7,16 +7,14 @@
 (defn remove-block-property!
   [block-id property-id-or-key]
   (assert (some? property-id-or-key) "remove-block-property! remove-block-property! is nil")
-  (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
-    (db-property-handler/remove-block-property! eid property-id-or-key)))
+  (db-property-handler/remove-block-property! block-id property-id-or-key))
 
 (defn set-block-property!
   [block-id key v]
   (assert (some? key) "set-block-property! key is nil")
-  (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
-    (if (or (nil? v) (and (coll? v) (empty? v)))
-      (db-property-handler/remove-block-property! eid key)
-      (db-property-handler/set-block-property! eid key v))))
+  (if (or (nil? v) (and (coll? v) (empty? v)))
+    (db-property-handler/remove-block-property! block-id key)
+    (db-property-handler/set-block-property! block-id key v)))
 
 (defn batch-remove-block-property!
   [block-ids key]

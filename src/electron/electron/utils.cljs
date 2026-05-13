@@ -1,5 +1,7 @@
 (ns electron.utils
   (:require ["electron" :refer [app BrowserWindow]]
+            ["node-fetch" :default node-fetch]
+            ["open" :as open-external]
             ["fs-extra" :as fs]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
@@ -7,8 +9,10 @@
             [electron.configs :as cfgs]
             [electron.logger :as logger]
             [logseq.cli.common.graph :as cli-common-graph]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [promesa.core :as p]))
+            [logseq.common.graph-dir :as graph-dir]
+            [logseq.common.config :as common-config]
+            [promesa.core :as p]
+            [shadow.esm :refer [dynamic-import]]))
 
 (defonce *win (atom nil)) ;; The main window
 
@@ -20,17 +24,31 @@
 
 (defonce dev? (not prod?))
 (defonce *fetchAgent (atom nil))
-
-(defonce open (js/require "open"))
-(defonce HttpsProxyAgent (.-HttpsProxyAgent (js/require "https-proxy-agent")))
-(defonce SocksProxyAgent (.-SocksProxyAgent (js/require "socks-proxy-agent")))
-(defonce _fetch (js/require "node-fetch"))
+(defonce *proxy-agent-ctors (atom nil))
 (defonce extract-zip (js/require "extract-zip"))
+
+(defn- <ensure-proxy-agent-ctors
+  "Load ESM-only proxy agent packages once and cache their constructors."
+  []
+  (or @*proxy-agent-ctors
+      (reset! *proxy-agent-ctors
+              (p/let [https-module (dynamic-import "https-proxy-agent")
+                      socks-module (dynamic-import "socks-proxy-agent")
+                      ctors {:http   (.-HttpsProxyAgent ^js https-module)
+                             :socks5 (.-SocksProxyAgent ^js socks-module)}]
+                ctors))))
+
+(defn open
+  ([target] (open target nil))
+  ([target options]
+   (if options
+     (open-external target (bean/->js options))
+     (open-external target))))
 
 (defn fetch
   ([url] (fetch url nil))
   ([url options]
-   (_fetch url (bean/->js (merge options {:agent @*fetchAgent})))))
+   (node-fetch url (bean/->js (merge options {:agent @*fetchAgent})))))
 
 (defn fix-win-path!
   [path]
@@ -71,12 +89,10 @@
   protocol: http | socks5"
   [{:keys [protocol host port]}]
   (if (and protocol host port (or (= protocol "http") (= protocol "socks5")))
-    (let [proxy-url (str protocol "://" host ":" port)]
-      (condp = protocol
-        "http"
-        (reset! *fetchAgent (new HttpsProxyAgent proxy-url))
-        "socks5"
-        (reset! *fetchAgent (new SocksProxyAgent proxy-url))
+    (p/let [ctors (<ensure-proxy-agent-ctors)
+            proxy-url (str protocol "://" host ":" port)]
+      (if-let [ctor (get ctors (keyword protocol))]
+        (reset! *fetchAgent (new ctor proxy-url))
         (logger/error "Unknown proxy protocol:" protocol)))
     (reset! *fetchAgent nil)))
 
@@ -160,13 +176,11 @@
        (set-fetch-agent-proxy proxy))
 
      (= type "direct")
-     (do
-       (<set-electron-proxy {:type "direct"})
+     (p/let [_ (<set-electron-proxy {:type "direct"})]
        (set-fetch-agent-proxy nil))
 
      (or (= type "socks5") (= type "http"))
-     (do
-       (<set-electron-proxy {:type type :host host :port port})
+     (p/let [_ (<set-electron-proxy {:type type :host host :port port})]
        (set-fetch-agent-proxy {:protocol type :host host :port port}))
 
      :else
@@ -240,14 +254,17 @@
 (defn get-graph-dir
   "required by all internal state in the electron section"
   [graph-name]
-  (when (string/starts-with? graph-name sqlite-util/db-version-prefix)
-    (node-path/join (cli-common-graph/get-db-graphs-dir) (string/replace-first graph-name sqlite-util/db-version-prefix ""))))
+  (when (and (string? graph-name)
+             (string/starts-with? graph-name common-config/db-version-prefix))
+    (let [repo (common-config/canonicalize-db-version-repo graph-name)]
+      (node-path/join (cli-common-graph/get-db-graphs-dir)
+                      (graph-dir/repo->encoded-graph-dir-name repo)))))
 
 (comment
   (defn get-graph-name
     "Reverse `get-graph-dir`"
     [graph-dir]
-    (str sqlite-util/db-version-prefix (node-path/basename graph-dir))))
+    (str common-config/db-version-prefix (node-path/basename graph-dir))))
 
 (defn decode-protected-assets-schema-path
   [schema-path]

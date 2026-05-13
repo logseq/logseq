@@ -9,6 +9,7 @@
             [electron.ipc :as ipc]
             [frontend.colors :as colors]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -2105,6 +2106,38 @@
            (fn [i item]
              (render-fn item (assoc opts :wave {:r (quot i icon-grid-cols) :c (mod i icon-grid-cols)})))
            icon-items)]))]))
+
+(defn- normalize-tabs
+  [tabs default-tab]
+  (let [tabs (or tabs [[:all (t :icon/tab-all)]
+                       [:emoji (t :icon/tab-emojis)]
+                       [:icon (t :icon/tab-icons)]])
+        default-tab (or default-tab (ffirst tabs) :all)
+        default-tab (if (some #(= (first %) default-tab) tabs)
+                      default-tab
+                      (ffirst tabs))]
+    {:tabs tabs
+     :default-tab default-tab
+     :has-icon-tab? (boolean (some #(= (first %) :icon) tabs))}))
+
+(defn- emoji-sections
+  [emojis* used-items show-used?]
+  (let [emoji-used-items (when (seq used-items)
+                           (filterv #(= :emoji (:type %)) used-items))
+        sections (cond-> []
+                   (and show-used? (seq emoji-used-items))
+                   (conj {:title (t :ui/frequently-used)
+                          :items emoji-used-items
+                          :virtual-list? false})
+                   true
+                   (conj {:title (t :icon/emojis-count (count emojis*))
+                          :items emojis*
+                          :virtual-list? true}))]
+    sections))
+
+;; Note: `get-used-items` and `add-used-item!` are defined further down
+;; (~line 2194) with v2-storage migration + type-aware dedup + renderable
+;; filtering — preferred over master's simpler legacy-format versions.
 
 (rum/defc emojis-cp < rum/static
   [emojis* opts]

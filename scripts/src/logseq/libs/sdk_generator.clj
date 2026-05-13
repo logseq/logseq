@@ -1,4 +1,5 @@
 (ns logseq.libs.sdk-generator
+  (:refer-clojure :exclude [run!])
   (:require [babashka.fs :as fs]
             [cheshire.core :as json]
             [clojure.string :as string]))
@@ -7,6 +8,7 @@
 (def default-output-dir "libs/cljs-sdk/src")
 (def default-ns-prefix "com.logseq")
 (def core-namespace "core")
+(def clojure-core-conflict-fns #{"get"})
 
 (defn parse-args
   [args]
@@ -30,35 +32,28 @@
       (string/replace #"[^a-z0-9]+" "-")
       (string/replace #"(^-|-$)" "")))
 
-(defn interface->target [iface-name]
-  (-> iface-name
-      (string/replace #"^I" "")
-      (string/replace #"Proxy$" "")))
-
-(defn interface->namespace [ns-prefix iface-name]
-  (str ns-prefix "." (camel->kebab (interface->target iface-name))))
+(defn getter->namespace [ns-prefix getter-name]
+  (str ns-prefix "." (camel->kebab getter-name)))
 
 (defn getter->interface-name [return-type]
   (some->> (re-find #"\.(I[A-Za-z0-9]+)" return-type)
            second))
 
-(defn iface-key->string [k]
-  (cond
-    (string? k) k
-    (keyword? k) (name k)
-    :else (str k)))
+(defn getter->class-name [return-type]
+  (some->> (re-find #"\.(LSPlugin[A-Za-z0-9]+)" return-type)
+           second))
 
 (defn format-docstring [doc]
   (when (and doc (not (string/blank? doc)))
     (str "  " (pr-str doc) "\n")))
 
 (defn param->info
-  [{:keys [name optional rest rest?]}]
+  [{:keys [name optional rest?] rest-param :rest}]
   (let [sym (camel->kebab name)]
     {:name name
      :sym sym
      :optional (boolean optional)
-     :rest (boolean (or rest rest?))}))
+     :rest (boolean (or rest-param rest?))}))
 
 (defn emit-rest-binding [{:keys [sym]}]
   (let [rest-var (str "rest-" sym)
@@ -144,7 +139,7 @@
                method-body))))))
 
 (defn emit-core-namespace
-  [ns-prefix {:keys [methods]}]
+  [ns-prefix {api-methods :methods}]
   (let [ns (str ns-prefix "." core-namespace)
         header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
                     "(ns " ns "\n"
@@ -161,25 +156,31 @@
   (normalize-result (.apply method owner (bean/->js args))))\n")
         helpers {:call "call-method"}
         owner "\n(def api-proxy js/logseq)\n"
-        methods-str (->> methods
+        methods-str (->> api-methods
                          (map #(emit-method % helpers))
                          (apply str))]
     [ns (str header owner methods-str)]))
 
-(defn emit-proxy-namespace
-  [ns-prefix iface-name iface]
-  (let [ns (interface->namespace ns-prefix iface-name)
-        target (interface->target iface-name)
-        owner-expr (format "(aget js/logseq \"%s\")" target)
+(defn emit-getter-namespace
+  [ns-prefix getter-name api]
+  (let [ns (getter->namespace ns-prefix getter-name)
+        owner-expr (format "(aget js/logseq \"%s\")" getter-name)
+        excluded-core-fns (->> (:methods api)
+                               (map (comp camel->kebab :name))
+                               (filter clojure-core-conflict-fns)
+                               distinct)
         header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
                     "(ns " ns "\n"
+                    (when (seq excluded-core-fns)
+                      (str "  (:refer-clojure :exclude [" (string/join " " excluded-core-fns) "])\n"))
                     "  (:require [com.logseq.core :as core]))\n")
         helpers {:call "core/call-method"}
         owner (format "\n(def api-proxy %s)\n" owner-expr)
-        methods-str (->> (:methods iface)
-                         (map #(emit-method % helpers))
+        methods-str (->> (:methods api)
+                         (keep #(emit-method % helpers))
                          (apply str))]
-    [ns (str header owner methods-str)]))
+    (when-not (string/blank? methods-str)
+      [ns (str header owner methods-str)])))
 
 (defn namespace->file
   [out-dir ns]
@@ -190,7 +191,7 @@
 
 (defn ensure-schema! [schema-path]
   (when-not (fs/exists? schema-path)
-    (throw (ex-info (str "Schema not found, run `yarn --cwd libs generate:schema` first: " schema-path)
+    (throw (ex-info (str "Schema not found, run `pnpm --dir libs generate:schema` first: " schema-path)
                     {:schema schema-path}))))
 
 (defn write-namespaces!
@@ -211,18 +212,25 @@
      (ensure-schema! schema-path)
      (let [schema (json/parse-string (slurp (str schema-path)) true)
            interfaces (:interfaces schema)
+            classes (:classes schema)
            ls-user (get-in schema [:classes :LSPluginUser])
            _ (when-not ls-user
                (throw (ex-info "Missing LSPluginUser metadata in schema" {:schema schema-path})))
            getters (:getters ls-user)
-           proxy-names (->> getters
-                            (keep #(some-> (getter->interface-name (:returnType %)) keyword))
-                            (remove #{:IUtilsProxy})
-                            distinct)
-           proxies (for [iface-key proxy-names
-                         :let [iface (get interfaces iface-key)]
-                         :when iface]
-                     (emit-proxy-namespace ns-prefix (iface-key->string iface-key) iface))
+            modules (->> getters
+                         (remove #(= "Utils" (:name %)))
+                         (keep (fn [{:keys [name returnType]}]
+                                 (let [iface-key (some-> (getter->interface-name returnType) keyword)
+                                       class-key (some-> (getter->class-name returnType) keyword)
+                                       api (or (get interfaces iface-key)
+                                               (get classes class-key))]
+                                   (when api
+                                     {:getter-name name
+                                      :api api}))))
+                         distinct)
+            proxies (keep (fn [{:keys [getter-name api]}]
+                            (emit-getter-namespace ns-prefix getter-name api))
+                          modules)
            core (emit-core-namespace ns-prefix ls-user)
            namespaces (cons core proxies)]
        (fs/create-dirs out-dir)

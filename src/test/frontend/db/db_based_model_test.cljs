@@ -5,7 +5,8 @@
             [frontend.db.model :as model]
             [frontend.test.helper :as test-helper]
             [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.outliner.property :as outliner-property]))
 
 (def repo test-helper/test-db)
 
@@ -32,6 +33,24 @@
                                        db-class/built-in-classes)))
              ["class1" "class2"]))
            (set (map :block/title (model/get-all-classes repo)))))))
+
+(deftest get-all-classes-filters-recycled-test
+  (let [opts {:redirect? false :class? true}
+        _ (test-helper/create-page! "class1" opts)
+        _ (test-helper/create-page! "class2" opts)
+        class1 (db/get-case-page "class1")]
+    (db/transact! repo [{:db/id (:db/id class1)
+                         :logseq.property/deleted-at 1}])
+    (is (not (contains? (set (map :block/title (model/get-all-classes repo))) "class1")))))
+
+(deftest get-all-properties-filters-recycled-test
+  (let [conn (db/get-db repo false)
+        _ (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "prop1"})
+        _ (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "prop2"})
+        prop1 (db/get-case-page "prop1")]
+    (db/transact! repo [{:db/id (:db/id prop1)
+                         :logseq.property/deleted-at 1}])
+    (is (not (contains? (set (map :block/title (model/get-all-properties repo))) "prop1")))))
 
 ;; TODO: Async test
 (deftest ^:fix-me get-class-objects-test

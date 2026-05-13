@@ -76,23 +76,90 @@ error if it detects an invalid query.
 
 ### Translations
 
-We use [tongue](https://github.com/tonsky/tongue), a simple and effective
-library, for translations. We have a couple bb tasks for working with
-translations under `lang:` e.g. `bb lang:list`. See [the translator
-guide](./contributing-to-translations.md) for usage.
+We use [tongue](https://github.com/tonsky/tongue) for translations.
 
-One useful task for reviewers (us) and contributors alike, is `bb
-lang:validate-translations` which catches [common
-mistakes](./contributing-to-translations.md#fix-mistakes)). When reviewing
-translations here are some things to keep in mind:
+Responsibilities are split across a few files:
 
-* Punctuation and delimiting characters (e.g. `:`, `:`, `?`) should be part of
-  the translatable string. Those characters and their position may vary depending on the language.
-* Translations usually return strings but they can return hiccup vectors with a
-  fn translation. Hiccup vectors are needed when word order matters for a
-  translation and formatting is involved. See [this 3 word Turkish
-  example](https://github.com/logseq/logseq/commit/1d932f07c4a0aad44606da6df03a432fe8421480#r118971415).
-* Translations can be anonymous fns with arguments for interpolating strings. Fns should be simple and only include the following fns: `str`, `when`, `if` and `=`.
+* [docs/contributing-to-translations.md](./contributing-to-translations.md) is
+  for locale contributors.
+* [docs/i18n-key-naming.md](./i18n-key-naming.md) is for naming and reusing
+  keys in `src/resources/dicts/en.edn`.
+* [.i18n-lint.toml](../.i18n-lint.toml) is the source of truth for hardcoded UI
+  text lint scope, translatable helpers/attributes, exclusions, and allowlists.
+
+#### What must be internationalized
+
+Inside the scope defined by `.i18n-lint.toml`, all user-visible UI text must be
+internationalized.
+
+Exceptions:
+
+* Console output does not need translation.
+* Keep out-of-scope developer-only `(Dev)` labels next to the developer
+  UI/command definition; do not add them to translation dictionaries.
+
+If you introduce a new UI helper, alert API, UI namespace, translatable
+attribute, or other shipped UI surface, update `.i18n-lint.toml` so the lint
+continues to cover it.
+
+#### Translation helpers
+
+All translation helpers live in
+`src/main/frontend/context/i18n.cljs`. Do not add parallel ad hoc i18n helpers
+elsewhere.
+
+| Helper | Use for |
+|---|---|
+| `t` | Standard translation with preferred-locale lookup |
+| `tt` | Try multiple keys and return the first existing translation |
+| `t-en` | Force English output, for example when UI text also needs an English console copy |
+| `interpolate-rich-text` / `interpolate-rich-text-node` | Replace placeholders with rich-text or hiccup fragments |
+| `interpolate-sentence` | Keep a full sentence in one key while inserting placeholders and inline links |
+| `replace-newlines-with-br` | Render translated newline characters as `[:br]` nodes |
+| `locale-join-rich-text` / `locale-join-rich-text-node` | Join rich fragments with locale-aware separators |
+| `locale-format-number` / `locale-format-date` / `locale-format-time` | Format dynamic numbers and dates before passing them into translations |
+
+#### Developer workflow
+
+1. Use `.i18n-lint.toml` to decide whether the text is in i18n scope.
+2. Search `src/resources/dicts/en.edn` for an existing key with the same
+   semantic owner and textual role.
+3. If no exact match exists, follow
+   [the key naming guide](./i18n-key-naming.md) and add the English source text
+   to `en.edn`.
+4. Add non-English locale entries only when you are also providing actual
+   translations. When renaming or removing keys, clean up stale locale keys.
+5. Replace the literal with the appropriate helper from
+   `frontend.context.i18n`.
+
+Recommended checks:
+
+```sh
+bb lang:validate-translations
+bb lang:lint-hardcoded --git-changed
+bb lang:format-dicts
+```
+
+`bb lang:format-dicts` is the repo-owned formatter for dictionary key ordering
+and namespace spacing. Run it after editing dict files.
+
+#### Content rules
+
+* Keep each translation as complete as possible. Do not assemble sentences from
+  fragments in the caller.
+* For plain dynamic text, use placeholders like `{1}` and pre-format arguments
+  in the caller before passing them to `t`.
+* Function-valued translations are allowed only when a locale needs real logic
+  or rich-text hiccup output. When functions are necessary, only `str`, `when`,
+  `if`, and `=` are allowed inside the function body.
+* Keep rich text in a single translation entry. Do not split one sentence
+  across multiple keys.
+* Non-English locale files should contain only actual translations. Do not copy
+  English values just to fill gaps; Tongue falls back to `:en`.
+* Preserve emoji/icon glyphs from `en.edn` exactly, and use punctuation natural
+  to each locale.
+* Pluralization is locale-specific. Do not force English singular/plural rules
+  onto other languages.
 
 ### Spell Checker
 
@@ -135,7 +202,7 @@ To run end to end tests, see [clj-e2e tests](/clj-e2e/README.md).
 Our unit tests use the [shadow-cljs test-runner](https://shadow-cljs.github.io/docs/UsersGuide.html#_testing). To run them:
 
 ```bash
-yarn test
+pnpm test
 ```
 
 By convention, a namespace's tests are found at a corresponding namespace
@@ -295,7 +362,7 @@ point out:
 
   ```sh
   # One time setup
-  $ cd scripts && yarn install && cd -
+  $ cd scripts && pnpm install && cd -
 
   # Build a release publishing app
   $ bb dev:publishing /path/to/graph-dir tmp/publish
@@ -322,7 +389,7 @@ docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.
 These tasks are specific to database graphs. For these tasks there is a one time setup:
 
 ```sh
-  $ cd deps/db && yarn install && cd ../outliner && yarn install && cd ../graph-parser && yarn install && cd ../..
+  $ cd deps/db && pnpm install && cd ../outliner && pnpm install && cd ../graph-parser && pnpm install && cd ../..
 ```
 * `dev:db-cli` - Run a CLI command from deps/db using latest deps/db code
 * `dev:query` - Query a DB graph
@@ -444,8 +511,9 @@ These tasks are specific to database graphs. For these tasks there is a one time
 ### Dev Commands
 
 In the app, you can enable Dev commands under `Settings > Advanced > Developer
-mode`. Then search for commands starting with `(Dev)`. Commands include
-inspectors for block/page data and AST.
+mode`. Then search for commands labeled with `(Dev)`. Those labels are
+intentionally hardcoded English developer-only labels, not translation keys.
+Commands include inspectors for block/page data and AST.
 
 ### Desktop Developer Tools
 
@@ -465,15 +533,15 @@ include a JS console and HTML inspector.
 
 If dev app launch failed after electron upgrade:
 ```sh
-yarn
-yarn watch
+pnpm install
+pnpm watch
 ```
 In another window:
 ```sh
 cd static
-yarn
+pnpm install
 cd ..
-yarn dev-electron-app
+pnpm dev-electron-app
 ```
 and kill all electron process
-Then a normal start happens via `yarn dev-electron-app`
+Then a normal start happens via `pnpm dev-electron-app`

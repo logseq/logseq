@@ -1,15 +1,16 @@
 {
   "name": "@logseq/outliner",
   "version": "1.0.0",
+  "packageManager": "pnpm@10.33.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v33"
+    "@logseq/nbb-logseq": "git+https://github.com/logseq/nbb-logseq.git#feat-db-v34"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.8.0",
     "mldoc": "^1.5.9"
   },
   "scripts": {
-    "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"
+    "test": "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner"
   }
 }

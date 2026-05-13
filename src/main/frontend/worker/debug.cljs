@@ -13,12 +13,12 @@
   []
   (some-> (get-conn) deref))
 
-#_:clj-kondo/ignore
+#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}
 (defn pull
   [eid]
   (some-> (get-db) (d/pull '[*] eid)))
 
-#_:clj-kondo/ignore
+#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}
 (defn entity
   [eid]
   (some-> (get-db) (d/entity eid)))

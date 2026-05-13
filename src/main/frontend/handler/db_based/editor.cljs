@@ -46,17 +46,39 @@
              x))
          refs)))
 
+(defn- markdown-heading-level
+  [content]
+  (when-let [heading (some->> content
+                              string/triml
+                              (re-find #"^(#{1,6})\s+"))]
+    (count (second heading))))
+
+(defn- normalize-markdown-heading?
+  [block]
+  (not (contains? #{:code :math} (:logseq.property.node/display-type block))))
+
 (defn wrap-parse-block
   [{:block/keys [title level] :as block}]
-  (let [block (or (and (:db/id block) (db/entity (:db/id block))) block)
+  (let [block (or (and (:db/id block) (db/entity (:db/id block)))
+                  (and (:block/uuid block) (db/entity [:block/uuid (:block/uuid block)]))
+                  block)
         block (if (nil? title)
                 block
-                (let [ast (mldoc/->edn (string/trim title) :markdown)
+                (let [heading-level (when (normalize-markdown-heading? block)
+                                      (markdown-heading-level title))
+                      title (if heading-level
+                              (commands/clear-markdown-heading (string/triml title))
+                              title)
+                      ast (mldoc/->edn (string/trim title) :markdown)
                       first-elem-type (first (ffirst ast))
                       block-with-title? (mldoc/block-with-title? first-elem-type)
                       content' (str common-config/block-pattern (if block-with-title? " " "\n") title)
                       parsed-block (block/parse-block (assoc block :block/title content'))
-                      block' (-> (merge block parsed-block {:block/title title})
+                      block' (-> (merge block
+                                         parsed-block
+                                         {:block/title title}
+                                         (when heading-level
+                                           {:logseq.property/heading heading-level}))
                                  (dissoc :block/format))]
                   (update block' :block/refs
                           (fn [refs]

@@ -1,13 +1,22 @@
 {
   "name": "nbb-dev-scripts",
   "version": "1.0.0",
+  "packageManager": "pnpm@10.33.0",
   "private": true,
+  "scripts": {
+    "test": "pnpm exec nbb-logseq -cp test -m logseq.tasks.test-runner"
+  },
   "devDependencies": {
-    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v33"
+    "@logseq/nbb-logseq": "git+https://github.com/logseq/nbb-logseq.git#feat-db-v34"
   },
   "dependencies": {
-    "better-sqlite3": "11.10.0",
-    "fs-extra": "9.1.0",
+    "better-sqlite3": "12.8.0",
+    "fs-extra": "^11.3.4",
     "mldoc": "^1.5.9"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }

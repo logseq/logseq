@@ -8,7 +8,7 @@ Most bb scripts live under `src/` and are defined as bb tasks. See [babashka tas
 
 ### Nbb scripts
 
-Before running [nbb-logseq](https://github.com/logseq/nbb-logseq) scripts, be sure to have node >= 18.14 installed as well as a recent [babashka](https://github.com/babashka/babashka) for managing the dependencies in `nbb.edn`. Then `yarn install` to install dependencies
+Before running [nbb-logseq](https://github.com/logseq/nbb-logseq) scripts, be sure to have node >= 18.14 installed as well as a recent [babashka](https://github.com/babashka/babashka) for managing the dependencies in `nbb.edn`. Then `pnpm install` to install dependencies
 
 #### Create graph scripts
 
@@ -25,7 +25,7 @@ example, the `create_graph_with_properties.cljs` script uses this ns to create a
 graph with a variety of properties:
 
 ```
-$ yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs woot
+$ pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs woot
 Generating 16 pages and 24 blocks ...
 Created graph woot!
 ```
@@ -41,7 +41,7 @@ for specifics on the EDN map.
 To create large graphs with varying size:
 
 ```
-$ yarn -s nbb-logseq src/logseq/tasks/db_graph/create_graph_with_large_sizes.cljs large
+$ pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_large_sizes.cljs large
 Building tx ...
 Built 21000 tx, 1000 pages and 20000 blocks ...
 Transacting chunk 1 of 21 starting with block: #:block{:name "page-0"}
@@ -49,7 +49,7 @@ Transacting chunk 1 of 21 starting with block: #:block{:name "page-0"}
 Created graph large with 187810 datoms!
 
 # To see options available
-$ yarn -s nbb-logseq src/logseq/tasks/db_graph/create_graph_with_large_sizes.cljs -h
+$ pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_large_sizes.cljs -h
 Usage: $0 GRAPH-NAME [OPTIONS]
 Options:
   -h, --help        Print help
@@ -61,7 +61,7 @@ Another example is the `create_graph_with_schema_org.cljs` script which creates 
 with the https://schema.org/ ontology with as many of the classes and properties as possible:
 
 ```
-$ yarn -s nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs schema
+$ pnpm exec nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs schema
 Skipping 67 superseded properties
 Skipping 25 properties with unsupported data types
 Renaming 1 properties due to page name conflicts

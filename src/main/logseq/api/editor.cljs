@@ -3,7 +3,6 @@
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
             [frontend.commands :as commands]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
@@ -26,7 +25,9 @@
             [goog.dom :as gdom]
             [logseq.api.block :as api-block]
             [logseq.api.db-based :as db-based-api]
+            [logseq.api.plugin :as api-plugin]
             [logseq.common.path :as path]
+            [logseq.outliner.property :as outliner-property]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.sdk.core]
@@ -104,8 +105,7 @@
 
 (defn get_today_page
   []
-  (p/let [today-name (date/today)
-          page (<get-block today-name {:children? false})]
+  (p/let [page (<get-block (db-model/get-today-journal-title) {:children? false})]
     (some-> page (sdk-utils/result->js))))
 
 (defn get_all_pages
@@ -163,11 +163,18 @@
   page-handler/rename!)
 
 (defn open_in_right_sidebar
-  [block-id-or-uuid]
-  (editor-handler/open-block-in-sidebar!
-   (if (number? block-id-or-uuid)
-     block-id-or-uuid
-     (sdk-utils/uuid-or-throw-error block-id-or-uuid))))
+  [block-id-or-uuid-or-key]
+  (if (or (number? block-id-or-uuid-or-key)
+        (util/uuid-string? block-id-or-uuid-or-key))
+    (editor-handler/open-block-in-sidebar!
+      (if (number? block-id-or-uuid-or-key)
+        block-id-or-uuid-or-key
+        (sdk-utils/uuid-or-throw-error block-id-or-uuid-or-key)))
+    (when-let [pid (api-plugin/get-caller-plugin-id)]
+      (state/sidebar-add-block!
+        (state/get-current-repo)
+        (keyword pid (str block-id-or-uuid-or-key))
+        :plugin))))
 
 (defn new_block_uuid []
   (str (db/new-block-id)))
@@ -188,8 +195,7 @@
   [block-uuid-or-page-name]
   (p/let [repo (state/get-current-repo)
           block (db-async/<get-block repo (str block-uuid-or-page-name)
-                                     {:children? true
-                                      :include-collapsed-children? true})
+                                     {:include-collapsed-children? true})
           _ (when-let [page-id (:db/id (:block/page block))]
               (when-let [page-uuid (:block/uuid (db/entity page-id))]
                 (db-async/<get-block repo page-uuid)))]
@@ -278,8 +284,7 @@
 
 (def get_block
   (fn [id ^js opts]
-    (p/let [block (db-async/<get-block (state/get-current-repo) id {:children? true
-                                                                    :include-collapsed-children? true})]
+    (p/let [block (db-async/<get-block (state/get-current-repo) id {:include-collapsed-children? true})]
       (api-block/get_block (:db/id block) (or opts #js {:includePage true})))))
 
 (def get_current_block
@@ -361,7 +366,7 @@
   (p/let [uuid-or-page-name (or
                              uuid-or-page-name
                              (state/get-current-page)
-                             (date/today))
+                             (db-model/get-today-journal-title))
           block           (<get-block uuid-or-page-name)
           new-page        (when (and (not block) (not (util/uuid-string? uuid-or-page-name))) ; page not exists
                             (page-handler/<create! uuid-or-page-name
@@ -376,7 +381,7 @@
   []
   (or
    (state/get-current-page)
-   (date/today)))
+   (db-model/get-today-journal-title)))
 
 (defn append_block_in_page
   ([content]
@@ -389,7 +394,7 @@
    (let [uuid-or-page-name (or
                             uuid-or-page-name
                             (state/get-current-page)
-                            (date/today))]
+                            (db-model/get-today-journal-title))]
      (p/let [_ (<ensure-page-loaded uuid-or-page-name)
              page? (not (util/uuid-string? uuid-or-page-name))
              page (db-model/get-page uuid-or-page-name)
@@ -441,35 +446,56 @@
                      key (api-block/get-db-ident-from-property-name key this)]
                  (property-handler/remove-block-property! block-uuid key))))))
 
+(defn- get-block-classes-properties-has-default-value
+  [block-id]
+  (when-let [classes-properties
+             (some-> (outliner-property/get-block-classes-properties (db/get-db) block-id)
+                     :classes-properties)]
+    (let [properties (->> classes-properties
+                          (filter :logseq.property/default-value)
+                          (map (fn [property]
+                                 [(:db/ident property)
+                                  (:logseq.property/default-value property)])))
+          properties (into {} properties)]
+      properties)))
+
+(defn- get-all-block-properties
+  [id]
+  (p/let [block (<get-block id {:children? false})]
+    (when-let [own-properties (:block/properties block)]
+      (let [classes-properties (get-block-classes-properties-has-default-value (:db/id block))
+            properties (if (seq classes-properties)
+                         (merge classes-properties own-properties)
+                         own-properties)]
+        properties))))
+
 (defn get_block_property
   [id key]
   (this-as this
-           (p/let [block (<get-block id {:children? false})]
-             (when-let [properties (some-> block (:block/uuid) (db-model/get-block-by-uuid) (:block/properties))]
-               (when (seq properties)
-                 (let [property-name (api-block/sanitize-user-property-name key)
-                       ident (api-block/get-db-ident-from-property-name property-name this)
-                       property-value (or (get properties property-name)
-                                          (get properties (keyword property-name))
-                                          (get properties ident))
-                       property-value (if-let [property-id (:db/id property-value)]
-                                        (db/pull property-id) property-value)
-                       property-value (cond-> property-value
-                                        (map? property-value)
-                                        (assoc
-                                         :value (or (:logseq.property/value property-value)
-                                                    (:block/title property-value))
-                                         :ident ident))
-                       parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
-                   (or parsed-value
-                       (bean/->js (sdk-utils/normalize-keyword-for-json property-value)))))))))
+    (p/let [properties (get-all-block-properties id)]
+      (when (seq properties)
+        (let [property-name (api-block/sanitize-user-property-name key)
+              ident (api-block/get-db-ident-from-property-name property-name this)
+              property-value (or (get properties property-name)
+                                 (get properties (keyword property-name))
+                                 (get properties ident))
+              property-value (if-let [property-id (:db/id property-value)]
+                               (db/pull property-id) property-value)
+              property-value (cond-> property-value
+                                     (map? property-value)
+                                     (assoc
+                                       :value (or (:logseq.property/value property-value)
+                                                  (:block/title property-value))
+                                       :ident ident))
+              parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
+          (or parsed-value
+              (sdk-utils/result->js property-value)))))))
 
 (def get_block_properties
   (fn [id]
-    (p/let [block (<get-block id {:children? false})]
-      (when block
-        (let [properties (api-block/into-readable-db-properties (:block/properties block))]
-          (sdk-utils/result->js properties))))))
+    (p/let [properties (get-all-block-properties id)]
+      (when-let [properties (some-> properties (api-block/into-readable-db-properties))]
+        (sdk-utils/result->js properties)))))
 
 (defn get_page_properties
   [id-or-page-name]

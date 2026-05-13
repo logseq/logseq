@@ -1,13 +1,15 @@
 (ns ^:no-doc frontend.handler.export
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.zip :as zip]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.notification :as notification]
-            [frontend.idb :as idb]
+            [frontend.common.idb :as idb]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -44,20 +46,20 @@
 
 (defn db-based-export-repo-as-zip!
   [repo]
-  (state/pub-event! [:dialog/export-zip "Preparing zip"])
+  (state/pub-event! [:dialog/export-zip (t :export/preparing-zip)])
   (-> (p/let [db-data (persist-db/<export-db repo {:return-data? true})
               filename "db.sqlite"
               repo-name (common-sqlite/sanitize-db-name repo)
               _ (state/set-state! :graph/exporting-state {:total 100
                                                           :current-idx 20
-                                                          :current-page "Collecting assets"
-                                                          :label "Exporting"})
+                                                          :current-page (t :export/collecting-assets)
+                                                          :label (t :export/exporting)})
               assets (assets-handler/<get-all-assets)
               files (cons [filename db-data] assets)
               _ (state/set-state! :graph/exporting-state {:total 100
                                                           :current-idx 40
-                                                          :current-page "Creating zip"
-                                                          :label "Exporting"})
+                                                          :current-page (t :export/creating-zip)
+                                                          :label (t :export/exporting)})
               zipfile (zip/make-zip repo-name files repo
                                     {:compression "STORE"
                                      :progress-fn (fn [percent]
@@ -65,19 +67,19 @@
                                                       (state/set-state! :graph/exporting-state
                                                                         {:total 100
                                                                          :current-idx (js/Math.round scaled)
-                                                                         :current-page "Creating zip"
-                                                                         :label "Exporting"})))})]
+                                                                         :current-page (t :export/creating-zip)
+                                                                         :label (t :export/exporting)})))})]
         (state/set-state! :graph/exporting-state {:total 100
                                                   :current-idx 100
-                                                  :current-page "Finalizing"
-                                                  :label "Exporting"})
+                                                  :current-page (t :export/finalizing)
+                                                  :label (t :export/exporting)})
         (when-let [anchor (gdom/getElement "download-as-zip")]
           (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
           (.setAttribute anchor "download" (.-name zipfile))
           (.click anchor)))
       (p/catch (fn [error]
                  (js/console.error error)
-                 (notification/show! "Export zip failed." :error)))
+                 (notification/show! (t :export/zip-error) :error)))
       (p/finally (fn []
                    (state/pub-event! [:dialog/close-export-zip])))))
 
@@ -104,16 +106,31 @@
 
 (defn export-repo-as-sqlite-db!
   [repo]
-  (->
-   (p/let [data (persist-db/<export-db repo {:return-data? true})
-           filename (file-name repo "sqlite")
-           url (js/URL.createObjectURL (js/Blob. #js [data]))]
-     (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
-       (.setAttribute anchor "href" url)
-       (.setAttribute anchor "download" filename)
-       (.click anchor)))
-   (p/catch (fn [error]
-              (js/console.error error)))))
+  (let [filename (file-name repo "sqlite")]
+    (->
+     (if (util/electron?)
+       (p/let [result (ipc/ipc :db-export-as repo filename)
+               path (or (:path result) (some-> result .-path))]
+         (when path
+           (notification/show! (t :export/sqlite-db-exported path) :success false)))
+       (p/let [data (persist-db/<export-db repo {:return-data? true})]
+         (if (fn? (.-showSaveFilePicker js/window))
+           (p/let [handle (.showSaveFilePicker
+                           js/window
+                           #js {:suggestedName filename
+                                :types #js [#js {:description "SQLite"
+                                                 :accept #js {"application/vnd.sqlite3" #js [".sqlite"]}}]})
+                   writable (.createWritable handle)
+                   _ (.write writable data)]
+             (.close writable))
+           (let [url (js/URL.createObjectURL (js/Blob. #js [data]))]
+             (when-let [anchor (gdom/getElement "download-as-sqlite-db")]
+               (.setAttribute anchor "href" url)
+               (.setAttribute anchor "download" filename)
+               (.click anchor))))))
+     (p/catch (fn [error]
+                (when-not (= "AbortError" (.-name error))
+                  (js/console.error error)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Export to roam json ;;
@@ -209,12 +226,12 @@
                       (js/console.error error))))
           (p/do!
             ;; handle cleared
-           (notification/show! "DB backup failed, please go to Export and specify a backup folder." :error)
+           (notification/show! (t :export/db-backup-error) :error)
            false))))))
 
 (defn backup-db-graph
   [repo]
-  (when-not (util/capacitor?)
+  (when util/web-platform?
     (web-backup-db-graph repo)))
 
 (defonce *backup-interval (atom nil))

@@ -1,0 +1,374 @@
+##########################################################################################
+# CAUTION: Do not modify this file without a clear understanding of its logic.           #
+# Check [https://github.com/logseq/logseq-i18n-lint] before proceeding with any changes. #
+##########################################################################################
+
+# Logseq-specific configuration for logseq-i18n-lint.
+
+# ── Shared settings ────────────────────────────────────────────────────────────
+
+# Path from the executable's directory to the Logseq repo root.
+# Behaviour is independent of the working directory.
+project_root = ".."
+
+# Directories to scan (relative to project_root).
+include_dirs = [
+  "src/main/frontend",
+  "src/main/electron",
+  "src/main/mobile",
+  "src/electron",
+  "deps",
+]
+
+# File extensions to scan.
+file_extensions = ["clj", "cljs", "cljc"]
+
+# Translation functions — calls to these provide translation keys for both subcommands.
+i18n_functions = [
+  "t",
+  "tt",
+  "i18n/t",
+  "i18n/tt",
+  # Parameterized translation function.
+  "t-fn",
+]
+
+# Alert/notification functions.
+# lint:       the FIRST argument is user-visible text; analyzed in UI context so
+#             str-concat, conditional-text, and format-string rules apply inside it.
+# check-keys: the FIRST keyword argument is a translation key reference.
+alert_functions = [
+  "notification/show!",
+]
+
+# UI component functions.
+# lint:       string arguments are user-visible text.
+# check-keys: keyword arguments are translation key references.
+ui_functions = [
+  "ui/button",
+  "ui/tooltip",
+  "ui/tooltip-content",
+  "ui/badge",
+  "ui/dropdown-menu-item",
+  "ui/dropdown-menu-sub-trigger",
+  "ui/loading",
+  "ui/select-item",
+  "ui/tabs-trigger",
+  "ui/form-label",
+  "ui/form-description",
+  "ui/card-title",
+  "ui/alert-title",
+  "ui/alert-description",
+  "ui/table-cell",
+  "ui/table-header",
+  "ui/link",
+]
+
+# Namespace prefixes where every function is treated as a UI component.
+ui_namespaces = [
+  "shui",
+]
+
+# HTML/hiccup attributes.
+# lint:       string values are flagged as user-visible text.
+# check-keys: keyword values are treated as translation key references.
+ui_attributes = [
+  "placeholder",
+  "title",
+  "aria-label",
+  "alt",
+  "label",
+]
+
+# ── [lint] settings ────────────────────────────────────────────────────────────
+
+[lint]
+
+# Glob patterns for files to skip during lint.
+# These patterns are also applied when using --git-changed.
+exclude_patterns = [
+  "**/test/**",
+  "**/node_modules/**",
+  "**/static/**",
+  "**/target/**",
+  "**/tmp/**",
+  "**/cljs-test-runner-out/**",
+  "**/.nbb/**",
+  "deps/cli/**",
+  "deps/publish/**",
+  "deps/publishing/**",
+  "deps/db-sync/src/logseq/db_sync/malli_schema.cljs",           # Malli protocol schema — wire-protocol message type names
+  "deps/graph-parser/src/logseq/graph_parser/schema/mldoc.cljc", # mldoc schema — AST node type names (Label, Paragraph, etc.)
+  "deps/shui/src/logseq/shui/demo*.cljs",                        # storybook demo UI — intentionally hardcoded
+  "src/main/frontend/components/profiler.cljs",                  # Developer profiling tool
+  "src/main/frontend/db/rtc/debug_ui.cljs",                      # Developer RTC tool
+  "src/main/frontend/handler/export/html.cljs",                  # Raw HTML export — intentional
+  "src/main/frontend/handler/shell.cljs",                        # Run shell command
+  "src/main/frontend/undo_redo/debug_ui.cljs",                   # Developer undo/redo tool
+  "src/main/frontend/worker/commands.cljs",                      # Internal command identifier strings
+  "src/main/frontend/**/plugin*",                                # Plugin namespaces — may contain hardcoded strings that are not
+]
+
+# Maximum character length of the text preview in output.
+text_preview_length = 60
+
+# Pure (non-UI) functions — string arguments inside are not reported even in UI context.
+pure_functions = [
+  # String utilities whose arguments are data, not UI text.
+  "text-util/cut-by",
+  "text-util/split-by",
+  # mldoc/markdown dispatch functions — args are AST node type names, not UI text.
+  "markup-element-cp",
+  "markup-elements-cp",
+  # mldoc inline renderer — first arg is config, second is an AST node vector.
+  "inline",
+  # Rum component key wrapper — second arg is a key string, not UI text.
+  "rum/with-key",
+  # Shortcut wrapper — positional args are shortcut IDs and positions, not UI text.
+  "ui/with-shortcut",
+  # Macro type identifier dispatch.
+  "macro->text",
+]
+
+# Format/printf functions — ONLY the FIRST argument (the template string) is flagged,
+# and ONLY when the call site is inside a UI context (hiccup or UI function call).
+format_functions = [
+  "format",
+  "goog.string/format",
+  "gstring/format",
+  "util/format",
+]
+
+# Strings to allow (exact match — also matches after trimming whitespace).
+# Keep this list SHORT. Add only strings that:
+#   1. Are NOT covered by any allow_pattern
+#   2. Have a clear, Logseq-specific reason for appearing in ui context
+#   3. Are truly non-translatable (brand names, internal IDs, technical constants)
+allow_strings = [
+  # Brand name — displayed literally in UI, intentionally not translated.
+  "Logseq",
+  "Logseq Sync",
+  "GitHub",
+  # Typography test string — rendered as a glyph sample, not translatable.
+  "Ag",
+  # Column header abbreviation for row index — shown as-is in table view.
+  "ID:",
+  # org-mode structural keywords — shown literally in drawer/block syntax.
+  ":END:",
+  # Common non-translatable UI labels.
+  "URL",
+  "OPML",
+  "EDN",
+  "HTML",
+  "PNG",
+  "SQLite",
+  "HTTP",
+  "SOCKS5",
+  # Config directory path shown literally.
+  "~/.logseq",
+]
+
+# Regex patterns to allow.
+allow_patterns = [
+  # Developer-only English labels intentionally outside i18n scope.
+  # e.g., "(Dev) RTC", "(Dev) Profiler"
+  "^\\(Dev\\)\\s",
+
+  # Logseq macro syntax.
+  # e.g., {{query ...}}, {{video ...}}
+  "^\\{\\{",
+
+  # Email addresses.
+  # e.g., user@example.com, tech.support@domain.org
+  "^[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$",
+
+  # URLs and URI schemes.
+  # e.g., https://google.com, sfsymbols://icon, file:///path/to/res
+  "^[a-z]+://[^\\s]*$",
+
+  # Git commands.
+  # e.g., git commit -m "feat", git push origin main
+  "^git\\s+[a-z]+(\\s+.*)?$",
+
+  # Tailwind CSS color / shade utility classes.
+  # e.g., bg-red-500, text-gray-300, border-blue-100
+  "^(bg|text|border|ring|shadow|fill|from|via|to|outline|divide|accent|caret|decoration)-[a-z]+-[0-9]+(/[0-9]+)?$",
+
+  # CSS color functions.
+  # e.g., rgb(255, 255, 255), rgba(0, 0, 0, 0.5)
+  "^rgba?\\(",
+
+  # CSS custom property access.
+  # e.g., var(--primary-color), var(--spacing-unit)
+  "^var\\(--",
+
+  # CSS BEM modifier classes (double-hyphen notation).
+  # e.g., shortcut-feedback--error, block__title--active
+  "^[a-z][a-z0-9-]*--[a-z][a-z0-9-]*$",
+
+  # Numeric base prefixes.
+  # e.g., 0b (binary), 0o (octal), 0x (hex)
+  "^0[box]$",
+
+  # Regex anchor notation.
+  # e.g., ^starting-with
+  "^\\^",
+
+  # Web resource references with specific extensions.
+  # e.g., script.js, styles.css, module.mjs
+  "^[a-z][a-z0-9/._-]+\\.(mjs|js|css|wasm)$",
+
+  # MIME types.
+  # e.g., image/png, application/json, text/html
+  "^[a-z][a-z0-9+.-]+/[a-z0-9.+*-]+$",
+
+  # Hex colors (3, 4, 6, or 8 digits).
+  # e.g., #fff, #1a2b3c, #ff00ffaa
+  "^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+
+  # DOM element IDs.
+  # e.g., #main-container, #submit-btn
+  "^#[a-z][a-z0-9-]+$",
+
+  # Dot-notation identifiers (icon library names, SF Symbols, CSS dot-joined classes).
+  # e.g., person.fill, cloud.sun.rain.fill, bg-red-600.top-1.absolute
+  "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*$",
+
+  # CSS unit values (supports decimals).
+  # e.g., 10px, 1.5rem, 100%, 500ms
+  "^[0-9]+(\\.[0-9]+)?(px|em|rem|vh|vw|%|pt|s|ms)$",
+
+  # DOM element ID / React key fragments (start or end with hyphen).
+  # e.g., tag-, -refs, sidebar-block-, -custom-query-, -add-property
+  "^-[a-z0-9]+(-[a-z0-9]+)*$",
+  "^[a-z0-9]+(-[a-z0-9]+)*-$",
+
+  # Strings starting with a dot (file fragments or class selectors).
+  # e.g., .hidden, .tmp-file
+  "^\\.",
+
+  # printf-style format templates.
+  # e.g., %s, [%d%%], #%x
+  "^[^A-Za-z ]*%",
+]
+
+# Exception/error constructor functions — arguments are developer-facing, not UI text.
+exception_functions = [
+  "ex-info",
+  "throw",
+]
+
+# Functions whose arguments are NOT checked.
+ignore_context_functions = [
+  "js/console.log",
+  "js/console.error",
+  "js/console.warn",
+  "prn",
+  "println",
+  "log/debug",
+  "log/info",
+  "log/warn",
+  "log/error",
+  "re-pattern",
+  "re-find",
+  "re-matches",
+  "require",
+  "ns",
+  # shui utilities that take CSS IDs / class utility strings, not user-visible text.
+  "shui/cn",
+  "shui/popup-show",
+  "shui/popup-show!",
+  "shui/popup-hide",
+  "shui/popup-hide!",
+  "shui/popup-hide-all",
+  "shui/dialog-open",
+  "shui/dialog-close",
+  "shui/dialog-close-all",
+  "shui/dialog-confirm",
+  "shui/table-get-selection-rows",
+  "shui/trigger-as",
+  # CSS class-joining utilities — string arguments are class names, not UI text.
+  "util/classnames",
+  "classnames",
+  # Icon functions — arguments are icon library identifiers (e.g. "trash",
+  # "arrow-right"), never user-visible text that needs translation.
+  "ui/icon",
+  "shui/tabler-icon",
+  "icon-v2/root",
+  # Ghost-icon button — the only positional argument is an icon name.
+  "button-ghost-icon",
+  # Shortcut display/trigger functions — arguments are key identifiers
+  # (e.g. "mod+enter", "backspace"), not translatable text.
+  "shui/shortcut",
+  "shui/shortcut-press!",
+]
+
+# ── [check-keys] settings ──────────────────────────────────────────────────────
+
+[check-keys]
+
+# Glob patterns for files to skip during check-keys.
+# NOTE: **/profiler.cljs is intentionally NOT excluded here so that translation
+# key references inside profiler.cljs are detected and not reported as unused.
+exclude_patterns = [
+  "**/test/**",
+  "**/tests/**",
+  "**/dev/**",
+  "**/node_modules/**",
+  "**/target/**",
+  "**/static/**",
+  "**/cljs-test-runner-out/**",
+  "**/.nbb/**",
+  "deps/cli/**",
+  "deps/publish/**",
+  "deps/publishing/**",
+]
+
+# Directory containing dictionary EDN files (relative to project_root).
+dicts_dir = "src/resources/dicts"
+
+# Primary dictionary file (relative to project_root).
+primary_dict = "src/resources/dicts/en.edn"
+
+# Key patterns always considered "used" — for dynamically generated keys
+# that cannot be detected via static analysis.
+always_used_key_patterns = [
+  # Table view keys used dynamically via (for [[option-key _] options] (t option-key)).
+  "^:view\\.table/group-journal-date",
+  "^:view\\.table/group-page",
+]
+
+# Key namespace prefixes excluded from unused-key checking.
+ignore_key_namespaces = [
+  # Shortcut keys are dynamically assembled via (keyword "command.ns" name).
+  "command",
+  # Shortcut category labels.
+  "shortcut.category",
+  # Shortcut handler group keys.
+  "shortcut.handler",
+  # Color theme keys derived from built-in-colors vector.
+  "color",
+  # Date NLP labels derived from nlp-pages vector.
+  "date.nlp",
+  # Flashcard FSRS rating keys derived via (keyword "flashcard.rating" ...).
+  "flashcard.rating",
+  # Graph validation keys derived from deprecated config keys.
+  "graph.validation",
+  # Left sidebar nav keys derived from tag nav entries.
+  "nav",
+]
+
+# Map attribute keys whose keyword values are translation key references.
+# Combined with ui_attributes during check-keys analysis.
+translation_key_attributes = ["i18n-key", "prompt-key", "title-key"]
+
+# Built-in db-ident definition sources.
+# Each entry scopes keyword extraction to a specific named def/defonce form,
+# preventing false positives from other keyword literals in the same file.
+[[check-keys.db_ident_defs]]
+file = "deps/db/src/logseq/db/frontend/property.cljs"
+def  = "built-in-properties"
+
+[[check-keys.db_ident_defs]]
+file = "deps/db/src/logseq/db/frontend/class.cljs"
+def  = "built-in-classes"

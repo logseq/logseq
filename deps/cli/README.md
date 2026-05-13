@@ -1,6 +1,6 @@
 ## Description
 
-This library provides a `logseq` CLI for DB graphs created using the [database-version](/README.md#-database-version). By default, the CLI works offline with local graphs. This allows for running commands automatically on CI/CD platforms like Github Actions. Most CLI commands also connect to the current DB graph in a desktop app (a.k.a. in-app graph) if the [HTTP API Server](https://docs.logseq.com/#/page/local%20http%20server) is turned on.
+This library provides a `logseq` CLI for DB graphs created using the [database-version](/README.md#-database-version). By default, the CLI works offline with local graphs. This allows for running commands automatically on CI/CD platforms like GitHub Actions. Most CLI commands also connect to the current DB graph in a desktop app (a.k.a. in-app graph) if the [HTTP API Server](https://docs.logseq.com/#/page/local%20http%20server) is turned on.
 
 ## Install
 
@@ -167,11 +167,11 @@ file](/.github/workflows/deps-cli.yml) for linting examples.
 ### Setup
 
 First install the following dependencies:
-* Install node.js >= 22 and yarn.
-* Run `yarn install` to install npm dependencies.
+* Install node.js >= 22 and pnpm.
+* Run `pnpm install` to install npm dependencies.
 * Install [babashka](https://github.com/babashka/babashka).
 
-To install the CLI locally so that local changes are immediately reflected in `logseq`, `yarn link`.
+To install the CLI locally so that local changes are immediately reflected in `logseq`, `pnpm link --global`.
 
 ### Testing
 
@@ -181,11 +181,11 @@ usage:
 
 ```sh
 # Run all tests
-$ yarn test
+$ pnpm test
 # List available options
-$ yarn test -H
+$ pnpm test -H
 # Run tests with :focus metadata flag
-$ yarn test -i focus
+$ pnpm test -i focus
 ```
 
 ### Managing dependencies

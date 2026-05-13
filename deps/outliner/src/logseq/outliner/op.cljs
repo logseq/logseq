@@ -1,13 +1,18 @@
 (ns logseq.outliner.op
   "Transact outliner ops"
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.template :as outliner-template]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
+            [logseq.outliner.recycle :as outliner-recycle]
             [logseq.outliner.transaction :as outliner-tx]
-            [malli.core :as m]))
+            [malli.core :as m]
+            [logseq.outliner.op.construct :as op-construct]))
 
 (def ^:private ^:large-vars/data-var op-schema
   [:multi {:dispatch first}
@@ -19,29 +24,33 @@
    [:insert-blocks
     [:catn
      [:op :keyword]
-     [:args [:tuple ::blocks ::id ::option]]]]
+     [:args [:tuple ::blocks ::block-id ::option]]]]
+   [:apply-template
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::block-id ::block-id ::option]]]]
    [:delete-blocks
     [:catn
      [:op :keyword]
-     [:args [:tuple ::ids ::option]]]]
+     [:args [:tuple ::block-ids ::option]]]]
    [:move-blocks
     [:catn
      [:op :keyword]
-     [:args [:tuple ::ids ::id ::option]]]]
+     [:args [:tuple ::block-ids ::block-id ::option]]]]
    [:move-blocks-up-down
     [:catn
      [:op :keyword]
-     [:args [:tuple ::ids :boolean]]]]
+     [:args [:tuple ::block-ids :boolean]]]]
    [:indent-outdent-blocks
     [:catn
      [:op :keyword]
-     [:args [:tuple ::ids :boolean ::option]]]]
+     [:args [:tuple ::block-ids :boolean ::option]]]]
 
    ;; properties
    [:upsert-property
     [:catn
      [:op :keyword]
-     [:args [:tuple ::property-id ::schema ::option]]]]
+     [:args [:tuple ::maybe-property-id ::schema ::option]]]]
    [:set-block-property
     [:catn
      [:op :keyword]
@@ -61,7 +70,7 @@
    [:create-property-text-block
     [:catn
      [:op :keyword]
-     [:args [:tuple ::block-id ::property-id ::value ::option]]]]
+     [:args [:tuple ::maybe-block-id ::property-id ::value ::option]]]]
    [:collapse-expand-block-property
     [:catn
      [:op :keyword]
@@ -89,7 +98,7 @@
    [:delete-closed-value
     [:catn
      [:op :keyword]
-     [:args [:tuple ::property-id ::value]]]]
+     [:args [:tuple ::property-id ::block-id]]]]
    [:add-existing-values-to-closed-values
     [:catn
      [:op :keyword]
@@ -120,6 +129,11 @@
    [:delete-page
     [:catn
      [:op :keyword]
+     [:args [:tuple ::uuid ::option]]]]
+
+   [:recycle-delete-permanently
+    [:catn
+     [:op :keyword]
      [:args [:tuple ::uuid]]]]
 
    [:toggle-reaction
@@ -128,22 +142,21 @@
      [:args [:tuple ::uuid ::emoji-id ::maybe-uuid]]]]])
 
 (def ^:private ops-schema
-  [:schema {:registry {::id int?
-                       ::block map?
+  [:schema {:registry {::block map?
                        ::schema map?
-                       ;; FIXME: use eid integer
-                       ::block-id :any
+                       ::block-id uuid?
+                       ::maybe-block-id [:maybe ::block-id]
                        ::block-ids [:sequential ::block-id]
-                       ::class-id int?
+                       ::class-id ::block-id
                        ::emoji-id string?
-                       ::property-id [:or int? keyword? nil?]
+                       ::property-id qualified-keyword?
+                       ::maybe-property-id [:maybe ::property-id]
                        ::maybe-uuid [:maybe :uuid]
                        ::value :any
                        ::values [:sequential ::value]
                        ::option [:maybe map?]
                        ::import-edn map?
                        ::blocks [:sequential ::block]
-                       ::ids [:sequential ::id]
                        ::uuid uuid?
                        ::title string?
                        ::tx-data [:sequential :any]
@@ -151,8 +164,6 @@
    [:sequential op-schema]])
 
 (def ^:private ops-validator (m/validator ops-schema))
-
-(defonce ^:private *op-handlers (atom {}))
 
 (defn- reaction-user-id
   [reaction]
@@ -186,10 +197,6 @@
                          {:outliner-op :toggle-reaction})
           true)))))
 
-(defn register-op-handlers!
-  [handlers]
-  (reset! *op-handlers handlers))
-
 (defn- import-edn-data
   [conn *result export-map {:keys [tx-meta] :as import-options}]
   (let [{:keys [init-tx block-props-tx misc-tx error] :as _txs}
@@ -207,6 +214,50 @@
           (js/console.error "Unexpected Import EDN error:" e)
           (reset! *result {:error (str "Unexpected Import EDN error: " (pr-str (ex-message e)))}))))))
 
+(defn- apply-insert-blocks-op!
+  [conn *result [blocks target-block-id opts]]
+  (when-let [target-block (d/entity @conn [:block/uuid target-block-id])]
+    (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
+      (reset! *result result))))
+
+(defn- template-children-blocks
+  [db template-id]
+  (when-let [template (d/entity db template-id)]
+    (let [template-blocks (some->> (ldb/get-block-and-children db (:block/uuid template)
+                                                               {:include-property-block? true})
+                                   rest)]
+      (when (seq template-blocks)
+        (cons (assoc (into {} (first template-blocks))
+                     :db/id (:db/id (first template-blocks))
+                     :logseq.property/used-template (:db/id template))
+              (map (fn [block]
+                     (assoc (into {} block) :db/id (:db/id block)))
+                   (rest template-blocks)))))))
+
+(defn- apply-template-op!
+  [conn *result [template-id target-block-id opts]]
+  (when-let [target (d/entity @conn [:block/uuid target-block-id])]
+    (let [blocks (or (some-> (:template-blocks opts) seq vec)
+                     (template-children-blocks @conn [:block/uuid template-id]))
+          blocks (outliner-template/resolve-dynamic-template-blocks @conn target blocks)]
+      (when (seq blocks)
+        (let [sibling? (:sibling? opts)
+              sibling?' (cond
+                          (some? sibling?)
+                          sibling?
+
+                          (seq (:block/_parent target))
+                          false
+
+                          :else
+                          true)
+              result (outliner-core/insert-blocks! conn blocks target
+                                                   (assoc opts
+                                                          :sibling? sibling?'
+                                                          :insert-template? true
+                                                          :outliner-op :insert-template-blocks))]
+          (reset! *result result))))))
+
 (defn- ^:large-vars/cleanup-todo apply-op!
   [conn opts' *result [op args]]
   (case op
@@ -215,32 +266,32 @@
     (apply outliner-core/save-block! conn args)
 
     :insert-blocks
-    (let [[blocks target-block-id opts] args]
-      (when-let [target-block (d/entity @conn target-block-id)]
-        (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
-          (reset! *result result))))
+    (apply-insert-blocks-op! conn *result args)
+
+    :apply-template
+    (apply-template-op! conn *result args)
 
     :delete-blocks
     (let [[block-ids opts] args
-          blocks (keep #(d/entity @conn %) block-ids)]
+          blocks (keep #(d/entity @conn [:block/uuid %]) block-ids)]
       (outliner-core/delete-blocks! conn blocks (merge opts opts')))
 
     :move-blocks
     (let [[block-ids target-block-id opts] args
-          blocks (keep #(d/entity @conn %) block-ids)
-          target-block (d/entity @conn target-block-id)]
+          blocks (keep #(d/entity @conn [:block/uuid %]) block-ids)
+          target-block (d/entity @conn [:block/uuid target-block-id])]
       (when (and target-block (seq blocks))
         (outliner-core/move-blocks! conn blocks target-block opts)))
 
     :move-blocks-up-down
     (let [[block-ids up?] args
-          blocks (keep #(d/entity @conn %) block-ids)]
+          blocks (keep #(d/entity @conn [:block/uuid %]) block-ids)]
       (when (seq blocks)
         (outliner-core/move-blocks-up-down! conn blocks up?)))
 
     :indent-outdent-blocks
     (let [[block-ids indent? opts] args
-          blocks (keep #(d/entity @conn %) block-ids)]
+          blocks (keep #(d/entity @conn [:block/uuid %]) block-ids)]
       (when (seq blocks)
         (outliner-core/indent-outdent-blocks! conn blocks indent? opts)))
 
@@ -258,7 +309,9 @@
     (apply outliner-property/delete-property-value! conn args)
 
     :create-property-text-block
-    (apply outliner-property/create-property-text-block! conn args)
+    (let [[block-id property-id v opts] args
+          block-id' (when block-id [:block/uuid block-id])]
+      (outliner-property/create-property-text-block! conn block-id' property-id v opts))
 
     :batch-set-property
     (apply outliner-property/batch-set-property! conn args)
@@ -270,16 +323,19 @@
     (apply outliner-property/batch-delete-property-value! conn args)
 
     :class-add-property
-    (apply outliner-property/class-add-property! conn args)
+    (let [[class-id property-id] args]
+      (outliner-property/class-add-property! conn [:block/uuid class-id] property-id))
 
     :class-remove-property
-    (apply outliner-property/class-remove-property! conn args)
+    (let [[class-id property-id] args]
+      (outliner-property/class-remove-property! conn [:block/uuid class-id] property-id))
 
     :upsert-closed-value
     (apply outliner-property/upsert-closed-value! conn args)
 
     :delete-closed-value
-    (apply outliner-property/delete-closed-value! conn args)
+    (let [[property-id value-block-id] args]
+      (outliner-property/delete-closed-value! conn property-id [:block/uuid value-block-id]))
 
     :add-existing-values-to-closed-values
     (apply outliner-property/add-existing-values-to-closed-values! conn args)
@@ -290,24 +346,50 @@
     :transact
     (apply ldb/transact! conn args)
 
+    :create-page
+    (let [[title options] args]
+      (reset! *result (outliner-page/create! conn title (or options {}))))
+
+    :rename-page
+    (let [[page-uuid new-title] args]
+      (if (string/blank? new-title)
+        (throw (ex-info "Page name shouldn't be blank" {:block/uuid page-uuid
+                                                        :block/title new-title}))
+        (outliner-core/save-block! conn
+                                   {:block/uuid page-uuid
+                                    :block/title new-title})))
+
+    :delete-page
+    (let [[page-uuid opts] args]
+      (reset! *result (outliner-page/delete! conn page-uuid (merge opts opts'))))
+
+    :recycle-delete-permanently
+    (let [[root-uuid] args]
+      (outliner-recycle/permanently-delete! conn root-uuid))
+
     :toggle-reaction
     (reset! *result (apply toggle-reaction! conn args))
-
-    (when-let [handler (get @*op-handlers op)]
-      (reset! *result (handler conn args)))))
+    nil))
 
 (defn apply-ops!
   [conn ops opts]
   (assert (ops-validator ops) ops)
-  (let [opts' (assoc opts
-                     :transact-opts {:conn conn}
-                     :local-tx? true)
+  (let [semantic-ops (filter (fn [op] (get op-construct/semantic-outliner-ops (first op))) ops)
+        single-op-outliner-op (when (= 1 (count ops))
+                                (first (first ops)))
+        opts' (cond-> (assoc opts
+                             :transact-opts {:conn conn}
+                             :local-tx? true
+                             :outliner-ops semantic-ops
+                             :db-sync/tx-id (or (:db-sync/tx-id opts) (random-uuid)))
+                (and single-op-outliner-op
+                     (nil? (:outliner-op opts)))
+                (assoc :outliner-op single-op-outliner-op))
         *result (atom nil)]
-    (if (next ops)
-      (outliner-tx/transact!
-       opts'
-       (doseq [op-entry ops]
-         (apply-op! conn opts' *result op-entry)))
-      (apply-op! conn opts' *result (first ops)))
+
+    (outliner-tx/transact!
+      opts'
+      (doseq [op-entry ops]
+        (apply-op! conn opts' *result op-entry)))
 
     @*result))

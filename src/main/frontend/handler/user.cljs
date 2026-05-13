@@ -7,13 +7,17 @@
             [cljs.core.async :as async :refer [<! go timeout]]
             [clojure.set :as set]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.debug :as debug]
             [frontend.flows :as flows]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
+            [frontend.util :as util]
+            [logseq.common.path :as path]
             [goog.crypt :as crypt]
             [goog.crypt.Hmac]
             [goog.crypt.Sha256]
@@ -99,6 +103,30 @@
    (js/localStorage.setItem "access-token" access-token)
    (js/localStorage.setItem "refresh-token" refresh-token)))
 
+(defn- auth-file-path
+  []
+  (when-let [home-dir (get-in @state/state [:system/info :home-dir])]
+    (path/path-join home-dir "logseq" "auth.json")))
+
+(defn- auth-file-payload
+  []
+  {:id-token (state/get-auth-id-token)
+   :access-token (:auth/access-token @state/state)
+   :refresh-token (state/get-auth-refresh-token)
+   :updated-at (.now js/Date)})
+
+(defn- persist-auth-file!
+  []
+  (when (util/electron?)
+    (when-let [auth-path (auth-file-path)]
+      (-> (ipc/ipc "writeFile"
+                   nil
+                   auth-path
+                   (js/JSON.stringify (clj->js (auth-file-payload)) nil 2))
+          (p/catch (fn [error]
+                     (js/console.warn :persist-auth-file-failed error)
+                     nil))))))
+
 (defn- clear-cognito-tokens!
   "Clear tokens for cognito's localstorage, prefix is 'CognitoIdentityServiceProvider'"
   []
@@ -118,7 +146,8 @@
       (let [refresh-token (js/localStorage.getItem refresh-token-key)]
         (when (and refresh-token (not= refresh-token "undefined"))
           (state/set-auth-refresh-token refresh-token)
-          (js/localStorage.setItem "refresh-token" refresh-token))))))
+          (js/localStorage.setItem "refresh-token" refresh-token)
+          (persist-auth-file!))))))
 
 (defn- clear-tokens
   ([]
@@ -126,7 +155,8 @@
    (state/set-auth-access-token nil)
    (state/set-auth-refresh-token nil)
    (set-token-to-localstorage! "" "" "")
-   (clear-cognito-tokens!))
+   (clear-cognito-tokens!)
+   (persist-auth-file!))
   ([except-refresh-token?]
    (state/set-auth-id-token nil)
    (state/set-auth-access-token nil)
@@ -134,13 +164,15 @@
      (state/set-auth-refresh-token nil))
    (if except-refresh-token?
      (set-token-to-localstorage! "" "")
-     (set-token-to-localstorage! "" "" ""))))
+     (set-token-to-localstorage! "" "" ""))
+   (persist-auth-file!)))
 
 (defn- set-tokens!
   ([id-token access-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
    (set-token-to-localstorage! id-token access-token)
+   (persist-auth-file!)
    (some->> (parse-jwt (state/get-auth-id-token))
             (reset! flows/*current-login-user)))
   ([id-token access-token refresh-token]
@@ -148,6 +180,7 @@
    (state/set-auth-access-token access-token)
    (state/set-auth-refresh-token refresh-token)
    (set-token-to-localstorage! id-token access-token refresh-token)
+   (persist-auth-file!)
    (some->> (parse-jwt (state/get-auth-id-token))
             (reset! flows/*current-login-user))))
 
@@ -190,7 +223,7 @@
             nil)                           ; do nothing
 
           (not (http/unexceptional-status? (:status resp)))
-          (notification/show! "exceptional status when refresh-token" :warning true)
+          (notification/show! (t :account/refresh-token-warning) :warning true)
 
           :else                         ; ok
           (when (and (:id_token (:body resp)) (:access_token (:body resp)))
@@ -238,6 +271,14 @@
   (auto-fill-refresh-token-from-cognito!)
   (state/pub-event! [:user/fetch-info-and-graphs]))
 
+(defn- clear-e2ee-password!
+  []
+  (when @state/*db-worker
+    (-> (state/<invoke-db-worker :thread-api/clear-e2ee-password)
+        (p/catch (fn [error]
+                   (js/console.warn :clear-e2ee-password-failed error)
+                   nil)))))
+
 (defn ^:export login-with-username-password-e2e
   [username' password client-id client-secret]
   (let [text-encoder (new js/TextEncoder)
@@ -265,7 +306,9 @@
           {:id-token id-token :access-token access-token :refresh-token refresh-token})))))
 
 (defn logout []
+  (clear-e2ee-password!)
   (clear-tokens)
+  (.clear js/localStorage)
   (state/clear-user-info!)
   (state/pub-event! [:user/logout])
   (reset! flows/*current-login-user :logout))
@@ -312,7 +355,8 @@
 
 (defn rtc-group?
   []
-  (boolean (seq (set/intersection (state/user-groups) #{"team" "rtc_2025_07_10"}))))
+  (boolean (or (some? (config/get-custom-sync-server-url))
+               (seq (set/intersection (state/user-groups) #{"team" "rtc_2025_07_10"})))))
 
 (defn alpha-user?
   []

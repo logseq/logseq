@@ -222,7 +222,7 @@
 
      (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
 
-     (and id [:li.item {:data-action "del"} (t :delete)])
+     (and id [:li.item {:data-action "del"} (t :ui/delete)])
 
      (when (and config/lsp-enabled? (not area?))
        (for [[_ {:keys [key label extras] :as _cmd} action pid]
@@ -850,7 +850,7 @@
       [:div.extensions__pdf-viewer-cnt.visible-scrollbar
        [:div.extensions__pdf-viewer.overflow-x-auto.absolute
         {:ref *el-ref :class (util/classnames [{:is-area-dashed area-dashed?}])}
-        [:div.pdfViewer "viewer pdf"]
+        [:div.pdfViewer (t :pdf/viewer)]
         [:div.pp-holder]
 
         ;; block hls refs
@@ -877,23 +877,23 @@
   [state confirm-fn]
   (let [password (get state ::password)]
     [:div.container
-     [:div.text-lg.mb-4 "Password required"]
+     [:div.text-lg.mb-4 (t :pdf/password-required)]
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
-        "This document is password protected. Please enter a password:"]]]
+        (t :pdf/password-protected-desc)]]
 
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:auto-focus true
-       :on-change (fn [e]
-                    (reset! password (util/evalue e)))}]
+      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
+       {:auto-focus true
+        :on-change (fn [e]
+                     (reset! password (util/evalue e)))}]
 
-     [:div.mt-5.sm:mt-4.flex
-      (ui/button
-       "Submit"
-       {:on-click (fn []
-                    (let [password @password]
-                      (confirm-fn password)))})]]))
+      [:div.mt-5.sm:mt-4.flex
+       (ui/button
+        (t :ui/submit)
+        {:on-click (fn []
+                     (let [password @password]
+                       (confirm-fn password)))})]]]))
 
 (defonce debounced-set-property!
   (debounce property-handler/set-block-property! 300))
@@ -941,9 +941,9 @@
            (p/catch
             (fn [^js e]
               (js/console.error "[load hls error]" e)
-              (let [msg (str (util/format "Error: failed to load the highlights file: \"%s\". \n"
-                                          (:hls-file pdf-current))
-                             e)]
+              (let [msg (t :pdf/load-highlights-file-error
+                           (:hls-file pdf-current)
+                           (str e))]
                 (notification/show! msg :error)
                 (set-hls-state! {:loaded true :error e})))))
        #())
@@ -980,7 +980,7 @@
            "MissingPDFException"
            (do
              (notification/show!
-              (str "Error: " (.-message error) "\n Is this the correct path?")
+              (t :pdf/missing-file-error (.-message error))
               :error
               false)
              (state/set-state! :pdf/current nil))
@@ -988,9 +988,7 @@
            "InvalidPDFException"
            (do
              (notification/show!
-              (str "Error: " (.-message error) "\n"
-                   "Is this .pdf file corrupted?\n"
-                   "Please confirm with external pdf viewer.")
+              (t :pdf/corrupted-file-error (.-message error))
               :error
               false)
              (state/set-state! :pdf/current nil))
@@ -1008,8 +1006,7 @@
 
            (do
              (notification/show!
-              (str "Error: " (.-name error) "\n" (.-message error) "\n"
-                   "Please confirm with pdf file resource.")
+              (t :pdf/generic-error (.-name error) (.-message error))
               :error
               false)
              (state/set-state! :pdf/current nil)))))

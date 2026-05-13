@@ -61,7 +61,7 @@ class LSPluginFileStorage implements IAsyncStorage {
    * @param key
    */
   removeItem(key: string): Promise<void> {
-    return this.ctx.caller.call(`api:call`, {
+    return this.ctx.caller.callAsync(`api:call`, {
       method: 'unlink-plugin-storage-file',
       args: [this.ctxId, key, this.opts?.assets],
     })
@@ -81,7 +81,7 @@ class LSPluginFileStorage implements IAsyncStorage {
    * Clears the storage
    */
   clear(): Promise<void> {
-    return this.ctx.caller.call(`api:call`, {
+    return this.ctx.caller.callAsync(`api:call`, {
       method: 'clear-plugin-storage-files',
       args: [this.ctxId, this.opts?.assets],
     })

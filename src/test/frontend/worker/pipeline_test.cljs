@@ -2,43 +2,12 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.pipeline :as worker-pipeline]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]))
-
-(deftest remove-conflict-datoms-test
-  (testing "remove-conflict-datoms (1)"
-    (let [datoms [[1 :a 1 1]
-                  [1 :a 1 1]
-                  [1 :a 2 1]
-                  [2 :a 1 1]]]
-      (is (= (set [[1 :a 1 1]
-                   [1 :a 2 1]
-                   [2 :a 1 1]])
-             (set (ldb/remove-conflict-datoms datoms))))))
-  (testing "check block/tags"
-    (let [datoms [[163 :block/tags 2 536870930 true]
-                  [163 :block/tags 136 536870930 true]
-                  [163 :block/tags 136 536870930 false]]]
-      (is (= (set [[163 :block/tags 2 536870930 true]
-                   [163 :block/tags 136 536870930 false]])
-             (set (ldb/remove-conflict-datoms datoms))))))
-  (testing "check block/refs"
-    (let [datoms [[176 :block/refs 177 536871080 true]
-                  [158 :block/refs 21 536871082 false]
-                  [158 :block/refs 137 536871082 false]
-                  [158 :block/refs 137 536871082 true]
-                  [158 :block/refs 21 536871082 true]
-                  [176 :block/refs 177 536871082 false]
-                  [176 :block/refs 177 536871082 true]
-                  [177 :block/refs 136 536871082 true]
-                  [177 :block/refs 21 536871082 true]]]
-      (is (= (set [[176 :block/refs 177 536871080 true]
-                   [158 :block/refs 137 536871082 true]
-                   [158 :block/refs 21 536871082 true]
-                   [176 :block/refs 177 536871082 true]
-                   [177 :block/refs 136 536871082 true]
-                   [177 :block/refs 21 536871082 true]])
-             (set (ldb/remove-conflict-datoms datoms)))))))
+            [logseq.db.common.order :as db-order]
+            [logseq.db.test.helper :as db-test]
+            [logseq.outliner.page :as outliner-page]))
 
 (deftest test-built-in-page-updates-that-should-be-reverted
   (let [conn (db-test/create-conn-with-blocks
@@ -178,3 +147,84 @@
                                    :block/title "page1-renamed"}])]
         (is (= "page1-renamed"
                (:block/title (d/entity (:db-after result) (:db/id page1)))))))))
+
+(deftest create-journal-page-name-uses-default-formatter-test
+  (let [conn (db-test/create-conn)]
+    (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
+    (let [[_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {})
+          page (d/entity @conn [:block/uuid page-uuid])
+          journal-day (:block/journal-day page)
+          expected-title (date-time-util/int->journal-title journal-day "yyyy-MM-dd EEEE")
+          expected-name (-> journal-day
+                            (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
+                            common-util/page-name-sanity-lc)]
+      (is (= expected-title (:block/title page))
+          "Journal title follows configured title format")
+      (is (= expected-name (:block/name page))
+          "Journal block/name keeps the default formatter for stable identity"))))
+
+(deftest built-in-tag-must-not-convert-page-child-block-to-class-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page1"}}]})
+        page1 (ldb/get-page @conn "page1")
+        now (js/Date.now)
+        bad-block-uuid (random-uuid)
+        new-tag-uuid (random-uuid)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+
+    (testing "page-child block with built-in #Tag stays a block"
+      (ldb/transact! conn [{:block/uuid bad-block-uuid
+                            :block/title "charlie"
+                            :block/created-at now
+                            :block/updated-at now
+                            :block/page (:db/id page1)
+                            :block/parent (:db/id page1)
+                            :block/order (db-order/gen-key)
+                            :block/tags [:logseq.class/Tag]}])
+      (let [block (d/entity @conn [:block/uuid bad-block-uuid])]
+        (is (some? block))
+        (is (nil? (:db/ident block)))
+        (is (nil? (:logseq.property.class/extends block)))
+        (is (not (ldb/class? block)))
+        (is (= (:db/id page1) (:db/id (:block/parent block))))
+        (is (empty? (:block/tags block)))))
+
+    (testing "standalone candidate is still converted to a class page"
+      (ldb/transact! conn [{:block/uuid new-tag-uuid
+                            :block/name "standalone-tag"
+                            :block/title "standalone-tag"
+                            :block/created-at now
+                            :block/updated-at now
+                            :block/tags [:logseq.class/Tag]}])
+      (let [tag-page (d/entity @conn [:block/uuid new-tag-uuid])]
+        (is (ldb/class? tag-page))
+        (is (keyword? (:db/ident tag-page)))
+        (is (= "user.class" (namespace (:db/ident tag-page))))
+        (is (= [:logseq.class/Root]
+               (map :db/ident (:logseq.property.class/extends tag-page))))))
+
+    ;; return global fn back to previous behavior
+    (ldb/register-transact-pipeline-fn! identity)))
+
+(deftest tag-template-insertion-resolves-dynamic-variable-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Target Page"}
+                 :blocks [{:block/title "target block"}]}
+                {:page {:block/title "Templates"}
+                 :blocks [{:block/title "tag template root"
+                           :build/children [{:block/title "auto <% current page %>"}]}]}]
+               :classes {:DiaryEntry {}}})
+        target-block (db-test/find-block-by-content @conn "target block")
+        template-root (db-test/find-block-by-content @conn "tag template root")
+        diary-entry (ldb/get-page @conn "DiaryEntry")]
+    (ldb/transact! conn [[:db/add (:db/id template-root)
+                          :logseq.property/template-applied-to
+                          (:db/id diary-entry)]])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn [[:db/add (:db/id target-block) :block/tags (:db/id diary-entry)]])
+      (is (some? (db-test/find-block-by-content @conn "auto [[Target Page]]")))
+      (finally
+        ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))

@@ -208,17 +208,18 @@
                           (when (and (true? (get property :logseq.property/enable-history?))
                                      (:added d))
                             {:property property
-                             :value (:v d)}))) datoms)]
-    (map
-     (fn [{:keys [property value]}]
-       (let [ref? (= :db.type/ref (:db/valueType property))
-             value-key (if ref? :logseq.property.history/ref-value :logseq.property.history/scalar-value)]
-         (sqlite-util/block-with-timestamps
-          {:block/uuid (ldb/new-block-id)
-           value-key value
-           :logseq.property.history/block (:db/id entity)
-           :logseq.property.history/property (:db/id property)})))
-     changes)))
+                             :value (:v d)}))) datoms)
+        data (map
+              (fn [{:keys [property value]}]
+                (let [ref? (= :db.type/ref (:db/valueType property))
+                      value-key (if ref? :logseq.property.history/ref-value :logseq.property.history/scalar-value)]
+                  (sqlite-util/block-with-timestamps
+                   {:block/uuid (ldb/new-block-id)
+                    value-key value
+                    :logseq.property.history/block (:db/id entity)
+                    :logseq.property.history/property (:db/id property)})))
+              changes)]
+    data))
 
 (defmethod handle-command :default [command _db entity datoms]
   (throw (ex-info "Unhandled command"

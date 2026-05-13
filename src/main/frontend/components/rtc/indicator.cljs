@@ -7,6 +7,7 @@
             [frontend.db :as db]
             [frontend.flows :as flows]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.context.i18n :refer [locale-format-date t]]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -27,6 +28,8 @@
          :graph-uuid nil
          :local-tx nil
          :remote-tx nil
+         :local-checksum nil
+         :remote-checksum nil
          :rtc-state :open
          :download-logs nil
          :upload-logs nil
@@ -61,6 +64,8 @@
                                          :graph-uuid (:graph-uuid state)
                                          :local-tx (:local-tx state)
                                          :remote-tx (:remote-tx state)
+                                         :local-checksum (:local-checksum state)
+                                         :remote-checksum (:remote-checksum state)
                                          :rtc-state (if (:rtc-lock state) :open :close)))
                                 rtc-flows/rtc-state-flow)))]
       (reset! *update-detail-info-canceler canceler))))
@@ -73,11 +78,47 @@
         (keep #(get % repo))
         (dedupe))))
 
+(defn asset-transfer-counts
+  [progress]
+  (reduce-kv
+   (fn [counts _id {:keys [direction loaded total]}]
+     (if (and (contains? #{:upload :download} direction)
+              (number? loaded)
+              (number? total)
+              (not= loaded total))
+       (update counts direction inc)
+       counts))
+   {:upload 0
+    :download 0}
+   (or progress {})))
+
+(defn asset-status-rows
+  [{:keys [pending-asset-ops]
+    transfer-counts :asset-transfer-counts}]
+  (let [{:keys [upload download]} transfer-counts]
+    (cond-> []
+      (pos? (or pending-asset-ops 0))
+      (conj {:count pending-asset-ops
+             :label-key :sync/pending-asset-uploads})
+
+      (pos? (or upload 0))
+      (conj {:count upload
+             :label-key :sync/assets-uploading})
+
+      (pos? (or download 0))
+      (conj {:count download
+             :label-key :sync/assets-downloading}))))
+
+(defn- asset-status-label
+  [label-key]
+  (case label-key
+    :sync/pending-asset-uploads (t :sync/pending-asset-uploads)
+    :sync/assets-uploading (t :sync/assets-uploading)
+    :sync/assets-downloading (t :sync/assets-downloading)))
+
 (rum/defc assets-progressing
-  []
-  (let [repo (state/get-current-repo)
-        progress (hooks/use-flow-state (asset-upload-download-progress-flow repo))
-        downloading (->>
+  [progress]
+  (let [downloading (->>
                      (keep (fn [[id {:keys [direction loaded total]}]]
                              (when (and (= direction :download)
                                         (not= loaded total)
@@ -98,7 +139,7 @@
      (when (seq downloading)
        [:details
         [:summary
-         (util/format "Downloading assets (%s)" (count downloading))]
+         (t :sync/assets-downloading-count (count downloading))]
         [:div.flex.flex-col.gap-1.text-sm
          (for [{:keys [block percent]} downloading]
            [:div.flex.flex-row.gap-1.items-center
@@ -107,7 +148,7 @@
      (when (seq uploading)
        [:details
         [:summary
-         (util/format "Uploading assets (%s)" (count uploading))]
+         (t :sync/assets-uploading-count (count uploading))]
         [:div.flex.flex-col.gap-1.text-sm
          (for [{:keys [block percent]} uploading]
            [:div.flex.flex-row.gap-1.items-center
@@ -117,23 +158,31 @@
 (rum/defc details
   []
   (let [online? (hooks/use-flow-state flows/network-online-event-flow)
+        repo (state/get-current-repo)
+        asset-progress (hooks/use-flow-state (asset-upload-download-progress-flow repo))
         [expand-debug? set-expand-debug!] (hooks/use-state false)
-        {:keys [graph-uuid local-tx remote-tx rtc-state
-                download-logs upload-logs misc-logs pending-local-ops pending-server-ops]}
-        (hooks/use-flow-state (m/watch *detail-info))]
+        show-checksums? (or config/dev? util/node-test?)
+        {:keys [graph-uuid local-tx remote-tx local-checksum remote-checksum rtc-state
+                download-logs upload-logs misc-logs pending-local-ops pending-asset-ops pending-server-ops]}
+        (hooks/use-flow-state (m/watch *detail-info))
+        asset-rows (asset-status-rows {:pending-asset-ops pending-asset-ops
+                                       :asset-transfer-counts (asset-transfer-counts asset-progress)})]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
-     [:div.font-medium.mb-2 (if online? "Online" "Offline")]
-     [:div [:span.font-medium.mr-1 (or pending-local-ops 0)] "pending local changes"]
+     [:div.font-medium.mb-2 (t (if online? :sync/online :sync/offline))]
+     [:div [:span.font-medium.mr-1 (or pending-local-ops 0)] (t :sync/pending-local-changes)]
+     (for [{:keys [count label-key]} asset-rows]
+       [:div {:key (name label-key)}
+        [:span.font-medium.mr-1 count]
+        (asset-status-label label-key)])
      ;; FIXME: pending-server-ops
-     [:div [:span.font-medium.mr-1 (or pending-server-ops 0)] "pending server changes"]
-     (assets-progressing)
+     [:div [:span.font-medium.mr-1 (or pending-server-ops 0)] (t :sync/pending-server-changes)]
+     (assets-progressing asset-progress)
      ;; FIXME: What's the type for downloaded log?
      (when-let [latest-log (some (fn [l] (when (contains? #{:rtc.log/push-local-update} (:type l)) l)) misc-logs)]
        (when-let [time (:created-at latest-log)]
-         [:div.text-sm "Last synced time: "
-          (.toLocaleString time)]))
+         [:div.text-sm (t :sync/last-synced-time-label (locale-format-date time))]))
      [:a.fade-link.text-sm {:on-click #(set-expand-debug! (not expand-debug?))}
-      "More debug info"]
+      (t :sync/more-debug-info)]
      (when expand-debug?
        [:div.rtc-info-debug
         [:pre.select-text
@@ -144,6 +193,8 @@
                graph-uuid (assoc :graph-uuid graph-uuid)
                local-tx (assoc :local-tx local-tx)
                remote-tx (assoc :remote-tx remote-tx)
+               (and show-checksums? local-checksum) (assoc :local-checksum local-checksum)
+               (and show-checksums? remote-checksum) (assoc :remote-checksum remote-checksum)
                rtc-state (assoc :rtc-state rtc-state))
              pprint/pprint
              with-out-str)]])
@@ -154,7 +205,7 @@
                       :on-click (fn []
                                   (rtc-handler/<rtc-start! (state/get-current-repo)
                                                            {:stop-before-start? true}))}
-                     "Start sync")])]))
+                     (t :sync/start-sync))])]))
 
 (rum/defc indicator
   []
@@ -253,7 +304,7 @@
       :on-click #(shui/popup-show! (.-target %)
                                    (downloading-logs)
                                    {:align "end"})}
-     "Downloading...")))
+     (t :sync/downloading))))
 
 (def ^:private upload?-flow
   (->> rtc-flows/rtc-upload-log-flow
@@ -278,4 +329,4 @@
       :on-click #(shui/popup-show! (.-target %)
                                    (uploading-logs)
                                    {:align "end"})}
-     "Uploading...")))
+     (t :sync/uploading))))

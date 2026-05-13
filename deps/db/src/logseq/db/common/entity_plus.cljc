@@ -44,7 +44,7 @@
 
 (assert (empty? (last (data/diff immutable-db-ident-entities nil-db-ident-entities))))
 
-(def ^:private lookup-entity @#'entity/lookup-entity)
+(def lookup-entity @#'entity/lookup-entity)
 
 (def ^:private *seen-immutable-entities (volatile! {}))
 
@@ -179,6 +179,7 @@
 
            :property/closed-values
            (some->> (lookup-entity e :block/_closed-value-property default-value)
+                    (remove entity-util/recycled?)
                     (sort-by :block/order))
 
            (lookup-kv-with-default-value db e k default-value))))
@@ -221,6 +222,7 @@
    (extend-type Entity
      cljs.core/IEncodeJS
      (-clj->js [_this] nil)                 ; avoid `clj->js` overhead when entity was passed to rum components
+     (-key->js [_this] nil)
 
      IAssociative
      (-assoc [this k v]

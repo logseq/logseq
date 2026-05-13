@@ -5,6 +5,7 @@
             [clojure.walk :as walk]
             [datascript.conn :as dc]
             [datascript.core :as d]
+            [datascript.storage :as storage]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.plural :as common-plural]
@@ -13,13 +14,13 @@
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
-            [logseq.db.common.normalize :as db-normalize]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.sqlite.util :as sqlite-util])
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.log :as log])
   (:refer-clojure :exclude [object?]))
 
 (def built-in? entity-util/built-in?)
@@ -33,6 +34,7 @@
 (defonce *transact-fn (atom nil))
 (defonce *transact-invalid-callback (atom nil))
 (defonce *transact-pipeline-fn (atom nil))
+(defonce *debounce-fn (atom nil))
 
 (defn register-transact-fn!
   [f]
@@ -43,11 +45,15 @@
 (defn register-transact-pipeline-fn!
   [f]
   (when f (reset! *transact-pipeline-fn f)))
+(defn register-debounce-fn!
+  [f]
+  (when f (reset! *debounce-fn f)))
 
 (defn- remove-temp-block-data
   [tx-data]
   (let [remove-block-temp-f (fn [m]
-                              (->> (remove (fn [[k _v]] (= "block.temp" (namespace k))) m)
+                              (->> (remove (fn [[k _v]]
+                                             (= "block.temp" (namespace k))) m)
                                    (into {})))]
     (keep (fn [data]
             (cond
@@ -81,15 +87,6 @@
        f))
    tx-data))
 
-(comment
-  (defn- skip-db-validate?
-    [datoms]
-    (every?
-     (fn [d]
-       (contains? #{:logseq.property/created-by-ref :block/refs :block/tx-id}
-                  (:a d)))
-     datoms)))
-
 (defn- throw-if-page-has-block-parent!
   [db tx-data]
   (when (some (fn [d] (and (:added d)
@@ -99,49 +96,83 @@
     (throw (ex-info "Page can't have block as parent"
                     {:tx-data tx-data}))))
 
+(comment
+  (defn debounced-store-db
+   [conn]
+   (when-some [_storage (storage/storage @conn)]
+     (when-not (:batch-tx? @conn)
+       (let [f (if (exists? js/process)
+                 d/store
+                 (or @*debounce-fn d/store))]
+         (f @conn))))))
+
+(defn- should-validate-tx?
+  [conn db tx-meta]
+  (and (entity-plus/db-based-graph? db)
+       (not
+        (or (:rtc-download-graph? tx-meta)
+            (:reset-conn! tx-meta)
+            (:initial-db? tx-meta)
+            (:skip-validate-db? tx-meta false)
+            ;; used by `batch-transact-with-temp-conn!`
+            (:skip-validate-db? @conn)
+            (:logseq.graph-parser.exporter/new-graph? tx-meta)))))
+
+(defn- tx-report-pipeline-data
+  [tx-report]
+  (map (fn [[e a v t]]
+         [e a v t])
+       (:tx-data tx-report)))
+
+(defn- invalid-tx-debug-data
+  [tx-meta tx-data errors tx-report]
+  {:tx-meta tx-meta
+   :tx-data tx-data
+   :errors errors
+   :pipeline-tx-data (tx-report-pipeline-data tx-report)})
+
+(defn- throw-invalid-tx!
+  [tx-meta tx-data errors tx-report]
+  ;; notify ui
+  (when-let [f @*transact-invalid-callback]
+    (f tx-report errors))
+  (let [debug-data (invalid-tx-debug-data tx-meta tx-data errors tx-report)]
+    (prn :debug :invalid-data debug-data)
+    (prn :debug :errors errors)
+    (throw (ex-info "DB write failed with invalid data" debug-data))))
+
 (defn- transact-sync
   [conn tx-data tx-meta]
   (try
     (let [db @conn
-          db-based? (entity-plus/db-based-graph? db)]
-      (if (and db-based?
-               (not
-                (or (:batch-temp-conn? @conn)
-                    (:rtc-download-graph? tx-meta)
-                    (:reset-conn! tx-meta)
-                    (:initial-db? tx-meta)
-                    (:skip-validate-db? tx-meta false)
-                    (:logseq.graph-parser.exporter/new-graph? tx-meta))))
+          validate? (should-validate-tx? conn db tx-meta)]
+      (if validate?
         (let [tx-report* (d/with db tx-data tx-meta)
               pipeline-f @*transact-pipeline-fn
-              tx-report (if-let [f pipeline-f] (f tx-report*) tx-report*)
+              tx-report (if pipeline-f (pipeline-f tx-report*) tx-report*)
               _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
               [validate-result errors] (db-validate/validate-tx-report tx-report nil)]
           (cond
             validate-result
-            (when (and tx-report (seq (:tx-data tx-report)))
+            (when (and tx-report
+                       (seq (:tx-data tx-report)))
               ;; perf enhancement: avoid repeated call on `d/with`
               (reset! conn (:db-after tx-report))
               (dc/store-after-transact! conn tx-report)
               (dc/run-callbacks conn tx-report))
 
             :else
-            (do
-              ;; notify ui
-              (when-let [f @*transact-invalid-callback]
-                (f tx-report errors))
-              (throw (ex-info "DB write failed with invalid data" {:tx-meta tx-meta
-                                                                   :tx-data tx-data
-                                                                   :errors errors
-                                                                   :pipeline-tx-data (map
-                                                                                      (fn [[e a v t]]
-                                                                                        [e a v t])
-                                                                                      (:tx-data tx-report))}))))
+            (throw-invalid-tx! tx-meta tx-data errors tx-report))
           tx-report)
         (d/transact! conn tx-data tx-meta)))
     (catch :default e
-      (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
-      (js/console.error e)
+      (when-not (and (:db-sync/suppress-stale-rebase-transact-failed-log? tx-meta)
+                     (= :entity-id/missing (:error (ex-data e))))
+        (prn :debug :transact-failed
+             :tx-meta tx-meta
+             :tx-data tx-data
+             :error (str e))
+        (js/console.error e))
       (throw e))))
 
 (defn transact!
@@ -181,35 +212,114 @@
        (if-let [transact-fn @*transact-fn]
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
-(def remove-conflict-datoms db-normalize/remove-conflict-datoms)
 
-(defn transact-with-temp-conn!
-  "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
-  however it can't write to the disk."
+(defn- make-conn [opts]
+  ;; `datascript.conn/->Conn` is not exposed in nbb runtime.
+  ;; Start from a fresh conn and merge the desired internal state.
+  (let [conn (d/create-conn)]
+    (swap! (:atom conn) merge opts)
+    conn))
+
+(defn- conn-from-db
+  "Forked conn-from-db to not invoke `d/store`, it's unsafe to store during nested batch tx."
+  [db]
+  (if-some [_storage (storage/storage db)]
+    (make-conn
+     {:db db
+      :tx-tail []
+      :db-last-stored db})
+    (make-conn {:db db})))
+
+(defn batch-transact-with-temp-conn!
+  "Run batched tx work against a temporary conn, then apply all collected tx-data
+  to `conn` with a single final `transact!`.
+
+  Semantics:
+  - Uses `d/conn-from-db` so batch work runs on an isolated in-memory conn.
+  - Temp conn can still read from storage-backed db state, but cannot write to disk
+    (`:skip-store? true`).
+  - Defers db validation during inner batch ops (`:skip-validate-db? true`), then
+    validates on the final `transact!` to `conn`.
+  - Supports nested usage.
+
+  Notes:
+  - `batch-tx-fn` is called as `(batch-tx-fn temp-conn *batch-tx-data)`.
+  - `listen-db` (if provided) receives each intermediate tx-report from temp conn.
+  - Do not rely on returned tx-report shape for undo/redo behavior."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
-  (let [temp-conn (d/conn-from-db @conn)
-        *batch-tx-data (volatile! [])]
+  (let [temp-conn (conn-from-db @conn)
+        *batch-tx-data (volatile! [])
+        *complete? (volatile! false)]
     ;; can read from disk, write is disallowed
     (swap! temp-conn assoc
            :skip-store? true
-           :batch-temp-conn? true)
+           :batch-tx? true
+           :skip-validate-db? true)
     (d/listen! temp-conn ::temp-conn-batch-tx
                (fn [{:keys [tx-data] :as tx-report}]
                  (vswap! *batch-tx-data into tx-data)
                  (when (fn? listen-db)
                    (listen-db tx-report))))
-    (batch-tx-fn temp-conn *batch-tx-data)
-    (let [tx-data @*batch-tx-data
-          temp-after-db @temp-conn]
-      (d/unlisten! temp-conn ::temp-conn-batch-tx)
-      (reset! temp-conn nil)
-      (vreset! *batch-tx-data nil)
-      (when (seq tx-data)
-        ;; transact tx-data to `conn` and validate db
-        (let [tx-data' (->>
-                        tx-data
-                        (db-normalize/replace-attr-retract-with-retract-entity temp-after-db))]
-          (transact! conn tx-data' tx-meta))))))
+    (try
+      (batch-tx-fn temp-conn *batch-tx-data)
+      (vreset! *complete? true)
+      (let [tx-data @*batch-tx-data]
+        (when (and @*complete? (seq tx-data))
+          ;; transact tx-data to `conn` and validate db
+          (transact! conn tx-data tx-meta)))
+      (finally
+        (d/unlisten! temp-conn ::temp-conn-batch-tx)
+        (reset! temp-conn nil)
+        (vreset! *batch-tx-data nil)))))
+
+(defn- batch-transact-listen!
+  [conn *tx-data listen-db]
+  (d/listen! conn ::batch-tx
+             (fn [tx-report]
+               (swap! *tx-data into (:tx-data tx-report))
+               (when (fn? listen-db)
+                 (listen-db tx-report)))))
+
+(defn- batch-transact-cleanup!
+  [conn]
+  (d/unlisten! conn ::batch-tx)
+  (swap! conn dissoc :skip-store? :batch-tx?))
+
+(defn batch-transact!
+  "Run batched tx work on `conn` and persist once at the end.
+  Not nestable; throws when called inside another `:batch-tx?`."
+  [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
+  (let [db-before @conn
+        *tx-data (atom [])]
+    (try
+      (when (:batch-tx? @conn)
+        (throw (ex-info "batch-transact! can't be nested called" {:tx-meta tx-meta})))
+      (batch-transact-listen! conn *tx-data listen-db)
+      (swap! conn assoc :skip-store? true :batch-tx? true)
+      (batch-tx-fn conn)
+      (batch-transact-cleanup! conn)
+      (when-some [_storage (storage/storage @conn)]
+        (d/store @conn)
+        ;; batch-transact! bypasses conn/store-after-transact!, so keep tail bookkeeping in sync
+        ;; with the just-persisted root snapshot.
+        (swap! (:atom conn) assoc
+               :tx-tail []
+               :db-last-stored @conn))
+      (let [batch-tx-data @*tx-data
+            _ (reset! *tx-data nil)
+            tx-report {:db-before db-before
+                       :db-after @conn
+                       :tx-meta (assoc tx-meta :batch-final-tx-report? true)
+                       :tx-data batch-tx-data}]
+        (dc/run-callbacks conn tx-report)
+        tx-report)
+      (catch :default e
+        (log/error e)
+        (reset! conn db-before)
+        (throw e))
+      (finally
+        (batch-transact-cleanup! conn)
+        (reset! *tx-data nil)))))
 
 (def page? entity-util/page?)
 (def internal-page? entity-util/internal-page?)
@@ -218,6 +328,7 @@
 (def closed-value? entity-util/closed-value?)
 (def journal? entity-util/journal?)
 (def hidden? entity-util/hidden?)
+(def recycled? entity-util/recycled?)
 (def object? entity-util/object?)
 (def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)
@@ -280,23 +391,73 @@
                      :else
                      (:block/_parent parent)))))
 
+(defn- get-right-sibling-for-property-children
+  [block parent]
+  (assert (or (de/entity? block) (nil? block)))
+  (let [children (get-block-children-or-property-children block parent)
+        right (some (fn [child] (when (> (compare (:block/order child) (:block/order block)) 0) child)) children)]
+    (when (not= (:db/id right) (:db/id block))
+      right)))
+
 (defn get-right-sibling
   [block]
   (assert (or (de/entity? block) (nil? block)))
   (when-let [parent (:block/parent block)]
-    (let [children (get-block-children-or-property-children block parent)
-          right (some (fn [child] (when (> (compare (:block/order child) (:block/order block)) 0) child)) children)]
-      (when (not= (:db/id right) (:db/id block))
-        right))))
+    (cond
+      (:block/closed-value-property block)
+      (get-right-sibling-for-property-children block parent)
+
+      (:logseq.property/created-from-property block)
+      (get-right-sibling-for-property-children block parent)
+
+      :else
+      (let [db (.-db block)
+            datoms (d/datoms db :avet :block/parent (:db/id parent))
+            child-orders (->> (map (fn [d]
+                                     [(:e d)
+                                      (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
+                              (sort-by last))
+            block-order (:block/order block)]
+
+        (some (fn [[e child-order]]
+                (when (and (> (compare child-order block-order) 0)
+                           (not (seq (d/datoms db :avet :logseq.property/created-from-property e)))
+                           (not (seq (d/datoms db :avet :block/closed-value-property e))))
+                  (d/entity db e))) child-orders)))))
+
+(defn- get-left-sibling-for-property-children
+  [block parent]
+  (assert (or (de/entity? block) (nil? block)))
+  (let [children (reverse (get-block-children-or-property-children block parent))
+        left (some (fn [child] (when (< (compare (:block/order child) (:block/order block)) 0) child)) children)]
+    (when (not= (:db/id left) (:db/id block))
+      left)))
 
 (defn get-left-sibling
   [block]
   (assert (or (de/entity? block) (nil? block)))
   (when-let [parent (:block/parent block)]
-    (let [children (reverse (get-block-children-or-property-children block parent))
-          left (some (fn [child] (when (< (compare (:block/order child) (:block/order block)) 0) child)) children)]
-      (when (not= (:db/id left) (:db/id block))
-        left))))
+    (cond
+      (:block/closed-value-property block)
+      (get-left-sibling-for-property-children block parent)
+
+      (:logseq.property/created-from-property block)
+      (get-left-sibling-for-property-children block parent)
+
+      :else
+      (let [db (.-db block)
+            datoms (d/datoms db :avet :block/parent (:db/id parent))
+            child-orders (->> (map (fn [d]
+                                     [(:e d)
+                                      (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
+                              (sort-by last)
+                              reverse)
+            block-order (:block/order block)]
+        (some (fn [[e child-order]]
+                (when (and (< (compare child-order block-order) 0)
+                           (not (seq (d/datoms db :avet :logseq.property/created-from-property e)))
+                           (not (seq (d/datoms db :avet :block/closed-value-property e))))
+                  (d/entity db e))) child-orders)))))
 
 (defn get-down
   [block]
@@ -366,6 +527,14 @@
   [db page-name]
   (when db
     (d/entity db (get-first-page-by-name db page-name))))
+
+(defn get-journal-page-by-day
+  "Get a journal page given its :block/journal-day value."
+  [db journal-day]
+  (when (and db journal-day)
+    (when-let [eid (some-> (first (d/datoms db :avet :block/journal-day journal-day))
+                           :e)]
+      (d/entity db eid))))
 
 (def get-built-in-page db-db/get-built-in-page)
 
@@ -468,6 +637,7 @@
      (sort-by-order (:block/_parent parent)))))
 
 (defn get-block-parents
+  "Returns parents entities"
   [db block-id & {:keys [depth] :or {depth 100}}]
   (loop [block-id block-id
          parents' (list)
@@ -669,11 +839,9 @@
   (d/q '[:find ?e ?a
          :in $ ?v
          :where
-         [?c :logseq.property.class/enable-bidirectional? ?c-enable?]
-         [(true? ?c-enable?)]
-         [?ea :logseq.property/classes ?c]
+         [?e ?a ?v]
          [?ea :db/ident ?a]
-         [?e ?a ?v]]
+         [?ea :logseq.property/classes ?c]]
        db
        v))
 
@@ -682,6 +850,23 @@
   (if class-id
     (update acc class-id (fnil conj #{}) entity)
     acc))
+
+(defn- build-bidirectional-property-group
+  [db [class-id entities]]
+  (let [class (d/entity db class-id)]
+    (when (true? (:logseq.property.class/enable-bidirectional? class))
+      (let [custom-title (when-let [custom (:logseq.property.class/bidirectional-property-title class)]
+                           (if (string? custom)
+                             custom
+                             (db-property/property-value-content custom)))
+            title (if (string/blank? custom-title)
+                    (common-plural/plural (:block/title class))
+                    custom-title)]
+        {:title title
+         :class (-> (into {} class)
+                    (assoc :db/id (:db/id class)))
+         :entities (->> entities
+                        (sort-by :block/created-at))}))))
 
 (defn get-bidirectional-properties
   "Given a target entity id, returns a seq of maps with:
@@ -704,31 +889,19 @@
                    (when (bidirectional-property-attr-cached? a)
                      (when-let [entity (d/entity db e)]
                        (when (and (not= (:db/id entity) target-id)
+                                  (not (entity-util/recycled? entity))
                                   (not (entity-util/class? entity))
                                   (not (entity-util/property? entity)))
                          (let [classes (filter entity-util/class? (:block/tags entity))]
                            (when (seq classes)
                              (keep (fn [class-ent]
-                                     (when-not (built-in? class-ent)
+                                     (when (and (not (built-in? class-ent))
+                                                (not (entity-util/recycled? class-ent)))
                                        [(:db/id class-ent) entity]))
                                    classes))))))))
            (mapcat identity)
            (reduce (fn [acc [class-ent entity]]
                      (add-entity acc class-ent entity))
                    {})
-           (keep (fn [[class-id entities]]
-                   (let [class (d/entity db class-id)]
-                     (when (true? (:logseq.property.class/enable-bidirectional? class))
-                       (let [custom-title (when-let [custom (:logseq.property.class/bidirectional-property-title class)]
-                                            (if (string? custom)
-                                              custom
-                                              (db-property/property-value-content custom)))
-                             title (if (string/blank? custom-title)
-                                     (common-plural/plural (:block/title class))
-                                     custom-title)]
-                         {:title title
-                          :class (-> (into {} class)
-                                     (assoc :db/id (:db/id class)))
-                          :entities (->> entities
-                                         (sort-by :block/created-at))})))))
+           (keep (partial build-bidirectional-property-group db))
            (sort-by (comp :block/created-at :class))))))

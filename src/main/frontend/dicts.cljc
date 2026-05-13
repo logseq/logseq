@@ -1,9 +1,10 @@
 (ns ^:bb-compatible frontend.dicts
   "Provides dictionary entries for most of the application"
-  (:require #?(:clj [clojure.edn :as edn])
-            #?@(:bb [[clojure.java.io :as io]]
-                :clj [[clojure.java.io :as io]
-                      [shadow.resource :as rc]]))
+  #?(:bb (:require [clojure.edn :as edn]
+                   [clojure.java.io :as io])
+     :clj (:require [clojure.edn :as edn]
+                    [clojure.java.io :as io]
+                    [shadow.resource :as rc]))
   #?(:cljs (:require-macros [frontend.dicts :refer [edn-resource]])))
 
 #?(:clj (defn resource [file] (slurp (io/resource file))))
@@ -14,29 +15,20 @@
    :clj (defmacro edn-resource [file]
           (edn/read-string {:readers {'resource resource}} (rc/slurp-resource &env file))))
 
-(def ^:private en-dicts-raw (edn-resource "dicts/en.edn"))
+(def ^:private en-dicts (edn-resource "dicts/en.edn"))
 
 (def categories
   "Shortcut categories described in default language"
-  (set (filter #(= "shortcut.category" (namespace %)) (keys en-dicts-raw))))
+  (set (filter #(= "shortcut.category" (namespace %)) (keys en-dicts))))
 
 (def abbreviated-commands
-  "Commands defined in default language and in a format that
-  frontend.modules.shortcut.* namespaces understand e.g. :date-picker/complete
-  instead of :command.date-picker/complete"
-  (set (keys (:commands en-dicts-raw))))
-
-(defn- decorate-namespace [k]
-  (let [n (name k)
-        ns (namespace k)]
-    (keyword (str "command." ns) n)))
-
-(def ^:private en-dicts
-  (merge (dissoc en-dicts-raw :commands)
-         ;; Dynamically add :command ns prefix since command descriptions have to
-         ;; stay in sync with frontend.modules.shortcut.config keywords which do not
-         ;; have the prefix
-         (update-keys (:commands en-dicts-raw) decorate-namespace)))
+  "Built-in shortcut command ids derived from flattened `:command.*` English
+  translation keys, converted to the abbreviated keyword format used by
+  `frontend.modules.shortcut.*`."
+  (set (map (fn [k]
+              (keyword (subs (namespace k) 8) (name k)))
+            (filter #(some-> % namespace (.startsWith "command."))
+                    (keys en-dicts)))))
 
 (def dicts
   "Main dictionary map used by tongue to translate app"

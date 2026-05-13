@@ -62,5 +62,5 @@ We also want the server and client to follow the same mental model:
 - Updated `deps/db-sync` storage, handler, and node-adapter tests.
 - Passed:
   - `bb dev:test -v frontend.worker.db-sync-test`
-  - `yarn test` in `deps/db-sync`
+  - `pnpm test` in `deps/db-sync`
   - `bb dev:lint-and-test`

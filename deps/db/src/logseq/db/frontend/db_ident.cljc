@@ -75,9 +75,9 @@
   (assert (not (re-find #"^(logseq|block)(\.|$)" (name user-namespace)))
           "New ident is not allowed to use an internal namespace")
   (if #?(:org.babashka/nbb true
-         :cljs             (exists? js/process)
+         ;; Use $LOGSEQ_STABLE_IDENTS when we want stable idents e.g. tests
+         :cljs             (and (exists? js/process) js/process.env.LOGSEQ_STABLE_IDENTS)
          :default          false)
-     ;; Used for contexts where we want repeatable idents e.g. tests and CLIs
     (keyword user-namespace (normalize-ident-name-part name-string))
     (let [plugin? (string/starts-with? user-namespace "plugin.class.")
           suffix (str "-"

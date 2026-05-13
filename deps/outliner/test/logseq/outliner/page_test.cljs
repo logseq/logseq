@@ -2,8 +2,11 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.page :as outliner-page]))
@@ -94,7 +97,19 @@
          js/Error
          #"can't include \"/"
          (outliner-page/create! conn "foo/bar" {}))
-        "Page can't have '/'n title")))
+        "Page can't have '/'n title")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"can't include \"#\""
+         (outliner-page/create! conn "foo#bar" {}))
+        "Page can't have '#' in title")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"can't include \"#\""
+         (outliner-page/create! conn "#tagstyle" {}))
+        "Page can't have leading '#' in title")))
 
 (deftest delete-page
   (let [conn (db-test/create-conn-with-blocks
@@ -108,8 +123,43 @@
     (is (contains? (set (map :db/id (:block/refs (d/entity @conn (:db/id b1)))))
                    (:db/id d1)))
     (outliner-page/delete! conn (:block/uuid d1))
-    (is (nil? (d/entity @conn (:db/id d1))))
-    (is (nil? (d/entity @conn (:db/id b1))))))
+    (let [d1' (d/entity @conn (:db/id d1))
+          b1' (d/entity @conn (:db/id b1))
+          recycle-page (ldb/get-built-in-page @conn "Recycle")]
+      (is (some? d1'))
+      (is (some? b1'))
+      (is (= (:block/uuid recycle-page) (:block/uuid (:block/parent d1'))))
+      (is (integer? (:logseq.property/deleted-at d1')))
+      (is (nil? (:block/raw-title b1')))
+      (is (contains? (set (map :db/id (:block/refs b1')))
+                     (:db/id d1)))
+      (is (= (:block/uuid d1') (:block/uuid (:block/page b1')))))))
+
+(deftest delete-class-page-hard-retracts-page-tree
+  (let [conn (db-test/create-conn-with-blocks {:classes {:Movie {}}})
+        class-page (ldb/get-page @conn "Movie")
+        child-uuid (random-uuid)
+        _ (d/transact! conn [{:block/uuid child-uuid
+                              :block/title "class child"
+                              :block/page (:db/id class-page)
+                              :block/parent (:db/id class-page)
+                              :block/order (db-order/gen-key)}])]
+    (outliner-page/delete! conn (:block/uuid class-page))
+    (is (nil? (d/entity @conn [:block/uuid (:block/uuid class-page)])))
+    (is (nil? (d/entity @conn [:block/uuid child-uuid])))))
+
+(deftest delete-property-page-hard-retracts-page-tree
+  (let [conn (db-test/create-conn-with-blocks {:properties {:rating {:logseq.property/type :number}}})
+        property-page (d/entity @conn :user.property/rating)
+        child-uuid (random-uuid)
+        _ (d/transact! conn [{:block/uuid child-uuid
+                              :block/title "property child"
+                              :block/page (:db/id property-page)
+                              :block/parent (:db/id property-page)
+                              :block/order (db-order/gen-key)}])]
+    (outliner-page/delete! conn (:block/uuid property-page))
+    (is (nil? (d/entity @conn :user.property/rating)))
+    (is (nil? (d/entity @conn [:block/uuid child-uuid])))))
 
 (deftest create-journal
   (let [conn (db-test/create-conn)
@@ -123,3 +173,16 @@
                 :block/tags
                 (map #(:db/ident (d/entity @conn (:db/id %))))))
         "New journal only has Journal tag")))
+
+(deftest create-journal-keeps-default-block-name-with-custom-title-format
+  (let [conn (db-test/create-conn)
+        _ (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
+        [_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {})
+        page (d/entity @conn [:block/uuid page-uuid])
+        default-name (-> (:block/journal-day page)
+                         (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
+                         common-util/page-name-sanity-lc)]
+    (is (= "2024-12-16 Monday" (:block/title page))
+        "Journal title follows configured formatter")
+    (is (= default-name (:block/name page))
+        "Journal block/name remains the default formatter, independent of title format")))

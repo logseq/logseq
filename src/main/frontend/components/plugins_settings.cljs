@@ -1,6 +1,7 @@
 (ns frontend.components.plugins-settings
   (:require [cljs-bean.core :as bean]
             [frontend.components.lazy-editor :as lazy-editor]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.security :as security]
@@ -25,8 +26,8 @@
                   (plugin-handler/open-settings-file-in-default-app! pid)
                   (set-edit-mode! #(if % nil :code))))}
    (if (= edit-mode :code)
-     "Exit code mode"
-     "Edit settings.json")])
+     (t :plugin.settings/exit-code-mode)
+     (t :plugin.settings/edit-settings-json))])
 
 (rum/defc render-item-input
   [val {:keys [key type title default description inputAs]} update-setting!]
@@ -104,7 +105,7 @@
 
 (rum/defc render-item-not-handled
   [s]
-  [:p.text-red-500 (str "#Not Handled# " s)])
+  [:p.text-red-500 (t :plugin/setting-not-handled s)])
 
 (rum/defc settings-container
   [schema ^js pl]
@@ -138,7 +139,7 @@
           [:div.code-mode-wrap.pl-3.pr-1.py-1.mb-8.-ml-1
            (let [content' (js/JSON.stringify (bean/->js settings) nil 2)]
              (lazy-editor/editor {:file? false}
-                                 (str "code-edit-lsp-settings")
+                                 "code-edit-lsp-settings"
                                  {:data-lang "json"}
                                  content' {}))
            [:div.flex.justify-end.pt-2.gap-2
@@ -147,7 +148,7 @@
                                       (let [^js cm (util/get-cm-instance (-> (.-target e) (.closest ".code-mode-wrap")))
                                             content' (some-> (.toJSON plugin-settings) (js/JSON.stringify nil 2))]
                                         (.setValue cm content')))}
-                         "Reset")
+                         (t :ui/reset))
             (shui/button {:size :sm
                           :on-click (fn [^js e]
                                       (try
@@ -158,7 +159,7 @@
                                           (set-edit-mode! nil))
                                         (catch js/Error e
                                           (notification/show! (.-message e) :error))))}
-                         "Save")]]
+                         (t :ui/save))]]
 
           ;; render with gui items
           (for [desc schema
@@ -179,4 +180,4 @@
               key)))]]
 
       ;; no settings
-      [:h2.font-bold.text-lg.py-4.warning "No Settings Schema!"])))
+      [:h2.font-bold.text-lg.py-4.warning (t :plugin/no-settings-schema)])))

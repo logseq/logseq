@@ -34,15 +34,30 @@
             :block/name (common-util/page-name-sanity-lc (:block/title page))})))
      pages)))
 
-(defn remove-block-path-refs
-  [db]
-  (when (d/entity db :block/path-refs)
-    (let [remove-datoms (->> (d/datoms db :avet :block/path-refs)
+(defn- delete-property
+  [db property-key]
+  (if (d/entity db property-key)
+    (let [remove-datoms (->> (d/datoms db :avet property-key)
                              (map :e)
                              (distinct)
                              (mapv (fn [id]
-                                     [:db/retract id :block/path-refs])))]
-      (conj remove-datoms [:db/retractEntity :block/path-refs]))))
+                                     [:db/retract id property-key])))]
+      (conj remove-datoms [:db/retractEntity property-key]))
+    (let [eids (d/q
+                '[:find [?e ...]
+                  :in $ ?property-key
+                  :where
+                  [?e ?property-key ?v]]
+                db
+                property-key)]
+      (map
+       (fn [eid]
+         [:db/retract eid property-key])
+       eids))))
+
+(defn remove-block-path-refs
+  [db]
+  (delete-property db :block/path-refs))
 
 (defn- remove-position-property-from-url-properties
   [db]
@@ -56,7 +71,7 @@
   [_db])
 
 (defn- fix-asset-source-url-property-type
-  "65.27 mistakenly registered :logseq.property.asset/source-url with type :url
+  "65.29 mistakenly registered :logseq.property.asset/source-url with type :url
    (a ref-typed schema), which made datascript treat string URLs as tempid
    lookups during transact and block all asset saves. Coerce the existing
    property's type to :string in any DB that ran the bad migration."
@@ -66,7 +81,7 @@
       [[:db/add (:db/id e) :logseq.property/type :string]])))
 
 (defn- fix-asset-source-url-schema-lock
-  "65.28 changed :logseq.property/type to :string but left :db/valueType
+  "65.30 changed :logseq.property/type to :string but left :db/valueType
    :db.type/ref on the entity. In Logseq's datascript fork, :db/valueType
    on a :db/ident-keyed entity IS the live schema entry — so the attribute
    stayed ref-typed and string URLs continued to fail with 'Tempids used
@@ -84,7 +99,6 @@
    and :fix."
   [["65.7" {:fix add-quick-add-page}]
    ["65.8" {:fix add-missing-page-name}]
-   ["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]
    ["65.10" {:properties [:block/journal-day :logseq.property.view/sort-groups-by-property :logseq.property.view/sort-groups-desc?]}]
    ["65.11" {:fix remove-block-path-refs}]
    ["65.12" {:fix remove-position-property-from-url-properties}]
@@ -100,15 +114,23 @@
    ["65.22" {:properties [:logseq.property.reaction/emoji-id
                           :logseq.property.reaction/target]}]
    ["65.23" {:properties [:logseq.property.asset/align]}]
-   ["65.24" {:properties [:logseq.property.class/default-icon]}]
-   ["65.25" {:properties [:logseq.property/wikidata-id]}]
-   ["65.26" {:properties [:logseq.property/property-key-width]}]
-   ["65.27" {:properties [:logseq.property.asset/source-url
+   ["65.24" {:properties [:logseq.property/deleted-at
+                          :logseq.property/deleted-by-ref
+                          :logseq.property.recycle/original-parent
+                          :logseq.property.recycle/original-page
+                          :logseq.property.recycle/original-order]}]
+   ["65.25" {:delete-properties [:block/pre-block?
+                                 :logseq.property.embedding/hnsw-label
+                                 :logseq.property.embedding/hnsw-label-updated-at]}]
+   ["65.26" {:properties [:logseq.property.class/default-icon]}]
+   ["65.27" {:properties [:logseq.property/wikidata-id]}]
+   ["65.28" {:properties [:logseq.property/property-key-width]}]
+   ["65.29" {:properties [:logseq.property.asset/source-url
                           :logseq.property.asset/source-name
                           :logseq.property.asset/license
                           :logseq.property.asset/attribution]}]
-   ["65.28" {:fix fix-asset-source-url-property-type}]
-   ["65.29" {:fix fix-asset-source-url-schema-lock}]])
+   ["65.30" {:fix fix-asset-source-url-property-type}]
+   ["65.31" {:fix fix-asset-source-url-schema-lock}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
@@ -200,7 +222,7 @@
 
 (defn- upgrade-version!
   "Return tx-data"
-  [conn version {:keys [properties classes fix] :as migrate-updates}]
+  [conn version {:keys [properties classes fix delete-properties] :as migrate-updates}]
   (let [version (db-schema/parse-schema-version version)
         db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
@@ -224,7 +246,11 @@
                                    {:db/ident db-ident})) new-classes)
         fixes (when (fn? fix)
                 (fix db))
-        tx-data (concat new-class-idents new-properties new-classes fixes)
+        delete-properties-tx (mapcat
+                              (fn [property]
+                                (delete-property db property))
+                              delete-properties)
+        tx-data (concat new-class-idents new-properties new-classes fixes delete-properties-tx)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
                   tx-data)

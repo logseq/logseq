@@ -14,25 +14,34 @@ const mobilePath = path.join(outputPath, 'mobile')
 const mobileJsPath = path.join(mobilePath, 'js')
 const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
+const resourceSyncGlobs = [
+  resourceFilePath,
+  '!' + path.join(resourcesPath, 'node_modules/**'),
+]
 const outputFilePath = path.join(outputPath, '**')
+const rawCopySrc = (globs, options = {}) =>
+  gulp.src(globs, { encoding: false, ...options })
+const removeUnsupportedIOSFontSources = (cssText) =>
+  cssText.
+    replace(/@font-face\s*{[^{}]*url\(["']?web\/Inter-[^{}]*?\.woff2[^{}]*}\s*/g, '').
+    replace(/url\((["']?)[^)"']+?\.(?:woff2|woff)(?:\?[^)"']*)?\1\)\s*format\((["'])(?:woff2|woff)\2\),?\s*/g, '')
 const staticCleanKeep = new Set([
   'entitlements.plist',
-  'forge.config.js',
   'node_modules',
   'package.json',
-  'yarn.lock',
+  'pnpm-lock.yaml',
 ])
 
 const css = {
   watchCSS () {
-    return cp.spawn(`yarn css:watch`, {
+    return cp.spawn(`pnpm css:watch`, {
       shell: true,
       stdio: 'inherit',
     })
   },
 
   watchMobileCSS () {
-    return cp.spawn(`yarn css:mobile-watch`, {
+    return cp.spawn(`pnpm css:mobile-watch`, {
       shell: true,
       stdio: 'inherit',
     })
@@ -40,20 +49,34 @@ const css = {
 
   buildCSS (...params) {
     return gulp.series(
-      () => exec(`yarn css:build`, {}),
+      () => exec(`pnpm css:build`, {}),
       css._optimizeCSSForRelease,
     )(...params)
   },
 
   buildMobileCSS (...params) {
     return gulp.series(
-      () => exec(`yarn css:mobile-build`, {}),
+      () => exec(`pnpm css:mobile-build`, {}),
+      css._removeUnsupportedIOSFonts,
     )(...params)
   },
 
   _optimizeCSSForRelease () {
     return gulp.src(path.join(outputPath, 'css', 'style.css')).
       pipe(gulp.dest(path.join(outputPath, 'css')))
+  },
+
+  _removeUnsupportedIOSFonts () {
+    const mobileCssPath = path.join(mobilePath, 'css')
+    for (const file of ['inter.css', 'style.css']) {
+      const filePath = path.join(mobileCssPath, file)
+      if (fs.existsSync(filePath)) {
+        fs.writeFileSync(
+          filePath,
+          removeUnsupportedIOSFontSources(fs.readFileSync(filePath, 'utf8')))
+      }
+    }
+    return Promise.resolve()
   },
 }
 
@@ -76,24 +99,23 @@ const common = {
   },
 
   syncResourceFile () {
-    return gulp.src(resourceFilePath).pipe(gulp.dest(outputPath))
+    return rawCopySrc(resourceSyncGlobs).pipe(gulp.dest(outputPath))
   },
 
   // NOTE: All assets from node_modules are copied to the output directory
   syncAssetFiles (...params) {
     return gulp.series(
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/katex/dist/katex.min.js',
         'node_modules/katex/dist/contrib/mhchem.min.js',
         'node_modules/html2canvas/dist/html2canvas.min.js',
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
-        'node_modules/shepherd.js/dist/js/shepherd.min.js',
-        'node_modules/marked/marked.min.js',
+        'node_modules/marked/lib/marked.umd.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'packages/ui/dist/ui.js',
-        'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
+        'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
         'node_modules/react/umd/react.production.min.js',
         'node_modules/react/umd/react.development.js',
         'node_modules/react-dom/umd/react-dom.production.min.js',
@@ -107,32 +129,31 @@ const common = {
         pipe(replace('"@tabler/icons-react"]={},a.react,',
           '"tablerIcons"]={},a.React,')).
         pipe(gulp.dest(path.join(outputPath, 'js'))),
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/@glidejs/glide/dist/glide.min.js',
         'node_modules/@glidejs/glide/dist/css/glide.core.min.css',
         'node_modules/@glidejs/glide/dist/css/glide.theme.min.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'glide'))),
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/pdfjs-dist/legacy/build/pdf.mjs',
         'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
         'node_modules/pdfjs-dist/legacy/web/pdf_viewer.mjs',
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'pdfjs'))),
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/pdfjs-dist/cmaps/*.*',
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'pdfjs', 'cmaps'))),
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/inter-ui/inter.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'css'))),
-      () => gulp.src('node_modules/inter-ui/Inter (web)/*.*').
-        pipe(gulp.dest(path.join(outputPath, 'css', 'Inter (web)'))),
-      () => gulp.src([
-        'node_modules/@tabler/icons-webfont/fonts/**',
+      () => rawCopySrc('node_modules/inter-ui/web/*.*').
+        pipe(gulp.dest(path.join(outputPath, 'css', 'web'))),
+      () => rawCopySrc([
         'node_modules/katex/dist/fonts/*.woff2',
       ]).pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/katex/dist/katex.min.js',
         'node_modules/katex/dist/contrib/mhchem.min.js',
-        'node_modules/marked/marked.min.js',
+        'node_modules/marked/lib/marked.umd.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'node_modules/react/umd/react.production.min.js',
@@ -143,27 +164,24 @@ const common = {
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
         'packages/ui/dist/ui.js',
-        'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
+        'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/inter-ui/inter.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css'))),
-      () => gulp.src('node_modules/inter-ui/Inter (web)/*.*').
-        pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'Inter (web)'))),
-      () => gulp.src([
-        'node_modules/@tabler/icons-webfont/fonts/**',
-        'node_modules/katex/dist/fonts/*.woff2',
+      () => rawCopySrc([
+        'node_modules/katex/dist/fonts/*.ttf',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'fonts'))),
     )(...params)
   },
 
   keepSyncResourceFile () {
-    return gulp.watch(resourceFilePath, { ignoreInitial: true },
+    return gulp.watch(resourceSyncGlobs, { ignoreInitial: true },
       common.syncResourceFile)
   },
 
   syncAllStatic () {
-    return gulp.src([
+    return rawCopySrc([
       outputFilePath,
       '!' + path.join(outputPath, 'node_modules/**'),
       '!' + path.join(outputPath, 'mobile/**'),
@@ -216,7 +234,7 @@ const common = {
     console.log(`Dev serve at: ${LOGSEQ_APP_SERVER_URL}`)
     console.log(`--------------------------------------`)
 
-    cp.execSync(`npx cap sync ${mode}`, {
+    cp.execSync(`pnpm exec cap sync ${mode}`, {
       stdio: 'inherit',
       env: Object.assign(process.env, {
         LOGSEQ_APP_SERVER_URL,
@@ -227,7 +245,7 @@ const common = {
       stdio: 'inherit',
     })
 
-    cp.execSync(`npx cap run ${mode}`, {
+    cp.execSync(`pnpm exec cap run ${mode}`, {
       stdio: 'inherit',
       env: Object.assign(process.env, {
         LOGSEQ_APP_SERVER_URL,
@@ -258,21 +276,22 @@ const common = {
 }
 
 exports.electron = () => {
-  if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
-    cp.execSync('yarn', {
-      cwd: outputPath,
-      stdio: 'inherit',
-    })
-  }
+  cp.execSync('pnpm install --frozen-lockfile', {
+    cwd: outputPath,
+    stdio: 'inherit',
+  })
 
-  cp.execSync('yarn electron:dev', {
+  cp.execSync('pnpm electron:dev', {
     cwd: outputPath,
     stdio: 'inherit',
   })
 }
 
 exports.electronMaker = async () => {
-  cp.execSync('yarn cljs:release-electron', {
+  cp.execSync('pnpm cljs:release-electron', {
+    stdio: 'inherit',
+  })
+  cp.execSync('pnpm desktop:prepare-runtime-js', {
     stdio: 'inherit',
   })
 
@@ -291,13 +310,13 @@ exports.electronMaker = async () => {
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
 
   if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
-    cp.execSync('yarn', {
+    cp.execSync('pnpm install --frozen-lockfile', {
       cwd: outputPath,
       stdio: 'inherit',
     })
   }
 
-  cp.execSync('yarn electron:make', {
+  cp.execSync('pnpm electron:make', {
     cwd: outputPath,
     stdio: 'inherit',
   })

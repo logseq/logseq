@@ -1,200 +1,368 @@
 (ns frontend.worker.undo-redo
-  "Undo redo validate"
-  (:require [clojure.set :as set]
-            [datascript.core :as d]
+  "Undo redo new implementation"
+  (:require [datascript.core :as d]
+            [frontend.worker.state :as worker-state]
+            [frontend.worker.sync.client-op :as client-op]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]))
+            [logseq.common.defkeywords :refer [defkeywords]]
+            [malli.core :as m]
+            [malli.util :as mu]))
 
-(def ^:private structural-attrs
-  #{:block/uuid :block/parent :block/page})
+(defkeywords
+  ::record-editor-info {:doc "record current editor and cursor"}
+  ::db-transact {:doc "db tx"}
+  ::ui-state {:doc "ui state such as route && sidebar blocks"})
 
-(def ^:private ref-attrs
-  #{:block/parent :block/page})
+(defonce *apply-history-action! (atom nil))
 
-(defn- structural-tx-item?
-  [item]
-  (cond
-    (map? item)
-    (some structural-attrs (keys item))
+;; TODO: add other UI states such as `::ui-updates`.
+(comment
+  ;; TODO: convert it to a qualified-keyword
+  (sr/defkeyword :gen-undo-ops?
+    "tx-meta option, generate undo ops from tx-data when true (default true)"))
 
-    (vector? item)
-    (let [op (first item)
-          a (nth item 2 nil)]
-      (or (= :db/retractEntity op)
-          (contains? structural-attrs a)))
+(def ^:private selection-editor-info-schema
+  [:map
+   [:selected-block-uuids [:sequential :uuid]]
+   [:selection-direction {:optional true} [:maybe [:enum :up :down]]]])
 
-    (d/datom? item)
-    (contains? structural-attrs (:a item))
+(def ^:private editor-cursor-info-schema
+  [:map
+   [:block-uuid :uuid]
+   [:container-id [:or :int [:enum :unknown-container]]]
+   [:start-pos [:maybe :int]]
+   [:end-pos [:maybe :int]]
+   [:selected-block-uuids {:optional true} [:sequential :uuid]]
+   [:selection-direction {:optional true} [:maybe [:enum :up :down]]]])
 
-    :else false))
+(def ^:private undo-op-item-schema
+  (mu/closed-schema
+   [:multi {:dispatch first}
+    [::db-transact
+     [:cat :keyword
+      [:map
+       [:tx-meta [:map {:closed false}
+                  [:outliner-op :keyword]]]
+       [:added-ids [:set :int]]
+       [:retracted-ids [:set :int]]
+       [:db-sync/tx-id {:optional true} :uuid]
+       [:db-sync/forward-outliner-ops {:optional true}
+        [:maybe [:sequential :any]]]
+       [:db-sync/inverse-outliner-ops {:optional true}
+        [:maybe [:sequential :any]]]]]]
 
-(defn- structural-tx?
-  [tx-data]
-  (boolean (some structural-tx-item? tx-data)))
+    [::record-editor-info
+     [:cat :keyword
+      [:or
+       editor-cursor-info-schema
+       selection-editor-info-schema]]]
 
-(defn- resolve-entity-id
-  [db value]
-  (cond
-    (int? value) value
-    (vector? value) (d/entid db value)
-    :else nil))
+    [::ui-state
+     [:cat :keyword :string]]]))
 
-(defn- tx-entity-ids
-  [db tx-data]
-  (->> tx-data
-       (keep (fn [item]
-               (cond
-                 (vector? item)
-                 (let [e (second item)]
-                   (resolve-entity-id db e))
+(def ^:private undo-op-validator (m/validator [:sequential undo-op-item-schema]))
 
-                 (d/datom? item)
-                 (resolve-entity-id db (:e item))
+(defonce max-stack-length 250)
+(defonce *undo-ops (atom {}))
+(defonce *redo-ops (atom {}))
+(defonce *pending-editor-info (atom {}))
 
-                 (map? item)
-                 (or (resolve-entity-id db (:db/id item))
-                     (resolve-entity-id db [:block/uuid (:block/uuid item)]))
+(defn clear-history!
+  [repo]
+  (swap! *undo-ops assoc repo [])
+  (swap! *redo-ops assoc repo [])
+  (swap! *pending-editor-info dissoc repo))
 
-                 :else nil)))
-       (remove nil?)
-       set))
+(defn set-pending-editor-info!
+  [repo editor-info]
+  (if editor-info
+    (swap! *pending-editor-info assoc repo editor-info)
+    (swap! *pending-editor-info dissoc repo)))
 
-(defn- entities-exist?
-  [db tx-data]
-  (every? (fn [id]
-            (when id
-              (d/entity db id)))
-          (tx-entity-ids db tx-data)))
+(defn- take-pending-editor-info!
+  [repo]
+  (let [editor-info (get @*pending-editor-info repo)]
+    (swap! *pending-editor-info dissoc repo)
+    editor-info))
 
-(defn- parent-cycle?
-  [ent]
-  (let [start (:block/uuid ent)]
-    (loop [current ent
-           seen #{start}
-           steps 0]
-      (cond
-        (>= steps 200) true
-        (nil? (:block/parent current)) false
-        :else (let [next-ent (:block/parent current)
-                    next-uuid (:block/uuid next-ent)]
-                (if (contains? seen next-uuid)
-                  true
-                  (recur next-ent (conj seen next-uuid) (inc steps))))))))
+(defn- conj-op
+  [col op]
+  (let [result (conj (if (empty? col) [] col) op)]
+    (if (>= (count result) max-stack-length)
+      (subvec result 0 (/ max-stack-length 2))
+      result)))
 
-(defn- issues-for-entity-ids
-  [db ids]
-  (let [id->ent (->> ids
-                     (keep (fn [id]
-                             (when-let [ent (d/entity db id)]
-                               (when (:db/id ent)
-                                 [id ent]))))
-                     (into {}))
-        ents (vals id->ent)
-        uuid-required-ids (keep (fn [[id ent]]
-                                  (when (or (:block/title ent)
-                                            (:block/page ent)
-                                            (:block/parent ent))
-                                    id))
-                                id->ent)]
-    (concat
-     (for [e uuid-required-ids
-           :let [ent (get id->ent e)]
-           :when (nil? (:block/uuid ent))]
-       {:type :missing-uuid :e e})
-     (for [ent ents
-           :let [uuid (:block/uuid ent)
-                 parent (:block/parent ent)]
-           :when (and (not (ldb/page? ent)) (nil? parent))]
-       {:type :missing-parent :uuid uuid})
-     (for [ent ents
-           :let [uuid (:block/uuid ent)
-                 parent (:block/parent ent)]
-           :when (and (not (ldb/page? ent)) parent (nil? (:block/uuid parent)))]
-       {:type :missing-parent-ref :uuid uuid})
-     (for [ent ents
-           :let [uuid (:block/uuid ent)
-                 page (:block/page ent)]
-           :when (and (not (ldb/page? ent)) (nil? page))]
-       {:type :missing-page :uuid uuid})
-     (for [ent ents
-           :let [uuid (:block/uuid ent)
-                 page (:block/page ent)]
-           :when (and (not (ldb/page? ent)) page (not (ldb/page? page)))]
-       {:type :page-not-page :uuid uuid})
-     (for [ent ents
-           :let [uuid (:block/uuid ent)
-                 parent (:block/parent ent)
-                 page (:block/page ent)
-                 expected-page (when parent
-                                 (if (ldb/page? parent) parent (:block/page parent)))]
-           :when (and (not (ldb/page? ent))
-                      parent
-                      page
-                      expected-page
-                      (not= (:block/uuid expected-page) (:block/uuid page)))]
-       {:type :page-mismatch :uuid uuid})
-     (for [ent ents
-           :let [uuid (:block/uuid ent)
-                 parent (:block/parent ent)]
-           :when (and parent (= uuid (:block/uuid parent)))]
-       {:type :self-parent :uuid uuid})
-     (for [ent ents
-           :let [uuid (:block/uuid ent)]
-           :when (and (not (ldb/page? ent))
-                      (parent-cycle? ent))]
-       {:type :cycle :uuid uuid}))))
+(defn- pop-stack
+  [stack]
+  (when (seq stack)
+    [(last stack) (pop stack)]))
 
-(defn- retract-entity-ids
-  [db-before tx-data]
-  (->> tx-data
-       (keep (fn [item]
-               (when (and (vector? item) (= :db/retractEntity (first item)))
-                 (second item))))
-       (map (fn [id] (d/entid db-before id)))
-       (filter int?)))
+(defn- push-undo-op
+  [repo op]
+  (assert (undo-op-validator op) {:op op})
+  (swap! *undo-ops update repo conj-op op))
 
-(defn- affected-entity-ids
-  [db-before {:keys [tx-data]} original-tx-data]
-  (let [tx-ids (->> tx-data
-                    (mapcat (fn [[e a v _tx _added]]
-                              (cond-> #{e}
-                                (and (contains? ref-attrs a) (int? v)) (conj v)
-                                (and (contains? ref-attrs a) (vector? v))
-                                (conj (d/entid db-before v)))))
+(defn- push-redo-op
+  [repo op]
+  (assert (undo-op-validator op) {:op op})
+  (swap! *redo-ops update repo conj-op op))
+
+(defn- pop-undo-op
+  [repo]
+  (let [undo-stack (get @*undo-ops repo)
+        [op undo-stack*] (pop-stack undo-stack)]
+    (swap! *undo-ops assoc repo undo-stack*)
+    op))
+
+(defn- pop-redo-op
+  [repo]
+  (let [redo-stack (get @*redo-ops repo)
+        [op redo-stack*] (pop-stack redo-stack)]
+    (swap! *redo-ops assoc repo redo-stack*)
+    op))
+
+(defn- empty-undo-stack?
+  [repo]
+  (empty? (get @*undo-ops repo)))
+
+(defn- empty-redo-stack?
+  [repo]
+  (empty? (get @*redo-ops repo)))
+
+(defn- undo-redo-action-meta
+  [{:keys [tx-meta]
+    source-tx-id :db-sync/tx-id}
+   undo?]
+  (-> tx-meta
+      (dissoc :db-sync/tx-id)
+      (assoc
+       :gen-undo-ops? false
+       :persist-op? true
+       :undo? undo?
+       :redo? (not undo?)
+       :db-sync/source-tx-id source-tx-id)))
+
+(defn- rebind-op-db-sync-tx-id
+  [op history-tx-id]
+  (if (uuid? history-tx-id)
+    (mapv (fn [item]
+            (if (= ::db-transact (first item))
+              [::db-transact (assoc (second item) :db-sync/tx-id history-tx-id)]
+              item))
+          op)
+    op))
+
+(defn- skippable-worker-error?
+  [error]
+  (= :invalid-history-action-ops (:reason (ex-data error))))
+
+(defn- skippable-worker-result?
+  [undo? {:keys [reason]}]
+  (if undo?
+    (contains? #{:invalid-history-action-ops
+                 :invalid-history-action-tx
+                 :unsupported-history-action}
+               reason)
+    (contains? #{:invalid-history-action-ops}
+               reason)))
+
+(defn- expected-invalid-history-action-reason?
+  [reason]
+  (contains? #{:invalid-history-action-ops
+               :invalid-history-action-tx}
+             reason))
+
+(declare undo-redo-aux)
+
+(defn- empty-stack-result
+  [undo?]
+  (if undo? ::empty-undo-stack ::empty-redo-stack))
+
+(defn- push-opposite-op!
+  [repo undo? op]
+  (let [sanitize-db-transact
+        (fn [data]
+          ;; Keep undo/redo history op-only. Drop any legacy/raw tx payloads.
+          (dissoc data
+                  :tx
+                  :tx-data
+                  :reversed-tx
+                  :reversed-tx-data
+                  :db-sync/normalized-tx-data
+                  :db-sync/reversed-tx-data))
+        op' (mapv (fn [item]
+                    (if (= ::db-transact (first item))
+                      [::db-transact (sanitize-db-transact (second item))]
+                      item))
+                  op)]
+    ((if undo? push-redo-op push-undo-op) repo op')))
+
+(defn- undo-redo-result
+  [repo conn undo? op op']
+  (push-opposite-op! repo undo? op')
+  (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
+                            (map second))
+        cursor (if undo?
+                 (first editor-cursors)
+                 (or (last editor-cursors) (first editor-cursors)))
+        block-content (when-let [block-uuid (:block-uuid cursor)]
+                        (:block/title (d/entity @conn [:block/uuid block-uuid])))]
+    {:undo? undo?
+     :editor-cursors editor-cursors
+     :block-content block-content}))
+
+(defn- skip-op-and-recur
+  [repo undo?]
+  (undo-redo-aux repo undo?))
+
+(defn- apply-history-action
+  [repo conn undo? op tx-meta' tx-id]
+  (if-let [apply-action @*apply-history-action!]
+    (try
+      (let [worker-result (apply-action repo tx-id undo? tx-meta')]
+        (cond
+          (:applied? worker-result)
+          (undo-redo-result repo conn undo? op
+                            (if undo?
+                              op
+                              (rebind-op-db-sync-tx-id op (:history-tx-id worker-result))))
+
+          (skippable-worker-result? undo? worker-result)
+          (skip-op-and-recur repo undo?)
+
+          :else
+          (do
+            (when-not (expected-invalid-history-action-reason? (:reason worker-result))
+              (log/error ::undo-redo-worker-action-unavailable
+                         {:undo? undo?
+                          :repo repo
+                          :tx-id tx-id
+                          :result worker-result}))
+            (clear-history! repo)
+            (empty-stack-result undo?))))
+      (catch :default e
+        (if (skippable-worker-error? e)
+          (skip-op-and-recur repo undo?)
+          (do
+            (log/error ::undo-redo-worker-failed e)
+            (clear-history! repo)
+            (throw e)))))
+    (do
+      (log/error ::undo-redo-worker-action-unavailable
+                 {:undo? undo?
+                  :repo repo
+                  :tx-id tx-id
+                  :tx-meta tx-meta'
+                  :reason :missing-apply-history-action})
+      (clear-history! repo)
+      (empty-stack-result undo?))))
+
+(defn- process-db-op
+  [repo conn undo? op]
+  (when-let [data (some #(when (= ::db-transact (first %))
+                           (second %))
+                        op)]
+    (let [tx-id (:db-sync/tx-id data)
+          tx-meta' (merge (undo-redo-action-meta data undo?)
+                          (select-keys data [:db-sync/forward-outliner-ops
+                                             :db-sync/inverse-outliner-ops]))]
+      (apply-history-action repo conn undo? op tx-meta' tx-id))))
+
+(defn- undo-redo-aux
+  [repo undo?]
+  (if-let [op (not-empty ((if undo? pop-undo-op pop-redo-op) repo))]
+    (if (= ::ui-state (ffirst op))
+      (do
+        (push-opposite-op! repo undo? op)
+        {:undo? undo?
+         :ui-state-str (second (first op))})
+      (process-db-op repo (worker-state/get-datascript-conn repo) undo? op))
+    (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
+      (empty-stack-result undo?))))
+
+(defn undo
+  [repo]
+  (undo-redo-aux repo true))
+
+(defn redo
+  [repo]
+  (undo-redo-aux repo false))
+
+(defn record-editor-info!
+  [repo editor-info]
+  (when editor-info
+    (swap! *undo-ops
+           update repo
+           (fn [stack]
+             (if (seq stack)
+               (update stack (dec (count stack))
+                       (fn [op]
+                         (conj (vec op) [::record-editor-info editor-info])))
+               stack)))))
+
+(defn record-ui-state!
+  [repo ui-state-str]
+  (when ui-state-str
+    (push-undo-op repo [[::ui-state ui-state-str]])))
+
+(defn- pending-history-action-ops
+  [repo tx-id]
+  (when (uuid? tx-id)
+    (client-op/history-action-ops-by-tx-id repo tx-id)))
+
+(defn gen-undo-ops!
+  [repo {:keys [tx-data tx-meta db-after db-before]} tx-id
+   {:keys [apply-history-action!]}]
+  (when (nil? @*apply-history-action!)
+    (reset! *apply-history-action! apply-history-action!))
+  (let [{:keys [outliner-op local-tx?]} tx-meta
+        {:db-sync/keys [forward-outliner-ops inverse-outliner-ops]} (pending-history-action-ops repo tx-id)]
+    (when (and
+           (true? local-tx?)
+           outliner-op
+           (not (false? (:gen-undo-ops? tx-meta)))
+           (not (:create-today-journal? tx-meta))
+           (not (contains? #{:create-view} (:source-outliner-op tx-meta))))
+      (let [all-ids (distinct (map :e tx-data))
+            retracted-ids (set
+                           (filter
+                            (fn [id] (and (nil? (d/entity db-after id)) (d/entity db-before id)))
+                            all-ids))
+            added-ids (set
+                       (filter
+                        (fn [id] (and (nil? (d/entity db-before id)) (d/entity db-after id)))
+                        all-ids))
+            editor-info (or (:undo-redo/editor-info tx-meta)
+                            (take-pending-editor-info! repo))
+
+            data (cond-> {:db-sync/tx-id tx-id
+                          :tx-meta (dissoc tx-meta :outliner-ops)
+                          :added-ids added-ids
+                          :retracted-ids retracted-ids
+                          :db-sync/forward-outliner-ops forward-outliner-ops
+                          :db-sync/inverse-outliner-ops inverse-outliner-ops})
+            op (->> [(when editor-info [::record-editor-info editor-info])
+                     [::db-transact data]]
                     (remove nil?)
-                    set)
-        retract-ids (retract-entity-ids db-before original-tx-data)
-        child-ids (mapcat (fn [id]
-                            (when-let [ent (d/entity db-before id)]
-                              (map :db/id (:block/_parent ent))))
-                          retract-ids)]
-    (-> tx-ids
-        (into retract-ids)
-        (into child-ids))))
+                    vec)]
+        ;; A new local action invalidates redo history.
+        (swap! *redo-ops assoc repo [])
+        (push-undo-op repo op)))))
 
-(defn valid-undo-redo-tx?
-  [conn tx-data]
-  (try
-    (if-not (structural-tx? tx-data)
-      (if (entities-exist? @conn tx-data)
-        true
-        (do
-          (log/warn ::undo-redo-invalid {:reason :missing-entities})
-          false))
-      (let [db-before @conn
-            tx-report (d/with db-before tx-data)
-            db-after (:db-after tx-report)
-            affected-ids (affected-entity-ids db-before tx-report tx-data)
-            baseline-issues (if (seq affected-ids)
-                              (set (issues-for-entity-ids db-before affected-ids))
-                              #{})
-            after-issues (if (seq affected-ids)
-                           (set (issues-for-entity-ids db-after affected-ids))
-                           #{})
-            new-issues (seq (set/difference after-issues baseline-issues))]
-        (when (seq new-issues)
-          (log/warn ::undo-redo-invalid {:issues (take 5 new-issues)}))
-        (empty? new-issues)))
-    (catch :default e
-      (log/error ::undo-redo-validate-failed e)
-      false)))
+(defn get-debug-state
+  [repo]
+  {:undo-ops (get @*undo-ops repo [])
+   :redo-ops (get @*redo-ops repo [])
+   :pending-editor-info (get @*pending-editor-info repo)})
+
+(defn referenced-history-tx-ids
+  [repo]
+  (->> (concat (get @*undo-ops repo [])
+               (get @*redo-ops repo []))
+       (mapcat identity)
+       (keep (fn [item]
+               (when (= ::db-transact (first item))
+                 (let [tx-id (:db-sync/tx-id (second item))]
+                   (when (uuid? tx-id)
+                     tx-id)))))
+       set))

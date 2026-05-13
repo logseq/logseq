@@ -1,8 +1,5 @@
 (ns frontend.handler.export.common
-  "common fns for exporting.
-  exclude some fns which produce lazy-seq, which can cause strange behaviors
-  when use together with dynamic var."
-  (:refer-clojure :exclude [map filter mapcat concat remove])
+  "Common functions for exporting."
   (:require [clojure.string :as string]
             [frontend.db.conn :as conn]
             [frontend.state :as state]
@@ -10,18 +7,20 @@
             [promesa.core :as p]))
 
 (defn get-content-config []
-  {:export-bullet-indentation (state/get-export-bullet-indentation)})
+  {:export-bullet-indentation (state/get-export-bullet-indentation)
+   :date-formatter (state/get-date-formatter)})
 
 (defn root-block-uuids->content
   "Converts given block uuids to content for given repo"
   ([repo root-block-uuids]
    (root-block-uuids->content repo root-block-uuids nil))
-  ([repo root-block-uuids {:keys [open-blocks-only?]}]
+  ([repo root-block-uuids {:keys [open-blocks-only? include-properties?]}]
    (binding [cli-export-common/*current-db* (conn/get-db repo)
              cli-export-common/*content-config* (get-content-config)]
      (let [contents (mapv (fn [id]
                             (cli-export-common/get-blocks-contents id
-                                                                   :open-blocks-only? open-blocks-only?))
+                                                                   :open-blocks-only? open-blocks-only?
+                                                                   :include-properties? include-properties?))
                           root-block-uuids)]
        (string/join "\n" (mapv string/trim-newline contents))))))
 
@@ -29,11 +28,12 @@
   "Gets page content for current repo, db and state"
   ([page-uuid]
    (get-page-content page-uuid nil))
-  ([page-uuid {:keys [open-blocks-only?]}]
+  ([page-uuid {:keys [open-blocks-only? include-properties?]}]
    (binding [cli-export-common/*current-db* (conn/get-db (state/get-current-repo))
              cli-export-common/*content-config* (get-content-config)]
      (cli-export-common/get-page-content page-uuid
-                                         :open-blocks-only? open-blocks-only?))))
+                                         :open-blocks-only? open-blocks-only?
+                                         :include-properties? include-properties?))))
 
 (defn <get-debug-datoms
   [repo]

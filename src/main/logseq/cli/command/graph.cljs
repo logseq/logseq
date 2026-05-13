@@ -1,0 +1,603 @@
+(ns logseq.cli.command.graph
+  "Graph-related CLI commands."
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [cljs.pprint :as pprint]
+            [clojure.string :as string]
+            [logseq.cli.command.core :as core]
+            [logseq.cli.command.sync :as sync-command]
+            [logseq.cli.common :as cli-common]
+            [logseq.cli.config :as cli-config]
+            [logseq.cli.humanize :as cli-humanize]
+            [logseq.cli.server :as cli-server]
+            [logseq.cli.transport :as transport]
+            [logseq.common.graph :as common-graph]
+            [logseq.common.graph-dir :as graph-dir]
+            [logseq.db-worker.graph-backup :as graph-backup]
+            [promesa.core :as p]))
+
+(def ^:private graph-export-spec
+  {:type {:desc "Export type"
+          :alias :t
+          :validate #{"edn" "sqlite"}}
+   :file {:desc "Export file path"
+          :coerce common-graph/expand-home
+          :complete :file}
+   :include-timestamps {:desc "Include timestamps in export"
+                        :coerce :boolean}
+   :exclude-built-in-pages {:desc "Exclude built-in pages"
+                            :coerce :boolean}
+   :exclude-namespaces {:desc "Namespaces to exclude from properties and classes"}})
+
+(def ^:private graph-import-spec
+  {:type {:desc "Import type"
+          :alias :t
+          :validate #{"edn" "sqlite"}}
+   :input {:desc "Input path"
+           :coerce common-graph/expand-home
+           :complete :file}})
+
+(def ^:private graph-create-spec
+  {:enable-sync {:desc "Upload the new graph to Logseq Sync and start sync"
+                 :coerce :boolean}
+   :e2ee-password {:desc "Verify and persist E2EE password before enabling sync"
+                   :coerce :string}})
+
+(def ^:private graph-validate-spec
+  {:fix {:desc "Attempt to fix validation errors"
+         :alias :f
+         :coerce :boolean
+         :default false}})
+
+(def ^:private graph-backup-create-spec
+  {:name {:desc "Optional backup label"}})
+
+(def ^:private graph-backup-restore-spec
+  {:src {:desc "Source backup name"}
+   :dst {:desc "Destination graph name"}})
+
+(def ^:private graph-backup-remove-spec
+  {:src {:desc "Source backup name"}})
+
+(def ^:private export-root-dir-name "export")
+
+(def entries
+  [(core/command-entry ["graph" "list"] :graph-list "List graphs" {}
+                       {:examples ["logseq graph list"]})
+   (core/command-entry ["graph" "create"] :graph-create "Create graph" graph-create-spec
+                       {:examples ["logseq graph create --graph my-graph"
+                                   "logseq graph create --graph my-graph --enable-sync"
+                                   "logseq graph create --graph my-graph --enable-sync --e2ee-password \"my-secret\""]})
+   (core/command-entry ["graph" "switch"] :graph-switch "Switch current graph" {}
+                       {:examples ["logseq graph switch --graph my-graph"]})
+   (core/command-entry ["graph" "remove"] :graph-remove "Remove graph" {}
+                       {:examples ["logseq graph remove --graph my-graph"]})
+   (core/command-entry ["graph" "validate"] :graph-validate "Validate graph" graph-validate-spec
+                       {:examples ["logseq graph validate --graph my-graph"
+                                   "logseq graph validate --graph my-graph --fix"]})
+   (core/command-entry ["graph" "info"] :graph-info "Graph metadata" {}
+                       {:examples ["logseq graph info --graph my-graph"]})
+   (core/command-entry ["graph" "export"] :graph-export "Export graph" graph-export-spec
+                       {:examples ["logseq graph export --graph my-graph --type edn --file /tmp/my-graph.edn --include-timestamps --exclude-built-in-pages --exclude-namespaces user,project"
+                                   "logseq graph export --graph my-graph --type sqlite --file /tmp/my-graph.sqlite"]})
+   (core/command-entry ["graph" "import"] :graph-import "Import graph" graph-import-spec
+                       {:examples ["logseq graph import --graph my-graph --type edn --input /tmp/my-graph.edn"]})
+   (core/command-entry ["graph" "backup" "list"] :graph-backup-list "List graph backups" {}
+                       {:examples ["logseq graph backup list --graph my-graph"]})
+   (core/command-entry ["graph" "backup" "create"] :graph-backup-create "Create graph backup" graph-backup-create-spec
+                       {:examples ["logseq graph backup create --graph my-graph"
+                                   "logseq graph backup create --graph my-graph --name nightly"]})
+   (core/command-entry ["graph" "backup" "restore"] :graph-backup-restore "Restore graph backup" graph-backup-restore-spec
+                       {:examples ["logseq graph backup restore --src my-graph-nightly --dst my-graph-restore"]})
+   (core/command-entry ["graph" "backup" "remove"] :graph-backup-remove "Remove graph backup" graph-backup-remove-spec
+                       {:examples ["logseq graph backup remove --src my-graph-nightly"]})])
+
+(def ^:private graph-info-kv-query
+  '[:find ?ident ?value
+    :where
+    [?e :db/ident ?ident]
+    [(namespace ?ident) ?ns]
+    [(= "logseq.kv" ?ns)]
+    [?e :kv/value ?value]])
+
+(defn normalize-import-export-type
+  [value]
+  (some-> value string/lower-case string/trim))
+
+(def ^:private graph-export-edn-only-option-keys
+  #{:include-timestamps :exclude-built-in-pages :exclude-namespaces})
+
+(defn- parse-csv-option
+  [value]
+  (when (some? value)
+    (->> (string/split (str value) #",")
+         (map string/trim)
+         (remove string/blank?)
+         vec)))
+
+(defn- normalize-csv-option
+  [value]
+  (when-let [values (seq (parse-csv-option value))]
+    (string/join "," values)))
+
+(defn normalize-options
+  [command opts]
+  (if (= command :graph-export)
+    (cond-> opts
+      (contains? opts :exclude-namespaces) (update :exclude-namespaces normalize-csv-option))
+    opts))
+
+(defn invalid-options?
+  [command opts]
+  (let [export-type (normalize-import-export-type (:type opts))
+        edn-only-options-specified? (some #(contains? opts %) graph-export-edn-only-option-keys)]
+    (cond
+      (and (= command :graph-create)
+           (contains? opts :e2ee-password)
+           (not (true? (:enable-sync opts))))
+      "--e2ee-password requires --enable-sync"
+
+      (and (= command :graph-export)
+           (= export-type "sqlite")
+           edn-only-options-specified?)
+      "graph export --type sqlite does not accept --include-timestamps, --exclude-built-in-pages, or --exclude-namespaces"
+
+      (and (= command :graph-export)
+           (= export-type "edn")
+           (contains? opts :exclude-namespaces)
+           (not (seq (:exclude-namespaces opts))))
+      "graph export --exclude-namespaces must include at least one non-empty value"
+
+      :else
+      nil)))
+
+(defn- graph-export-options
+  [{:keys [include-timestamps exclude-built-in-pages exclude-namespaces]}]
+  (let [exclude-namespaces' (some->> exclude-namespaces
+                                     parse-csv-option
+                                     (map keyword)
+                                     set
+                                     not-empty)]
+    (cond-> {}
+      include-timestamps (assoc :include-timestamps? true)
+      exclude-built-in-pages (assoc :exclude-built-in-pages? true)
+      exclude-namespaces' (assoc :exclude-namespaces exclude-namespaces'))))
+
+(defn- missing-graph-error
+  []
+  {:ok? false
+   :error {:code :missing-graph
+           :message "graph name is required"}})
+
+(defn- trimmed-option
+  [value]
+  (some-> value str string/trim not-empty))
+
+(defn build-backup-list-action
+  [repo]
+  (if-not (seq repo)
+    {:ok? false
+     :error {:code :missing-repo
+             :message "repo is required for backup list"}}
+    {:ok? true
+     :action {:type :graph-backup-list
+              :command :graph-backup-list
+              :repo repo
+              :graph (core/repo->graph repo)}}))
+
+(defn build-backup-create-action
+  [repo name]
+  (if-not (seq repo)
+    {:ok? false
+     :error {:code :missing-repo
+             :message "repo is required for backup create"}}
+    (let [graph (core/repo->graph repo)
+          backup-name (graph-backup/build-backup-name repo name)]
+      {:ok? true
+       :action {:type :graph-backup-create
+                :command :graph-backup-create
+                :repo repo
+                :graph graph
+                :backup-name backup-name}})))
+
+(defn build-backup-restore-action
+  [source-repo src dst]
+  (let [src (trimmed-option src)
+        dst (trimmed-option dst)
+        destination-repo (core/resolve-repo dst)]
+    (cond
+      (not (seq source-repo))
+      {:ok? false
+       :error {:code :missing-repo
+               :message "repo is required for backup restore"}}
+
+      (not (seq destination-repo))
+      {:ok? false
+       :error {:code :missing-dst
+               :message "destination graph name is required"}}
+
+      :else
+      {:ok? true
+       :action {:type :graph-backup-restore
+                :command :graph-backup-restore
+                :repo destination-repo
+                :graph (core/repo->graph destination-repo)
+                :source-repo source-repo
+                :source-graph (core/repo->graph source-repo)
+                :src src
+                :dst dst
+                :allow-missing-graph true
+                :require-missing-graph true}})))
+
+(defn build-backup-remove-action
+  [repo src]
+  (if-not (seq repo)
+    {:ok? false
+     :error {:code :missing-repo
+             :message "repo is required for backup remove"}}
+    {:ok? true
+     :action {:type :graph-backup-remove
+              :command :graph-backup-remove
+              :repo repo
+              :graph (core/repo->graph repo)
+              :src (trimmed-option src)}}))
+
+(defn build-graph-action
+  [command graph repo options]
+  (case command
+    :graph-list
+    {:ok? true
+     :action {:type :graph-list
+              :command :graph-list}}
+
+    :graph-create
+    (if-not (seq graph)
+      (missing-graph-error)
+      (let [graph-name (core/repo->graph repo)
+            base-action {:command :graph-create
+                         :method :thread-api/create-or-open-db
+                         :args [repo {}]
+                         :repo repo
+                         :graph graph-name
+                         :allow-missing-graph true
+                         :require-missing-graph true
+                         :persist-repo graph-name}]
+        {:ok? true
+         :action (if (true? (:enable-sync options))
+                   (assoc base-action
+                          :type :graph-create-enable-sync
+                          :enable-sync true
+                          :e2ee-password (:e2ee-password options))
+                   (assoc base-action :type :invoke))}))
+
+    :graph-switch
+    (if-not (seq graph)
+      (missing-graph-error)
+      {:ok? true
+       :action {:type :graph-switch
+                :command :graph-switch
+                :repo repo
+                :graph (core/repo->graph repo)}})
+
+    :graph-remove
+    (if-not (seq graph)
+      (missing-graph-error)
+      {:ok? true
+       :action {:type :graph-remove
+                :command :graph-remove
+                :repo repo
+                :graph (core/repo->graph repo)}})
+
+    :graph-validate
+    (if-not (seq repo)
+      (missing-graph-error)
+      {:ok? true
+       :action {:type :invoke
+                :command :graph-validate
+                :method :thread-api/validate-db
+                :args [repo options]
+                :repo repo
+                :graph (core/repo->graph repo)}})
+
+    :graph-info
+    (if-not (seq repo)
+      (missing-graph-error)
+      {:ok? true
+       :action {:type :graph-info
+                :command :graph-info
+                :repo repo
+                :graph (core/repo->graph repo)}})))
+
+(defn build-export-action
+  [repo export-type file options]
+  (if-not (seq repo)
+    {:ok? false
+     :error {:code :missing-repo
+             :message "repo is required for export"}}
+    {:ok? true
+     :action (cond-> {:type :graph-export
+                      :repo repo
+                      :graph (core/repo->graph repo)
+                      :export-type export-type
+                      :file file}
+               (= export-type "edn")
+               (assoc :graph-options (graph-export-options options)))}))
+
+(defn build-import-action
+  [repo import-type input]
+  (if-not (seq repo)
+    {:ok? false
+     :error {:code :missing-repo
+             :message "repo is required for import"}}
+    {:ok? true
+     :action {:type :graph-import
+              :repo repo
+              :graph (core/repo->graph repo)
+              :import-type import-type
+              :input input
+              :allow-missing-graph true
+              :require-missing-graph (= import-type "sqlite")}}))
+
+(defn- graph-item->graph-name
+  [item]
+  (case (:kind item)
+    :canonical (:graph-name item)
+    :legacy (or (:legacy-graph-name item)
+                (:legacy-dir item))
+    :legacy-undecodable (:legacy-dir item)
+    nil))
+
+(defn- export-root-path
+  [config repo]
+  (when-let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)]
+    (node-path/join (cli-server/graphs-dir config)
+                    graph-dir-name
+                    export-root-dir-name)))
+
+(defn- default-sqlite-export-path
+  [config repo]
+  (when-let [export-root (export-root-path config repo)]
+    (node-path/join export-root
+                    (str (graph-dir/graph-dir-key->encoded-dir-name
+                          (graph-dir/repo->graph-dir-key repo))
+                         "_"
+                         (quot (.now js/Date) 1000)
+                         ".sqlite"))))
+
+(defn execute-graph-list
+  [_action config]
+  (let [graph-items (vec (cli-server/list-graph-items config))
+        graphs (->> graph-items
+                    (keep graph-item->graph-name)
+                    (mapv core/repo->graph))
+        legacy-count (->> graph-items
+                          (filter (fn [{:keys [kind]}]
+                                    (contains? #{:legacy :legacy-undecodable} kind)))
+                          count)]
+    (cond-> {:status :ok
+             :data {:graphs graphs
+                    :graph-items graph-items}}
+      (pos? legacy-count) (assoc :human {:graph-list {:legacy-count legacy-count}}))))
+
+(defn execute-graph-backup-list
+  [action config]
+  {:status :ok
+   :data {:backups (graph-backup/list-backups (cli-server/graphs-dir config)
+                                              (:repo action))}})
+
+(defn execute-graph-backup-create
+  [action config]
+  (p/let [cfg (cli-server/ensure-server! config (:repo action))
+          {:keys [backup-name path]} (graph-backup/<create-backup!
+                                      {:graphs-dir (cli-server/graphs-dir config)
+                                       :repo (:repo action)
+                                       :backup-name (:backup-name action)
+                                       :source :cli
+                                       :snapshot! (fn [dst-path]
+                                                    (transport/invoke cfg
+                                                                      :thread-api/backup-db-sqlite
+                                                                      [(:repo action) dst-path]))})]
+    {:status :ok
+     :data {:backup-name backup-name
+            :path path
+            :message (str "Created backup " backup-name)}}))
+
+(declare execute-graph-import)
+
+(defn execute-graph-backup-restore
+  [action config]
+  (let [src-path (graph-backup/backup-db-path (cli-server/graphs-dir config)
+                                              (:source-repo action)
+                                              (:src action))]
+    (if-not (and (seq src-path)
+                 (fs/existsSync src-path))
+      {:status :error
+       :error {:code :backup-not-found
+               :message (str "backup not found: " (:src action))}}
+      (execute-graph-import (assoc action
+                                   :import-type "sqlite"
+                                   :input src-path)
+                            config))))
+
+(defn execute-graph-backup-remove
+  [action config]
+  (let [removed? (graph-backup/remove-backup! (cli-server/graphs-dir config)
+                                              (:repo action)
+                                              (:src action))]
+    (if-not removed?
+      {:status :error
+       :error {:code :backup-not-found
+               :message (str "backup not found: " (:src action))}}
+      {:status :ok
+       :data {:message (str "Removed backup " (:src action))}})))
+
+(defn- format-validation-errors
+  [errors]
+  (let [error-count (count errors)]
+    (str "Graph invalid. Found "
+         (cli-humanize/format-count error-count)
+         " "
+         (cli-humanize/pluralize-noun error-count "entity")
+         " with errors:\n"
+         (with-out-str (pprint/pprint errors)))))
+
+(defn- graph-validate-result
+  [result]
+  (if (seq (:errors result))
+    {:status :error
+     :error {:code :graph-validation-failed
+             :message (format-validation-errors (:errors result))}
+     :data {:errors (:errors result)}}
+    {:status :ok :data {:result result}}))
+
+(defn execute-invoke
+  [action config]
+  (p/let [cfg (if-let [repo (:repo action)]
+                (cli-server/ensure-server! config repo)
+                (p/resolved config))
+          result (transport/invoke cfg
+                                   (:method action)
+                                   (:args action))]
+    (when-let [repo (:persist-repo action)]
+      (cli-config/update-config! config {:graph repo}))
+    (let [write (:write action)]
+      (cond
+        (= :graph-validate (:command action))
+        (graph-validate-result result)
+
+        write
+        (let [{:keys [format path]} write]
+          (transport/write-output {:format format :path path :data result})
+          {:status :ok
+           :data {:message (str "wrote " path)}})
+
+        :else
+        {:status :ok :data {:result result}}))))
+
+(defn- sync-stage-action
+  [type {:keys [repo graph e2ee-password]}]
+  {:type type
+   :repo repo
+   :graph graph
+   :e2ee-password e2ee-password})
+
+(defn execute-graph-create-enable-sync
+  [action config]
+  (p/let [create-result (execute-invoke action config)]
+    (if (= :error (:status create-result))
+      create-result
+      (p/let [upload-result (sync-command/execute (sync-stage-action :sync-upload action) config)]
+        (if (= :error (:status upload-result))
+          upload-result
+          (p/let [start-result (sync-command/execute (sync-stage-action :sync-start action) config)]
+            (if (= :error (:status start-result))
+              start-result
+              {:status :ok
+               :data {:graph (:graph action)
+                      :repo (:repo action)
+                      :stages {:create (:data create-result)
+                               :upload (:data upload-result)
+                               :start (:data start-result)}}})))))))
+
+(defn execute-graph-remove
+  [action config]
+  (-> (p/let [stop-result (cli-server/stop-server! config (:repo action))
+              _ (when-not (or (:ok? stop-result)
+                              (= :server-not-found (get-in stop-result [:error :code])))
+                  (throw (ex-info (get-in stop-result [:error :message] "failed to stop server")
+                                  {:code (get-in stop-result [:error :code])})))
+              unlinked-dir (cli-common/unlink-graph! (cli-server/graphs-dir config) (:repo action))]
+        (if unlinked-dir
+          {:status :ok
+           :data {:result nil}}
+          {:status :error
+           :error {:code :graph-not-removed
+                   :message "unable to remove graph"}}))))
+
+(defn execute-graph-switch
+  [action config]
+  (-> (p/let [graphs (cli-server/list-graphs config)
+              graph (:graph action)]
+        (if-not (some #(= graph %) graphs)
+          {:status :error
+           :error {:code :graph-not-found
+                   :message (str "graph not found: " graph)}}
+          (p/let [_ (cli-server/ensure-server! config (:repo action))]
+            (cli-config/update-config! config {:graph graph})
+            {:status :ok
+             :data {:message (str "switched to " graph)}})))))
+
+(defn execute-graph-info
+  [action config]
+  (let [ident->kv-key (fn [ident]
+                        (if (keyword? ident)
+                          (if-let [ident-ns (namespace ident)]
+                            (str ident-ns "/" (name ident))
+                            (name ident))
+                          (str ident)))
+        kv-lookup (fn [kv key]
+                    (or (get kv key)
+                        (get kv (str ":" key))))]
+    (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+                rows (transport/invoke cfg :thread-api/q [(:repo action) [graph-info-kv-query]])
+                kv (reduce (fn [acc [ident value]]
+                             (assoc acc (ident->kv-key ident) value))
+                           {}
+                           (or rows []))
+                created-at (kv-lookup kv "logseq.kv/graph-created-at")
+                schema-version (kv-lookup kv "logseq.kv/schema-version")]
+          {:status :ok
+           :data {:graph (:graph action)
+                  :logseq.kv/graph-created-at created-at
+                  :logseq.kv/schema-version schema-version
+                  :kv kv}}))))
+
+(defn execute-graph-export
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              export-type (:export-type action)
+              file (or (:file action)
+                       (when (= export-type "sqlite")
+                         (default-sqlite-export-path config (:repo action))))
+              payload (cond-> {:export-type :graph}
+                        (seq (:graph-options action))
+                        (assoc :graph-options (:graph-options action)))
+              export-result (when (= export-type "edn")
+                              (transport/invoke cfg
+                                                :thread-api/export-edn
+                                                [(:repo action) payload]))
+              _ (case export-type
+                  "edn"
+                  (transport/write-output {:format :edn
+                                           :path file
+                                           :data export-result})
+                  "sqlite"
+                  (transport/invoke cfg
+                                    :thread-api/backup-db-sqlite
+                                    [(:repo action) file])
+                  (throw (ex-info "unsupported export type" {:export-type export-type})))]
+        {:status :ok
+         :data {:message (str "wrote " file)}})))
+
+(defn execute-graph-import
+  [action config]
+  (-> (p/let [existing-graphs (cli-server/list-graphs config)
+              graph (core/repo->graph (:repo action))
+              new-graph? (not (some #(= graph %) existing-graphs))
+              _ (cli-server/stop-server! config (:repo action))
+              cfg (cli-server/ensure-server! config (:repo action))
+              import-type (:import-type action)
+              input-data (case import-type
+                           "edn" (transport/read-input {:format :edn :path (:input action)})
+                           "sqlite" (transport/read-input {:format :sqlite :path (:input action)})
+                           (throw (ex-info "unsupported import type" {:import-type import-type})))
+              method (if (= import-type "sqlite")
+                       :thread-api/import-db-binary
+                       :thread-api/import-edn)
+              _ (transport/invoke cfg method [(:repo action) input-data])
+              _ (cli-server/restart-server! config (:repo action))]
+        {:status :ok
+         :data {:new-graph? new-graph?
+                :message (str (when new-graph?
+                                (str "Created graph " graph "\n"))
+                              "Imported " import-type " from " (:input action))}})))

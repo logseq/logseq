@@ -8,7 +8,9 @@
             [datascript.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [electron.locale :as electron-locale]
             [frontend.db.conn-state :as db-conn-state]
+            [frontend.dicts :as dicts]
             [frontend.flows :as flows]
             [frontend.mobile.util :as mobile-util]
             [frontend.spec.storage :as storage-spec]
@@ -35,33 +37,41 @@
 (defonce *editor-info (atom nil))
 (defonce app-ready-promise (p/deferred))
 
+(def ^:private supported-locale-tags
+  (into {}
+        (map (fn [locale]
+               [(string/lower-case (name locale)) locale])
+             (keys dicts/dicts))))
+
+(defn- canonical-preferred-language
+  "Convert browser/storage locale tags into one supported locale string."
+  [language]
+  (let [tag (cond
+              (keyword? language) (name language)
+              (string? language) language
+              :else nil)]
+    (when-not (string/blank? tag)
+      (let [normalized-tag (some-> tag string/trim string/lower-case)
+            base-tag (some-> normalized-tag (string/split #"-") first)]
+        (some-> (or (get supported-locale-tags normalized-tag)
+                    (get supported-locale-tags base-tag)
+                    :en)
+                name)))))
+
 (def db-worker-ready-flow
   "`<invoke-db-worker` throws err if `*db-worker` not ready yet.
   Use this flow to wait till db-worker ready."
   (->> (m/watch *db-worker)
        (m/eduction (map some?))))
 
-(defn- <invoke-db-worker*
-  [qkw direct-pass? args-list]
+(defn <invoke-db-worker
+  "invoke db-worker thread api"
+  [qkw & args]
   (let [worker @*db-worker]
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
       (throw (ex-info "db-worker has not been initialized" {})))
-    (apply worker qkw direct-pass? args-list)))
-
-(defn <invoke-db-worker
-  "invoke db-worker thread api"
-  [qkw & args]
-  (<invoke-db-worker* qkw false args))
-
-(defn <invoke-db-worker-direct-pass
-  "invoke db-worker thread api.
-  But directly pass args to db-worker, and result from db-worker as well."
-  [qkw & args]
-  (<invoke-db-worker* qkw true args))
-
-(defonce *infer-worker (atom nil))
-(defonce *infer-worker-port (atom nil))
+    (apply worker qkw args)))
 
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
@@ -87,11 +97,15 @@
       :db/restoring?           nil
 
       :search/q                              ""
-      :search/mode                           nil ; nil -> global mode, :graph -> add graph filter, etc.
+      :search/mode                           nil
       :search/args                           nil
       :search/result                         nil
-      :search/graph-filters                  []
       :search/engines                        {}
+      :search/index-build                    {:running? false
+                                              :repo nil
+                                              :progress 0
+                                              :processed 0
+                                              :total 0}
 
       ;; modals
       :modal/dropdowns                       {}
@@ -147,7 +161,7 @@
       :block/component-editing-mode?         false
       :editor/op                             (atom nil)
       :editor/start-pos                      (atom nil)
-      :editor/async-unsaved-chars            (atom nil)
+      :editor/pending-new-block              (atom nil)
       :editor/hidden-editors                 #{} ;; page names
 
       :editor/action                         (atom nil)
@@ -197,7 +211,7 @@
       ;; It is a list of `[repo db-id block-type block-data]` 4-tuple
       :sidebar/blocks                        '()
 
-      :preferred-language                    (storage/get :preferred-language)
+      :preferred-language                    (canonical-preferred-language (storage/get :preferred-language))
 
       ;; electron
       :electron/auto-updater-downloaded      false
@@ -294,6 +308,7 @@
       :rtc/online-info                       (atom {})
       :rtc/asset-upload-download-progress    (atom {})
       :rtc/users-info                        (atom {})
+      :sync/block-conflicts                  (atom {})
 
       :user/info                             {:UserGroups (storage/get :user-groups)}
       :encryption/graph-parsing?             false
@@ -317,10 +332,7 @@
                                                        3))
       :favorites/updated?                    (atom 0)
       :db/async-queries                      (atom {})
-      :db/latest-transacted-entity-uuids     (atom {})
-
-      :vector-search/state                   (atom {})
-      :vector-search/load-model-progress     (atom nil)})))
+      :db/latest-transacted-entity-uuids     (atom {})})))
 
 ;; User configuration getters under :config (and sometimes :me)
 ;; ========================================
@@ -342,7 +354,8 @@
          ;; The "TODO" query returns tasks with "Todo" status for upcoming future days
          {:default-queries
           {:journals
-           [{:title [:span (shui/tabler-icon "InProgress50" {:class "align-middle pr-1"}) [:span.align-middle "DOING"]]
+           [{:title-key :journal.default-query/doing
+             :title-icon "InProgress50"
              :query '[:find (pull ?b [*])
                       :in $ ?start ?today
                       :where
@@ -353,7 +366,8 @@
                       [(<= ?d ?today)]]
              :inputs [:14d :today]
              :collapsed? true}
-            {:title [:span (shui/tabler-icon "Todo" {:class "align-middle pr-1"}) [:span.align-middle "TODO"]]
+            {:title-key :journal.default-query/todo
+             :title-icon "Todo"
              :query '[:find (pull ?b [*])
                       :in $ ?start ?next
                       :where
@@ -607,14 +621,6 @@ Similar to re-frame subscriptions"
   ([repo]
    (not (false? (:feature/enable-flashcards? (sub-config repo))))))
 
-(defn graph-settings
-  []
-  (:graph/settings (sub-config)))
-
-(defn graph-forcesettings
-  []
-  (:graph/forcesettings (sub-config)))
-
 ;; Enable by default
 (defn show-brackets?
   []
@@ -809,8 +815,12 @@ Similar to re-frame subscriptions"
 
 (defn set-preferred-language!
   [language]
-  (set-state! :preferred-language (name language))
-  (storage/set :preferred-language (name language)))
+  (let [old-language (:preferred-language @state)
+        new-language (canonical-preferred-language language)]
+    (when (not= new-language old-language)
+      (set-state! :preferred-language new-language)
+      (storage/set :preferred-language new-language)
+      (electron-locale/push-locale! new-language))))
 
 (defn delete-repo!
   [repo]
@@ -1043,7 +1053,14 @@ Similar to re-frame subscriptions"
    (set-selection-blocks! blocks nil))
   ([blocks direction]
    (when (seq blocks)
-     (let [blocks (vec (remove nil? blocks))]
+     (let [blocks (->> blocks
+                       (remove nil?)
+                       (remove (fn [block]
+                                 (when-let [id (some-> block (dom/attr "blockid"))]
+                                   (when-let [conn (db-conn-state/get-conn (get-current-repo))]
+                                     (when-let [entity (d/entity @conn [:block/uuid (uuid id)])]
+                                       (ldb/recycled? entity))))))
+                       vec)]
        (set-selection-blocks-aux! blocks)
        (when direction (set-state! :selection/direction direction))
        (let [ids (get-selection-block-ids)]
@@ -1630,24 +1647,6 @@ Similar to re-frame subscriptions"
   []
   (set-search-result! nil))
 
-(defn add-graph-search-filter!
-  [q]
-  (when-not (string/blank? q)
-    (update-state! :search/graph-filters
-                   (fn [value]
-                     (vec (distinct (conj value q)))))))
-
-(defn remove-search-filter!
-  [q]
-  (when-not (string/blank? q)
-    (update-state! :search/graph-filters
-                   (fn [value]
-                     (remove #{q} value)))))
-
-(defn clear-search-filters!
-  []
-  (set-state! :search/graph-filters []))
-
 (defn get-search-mode
   []
   (:search/mode @state))
@@ -1676,6 +1675,7 @@ Similar to re-frame subscriptions"
       (if (and page
                ;; TODO: Use config/dev? when it's not a circular dep
                (not goog.DEBUG)
+               (not= common-config/recycle-page-name (:block/title page))
                (or (and (ldb/hidden? page) (not (ldb/property? page)))
                    (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
         (pub-event! [:notification/show {:content "Cannot open an internal page." :status :warning}])
@@ -2060,11 +2060,18 @@ Similar to re-frame subscriptions"
 
 (defn get-editor-info
   []
-  (when-let [edit-block (get-edit-block)]
-    {:block-uuid (:block/uuid edit-block)
-     :container-id (or @(:editor/container-id @state) :unknown-container)
-     :start-pos @(:editor/start-pos @state)
-     :end-pos (get-edit-pos)}))
+  (let [selected-block-uuids (some-> (get-selection-block-ids) seq vec)
+        selection-info (when selected-block-uuids
+                         {:selected-block-uuids selected-block-uuids
+                          :selection-direction (get-selection-direction)})]
+    (if-let [edit-block (get-edit-block)]
+      (cond-> {:block-uuid (:block/uuid edit-block)
+               :container-id (or @(:editor/container-id @state) :unknown-container)
+               :start-pos @(:editor/start-pos @state)
+               :end-pos (get-edit-pos)}
+        selection-info
+        (merge selection-info))
+      selection-info)))
 
 (defn conj-block-ref!
   [ref-entity]
