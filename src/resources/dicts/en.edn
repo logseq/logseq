@@ -717,6 +717,7 @@
  :graph/removed "Removed graph \"{1}\""
  :graph/removed-and-redirecting "Removed graph \"{1}\". Redirecting to graph \"{2}\""
  :graph/removed-from-sync "This graph has been removed from Logseq Sync."
+ :graph/reset-view "Reset graph view"
  :graph/retry "Retry"
  :graph/search-tags "Search tags"
  :graph/select-all-tags "Select all"
