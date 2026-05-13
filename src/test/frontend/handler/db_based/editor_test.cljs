@@ -39,3 +39,20 @@
           (is (= (str "alias [Tag Number One](#[[" tag-uuid "]])")
                  (:block/title result)))
           (is (= [tag-uuid] (map :block/uuid (:block/refs result)))))))))
+
+(deftest wrap-parse-block-preserves-multiple-block-refs-test
+  (testing "multiple block refs are preserved when markdown hashtag refs are merged"
+    (let [block-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          ref-uuid-a #uuid "11111111-1111-1111-1111-111111111111"
+          ref-uuid-b #uuid "22222222-2222-2222-2222-222222222222"]
+      (with-redefs [db/entity (fn [lookup]
+                                (when (and (vector? lookup)
+                                           (= :block/uuid (first lookup)))
+                                  {:block/uuid (second lookup)}))]
+        (let [result (db-editor-handler/wrap-parse-block
+                      {:block/uuid block-uuid
+                       :block/title (str "((" ref-uuid-a ")) ((" ref-uuid-b "))")})]
+          (is (= #{[:block/uuid ref-uuid-a]
+                   [:block/uuid ref-uuid-b]}
+                 (set (:block/refs result))))
+          (is (= 2 (count (:block/refs result)))))))))
