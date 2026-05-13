@@ -1,6 +1,6 @@
 ---
 name: logseq-review-workflow
-description: Review Logseq changes with a structured workflow that routes findings through general repository rules, third-party library rules, and Logseq module-specific rules.
+description: Review Logseq changes with a structured workflow that routes findings through general repository rules, third-party library rules, Logseq module-specific rules, and targeted runtime verification across the web app, desktop app, and Logseq CLI.
 ---
 
 # Logseq Review Workflow
@@ -24,7 +24,10 @@ Prefer concrete findings backed by code paths, invariants, tests, or runtime beh
 1. Root `AGENTS.md` for repository rules and test commands.
 2. `.agents/skills/logseq-i18n/SKILL.md` when reviewing shipped user-facing UI text or translation dictionaries.
 3. `.agents/skills/logseq-cli/SKILL.md` when review requires running or interpreting the Logseq CLI.
-4. `.agents/skills/logseq-debug-workflow/SKILL.md` when review uncovers a bug that needs runtime reproduction.
+4. `.agents/skills/logseq-repl/SKILL.md` when review requires Desktop renderer, Electron main-process, or db-worker-node runtime checks.
+5. `Chrome` skill when testing web-app behavior in Chrome.
+6. `computer-use` skill when testing Desktop app UI interactions that require operating the local application window.
+7. `.agents/skills/logseq-debug-workflow/SKILL.md` when review uncovers a bug that needs deeper runtime reproduction.
 
 ## Workflow
 
@@ -86,7 +89,21 @@ Then read every matching module below.
 5. **Test pass** — verify that tests cover the behavior contract and failure cases, not just happy paths.
 6. **Repository-convention pass** — apply naming, i18n, logging, keyword, migration, and command conventions.
 
-### 4. Severity guidance
+### 4. Run targeted runtime verification
+
+After static code inspection, exercise the reviewed functionality in the runtime surfaces affected by the diff. Keep the scenarios narrow: validate the changed behavior, the likely regression path, or the exact failure mode behind a finding.
+
+Use these skills and surfaces:
+
+- **Web app** — use the `Chrome` skill to drive the web UI, inspect rendered state, and check console errors for the reviewed path.
+- **Desktop app** — use `.agents/skills/logseq-repl/SKILL.md` for `:app`, `:electron`, and `:db-worker-node` probes; use `computer-use` for UI interactions that must happen in the Desktop app window.
+- **Logseq CLI** — use `.agents/skills/logseq-cli/SKILL.md` to inspect live command options/examples and run the reviewed CLI behavior.
+
+Prefer isolated test graphs, temporary root directories, or disposable app state when verification needs writes. Do not mutate a user's real graph unless the review request explicitly requires it and the user has approved the target data.
+
+If a surface is relevant but cannot be exercised, say exactly why. Do not describe unrun checks as verified.
+
+### 5. Severity guidance
 
 Use concise severity labels:
 
@@ -95,7 +112,7 @@ Use concise severity labels:
 - **Minor** — readability, naming, local maintainability, missing small cleanup.
 - **Question** — unclear intent or missing context that prevents confident review.
 
-### 5. Finding format
+### 6. Finding format
 
 Each finding should include:
 
@@ -109,10 +126,14 @@ Each finding should include:
 
 If there are no findings, say what was reviewed and which rule modules were applied.
 
+Add a short verification summary after findings or after the no-findings statement. Include the CLI commands, REPL probes, Chrome/browser scenarios, Desktop UI actions, and any relevant checks that could not be run.
+
 ## Review checklist before final response
 
 - Did you apply `rules/common.md`?
 - Did you route every touched library/module to its rule file?
+- Did you run targeted runtime verification after static inspection for every affected web-app, desktop-app, and Logseq CLI surface?
+- Did you separate verified behavior from checks that could not be run?
 - Did you distinguish proven issues from questions?
 - Did you check persisted data, migrations, or protocol compatibility when relevant?
 - Did you check tests and name exact missing test coverage?
