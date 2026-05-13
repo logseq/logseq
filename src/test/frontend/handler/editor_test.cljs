@@ -122,6 +122,20 @@
   ;; Reset state
   (state/set-editor-action! nil))
 
+(deftest get-matched-classes-excludes-class-aliases
+  (test-helper/create-page! "Project Tag" :redirect? false :class? true)
+  (test-helper/create-page! "Alias Only" :redirect? false)
+  (let [class (db/get-case-page "Project Tag")
+        alias (db/get-case-page "Alias Only")]
+    (db/transact! test-helper/test-db [{:db/id (:db/id class)
+                                        :block/alias #{(:db/id alias)}}]))
+  (is (= ["Project Tag"]
+         (map :block/title (editor/get-matched-classes "Project Tag")))
+      "Existing tag title matching still works")
+  (is (empty? (filter #(= "Alias Only" (:block/title %))
+                      (editor/get-matched-classes "Alias Only")))
+      "Tag aliases are not separate tag completion choices"))
+
 (defn- default-keyup-result
   [{:keys [value cursor-pos key code action is-processed?]
     :or {code "KeyA"
