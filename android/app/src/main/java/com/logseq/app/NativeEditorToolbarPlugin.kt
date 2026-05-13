@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
@@ -258,9 +260,14 @@ private fun EditorToolbar(
     background: ComposeColor,
     onAction: (String) -> Unit
 ) {
+    val borderColor = ComposeColor.Gray.copy(
+        alpha = if (background.luminance() < 0.5f) 0.08f else 0.2f
+    )
+
     Surface(
         color = background,
-        shadowElevation = 6.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(1.dp, borderColor),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
             .fillMaxWidth()
