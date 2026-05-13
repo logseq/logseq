@@ -422,10 +422,15 @@
   [state config options]
   (let [shown?* (:shown? state)
         shown? (rum/react shown?*)
-        toggle! #(swap! shown?* not)
+        ;; Guard against clicks that originate from inner <a> elements
+        ;; (e.g. page refs rendered by inline-title), which would otherwise
+        ;; bubble up and toggle the cloze while the user intends to follow a link.
+        toggle! (fn [e]
+                  (when-not (.closest (.-target e) "a")
+                    (swap! shown?* not)))
         toggle-key! #(when (contains? #{"Enter" " "} (.-key %))
                        (util/stop %)
-                       (toggle!))
+                       (swap! shown?* not))
         [answer cue] (cloze-parse (string/join ", " (:arguments options)))
         attrs {:role "button"
                :tab-index 0
