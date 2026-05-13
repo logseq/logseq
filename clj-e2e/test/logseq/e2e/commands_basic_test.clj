@@ -321,5 +321,5 @@
     (util/input-command "cloze")
     (util/press-seq "hidden answer")
     (util/exit-edit)
-    (w/click "a.cloze")
-    (w/wait-for "a.cloze-revealed")))
+    (w/click "span.cloze")
+    (w/wait-for "span.cloze-revealed")))
