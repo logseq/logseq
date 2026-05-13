@@ -93,6 +93,57 @@
     ;; return global fn back to previous behavior
     (ldb/register-transact-pipeline-fn! identity)))
 
+(deftest materialize-class-default-property-values-on-tag-additions-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:choice {:logseq.property/type :default
+                                     :build/properties
+                                     {:logseq.property/default-value "foo"}
+                                     :build/properties-ref-types {:entity :number}}
+                            :checked {:logseq.property/type :checkbox
+                                      :build/properties
+                                      {:logseq.property/scalar-default-value true}}}
+               :classes {:Defaults {:build/class-properties [:choice :checked]}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "task"}
+                                            {:block/title "needs defaults"}
+                                            {:block/title "keeps explicit"
+                                             :build/properties {:choice "bar"
+                                                                :checked false}}]}]})
+        task (db-test/find-block-by-content @conn "task")
+        needs-defaults (db-test/find-block-by-content @conn "needs defaults")
+        keeps-explicit (db-test/find-block-by-content @conn "keeps explicit")
+        defaults-class (d/entity @conn :user.class/Defaults)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+
+    (testing "Task status default is stored on the block"
+      (ldb/transact! conn [[:db/add (:db/id task) :block/tags :logseq.class/Task]])
+      (is (= :logseq.property/status.todo
+             (get-in (d/pull @conn [{:logseq.property/status [:db/ident]}] (:db/id task))
+                     [:logseq.property/status :db/ident])))
+      (is (= [(:db/id task)]
+             (d/q '[:find [?b ...]
+                    :where [?b :logseq.property/status :logseq.property/status.todo]]
+                  @conn))))
+
+    (testing "Custom class defaults are stored without overriding explicit values"
+      (ldb/transact! conn [[:db/add (:db/id needs-defaults) :block/tags (:db/id defaults-class)]
+                           [:db/add (:db/id keeps-explicit) :block/tags (:db/id defaults-class)]])
+      (is (= "foo"
+             (-> (d/pull @conn [{:user.property/choice [:block/title]}] (:db/id needs-defaults))
+                 :user.property/choice
+                 :block/title)))
+      (is (= true
+             (:user.property/checked (d/pull @conn [:user.property/checked] (:db/id needs-defaults)))))
+      (is (= "bar"
+             (-> (d/pull @conn [{:user.property/choice [:block/title]}] (:db/id keeps-explicit))
+                 :user.property/choice
+                 :block/title)))
+      (is (= false
+             (:user.property/checked (d/pull @conn [:user.property/checked] (:db/id keeps-explicit))))))
+
+    ;; return global fn back to previous behavior
+    (ldb/register-transact-pipeline-fn! identity)))
+
 (deftest journal-name-title-updates-throw-in-transact-pipeline-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:build/journal 20250203}}

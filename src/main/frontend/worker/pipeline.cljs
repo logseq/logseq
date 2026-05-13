@@ -323,6 +323,65 @@
                         :logseq.property/query [:block/uuid value-uuid]})]))))))
          tagged-block-ids)))))
 
+(defn- scalar-property-default-value
+  [property]
+  (if-some [value (:logseq.property/scalar-default-value property)]
+    [value]
+    nil))
+
+(defn- value-block-content
+  [value-block]
+  (or (:logseq.property/value value-block)
+      (:block/title value-block)))
+
+(defn- default-property-value-tx-data
+  [block property]
+  (let [property-ident (:db/ident property)]
+    (if-let [[value] (scalar-property-default-value property)]
+      [[:db/add (:db/id block) property-ident value]]
+      (when-let [value-block (:logseq.property/default-value property)]
+        (if (and (:logseq.property/created-from-property value-block)
+                 (not (:block/closed-value-property value-block)))
+          (when-some [content (value-block-content value-block)]
+            (let [new-value-block (db-property-build/build-property-value-block
+                                   block property content
+                                   {:block-uuid (common-uuid/gen-uuid)})
+                  value-uuid (:block/uuid new-value-block)]
+              [new-value-block
+               [:db/add (:db/id block) property-ident [:block/uuid value-uuid]]]))
+          [[:db/add (:db/id block) property-ident (:db/id value-block)]])))))
+
+(defn- block-has-property-datom?
+  [db eid property-ident]
+  (seq (d/datoms db :eavt eid property-ident)))
+
+(defn- class-default-property-tx-data
+  [db eid class-ids]
+  (when-let [block (d/entity db eid)]
+    (let [classes (->> class-ids
+                       (keep #(d/entity db %))
+                       (mapcat #(cons % (ldb/get-classes-parents [%]))))
+          properties (common-util/distinct-by :db/id (mapcat :logseq.property.class/properties classes))]
+      (mapcat
+       (fn [property]
+         (let [property-ident (:db/ident property)]
+           (when (and property-ident
+                      (not (block-has-property-datom? db eid property-ident)))
+             (default-property-value-tx-data block property))))
+       properties))))
+
+(defn- materialize-class-default-properties-on-tag-additions
+  [tx-report]
+  (let [{:keys [db-after tx-data tx-meta]} tx-report]
+    (when-not (or (rtc-tx-or-download-graph? tx-meta)
+                  (:undo? tx-meta)
+                  (:redo? tx-meta))
+      (->> tx-data
+           (filter (fn [d] (and (= :block/tags (:a d)) (:added d))))
+           (group-by :e)
+           (mapcat (fn [[eid datoms]]
+                     (class-default-property-tx-data db-after eid (map :v datoms))))))))
+
 (defn- invoke-hooks-for-imported-graph [conn {:keys [tx-meta] :as tx-report}]
   (let [refs-tx-report (outliner-pipeline/transact-new-db-graph-refs conn tx-report)
         full-tx-data (concat (:tx-data tx-report) (:tx-data refs-tx-report))
@@ -450,6 +509,7 @@
                                         (toggle-page-and-block db tx-report))
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data tx-meta)
         ensure-query-tx-data (ensure-query-property-on-tag-additions tx-report)
+        class-default-properties-tx-data (materialize-class-default-properties-on-tag-additions tx-report)
         commands-tx (when-not (or (:undo? tx-meta)
                                   (= :rebase (:outliner-op tx-meta))
                                   (rtc-tx-or-download-graph? tx-meta))
@@ -461,6 +521,7 @@
             toggle-page-and-block-tx-data
             display-blocks-tx-data
             ensure-query-tx-data
+            class-default-properties-tx-data
             commands-tx
             insert-templates-tx
             created-by-tx
