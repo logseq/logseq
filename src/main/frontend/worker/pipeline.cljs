@@ -283,11 +283,15 @@
               (contains? ldb/node-display-type-classes (:db/ident (d/entity db (:v d))))
               (:added d))
          (when-let [display-type (ldb/get-display-type-by-class-ident (:db/ident (d/entity db (:v d))))]
-           [(cond->
-             {:db/id (:e d)
-              :logseq.property.node/display-type display-type}
-              (and (= display-type :code) (d/entity db :logseq.kv/latest-code-lang))
-              (assoc :logseq.property.code/lang (:kv/value (d/entity db :logseq.kv/latest-code-lang))))])))
+           (let [block (d/entity db (:e d))
+                 latest-code-lang (:kv/value (d/entity db :logseq.kv/latest-code-lang))]
+             [(cond->
+               {:db/id (:e d)
+                :logseq.property.node/display-type display-type}
+                (and (= display-type :code)
+                     (nil? (:logseq.property.code/lang block))
+                     latest-code-lang)
+                (assoc :logseq.property.code/lang latest-code-lang))]))))
      datoms)))
 
 (defn- ensure-query-property-on-tag-additions
