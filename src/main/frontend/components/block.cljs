@@ -11,6 +11,7 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
+            [frontend.components.block.drop :as block-drop]
             [frontend.components.block.macros :as block-macros]
             [frontend.components.block.selection :as block-selection]
             [frontend.components.icon :as icon-component]
@@ -3420,20 +3421,7 @@
             (state/set-state! :mobile/show-action-bar? false)
             (state/clear-selection!)))
         ;; handle DataTransfer
-        (let [data-transfer (.-dataTransfer event)
-              transfer-types (set (js->clj (.-types data-transfer)))]
-          (cond
-            (contains? transfer-types "text/plain")
-            (let [text (.getData data-transfer "text/plain")]
-              (editor-handler/api-insert-new-block!
-               text
-               {:block-uuid uuid
-                :edit-block? false
-                :sibling? (= @*move-to' :sibling)
-                :before? (= @*move-to' :top)}))
-
-            :else
-            (prn ::unhandled-drop-data-transfer-type transfer-types)))))
+        (block-drop/handle-data-transfer-drop! event uuid target-block @*move-to')))
     (block-drag-end event *move-to')))
 
 (defonce *block-last-mouse-event (atom nil))
