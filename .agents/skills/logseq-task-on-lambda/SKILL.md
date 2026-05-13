@@ -61,6 +61,9 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
 6. Optionally create a pull request.
    - Default behavior is to not create a PR.
    - Create a PR only when the fetched task block or the user's current request explicitly asks for one.
+   - For bug or regression tasks with an existing GitHub issue URL in the fetched task block, its properties, or its children, preserve that issue URL before overwriting any task property with the PR URL.
+   - For those bug or regression PRs, make the commit message mention the linked issue with `fix $github_issue_url`, for example `fix https://github.com/logseq/db-test/issues/1`.
+   - Use the linked GitHub issue URL, not the newly created PR URL, in the `fix ...` line.
    - When creating a PR, follow the loaded GitHub publishing workflow for branch, staging, commit, push, and PR creation.
    - Prefer a draft PR unless the task explicitly asks for a ready PR.
    - After a PR is created, update the fetched root block's `GitHub Url` property to the PR URL before adding the completion summary.
@@ -88,7 +91,7 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - State that the sync gate passed, including `ws-state`, `pending-local`, and `pending-server`.
    - State that the task status was moved to `doing`, a summary child block was added, and the task status was moved to `in-review`.
    - State whether `Reproducible?` was enabled for a bug or regression task, or skipped because the task was not a bug or regression.
-   - If a PR was explicitly requested and created, include the PR URL and state that the `GitHub Url` property was updated. If no PR was requested, do not create one.
+   - If a PR was explicitly requested and created, include the PR URL and state that the `GitHub Url` property was updated. For bug or regression PRs with a linked GitHub issue, state that the commit message mentioned `fix $github_issue_url`. If no PR was requested, do not create one.
    - Summarize the task outcome and any verification performed.
 
 ## Fail-Fast Rules
@@ -99,6 +102,8 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
 - Never mask invalid sync state with defaults.
 - Never create a pull request unless the fetched task block or the user's current request explicitly asks for one.
 - Never leave a created PR unrecorded on the fetched root block's `GitHub Url` property.
+- Never overwrite a bug or regression task's linked GitHub issue URL before preserving it for the commit message.
+- Never create a bug or regression PR for a task with a linked GitHub issue URL unless the commit message mentions `fix $github_issue_url`.
 - Never enable `Reproducible?` for idea or enhancement tasks.
 - Never skip enabling `Reproducible?` for a fetched task that is clearly a bug or regression.
 - Never skip the `doing` status write, completion summary child block, or final `in-review` status write when the described task completes successfully.
