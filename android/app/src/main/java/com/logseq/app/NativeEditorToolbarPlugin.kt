@@ -2,8 +2,11 @@ package com.logseq.app
 
 import android.graphics.Color
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -11,8 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -70,6 +71,7 @@ class NativeEditorToolbarPlugin : Plugin() {
             view.bind(actions, trailing, tintHex, bgHex)
 
             val root = NativeUiUtils.contentRoot(activity)
+            val margin = NativeUiUtils.dp(activity, 12f)
             if (view.parent !== root) {
                 NativeUiUtils.detachView(view)
                 val lp = FrameLayout.LayoutParams(
@@ -77,11 +79,11 @@ class NativeEditorToolbarPlugin : Plugin() {
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     Gravity.BOTTOM
                 ).apply {
-                    val margin = NativeUiUtils.dp(activity, 12f)
                     setMargins(margin, margin, margin, margin)
                 }
                 root.addView(view, lp)
             }
+            view.bindToKeyboardTop(root, margin)
 
             call.resolve()
         }
@@ -97,7 +99,10 @@ class NativeEditorToolbarPlugin : Plugin() {
 
     private fun dismissInternal() {
         val root = activity?.let { NativeUiUtils.contentRoot(it) } ?: return
-        toolbarView?.let { root.removeView(it) }
+        toolbarView?.let {
+            it.clearKeyboardTopBinding()
+            root.removeView(it)
+        }
         toolbarView = null
     }
 
@@ -122,7 +127,11 @@ data class EditorAction(
             val id = obj.optString("id", "")
             if (id.isBlank()) return null
             val title = obj.optString("title", id)
-            val icon = obj.optString("systemIcon", null)
+            val icon = if (obj.has("systemIcon") && !obj.isNull("systemIcon")) {
+                obj.optString("systemIcon")
+            } else {
+                null
+            }
             return EditorAction(id, title, icon)
         }
     }
@@ -143,6 +152,65 @@ private class EditorToolbarView(context: android.content.Context) : FrameLayout(
 
     init {
         addView(composeView)
+    }
+
+    fun bindToKeyboardTop(root: FrameLayout, margin: Int) {
+        val decorView = root.rootView ?: root
+        updateBottomMargin(margin)
+        ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
+            applyRootInsets(root, decorView, insets, margin)
+            insets
+        }
+        root.post {
+            ViewCompat.getRootWindowInsets(decorView)?.let { applyRootInsets(root, decorView, it, margin) }
+                ?: ViewCompat.getRootWindowInsets(root)?.let { applyRootInsets(root, decorView, it, margin) }
+            ViewCompat.requestApplyInsets(this)
+        }
+    }
+
+    fun clearKeyboardTopBinding() {
+        ViewCompat.setOnApplyWindowInsetsListener(this, null)
+    }
+
+    private fun applyRootInsets(
+        root: FrameLayout,
+        decorView: View,
+        insets: WindowInsetsCompat,
+        margin: Int
+    ) {
+        val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
+        val navInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+        val coveredBySystemUi = if (insets.isVisible(WindowInsetsCompat.Type.ime())) {
+            bottomOverlap(root, decorView, imeInsets.bottom)
+        } else {
+            bottomOverlap(root, decorView, navInsets.bottom)
+        }
+        updateBottomMargin(coveredBySystemUi + margin)
+    }
+
+    private fun bottomOverlap(root: View, decorView: View, bottomInset: Int): Int {
+        if (bottomInset <= 0 || root.height <= 0) return 0
+
+        val decorHeight = decorView.height.takeIf { it > 0 } ?: root.rootView.height
+        if (decorHeight <= 0) return bottomInset
+
+        val rootLocation = IntArray(2)
+        val decorLocation = IntArray(2)
+        root.getLocationInWindow(rootLocation)
+        decorView.getLocationInWindow(decorLocation)
+
+        val rootBottomInWindow = rootLocation[1] + root.height
+        val decorBottomInWindow = decorLocation[1] + decorHeight
+        val insetTopInWindow = decorBottomInWindow - bottomInset
+
+        return (rootBottomInWindow - insetTopInWindow).coerceAtLeast(0)
+    }
+
+    private fun updateBottomMargin(bottom: Int) {
+        val lp = layoutParams as? LayoutParams ?: return
+        if (lp.bottomMargin == bottom) return
+        lp.bottomMargin = bottom
+        layoutParams = lp
     }
 
     fun bind(
@@ -197,8 +265,6 @@ private fun EditorToolbar(
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentHeight()
-            .navigationBarsPadding()
-            .imePadding() // Lift toolbar above system nav/IME when the keyboard opens
     ) {
         Row(
             modifier = Modifier
