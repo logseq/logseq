@@ -332,7 +332,7 @@
 
 (defn get-electron-backup-dir
   [repo]
-  (path/path-join (get-local-dir repo) "backups"))
+  (path/path-join (get-local-dir repo) "backup"))
 
 (defn get-repo-dir
   [repo-url]
