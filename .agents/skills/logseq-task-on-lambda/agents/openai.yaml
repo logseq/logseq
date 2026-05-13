@@ -1,0 +1,4 @@
+interface:
+  display_name: "Logseq Task On Lambda"
+  short_description: "Run Lambda RTC block-described tasks"
+  default_prompt: "Use $logseq-task-on-lambda to run the task described by [[11111111-1111-1111-1111-111111111111]]."

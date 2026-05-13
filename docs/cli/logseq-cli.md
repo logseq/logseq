@@ -135,6 +135,7 @@ For any command that requires `--graph`, if the target graph does not exist, the
 Backup scope note:
 - `graph backup create` copies only `db.sqlite`.
 - `search-db.sqlite` and `client-ops-db.sqlite` are intentionally excluded.
+- Desktop graph backups use the same `<root-dir>/graphs/<graph>/backup/<backup-name>/db.sqlite` layout, so the CLI can list, restore, and remove Desktop-created graph backups when it uses the same root directory.
 
 Server commands:
 - `server list` - list running db-worker-node servers

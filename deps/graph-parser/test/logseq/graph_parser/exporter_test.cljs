@@ -15,6 +15,7 @@
             [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]
@@ -78,6 +79,43 @@
   (some->> (find-template-by-title db title)
            ordered-children
            (mapv block-tree-with-properties)))
+
+(defn- block-status
+  [db content]
+  (:logseq.property/status (db-test/find-block-by-content db content)))
+
+(defn- status-content
+  [db content]
+  (db-property/closed-value-content (block-status db content)))
+
+(defn- status-closed-value-contents
+  [db]
+  (set (map db-property/closed-value-content
+            (db-property/get-closed-property-values db :logseq.property/status))))
+
+(defn- status-closed-value-content-frequencies
+  [db]
+  (frequencies (map db-property/closed-value-content
+                    (db-property/get-closed-property-values db :logseq.property/status))))
+
+(defn- blocks-by-title
+  [db title]
+  (->> (d/q '[:find [?b ...]
+              :in $ ?title
+              :where
+              [?b :block/page]
+              [?b :block/title ?title]]
+            db title)
+       (map #(d/entity db %))))
+
+(defn- report-retracts-block-uuid?
+  [tx-report block-uuid]
+  (boolean
+   (some (fn [datom]
+           (and (= :block/uuid (:a datom))
+                (= block-uuid (:v datom))
+                (false? (:added datom))))
+         (:tx-data tx-report))))
 
 
 (defn- build-graph-files
@@ -220,6 +258,183 @@
         "Email addresses inside quotes are preserved during import")
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
+
+(deftest-async import-repeated-deadline-and-scheduled
+  (p/let [file (write-temp-graph-file
+                 "pages/repeated-tasks.md"
+                 (str "- TODO wish [[name]] a happy birthday\n"
+                      "  SCHEDULED: <2025-11-01 Sat 08:00 .+1y>\n"
+                      "- TODO prepare weekly report\n"
+                      "  DEADLINE: <2025-11-07 Fri +2w>\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (let [birthday-properties (db-test/readable-properties
+                               (db-test/find-block-by-content @conn #"happy birthday"))
+          report-properties (db-test/readable-properties
+                             (db-test/find-block-by-content @conn #"weekly report"))
+          birthday-scheduled (:logseq.property/scheduled birthday-properties)
+          birthday-date (js/Date. birthday-scheduled)]
+      (is (= 20251101 (date-time-util/ms->journal-day birthday-scheduled))
+          "Repeated scheduled timestamp keeps its scheduled date")
+      (is (= [8 0] [(.getHours birthday-date) (.getMinutes birthday-date)])
+          "Repeated scheduled timestamp keeps its time")
+      (is (= {:logseq.property.repeat/repeated? true
+              :logseq.property.repeat/temporal-property :logseq.property/scheduled
+              :logseq.property.repeat/recur-frequency 1
+              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.year}
+             (select-keys birthday-properties
+                          [:logseq.property.repeat/repeated?
+                           :logseq.property.repeat/temporal-property
+                           :logseq.property.repeat/recur-frequency
+                           :logseq.property.repeat/recur-unit]))
+          "Repeated scheduled timestamp keeps its repeat properties")
+      (is (= {:logseq.property/deadline 20251107
+              :logseq.property.repeat/repeated? true
+              :logseq.property.repeat/temporal-property :logseq.property/deadline
+              :logseq.property.repeat/recur-frequency 2
+              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}
+             (-> report-properties
+                 (update :logseq.property/deadline date-time-util/ms->journal-day)
+                 (select-keys [:logseq.property/deadline
+                               :logseq.property.repeat/repeated?
+                               :logseq.property.repeat/temporal-property
+                               :logseq.property.repeat/recur-frequency
+                               :logseq.property.repeat/recur-unit])))
+          "Repeated deadline timestamp keeps its repeat properties")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
+(deftest-async import-preserves-legacy-task-markers-as-status-choices
+  (p/let [file (write-temp-graph-file
+                 "pages/tasks.md"
+                 "- TODO todo item\n- LATER later item\n- NOW now item\n- DOING doing item\n- WAIT waiting item\n- WAITING waiting full item\n- IN-PROGRESS in-progress item\n- DONE done item\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (is (= :logseq.property/status.todo
+           (:db/ident (block-status @conn "todo item")))
+        "TODO still imports to the built-in Todo status")
+    (is (= :logseq.property/status.doing
+           (:db/ident (block-status @conn "doing item")))
+        "DOING still imports to the built-in Doing status")
+    (is (= :logseq.property/status.done
+           (:db/ident (block-status @conn "done item")))
+        "DONE still imports to the built-in Done status")
+    (is (= :logseq.property/status.todo
+           (:db/ident (block-status @conn "later item")))
+        "LATER imports to the built-in Todo status")
+    (is (= :logseq.property/status.doing
+           (:db/ident (block-status @conn "now item")))
+        "NOW imports to the built-in Doing status")
+    (is (= "WAIT" (status-content @conn "waiting item"))
+        "WAIT imports as its own status choice")
+    (is (= "WAITING" (status-content @conn "waiting full item"))
+        "WAITING imports as its own status choice")
+    (is (= "IN-PROGRESS" (status-content @conn "in-progress item"))
+        "IN-PROGRESS imports as its own status choice")
+    (is (set/subset? #{"WAIT" "WAITING" "IN-PROGRESS"}
+                     (status-closed-value-contents @conn))
+        "Custom imported markers are added to Status closed values")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-custom-task-marker-across-multiple-files
+  (p/let [first-file (write-temp-graph-file
+                       "pages/custom-status-a.md"
+                       "- WAITING first custom status item\n")
+          second-file (write-temp-graph-file
+                        "pages/custom-status-b.md"
+                        "- WAITING second custom status item\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [first-file second-file] conn {})]
+    (is (= "WAITING" (status-content @conn "first custom status item"))
+        "Custom status marker imports from the first file")
+    (is (= "WAITING" (status-content @conn "second custom status item"))
+        "Custom status marker imports from the second file")
+    (is (= 1 (get (status-closed-value-content-frequencies @conn) "WAITING"))
+        "Custom status closed value is shared across imported files")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-removes-pre-block-marker-and-missing-block-refs
+  (let [missing-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        target-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        empty-title-property-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        empty-title-parent-uuid #uuid "44444444-4444-4444-4444-444444444444"]
+    (p/let [source-file (write-temp-graph-file
+                         "pages/A.md"
+                         (str "Plain pre-block\n"
+                              "- Missing ref ((" missing-uuid "))\n"
+                              "- Existing ref ((" target-uuid "))\n"
+                              "- ((" empty-title-property-uuid "))\n"
+                              "  heading:: true\n"
+                              "  background-color:: yellow\n"
+                              "- ((" empty-title-parent-uuid "))\n"
+                              "  - Child survives\n"))
+            target-file (write-temp-graph-file
+                         "pages/Z.md"
+                         (str "- Target block\n"
+                              "  id:: " target-uuid "\n"))
+            conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            _ (import-files-to-db [source-file target-file] conn {})
+            missing-block (db-test/find-block-by-content @conn #"Missing ref")
+            existing-block (db-test/find-block-by-content @conn #"Existing ref")
+            target-block (db-test/find-block-by-content @conn "Target block")
+            empty-title-blocks (blocks-by-title @conn "")
+            empty-title-property-block (some #(when (:logseq.property/heading %) %) empty-title-blocks)
+            empty-title-parent-block (some #(when (some (fn [child]
+                                                          (= "Child survives" (:block/title child)))
+                                                        (ordered-children %))
+                                             %)
+                                           empty-title-blocks)]
+      (is (empty? (filter #(= :block/pre-block? (:a %))
+                          (d/datoms @conn :eavt)))
+          "Legacy pre-block markers are never transacted")
+      (is (= "Missing ref" (:block/title missing-block))
+          "Missing OG block refs are removed from imported content")
+      (is (empty? (:block/refs missing-block))
+          "Missing OG block refs are removed from imported refs")
+      (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
+          "Missing OG block refs do not leave placeholder entities")
+      (is (nil? (d/entity @conn [:block/uuid empty-title-property-uuid]))
+          "Missing OG block refs in empty-title property blocks do not leave placeholder entities")
+      (is (nil? (d/entity @conn [:block/uuid empty-title-parent-uuid]))
+          "Missing OG block refs in empty-title parent blocks do not leave placeholder entities")
+      (is (= 2 (count empty-title-blocks))
+          "Blocks whose titles become empty after cleanup are preserved")
+      (is (true? (:logseq.property/heading empty-title-property-block))
+          "Empty-title blocks keep imported heading properties")
+      (is (= "yellow"
+             (:logseq.property/background-color (db-test/readable-properties empty-title-property-block)))
+          "Empty-title blocks keep imported background colors")
+      (is (= ["Child survives"] (mapv :block/title (ordered-children empty-title-parent-block)))
+          "Empty-title parent blocks keep their children")
+      (is (= [(:db/id target-block)] (mapv :db/id (:block/refs existing-block)))
+          "Existing block refs are preserved, including forward refs from later files")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
+(deftest-async export-doc-files-propagates-missing-block-ref-cleanup-report
+  (let [missing-uuid #uuid "55555555-5555-5555-5555-555555555555"
+        tx-reports (atom [])]
+    (p/let [file (write-temp-graph-file
+                  "pages/A.md"
+                  (str "- Missing ref ((" missing-uuid "))\n"))
+            conn (db-test/create-conn)
+            _ (db-pipeline/add-listener conn)
+            doc-options (gp-exporter/build-doc-options
+                         {:macros {} :file/name-format :triple-lowbar}
+                         (merge default-export-options
+                                {:user-options {:convert-all-tags? false}
+                                 :on-tx-report #(swap! tx-reports conj %)}))
+            _ (gp-exporter/export-doc-files conn [{:path file}] <read-file doc-options)]
+      (is (some #(report-retracts-block-uuid? % missing-uuid) @tx-reports)
+          "Missing block ref cleanup tx-report is propagated to import callers")
+      (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
+          "Missing OG block ref placeholder is removed"))))
 
 (deftest update-asset-links-in-block-title
   (are [x y]
@@ -370,7 +585,7 @@
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Code-block]] @conn))))
       (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Math-block]] @conn))))
       (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Template]] @conn))))
-      (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
+      (is (= 6 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
       (is (= 7 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
@@ -801,15 +1016,41 @@
             "Zotero imported pdf area highlight links to correct asset"))
 
       ;; Quotes
-      (is (= {:block/tags [:logseq.class/Quote-block]
-              :logseq.property.node/display-type :quote}
-             (db-test/readable-properties (db-test/find-block-by-content @conn #"Saito"))))
+      (is (string/starts-with? (:block/title (db-test/find-block-by-content @conn #"Saito")) "From Inception:\n> Saito:")
+          "Mixed #+BEGIN_QUOTE block: heading retained and quote content prefixed with '>'")
+      (is (nil? (:logseq.property.node/display-type (db-test/find-block-by-content @conn #"Saito")))
+          "Mixed #+BEGIN_QUOTE block is not converted to a Quote-block")
       (is (= "markdown quote\n[[wut]]\nline 3"
              (:block/title (db-test/find-block-by-content @conn #"markdown quote")))
           "Markdown quote imports as full multi-line quote")
-      (is (= "*Italic* ~~Strikethrough~~ ^^Highlight^^ #[[foo]]\n**Learn Datalog Today** is an interactive tutorial designed to teach you the [Datomic](http://datomic.com/) dialect of [Datalog](http://en.wikipedia.org/wiki/Datalog). Datalog is a declarative **database query language** with roots in logic programming. Datalog has similar expressive power as [SQL](http://en.wikipedia.org/wiki/Sql)."
-             (:block/title (db-test/find-block-by-content @conn #"Learn Datalog")))
-          "Imports full quote with various ast types"))
+      (is (string/starts-with? (:block/title (db-test/find-block-by-content @conn #"Learn Datalog"))
+                                "Test of various ast types:\n> *Italic*")
+          "Mixed #+BEGIN_QUOTE block retains heading and quote content in block title")
+      (is (= "Blockquotes\n> Nested Blockquotes"
+             (:block/title (db-test/find-block-by-content @conn #"Nested Blockquotes")))
+          "Nested '>> quote' is preserved as '> ' prefix in Quote-block title")
+      (is (= :quote (:logseq.property.node/display-type (db-test/find-block-by-content @conn #"Nested Blockquotes")))
+          "Nested markdown quote block is tagged as Quote-block")
+      (is (= "it's a\n\norg blockquote"
+             (:block/title (db-test/find-block-by-content @conn #"org blockquote")))
+          "#+BEGIN_QUOTE pure block title has no '> ' prefix — display-type provides blockquote styling")
+      (is (= :quote (:logseq.property.node/display-type (db-test/find-block-by-content @conn #"org blockquote")))
+          "#+BEGIN_QUOTE pure block is tagged as Quote-block")
+      (is (= "> Blockquotes\n> and\n\nsomething else"
+             (:block/title (db-test/find-block-by-content @conn #"Blockquotes\n> and")))
+          "Mixed #+BEGIN_QUOTE at start of block: quote content prefixed with '>' and blank line separates following text")
+      (is (nil? (:logseq.property.node/display-type (db-test/find-block-by-content @conn #"Blockquotes\n> and")))
+          "Mixed #+BEGIN_QUOTE block at start is not converted to a Quote-block")
+      (let [block (db-test/find-block-by-content @conn #"Question 1")]
+        (is (string/includes? (:block/title block) "\n>> nested")
+            "Mixed markdown quote block preserves nested quote depth")
+        (is (nil? (:logseq.property.node/display-type block))
+            "Mixed markdown quote block is not converted to a Quote-block"))
+      (let [block (db-test/find-block-by-content @conn #"Question 2")]
+        (is (string/includes? (:block/title block) "> Question 3")
+            "Mixed markdown quote child block preserves separated quote lines")
+        (is (string/includes? (:block/title block) "> Answer 3")
+            "Mixed markdown quote child block preserves quote content after blank quote line")))
 
     (testing "embeds"
       (is (= {:block/title ""}
@@ -1125,7 +1366,21 @@
           files (mapv #(path/path-join file-graph-dir %) ["journals/2024_02_07.md"
                                                           "journals/2026_01_27.md"])
           conn (db-test/create-conn)
-          _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})]
+          _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})
+          namespaced-file (write-temp-graph-file
+                           "pages/namespace-inline-tag.md"
+                           "- #parent/child\n")
+          namespaced-conn (db-test/create-conn)
+          _ (import-files-to-db [namespaced-file] namespaced-conn {:remove-inline-tags? false :convert-all-tags? true})
+          [block tag] (->> (d/q '[:find ?b ?t
+                                  :where
+                                  [?b :block/tags ?t]
+                                  [?b :block/page]
+                                  [?t :db/ident :user.class/parent___child]]
+                                @namespaced-conn)
+                           first
+                           (map #(d/entity @namespaced-conn %)))
+          raw-title (:block/title block)]
 
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Created graph has no validation errors")
@@ -1134,7 +1389,15 @@
         "block with tag preserves inline tag")
     (is (string/includes? (:block/title (db-test/find-block-by-content @conn #"block with multi word tag"))
                           "#[[another test]]")
-        "block with multi word tag preserves inline tag")))
+        "block with multi word tag preserves inline tag")
+    (testing "namespaced inline tag on first line is preserved as inline tag"
+      (is (some? block)
+          "imported first-line namespaced tag block")
+      (is (string? raw-title)
+          "imported block has raw title")
+      (when (string? raw-title)
+        (is (ldb/inline-tag? raw-title tag)
+            "first-line namespaced tag is stored as an inline tag")))))
 
 (deftest-async export-files-with-ignored-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"

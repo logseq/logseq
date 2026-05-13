@@ -1061,14 +1061,28 @@
   [_context {:keys [message]}]
   message)
 
+(defn- automatic-backup-source?
+  [source]
+  (contains? #{:electron-auto "electron-auto"} source))
+
+(defn- format-backup-auto-save
+  [backup]
+  (let [source (or (:source backup)
+                   (get-in backup [:metadata :source]))]
+    (cond
+      (automatic-backup-source? source) "yes"
+      (some? source) "no"
+      :else "-")))
+
 (defn- format-graph-backup-list
   [backups now-ms]
   (format-counted-table
-   ["NAME" "CREATED-AT" "SIZE-BYTES"]
-   (mapv (fn [{:keys [name created-at size-bytes]}]
+   ["NAME" "CREATED-AT" "SIZE-BYTES" "AUTO-SAVE"]
+   (mapv (fn [{:keys [name created-at size-bytes] :as backup}]
            [(or name "-")
             (human-ago created-at now-ms)
-            (or size-bytes 0)])
+            (or size-bytes 0)
+            (format-backup-auto-save backup)])
          (or backups []))))
 
 (defn- format-graph-backup-create

@@ -422,12 +422,31 @@
   [state config options]
   (let [shown?* (:shown? state)
         shown? (rum/react shown?*)
-        toggle! #(swap! shown?* not)
-        [answer cue] (cloze-parse (string/join ", " (:arguments options)))]
+        ;; Only suppress toggle when the click originates from a child <a>
+        ;; element rendered inside the revealed answer (e.g. a page ref).
+        ;; An ancestor <a> should not block the toggle.
+        toggle! (fn [e]
+                  (let [target (.-target e)
+                        inner-a (when (instance? js/Element target)
+                                  (.closest target "a"))]
+                    (when (or (nil? inner-a)
+                              (not (.contains (.-currentTarget e) inner-a)))
+                      (swap! shown?* not))))
+        toggle-key! #(when (contains? #{"Enter" " " "Space" "Spacebar"} (.-key %))
+                       (util/stop %)
+                       (swap! shown?* not))
+        [answer cue] (cloze-parse (string/join ", " (:arguments options)))
+        attrs {:role "button"
+               :tab-index 0
+               :aria-pressed shown?
+               :on-click toggle!
+               :on-key-down toggle-key!}]
     (if (or shown? (:show-cloze? config))
-      [:a.cloze-revealed {:on-click toggle!}
-       (util/format "[%s]" answer)]
-      [:a.cloze {:on-click toggle!}
+      [:span.cloze-revealed attrs
+       "["
+       (component-block/inline-title config answer)
+       "]"]
+      [:span.cloze attrs
        (if (string/blank? cue)
          "[...]"
          (str "(" cue ")"))])))

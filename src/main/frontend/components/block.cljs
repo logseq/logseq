@@ -11,7 +11,9 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
+            [frontend.components.block.drop :as block-drop]
             [frontend.components.block.macros :as block-macros]
+            [frontend.components.block.selection :as block-selection]
             [frontend.components.icon :as icon-component]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
@@ -638,6 +640,34 @@
 
 (declare page-reference)
 
+(defn- heading-value->level
+  [heading level]
+  (cond
+    (and (integer? heading) (<= 1 heading 6)) heading
+    (true? heading) (min (inc (or level 0)) 6)
+    :else nil))
+
+(defn- block-heading-level
+  [block level]
+  (or (when-let [heading-level (:block/heading-level block)]
+        (when (and (integer? heading-level)
+                   (<= 1 heading-level 6))
+          heading-level))
+      (heading-value->level (or (pu/lookup block :logseq.property/heading)
+                                (:block.temp/heading block))
+                            level)))
+
+(defn- heading-icon-size
+  [heading-level]
+  (case heading-level
+    1 28
+    2 24
+    3 20
+    4 16
+    5 13
+    6 12
+    14))
+
 (defn <open-page-ref
   [config page-entity e page-name contents-page?]
   (when (not (util/right-click? e))
@@ -695,7 +725,8 @@
         untitled? (when page-name
                     (or (model/untitled-page? (:block/title page-entity))
                         (and (ldb/page? page-entity) (string/blank? (:block/title page-entity)))))
-        show-icon? (:show-icon? config)]
+        show-icon? (:show-icon? config)
+        icon-size (heading-icon-size (:parent-heading config))]
     [:a.relative
      (cond->
       {:tabIndex "0"
@@ -745,7 +776,8 @@
        (let [own-icon (get page-entity :logseq.property/icon)
              emoji? (and (map? own-icon) (= (:type own-icon) :emoji))]
          (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true
-                                                                       :not-text-or-page? true})]
+                                                                       :not-text-or-page? true
+                                                                       :size icon-size})]
            [:span {:class (str "icon-emoji-wrap " (when emoji? "as-emoji"))}
             icon])))
 
@@ -2015,7 +2047,9 @@
                                                         :ignore-children? page-title?
                                                         :page-title? page-title?})
         link? (boolean (:original-block config))
-        icon-size (if collapsed? 12 14)
+        heading-level (when-not collapsed?
+                        (block-heading-level block (:level config)))
+        icon-size (if collapsed? 12 (heading-icon-size heading-level))
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
         with-icon? (and (some? icon)
                         (or (and (db/page? block)
@@ -2156,14 +2190,7 @@
         level (:level config)
         block-ref? (:block-ref? config)
         block-type (or (keyword (pu/lookup block :logseq.property/ls-type)) :default)
-        ;; `heading-level` is for backward compatibility, will remove it in later releases
-        heading-level (:block/heading-level block)
-        heading (or
-                 (and heading-level
-                      (<= heading-level 6)
-                      heading-level)
-                 (pu/lookup block :logseq.property/heading))
-        heading (if (true? heading) (min (inc level) 6) heading)
+        heading (block-heading-level block level)
         elem (if heading
                (keyword (str "h" heading ".block-title-wrap.as-heading"
                              (when block-ref? ".as-inline")))
@@ -2208,7 +2235,9 @@
                          (and (:page-ref? config)
                               (= 1 (count block-ast-title))
                               (= "Link" (ffirst block-ast-title)))
-                         (assoc :node-ref-link-only? true))]
+                         (assoc :node-ref-link-only? true)
+                         (integer? heading)
+                         (assoc :parent-heading heading))]
            (map-inline config' block-ast-title))))))))
 
 (rum/defc block-title-aux
@@ -2348,6 +2377,8 @@
         (dom/has-class? target "fn"))
    (dom/has-class? target "image-resize")
    (dom/closest target "a")
+   (dom/closest target ".cloze")
+   (dom/closest target ".cloze-revealed")
    (dom/closest target ".query-table")))
 
 (defn- block-content-on-pointer-down
@@ -2465,7 +2496,10 @@
                                 (some? (mldoc/extract-first-query-from-ast body))))))
           [:div.block-body
            (let [body (block/trim-break-lines! (:block.temp/ast-body block))
-                 uuid (:block/uuid block)]
+                 uuid (:block/uuid block)
+                 raw-content (or (:block/raw-title block) (:block/title block) "")
+                 deprecated-org-quote? (boolean (re-find #"(?i)^\s*#\+BEGIN_QUOTE" (str raw-content)))
+                 config (if deprecated-org-quote? (assoc config :deprecated-org-quote? true) config)]
              (for [[idx child] (medley/indexed body)]
                (when-let [block (markup-element-cp config child)]
                  (rum/with-key (block-child block)
@@ -3387,32 +3421,82 @@
             (state/set-state! :mobile/show-action-bar? false)
             (state/clear-selection!)))
         ;; handle DataTransfer
-        (let [data-transfer (.-dataTransfer event)
-              transfer-types (set (js->clj (.-types data-transfer)))]
-          (cond
-            (contains? transfer-types "text/plain")
-            (let [text (.getData data-transfer "text/plain")]
-              (editor-handler/api-insert-new-block!
-               text
-               {:block-uuid uuid
-                :edit-block? false
-                :sibling? (= @*move-to' :sibling)
-                :before? (= @*move-to' :top)}))
-
-            :else
-            (prn ::unhandled-drop-data-transfer-type transfer-types)))))
+        (block-drop/handle-data-transfer-drop! event uuid target-block @*move-to')))
     (block-drag-end event *move-to')))
 
 (defonce *block-last-mouse-event (atom nil))
+(defonce *block-scroll-selection-raf (atom nil))
+(defonce *block-last-scroll-top (atom nil))
 
+(defn- remember-block-pointer!
+  [^js e]
+  (reset! *block-last-mouse-event
+          {:client-x (.-clientX e)
+           :client-y (.-clientY e)}))
+
+(defn- visible-selection-boundary-block
+  [selection-block-ids scroll-direction]
+  (let [selection-block-id-set (set (map str selection-block-ids))
+        blocks (->> (dom/sel ".ls-page-blocks .page-blocks-inner .ls-block[blockid]")
+                    (filter #(contains? selection-block-id-set (dom/attr % "blockid"))))]
+    (case scroll-direction
+      :down (last blocks)
+      :up (first blocks)
+      nil)))
+
+(defn- block-under-pointer
+  []
+  (when-let [{:keys [client-x client-y]} @*block-last-mouse-event]
+    (when-let [target (.elementFromPoint js/document client-x client-y)]
+      (util/rec-get-node target "ls-block"))))
+
+(defn- select-block-under-pointer!
+  [selection-block-ids scroll-direction]
+  (when (and (seq selection-block-ids)
+             (or (state/get-selection-start-block)
+                 (seq (state/get-selection-blocks))))
+    (when-let [block-dom-node (or (visible-selection-boundary-block selection-block-ids scroll-direction)
+                                  (block-under-pointer))]
+      (when-let [block-id (.-id block-dom-node)]
+        (when-not (string/blank? block-id)
+          (editor-handler/highlight-selection-area! block-id block-dom-node
+                                                    {:append? true
+                                                     :block-ids selection-block-ids}))))))
+
+(defn- schedule-select-block-under-pointer!
+  [selection-block-ids scroll-container]
+  (when (seq selection-block-ids)
+    (let [scroll-top (some-> scroll-container .-scrollTop)
+          last-scroll-top @*block-last-scroll-top
+          scroll-direction (cond
+                             (and scroll-top last-scroll-top (> scroll-top last-scroll-top)) :down
+                             (and scroll-top last-scroll-top (< scroll-top last-scroll-top)) :up
+                             :else nil)]
+      (reset! *block-last-scroll-top scroll-top)
+      (when-let [raf-id @*block-scroll-selection-raf]
+        (js/cancelAnimationFrame raf-id))
+      (reset! *block-scroll-selection-raf
+              (js/requestAnimationFrame
+               (fn []
+                 (reset! *block-scroll-selection-raf
+                         (js/requestAnimationFrame
+                          (fn []
+                            (reset! *block-scroll-selection-raf nil)
+                            (select-block-under-pointer! selection-block-ids scroll-direction))))))))))
 (defn- block-mouse-over
-  [^js e block *control-show? block-id doc-mode?]
-  (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))
+  [^js e block *control-show? block-id doc-mode? selection-block-ids]
+  (let [last-client-y (:client-y @*block-last-mouse-event)
+        client-y (.-clientY e)
         block-dom-node (util/rec-get-node (.-target e) "ls-block")]
+    (remember-block-pointer! e)
     (reset! *control-show? true)
-    (when (and mouse-moving?
-               (not @*dragging?)
-               (not= (:block/uuid block) (:block/uuid (state/get-edit-block))))
+    (when (block-selection/select-on-hover?
+           {:last-client-y last-client-y
+            :client-y client-y
+            :dragging? @*dragging?
+            :editing-same-block? (= (:block/uuid block)
+                                    (:block/uuid (state/get-edit-block)))
+            :active-selection? (boolean (seq (state/get-selection-blocks)))})
       (.preventDefault e)
       (when-let [parent (gdom/getElement block-id)]
         (let [node (.querySelector parent ".bullet-container")]
@@ -3421,7 +3505,9 @@
       (when (non-dragging? e)
         (when-let [container (gdom/getElement "app-container-wrapper")]
           (dom/add-class! container "blocks-selection-mode"))
-        (editor-handler/highlight-selection-area! block-id block-dom-node {:append? true})))))
+        (editor-handler/highlight-selection-area! block-id block-dom-node
+                                                  {:append? true
+                                                   :block-ids selection-block-ids})))))
 
 (defn- block-mouse-leave
   [*control-show? block-id doc-mode?]
@@ -3881,11 +3967,12 @@
                                   (util/mobile?) 0
                                   page-icon -36
                                   :else -30)})
-         :data-has-heading (some-> block (pu/lookup :logseq.property/heading))
+         :data-has-heading (block-heading-level block level)
          :on-mouse-enter (fn [e]
-                           (block-mouse-over e block *control-show? block-id doc-mode?))
-         :on-mouse-move (fn [e]
-                          (reset! *block-last-mouse-event e))
+                           (block-mouse-over e block *control-show? block-id doc-mode?
+                                             (:selection/block-ids config)))
+           :on-mouse-move (fn [e]
+                            (remember-block-pointer! e))
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
@@ -4391,8 +4478,10 @@
       ["Example" l]
       [:pre.pre-wrap-white-space
        (join-lines l)]
-      ["Quote" _l]
-      [:div.warning (t :block/deprecated-quote)]
+      ["Quote" l]
+      (if (:deprecated-org-quote? config)
+        [:div.warning (t :block/deprecated-quote)]
+        [:blockquote.ls-blockquote (markup-elements-cp config l)])
       ["Raw_Html" content]
       (when (not html-export?)
         [:div.raw_html.inline-block
@@ -4574,13 +4663,20 @@
                                       {:top? top?
                                        :bottom? bottom?}))))
         virtualized? (and virtualized? (seq blocks))
+        virtualized-block-ids (when virtualized? (mapv :block/uuid blocks))
+        selection-block-ids (or (:selection/block-ids config)
+                                virtualized-block-ids)
+        scroll-container (or (:scroll-container config)
+                             (if-let [node (js/document.getElementById (:blocks-node-id config))]
+                               (util/app-scroll-container-node node)
+                               (util/app-scroll-container-node)))
+        scroll-container (if (fn? scroll-container)
+                           (scroll-container)
+                           scroll-container)
         *virtualized-ref (hooks/use-ref nil)
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
-                        :custom-scroll-parent (or (:scroll-container config)
-                                                  (if-let [node (js/document.getElementById (:blocks-node-id config))]
-                                                    (util/app-scroll-container-node node)
-                                                    (util/app-scroll-container-node)))
+                        :custom-scroll-parent scroll-container
                         :compute-item-key (fn [idx]
                                             (let [block (nth blocks idx)]
                                               (str (:container-id config) "-" (:db/id block))))
@@ -4593,6 +4689,7 @@
                                               bottom? (= (dec blocks-count) idx)
                                               block (nth blocks idx)
                                               config' (cond-> (assoc config :top? top?)
+                                                        true (assoc :selection/block-ids selection-block-ids)
                                                         (and root-level? defer-root-render?) (assoc :defer-top-index idx)
                                                         (and root-level? defer-root-render?) (assoc :defer-ready-index defer-ready-index)
                                                         (and root-level? defer-root-render?) (assoc :defer-children-render-complete-by-root* *defer-children-render-complete-by-root))]
@@ -4654,6 +4751,14 @@
                     (vreset! *ob ob))))))
            #(some-> @*ob (.disconnect)))))
      [])
+    (hooks/use-effect!
+     (fn []
+       (if (and scroll-container (seq selection-block-ids))
+         (let [handler #(schedule-select-block-under-pointer! selection-block-ids scroll-container)]
+           (.addEventListener scroll-container "scroll" handler #js {:passive true})
+           #(.removeEventListener scroll-container "scroll" handler))
+         (fn [])))
+     [scroll-container selection-block-ids])
 
     [:div.blocks-list-wrap
      {:data-level (or (:level config) 0)

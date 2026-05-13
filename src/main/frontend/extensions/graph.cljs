@@ -22,11 +22,7 @@
    (:width opts)
    (:height opts)
    (:aria-label opts)
-   (:grid-layout? opts)
-   (:on-node-activate opts)
-   (:on-node-preview opts)
-   (:on-selection-change opts)
-   (:on-rendered opts)])
+   (:grid-layout? opts)])
 
 (defn- schedule-render-container!
   [container opts]
@@ -55,9 +51,35 @@
   [opts]
   (let [container-ref (hooks/use-ref nil)
         render-pending-ref (hooks/use-ref false)
+        on-node-activate-ref (hooks/use-ref nil)
+        on-node-preview-ref (hooks/use-ref nil)
+        on-selection-change-ref (hooks/use-ref nil)
+        on-focus-change-ref (hooks/use-ref nil)
+        on-rendered-ref (hooks/use-ref nil)
         incremental-update-ready? (fn [container]
                                     (and container
-                                         (not (hooks/deref render-pending-ref))))]
+                                         (not (hooks/deref render-pending-ref))))
+        activate-node! (fn [node event]
+                         (when-let [handler (hooks/deref on-node-activate-ref)]
+                           (handler node event)))
+        preview-node! (fn [node event]
+                        (when-let [handler (hooks/deref on-node-preview-ref)]
+                          (handler node event)))
+        change-selection! (fn [nodes]
+                            (when-let [handler (hooks/deref on-selection-change-ref)]
+                              (handler nodes)))
+        change-focus! (fn [node]
+                        (when-let [handler (hooks/deref on-focus-change-ref)]
+                          (handler node)))
+        rendered! (fn [render-info]
+                    (hooks/set-ref! render-pending-ref false)
+                    (when-let [handler (hooks/deref on-rendered-ref)]
+                      (handler render-info)))]
+    (hooks/set-ref! on-node-activate-ref (:on-node-activate opts))
+    (hooks/set-ref! on-node-preview-ref (:on-node-preview opts))
+    (hooks/set-ref! on-selection-change-ref (:on-selection-change opts))
+    (hooks/set-ref! on-focus-change-ref (:on-focus-change opts))
+    (hooks/set-ref! on-rendered-ref (:on-rendered opts))
     (hooks/use-effect!
      (fn []
        (let [container (hooks/deref container-ref)]
@@ -66,11 +88,11 @@
            (schedule-render-container!
             container
             (assoc opts
-                   :on-rendered
-                   (fn [render-info]
-                     (hooks/set-ref! render-pending-ref false)
-                     (when-let [on-rendered (:on-rendered opts)]
-                       (on-rendered render-info))))))))
+                   :on-node-activate activate-node!
+                   :on-node-preview preview-node!
+                   :on-selection-change change-selection!
+                   :on-focus-change change-focus!
+                   :on-rendered rendered!)))))
      (render-container-deps opts))
     (hooks/use-effect!
      (fn []
@@ -106,6 +128,12 @@
                                       (:show-arrows? opts)
                                       (:show-edge-labels? opts)))))
      [(:show-arrows? opts) (:show-edge-labels? opts)])
+    (hooks/use-effect!
+     (fn []
+       (when-let [container (hooks/deref container-ref)]
+         (when (incremental-update-ready? container)
+           (pixi/reset-interaction! container))))
+     [(:reset-token opts)])
     [:div.graph-canvas
      {:ref container-ref
       :style (canvas-style opts)

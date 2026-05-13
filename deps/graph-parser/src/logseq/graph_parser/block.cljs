@@ -266,23 +266,30 @@
    (map last)
    (into {})))
 
+(defn- timestamp->scheduled-or-deadline-value
+  [{:keys [date repetition] timestamp-time :time}]
+  (let [{:keys [year month day]} date
+        day (js/parseInt (str year (common-util/zero-pad month) (common-util/zero-pad day)))]
+    (if (or timestamp-time repetition)
+      (cond-> {:date-int day}
+        timestamp-time
+        (assoc :time timestamp-time)
+        repetition
+        (assoc :repetition repetition))
+      day)))
+
 ;; {"Deadline" {:date {:year 2020, :month 10, :day 20}, :wday "Tue", :time {:hour 8, :min 0}, :repetition [["DoublePlus"] ["Day"] 1], :active true}}
 (defn timestamps->scheduled-and-deadline
   [timestamps]
   (let [timestamps (update-keys timestamps (comp keyword string/lower-case))
         m (some->> (select-keys timestamps [:scheduled :deadline])
                    (map (fn [[k v]]
-                          (let [{:keys [date repetition]} v
-                                {:keys [year month day]} date
-                                day (js/parseInt (str year (common-util/zero-pad month) (common-util/zero-pad day)))]
-                            (cond->
-                             (case k
-                               :scheduled
-                               {:scheduled day}
-                               :deadline
-                               {:deadline day})
-                              repetition
-                              (assoc :repeated? true))))))]
+                          (let [value (timestamp->scheduled-or-deadline-value v)]
+                            (case k
+                              :scheduled
+                              {:scheduled value}
+                              :deadline
+                              {:deadline value})))))]
     (apply merge m)))
 
 (defn- convert-page-if-journal-impl
