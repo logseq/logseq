@@ -422,12 +422,14 @@
   [state config options]
   (let [shown?* (:shown? state)
         shown? (rum/react shown?*)
-        ;; Guard against clicks that originate from inner <a> elements
-        ;; (e.g. page refs rendered by inline-title), which would otherwise
-        ;; bubble up and toggle the cloze while the user intends to follow a link.
+        ;; Only suppress toggle when the click originates from a child <a>
+        ;; element rendered inside the revealed answer (e.g. a page ref).
+        ;; An ancestor <a> should not block the toggle.
         toggle! (fn [e]
-                  (when-not (.closest (.-target e) "a")
-                    (swap! shown?* not)))
+                  (let [inner-a (some-> (.-target e) (.closest "a"))]
+                    (when (or (nil? inner-a)
+                              (not (.contains (.-currentTarget e) inner-a)))
+                      (swap! shown?* not))))
         toggle-key! #(when (contains? #{"Enter" " "} (.-key %))
                        (util/stop %)
                        (swap! shown?* not))
