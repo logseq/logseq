@@ -25,3 +25,19 @@
             (assoc base-opts
                    :show-arrows? true
                    :show-edge-labels? false))))))
+
+(deftest interaction-callback-changes-do-not-rebuild-pixi-container
+  (let [base-deps (graph/render-container-deps base-opts)]
+    (is (= base-deps
+           (graph/render-container-deps
+            (assoc base-opts
+                   :on-node-activate (fn [_node _event])
+                   :on-node-preview (fn [_node _event])
+                   :on-selection-change (fn [_nodes])
+                   :on-rendered (fn [_render-info])))))))
+
+(deftest recent-task-count-rebuilds-pixi-container
+  (let [base-deps (graph/render-container-deps base-opts)]
+    (is (not= base-deps
+              (graph/render-container-deps
+               (assoc base-opts :visible-recent-task-count 7))))))

@@ -23,6 +23,24 @@
               ["logseq_db_test" 202 :block]]
              @sidebar*)))))
 
+(deftest activate-node-opens-graph-label-targets-in-sidebar-by-default
+  (let [redirects* (atom [])
+        sidebar* (atom [])
+        task-label-node {:db-id 202
+                         :uuid "22222222-2222-2222-2222-222222222222"
+                         :page? false
+                         :graph/open-in-sidebar? true}]
+    (with-redefs [route-handler/redirect-to-page! (fn [uuid]
+                                                    (swap! redirects* conj uuid))
+                  state/get-current-repo (constantly "logseq_db_test")
+                  state/sidebar-add-block! (fn [repo db-id block-type]
+                                             (swap! sidebar* conj [repo db-id block-type]))]
+      (graph-actions/activate-node! task-label-node #js {:shiftKey false})
+
+      (is (empty? @redirects*))
+      (is (= [["logseq_db_test" 202 :block]]
+             @sidebar*)))))
+
 (deftest redirect-to-node-prefers-block-uuid-over-label
   (let [redirects* (atom [])
         page-uuid #uuid "33333333-3333-3333-3333-333333333333"

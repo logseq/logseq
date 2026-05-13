@@ -91,10 +91,17 @@
              dy (- world-y (:y node))
              dist (js/Math.sqrt (+ (* dx dx) (* dy dy)))
              threshold (+ (:radius node) max-dist)
+             rank (case (:type node)
+                    "taskLabel" -1
+                    "collapsed" 0
+                    1)
+             best-rank (or (:rank best) js/Number.POSITIVE_INFINITY)
              best-dist (or (:dist best) js/Number.POSITIVE_INFINITY)]
          (if (and (<= dist threshold)
-                  (< dist best-dist))
-           {:node node :dist dist}
+                  (or (< rank best-rank)
+                      (and (= rank best-rank)
+                           (< dist best-dist))))
+           {:node node :dist dist :rank rank}
            best)))
      nil
      candidates)))
@@ -175,6 +182,7 @@
 (def ^:private edge-label-visible-scale 0.82)
 (def ^:private navigation-idle-ms 90)
 (def ^:private node-transition-speed 0.22)
+(def ^:private task-status-background-context-limit 900)
 
 (defn- tag-focus-level
   [scale]
@@ -565,17 +573,43 @@
                  (reset! entry-by-id* {})
                  (reset! visible-ids* #{}))}))
 
+(def ^:private task-edge-alpha-by-type
+  {"root-to-task" 0.28
+   "task-relation" 0.34
+   "root-to-group" 0.42
+   "group-to-task" 0.14})
+
+(def ^:private task-edge-width-by-type
+  {"root-to-task" 0.95
+   "task-relation" 1.05
+   "root-to-group" 1.10
+   "group-to-task" 0.75})
+
+(def ^:private task-edge-curve-offset-by-type
+  {"root-to-task" 10
+   "task-relation" 18})
+
 (defn- edge-alpha
-  [{:keys [selected-ids active-ids select-mode?]} source target]
-  (cond
-    (not select-mode?) 0.54
-    (or (and (contains? selected-ids source)
-             (contains? active-ids target))
-        (and (contains? selected-ids target)
-             (contains? active-ids source))) 0.82
-    (and (contains? active-ids source)
-         (contains? active-ids target)) 0.46
-    :else 0.18))
+  [{:keys [selected-ids active-ids select-mode?]} {:keys [source target edge/type]}]
+  (or (get task-edge-alpha-by-type type)
+      (cond
+        (not select-mode?) 0.54
+        (or (and (contains? selected-ids source)
+                 (contains? active-ids target))
+            (and (contains? selected-ids target)
+                 (contains? active-ids source))) 0.82
+        (and (contains? active-ids source)
+             (contains? active-ids target)) 0.46
+        :else 0.18)))
+
+(defn- edge-stroke-width
+  [type select-mode?]
+  (or (get task-edge-width-by-type type)
+      (if select-mode? 1.25 1)))
+
+(defn- edge-curve-offset
+  [type]
+  (get task-edge-curve-offset-by-type type 0))
 
 (defn- edge-label-display-scale
   [world-scale]
@@ -682,7 +716,7 @@
          stroke-color (color->int (edge-color dark?))
          runs (logic/edge-render-runs links* show-arrows?)]
      (.clear graphics)
-     (doseq [{:keys [source target label show-arrow? parallel-offset]} runs]
+     (doseq [{:keys [source target label show-arrow? parallel-offset edge/type] :as run} runs]
        (when-let [from-node (get layout-by-id source)]
          (when-let [to-node (get layout-by-id target)]
            (let [{:keys [ux uy start-x start-y end-x end-y mid-x mid-y segment-distance]}
@@ -699,8 +733,13 @@
                              (+ mid-x (* ux half-gap)))
                  gap-end-y (when half-gap
                              (+ mid-y (* uy half-gap)))
-                 stroke-width (if (:select-mode? highlight-state) 1.25 1)
-                 alpha (edge-alpha highlight-state source target)
+                 stroke-width (edge-stroke-width type (:select-mode? highlight-state))
+                 curve-offset (edge-curve-offset type)
+                 curved? (pos? curve-offset)
+                 curve-sign (if (neg? (js/Math.sin (+ (* start-x 0.017) (* end-y 0.013)))) -1 1)
+                 control-x (+ mid-x (* (- uy) curve-offset curve-sign))
+                 control-y (+ mid-y (* ux curve-offset curve-sign))
+                 alpha (edge-alpha highlight-state run)
                  arrow! (fn [tip-x tip-y dir-x dir-y]
                           (let [length 6.8
                                 width 3.3
@@ -735,9 +774,13 @@
                  (.lineTo graphics gap-start-x gap-start-y)
                  (.moveTo graphics gap-end-x gap-end-y)
                  (.lineTo graphics end-x end-y))
-               (do
-                 (.moveTo graphics start-x start-y)
-                 (.lineTo graphics end-x end-y)))
+               (if curved?
+                 (do
+                   (.moveTo graphics start-x start-y)
+                   (.quadraticCurveTo graphics control-x control-y end-x end-y))
+                 (do
+                   (.moveTo graphics start-x start-y)
+                   (.lineTo graphics end-x end-y))))
              (.stroke graphics)
              (when show-arrow?
                (arrow! end-x end-y ux uy))))))
@@ -755,6 +798,32 @@
   [^js container]
   (doseq [^js child (array-seq (.removeChildren container))]
     (.destroy child #js {:children true})))
+
+(defn- task-status-accent-color
+  [status-key dark?]
+  (let [palette (if dark?
+                  ["#2DD4BF" "#60A5FA" "#A78BFA" "#86EFAC" "#FBBF24" "#F472B6" "#22D3EE" "#FB7185"]
+                  ["#0F766E" "#2563EB" "#7C3AED" "#16A34A" "#B45309" "#BE185D" "#0891B2" "#E11D48"])
+        idx (mod (abs (hash (str status-key))) (count palette))]
+    (color->int (nth palette idx))))
+
+(defn- task-status-label-target
+  [node]
+  (assoc node :graph/open-in-sidebar? true))
+
+(defn- set-display-position!
+  [^js display {:keys [x y]}]
+  (set! (.-x display) x)
+  (set! (.-y display) y)
+  display)
+
+(defn- draw-rounded-rect!
+  [^js graphics x y width height radius fill-style stroke-style]
+  (.roundRect graphics x y width height radius)
+  (.fill graphics fill-style)
+  (when stroke-style
+    (.setStrokeStyle graphics stroke-style)
+    (.stroke graphics)))
 
 (def ^:private edge-label-limit 420)
 
@@ -828,8 +897,8 @@
             (.addChild entry text)
             (set! (.-alpha entry) 0.78)
             (position-edge-label-entry! entry world width height layout-by-id)
-            (.addChild label-layer entry)))))
-  nil))
+            (.addChild label-layer entry))))))
+  nil)
 
 (defn- render-edge-labels!
   [^js container ^js world width height layout-by-id links dark? view-mode show-edge-labels?]
@@ -996,21 +1065,30 @@
          emoji? (= "emoji" kind)
          tag? (= "tag" (:kind node))
          tag-circle? (and tag? (= "circle" kind))
-         display-radius (if tag-circle? 8.5 (:radius node))
+         task-center? (:task-center? node)
+         display-radius (cond
+                          task-center? (:radius node)
+                          tag-circle? 8.5
+                          :else (:radius node))
          scale (/ (* 2 display-radius) (if icon? icon-texture-font-size 96))
          base-scale (* (if (= view-mode :page) page-node-scale 1.0)
-                       (if (and tag? (not tag-circle?)) 1.18 1.0))
+                       (cond
+                         task-center? 1.0
+                         (and tag? (not tag-circle?)) 1.18
+                         :else 1.0))
          emphasis-scale (case emphasis
                           :selected 1.55
                           :hovered 1.42
                           :connected 1.22
                           :preview 1.16
+                          :background 0.88
                           1.0)
          alpha (case emphasis
                  :selected 1.0
                  :hovered 1.0
                  :connected 0.95
                  :preview 0.92
+                 :background 0.16
                  :dimmed 0.16
                  1.0)
          alpha (* alpha (node-density-alpha node emphasis world-scale))]
@@ -1021,7 +1099,10 @@
      (set! (.-y display) (:y node))
      (set! (.-tint display) (cond
                               emoji? 0xFFFFFF
+                              task-center? (if (= "circle" kind) 0x0B2230 (:color-int node))
+                              (= emphasis :background) 0x64748B
                               :else (:color-int node)))
+     (set! (.-filters display) nil)
      (gobj/set display "logseqGraphBaseAlpha" alpha)
      (set! (.. display -scale -x) (* scale base-scale emphasis-scale))
      (set! (.. display -scale -y) (* scale base-scale emphasis-scale))
@@ -1169,6 +1250,454 @@
                                         :alpha stroke-alpha
                                         :join "round"})
          (.stroke graphics))))))
+
+(defn- set-interactive!
+  [^js display on-tap]
+  (when (fn? on-tap)
+    (set! (.-eventMode display) "static")
+    (set! (.-cursor display) "pointer")
+    (set! (.-accessible display) true)
+    (.on display "pointertap"
+         (fn [^js e]
+           (.stopPropagation e)
+           (on-tap))))
+  display)
+
+(defn- activate-node-tap
+  [on-node-activate node]
+  (when (and (fn? on-node-activate) node)
+    #(on-node-activate node nil)))
+
+(defn- label-card-hit-radius
+  [{:keys [width height]}]
+  (/ (js/Math.sqrt (+ (* width width) (* height height))) 2))
+
+(defn- task-status-label-hit-node*
+  [id target-node label-card]
+  (when-let [{:keys [position] :as label-card} label-card]
+    {:id id
+     :type "taskLabel"
+     :kind "taskLabel"
+     :x (:x position)
+     :y (:y position)
+     :radius (label-card-hit-radius label-card)
+     :target-node target-node}))
+
+(defn- task-status-label-hit-node
+  [{:keys [id label-card] :as task}]
+  (task-status-label-hit-node*
+   (str "task-status-label:" id)
+   (task-status-label-target task)
+   label-card))
+
+(defn- task-status-center-label-hit-node
+  [selected-group-node {:keys [label-card]}]
+  (task-status-label-hit-node*
+   (str "task-status-center-label:" (:id selected-group-node))
+   (task-status-label-target selected-group-node)
+   label-card))
+
+(defn- task-status-label-hit-nodes
+  [selected-group-node groups-layout]
+  (let [center (:center groups-layout)
+        center-node (when (and selected-group-node center)
+                      (task-status-center-label-hit-node selected-group-node center))]
+    (cond-> (vec (keep task-status-label-hit-node
+                       (mapcat :tasks (:groups groups-layout))))
+      center-node
+      (conj center-node))))
+
+(defn- task-status-interactive-layout-nodes
+  [visible-task-ids candidate-nodes label-hit-nodes]
+  (into (vec (filter #(contains? visible-task-ids (:id %)) candidate-nodes))
+        label-hit-nodes))
+
+(defn- draw-task-center-rings!
+  [^js graphics {:keys [x y]} dark?]
+  (let [core-color (color->int (if dark? "#0B2230" "#E0F2FE"))
+        ring-color (color->int (if dark? "#2DD4BF" "#0F766E"))
+        halo-color (color->int (if dark? "#38BDF8" "#0284C7"))]
+    (.circle graphics x y 30)
+    (.fill graphics #js {:color halo-color
+                         :alpha (if dark? 0.022 0.020)})
+    (.circle graphics x y 22)
+    (.setStrokeStyle graphics #js {:width 2.2
+                                   :color ring-color
+                                   :alpha (if dark? 0.24 0.18)})
+    (.stroke graphics)
+    (.circle graphics x y 14)
+    (.fill graphics #js {:color core-color
+                         :alpha (if dark? 0.44 0.38)})
+    (.setStrokeStyle graphics #js {:width 1.5
+                                   :color halo-color
+                                   :alpha (if dark? 0.24 0.18)})
+    (.stroke graphics)
+    (doseq [idx (range 24)]
+      (let [angle (* 2 js/Math.PI (/ idx 24))
+            dot-radius (if (zero? (mod idx 5)) 1.55 1.05)]
+        (.circle graphics
+                 (+ x (* 26 (js/Math.cos angle)))
+                 (+ y (* 26 (js/Math.sin angle)))
+                 dot-radius)
+        (.fill graphics #js {:color ring-color
+                             :alpha (if dark? 0.20 0.13)})))))
+
+(defn- draw-task-status-group-shape!
+  [^js graphics {:keys [x y radius blob-points]}]
+  (if (seq blob-points)
+    (draw-closed-points! graphics blob-points)
+    (.circle graphics x y radius)))
+
+(defn- task-status-text-styles
+  [dark?]
+  {:title (new (.-TextStyle PIXI)
+               #js {:fontFamily "Inter, Avenir Next, system-ui, sans-serif"
+                    :fontSize 15
+                    :fontWeight "700"
+                    :letterSpacing 0
+                    :fill (label-color dark?)})
+   :count (new (.-TextStyle PIXI)
+               #js {:fontFamily "Inter, Avenir Next, system-ui, sans-serif"
+                    :fontSize 12
+                    :fontWeight "600"
+                    :fill (edge-label-color dark?)})
+   :task-tag (new (.-TextStyle PIXI)
+                  #js {:fontFamily "Inter, Avenir Next, system-ui, sans-serif"
+                       :fontSize 11
+                       :fontWeight "650"
+                       :fill (edge-label-color dark?)})
+   :center (new (.-TextStyle PIXI)
+                #js {:fontFamily "Inter, Avenir Next, system-ui, sans-serif"
+                     :fontSize 14
+                     :fontWeight "650"
+                     :lineHeight 18
+                     :fill (label-color dark?)})
+   :task-label-bg-color (color->int (if dark? "#0F172A" "#FFFFFF"))})
+
+(defn- add-task-status-center-label!
+  [^js graphics ^js label-layer center center-node dark? center-style on-node-activate]
+  (draw-task-center-rings! graphics center dark?)
+  (when-let [{:keys [position width height title]} (:label-card center)]
+    (let [center-label (or title (:label center) "")
+          ^js center-container (new (.-Container PIXI))
+          ^js bg (new (.-Graphics PIXI))
+          ^js center-text (new (.-Text PIXI)
+                               #js {:text center-label
+                                    :style center-style})
+          card-x (- (/ width 2))
+          card-y (- (/ height 2))]
+      (draw-rounded-rect! bg
+                          card-x
+                          card-y
+                          width
+                          height
+                          7
+                          #js {:color (color->int (if dark? "#0F172A" "#FFFFFF"))
+                               :alpha (if dark? 0.84 0.92)}
+                          #js {:width 1.1
+                               :color (color->int (if dark? "#38BDF8" "#0F766E"))
+                               :alpha (if dark? 0.36 0.26)})
+      (set-display-position! center-container position)
+      (set! (.-x center-text) (+ card-x 12))
+      (set! (.-y center-text) (+ card-y 10))
+      (.addChild center-container bg)
+      (.addChild center-container center-text)
+      (gobj/set center-container "accessibleTitle" center-label)
+      (set! (.-hitArea center-container) (new (.-Rectangle PIXI) card-x card-y width height))
+      (set-interactive! center-container (activate-node-tap on-node-activate (task-status-label-target center-node)))
+      (.addChild label-layer center-container))))
+
+(defn- draw-task-status-group-blob!
+  [^js graphics dark? group color]
+  (draw-task-status-group-shape! graphics group)
+  (.fill graphics #js {:color color
+                       :alpha (if dark? 0.105 0.078)})
+  (when (seq (:blob-points group))
+    (draw-task-status-group-shape! graphics group)
+    (.setStrokeStyle graphics #js {:width 9
+                                   :color color
+                                   :alpha (if dark? 0.032 0.026)
+                                   :join "round"})
+    (.stroke graphics))
+  (draw-task-status-group-shape! graphics group)
+  (.setStrokeStyle graphics #js {:width 1.45
+                                 :color color
+                                 :alpha (if dark? 0.48 0.34)
+                                 :join "round"})
+  (.stroke graphics))
+
+(defn- add-task-status-badge!
+  [^js label-layer dark? group color title-style on-group-toggle]
+  (let [{:keys [normalized-status label-position badge-card]} group
+        title (or (:title badge-card) (logic/task-status-group-title-text group))
+        ^js badge (new (.-Container PIXI))
+        ^js badge-bg (new (.-Graphics PIXI))
+        ^js label-text (new (.-Text PIXI)
+                            #js {:text title
+                                 :style title-style})
+        badge-width (or (:width badge-card) (+ (.-width label-text) 20))
+        badge-height (or (:height badge-card) (+ (.-height label-text) 8))
+        badge-position (or (:position badge-card)
+                           {:x (+ (:x label-position) (/ badge-width 2))
+                            :y (+ (:y label-position) (/ badge-height 2))})
+        card-x (- (/ badge-width 2))
+        card-y (- (/ badge-height 2))]
+    (draw-rounded-rect! badge-bg
+                        card-x
+                        card-y
+                        badge-width
+                        badge-height
+                        10
+                        #js {:color color
+                             :alpha (if dark? 0.26 0.16)}
+                        #js {:width 1.2
+                             :color color
+                             :alpha (if dark? 0.62 0.42)})
+    (.addChild badge badge-bg)
+    (.addChild badge label-text)
+    (set! (.-x label-text) (+ card-x 10))
+    (set! (.-y label-text) (+ card-y (/ (- badge-height (.-height label-text)) 2)))
+    (set-display-position! badge badge-position)
+    (gobj/set badge "accessibleTitle" title)
+    (set! (.-hitArea badge) (new (.-Rectangle PIXI) card-x card-y badge-width badge-height))
+    (set-interactive! badge #(on-group-toggle normalized-status))
+    (.addChild label-layer badge)))
+
+(defn- add-task-status-task-label!
+  [^js label-layer dark? color task-label-bg-color task-tag-style
+   on-node-activate {:keys [label-card label] :as task}]
+  (let [{:keys [position width height title tag]} label-card
+        ^js label-container (new (.-Container PIXI))
+        ^js bg (new (.-Graphics PIXI))
+        ^js task-text (new (.-Text PIXI)
+                           #js {:text (logic/label-display-text (or title label) true)
+                                :style (new (.-TextStyle PIXI)
+                                            #js {:fontFamily "Inter, Avenir Next, system-ui, sans-serif"
+                                                 :fontSize 13
+                                                 :fontWeight "600"
+                                                 :lineHeight 17
+                                                 :fill (label-color dark?)
+                                                 :wordWrap true
+                                                 :wordWrapWidth (- width 20)
+                                                 :breakWords true})})
+        ^js tag-text (when tag
+                       (new (.-Text PIXI)
+                            #js {:text tag
+                                 :style task-tag-style}))
+        card-x (- (/ width 2))
+        card-y (- (/ height 2))]
+    (.addChild label-container bg)
+    (.addChild label-container task-text)
+    (when tag-text
+      (.addChild label-container tag-text))
+    (draw-rounded-rect! bg
+                        card-x
+                        card-y
+                        width
+                        height
+                        6
+                        #js {:color task-label-bg-color
+                             :alpha (if dark? 0.88 0.94)}
+                        #js {:width 1
+                             :color color
+                             :alpha (if dark? 0.32 0.22)})
+    (set! (.-x task-text) (+ card-x 10))
+    (set! (.-y task-text) (+ card-y 7))
+    (when tag-text
+      (let [tag-width (+ (.-width tag-text) 12)
+            tag-y (+ (.-y task-text) (.-height task-text) 5)]
+        (draw-rounded-rect! bg
+                            (+ card-x 8)
+                            tag-y
+                            tag-width
+                            14
+                            5
+                            #js {:color color
+                                 :alpha (if dark? 0.18 0.12)}
+                            #js {:width 0.8
+                                 :color color
+                                 :alpha (if dark? 0.42 0.30)})
+        (set! (.-x tag-text) (+ card-x 14))
+        (set! (.-y tag-text) (inc tag-y))))
+    (set-display-position! label-container position)
+    (gobj/set label-container "accessibleTitle"
+              (str (:label task) (when tag (str " " tag))))
+    (set! (.-hitArea label-container) (new (.-Rectangle PIXI) card-x card-y width height))
+    (set-interactive! label-container (activate-node-tap on-node-activate (task-status-label-target task)))
+    (.addChild label-layer label-container)))
+
+(defn- draw-task-status-label-leader!
+  [^js graphics dark? color {:keys [x y label-card]}]
+  (when-let [{:keys [position width height]} label-card]
+    (let [card-x (:x position)
+          card-y (:y position)
+          half-width (/ width 2)
+          half-height (/ height 2)
+          target-x (if (< x card-x)
+                     (- card-x half-width)
+                     (+ card-x half-width))
+          target-y (-> y
+                       (max (+ (- card-y half-height) 8))
+                       (min (- (+ card-y half-height) 8)))]
+      (.moveTo graphics x y)
+      (.lineTo graphics target-x target-y)
+      (.setStrokeStyle graphics #js {:width 0.9
+                                     :color color
+                                     :alpha (if dark? 0.26 0.20)
+                                     :cap "round"})
+      (.stroke graphics))))
+
+(defn- add-task-status-more-control!
+  [^js label-layer normalized-status collapsed-node color count-style on-collapsed-toggle dark?]
+  (let [^js more-container (new (.-Container PIXI))
+        ^js bg (new (.-Graphics PIXI))
+        ^js more-text (new (.-Text PIXI)
+                           #js {:text "..."
+                                :style count-style})]
+    (draw-rounded-rect! bg
+                        -10
+                        -5
+                        32
+                        22
+                        9
+                        #js {:color color
+                             :alpha (if dark? 0.28 0.18)}
+                        #js {:width 1
+                             :color color
+                             :alpha (if dark? 0.58 0.38)})
+    (.addChild more-container bg)
+    (.addChild more-container more-text)
+    (set! (.-x more-text) 0)
+    (set! (.-y more-text) 0)
+    (set-display-position! more-container collapsed-node)
+    (gobj/set more-container "accessibleTitle" (str normalized-status " ..."))
+    (set-interactive! more-container #(on-collapsed-toggle normalized-status))
+    (.addChild label-layer more-container)))
+
+(defn- sync-task-status-group-background!
+  [^js graphics ^js label-layer dark? styles on-group-toggle on-collapsed-toggle on-node-activate group]
+  (let [{:keys [status-key normalized-status collapsed-node]} group
+        color (task-status-accent-color status-key dark?)
+        labelled-tasks (filter :task-status-label? (:tasks group))]
+    (draw-task-status-group-blob! graphics dark? group color)
+    (doseq [task labelled-tasks]
+      (draw-task-status-label-leader! graphics dark? color task))
+    (doseq [task labelled-tasks]
+      (add-task-status-task-label!
+       label-layer
+       dark?
+       color
+       (:task-label-bg-color styles)
+       (:task-tag styles)
+       on-node-activate
+       task))
+    (when collapsed-node
+      (add-task-status-more-control!
+       label-layer
+       normalized-status
+       collapsed-node
+       color
+       (:count styles)
+       on-collapsed-toggle
+       dark?))
+    (add-task-status-badge! label-layer dark? group color (:title styles) on-group-toggle)))
+
+(defn- sync-task-status-backgrounds!
+  ([^js graphics ^js label-layer groups-layout dark?]
+   (sync-task-status-backgrounds! graphics label-layer groups-layout dark? {}))
+  ([^js graphics ^js label-layer groups-layout dark?
+    {:keys [center-node on-group-toggle on-collapsed-toggle on-node-activate]}]
+   (.clear graphics)
+   (destroy-children! label-layer)
+   (let [styles (task-status-text-styles dark?)]
+     (when-let [center (:center groups-layout)]
+       (add-task-status-center-label!
+        graphics label-layer center center-node dark? (:center styles) on-node-activate))
+     (doseq [group (:groups groups-layout)]
+       (sync-task-status-group-background!
+        graphics
+        label-layer
+        dark?
+        styles
+        on-group-toggle
+        on-collapsed-toggle
+        on-node-activate
+        group)))))
+
+(defn- task-status-fit-nodes
+  [selected-group-node groups-layout]
+  (let [center-node (select-keys selected-group-node [:x :y])]
+    (into
+     (if (and (:x center-node) (:y center-node)) [center-node] [])
+     (mapcat (fn [{:keys [x y radius blob-points]}]
+               (if (seq blob-points)
+                 blob-points
+                 [{:x (- x radius) :y (- y radius)}
+                  {:x (+ x radius) :y (- y radius)}
+                  {:x (+ x radius) :y (+ y radius)}
+                  {:x (- x radius) :y (+ y radius)}])))
+     (:groups groups-layout))))
+
+(defn- draw-fps-overlay-background!
+  [^js background ^js text dark?]
+  (.clear background)
+  (.roundRect background
+              -8
+              -4
+              (+ (.-width text) 16)
+              (+ (.-height text) 8)
+              7)
+  (.fill background #js {:color (color->int (if dark? "#020617" "#F8FAFC"))
+                         :alpha (if dark? 0.54 0.70)})
+  (.setStrokeStyle background
+                   #js {:width 1
+                        :color (color->int (if dark? "#38BDF8" "#0F766E"))
+                        :alpha (if dark? 0.26 0.22)})
+  (.stroke background))
+
+(defn- create-fps-overlay!
+  [dark?]
+  (let [^js container (new (.-Container PIXI))
+        ^js background (new (.-Graphics PIXI))
+        ^js text (new (.-Text PIXI)
+                      #js {:text "FPS --"
+                           :style (new (.-TextStyle PIXI)
+                                       #js {:fontFamily "Inter, Avenir Next, system-ui, sans-serif"
+                                            :fontSize 11
+                                            :fontWeight "650"
+                                            :letterSpacing 0
+                                            :fill (edge-label-color dark?)})})]
+    (set! (.-eventMode container) "none")
+    (set! (.-alpha container) 0.82)
+    (.addChild container background)
+    (.addChild container text)
+    (draw-fps-overlay-background! background text dark?)
+    {:container container
+     :sync-position! (fn [_width _height]
+                       (let [{:keys [x y]} (logic/fps-overlay-position
+                                            _width
+                                            _height
+                                            (.-width text)
+                                            (.-height text))]
+                         (set! (.-x container) x)
+                         (set! (.-y container) y)))
+     :update! (fn [fps]
+                (let [next-text (str "FPS " (js/Math.round fps))]
+                  (when-not (= next-text (.-text text))
+                    (set! (.-text text) next-text)
+                    (draw-fps-overlay-background! background text dark?))))}))
+
+(defn- tick-fps-overlay!
+  [fps-overlay last-ms* frame-count* width height]
+  (let [now (.now js/performance)]
+    (swap! frame-count* inc)
+    ((:sync-position! fps-overlay) width height)
+    (when (>= (- now @last-ms*) 250)
+      (let [elapsed (max 1 (- now @last-ms*))
+            fps (/ (* @frame-count* 1000) elapsed)]
+        (reset! last-ms* now)
+        (reset! frame-count* 0)
+        ((:update! fps-overlay) fps)))))
 
 (defn- ^:large-vars/cleanup-todo render-nodes!
   [^js tag-container ^js detail-container layouted-nodes* view-mode highlight-state* visible-node-ids* current-layout-nodes]
@@ -1399,7 +1928,10 @@
                                 on-hover-node-change
                                 on-gesture-point
                                 on-node-drag
-                                on-node-drag-end]}]
+                                on-node-drag-end
+                                gesture-locked?
+                                task-status-preview-active?
+                                on-preview-exit]}]
   (let [dragging-world? (atom false)
         drag-node* (atom nil)
         moved? (atom false)
@@ -1423,55 +1955,71 @@
               (when (fn? on-gesture-point)
                 (let [[world-x world-y] (screen->world sx sy)]
                   (on-gesture-point world-x world-y (.. world -scale -x)))))
+            (gesture-locked-now? []
+              (and (fn? gesture-locked?)
+                   (gesture-locked?)))
             (handle-node-click! [node ^js e]
-              (if (util/meta-key? e)
-                (do
-                  (.preventDefault e)
-                  (.stopPropagation e)
-                  (reset! last-click* nil)
-                  (when (fn? on-node-preview)
-                    (on-node-preview node e)))
-                (let [{:keys [action next-click]}
-                      (logic/node-click-action @last-click*
-                                               (:id node)
-                                               {:selected? (and (fn? node-selected?)
-                                                                (node-selected? (:id node)))
-                                                :open? (.-shiftKey e)}
-                                               (.now js/performance))]
-                  (reset! last-click* next-click)
-                  (case action
-                    :open
-                    (when (fn? on-node-activate)
-                      (on-node-activate node e))
+              (if (= "taskLabel" (:type node))
+                (when (fn? on-node-activate)
+                  (on-node-activate (or (:target-node node) node) e))
+                (if (util/meta-key? e)
+                  (do
+                    (.preventDefault e)
+                    (.stopPropagation e)
+                    (reset! last-click* nil)
+                    (when (fn? on-node-preview)
+                      (on-node-preview node e)))
+                  (let [{:keys [action next-click]}
+                        (logic/node-click-action @last-click*
+                                                 (:id node)
+                                                 {:selected? (and (fn? node-selected?)
+                                                                  (node-selected? (:id node)))
+                                                  :open? (.-shiftKey e)}
+                                                 (.now js/performance))]
+                    (reset! last-click* next-click)
+                    (case action
+                      :open
+                      (when (fn? on-node-activate)
+                        (on-node-activate node e))
 
-                    :unhighlight
-                    (when (fn? on-node-select)
-                      (on-node-select node true))
+                      :unhighlight
+                      (when (fn? on-node-select)
+                        (on-node-select node true))
 
-                    :highlight
-                    (when (fn? on-node-select)
-                      (on-node-select node false))
+                      :highlight
+                      (when (fn? on-node-select)
+                        (on-node-select node false))
 
-                    nil))))
+                      nil)))))
             (on-pointer-down [^js e]
               (let [[sx sy] (canvas-point e)
                     [world-x world-y] (screen->world sx sy)
                     scale (.. world -scale -x)
                     hit (hit-test-node (get-node-index) world-x world-y scale)]
-                (emit-gesture-point! sx sy)
-                (set-hover-node! nil)
-                (reset! moved? false)
-                (if-let [node (:node hit)]
-                  (reset! drag-node* {:node node
-                                      :offset-x (- world-x (:x node))
-                                      :offset-y (- world-y (:y node))
-                                      :current-x (:x node)
-                                      :current-y (:y node)})
+                (if (gesture-locked-now?)
                   (do
-                    (reset! dragging-world? true)
-                    (reset! drag-start [sx sy (.-x world) (.-y world)])))))
+                    (.preventDefault e)
+                    (reset! drag-node* nil)
+                    (reset! dragging-world? false)
+                    (reset! moved? false))
+                  (do
+                    (emit-gesture-point! sx sy)
+                    (set-hover-node! nil)
+                    (reset! moved? false)
+                    (if-let [node (:node hit)]
+                      (reset! drag-node* {:node node
+                                          :offset-x (- world-x (:x node))
+                                          :offset-y (- world-y (:y node))
+                                          :current-x (:x node)
+                                          :current-y (:y node)})
+                      (do
+                        (reset! dragging-world? true)
+                        (reset! drag-start [sx sy (.-x world) (.-y world)])))))))
             (on-pointer-move [^js e]
               (cond
+                (gesture-locked-now?)
+                nil
+
                 @drag-node*
                 (let [[sx sy] (canvas-point e)
                       [world-x world-y] (screen->world sx sy)
@@ -1515,6 +2063,12 @@
                   (set-hover-node! (some-> hit :node :id)))))
             (on-pointer-up [^js e]
               (cond
+                (gesture-locked-now?)
+                (do
+                  (reset! drag-node* nil)
+                  (reset! dragging-world? false)
+                  (reset! moved? false))
+
                 @drag-node*
                 (let [{:keys [node current-x current-y]} @drag-node*]
                   (reset! drag-node* nil)
@@ -1546,19 +2100,40 @@
               (.preventDefault e)
               (let [[sx sy] (canvas-point e)
                     [before-x before-y] (screen->world sx sy)
-                    current-scale (.. world -scale -x)
-                    factor (if (pos? (.-deltaY e)) 0.9 1.1)
-                    next-scale (logic/clamp-zoom-scale (* current-scale factor))]
-                (set! (.. world -scale -x) next-scale)
-                (set! (.. world -scale -y) next-scale)
-                (set! (.-x world) (- sx (* before-x next-scale)))
-                (set! (.-y world) (- sy (* before-y next-scale)))
-                (when (fn? on-gesture-point)
-                  (on-gesture-point before-x before-y next-scale))
-                (when (fn? on-scale-change)
-                  (on-scale-change next-scale))
-                (when (fn? on-transform)
-                  (on-transform))))
+                    transform (logic/wheel-zoom-transform
+                               {:world-x before-x
+                                :world-y before-y
+                                :scale (.. world -scale -x)}
+                               {:screen-x sx
+                                :screen-y sy
+                                :delta-y (.-deltaY e)
+                                :locked? (gesture-locked-now?)})]
+                (when transform
+                  (let [{:keys [x y scale]} transform]
+                    (set! (.. world -scale -x) scale)
+                    (set! (.. world -scale -y) scale)
+                    (set! (.-x world) x)
+                    (set! (.-y world) y)
+                    (when (fn? on-gesture-point)
+                      (on-gesture-point before-x before-y scale))
+                    (when (fn? on-scale-change)
+                      (on-scale-change scale))
+                    (when (fn? on-transform)
+                      (on-transform))))))
+            (on-key-down [^js e]
+              (case (logic/graph-key-action
+                     {:key (.-key e)
+                      :task-status-preview-active? (and (fn? task-status-preview-active?)
+                                                        (task-status-preview-active?))})
+                :exit-task-status-preview
+                (do
+                  (.preventDefault e)
+                  (.stopPropagation e)
+                  (reset! last-click* nil)
+                  (when (fn? on-preview-exit)
+                    (on-preview-exit)))
+
+                nil))
             (on-pointer-leave [^js e]
               (on-pointer-up e)
               (set-hover-node! nil))]
@@ -1567,15 +2142,17 @@
       (.addEventListener canvas "pointerup" on-pointer-up)
       (.addEventListener canvas "pointerleave" on-pointer-leave)
       (.addEventListener canvas "wheel" on-wheel #js {:passive false})
+      (.addEventListener js/window "keydown" on-key-down)
       (fn []
         (.removeEventListener canvas "pointerdown" on-pointer-down)
         (.removeEventListener canvas "pointermove" on-pointer-move)
         (.removeEventListener canvas "pointerup" on-pointer-up)
         (.removeEventListener canvas "pointerleave" on-pointer-leave)
-        (.removeEventListener canvas "wheel" on-wheel)))))
+        (.removeEventListener canvas "wheel" on-wheel)
+        (.removeEventListener js/window "keydown" on-key-down)))))
 
 (defn- ^:large-vars/cleanup-todo setup-scene!
-  [^js app ^js container {:keys [nodes links dark? on-node-activate on-node-preview on-selection-change on-rendered view-mode visible-node-ids background-visible-node-ids depth show-arrows? link-distance show-edge-labels? grid-layout?]} render-start]
+  [^js app ^js container {:keys [nodes links dark? on-node-activate on-node-preview on-selection-change on-rendered view-mode visible-node-ids background-visible-node-ids depth show-arrows? link-distance visible-recent-task-count show-edge-labels? grid-layout?]} render-start]
   (set! (.-innerHTML container) "")
   (let [^js canvas (or (.-canvas app) (.-view app))
         ^js stage (.-stage app)
@@ -1585,15 +2162,22 @@
         ^js edge-label-layer-wrapper (new (.-Container PIXI))
         ^js node-label-layer (new (.-Container PIXI))
         ^js cluster-background-layer (new (.-Graphics PIXI))
+        ^js task-status-background-layer (new (.-Graphics PIXI))
+        ^js task-status-label-layer (new (.-Container PIXI))
+        fps-overlay (create-fps-overlay! dark?)
         _ (.appendChild container canvas)
         _ (.addChild stage world)
         _ (.addChild world detail-layer)
         _ (.addChild world tag-layer)
         _ (.addChild world node-label-layer)
+        _ (.addChild world task-status-label-layer)
         _ (.addChild stage edge-label-layer-wrapper)
+        _ (.addChild stage (:container fps-overlay))
         width (.-clientWidth container)
         height (.-clientHeight container)
         size* (atom {:width width :height height})
+        fps-last-ms* (atom (.now js/performance))
+        fps-frame-count* (atom 0)
         normalized-view-mode (normalize-view-mode view-mode)
         depth* (atom (-> (or depth 1) (max 1) (min 5)))
         grid-layout? (true? grid-layout?)
@@ -1606,13 +2190,7 @@
                                             dark?
                                             {:link-distance link-distance
                                              :grid-layout? grid-layout?}))
-        scene-link-limit (logic/draw-edge-limit (count @layouted-nodes*)
-                                                (count links)
-                                                view-mode)
-        scene-links (if (> (count links) scene-link-limit)
-                      (take scene-link-limit links)
-                      links)
-        display-links* (atom (logic/display-links scene-links @layouted-nodes*))
+        display-links* (atom (logic/display-links links @layouted-nodes*))
         all-node-id-set (set (map :id @layouted-nodes*))
         visible-node-ids* (atom (visible-node-id-set
                                  @layouted-nodes*
@@ -1647,6 +2225,17 @@
         highlighted-node-ids* (atom #{})
         hovered-node-id* (atom nil)
         tag-focus-node-id* (atom nil)
+        task-status-preview-active? (atom false)
+        task-status-fit-key* (atom nil)
+        task-status-visible-node-ids* (atom nil)
+        task-status-display-node-ids* (atom nil)
+        task-status-main-node-ids* (atom nil)
+        task-status-links* (atom nil)
+        task-status-label-hit-nodes* (atom [])
+        task-status-revealed-count-by-status* (atom {})
+        task-status-return-transform* (atom nil)
+        task-status-sync-key* (atom nil)
+        world-transform-target* (atom nil)
         node-kind (fn [node-id]
                     (:kind (get @layout-by-id* node-id)))
         overlapping-tag-ids (fn [node-ids]
@@ -1668,10 +2257,13 @@
                                       active-ids (set/union (:active-ids base) overlapping-tags)
                                       connected-ids (set/difference active-ids
                                                                     @highlighted-node-ids*)]
-                                  (assoc base
-                                         :active-ids active-ids
-                                         :connected-ids connected-ids
-                                         :hovered-id @hovered-node-id*)))
+                                  (cond-> (assoc base
+                                                 :active-ids active-ids
+                                                 :connected-ids connected-ids
+                                                 :hovered-id @hovered-node-id*)
+                                    (seq @task-status-main-node-ids*)
+                                    (assoc :task-focus-mode? true
+                                           :task-focus-ids @task-status-main-node-ids*))))
         highlight-state* (atom (highlight-state-value))
         display-visible-node-ids* (atom (if (= normalized-view-mode :tags-and-objects)
                                           (if grid-layout?
@@ -1688,11 +2280,19 @@
                                             @background-visible-node-ids*)
                                           @visible-node-ids*))
         visible-link-list (fn []
-                            (let [links (visible-links @display-links* @display-visible-node-ids*)]
-                              (if (and (edge-detail-view-mode? normalized-view-mode)
-                                       (not (:select-mode? @highlight-state*)))
-                                links
-                                (logic/highlight-visible-links links @highlight-state*))))
+                            (if-let [task-links @task-status-links*]
+                              (let [scale (.. world -scale -x)]
+                                (cond->> task-links
+                                  (< scale 0.55)
+                                  (filter #(= "root-to-group" (:edge/type %)))
+                                  (< scale 1.0)
+                                  (remove #(and (= "group-to-task" (:edge/type %))
+                                                (not (:important? %))))))
+                              (let [links (visible-links @display-links* @display-visible-node-ids*)]
+                                (if (and (edge-detail-view-mode? normalized-view-mode)
+                                         (not (:select-mode? @highlight-state*)))
+                                  links
+                                  (logic/highlight-visible-links links @highlight-state*)))))
         display-node-index* (atom (index-layouted-nodes
                                    (filter #(visible-node? display-visible-node-ids* %)
                                            @layouted-nodes*)))
@@ -1700,11 +2300,35 @@
                                 (filter #(visible-node? visible-node-ids* %)
                                         @layouted-nodes*)))
         _ (.addChild detail-layer cluster-background-layer)
+        _ (.addChild detail-layer task-status-background-layer)
         _ (draw-cluster-backgrounds! cluster-background-layer @layouted-nodes* normalized-view-mode dark? context-visible-node-ids* grid-layout? @highlight-state*)
         current-layout-nodes (fn []
                                (vals (logic/current-layout-by-id
                                       @layout-by-id*
                                       @preview-layout-by-id*)))
+        current-world-transform (fn []
+                                  {:x (.-x world)
+                                   :y (.-y world)
+                                   :scale (.. world -scale -x)})
+        set-world-transform! (fn [{:keys [x y scale]}]
+                               (set! (.-x world) x)
+                               (set! (.-y world) y)
+                               (set! (.. world -scale -x) scale)
+                               (set! (.. world -scale -y) scale))
+        task-status-background-context-ids
+        (fn [base-nodes selected-group-node selected-task-ids]
+          (let [selected-task-ids (set selected-task-ids)
+                selected-id (:id selected-group-node)
+                center-x (or (:x selected-group-node) 0)
+                center-y (or (:y selected-group-node) 0)]
+            (->> base-nodes
+                 (filter #(and (contains? @background-visible-node-ids* (:id %))
+                               (not (contains? selected-task-ids (:id %)))
+                               (not= selected-id (:id %))))
+                 (sort-by #(distance-squared center-x center-y (or (:x %) center-x) (or (:y %) center-y)))
+                 (take task-status-background-context-limit)
+                 (map :id)
+                 set)))
         sync-cluster-backgrounds! (fn [nodes]
                                     (draw-cluster-backgrounds! cluster-background-layer
                                                                nodes
@@ -1758,6 +2382,10 @@
                            (reset! navigation-active? true)
                            (reset! last-navigation-ms* (.now js/performance))
                            (reset! transform-dirty? true))
+        selected-task-group-id (fn []
+                                 (let [ids @highlighted-node-ids*]
+                                   (when (= 1 (count ids))
+                                     (first ids))))
         emit-selection! (fn []
                           (when (fn? on-selection-change)
                             (on-selection-change
@@ -1803,9 +2431,191 @@
                                      @layout-by-id*
                                      @preview-layout-by-id*))
                                    (mark-transform!))))
+        clear-task-status-grouping! (fn []
+                                      (.clear task-status-background-layer)
+                                      (destroy-children! task-status-label-layer)
+                                      (reset! task-status-fit-key* nil)
+                                      (reset! task-status-visible-node-ids* nil)
+                                      (reset! task-status-display-node-ids* nil)
+                                      (reset! task-status-main-node-ids* nil)
+                                      (reset! task-status-links* nil)
+                                      (reset! task-status-label-hit-nodes* [])
+                                      (reset! task-status-revealed-count-by-status* {})
+                                      (reset! task-status-sync-key* nil)
+                                      (when @task-status-preview-active?
+                                        (when-let [return-transform @task-status-return-transform*]
+                                          (reset! world-transform-target* return-transform))
+                                        (reset! task-status-return-transform* nil)
+                                        (reset! display-visible-node-ids* @visible-node-ids*)
+                                        (reset! context-visible-node-ids* @background-visible-node-ids*)
+                                        (reset! display-visible-key* nil)
+                                        (reset! display-node-index*
+                                                (index-layouted-nodes
+                                                 (filter #(visible-node? display-visible-node-ids* %)
+                                                         @layouted-nodes*)))
+                                        (reset! full-node-index*
+                                                (index-layouted-nodes
+                                                 (filter #(visible-node? visible-node-ids* %)
+                                                         @layouted-nodes*)))
+                                        (reset! preview-layout-by-id* nil)
+                                        (reset! task-status-preview-active? false)
+                                        (reset! highlight-state* (highlight-state-value))
+                                        (sync-cluster-backgrounds! @layouted-nodes*)))
+        reveal-task-status-count! (fn [status current-count total-count]
+                                    (let [batch-size (or visible-recent-task-count
+                                                         logic/task-status-detail-visible-limit)]
+                                      (swap! task-status-revealed-count-by-status*
+                                             assoc
+                                             status
+                                             (min total-count (+ current-count batch-size)))
+                                      (reset! task-status-fit-key* nil)
+                                      (mark-transform!)))
+        reveal-task-status! (fn [groups status]
+                              (when-let [group (some #(when (= status (:normalized-status %)) %) groups)]
+                                (let [batch-size (or visible-recent-task-count
+                                                     logic/task-status-detail-visible-limit)
+                                      current-count (get @task-status-revealed-count-by-status*
+                                                         status
+                                                         batch-size)]
+                                  (reveal-task-status-count! status current-count (:count group)))))
+        sync-task-status-grouping! (fn []
+                                     (let [raw-selected-group-id (selected-task-group-id)
+                                           selected-group-id (or (when-let [selected-node (get @layout-by-id* raw-selected-group-id)]
+                                                                   (logic/task-status-preview-entry-group-id
+                                                                    selected-node
+                                                                    @layout-by-id*
+                                                                    neighbor-map))
+                                                                 raw-selected-group-id)
+                                           {:keys [width height] :as size} @size*
+                                           sync-key [selected-group-id
+                                                     width
+                                                     height
+                                                     visible-recent-task-count
+                                                     @task-status-revealed-count-by-status*
+                                                     @visible-node-ids*
+                                                     (boolean @drag-session*)]]
+                                       (when (not= sync-key @task-status-sync-key*)
+                                         (reset! task-status-sync-key* sync-key)
+                                         (let [base-nodes @layouted-nodes*
+                                               eligible? (logic/task-status-detail-eligible?
+                                                          base-nodes
+                                                          selected-group-id
+                                                          neighbor-map
+                                                          @visible-node-ids*
+                                                          {:view-mode normalized-view-mode
+                                                           :grid-layout? grid-layout?})]
+                                           (case (logic/task-status-preview-sync-action
+                                                  {:eligible? eligible?
+                                                   :dragging? (some? @drag-session*)
+                                                   :preview-active? @task-status-preview-active?})
+                                             :sync
+                                             (let [selected-group-node (get @layout-by-id* selected-group-id)
+                                                   groups (logic/task-status-groups
+                                                           base-nodes
+                                                           selected-group-id
+                                                           neighbor-map
+                                                           @visible-node-ids*
+                                                           nil)
+                                                   groups-layout (logic/task-status-group-layout
+                                                                  groups
+                                                                  {:center-x (:x selected-group-node)
+                                                                   :center-y (:y selected-group-node)
+                                                                   :center-label (:label selected-group-node)
+                                                                   :visible-recent-task-count visible-recent-task-count
+                                                                   :revealed-task-count-by-status @task-status-revealed-count-by-status*
+                                                                   :width width
+                                                                   :height height})
+                                                   fit-key (logic/task-status-fit-key
+                                                            selected-group-id
+                                                            @task-status-revealed-count-by-status*
+                                                            groups
+                                                            (assoc size
+                                                                   :visible-recent-task-count visible-recent-task-count))
+                                                   status-layout-by-id (logic/task-status-layout-by-id selected-group-node groups-layout)
+                                                   next-preview (merge
+                                                                 (logic/merge-node-positions
+                                                                  @layout-by-id*
+                                                                  (:positions-by-id groups-layout))
+                                                                 status-layout-by-id)
+                                                   visible-task-ids (logic/task-status-visible-node-ids
+                                                                     selected-group-id
+                                                                     (:groups groups-layout))
+                                                   selected-task-ids (set (mapcat :all-task-ids
+                                                                                  (:groups groups-layout)))
+                                                   status-links (logic/task-status-display-links
+                                                                 selected-group-id
+                                                                 (:groups groups-layout))
+                                                   label-hit-nodes (task-status-label-hit-nodes
+                                                                    selected-group-node
+                                                                    groups-layout)]
+                                               (when (and selected-group-id
+                                                          (not= selected-group-id raw-selected-group-id))
+                                                 (reset! highlighted-node-ids* #{selected-group-id})
+                                                 (emit-selection!))
+                                               (when (not= fit-key @task-status-fit-key*)
+                                                 (when-not @task-status-preview-active?
+                                                   (reset! task-status-return-transform* (current-world-transform)))
+                                                 (let [fit-transform (logic/fit-transform
+                                                                     (task-status-fit-nodes selected-group-node groups-layout)
+                                                                     width
+                                                                     height
+                                                                     {:padding 64
+                                                                      :max-scale 1.16})]
+                                                   (reset! world-transform-target* fit-transform)
+                                                   (reset! task-status-fit-key* fit-key)))
+                                               (when (not= next-preview @preview-layout-by-id*)
+                                                 (reset! preview-layout-by-id* next-preview)
+                                                 (.clear cluster-background-layer))
+                                               (let [background-context-ids (task-status-background-context-ids
+                                                                             base-nodes
+                                                                             selected-group-node
+                                                                             selected-task-ids)
+                                                     display-node-ids (set/union visible-task-ids background-context-ids)]
+                                                 (reset! task-status-visible-node-ids* visible-task-ids)
+                                                 (reset! task-status-display-node-ids* display-node-ids)
+                                                 (reset! task-status-main-node-ids* visible-task-ids)
+                                                 (reset! task-status-label-hit-nodes* label-hit-nodes)
+                                                 (reset! highlight-state* (highlight-state-value))
+                                                 (let [display-changed? (not= display-node-ids
+                                                                              @display-visible-node-ids*)]
+                                                   (when display-changed?
+                                                     (reset! display-visible-node-ids* display-node-ids)
+                                                     (reset! context-visible-node-ids* background-context-ids)
+                                                     (reset! full-node-index*
+                                                             (index-layouted-nodes
+                                                              (filter #(contains? visible-task-ids (:id %))
+                                                                      @layouted-nodes*))))
+                                                   (reset! display-node-index*
+                                                           (index-layouted-nodes
+                                                            (task-status-interactive-layout-nodes
+                                                             visible-task-ids
+                                                             (current-layout-nodes)
+                                                             label-hit-nodes)))))
+                                               (reset! task-status-links* status-links)
+                                               (reset! task-status-preview-active? true)
+                                               (sync-task-status-backgrounds!
+                                                task-status-background-layer
+                                                task-status-label-layer
+                                                groups-layout
+                                                dark?
+                                                {:center-node selected-group-node
+                                                 :on-node-activate on-node-activate
+                                                 :on-group-toggle
+                                                 (fn [status]
+                                                   (reveal-task-status! groups status))
+                                                 :on-collapsed-toggle
+                                                 (fn [status]
+                                                   (reveal-task-status! groups status))}))
+                                             :keep
+                                             nil
+
+                                             :clear
+                                             (clear-task-status-grouping!))))))
         sync-highlight! (fn []
                           (reset! highlight-state* (highlight-state-value))
-                          (sync-cluster-backgrounds! (current-layout-nodes))
+                          (if @task-status-preview-active?
+                            (.clear cluster-background-layer)
+                            (sync-cluster-backgrounds! (current-layout-nodes)))
                           (sync-edges-and-labels!
                            (logic/current-layout-by-id
                             @layout-by-id*
@@ -1830,7 +2640,7 @@
                                     (reset! display-visible-key* nil)
                                     (reset! layout-by-id*
                                             (into {} (map (fn [node] [(:id node) node]) next-layouted-nodes)))
-                                    (reset! display-links* (logic/display-links scene-links next-layouted-nodes))
+                                    (reset! display-links* (logic/display-links links next-layouted-nodes))
                                     (reset! tag-node-index*
                                             (index-layouted-nodes
                                              (filter #(and (visible-node? visible-node-ids* %)
@@ -1859,11 +2669,16 @@
                                              (= "tag" (:kind %))))
                                (map :id)
                                set))
+        task-status-tag-id? (fn [node-id]
+                              (when-let [node (get @layout-by-id* node-id)]
+                                (= node-id
+                                   (logic/task-status-preview-entry-group-id node))))
         focused-tag-id-for-scale (fn [scale]
                                    (let [focus-level (tag-focus-level scale)
                                          visible-tag-id-set (visible-tag-ids)]
                                      (when (and focus-level
-                                                (contains? visible-tag-id-set @tag-focus-node-id*))
+                                                (contains? visible-tag-id-set @tag-focus-node-id*)
+                                                (not (task-status-tag-id? @tag-focus-node-id*)))
                                        @tag-focus-node-id*)))
         tag-context-node-ids (fn [tag-id]
                                (->> (conj (set (get neighbor-map tag-id)) tag-id)
@@ -1876,46 +2691,56 @@
                                                   (= "tag" (node-kind %))))
                                     set))
         tag-drill-visible-node-ids (fn [scale]
-                                     (if (or (not= normalized-view-mode :tags-and-objects)
-                                             (seq @highlighted-node-ids*))
-                                       @visible-node-ids*
-                                       (if grid-layout?
-                                         (grid-layout-display-node-ids @layouted-nodes* visible-node-ids*)
-                                         (let [visible-tag-id-set (visible-tag-ids)
-                                             focus-level (tag-focus-level scale)
-                                             focused-tag-id (focused-tag-id-for-scale scale)]
-                                           (case focus-level
-                                             :isolate
-                                             (if focused-tag-id #{focused-tag-id} visible-tag-id-set)
+                                     (if-let [task-display-node-ids @task-status-display-node-ids*]
+                                       task-display-node-ids
+                                       (if (or (not= normalized-view-mode :tags-and-objects)
+                                               (seq @highlighted-node-ids*))
+                                         @visible-node-ids*
+                                         (if grid-layout?
+                                           (grid-layout-display-node-ids @layouted-nodes* visible-node-ids*)
+                                           (let [visible-tag-id-set (visible-tag-ids)
+                                                 focus-level (tag-focus-level scale)
+                                                 focused-tag-id (focused-tag-id-for-scale scale)]
+                                             (case focus-level
+                                               :isolate
+                                               (logic/tag-focus-display-node-ids
+                                                visible-tag-id-set
+                                                focus-level
+                                                focused-tag-id
+                                                #{}
+                                                #{})
 
-                                             :objects
-                                             (if focused-tag-id
-                                               (let [context-node-ids (tag-context-node-ids focused-tag-id)
-                                                     object-ids (->> context-node-ids
-                                                                     (filter #(not= "tag" (node-kind %)))
-                                                                     set)
-                                                     {:keys [width height]} @size*
-                                                     object-budget (tag-object-display-budget
-                                                                    @layout-by-id*
-                                                                    focused-tag-id
-                                                                    context-node-ids
-                                                                    (count object-ids)
-                                                                    scale
-                                                                    width
-                                                                    height)
-                                                     visible-object-ids (balanced-object-node-ids
-                                                                         @layout-by-id*
-                                                                         focused-tag-id
-                                                                         object-ids
-                                                                         object-budget)]
-                                                 (->> (set/union #{focused-tag-id}
-                                                                 visible-object-ids
-                                                                 (crossed-tag-node-ids visible-object-ids))
-                                                      (filter #(contains? @visible-node-ids* %))
-                                                      set))
-                                               visible-tag-id-set)
+                                               :objects
+                                               (if focused-tag-id
+                                                 (let [context-node-ids (tag-context-node-ids focused-tag-id)
+                                                       object-ids (->> context-node-ids
+                                                                       (filter #(not= "tag" (node-kind %)))
+                                                                       set)
+                                                       {:keys [width height]} @size*
+                                                       object-budget (tag-object-display-budget
+                                                                      @layout-by-id*
+                                                                      focused-tag-id
+                                                                      context-node-ids
+                                                                      (count object-ids)
+                                                                      scale
+                                                                      width
+                                                                      height)
+                                                       visible-object-ids (balanced-object-node-ids
+                                                                           @layout-by-id*
+                                                                           focused-tag-id
+                                                                           object-ids
+                                                                           object-budget)]
+                                                   (->> (logic/tag-focus-display-node-ids
+                                                         visible-tag-id-set
+                                                         focus-level
+                                                         focused-tag-id
+                                                         visible-object-ids
+                                                         (crossed-tag-node-ids visible-object-ids))
+                                                        (filter #(contains? @visible-node-ids* %))
+                                                        set))
+                                                 visible-tag-id-set)
 
-                                             visible-tag-id-set)))))
+                                               visible-tag-id-set))))))
         tag-drill-context-node-ids (fn [scale]
                                      (if (or (not= normalized-view-mode :tags-and-objects)
                                              (seq @highlighted-node-ids*))
@@ -1923,9 +2748,10 @@
                                        (if grid-layout?
                                          (grid-layout-display-node-ids @layouted-nodes* visible-node-ids*)
                                          (if-let [tag-id (and (contains? #{:isolate :objects}
-                                                                       (tag-focus-level scale))
-                                                           (focused-tag-id-for-scale scale))]
-                                           (tag-context-node-ids tag-id)
+                                                                         (tag-focus-level scale))
+                                                              (focused-tag-id-for-scale scale))]
+                                           (set/union @background-visible-node-ids*
+                                                      (tag-context-node-ids tag-id))
                                            @background-visible-node-ids*))))
         display-visible-key (fn [scale]
                               (let [focus-level (when (= normalized-view-mode :tags-and-objects)
@@ -1950,13 +2776,20 @@
                                             (reset! context-visible-node-ids* next-context-node-ids)
                                             (reset! display-node-index*
                                                     (index-layouted-nodes
-                                                     (filter #(visible-node? display-visible-node-ids* %)
-                                                             @layouted-nodes*)))
+                                                     (if @task-status-preview-active?
+                                                       (task-status-interactive-layout-nodes
+                                                        (or @task-status-visible-node-ids* #{})
+                                                        (current-layout-nodes)
+                                                        @task-status-label-hit-nodes*)
+                                                       (filter #(contains? next-visible-node-ids (:id %))
+                                                               (current-layout-nodes)))))
                                             (reset! full-node-index*
                                                     (index-layouted-nodes
                                                      (filter #(visible-node? visible-node-ids* %)
                                                              @layouted-nodes*)))
-                                            (sync-cluster-backgrounds! @layouted-nodes*)
+                                            (if @task-status-preview-active?
+                                              (.clear cluster-background-layer)
+                                              (sync-cluster-backgrounds! @layouted-nodes*))
                                             (sync-edges-and-labels!
                                              (logic/current-layout-by-id
                                               @layout-by-id*
@@ -1985,22 +2818,76 @@
                                                scale
                                                tag-focus-max-screen-distance)
                                       next-id (or next-id focused-tag-id)]
-                                  (when (not= next-id @tag-focus-node-id*)
-                                    (reset! tag-focus-node-id* next-id)
-                                    (mark-transform!))))))
+                                  (if (and next-id (task-status-tag-id? next-id))
+                                    (clear-tag-focus!)
+                                    (when (not= next-id @tag-focus-node-id*)
+                                      (reset! tag-focus-node-id* next-id)
+                                      (mark-transform!)))))))
         update-highlight! (fn [node remove?]
-                            (clear-tag-focus!)
-                            (swap! highlighted-node-ids*
-                                   logic/update-highlighted-node-ids
-                                   (:id node)
-                                   remove?)
-                            (emit-selection!)
-                            (sync-highlight!))
+                            (if-let [activation-target
+                                     (logic/task-status-preview-click-activation-target
+                                      @task-status-preview-active?
+                                      node)]
+                              (when (fn? on-node-activate)
+                                (on-node-activate activation-target nil))
+                              (cond
+                                (= "collapsed" (:type node))
+                                (do
+                                  (let [status (:normalized-status node)
+                                        visible-count (or (:visible-task-count node)
+                                                          visible-recent-task-count
+                                                          logic/task-status-detail-visible-limit)
+                                        total-count (+ visible-count (or (:hidden-count node) 0))]
+                                    (swap! task-status-revealed-count-by-status*
+                                           assoc
+                                           status
+                                           (min total-count
+                                                (+ visible-count
+                                                   (or visible-recent-task-count
+                                                       logic/task-status-detail-visible-limit)))))
+                                  (reset! task-status-fit-key* nil)
+                                  (mark-transform!))
+
+                                :else
+                                (do
+                                  (clear-tag-focus!)
+                                  (let [entry-group-id (logic/task-status-preview-entry-group-id
+                                                        node
+                                                        @layout-by-id*
+                                                        neighbor-map)
+                                        entry-selected-ids
+                                        (logic/task-status-preview-entry-selected-ids
+                                         entry-group-id
+                                         {:eligible? (and entry-group-id
+                                                          (logic/task-status-detail-eligible?
+                                                           @layouted-nodes*
+                                                           entry-group-id
+                                                           neighbor-map
+                                                           @visible-node-ids*
+                                                           {:view-mode normalized-view-mode
+                                                            :grid-layout? grid-layout?}))
+                                          :preview-active? @task-status-preview-active?})]
+                                    (if entry-selected-ids
+                                      (do
+                                        (reset! highlighted-node-ids* entry-selected-ids)
+                                        (emit-selection!)
+                                        (reset! task-status-sync-key* nil)
+                                        (sync-task-status-grouping!)
+                                        (sync-highlight!))
+                                      (do
+                                        (swap! highlighted-node-ids*
+                                               logic/update-highlighted-node-ids
+                                               (:id node)
+                                               remove?)
+                                        (emit-selection!)
+                                        (sync-highlight!))))))))
         clear-highlight! (fn []
                            (when (seq @highlighted-node-ids*)
                              (reset! highlighted-node-ids* #{})
                              (emit-selection!)
                              (clear-tag-focus!)
+                             (when @task-status-preview-active?
+                               (clear-task-status-grouping!))
                              (sync-highlight!)))
         update-edge-highlight! (fn [{:keys [source target]}]
                                  (clear-tag-focus!)
@@ -2082,7 +2969,7 @@
                               (reset! display-node-index*
                                       (index-layouted-nodes
                                        (filter #(visible-node? display-visible-node-ids* %)
-                                               @layouted-nodes*)))
+                                               (current-layout-nodes))))
                               (reset! full-node-index*
                                       (index-layouted-nodes
                                        (filter #(visible-node? visible-node-ids* %)
@@ -2094,13 +2981,32 @@
                             next (+ alpha (* (- target alpha) 0.2))]
                         (set! (.-alpha layer) next)
                         (set! (.-visible layer) (> next 0.01))))
+        tick-world-transform! (fn []
+                                (when-let [{target-x :x target-y :y target-scale :scale} @world-transform-target*]
+                                  (let [current (current-world-transform)
+                                        next {:x (+ (:x current) (* (- target-x (:x current)) 0.18))
+                                              :y (+ (:y current) (* (- target-y (:y current)) 0.18))
+                                              :scale (+ (:scale current) (* (- target-scale (:scale current)) 0.18))}
+                                        done? (and (< (js/Math.abs (- target-x (:x next))) 0.6)
+                                                   (< (js/Math.abs (- target-y (:y next))) 0.6)
+                                                   (< (js/Math.abs (- target-scale (:scale next))) 0.006))]
+                                    (set-world-transform! (if done?
+                                                            {:x target-x :y target-y :scale target-scale}
+                                                            next))
+                                    (when done?
+                                      (reset! world-transform-target* nil))
+                                    true)))
         animate-layer (fn []
                         (let [now (.now js/performance)]
+                          (let [{:keys [width height]} @size*]
+                            (tick-fps-overlay! fps-overlay fps-last-ms* fps-frame-count* width height))
                           (when (and @navigation-active?
                                      (> (- now @last-navigation-ms*) navigation-idle-ms))
                             (reset! navigation-active? false)
                             (mark-scene!)))
                         (ticker-step detail-layer detail-target-alpha)
+                        (when (tick-world-transform!)
+                          (reset! transform-dirty? true))
                         (let [dirty? @transform-dirty?
                               navigation? @navigation-active?
                               scale (.. world -scale -x)
@@ -2112,6 +3018,7 @@
                                                (or display-changed?
                                                    (not navigation?)))]
                           (when dirty?
+                            (sync-task-status-grouping!)
                             (when heavy-sync?
                               (let [{:keys [width height]} @size*]
                                 ((:sync! node-render-info) world width height @hovered-node-id*)
@@ -2119,7 +3026,7 @@
                                   (sync-edges-and-labels!
                                    (logic/current-layout-by-id
                                     @layout-by-id*
-                                    @preview-layout-by-id*))))))
+                                    @preview-layout-by-id*)))))
                             (when-let [sync-edge-label-transform-fn (:sync-transform! edge-label-render-info)]
                               (let [{:keys [width height]} @size*]
                                 (sync-edge-label-transform-fn
@@ -2128,18 +3035,20 @@
                                  height
                                  (logic/current-layout-by-id
                                   @layout-by-id*
-                                  @preview-layout-by-id*))))
+                                  @preview-layout-by-id*)))))
                           (when-let [label-layer (:container label-manager)]
-                            (let [focus-level (when (and (= normalized-view-mode :tags-and-objects)
+                            (let [task-status-preview-active? @task-status-preview-active?
+                                  focus-level (when (and (= normalized-view-mode :tags-and-objects)
                                                          (empty? @highlighted-node-ids*))
                                                 (tag-focus-level scale))
                                   focused-tag-id (focused-tag-id-for-scale scale)
                                   focused-node-ids (if focused-tag-id
                                                      #{focused-tag-id}
                                                      #{})
-                                  label-hovered-node-id (when-not (and (= normalized-view-mode :tags-and-objects)
-                                                                       (empty? @highlighted-node-ids*)
-                                                                       (nil? focus-level))
+                                  label-hovered-node-id (when-not (or task-status-preview-active?
+                                                                      (and (= normalized-view-mode :tags-and-objects)
+                                                                           (empty? @highlighted-node-ids*)
+                                                                           (nil? focus-level)))
                                                           @hovered-node-id*)
                                   focus-labels-only? (and (seq focused-node-ids)
                                                           (not (:label-visible? @visibility-state*)))
@@ -2148,7 +3057,11 @@
                                                            (assoc :label-visible? true)
                                                            true
                                                            (assoc :linked-label-visible?
-                                                                  (>= scale logic/linked-label-visible-scale)))
+                                                                  (>= scale logic/linked-label-visible-scale))
+                                                           task-status-preview-active?
+                                                           (assoc :task-status-preview-active? true
+                                                                  :label-visible? false
+                                                                  :linked-label-visible? false))
                                   {:keys [target-alpha update? hovered-only? selected-only? active-only?]}
                                   (logic/label-render-state
                                    label-hovered-node-id
@@ -2171,6 +3084,9 @@
                                      height
                                      label-hovered-node-id
                                      {:node-visible? (cond
+                                                       task-status-preview-active?
+                                                       (constantly false)
+
                                                        focus-labels-only?
                                                        #(and (visible-node? visible-node-ids* %)
                                                              (or (= "tag" (:kind %))
@@ -2251,9 +3167,11 @@
                                                 (if (:label-visible? next) 1.0 0.0))
                                         (mark-transform!))))
         get-node-index (fn []
-                         (if (seq @highlighted-node-ids*)
-                           @full-node-index*
-                           @display-node-index*))
+                         (if @task-status-preview-active?
+                           @display-node-index*
+                           (if (seq @highlighted-node-ids*)
+                             @full-node-index*
+                             @display-node-index*)))
         get-edge-hit (fn [world-x world-y scale]
                        (hit-test-edge
                         (logic/current-layout-by-id
@@ -2272,14 +3190,19 @@
                         :on-node-preview on-node-preview
                         :on-node-select update-highlight!
                         :on-edge-select update-edge-highlight!
-                        :on-selection-clear clear-highlight!
+                        :on-selection-clear (fn []
+                                              (when-not @task-status-preview-active?
+                                                (clear-highlight!)))
                         :node-selected? #(contains? @highlighted-node-ids* %)
                         :on-scale-change update-detail-visibility!
                         :on-transform mark-navigation!
                         :on-hover-node-change sync-hover-preview!
                         :on-gesture-point update-tag-focus!
                         :on-node-drag apply-node-drag!
-                        :on-node-drag-end commit-node-drag!})
+                        :on-node-drag-end commit-node-drag!
+                        :task-status-preview-active? #(boolean @task-status-preview-active?)
+                        :on-preview-exit clear-highlight!
+                        :gesture-locked? #(some? @world-transform-target*)})
         resize-observer (when (exists? js/ResizeObserver)
                           (let [observer (js/ResizeObserver. resize-to-container!)]
                             (.observe observer container)
@@ -2345,7 +3268,7 @@
   nil)
 
 (defn render-container!
-  [^js container {:keys [nodes links dark? on-node-activate on-node-preview on-selection-change on-rendered view-mode visible-node-ids background-visible-node-ids depth show-arrows? link-distance show-edge-labels? grid-layout?]}]
+  [^js container {:keys [nodes links dark? on-node-activate on-node-preview on-selection-change on-rendered view-mode visible-node-ids background-visible-node-ids depth show-arrows? link-distance visible-recent-task-count show-edge-labels? grid-layout?]}]
   (when container
     (let [token (get (swap! *render-tokens update container (fnil inc 0)) container)
           render-start (.now js/performance)
@@ -2374,6 +3297,7 @@
                                                      :depth depth
                                                      :show-arrows? show-arrows?
                                                      :link-distance link-distance
+                                                     :visible-recent-task-count visible-recent-task-count
                                                      :show-edge-labels? show-edge-labels?
                                                      :grid-layout? grid-layout?}
                                       render-start)))
