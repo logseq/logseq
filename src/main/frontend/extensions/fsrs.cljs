@@ -426,7 +426,9 @@
         ;; element rendered inside the revealed answer (e.g. a page ref).
         ;; An ancestor <a> should not block the toggle.
         toggle! (fn [e]
-                  (let [inner-a (some-> (.-target e) (.closest "a"))]
+                  (let [target (.-target e)
+                        inner-a (when (instance? js/Element target)
+                                  (.closest target "a"))]
                     (when (or (nil? inner-a)
                               (not (.contains (.-currentTarget e) inner-a)))
                       (swap! shown?* not))))
