@@ -86,12 +86,12 @@
       [["Macro" {:name "cloze" :arguments ["[[page name]]"]}]]))
 
   (testing "block parsing keeps the issue reproduction as macro nodes"
-    (is (= [["Plain" "This is usally highlighted by the accumulation of the "]
+    (is (= [["Plain" "This is usually highlighted by the accumulation of the "]
             ["Macro" {:name "cloze" :arguments ["Ca^{ +2} ions"]}]
             ["Plain" " . This will be seen as "]
             ["Macro" {:name "cloze" :arguments ["<ins>large flocculent amorphous densities in TEM</ins>"]}]]
            (-> (gp-mldoc/->edn
-                "- This is usally highlighted by the accumulation of the {{cloze Ca^{ +2} ions}} . This will be seen as {{cloze <ins>large flocculent amorphous densities in TEM</ins>}}"
+                "- This is usually highlighted by the accumulation of the {{cloze Ca^{ +2} ions}} . This will be seen as {{cloze <ins>large flocculent amorphous densities in TEM</ins>}}"
                 md-config)
                ffirst
                second
