@@ -1,5 +1,6 @@
 (ns ^:no-doc frontend.handler.block
   (:require [clojure.string :as string]
+            [datascript.core :as d]
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.config :as config]
@@ -77,6 +78,18 @@
         (or "")
         (subs 0 pos))))
 
+(defn- class-title-conflicts?
+  [class-entity]
+  (let [class-title (:block/title class-entity)
+        class-id (:db/id class-entity)]
+    (when-let [db (and class-title (db/get-db))]
+      (->> (d/datoms db :avet :block/title class-title)
+           (some (fn [datom]
+                   (let [entity (d/entity db (:e datom))]
+                     (and (not= class-id (:db/id entity))
+                          (ldb/class? entity)
+                          (not (ldb/recycled? entity))))))))))
+
 (defn mark-last-input-time!
   [repo]
   (when repo
@@ -115,7 +128,9 @@
                                (ldb/private-tags (:db/ident t))))
                          (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block))))
           base-title (if class?
-                       (ldb/get-class-title-with-extends block)
+                       (if (class-title-conflicts? block-e)
+                         (ldb/get-class-title-with-extends block-e)
+                         (:block/title block))
                        (:block/title block))
           trunc-title (if (and truncate? base-title (> (count base-title) 256))
                         (subs base-title 0 256)
