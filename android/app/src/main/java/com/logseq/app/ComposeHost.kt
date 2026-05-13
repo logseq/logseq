@@ -8,6 +8,8 @@ import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -97,6 +99,9 @@ private fun encodePath(path: String): String =
 private fun routeFor(path: String): String =
     "web/${encodePath(path)}"
 
+private fun shouldAnimateNavigation(navigationType: String): Boolean =
+    navigationType == "push" || navigationType == "pop"
+
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 private fun ComposeNavigationHost(
@@ -134,7 +139,10 @@ private fun ComposeNavigationHost(
             ),
             // ---- PUSH: A -> B ----
             enterTransition = {
-                if (lastNavTypeState.value == "pop") {
+                val navType = lastNavTypeState.value
+                if (!shouldAnimateNavigation(navType)) {
+                    EnterTransition.None
+                } else if (navType == "pop") {
                     slideInHorizontally(
                         initialOffsetX = { fullWidth -> -fullWidth / 3 },
                         animationSpec = tween(220)
@@ -147,7 +155,10 @@ private fun ComposeNavigationHost(
                 }
             },
             exitTransition = {
-                if (lastNavTypeState.value == "pop") {
+                val navType = lastNavTypeState.value
+                if (!shouldAnimateNavigation(navType)) {
+                    ExitTransition.None
+                } else if (navType == "pop") {
                     slideOutHorizontally(
                         targetOffsetX = { fullWidth -> fullWidth },
                         animationSpec = tween(200)
@@ -161,16 +172,24 @@ private fun ComposeNavigationHost(
             },
             // ---- POP: B -> A ----
             popEnterTransition = {
-                slideInHorizontally(
-                    initialOffsetX = { fullWidth -> -fullWidth / 4 },
-                    animationSpec = tween(200)
-                ) + fadeIn(animationSpec = tween(160))
+                if (!shouldAnimateNavigation(lastNavTypeState.value)) {
+                    EnterTransition.None
+                } else {
+                    slideInHorizontally(
+                        initialOffsetX = { fullWidth -> -fullWidth / 4 },
+                        animationSpec = tween(200)
+                    ) + fadeIn(animationSpec = tween(160))
+                }
             },
             popExitTransition = {
-                slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> fullWidth },
-                    animationSpec = tween(200)
-                ) + fadeOut(animationSpec = tween(160))
+                if (!shouldAnimateNavigation(lastNavTypeState.value)) {
+                    ExitTransition.None
+                } else {
+                    slideOutHorizontally(
+                        targetOffsetX = { fullWidth -> fullWidth },
+                        animationSpec = tween(200)
+                    ) + fadeOut(animationSpec = tween(160))
+                }
             }
         ) {
             AndroidView(
@@ -253,7 +272,12 @@ private fun HandleNavigationEvents(
         navEvents.collect { event ->
             snapshotVersion += 1
             val currentSnapshotVersion = snapshotVersion
-            WebViewSnapshotManager.showSnapshot("navigation", webView)
+            val animateNavigation = shouldAnimateNavigation(event.navigationType)
+            if (animateNavigation) {
+                WebViewSnapshotManager.showSnapshot("navigation", webView)
+            } else {
+                WebViewSnapshotManager.clearSnapshot("navigation")
+            }
             onNavType(event.navigationType)
             val route = routeFor(event.path)
             when (event.navigationType) {
@@ -283,10 +307,12 @@ private fun HandleNavigationEvents(
                 else -> navController.navigate(route)
             }
 
-            launch {
-                delay(260)
-                if (currentSnapshotVersion == snapshotVersion) {
-                    WebViewSnapshotManager.clearSnapshot("navigation")
+            if (animateNavigation) {
+                launch {
+                    delay(260)
+                    if (currentSnapshotVersion == snapshotVersion) {
+                        WebViewSnapshotManager.clearSnapshot("navigation")
+                    }
                 }
             }
         }
