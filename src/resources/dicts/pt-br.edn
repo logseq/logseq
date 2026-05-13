@@ -93,7 +93,6 @@
  :block/open-block-references "Abrir referências do bloco"
  :block/practice "Praticar"
  :block/practice-cards "Praticar cartões"
- :block/ref-nesting-too-deep "Aninhamento de referência de bloco é muito profundo"
  :block/remove-tag "Remover tag"
  :block/remove-this-tag "Remover esta tag"
  :block/render-error "Erro de renderização do bloco:"

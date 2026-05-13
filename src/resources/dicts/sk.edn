@@ -93,7 +93,6 @@
  :block/open-block-references "Otvoriť referencie bloku"
  :block/practice "Precvičovať"
  :block/practice-cards "Precvičovať kartičky"
- :block/ref-nesting-too-deep "Vnorenie referencie bloku je príliš hlboké"
  :block/remove-tag "Odstrániť tag"
  :block/remove-this-tag "Odstrániť tento tag"
  :block/render-error "Chyba zobrazenia bloku:"
