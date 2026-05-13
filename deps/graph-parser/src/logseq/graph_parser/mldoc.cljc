@@ -137,16 +137,20 @@
                x)))
 
 (defn- inline-ast->source
-  ;; Only reconstructs the source text for the small set of node types that
-  ;; appear when mldoc splits a macro containing ^{}/{_{}. Nested rich-inline
-  ;; types (Emphasis, Code, etc.) inside a Superscript/Subscript will produce
-  ;; nil, which (apply str ...) silently drops. This is intentional: the
-  ;; function is only called during macro-recovery, not for general rendering.
+  ;; Only reconstructs the source text for the node types that appear when
+  ;; mldoc splits a macro containing ^{}/{_{}. Nested rich-inline types
+  ;; (Emphasis, Code, etc.) inside a Superscript/Subscript will produce nil,
+  ;; which (apply str ...) silently drops. This is intentional: the function
+  ;; is only called during macro-recovery, not for general rendering.
   [[typ content]]
   (case typ
     "Plain" content
     "Spaces" content
     "Link" (:full_text content)
+    ;; Nested_link is the AST node for [[page name]]; :content is the page name
+    ;; string. Without this case, collect-macro-source aborts via when-let
+    ;; whenever a page ref appears inside a fragmented macro.
+    "Nested_link" (str "[[" (:content content) "]]")
     "Superscript" (str "^{" (apply str (map inline-ast->source content)) "}")
     "Subscript" (str "_{" (apply str (map inline-ast->source content)) "}")
     nil))
