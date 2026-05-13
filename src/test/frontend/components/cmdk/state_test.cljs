@@ -1,7 +1,23 @@
 (ns frontend.components.cmdk.state-test
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.components.cmdk.state :as state]
+            [frontend.util :as util]
+            [goog.object :as gobj]
             [frontend.storage :as storage]))
+
+(defn- key-event
+  [{:keys [key ctrl? meta?]}]
+  (let [prevented? (atom false)
+        stopped? (atom false)
+        event (js-obj)]
+    (gobj/set event "key" key)
+    (gobj/set event "ctrlKey" (boolean ctrl?))
+    (gobj/set event "metaKey" (boolean meta?))
+    (gobj/set event "preventDefault" #(reset! prevented? true))
+    (gobj/set event "stopPropagation" #(reset! stopped? true))
+    {:event event
+     :prevented? prevented?
+     :stopped? stopped?}))
 
 (deftest default-cmdk-context?-true-for-global-open
   (testing "default cmdk context is true for global open"
@@ -46,6 +62,33 @@
       (is (= {:query "beta" :filter-group :code}
              (state/load-last-cmdk-search "repo-b")))
       (is (nil? (state/load-last-cmdk-search "repo-c"))))))
+
+(deftest consume-open-search-sidebar-keydown-stops-editor-shortcut
+  (testing "cmdk consumes mod+Enter before the focused editor can cycle todo"
+    (let [{:keys [event prevented? stopped?]} (key-event {:key "Enter" :ctrl? true})
+          opened? (atom false)]
+      (with-redefs [util/meta-key? (constantly true)]
+        (is (true? (state/consume-open-search-sidebar-keydown! event #(reset! opened? true))))
+        (is (true? @opened?))
+        (is (true? @prevented?))
+        (is (true? @stopped?))))))
+
+(deftest consume-open-search-sidebar-keydown-ignores-other-keys
+  (testing "cmdk leaves non-shortcut keydowns available to normal handling"
+    (let [{plain-enter :event plain-prevented? :prevented? plain-stopped? :stopped?}
+          (key-event {:key "Enter"})
+          {mod-n :event mod-n-prevented? :prevented? mod-n-stopped? :stopped?}
+          (key-event {:key "n" :ctrl? true})
+          opened* (atom 0)]
+      (with-redefs [util/meta-key? (constantly false)]
+        (is (nil? (state/consume-open-search-sidebar-keydown! plain-enter #(swap! opened* inc)))))
+      (with-redefs [util/meta-key? (constantly true)]
+        (is (nil? (state/consume-open-search-sidebar-keydown! mod-n #(swap! opened* inc)))))
+      (is (= 0 @opened*))
+      (is (false? @plain-prevented?))
+      (is (false? @plain-stopped?))
+      (is (false? @mod-n-prevented?))
+      (is (false? @mod-n-stopped?)))))
 
 (deftest init-prioritizes-initial-input-over-saved-query
   (testing "initial-input wins over persisted query when both exist"

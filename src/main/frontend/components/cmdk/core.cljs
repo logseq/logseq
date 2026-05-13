@@ -1053,10 +1053,13 @@
       (util/stop e))
 
     (cond
-      (and meta? enter?)
-      (let [repo (state/get-current-repo)]
-        (shui/dialog-close! :ls-dialog-cmdk)
-        (state/sidebar-add-block! repo input :search))
+      (cmdk-state/consume-open-search-sidebar-keydown!
+       e
+       (fn []
+         (let [repo (state/get-current-repo)]
+           (shui/dialog-close! :ls-dialog-cmdk)
+           (state/sidebar-add-block! repo input :search))))
+      nil
       as-keydown? (if meta?
                     (show-more)
                     (do
