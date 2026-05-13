@@ -15,6 +15,7 @@
 (def ^:private default-open-groups #{:view-mode :displayed-tags :layout})
 (def ^:private default-depth 1)
 (def ^:private default-link-distance 72)
+(def ^:private default-visible-recent-task-count 12)
 (def ^:private default-grid-layout? false)
 (def ^:private default-show-journals? false)
 (def ^:private graph-show-arrows? false)
@@ -24,6 +25,7 @@
                                  :created-at-filter nil
                                  :depth default-depth
                                  :link-distance default-link-distance
+                                 :visible-recent-task-count default-visible-recent-task-count
                                  :grid-layout? default-grid-layout?
                                  :show-journals? default-show-journals?
                                  :open-groups default-open-groups})
@@ -54,12 +56,17 @@
   [value]
   (int (clamp-number value 36 180 default-link-distance)))
 
+(defn- valid-visible-recent-task-count
+  [value]
+  (int (clamp-number value 1 24 default-visible-recent-task-count)))
+
 (defn encode-settings
-  [{:keys [view-mode selected-tag-ids created-at-filter depth link-distance grid-layout? show-journals? open-groups]}]
+  [{:keys [view-mode selected-tag-ids created-at-filter depth link-distance visible-recent-task-count grid-layout? show-journals? open-groups]}]
   (clj->js
    (cond-> {:viewMode (name (valid-view-mode view-mode))
             :depth (valid-depth depth)
             :linkDistance (valid-link-distance link-distance)
+            :visibleRecentTaskCount (valid-visible-recent-task-count visible-recent-task-count)
             :gridLayout (boolean grid-layout?)
             :showJournals (not (false? show-journals?))
             :openGroups (mapv name (or open-groups default-open-groups))}
@@ -91,6 +98,10 @@
 
              (contains? data :linkDistance)
              (assoc :link-distance (valid-link-distance (:linkDistance data)))
+
+             (contains? data :visibleRecentTaskCount)
+             (assoc :visible-recent-task-count
+                    (valid-visible-recent-task-count (:visibleRecentTaskCount data)))
 
              (contains? data :gridLayout)
              (assoc :grid-layout? (true? (:gridLayout data)))
@@ -735,6 +746,8 @@
                        :depth (valid-depth (:depth canvas-settings))
                        :show-arrows? graph-show-arrows?
                        :link-distance (valid-link-distance (:link-distance canvas-settings))
+                       :visible-recent-task-count (valid-visible-recent-task-count
+                                                   (:visible-recent-task-count canvas-settings))
                        :show-edge-labels? graph-show-edge-labels?
                        :grid-layout? (true? (:grid-layout? canvas-settings))
                        :dark? dark?

@@ -61,6 +61,7 @@
 
 (defn activate-node!
   [node event]
-  (if (.-shiftKey event)
+  (if (or (:graph/open-in-sidebar? node)
+          (some-> event .-shiftKey))
     (open-node-in-sidebar! node)
     (redirect-to-node! node)))
