@@ -1047,14 +1047,16 @@ a.filter svg {
   display: none;
 }
 
-a.cloze {
+.cloze {
   color: var(--ls-cloze-text-color);
+  cursor: pointer;
 }
 
-a.cloze-revealed {
+.cloze-revealed {
   color: var(--ls-cloze-text-color);
   text-decoration: underline;
   text-underline-position: under;
+  cursor: pointer;
 }
 
 .page-property-key {
