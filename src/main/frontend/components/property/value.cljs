@@ -485,13 +485,13 @@
                                                       (db-property-handler/remove-block-property! (:db/id block)
                                                                                                   :logseq.property.repeat/temporal-property)))))]
        (if (#{:logseq.property/deadline :logseq.property/scheduled} (:db/ident property))
-           [:div (t :property.repeat/task)]
-           [:div (t (if (= :date (:logseq.property/type property))
-                      :property.repeat/date
-                      :property.repeat/datetime))])]]
+         [:div (t :property.repeat/task)]
+         [:div (t (if (= :date (:logseq.property/type property))
+                    :property.repeat/date
+                    :property.repeat/datetime))])]]
      [:div.flex.flex-row.gap-2.ls-repeat-task-frequency
       [:div.flex.text-muted-foreground
-         (t :property.repeat/every)]
+       (t :property.repeat/every)]
 
       ;; recur frequency
       [:div.w-10.mr-2
@@ -1014,12 +1014,28 @@
                                                                   (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node)
                                                                               {:disabled? true})]))
                                                       label [:div.flex.flex-row.items-center.gap-1
-                                                             (when-not (or (:logseq.property/classes property)
-                                                                           (contains? #{:class :property} property-type))
-                                                               (icon-component/get-node-icon-cp node {:ignore-current-icon? true}))
-                                                             [:div (if (contains? #{:class :property :page} property-type)
-                                                                     title
-                                                                     (block-handler/block-title-with-icon node title icon-component/icon))]]]
+                                                             ;; Single icon per row, same policy as CMD-K and the
+                                                             ;; bracket popover. `get-node-icon-cp` resolves the
+                                                             ;; committed icon (own → tag default → type default);
+                                                             ;; the title renders alone below — no inline icon via
+                                                             ;; `block-title-with-icon` (see cmdk/list_item.cljs:114-122).
+                                                             ;;
+                                                             ;; Fixed 20×20 slot so all titles align regardless of
+                                                             ;; icon type. Stays 20px even when the conditional
+                                                             ;; suppresses the icon (class/property rows), keeping
+                                                             ;; titles column-aligned.
+                                                             [:div.w-5.h-5.flex.items-center.justify-center.shrink-0
+                                                              ;; Class/property pickers intentionally render iconless
+                                                              ;; (the entities being picked ARE classes/properties — a
+                                                              ;; leading icon would just repeat the picker's own context).
+                                                              ;; The `:logseq.property/classes` check used to be part of
+                                                              ;; this guard, but only because the old title path inlined
+                                                              ;; the icon via `block-title-with-icon`; with that path
+                                                              ;; removed, entity-reference properties (Attendees,
+                                                              ;; Collaborators, etc.) need the leading icon.
+                                                              (when-not (contains? #{:class :property} property-type)
+                                                                (icon-component/get-node-icon-cp node {}))]
+                                                             [:div title]]]
                                                   [header label]))
                                               [nil (:block/title node)])]
                          (assoc node
@@ -1844,7 +1860,7 @@
   [state block property {:keys [show-tooltip? p-block p-property editing?]
                          :as opts}]
   (ui/catch-error
-  (ui/block-error (t :sync/something-wrong) {})
+   (ui/block-error (t :sync/something-wrong) {})
    (let [block-cp (state/get-component :block/blocks-container)
          opts (merge opts
                      {:page-cp (state/get-component :block/page-cp)
