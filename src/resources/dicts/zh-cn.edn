@@ -1423,6 +1423,7 @@
  :property.built-in/repeat-checked-property "重复的选中属性"
  :property.built-in/repeat-recur-frequency "重复频率"
  :property.built-in/repeat-recur-unit "重复单位"
+ :property.built-in/repeat-repeat-type "重复类型"
  :property.built-in/repeat-repeated "节点是否重复？"
  :property.built-in/repeat-temporal-property "重复的时间属性"
  :property.built-in/scalar-default-value "非引用类型默认值"
@@ -1473,6 +1474,7 @@
  :property.repeat/datetime "重复日期时间"
  :property.repeat/every "每"
  :property.repeat/is-label "是："
+ :property.repeat/next-date "下次日期"
  :property.repeat/task "重复任务"
  :property.repeat/when "当"
 
@@ -1482,6 +1484,10 @@
  :property.repeat-recur-unit/month "月"
  :property.repeat-recur-unit/week "周"
  :property.repeat-recur-unit/year "年"
+
+ :property.repeat-repeat-type/dotted-plus "从完成时间推进"
+ :property.repeat-repeat-type/double-plus "从计划时间推进，跳到未来"
+ :property.repeat-repeat-type/plus "从计划时间推进"
 
  :property.status/backlog "待办列表"
  :property.status/canceled "已取消"
