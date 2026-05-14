@@ -1309,6 +1309,14 @@
         (join (config/get-repo-dir (state/get-current-repo))
               (config/get-local-asset-absolute-path path)))))
 
+(defn- file-link-path->open-path
+  [file-path]
+  (let [file-path (path/file-url-or-path->path file-path)]
+    (if (or (path/absolute? file-path)
+            (path/protocol-url? file-path))
+      file-path
+      (relative-assets-path->absolute-path file-path))))
+
 (rum/defc audio-link
   [config url href _label metadata full_text]
   (if (common-config/local-relative-asset? href)
@@ -1391,14 +1399,14 @@
     (util/electron?)
     (let [path (cond
                  (string/starts-with? s "file://")
-                 (path/file-url-or-path->path s)
+                 s
 
                  (string/starts-with? s "/")
                  s
 
                  :else
                  (relative-assets-path->absolute-path s))
-          path (path/file-url-or-path->path path)]
+          path (file-link-path->open-path path)]
       (->elem
        :a
        (cond->
@@ -1443,7 +1451,7 @@
           (= protocol "file")
           (if (show-link? href full_text)
             (media-link config url href label metadata full_text)
-            (let [file-path (path/file-url-or-path->path path)
+            (let [file-path (file-link-path->open-path path)
                   href* (if (util/electron?)
                           file-path
                           href)]
