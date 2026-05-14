@@ -319,6 +319,209 @@
        (or (string/includes? content "^{")
            (string/includes? content "_{"))))
 
+(declare inline->edn)
+
+(defn- markdown-config?
+  [config]
+  (and (string? config)
+       (boolean (re-find #"\"format\"\s*:\s*\"Markdown\"" config))))
+
+(defn- backtick-run-length
+  [s idx]
+  (loop [idx' idx]
+    (if (and (< idx' (count s))
+             (= \` (nth s idx')))
+      (recur (inc idx'))
+      (- idx' idx))))
+
+(defn- matching-backtick-index
+  [s start-idx run-length]
+  (loop [idx (+ start-idx run-length)]
+    (when (< idx (count s))
+      (let [c (nth s idx)]
+        (if (= \` c)
+          (let [run-length' (backtick-run-length s idx)]
+            (if (= run-length run-length')
+              idx
+              (recur (+ idx run-length'))))
+          (recur (inc idx)))))))
+
+(defn- escaped-pipe?
+  [s idx]
+  (loop [idx' (dec idx)
+         n 0]
+    (if (and (not (neg? idx'))
+             (= \\ (nth s idx')))
+      (recur (dec idx') (inc n))
+      (odd? n))))
+
+(defn- markdown-table-source-needs-normalization?
+  [source]
+  (loop [idx 0
+         code-end nil]
+    (if (< idx (count source))
+      (let [c (nth source idx)]
+        (cond
+          (and (some? code-end)
+               (= idx code-end))
+          (recur (+ idx (backtick-run-length source idx)) nil)
+
+          (= \` c)
+          (let [run-length (backtick-run-length source idx)
+                end-idx (matching-backtick-index source idx run-length)]
+            (recur (+ idx run-length) end-idx))
+
+          (and (= \| c)
+               (some? code-end))
+          true
+
+          (and (= \| c)
+               (escaped-pipe? source idx))
+          true
+
+          :else
+          (recur (inc idx) code-end)))
+      false)))
+
+(defn- split-markdown-table-row
+  [line]
+  (let [s (cond-> (string/trim line)
+            (string/starts-with? (string/trim line) "|") (subs 1))
+        trailing-pipe? (string/ends-with? s "|")]
+    (loop [idx 0
+           start 0
+           code-end nil
+           cells []]
+      (if (< idx (count s))
+        (let [c (nth s idx)]
+          (cond
+            (and (some? code-end)
+                 (= idx code-end))
+            (recur (+ idx (backtick-run-length s idx)) start nil cells)
+
+            (= \` c)
+            (let [run-length (backtick-run-length s idx)
+                  end-idx (matching-backtick-index s idx run-length)]
+              (recur (+ idx run-length) start end-idx cells))
+
+            (and (= \| c)
+                 (nil? code-end)
+                 (not (escaped-pipe? s idx)))
+            (recur (inc idx) (inc idx) code-end
+                   (conj cells (subs s start idx)))
+
+            :else
+            (recur (inc idx) start code-end cells)))
+        (let [cells' (conj cells (subs s start))]
+          (mapv string/trim
+                (if (and trailing-pipe?
+                         (string/blank? (peek cells')))
+                  (pop cells')
+                  cells')))))))
+
+(defn- markdown-table-separator-line?
+  [line]
+  (let [line' (string/trim line)]
+    (and (string/includes? line' "-")
+         (boolean (re-matches #"[\s|:-]+" line')))))
+
+(defn- unescape-markdown-table-pipes
+  [s]
+  (loop [idx 0
+         code-end nil
+         result-parts []]
+    (if (< idx (count s))
+      (let [c (nth s idx)]
+        (cond
+          (and (some? code-end)
+               (= idx code-end))
+          (let [run-length (backtick-run-length s idx)]
+            (recur (+ idx run-length) nil
+                   (conj result-parts (subs s idx (+ idx run-length)))))
+
+          (= \` c)
+          (let [run-length (backtick-run-length s idx)
+                tick-run (subs s idx (+ idx run-length))
+                end-idx (matching-backtick-index s idx run-length)]
+            (recur (+ idx run-length) end-idx (conj result-parts tick-run)))
+
+          (and (nil? code-end)
+               (= \\ c)
+               (< (inc idx) (count s))
+               (= \| (nth s (inc idx))))
+          (recur (+ idx 2) code-end (conj result-parts "|"))
+
+          :else
+          (recur (inc idx) code-end (conj result-parts c))))
+      (apply str result-parts))))
+
+(defn- table-cell->inline-ast
+  [cell config]
+  (let [cell' (unescape-markdown-table-pipes (string/trim cell))]
+    (if (string/blank? cell')
+      [["Plain" ""]]
+      (inline->edn cell' config))))
+
+(defn- table-row->inline-asts
+  [line config]
+  (mapv #(table-cell->inline-ast % config)
+        (split-markdown-table-row line)))
+
+(defn- table-body-groups
+  [lines config]
+  (loop [lines lines
+         current []
+         groups []]
+    (if-let [[line & more] (seq lines)]
+      (if (markdown-table-separator-line? line)
+        (recur more [] (cond-> groups
+                         (seq current) (conj current)))
+        (recur more
+               (conj current (table-row->inline-asts line config))
+               groups))
+      (cond-> groups
+        (seq current) (conj current)))))
+
+(defn- table-col-groups
+  [fallback-table col-count]
+  (let [col-groups (:col_groups fallback-table)]
+    (if (and (seq col-groups)
+             (= col-count (reduce + col-groups)))
+      col-groups
+      [col-count])))
+
+(defn- source->markdown-table
+  [source config fallback-table]
+  (let [lines (remove string/blank? (string/split-lines source))]
+    (if-let [header-line (first lines)]
+      (let [header (table-row->inline-asts header-line config)
+            body-lines (rest lines)
+            groups (table-body-groups body-lines config)
+            col-count (apply max (count header)
+                             (mapcat (fn [group] (map count group)) groups))]
+        (assoc fallback-table
+               :header header
+               :groups groups
+               :col_groups (table-col-groups fallback-table col-count)))
+      fallback-table)))
+
+(defn- normalize-markdown-table-asts
+  [ast content config]
+  (if (markdown-config? config)
+    (let [payload (utf8/encode content)]
+      (mapv (fn [[block pos-meta :as item]]
+              (if (and (vector? block)
+                       (= "Table" (first block)))
+                (let [{:keys [start_pos end_pos]} pos-meta
+                      source (utf8/substring payload start_pos end_pos)]
+                  (if (markdown-table-source-needs-normalization? source)
+                    [["Table" (source->markdown-table source config (second block))]
+                     pos-meta]
+                    item))
+                item))
+            ast))
+    ast))
+
 (defn collect-page-properties
   [ast config]
   (when (seq ast)
@@ -359,6 +562,7 @@
          (-> content
              (parse-json config)
              (common-util/json->clj)
+             (normalize-markdown-table-asts content config)
              (cond-> (macro-with-script-markup? content)
                (normalize-macro-asts))
              (update-src-full-content content)

@@ -37,6 +37,16 @@
               [(keyword k) (text/parse-property k v ast {})]))
        (into {})))
 
+(defn- markdown-table
+  [text]
+  (let [[block _pos-meta] (first (gp-mldoc/->edn text md-config))]
+    (is (= "Table" (first block)))
+    (second block)))
+
+(defn- normalize-markdown-table-asts
+  [ast content config]
+  ((deref (var gp-mldoc/normalize-markdown-table-asts)) ast content config))
+
 (deftest md-properties-test
   (are [x y] (= y (get-properties x))
 
@@ -110,6 +120,114 @@
                ffirst
                second
                :title)))))
+
+(deftest markdown-table-cell-boundary-test
+  (testing "escaped pipes and code spans do not split table cells"
+    (let [{:keys [header groups col_groups]}
+          (markdown-table
+           "|Column A|Column B|
+|---|---|
+|Row 1|Some text|
+|Row 2, \\||Pipe character with escape \\||
+|Row 3, `|`|Pipe character between `|`|")]
+      (is (= [[["Plain" "Column A"]]
+              [["Plain" "Column B"]]]
+             header))
+      (is (= [[[[["Plain" "Row 1"]]
+                [["Plain" "Some text"]]]
+               [[["Plain" "Row 2, |"]]
+                [["Plain" "Pipe character with escape |"]]]
+               [[["Plain" "Row 3, "]
+                 ["Code" "|"]]
+                [["Plain" "Pipe character between "]
+                 ["Code" "|"]]]]]
+             groups))
+      (is (= [2] col_groups))))
+
+  (testing "header cells can contain escaped pipes and code-span pipes"
+    (let [{:keys [header groups col_groups]}
+          (markdown-table
+           "|Label \\||Code `a | b`|
+|---|---|
+|left \\| right|`x | y`|")]
+      (is (= [[[["Plain" "Label |"]]
+               [["Plain" "Code "]
+                ["Code" "a | b"]]]
+              [[[[["Plain" "left | right"]]
+                 [["Code" "x | y"]]]]]
+              [2]]
+             [header groups col_groups]))))
+
+  (testing "separator rows still split table body groups"
+    (let [{:keys [header groups col_groups]}
+          (markdown-table
+           "|A|B|
+|---|---|
+|one \\| two|`three | four`|
+|---|---|
+|five|six \\||")]
+      (is (= [[[["Plain" "A"]]
+               [["Plain" "B"]]]
+              [[[[["Plain" "one | two"]]
+                 [["Code" "three | four"]]]]
+               [[[["Plain" "five"]]
+                 [["Plain" "six |"]]]]]
+              [2]]
+             [header groups col_groups]))))
+
+  (testing "ordinary markdown tables keep mldoc's original AST"
+    (let [{:keys [header groups col_groups]}
+          (markdown-table
+           "|A|B|
+|---|---|
+|---|---|
+|1|2|")]
+      (is (= [[[["Plain" "A"]]
+               [["Plain" "B"]]]
+              [[], [[[["Plain" "1"]]
+                     [["Plain" "2"]]]]]
+              []]
+             [header groups col_groups]))))
+
+  (testing "non-markdown configs are not normalized"
+    (let [ast [[["Table" {:header [[["Plain" "A"]]
+                                    [["Plain" "B"]]]
+                          :groups []
+                          :col_groups [1 1]}]
+                {:start_pos 0 :end_pos 14}]]]
+      (is (= ast
+             (normalize-markdown-table-asts
+              ast
+              "|A \\||`B | C`|"
+              (gp-mldoc/default-config :org))))))
+
+  (testing "fallback table column groups are preserved"
+    (let [ast [[["Table" {:header [[["Plain" "A"]]
+                                    [["Plain" "B"]]]
+                          :groups []
+                          :col_groups [1 1]}]
+                {:start_pos 0 :end_pos 14}]]
+          [[[_ table] _pos-meta]]
+          (normalize-markdown-table-asts
+           ast
+           "|A \\||`B | C`|"
+           md-config)]
+      (is (= [1 1] (:col_groups table)))))
+
+  (testing "unclosed code spans do not hide cell boundaries"
+    (let [{:keys [header groups col_groups]}
+          (markdown-table
+           "|A|B|C|
+|---|---|---|
+|`foo | bar | baz \\||")]
+      (is (= [[[["Plain" "A"]]
+               [["Plain" "B"]]
+               [["Plain" "C"]]]
+              [[[[["Plain" "`foo"]]
+                 [["Plain" "bar"]]
+                 [["Plain" "baz |"]]]]]
+              [3]]
+             [header groups col_groups])))))
 
 (defn- parse-properties
   [text]
