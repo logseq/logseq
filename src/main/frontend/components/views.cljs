@@ -1733,13 +1733,13 @@
     (sequential? v) v
     :else [v]))
 
-(defn- gallery-node-property-idents
-  "Returns the db-idents of columns whose property is of type :node."
+(defn- gallery-asset-property-idents
+  "Returns the db-idents of columns whose property is of type :asset."
   [columns]
   (->> columns
        (keep (fn [column]
                (when-let [p (and (:id column) (db/entity (:id column)))]
-                 (when (= :node (:logseq.property/type p))
+                 (when (= :asset (:logseq.property/type p))
                    (:id column)))))))
 
 (defn- ungroup-view-rows
@@ -1763,25 +1763,19 @@
     (seq (db-content/get-matched-ids title))))
 
 (defn- <load-gallery-card-data!
-  "Ensures the gallery's rows and any node-property values or inline
-  title refs they reference are loaded into the local DB so
-  gallery-image-candidate-properties and gallery-card-item can detect
-  asset-valued properties synchronously. Returns a promise that
-  resolves when loading is done (or nil-safe)."
-  [table columns]
+  "Ensures the gallery's rows and any inline title refs they reference
+  are loaded into the local DB so gallery-card-item can resolve title
+  refs synchronously. Returns a promise that resolves when loading is
+  done (or nil-safe)."
+  [table]
   (let [repo (state/get-current-repo)
-        rows (ungroup-view-rows (:rows table))
-        node-prop-idents (gallery-node-property-idents columns)]
+        rows (ungroup-view-rows (:rows table))]
     (p/let [_ (when (seq rows)
                 (db-async/<get-blocks repo (vec rows) {}))
             referenced (->> rows
                             (mapcat (fn [row]
                                       (when-let [block (some-> (row->db-id row) db/entity)]
-                                        (concat
-                                         (mapcat (fn [prop-ident]
-                                                   (keep :db/id (property-values-seq (get block prop-ident))))
-                                                 node-prop-idents)
-                                         (block-title-referenced-uuids block)))))
+                                        (block-title-referenced-uuids block))))
                             distinct
                             vec)
             _ (when (seq referenced)
@@ -1793,25 +1787,10 @@
    order. The first entry is always the `:block/title` entity, which
    represents the default Title option (pull the card image from the
    first asset ref embedded inline in the block title). The remaining
-   entries are property entities of :node type whose values across the
-   current query's rows include at least one Asset block."
-  [table columns]
-  (let [rows (ungroup-view-rows (:rows table))
-        node-prop-idents (gallery-node-property-idents columns)
-        node-prop-candidates
-        (->> node-prop-idents
-             (keep (fn [prop-ident]
-                     (let [has-asset? (reduce
-                                       (fn [_ row]
-                                         (let [block (some-> (row->db-id row) db/entity)
-                                               values (property-values-seq (get block prop-ident))]
-                                           (if (some ldb/asset? values)
-                                             (reduced true)
-                                             false)))
-                                       false
-                                       rows)]
-                       (when has-asset? (db/entity prop-ident))))))]
-    (cons (db/entity :block/title) node-prop-candidates)))
+   entries are property entities of :asset type from the current columns."
+  [columns]
+  (cons (db/entity :block/title)
+        (keep db/entity (gallery-asset-property-idents columns))))
 
 (defn- gallery-title-asset-block
   "Returns the first asset block referenced inline from the given block's
@@ -1871,20 +1850,9 @@
       (or (some-> ident name (string/split #"\.") last)
           "square"))))
 
-(defn- block-node-property-referenced-ids
-  "Returns referenced entity ids from node-type properties on the given block."
-  [block node-prop-idents]
-  (->> node-prop-idents
-       (mapcat (fn [prop-ident]
-                 (keep :db/id (property-values-seq (get block prop-ident)))))
-       distinct
-       vec))
-
 (rum/defc gallery-card-item
-  [view-entity block config table image-prop-ident]
-  (let [columns (:columns table)
-        node-prop-idents (gallery-node-property-idents columns)
-        ;; refs-loaded? state is only used to trigger a re-render once
+  [view-entity block config image-prop-ident]
+  (let [;; refs-loaded? state is only used to trigger a re-render once
         ;; the effect below has finished loading referenced blocks, so
         ;; gallery-card-image-block can resolve title refs synchronously.
         [_refs-loaded? set-refs-loaded!] (hooks/use-state false)
@@ -1895,8 +1863,7 @@
     (hooks/use-effect!
      (fn []
        (try
-         (let [referenced (concat (block-node-property-referenced-ids block node-prop-idents)
-                                  (block-title-referenced-uuids block))]
+         (let [referenced (block-title-referenced-uuids block)]
            (if (seq referenced)
              (-> (db-async/<get-blocks (state/get-current-repo) (distinct referenced) {})
                  (p/then (fn [_] (set-refs-loaded! true)))
@@ -1972,7 +1939,7 @@
          :item-content (fn [idx]
                          (lazy-item (:data table) idx {}
                                     (fn [block]
-                                      (gallery-card-item view-entity block config' table image-prop-ident))))}))]))
+                                      (gallery-card-item view-entity block config' image-prop-ident))))}))]))
 
 (defn- run-effects!
   [option {:keys [data]} *scroller-ref gallery? set-ready?]
@@ -2129,7 +2096,7 @@
 (rum/defc gallery-settings-config
   [view-entity table columns]
   (let [[loaded? set-loaded!] (hooks/use-state false)
-        candidates (when loaded? (gallery-image-candidate-properties table columns))
+        candidates (when loaded? (gallery-image-candidate-properties columns))
         current-image-id (:db/id (:logseq.property.view/gallery-image-property view-entity))
         default-image-id (or (and (some #(= current-image-id (:db/id %)) candidates) current-image-id)
                              (:db/id (db/entity :block/title)))
@@ -2175,7 +2142,7 @@
     (hooks/use-effect!
      (fn []
        (try
-         (-> (<load-gallery-card-data! table columns)
+         (-> (<load-gallery-card-data! table)
              (p/then (fn [_] (set-loaded! true)))
              (p/catch (fn [_] (set-loaded! true))))
          (catch :default _
