@@ -393,8 +393,9 @@
 
 (defn- split-markdown-table-row
   [line]
-  (let [s (cond-> (string/trim line)
-            (string/starts-with? (string/trim line) "|") (subs 1))
+  (let [line' (string/trim line)
+        s (cond-> line'
+            (string/starts-with? line' "|") (subs 1))
         trailing-pipe? (string/ends-with? s "|")]
     (loop [idx 0
            start 0
