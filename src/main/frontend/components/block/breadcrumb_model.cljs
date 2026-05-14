@@ -4,7 +4,8 @@
    Converts page/block entities into flat segment maps, then applies a
    display-budget algorithm to determine which segments are visible and
    which are folded into an ellipsis."
-  (:require [clojure.string :as string]))
+  (:require [clojure.string :as string]
+            [logseq.db.frontend.content :as db-content]))
 
 ;; ---------------------------------------------------------------------------
 ;; Text normalization
@@ -50,10 +51,6 @@
   (when-let [[_ text] (re-matches #"^\s*(?:;;|//|#|--)\s+(.+)$" line)]
     text))
 
-(defn- useful-code-line?
-  [line]
-  (some? (strip-code-comment-marker line)))
-
 (defn- useful-query-line?
   [line]
   (not (query-line? line)))
@@ -81,46 +78,65 @@
       (string/replace #"(?i)#\+END_\w+" "")
       string/trim))
 
+(defn- resolve-uuid-refs
+  [entity text]
+  ;; Breadcrumb renderers hydrate title refs before displaying when possible.
+  ;; Keep unresolved UUID refs unchanged for partial entities or fallback paths.
+  (or (when (and (string? text)
+                 (re-find db-content/id-ref-pattern text))
+        (db-content/recur-replace-uuid-in-block-title
+         (assoc entity :block/title text)
+         10))
+      text))
+
 (defn normalize-breadcrumb-text
   "Extracts a short plain-text label from block raw-title.
    Returns at most max-segment-text-length characters of the first
    non-empty line (plus a trailing ellipsis if truncated).
    Does NOT invoke mldoc parse or markup rendering."
   [raw-title]
-  (when (string? raw-title)
-    (let [line (some (fn [line]
-                       (when-not (structural-marker-line? line)
-                         line))
-                     (normalized-lines raw-title))
-          cleaned (when line (strip-markdown-markup line))]
-      (truncate-segment-text cleaned))))
+  (let [line (some (fn [line]
+                     (when-not (structural-marker-line? line)
+                       line))
+                   (normalized-lines raw-title))
+        cleaned (when line (strip-markdown-markup line))]
+    (truncate-segment-text cleaned)))
 
-(defn- normalize-typed-breadcrumb-text
+(defn- first-content-line
+  [raw-title]
+  (some (fn [line]
+          (when-not (structural-marker-line? line)
+            line))
+        (normalized-lines raw-title)))
+
+(defn- breadcrumb-label-line
   [raw-title block-type]
   (when (string? raw-title)
-    (let [line (case block-type
-                 :code
-                 (some (fn [line]
-                         (when (useful-code-line? line)
-                           (strip-code-comment-marker line)))
-                       (normalized-lines raw-title))
+    (case block-type
+      :code
+      (some strip-code-comment-marker (normalized-lines raw-title))
 
-                 :query
-                 (some (fn [line]
-                         (when (and (not (structural-marker-line? line))
-                                    (useful-query-line? line))
-                           line))
-                       (normalized-lines raw-title))
+      :query
+      (some (fn [line]
+              (when (and (not (structural-marker-line? line))
+                         (useful-query-line? line))
+                line))
+            (normalized-lines raw-title))
 
-                 (:note :quote)
-                 (some (fn [line]
-                         (when-not (structural-marker-line? line)
-                           line))
-                       (normalized-lines raw-title))
+      (:note :quote)
+      (first-content-line raw-title)
 
-                 (normalize-breadcrumb-text raw-title))
-          cleaned (when line (strip-markdown-markup line))]
-      (truncate-segment-text cleaned))))
+      (first-content-line raw-title))))
+
+(defn- normalize-breadcrumb-line
+  [entity line]
+  (let [line (resolve-uuid-refs entity line)
+        cleaned (when line (strip-markdown-markup line))]
+    (truncate-segment-text cleaned)))
+
+(defn- normalize-typed-breadcrumb-text
+  [entity raw-title block-type]
+  (normalize-breadcrumb-line entity (breadcrumb-label-line raw-title block-type)))
 
 ;; ---------------------------------------------------------------------------
 ;; Block type detection
@@ -182,13 +198,14 @@
   "Converts a page or block entity map to a breadcrumb segment map.
 
    Segment keys:
-     :db/id       - DataScript entity id
-     :block/uuid  - block uuid
-     :type        - :page | :block | :code | :query | :note | :quote | :math
-     :text        - short plain-text label (may be nil for empty blocks)
-     :full-text   - full normalized single-line text for title/aria-label
-     :icon        - icon value from :logseq.property/icon, or nil
-     :page?       - true for page segments"
+     :db/id         - DataScript entity id
+     :block/uuid    - block uuid
+     :type          - :page | :block | :code | :query | :note | :quote | :math
+     :text          - short plain-text label (may be nil for empty blocks)
+     :full-text     - full normalized single-line text for title/aria-label
+     :title-ref-ids - UUID refs from the source line that can become the label
+     :icon          - icon value from :logseq.property/icon, or nil
+     :page?         - true for page segments"
   [entity]
   (when entity
     (let [page? (some? (:block/name entity))
@@ -200,9 +217,11 @@
           db-display-type (display-type->block-type (:logseq.property.node/display-type entity))
           tag-type (when-not page? (entity-tags->block-type entity))
           block-type (or db-display-type tag-type (detect-block-type raw-title page?))
+          title-line (when-not page?
+                       (breadcrumb-label-line raw-title block-type))
           text (if page?
                  (or (:block/title entity) (:block/name entity))
-                 (normalize-typed-breadcrumb-text raw-title block-type))
+                 (normalize-typed-breadcrumb-text entity raw-title block-type))
           full-text (if page?
                       (or (:block/title entity) (:block/name entity) "")
                       (or text ""))
@@ -212,6 +231,8 @@
        :type block-type
        :text text
        :full-text full-text
+       :title-ref-ids (when (and (not page?) (string? title-line))
+                        (db-content/get-matched-ids title-line))
        :icon icon
        :page? page?})))
 
