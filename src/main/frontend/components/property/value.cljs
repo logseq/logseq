@@ -31,6 +31,7 @@
             [frontend.util.cursor :as cursor]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
@@ -134,6 +135,10 @@
         (seq (:property/closed-values property))
         (and (= (:db/ident property) :logseq.property/default-value)
              (= (:logseq.property/type block) :number)))))
+
+(defn direct-value-picker-type?
+  [type]
+  (contains? #{:date :datetime :asset} type))
 
 (defn <create-new-block!
   [block property value & {:keys [edit-block? batch-op?]
@@ -260,13 +265,13 @@
                                                       (db-property-handler/remove-block-property! (:db/id block)
                                                                                                   :logseq.property.repeat/temporal-property)))))]
        (if (#{:logseq.property/deadline :logseq.property/scheduled} (:db/ident property))
-           [:div (t :property.repeat/task)]
-           [:div (t (if (= :date (:logseq.property/type property))
-                      :property.repeat/date
-                      :property.repeat/datetime))])]]
+         [:div (t :property.repeat/task)]
+         [:div (t (if (= :date (:logseq.property/type property))
+                    :property.repeat/date
+                    :property.repeat/datetime))])]]
      [:div.flex.flex-row.gap-2.ls-repeat-task-frequency
       [:div.flex.text-muted-foreground
-         (t :property.repeat/every)]
+       (t :property.repeat/every)]
 
       ;; recur frequency
       [:div.w-10.mr-2
@@ -396,8 +401,8 @@
          :del-btn? del-btn?
          :on-delete on-delete
          :on-day-click select-handler!}
-         initial-month
-         (assoc :default-month initial-month)))]
+        initial-month
+        (assoc :default-month initial-month)))]
      [:div.hidden.sm:initial
       (shui/separator {:orientation "vertical"})]
      (repeat-setting block property)]))
@@ -867,7 +872,7 @@
 
                 (and (seq classes') (not tags-or-alias?))
                 (assoc
-                  ;; Provides additional completion for inline classes on new pages or objects
+                 ;; Provides additional completion for inline classes on new pages or objects
                  :transform-fn (fn [results input]
                                  (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
                                    (let [repo (state/get-current-repo)
@@ -1246,7 +1251,7 @@
                                           :align "start"}))}]
            (rum/with-key (page-cp opts value) (:db/id value))))
 
-       (contains? #{:node :class :property :page} type)
+       (contains? #{:node :class :property :page :asset} type)
        (when-let [reference (state/get-component :block/reference)]
          (when value (reference {:table-view? table-view?} (:block/uuid value))))
 
@@ -1448,6 +1453,342 @@
                               nil))))})
        value)]))
 
+(defn- asset-icon-for-type
+  "Returns a tabler-icon name for a given asset file extension string."
+  [asset-type]
+  (let [kw (some-> asset-type keyword)]
+    (cond
+      (contains? (common-config/img-formats) kw) "photo"
+      (contains? config/audio-formats kw) "music"
+      (contains? config/video-formats kw) "movie"
+      (= :pdf kw) "file-type-pdf"
+      :else "file")))
+
+(defn- asset-image?
+  [asset-type]
+  (contains? (common-config/img-formats) (some-> asset-type keyword)))
+
+(defn- asset-video?
+  [asset-type]
+  (contains? config/video-formats (some-> asset-type keyword)))
+
+(def ^:private asset-embedded-control-selector
+  ".asset-action-bar, [data-radix-popper-content-wrapper], [role='menu'], [role='menuitem'], button, a, input, textarea, select")
+
+(defn- asset-embedded-control-click?
+  [^js target]
+  (some? (some-> target (.closest asset-embedded-control-selector))))
+
+(def ^:private asset-thumb-fit-class
+  "CSS escape hatch that makes asset-cp's output fit the wrapper's bounding box.
+  asset-cp wraps the <img> in a div.asset-container with no size constraint of
+  its own, so max-h-full on the img resolves against an auto-sized parent and
+  never actually caps height. Forcing .asset-container to w-full h-full (plus
+  flex centering) gives the img a real bounded parent; the !w-auto/!h-auto +
+  !max-w-full/!max-h-full + object-contain rules then shrink it proportionally
+  to fit without cropping any aspect ratio."
+  (str "[&_.asset-container]:!w-full [&_.asset-container]:!h-full "
+       "[&_.asset-container]:flex [&_.asset-container]:items-center [&_.asset-container]:justify-center "
+       "[&_img]:!w-auto [&_img]:!h-auto [&_img]:!max-w-full [&_img]:!max-h-full [&_img]:object-contain"))
+
+(def asset-picker-grid-style
+  {:width "min(640px, calc(100vw - 32px))"
+   :max-width "100%"
+   :box-sizing "border-box"
+   :max-height "min(480px, calc(100vh - 96px))"
+   :overflow "auto"})
+
+(def asset-picker-items-grid-style
+  {:grid-template-columns "repeat(auto-fill, minmax(140px, 1fr))"})
+
+(defn- asset-value-id
+  [value]
+  (cond
+    (map? value) (:db/id value)
+    (number? value) value
+    :else nil))
+
+(defn- asset-selected-ids
+  [block property]
+  (let [value (get block (:db/ident property))]
+    (cond
+      (nil? value)
+      #{}
+
+      (map? value)
+      (if-let [id (asset-value-id value)]
+        #{id}
+        #{})
+
+      (coll? value)
+      (set (keep asset-value-id value))
+
+      :else
+      (if-let [id (asset-value-id value)]
+        #{id}
+        #{}))))
+
+(defn- assets-selected-first
+  [assets selected-ids]
+  (->> assets
+       (map-indexed vector)
+       (sort-by (fn [[idx asset]]
+                  [(if (contains? selected-ids (:db/id asset)) 0 1)
+                   idx]))
+       (mapv second)))
+
+(defn- show-asset-picker-error!
+  [message err]
+  (log/error :msg message :error err)
+  (notification/show!
+   (t :asset/picker-set-failed)
+   :error))
+
+(rum/defc asset-value-content
+  [value]
+  (let [asset-type (:logseq.property.asset/type value)
+        image? (asset-image? asset-type)
+        video? (asset-video? asset-type)
+        preview! (fn [e]
+                   (when-not (asset-embedded-control-click? (.-target e))
+                     (util/stop e)
+                     (state/pub-event! [:asset/show-preview value])))
+        preview-key! (fn [e]
+                       (when (contains? #{" " "Enter"} (util/ekey e))
+                         (preview! e)))]
+    (if video?
+      (shui/button
+       {:variant :outline
+        :size :sm
+        :class "gap-1 h-auto whitespace-normal text-left"
+        :data-asset-preview-trigger true
+        :on-click preview!}
+       (ui/icon "movie" {:size 14})
+       [:span (:block/title value)])
+      (when-let [asset-cp (state/get-component :block/asset-cp)]
+        (if image?
+          [:div.asset-value-thumb.flex-shrink-0.rounded.overflow-hidden.flex.items-center.justify-center
+           {:class asset-thumb-fit-class
+            :style {:width 80 :height 80}
+            :role "button"
+            :tabIndex 0
+            :data-asset-preview-trigger true
+            :onClickCapture preview!
+            :on-key-down preview-key!}
+           (rum/with-key (asset-cp {:disable-resize? true} value)
+             (str "asset-cp-" (:block/uuid value)))]
+          [:div.asset-value-thumb.flex-shrink-0.flex.items-center
+           {:role "button"
+            :tabIndex 0
+            :data-asset-preview-trigger true
+            :onClickCapture preview!
+            :on-key-down preview-key!}
+           (rum/with-key (asset-cp {:disable-resize? true} value)
+             (str "asset-cp-" (:block/uuid value)))])))))
+
+(defn- <select-assets!
+  [block property many? selected-ids set-selected-ids! on-chosen assets]
+  (let [asset-ids (vec (keep :db/id assets))]
+    (when (seq asset-ids)
+      (-> (if many?
+            (p/all (map (fn [asset-id]
+                          (db-property-handler/set-block-property!
+                           (:db/id block) (:db/ident property) asset-id))
+                        asset-ids))
+            (db-property-handler/set-block-property!
+             (:db/id block) (:db/ident property) (first asset-ids)))
+          (p/then
+           (fn []
+             (set-selected-ids!
+              (if many?
+                (into selected-ids asset-ids)
+                #{(first asset-ids)}))
+             (when-not many?
+               (shui/popup-hide!))))
+          (p/then #(when on-chosen (on-chosen)))
+          (p/catch #(show-asset-picker-error! "Failed to set asset property" %))))))
+
+(defn- <unselect-asset!
+  [block property many? selected-ids set-selected-ids! on-chosen asset]
+  (when-let [asset-id (:db/id asset)]
+    (-> (if many?
+          (db-property-handler/delete-property-value!
+           (:db/id block) (:db/ident property) asset-id)
+          (db-property-handler/remove-block-property!
+           (:db/id block) (:db/ident property)))
+        (p/then
+         (fn []
+           (set-selected-ids! (disj selected-ids asset-id))
+           (when on-chosen (on-chosen))))
+        (p/catch #(show-asset-picker-error! "Failed to unset asset property" %)))))
+
+(defn- open-asset-file-picker!
+  [upload-files!]
+  (let [input (js/document.createElement "input")
+        cleanup! (fn []
+                   (some-> (.-parentNode input)
+                           (.removeChild input)))]
+    (set! (.-type input) "file")
+    (set! (.-multiple input) true)
+    (set! (.. input -style -display) "none")
+    (.addEventListener input "change"
+                       (fn [e]
+                         (let [input (.-target e)]
+                           (upload-files! (.-files input))
+                           (cleanup!))))
+    (.addEventListener input "cancel" cleanup!)
+    (.appendChild js/document.body input)
+    (.click input)))
+
+(rum/defc asset-grid-upload-button
+  [saving? open-file-picker!]
+  [:div.flex.items-center.justify-end.mb-2.min-w-0
+   (shui/button
+    {:size :sm
+     :variant :outline
+     :class "max-w-full whitespace-nowrap"
+     :disabled saving?
+     :on-click (fn [e]
+                 (util/stop e)
+                 (open-file-picker!))}
+    (ui/icon "upload" {:size 14})
+    (t :asset/add-assets))])
+
+(rum/defc asset-grid-cell
+  [asset selected? toggle-asset!]
+  (let [asset-type (:logseq.property.asset/type asset)
+        image? (asset-image? asset-type)]
+    [:div.asset-picker-cell.relative.rounded.overflow-hidden.border.flex.flex-col.p-0.hover:bg-gray-03.cursor-pointer
+     {:key (str (:block/uuid asset))
+      :title (:block/title asset)
+      :role "button"
+      :tabIndex 0
+      :style {:aspect-ratio "1 / 1"}
+      :class (when selected? "ring-2 ring-primary border-primary")
+      :aria-pressed selected?
+      :on-click #(toggle-asset! asset)
+      :on-key-down (fn [e]
+                     (when (contains? #{" " "Enter"} (util/ekey e))
+                       (util/stop e)
+                       (toggle-asset! asset)))}
+     [:div.asset-picker-title.w-full.px-1.py-0.5.text-xs.truncate.text-left.border-b.opacity-80
+      (:block/title asset)]
+     [:div.flex.flex-1.items-center.justify-center.w-full.overflow-hidden.p-1.pointer-events-none
+      {:style {:min-height 0}}
+      (if image?
+        (when-let [asset-cp (state/get-component :block/asset-cp)]
+          [:div.flex.items-center.justify-center.w-full.h-full
+           {:class asset-thumb-fit-class}
+           (asset-cp {:disable-resize? true} asset)])
+        [:div.flex.flex-col.items-center.justify-center.gap-1.opacity-70
+         (ui/icon (asset-icon-for-type asset-type) {:size 40})
+         [:span.text-xs.uppercase (or asset-type (t :asset/picker-fallback-type))]])]
+     [:div.absolute.right-1.bottom-1.pointer-events-none.rounded.bg-popover.shadow-sm
+      (shui/checkbox {:checked selected?
+                      :tabIndex -1
+                      :aria-hidden true})]]))
+
+(rum/defc asset-grid-assets
+  [assets selected-ids toggle-asset!]
+  [:div.grid.gap-2
+   {:style asset-picker-items-grid-style}
+   (for [asset (assets-selected-first assets selected-ids)]
+     (rum/with-key
+       (asset-grid-cell asset
+                        (contains? selected-ids (:db/id asset))
+                        toggle-asset!)
+       (str (:block/uuid asset))))])
+
+(rum/defc asset-grid-popup-content
+  [block property {:keys [on-chosen]}]
+  (let [[assets set-assets!] (hooks/use-state nil)
+        [selected-ids set-selected-ids!] (hooks/use-state (asset-selected-ids block property))
+        [saving? set-saving!] (hooks/use-state false)
+        repo (state/get-current-repo)
+        many? (db-property/many? property)
+        select-assets! #(<select-assets! block property many? selected-ids set-selected-ids! on-chosen %)
+        unselect-asset! #(<unselect-asset! block property many? selected-ids set-selected-ids! on-chosen %)
+        toggle-asset! (fn [asset]
+                        (if (contains? selected-ids (:db/id asset))
+                          (unselect-asset! asset)
+                          (select-assets! [asset])))
+        upload-files! (fn [^js files]
+                        (let [files (array-seq files)]
+                          (when (seq files)
+                            (set-saving! true)
+                            (-> (editor-handler/db-based-save-assets! repo files)
+                                (p/then
+                                 (fn [saved-assets]
+                                   (let [saved-assets (vec (remove nil? saved-assets))]
+                                     (when (seq saved-assets)
+                                       (set-assets! (vec (concat (or assets []) saved-assets)))
+                                       (select-assets! saved-assets)))))
+                                (p/catch #(show-asset-picker-error! "Failed to add assets from picker" %))
+                                (p/finally #(set-saving! false))))))]
+    (hooks/use-effect!
+     (fn []
+       (p/let [asset-class (db/entity :logseq.class/Asset)
+               result (when asset-class
+                        (db-async/<get-tag-objects repo (:db/id asset-class)))]
+         (set-assets! (vec result))))
+     [])
+    [:div.asset-picker-grid.p-3
+     {:style asset-picker-grid-style}
+     (asset-grid-upload-button saving? #(open-asset-file-picker! upload-files!))
+     (cond
+       (nil? assets)
+       [:div.p-4.opacity-60 (t :ui/loading)]
+
+       (empty? assets)
+       [:div.p-4.opacity-60.flex.flex-col.gap-1
+        [:div (t :asset/picker-empty)]
+        [:div.text-sm (t :asset/picker-empty-hint)]]
+
+       :else
+       (asset-grid-assets assets selected-ids toggle-asset!))]))
+
+(rum/defc asset-value-picker
+  [block property value opts]
+  (let [*el (hooks/use-ref nil)
+        editing? (:editing? opts)
+        show-grid! (fn [target]
+                     (when-not config/publishing?
+                       (shui/popup-show! target
+                                         (fn [] (asset-grid-popup-content block property opts))
+                                         {:align "start"
+                                          :auto-focus? true})))
+        show-grid-from-click! (fn [e]
+                                (when-not (some-> (.-target e)
+                                                  (.closest (str "[data-asset-preview-trigger], "
+                                                                 asset-embedded-control-selector)))
+                                  (util/stop e)
+                                  (show-grid! (or (.-currentTarget e) (rum/deref *el)))))]
+    (if editing?
+      [:div.property-select.w-full
+       (asset-grid-popup-content block property opts)]
+      (shui/trigger-as
+       :div.jtrigger.flex.flex-1.w-full
+       {:ref *el
+        :tabIndex 0
+        :aria-label (t :asset/picker-open)
+        :onClickCapture show-grid-from-click!
+        :on-click show-grid-from-click!
+        :on-key-down (fn [e]
+                       (case (util/ekey e)
+                         ("Backspace" "Delete")
+                         (when-not config/publishing?
+                           (delete-block-property! block property))
+                         (" " "Enter")
+                         (do (show-grid! (or (.-currentTarget e) (rum/deref *el)))
+                             (util/stop e))
+                         nil))}
+       (if (and value (:db/id value))
+         [:div.flex.items-center.gap-2.w-full.flex-wrap
+          (asset-value-content value)]
+         [:div.w-full.cursor-pointer
+          {:on-click show-grid-from-click!}
+          (property-empty-text-value property opts)])))))
+
 (rum/defcs property-scalar-value-aux < rum/static rum/reactive
   [state block property value* {:keys [editing? on-chosen]
                                 :as opts}]
@@ -1470,6 +1811,9 @@
 
       (= type :string)
       (single-string-input block property value (:table-view? opts))
+
+      (= type :asset)
+      (asset-value-picker block property value (assoc opts :editing? editing?))
 
       :else
       (if (and select-type?'
@@ -1547,10 +1891,15 @@
                                              (when-not editing?
                                                {:dropdown? false}))]
                       [:div.property-select
-                       (if (contains? #{:node :page :class :property} type)
+                       (case type
+                         :asset
+                         (asset-grid-popup-content block property select-opts)
+
+                         (:node :page :class :property)
                          (property-value-select-node block property
                                                      (assoc select-opts :target target)
                                                      opts)
+
                          (select block property select-opts opts))]))]
     (if editing?
       (select-cp {} nil)
@@ -1580,17 +1929,26 @@
           :class "flex flex-1 flex-row items-center flex-wrap gap-1"}
          (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
            (if (and (seq items) not-empty-value?)
-             (concat
-              (->> (for [item items]
-                     (rum/with-key
-                       (select-item property type item (assoc opts :show-popup! show-popup!))
-                       (or (:block/uuid item) (str item))))
-                   (interpose [:span.opacity-50.-ml-1 ","]))
-              (when date?
-                [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
+             (if (= type :asset)
+               (for [item items]
+                 (rum/with-key
+                   (asset-value-content item)
+                   (or (:block/uuid item) (str item))))
+               (concat
+                (->> (for [item items]
+                       (rum/with-key
+                         (select-item property type item (assoc opts :show-popup! show-popup!))
+                         (or (:block/uuid item) (str item))))
+                     (interpose [:span.opacity-50.-ml-1 ","]))
+                (when date?
+                  [(property-value-date-picker block property nil {:toggle-fn toggle-fn})])))
              (if date?
                (property-value-date-picker block property nil {:toggle-fn toggle-fn})
-               (property-empty-text-value property opts))))]))))
+               (if (= type :asset)
+                 [:div.w-full.cursor-pointer
+                  {:on-click show-popup!}
+                  (property-empty-text-value property opts)]
+                 (property-empty-text-value property opts)))))]))))
 
 (rum/defc multiple-values < rum/reactive db-mixins/query
   [block property opts]
@@ -1620,7 +1978,7 @@
   [state block property {:keys [show-tooltip? p-block p-property editing?]
                          :as opts}]
   (ui/catch-error
-  (ui/block-error (t :sync/something-wrong) {})
+   (ui/block-error (t :sync/something-wrong) {})
    (let [block-cp (state/get-component :block/blocks-container)
          opts (merge opts
                      {:page-cp (state/get-component :block/page-cp)
