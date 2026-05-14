@@ -102,7 +102,7 @@
     width: unset !important;
   }
 
-  a, svg, div {
+  a {
     @apply inline;
   }
 
