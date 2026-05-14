@@ -291,6 +291,16 @@
                  value)]
     (validate! property schema value')))
 
+(defn- throw-error-if-invalid-new-property-value
+  [db property value]
+  (let [property-type (:logseq.property/type property)
+        many? (= :db.cardinality/many (:db/cardinality property))
+        schema (get-property-value-schema db property-type property :new-closed-value? true)
+        value' (if (and many? (not (or (sequential? value) (set? value))))
+                 #{value}
+                 value)]
+    (validate! property schema value')))
+
 (defn- ->eid
   [id]
   (if (uuid? id) [:block/uuid id] id))
@@ -305,9 +315,11 @@
     (ldb/transact! conn tx-data {:outliner-op :save-block})))
 
 (defn create-property-text-block!
-  "Creates a property value block for the given property and value. Adds it to
-  block if given block."
-  [conn block-id property-id value {:keys [new-block-id]}]
+  "Creates a property value block for the given property and value.
+
+  Adds it to `block-id` unless `:set-block-property?` is false."
+  [conn block-id property-id value {:keys [new-block-id set-block-property?]
+                                    :or {set-block-property? true}}]
   (let [property (d/entity @conn property-id)
         block (when block-id (d/entity @conn block-id))
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
@@ -327,7 +339,7 @@
      (fn [conn]
        (ldb/transact! conn [new-value-block] {:outliner-op :insert-blocks})
        (let [property-id (:db/ident property)]
-         (when (and property-id block)
+         (when (and property-id block set-block-property?)
            (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
              (raw-set-block-property! conn block property block-id))))))
     (:block/uuid new-value-block)))
@@ -356,7 +368,7 @@
 
 (defn- find-or-create-property-value
   "Find or create a property value. Only to be used with properties that have ref types"
-  [conn property-id v]
+  [conn property-id v block-id]
   (let [property (d/entity @conn property-id)
         closed-values? (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))
         default-or-url? (contains? #{:default :url} (:logseq.property/type property))]
@@ -370,7 +382,8 @@
       (and default-or-url?
            ;; FIXME: remove this when :logseq.property/order-list-type updated to closed values
            (not= property-id :logseq.property/order-list-type))
-      (let [v-uuid (create-property-text-block! conn nil property-id v {})]
+      (let [_ (throw-error-if-invalid-new-property-value @conn property v)
+            v-uuid (create-property-text-block! conn block-id property-id v {:set-block-property? false})]
         (:db/id (d/entity @conn [:block/uuid v-uuid])))
 
       :else
@@ -381,7 +394,7 @@
 (defn- convert-ref-property-value
   "Converts a ref property's value whether it's an integer or a string. Creates
    a property ref value for a string value if necessary"
-  [conn property-id v property-type]
+  [conn property-id v property-type block-id]
   (let [number-property? (= property-type :number)]
     (cond
       (and (qualified-keyword? v) (not= :keyword property-type))
@@ -418,14 +431,14 @@
       (when-let [v' (if (and number-property? (string? v))
                       (parse-double v)
                       v)]
-        (find-or-create-property-value conn property-id v')))))
+        (find-or-create-property-value conn property-id v' block-id)))))
 
 (defn- convert-ref-property-values
-  [conn property-id value property-type {:keys [many?]}]
+  [conn property-id value property-type {:keys [many? block-id]}]
   (if-not (and many? (or (sequential? value) (set? value)))
-    (convert-ref-property-value conn property-id value property-type)
+    (convert-ref-property-value conn property-id value property-type block-id)
     (try
-      (mapv #(convert-ref-property-value conn property-id % property-type) value)
+      (mapv #(convert-ref-property-value conn property-id % property-type block-id) value)
       (catch :default e
         (throw (ex-info "Failed to convert many property values"
                         (merge
@@ -514,6 +527,27 @@
      (if (number? v) (d/entity @conn v) v)
      (map #(d/entity @conn %) block-eids))))
 
+(defn- normalize-default-url-property-value
+  [conn property value]
+  (if (number? value)
+    (do
+      (throw-error-if-invalid-property-value @conn property value)
+      (:block/title (d/entity @conn value)))
+    value))
+
+(defn- normalize-and-validate-default-url-property-value
+  [conn property value]
+  (let [value' (normalize-default-url-property-value conn property value)]
+    (when-not (qualified-keyword? value')
+      (throw-error-if-invalid-new-property-value @conn property value'))
+    value'))
+
+(defn- normalize-and-validate-default-url-property-values
+  [conn property value many?]
+  (if (and many? (or (sequential? value) (set? value)))
+    (mapv #(normalize-and-validate-default-url-property-value conn property %) value)
+    (normalize-and-validate-default-url-property-value conn property value)))
+
 (defn batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
    Does no validation of property values. For :many properties, passing a collection
@@ -537,7 +571,9 @@
            default-url-not-closed? (and (contains? #{:default :url} property-type)
                                         (not (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))))
            v' (if (and ref? (not entity-id?))
-                (convert-ref-property-values conn property-id v property-type {:many? many?})
+                (if default-url-not-closed?
+                  (normalize-and-validate-default-url-property-values conn property v many?)
+                  (convert-ref-property-values conn property-id v property-type {:many? many?}))
                 v)
            _ (when (nil? v')
                (throw (ex-info "Property value must be not nil" {:v v})))
@@ -546,18 +582,10 @@
                  (fn [eid]
                    (if-let [block (d/entity @conn eid)]
                      (let [v' (if (and default-url-not-closed?
-                                       (not (and (keyword? v) entity-id?)))
-                                (let [normalize-default-url-value
-                                      (fn [value]
-                                        (if (number? value)
-                                          (do
-                                            (throw-error-if-invalid-property-value @conn property value)
-                                            (:block/title (d/entity @conn value)))
-                                          value))
-                                      value' (if (and many? (or (sequential? v') (set? v')))
-                                               (mapv normalize-default-url-value v')
-                                               (normalize-default-url-value v'))]
-                                  (convert-ref-property-values conn property-id value' property-type {:many? many?}))
+                                        (not (and (keyword? v) entity-id?)))
+                                (convert-ref-property-values conn property-id v' property-type
+                                                             {:many? many?
+                                                              :block-id (:db/id block)})
                                 v')]
                        (throw-error-if-self-value block v' ref?)
                        (throw-error-if-invalid-property-value @conn property v')
@@ -639,7 +667,7 @@
             property-type (get property :logseq.property/type :default)
             ref? (db-property-type/all-ref-property-types property-type)
             v' (if ref?
-                 (convert-ref-property-value conn property-id v property-type)
+                 (convert-ref-property-value conn property-id v property-type block-eid)
                  v)]
         (when-not (and block property)
           (throw (ex-info "Set block property failed: block or property doesn't exist"
@@ -934,11 +962,14 @@
         (assert (every? uuid? values') "existing values should all be UUIDs")
         (let [values (keep #(d/entity @conn [:block/uuid %]) values')]
           (when (seq values)
-            (let [value-property-tx (map (fn [id]
+            (let [property-db-id (:db/id property)
+                  value-property-tx (map (fn [id]
                                            {:db/id id
-                                            :block/closed-value-property (:db/id property)})
+                                            :block/closed-value-property property-db-id
+                                            :block/parent property-db-id
+                                            :block/page property-db-id})
                                          (map :db/id values))
-                  property-tx (outliner-core/block-with-updated-at {:db/id (:db/id property)})]
+                  property-tx (outliner-core/block-with-updated-at {:db/id property-db-id})]
               (ldb/transact! conn (cons property-tx value-property-tx)
                              {:outliner-op :add-existing-values-to-closed-values}))))))))
 
