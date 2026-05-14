@@ -44,6 +44,13 @@
     (catch :default e
       (or (ex-message e) (.-message e) (str e)))))
 
+(defn- parse-args-capturing-error
+  [args]
+  (try
+    {:result (commands/parse-args args)}
+    (catch :default e
+      {:error (or (ex-message e) (.-message e) (str e))})))
+
 (defn- command-lines
   [summary]
   (let [lines (string/split-lines (strip-ansi summary))
@@ -1270,6 +1277,13 @@
       (is (= :list-task (:command result)))
       (is (= "alpha" (get-in result [:options :content])))))
 
+  (testing "list task accepts numeric-looking content"
+    (let [{:keys [result error]} (parse-args-capturing-error ["list" "task" "-c" "1111"])]
+      (is (nil? error))
+      (is (true? (:ok? result)))
+      (is (= :list-task (:command result)))
+      (is (= "1111" (get-in result [:options :content])))))
+
   (testing "list node parses with tags/properties and common options"
     (let [result (commands/parse-args ["list" "node"
                                        "--tags" "project,work"
@@ -1346,7 +1360,14 @@
     (let [result (commands/parse-args ["search" "block" "-c" "Alpha"])]
       (is (true? (:ok? result)))
       (is (= :search-block (:command result)))
-      (is (= "Alpha" (get-in result [:options :content]))))))
+      (is (= "Alpha" (get-in result [:options :content])))))
+
+  (testing "search block accepts numeric-looking content"
+    (let [{:keys [result error]} (parse-args-capturing-error ["search" "block" "-c" "1111"])]
+      (is (nil? error))
+      (is (true? (:ok? result)))
+      (is (= :search-block (:command result)))
+      (is (= "1111" (get-in result [:options :content]))))))
 
 (deftest test-search-subcommand-validation
   (testing "search block requires --content"
@@ -1842,6 +1863,13 @@
       (is (= :upsert-block (:command result)))
       (is (= "hello" (get-in result [:options :content])))))
 
+  (testing "upsert block create mode accepts numeric-looking content"
+    (let [{:keys [result error]} (parse-args-capturing-error ["upsert" "block" "-c" "1111"])]
+      (is (nil? error))
+      (is (true? (:ok? result)))
+      (is (= :upsert-block (:command result)))
+      (is (= "1111" (get-in result [:options :content])))))
+
   (testing "upsert block create mode parses with target selectors and pos"
     (let [result (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
@@ -1957,6 +1985,13 @@
       (is (= "high" (get-in result [:options :priority])))
       (is (= "2026-02-10T08:00:00.000Z" (get-in result [:options :scheduled])))
       (is (= "2026-02-12T18:00:00.000Z" (get-in result [:options :deadline])))))
+
+  (testing "upsert task accepts numeric-looking content"
+    (let [{:keys [result error]} (parse-args-capturing-error ["upsert" "task" "-c" "1111"])]
+      (is (nil? error))
+      (is (true? (:ok? result)))
+      (is (= :upsert-task (:command result)))
+      (is (= "1111" (get-in result [:options :content])))))
 
   (testing "upsert task parses explicit clear flags"
     (let [result (commands/parse-args ["upsert" "task"
@@ -2107,6 +2142,16 @@
       (is (= :upsert-asset (:command result)))
       (is (= 42 (get-in result [:options :id])))
       (is (= "Updated asset title" (get-in result [:options :content])))))
+
+  (testing "upsert asset update mode accepts numeric-looking content"
+    (let [{:keys [result error]} (parse-args-capturing-error ["upsert" "asset"
+                                                              "--id" "42"
+                                                              "-c" "1111"])]
+      (is (nil? error))
+      (is (true? (:ok? result)))
+      (is (= :upsert-asset (:command result)))
+      (is (= 42 (get-in result [:options :id])))
+      (is (= "1111" (get-in result [:options :content])))))
 
   (testing "upsert asset update mode rejects --path"
     (let [result (commands/parse-args ["upsert" "asset"
