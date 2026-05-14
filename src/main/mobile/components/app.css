@@ -192,11 +192,11 @@ ul {
     max-width: calc(100vw - 40px);
 
     &[data-side=top] {
-      max-height: var(--top-popup-content-max-height, 50vh);
+      max-height: var(--top-popup-content-max-height, 60vh);
     }
 
     &[data-side=bottom] {
-      max-height: var(--bottom-popup-content-max-height, 50vh);
+      max-height: var(--bottom-popup-content-max-height, 60vh);
     }
   }
 }
