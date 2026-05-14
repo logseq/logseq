@@ -697,6 +697,40 @@
       initial-choices'
       (conj initial-choices' new-choice))))
 
+(def ^:private broad-scoped-node-class-idents
+  #{:logseq.class/Page})
+
+(defn- broad-scoped-node-property?
+  [property classes]
+  (and (= :node (:logseq.property/type property))
+       (some #(contains? broad-scoped-node-class-idents (:db/ident %)) classes)))
+
+(defn- scoped-class-ids
+  [repo classes]
+  (->> classes
+       (mapcat (fn [class]
+                 (cons (:db/id class)
+                       (model/get-structured-children repo (:db/id class)))))
+       set))
+
+(defn- node-matches-scoped-classes?
+  [class-ids node]
+  (let [node (or (:value node) node)]
+    (some #(contains? class-ids (if (integer? %) % (:db/id %))) (:block/tags node))))
+
+(defn- scoped-class-nodes
+  [repo property classes result]
+  (let [broad-scope? (broad-scoped-node-property? property classes)]
+    (if (or (some? result) broad-scope?)
+      (let [class-ids (scoped-class-ids repo classes)]
+        (filter #(node-matches-scoped-classes? class-ids %) result))
+      (->>
+       (mapcat
+        (fn [class]
+          (model/get-class-objects repo (:db/id class)))
+        classes)
+       distinct))))
+
 (rum/defc ^:large-vars/cleanup-todo select-node < rum/static
   [property
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
@@ -746,12 +780,7 @@
                 (property-handler/get-class-property-choices)
 
                 (seq classes)
-                (->>
-                 (mapcat
-                  (fn [class]
-                    (model/get-class-objects repo (:db/id class)))
-                  classes)
-                 distinct)
+                (scoped-class-nodes repo property classes result)
 
                 :else
                 (if (empty? result)
@@ -933,9 +962,11 @@
          nil
 
          (seq non-root-classes)
-         (p/let [result (p/all (map (fn [class] (db-async/<get-tag-objects repo (:db/id class))) non-root-classes))
-                 result' (distinct (apply concat result))]
-           (set-result-and-initial-choices! result'))
+         (if (broad-scoped-node-property? property non-root-classes)
+           (set-result-and-initial-choices! [])
+           (p/let [result (p/all (map (fn [class] (db-async/<get-tag-objects repo (:db/id class))) non-root-classes))
+                   result' (distinct (apply concat result))]
+             (set-result-and-initial-choices! result')))
 
          :else
          (p/let [result (db-async/<get-property-values (:db/ident property))]
