@@ -124,18 +124,25 @@
   "`++` semantics: advance from scheduled in frequency*unit steps until strictly
   after now. cljs-time arithmetic is UTC, so adding whole weeks preserves
   day-of-week by construction — no fix-up needed."
-  [datetime recur-unit frequency]
-  (let [now (t/now)]
-    (loop [t (t/plus datetime (recur-unit frequency))]
-      (if (t/after? t now)
-        t
-        (recur (t/plus t (recur-unit frequency)))))))
+  [datetime recur-unit period-f frequency]
+  (let [now (t/now)
+        periods (max 1
+                     (if (t/after? datetime now)
+                       1
+                       (period-f (t/interval datetime now))))
+        delta (->> (Math/ceil (/ periods frequency))
+                   (* frequency)
+                   recur-unit)
+        result (t/plus datetime delta)]
+    (if (t/after? result now)
+      result
+      (t/plus result (recur-unit frequency)))))
 
 (defn- repeat-next-timestamp
   "Dispatch on repeat-type db-ident to compute the next occurrence. Mirrors the
   three org-mode repeater cookies documented at
   docs.logseq.com: `.+` (dotted-plus), `+` (plus), `++` (double-plus)."
-  [datetime recur-unit frequency repeat-type]
+  [datetime recur-unit period-f frequency repeat-type]
   (case repeat-type
     :logseq.property.repeat/repeat-type.dotted-plus
     (advance-from-completion recur-unit frequency)
@@ -144,23 +151,23 @@
     (advance-from-scheduled datetime recur-unit frequency)
 
     ;; :double-plus or unknown fallback
-    (advance-until-future datetime recur-unit frequency)))
+    (advance-until-future datetime recur-unit period-f frequency)))
 
 (defn- get-next-time
   [current-value unit frequency repeat-type]
   (let [current-date-time (tc/to-date-time current-value)
-        recur-unit (case (:db/ident unit)
-                     :logseq.property.repeat/recur-unit.minute t/minutes
-                     :logseq.property.repeat/recur-unit.hour t/hours
-                     :logseq.property.repeat/recur-unit.day t/days
-                     :logseq.property.repeat/recur-unit.week t/weeks
-                     :logseq.property.repeat/recur-unit.month t/months
-                     :logseq.property.repeat/recur-unit.year t/years
-                     nil)]
+        [recur-unit period-f] (case (:db/ident unit)
+                                :logseq.property.repeat/recur-unit.minute [t/minutes t/in-minutes]
+                                :logseq.property.repeat/recur-unit.hour [t/hours t/in-hours]
+                                :logseq.property.repeat/recur-unit.day [t/days t/in-days]
+                                :logseq.property.repeat/recur-unit.week [t/weeks t/in-weeks]
+                                :logseq.property.repeat/recur-unit.month [t/months t/in-months]
+                                :logseq.property.repeat/recur-unit.year [t/years t/in-years]
+                                nil)]
     ;; Guard against frequency <= 0: `advance-until-future` would infinite-loop
     ;; on zero-length intervals, and the other variants produce nonsense.
     (when (and recur-unit (pos? frequency))
-      (tc/to-long (repeat-next-timestamp current-date-time recur-unit frequency repeat-type)))))
+      (tc/to-long (repeat-next-timestamp current-date-time recur-unit period-f frequency repeat-type)))))
 
 (defn- resolve-recur-frequency
   "Returns `[frequency default-value-tx-data]` for a recurring task entity:

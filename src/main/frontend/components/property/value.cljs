@@ -277,7 +277,7 @@
        (property-value block (db/entity :logseq.property.repeat/recur-unit) (assoc opts :property property))]]
      [:div.flex.flex-col.gap-1
       [:div.text-muted-foreground
-       "Next date"]
+       (t :property.repeat/next-date)]
       (property-value block (db/entity :logseq.property.repeat/repeat-type) opts)]
      (let [properties (->>
                        (outliner-property/get-block-full-properties (db/get-db) (:db/id block))

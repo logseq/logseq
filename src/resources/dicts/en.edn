@@ -1434,6 +1434,7 @@
  :property.built-in/repeat-checked-property "Repeating Checked Property"
  :property.built-in/repeat-recur-frequency "Repeating recur frequency"
  :property.built-in/repeat-recur-unit "Repeating recur unit"
+ :property.built-in/repeat-repeat-type "Repeating type"
  :property.built-in/repeat-repeated "Node Repeats?"
  :property.built-in/repeat-temporal-property "Repeating Temporal Property"
  :property.built-in/scalar-default-value "Non ref type default value"
@@ -1484,6 +1485,7 @@
  :property.repeat/datetime "Repeat datetime"
  :property.repeat/every "Every"
  :property.repeat/is-label "is:"
+ :property.repeat/next-date "Next date"
  :property.repeat/task "Repeat task"
  :property.repeat/when "When"
 
@@ -1493,6 +1495,10 @@
  :property.repeat-recur-unit/month "Month"
  :property.repeat-recur-unit/week "Week"
  :property.repeat-recur-unit/year "Year"
+
+ :property.repeat-repeat-type/dotted-plus "Advance from completion"
+ :property.repeat-repeat-type/double-plus "Advance from scheduled, skip to future"
+ :property.repeat-repeat-type/plus "Advance from scheduled"
 
  :property.status/backlog "Backlog"
  :property.status/canceled "Canceled"

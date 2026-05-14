@@ -277,6 +277,26 @@
               next-time (get-next-time two-years-ago year-unit 1 double-plus)]
           (is (= 1 (in-years next-time))))))))
 
+(deftest double-plus-far-overdue-minute-is-bounded-test
+  (testing "`++` does not advance far-overdue minute repeats one interval at a time"
+    (let [now (t/now)
+          two-years-ago (t/minus now (t/years 2))
+          unit-calls (atom 0)
+          minutes (fn [frequency]
+                    (swap! unit-calls inc)
+                    (when (> @unit-calls 1000)
+                      (throw (ex-info "Too many recurrence unit calls" {:calls @unit-calls})))
+                    (t/minutes frequency))
+          result (with-redefs [t/now (fn [] now)]
+                   (try
+                     (#'commands/repeat-next-timestamp two-years-ago minutes t/in-minutes 1 double-plus)
+                     (catch :default e e)))]
+      (is (not (instance? js/Error result))
+          "Far-overdue minutely repeats should compute without unbounded iteration")
+      (when-not (instance? js/Error result)
+        (is (= 1 (/ (- (tc/to-long result) (tc/to-long now)) (* 1000 60)))))
+      (is (< @unit-calls 20)))))
+
 (deftest resolve-recur-frequency-test
   (let [resolve (fn [db entity] (#'commands/resolve-recur-frequency db entity))]
     (testing "returns the explicit frequency when the property has a value"

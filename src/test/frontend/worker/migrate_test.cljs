@@ -71,3 +71,21 @@
     (is (nil? (d/entity @conn :logseq.property.embedding/hnsw-label-updated-at)))
     (is (= "legacy block"
            (:block/title (d/entity @conn [:block/uuid legacy-block-uuid]))))))
+
+(deftest migrate-65-25-adds-repeat-type-property
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 25}}])
+
+    (db-migrate/migrate conn)
+
+    (is (= db-schema/version
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (let [property (d/entity @conn :logseq.property.repeat/repeat-type)]
+      (is (some? property))
+      (is (= :logseq.property.repeat/repeat-type.double-plus
+             (:db/ident (:logseq.property/default-value property))))
+      (is (= #{:logseq.property.repeat/repeat-type.dotted-plus
+               :logseq.property.repeat/repeat-type.plus
+               :logseq.property.repeat/repeat-type.double-plus}
+             (set (map :db/ident (:property/closed-values property))))))))
