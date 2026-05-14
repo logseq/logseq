@@ -1,5 +1,6 @@
 (ns ^:no-doc frontend.handler.block
   (:require [clojure.string :as string]
+            [datascript.core :as d]
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.config :as config]
@@ -77,6 +78,21 @@
         (or "")
         (subs 0 pos))))
 
+(defn- class-title-conflicts?
+  [class-entity]
+  (let [class-title (:block/title class-entity)
+        class-id (:db/id class-entity)]
+    (when-let [db (and class-title (db/get-db))]
+      (boolean
+       (d/q '[:find ?other .
+              :in $ ?class-title ?class-id
+              :where
+              [?other :block/title ?class-title]
+              [?other :block/tags :logseq.class/Tag]
+              [(not= ?other ?class-id)]
+              (not [?other :logseq.property/deleted-at])]
+            db class-title class-id)))))
+
 (defn mark-last-input-time!
   [repo]
   (when repo
@@ -104,18 +120,25 @@
     (let [block-e (cond
                     (de/entity? block)
                     block
+
+                    (number? (:db/id block))
+                    (or (db/entity (:db/id block)) block)
+
                     (uuid? (:block/uuid block))
                     (db/entity [:block/uuid (:block/uuid block)])
+
                     :else
                     block)
-          class? (ldb/class? block)
+          class? (ldb/class? block-e)
           tags (when (and with-tags? (not class?))
                  (remove (fn [t]
                            (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
                                (ldb/private-tags (:db/ident t))))
                          (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block))))
           base-title (if class?
-                       (ldb/get-class-title-with-extends block)
+                       (if (class-title-conflicts? block-e)
+                         (ldb/get-class-title-with-extends block-e)
+                         (:block/title block-e))
                        (:block/title block))
           trunc-title (if (and truncate? base-title (> (count base-title) 256))
                         (subs base-title 0 256)
