@@ -98,7 +98,8 @@
                           :logseq.property.recycle/original-order]}]
    ["65.25" {:delete-properties [:block/pre-block?
                                  :logseq.property.embedding/hnsw-label
-                                 :logseq.property.embedding/hnsw-label-updated-at]}]])
+                                 :logseq.property.embedding/hnsw-label-updated-at]}]
+   ["65.26" {:properties [:logseq.property.repeat/repeat-type]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
