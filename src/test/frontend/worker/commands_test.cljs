@@ -277,6 +277,14 @@
               next-time (get-next-time two-years-ago year-unit 1 double-plus)]
           (is (= 1 (in-years next-time))))))))
 
+(deftest double-plus-month-clamp-stays-future-test
+  (testing "`++` keeps advancing after month-end clamping until the result is future"
+    (let [now (t/date-time 2026 3 30)
+          scheduled (t/date-time 2026 1 31)]
+      (with-redefs [t/now (fn [] now)]
+        (is (t/after? (tc/from-long (get-next-time scheduled month-unit 1 double-plus))
+                      now))))))
+
 (deftest double-plus-far-overdue-minute-is-bounded-test
   (testing "`++` does not advance far-overdue minute repeats one interval at a time"
     (let [now (t/now)

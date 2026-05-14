@@ -134,9 +134,10 @@
                    (* frequency)
                    recur-unit)
         result (t/plus datetime delta)]
-    (if (t/after? result now)
-      result
-      (t/plus result (recur-unit frequency)))))
+    (loop [candidate result]
+      (if (t/after? candidate now)
+        candidate
+        (recur (t/plus candidate (recur-unit frequency)))))))
 
 (defn- repeat-next-timestamp
   "Dispatch on repeat-type db-ident to compute the next occurrence. Mirrors the
