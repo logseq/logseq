@@ -1696,13 +1696,23 @@
     (search-handler/highlight-exact-query content query)
     content))
 
+(defn- preserve-heading-whitespace
+  [config s]
+  (if (and (:parent-heading config)
+           (string? s)
+           (string/blank? s))
+    [:span.whitespace-pre-wrap s]
+    s))
+
 (defn ^:large-vars/cleanup-todo inline
   [{:keys [html-export?] :as config} item]
   (match item
     ["Plain" s]
-    (highlight-query-text s (:highlight-query config))
+    (preserve-heading-whitespace
+     config
+     (highlight-query-text s (:highlight-query config)))
     ["Spaces" s]
-    s
+    (preserve-heading-whitespace config s)
 
     ["Superscript" l]
     (->elem :sup (map-inline config l))
