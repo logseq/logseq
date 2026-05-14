@@ -155,7 +155,8 @@
                :validate {:pred available-task-priority-values-set
                           :ex-msg invalid-task-priority-message}}
     :content {:desc "Filter by task title content"
-              :alias :c}
+              :alias :c
+              :coerce :string}
     :sort {:validate (set (keys list-task-field-map))}
     :fields {:multiple-values (keys list-task-field-map)}}))
 
