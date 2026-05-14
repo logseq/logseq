@@ -2074,9 +2074,7 @@
                                                         :ignore-children? page-title?
                                                         :page-title? page-title?})
         link? (boolean (:original-block config))
-        heading-level (when-not collapsed?
-                        (block-heading-level block (:level config)))
-        icon-size (if collapsed? 12 (heading-icon-size heading-level))
+        icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
         with-icon? (and (some? icon)
                         (or (and (db/page? block)

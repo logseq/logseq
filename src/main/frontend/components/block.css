@@ -575,15 +575,8 @@
 
 .block-main-container {
   @apply min-h-[24px];
-  --ls-heading-control-icon-size: 14px;
 
   > .block-control-wrap.is-with-icon {
-    .bullet-container {
-      width: var(--ls-heading-control-icon-size);
-      min-width: var(--ls-heading-control-icon-size);
-      height: var(--ls-heading-control-icon-size);
-    }
-
     .icon-cp-container,
     .ls-icon-color-wrap,
     .ui__icon {
@@ -598,16 +591,9 @@
       display: block;
       line-height: 1;
     }
-
-    .ui__icon.ti svg {
-      width: var(--ls-heading-control-icon-size);
-      height: var(--ls-heading-control-icon-size);
-    }
   }
 
   &[data-has-heading="1"], &:has(textarea.h1) {
-    --ls-heading-control-icon-size: 28px;
-
     > .block-control-wrap {
       @apply relative top-4;
     }
@@ -620,8 +606,6 @@
   }
 
   &[data-has-heading="2"], &:has(textarea.h2) {
-    --ls-heading-control-icon-size: 24px;
-
     > .block-control-wrap {
       @apply relative top-2.5;
     }
@@ -633,27 +617,6 @@
     }
   }
 
-  &[data-has-heading="3"], &:has(textarea.h3) {
-    --ls-heading-control-icon-size: 20px;
-
-    .block-content-or-editor-wrap {
-      .positioned-properties {
-        @apply relative top-[2px];
-      }
-    }
-  }
-
-  &[data-has-heading="4"], &:has(textarea.h4) {
-    --ls-heading-control-icon-size: 16px;
-  }
-
-  &[data-has-heading="5"], &:has(textarea.h5) {
-    --ls-heading-control-icon-size: 13px;
-  }
-
-  &[data-has-heading="6"], &:has(textarea.h6) {
-    --ls-heading-control-icon-size: 12px;
-  }
 }
 
 .ls-page-title-container .block-content-wrapper {
@@ -768,6 +731,15 @@
 .editor-inner .uniline-block:is(.h1, .h2, .h3, .h4, .h5, .h6),
 .editor-inner .multiline-block:is(.h1, .h2, .h3, .h4, .h5, .h6)::first-line {
   font-weight: 600;
+}
+
+.editor-inner textarea.uniline-block:is(.h3, .h4, .h5, .h6) {
+  line-height: 24px;
+  min-height: 24px;
+}
+
+.editor-inner textarea.uniline-block.h5 {
+  height: 24px !important;
 }
 
 .ls-block :is(h1, h2),
