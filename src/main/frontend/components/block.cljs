@@ -562,7 +562,13 @@
              {:on-click (fn [e]
                           (util/stop e)
                           (let [repo-dir (config/get-repo-dir repo)
-                                file-fpath (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) "." (name ext)))]
+                                ext-url (:logseq.property.asset/external-url asset-block)
+                                local-ext-url? (and (not (string/blank? ext-url))
+                                                    (common-config/local-relative-asset? ext-url))
+                                file-fpath (if local-ext-url?
+                                             ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
+                                             (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
+                                             (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) "." (name ext))))]
                             (js/window.apis.openPath file-fpath)))}
              file-name])
 
@@ -1113,13 +1119,19 @@
         img-placeholder (when image?
                           [:div.img-placeholder.asset-container
                            {:style img-metadata}])
+        ;; When external-url is set, use it as the render path so
+        ;; plugin-sandboxed assets (./assets/storages/<plugin-id>/...)
+        ;; resolve correctly; <make-asset-url handles both remote URLs
+        ;; and graph-root-relative paths.
+        href (or (:logseq.property.asset/external-url block)
+                 (path/path-join (str "../" common-config/local-assets-dir) file))
         content (cond
                   file-ready?
                   (asset-link (assoc config
                                      :asset-block block
                                      :image-placeholder img-placeholder)
                               (:block/title block)
-                              (path/path-join (str "../" common-config/local-assets-dir) file)
+                              href
                               img-metadata
                               nil)
                   image?
