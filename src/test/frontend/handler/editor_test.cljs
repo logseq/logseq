@@ -1,7 +1,9 @@
 (ns frontend.handler.editor-test
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.test :refer [async deftest is testing use-fixtures]]
             [frontend.commands :as commands]
+            [frontend.components.editor :as editor-component]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
             [frontend.state :as state]
@@ -9,9 +11,13 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
-            [logseq.outliner.core :as outliner-core]))
+            [logseq.outliner.core :as outliner-core]
+            [promesa.core :as p]))
 
-(use-fixtures :each test-helper/start-and-destroy-db)
+(use-fixtures :each {:before test-helper/start-test-db!
+                     :after (fn []
+                              (state/set-current-repo! nil)
+                              (test-helper/destroy-test-db!))})
 
 (deftest extract-nearest-link-from-text-test
   (testing "Page, block and tag links"
@@ -122,19 +128,38 @@
   ;; Reset state
   (state/set-editor-action! nil))
 
-(deftest get-matched-classes-excludes-class-aliases
+(defn- create-tag-with-alias!
+  []
   (test-helper/create-page! "Project Tag" :redirect? false :class? true)
   (test-helper/create-page! "Alias Only" :redirect? false)
   (let [class (db/get-case-page "Project Tag")
         alias (db/get-case-page "Alias Only")]
     (db/transact! test-helper/test-db [{:db/id (:db/id class)
-                                        :block/alias #{(:db/id alias)}}]))
+                                        :block/alias #{(:db/id alias)}}])))
+
+(deftest get-matched-classes-includes-class-aliases
+  (create-tag-with-alias!)
   (is (= ["Project Tag"]
          (map :block/title (editor/get-matched-classes "Project Tag")))
       "Existing tag title matching still works")
-  (is (empty? (filter #(= "Alias Only" (:block/title %))
-                      (editor/get-matched-classes "Alias Only")))
-      "Tag aliases are not separate tag completion choices"))
+  (is (= ["Alias Only"]
+         (map :block/title (editor/get-matched-classes "Alias Only")))
+      "Tag aliases stay available as tag completion choices"))
+
+(deftest tag-search-does-not-convert-class-aliases
+  (async done
+    (create-tag-with-alias!)
+    (let [matched-pages (atom nil)]
+      (-> (p/with-redefs [db-async/<get-block (fn [_repo _title _opts]
+                                                (p/resolved (db/get-page "Alias Only")))]
+            (#'editor-component/search-pages "Alias Only" true #(reset! matched-pages %)))
+          (.then
+           (fn []
+             (is (some #(= "Alias Only" (:block/title %)) @matched-pages)
+                 "The alias is still selectable from tag completion")
+             (is (not-any? :convert-page-to-tag? @matched-pages)
+                 "A class alias must not show a redundant Convert action")
+             (done)))))))
 
 (defn- default-keyup-result
   [{:keys [value cursor-pos key code action is-processed?]
