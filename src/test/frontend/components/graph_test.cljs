@@ -26,9 +26,6 @@
 (deftest settings-use-non-grid-tags-layout-by-default
   (is (false? (:grid-layout? (graph/decode-settings {})))))
 
-(deftest settings-show-roomier-task-zoom-by-default
-  (is (= 12 (:visible-recent-task-count (graph/decode-settings {})))))
-
 (deftest settings-roundtrip-keeps-all-tags-sentinel
   (let [settings {:view-mode :tags-and-objects
                   :selected-tag-ids nil
@@ -41,53 +38,51 @@
     (is (= #{"1" "2" "3"}
            (graph/selected-tag-id-set decoded (graph/tag-options graph-data))))))
 
-(deftest settings-roundtrip-keeps-time-travel-filter
+(deftest settings-roundtrip-keeps-time-travel-filter-ephemeral
   (let [settings {:view-mode :all-pages
                   :created-at-filter 86400000
                   :open-groups #{:view-mode :time-travel}}
         encoded (graph/encode-settings settings)
         data (js->clj (js/JSON.parse (js/JSON.stringify encoded)) :keywordize-keys true)
-        decoded (graph/decode-settings data)]
-    (is (= 86400000 (:createdAtFilter data)))
-    (is (= 86400000 (:created-at-filter decoded)))
+        decoded (graph/decode-settings (assoc data :createdAtFilter 86400000))]
+    (is (not (contains? data :createdAtFilter)))
+    (is (nil? (:created-at-filter decoded)))
     (is (contains? (:open-groups decoded) :time-travel))))
 
 (deftest settings-roundtrip-keeps-layout-controls
   (let [settings {:view-mode :tags-and-objects
-                  :depth 4
-                  :grid-layout? true
-                  :link-distance 132
-                  :visible-recent-task-count 7
-                  :open-groups #{:layout}}
+	                  :depth 4
+	                  :grid-layout? true
+	                  :link-distance 132
+	                  :open-groups #{:layout}}
         encoded (graph/encode-settings settings)
         data (js->clj (js/JSON.parse (js/JSON.stringify encoded)) :keywordize-keys true)
         decoded (graph/decode-settings data)]
-    (is (= 4 (:depth data)))
-    (is (true? (:gridLayout data)))
-    (is (= 132 (:linkDistance data)))
-    (is (= 7 (:visibleRecentTaskCount data)))
-    (is (not (contains? data :showArrows)))
-    (is (not (contains? data :showEdgeLabels)))
-    (is (= 4 (:depth decoded)))
-    (is (true? (:grid-layout? decoded)))
-    (is (= 132 (:link-distance decoded)))
-    (is (= 7 (:visible-recent-task-count decoded)))
-    (is (not (contains? decoded :show-arrows?)))
-    (is (not (contains? decoded :show-edge-labels?)))))
+	    (is (= 4 (:depth data)))
+	    (is (true? (:gridLayout data)))
+	    (is (= 132 (:linkDistance data)))
+	    (is (not (contains? data :visibleRecentTaskCount)))
+	    (is (not (contains? data :showArrows)))
+	    (is (not (contains? data :showEdgeLabels)))
+	    (is (= 4 (:depth decoded)))
+	    (is (true? (:grid-layout? decoded)))
+	    (is (= 132 (:link-distance decoded)))
+	    (is (not (contains? decoded :visible-recent-task-count)))
+	    (is (not (contains? decoded :show-arrows?)))
+	    (is (not (contains? decoded :show-edge-labels?)))))
 
 (deftest layout-settings-are-clamped-when-decoded
   (let [decoded (graph/decode-settings {:depth 99
-                                        :showArrows true
-                                        :gridLayout true
-                                        :linkDistance 999
-                                        :visibleRecentTaskCount 100
-                                        :showEdgeLabels false})]
-    (is (= 5 (:depth decoded)))
-    (is (true? (:grid-layout? decoded)))
-    (is (= 180 (:link-distance decoded)))
-    (is (= 24 (:visible-recent-task-count decoded)))
-    (is (not (contains? decoded :show-arrows?)))
-    (is (not (contains? decoded :show-edge-labels?)))))
+	                                        :showArrows true
+	                                        :gridLayout true
+	                                        :linkDistance 999
+	                                        :showEdgeLabels false})]
+	    (is (= 5 (:depth decoded)))
+	    (is (true? (:grid-layout? decoded)))
+	    (is (= 180 (:link-distance decoded)))
+	    (is (not (contains? decoded :visible-recent-task-count)))
+	    (is (not (contains? decoded :show-arrows?)))
+	    (is (not (contains? decoded :show-edge-labels?)))))
 
 (deftest depth-control-is-active-only-with-selected-nodes
   (is (true? (graph/depth-control-disabled? [])))
@@ -125,4 +120,16 @@
     (is (= #{"1" "2" "10"}
            (set (map :id (:nodes filtered)))))
     (is (= #{{:source "10" :target "1"}}
+           (set (:links filtered))))))
+
+(deftest time-travel-filter-keeps-undated-all-pages-nodes
+  (let [all-pages-graph {:nodes [{:id "1" :label "Early" :kind "page" :block/created-at 1000}
+                                 {:id "2" :label "Undated" :kind "page"}
+                                 {:id "3" :label "Late" :kind "page" :block/created-at 3000}]
+                         :links [{:source "1" :target "2"}
+                                 {:source "2" :target "3"}]}
+        filtered (graph/filter-graph-by-created-at all-pages-graph 1000)]
+    (is (= #{"1" "2"}
+           (set (map :id (:nodes filtered)))))
+    (is (= #{{:source "1" :target "2"}}
            (set (:links filtered))))))

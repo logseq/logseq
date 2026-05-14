@@ -19,6 +19,8 @@ Use the routing tables below to load the most specific matching rule files.
 
 Prefer concrete findings backed by code paths, invariants, tests, or runtime behavior. Do not list speculative issues unless you can explain the failure mode and affected scenario.
 
+Every actionable finding must be validated through at least one real Logseq interaction path before it is included in the final review. Use `logseq-repl`, `logseq-cli`, `chrome`, or `computer-use` depending on the touched surface. Static reasoning and unit tests are useful for narrowing the issue, but they do not replace this per-finding runtime or tool-based validation requirement.
+
 ## Read these first
 
 1. Root `AGENTS.md` for repository rules and test commands.
@@ -87,7 +89,12 @@ Then read every matching module below.
 3. **Failure-mode pass** — check error propagation, logging, cancellation, transaction atomicity, partial writes, and fail-fast behavior.
 4. **Performance pass** — check query shape, repeated schema construction, large data conversions, render loops, memory retention, and cache invalidation.
 5. **Test pass** — verify that tests cover the behavior contract and failure cases, not just happy paths.
-6. **Repository-convention pass** — apply naming, i18n, logging, keyword, migration, and command conventions.
+6. **Finding validation pass** — for each candidate actionable finding, run at least one actual check through an appropriate Logseq interaction path:
+   - `logseq-repl` for ClojureScript functions, DataScript state, importer/exporter behavior, renderer state, Electron, or worker runtime behavior.
+   - `logseq-cli` for CLI command behavior, db-worker-node graph interactions, command output, and graph mutations.
+   - `chrome` or `computer-use` for UI, keyboard, accessibility, browser-visible rendering, Electron window behavior, and user workflows.
+   Record the exact command, REPL expression, or UI workflow and the observed result. If no actual check can be run, do not present the item as a confirmed finding; either continue investigating, downgrade it to a clearly labeled question, or explain the blocker.
+7. **Repository-convention pass** — apply naming, i18n, logging, keyword, migration, and command conventions.
 
 ### 4. Run targeted runtime verification
 
@@ -137,5 +144,6 @@ Add a short verification summary after findings or after the no-findings stateme
 - Did you distinguish proven issues from questions?
 - Did you check persisted data, migrations, or protocol compatibility when relevant?
 - Did you check tests and name exact missing test coverage?
+- Did every actionable finding have at least one actual validation via `logseq-repl`, `logseq-cli`, `chrome`, or `computer-use`, with observed evidence?
 - Did you avoid asking for broad rewrites when a targeted fix is enough?
 - Did you mention any verification you could not perform?

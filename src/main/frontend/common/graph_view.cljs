@@ -14,19 +14,31 @@
   [links]
   (first
    (reduce
-    (fn [[result index-by-endpoints] [from to label]]
+    (fn [[result index-by-endpoints] [from to label edge-type]]
       (if (and from to)
         (let [link {:source (str from)
                     :target (str to)}
               endpoints [(:source link) (:target link)]
+              class-extends? (= edge-type :class-extends)
               label? (and (string? label)
                           (not (string/blank? label)))]
           (if-let [idx (get index-by-endpoints endpoints)]
-            [(if label?
+            [(cond
+               class-extends?
+               (cond-> (assoc-in result [idx :edge/type] "class-extends")
+                 label?
+                 (assoc-in [idx :label] label))
+
+               label?
                (assoc-in result [idx :label] label)
+
+               :else
                result)
              index-by-endpoints]
             [(conj result (cond-> link
+                            class-extends?
+                            (assoc :edge/type "class-extends")
+
                             label?
                             (assoc :label label)))
              (assoc index-by-endpoints endpoints (count result))]))
@@ -116,25 +128,26 @@
   ([db ids]
    (entity-title-map db ids true))
   ([db ids normalize-id-refs?]
-   (persistent!
-    (reduce
-     (fn [m {:keys [db/id block/title]}]
-       (let [contains-ref? (and (string? title)
-                                (string/includes? title "[["))
-             title (if (and normalize-id-refs?
+   (let [ids (filter some? ids)]
+     (persistent!
+      (reduce
+       (fn [m {:keys [db/id block/title]}]
+         (let [contains-ref? (and (string? title)
+                                  (string/includes? title "[["))
+               title (if (and normalize-id-refs?
+                              contains-ref?
+                              (re-find db-content/id-ref-pattern title))
+                       (or (some-> (d/entity db id)
+                                   (db-content/recur-replace-uuid-in-block-title 10))
+                           title)
+                       title)]
+           (if (some? title)
+             (assoc! m id (cond-> title
                             contains-ref?
-                            (re-find db-content/id-ref-pattern title))
-                     (or (some-> (d/entity db id)
-                                 (db-content/recur-replace-uuid-in-block-title 10))
-                         title)
-                     title)]
-         (if (some? title)
-           (assoc! m id (cond-> title
-                          contains-ref?
-                          (string/replace #"#?\[\[([^\]]+)\]\]" "$1")))
-           m)))
-     (transient {})
-     (d/pull-many db [:db/id :block/title] ids)))))
+                            (string/replace #"#?\[\[([^\]]+)\]\]" "$1")))
+             m)))
+       (transient {})
+       (d/pull-many db [:db/id :block/title] ids))))))
 
 (defn- entity-id-subset-with
   [db attr ids]
@@ -175,96 +188,20 @@
    (build-node-context db node-ids true))
   ([db node-ids normalize-id-refs?]
    (let [title-by-id (entity-title-map db node-ids normalize-id-refs?)
-         title-missing-ids (set/difference node-ids (set (keys title-by-id)))
-         name-by-id (if (empty? title-missing-ids)
-                      {}
-                      (entity-value-map db :block/name title-missing-ids))
-         uuid-by-id (entity-value-map-by-id db :block/uuid node-ids)
-         icon-by-id (entity-value-map db :logseq.property/icon node-ids)
-         created-at-by-id (entity-value-map db :block/created-at node-ids)
-         ident-by-id (entity-value-map-by-id db :db/ident node-ids)]
-     {:title-by-id title-by-id
-      :name-by-id name-by-id
-      :uuid-by-id uuid-by-id
-      :icon-by-id icon-by-id
-      :created-at-by-id created-at-by-id
-      :ident-by-id ident-by-id})))
-
-(defn- task-tag-id?
-  [ident-by-class-id tag-id]
-  (= :logseq.class/Task (get ident-by-class-id tag-id)))
-
-(defn- task-object-id-set
-  [tag-links ident-by-class-id]
-  (persistent!
-   (reduce
-    (fn [task-ids [object-id tag-id]]
-      (cond-> task-ids
-        (task-tag-id? ident-by-class-id tag-id)
-        (conj! object-id)))
-    (transient #{})
-    tag-links)))
-
-(defn- task-status-context
-  [db status-ref-by-id]
-  (let [status-ids (set (vals status-ref-by-id))]
-    {:status-ident-by-id (entity-value-map-by-id db :db/ident status-ids)
-     :status-title-by-id (entity-title-map db status-ids false)}))
-
-(defn- tag-summary
-  [{:keys [title-by-id name-by-id]} ident-by-class-id tag-id]
-  (cond->
-   {:id (str tag-id)
-    :label (or (get title-by-id tag-id)
-               (get name-by-id tag-id)
-               (str tag-id))}
-    (contains? ident-by-class-id tag-id)
-    (assoc :db-ident (get ident-by-class-id tag-id))))
-
-(defn- task-tag-summaries-by-id
-  [tag-links task-ids tag-id-set tag-context ident-by-class-id]
-  (persistent!
-   (reduce
-    (fn [summaries [object-id tag-id]]
-      (cond-> summaries
-        (and (contains? task-ids object-id)
-             (contains? tag-id-set tag-id))
-        (assoc! object-id (conj (get summaries object-id [])
-                                (tag-summary tag-context ident-by-class-id tag-id)))))
-    (transient {})
-    tag-links)))
-
-(defn- task-metadata-by-id
-  [db task-ids tag-links tag-id-set tag-context ident-by-class-id]
-  (if (empty? task-ids)
-    {}
-    (let [status-ref-by-id (entity-value-map db :logseq.property/status task-ids)
-          {:keys [status-ident-by-id status-title-by-id]} (task-status-context db status-ref-by-id)
-          updated-at-by-id (entity-value-map db :block/updated-at task-ids)
-          tags-by-id (task-tag-summaries-by-id tag-links task-ids tag-id-set tag-context ident-by-class-id)]
-      (persistent!
-       (reduce
-        (fn [metadata-by-id task-id]
-          (let [status-id (get status-ref-by-id task-id)
-                status-ident (get status-ident-by-id status-id)
-                status-title (get status-title-by-id status-id)]
-            (assoc! metadata-by-id
-                    task-id
-                    (cond->
-                     {:task? true}
-                      (some? status-ident)
-                      (assoc :task/status-ident status-ident)
-
-                      (some? status-title)
-                      (assoc :task/status-title status-title)
-
-                      (contains? updated-at-by-id task-id)
-                      (assoc :block/updated-at (get updated-at-by-id task-id))
-
-                      (contains? tags-by-id task-id)
-                      (assoc :tags (get tags-by-id task-id))))))
-        (transient {})
-        task-ids)))))
+        title-missing-ids (set/difference node-ids (set (keys title-by-id)))
+        name-by-id (if (empty? title-missing-ids)
+                     {}
+                     (entity-value-map db :block/name title-missing-ids))
+        uuid-by-id (entity-value-map-by-id db :block/uuid node-ids)
+        icon-by-id (entity-value-map db :logseq.property/icon node-ids)
+        created-at-by-id (entity-value-map db :block/created-at node-ids)
+        ident-by-id (entity-value-map-by-id db :db/ident node-ids)]
+    {:title-by-id title-by-id
+     :name-by-id name-by-id
+     :uuid-by-id uuid-by-id
+     :icon-by-id icon-by-id
+     :created-at-by-id created-at-by-id
+     :ident-by-id ident-by-id})))
 
 (defn- hidden-or-recycled?
   [entity]
@@ -407,6 +344,60 @@
          distinct
          vec)))
 
+(defn- class-extends-links
+  [db seed-class-ids allowed-class-id?]
+  (let [label (property-link-title db :logseq.property.class/extends)]
+    (loop [frontier (seq (set (remove nil? seed-class-ids)))
+           seen #{}
+           links []]
+      (if (nil? frontier)
+        (vec (distinct links))
+        (let [class-id (first frontier)
+              frontier (next frontier)]
+          (if (contains? seen class-id)
+            (recur frontier seen links)
+            (let [parent-ids (->> (if (and class-id
+                                            (d/entid db :logseq.property.class/extends))
+                                    (d/datoms db :eavt class-id :logseq.property.class/extends)
+                                    [])
+                                  (map :v)
+                                  (remove nil?)
+                                  (filter allowed-class-id?)
+                                  set)]
+              (recur (seq (concat frontier parent-ids))
+                     (conj seen class-id)
+                     (into links (map (fn [parent-id]
+                                        [class-id parent-id label :class-extends])
+                                      parent-ids))))))))))
+
+(defn- link-node-ids
+  [links]
+  (set (mapcat (fn [[source target]]
+                 [source target])
+               links)))
+
+(defn- all-pages-class-extends-links
+  [db page-id-set ident-by-page-id]
+  (let [class-page-ids (set/intersection page-id-set
+                                         (entity-ids-with db :block/tags :logseq.class/Tag))]
+    (class-extends-links db
+                         class-page-ids
+                         (fn [id]
+                           (and (contains? page-id-set id)
+                                (not (contains? hidden-built-in-tag-idents
+                                                (get ident-by-page-id id))))))))
+
+(defn- visible-page-class-extends-links
+  [db page-id]
+  (class-extends-links db
+                       #{page-id}
+                       (fn [id]
+                         (let [entity (d/entity db id)]
+                           (and (visible-entity? entity)
+                                (not (ldb/property? entity))
+                                (not (contains? hidden-built-in-tag-idents
+                                                (:db/ident entity))))))))
+
 (defn- built-in-class-ident?
   [ident]
   (and (keyword? ident)
@@ -453,8 +444,10 @@
                                vec)
         visible-tag-id-set (set (map second visible-tag-links))
         used-built-in-tag-id-set (set/intersection allowed-built-in-tag-id-set visible-tag-id-set)
-        tag-id-set (set/union (set/intersection user-tag-id-set visible-tag-id-set)
-                              used-built-in-tag-id-set)]
+        visible-tag-id-set (set/union (set/intersection user-tag-id-set visible-tag-id-set)
+                                      used-built-in-tag-id-set)
+        extends-links (class-extends-links db visible-tag-id-set candidate-tag-id-set)
+        tag-id-set (set/union visible-tag-id-set (link-node-ids extends-links))]
     (if (or (empty? tag-id-set)
             (empty? visible-object-ids))
       {:nodes []
@@ -466,26 +459,18 @@
             object-id-set (set (map first tag-links))
             node-ids (set/union tag-id-set object-id-set)
             page-ids (entity-id-subset-with db :block/name object-id-set)
-            context (build-node-context db node-ids false)
-            task-ids (task-object-id-set tag-links ident-by-class-id)
-            task-metadata (task-metadata-by-id db
-                                               task-ids
-                                               tag-links
-                                               tag-id-set
-                                               context
-                                               ident-by-class-id)
+            context (build-node-context db node-ids)
             tags (mapv #(scalar-node context % "tag" true) tag-id-set)
-            objects (mapv (fn [object-id]
-                            (merge (scalar-node context object-id "object" (contains? page-ids object-id))
-                                   (get task-metadata object-id)))
+            objects (mapv #(scalar-node context % "object" (contains? page-ids %))
                           object-id-set)
             nodes (into tags objects)
             node-id-set (set (map :id nodes))
-            links (->> tag-links
-                       (filter (fn [[from-id _tag-id]]
-                                 (contains? object-id-set from-id)))
-                       (build-links)
-                       vec)
+	            links (->> tag-links
+	                       (filter (fn [[from-id _tag-id]]
+	                                 (contains? object-id-set from-id)))
+                       (concat extends-links)
+	                       (build-links)
+	                       vec)
             property-links (->> (property-ref-link-tuples db node-ids :entity :entity)
                                 build-links
                                 (filter (fn [{:keys [source target]}]
@@ -612,6 +597,16 @@
                  (contains? page-id-set tag-id)))
           tagged-links))
 
+(defn- page-parent-links
+  [db page-id-set]
+  (->> (datoms-for db :avet :block/parent)
+       (keep (fn [{child-id :e parent-id :v}]
+               (when (and (contains? page-id-set child-id)
+                          (contains? page-id-set parent-id))
+                 [child-id parent-id])))
+       distinct
+       vec))
+
 (defn- show-orphan-pages?
   [orphan-pages?]
   (not (false? orphan-pages?)))
@@ -672,6 +667,7 @@
         title-by-id (entity-title-map db page-ids)
         icon-by-id (entity-value-map db :logseq.property/icon page-ids)
         uuid-by-id (entity-value-map-by-id db :block/uuid page-ids)
+        ident-by-id (entity-value-map-by-id db :db/ident page-ids)
         created-at-by-id (entity-value-map db :block/created-at page-ids)
         build-in-pages (->> sqlite-create-graph/built-in-pages-names
                             (map string/lower-case)
@@ -694,8 +690,16 @@
         {raw-links :links linked-page-ids :linked-page-ids}
         (bounded-visible-page-links db base-visible-page-ids tagged-pages)
         property-link-tuples (property-ref-link-tuples db base-visible-page-ids :page :page)
-        raw-links (vec (distinct (concat raw-links property-link-tuples)))
-        linked-page-ids (set/union linked-page-ids (set (mapcat (juxt first second) property-link-tuples)))
+        parent-link-tuples (page-parent-links db base-visible-page-ids)
+        extends-link-tuples (all-pages-class-extends-links db base-visible-page-ids ident-by-id)
+        raw-links (vec (distinct (concat raw-links
+                                         property-link-tuples
+                                         parent-link-tuples
+                                         extends-link-tuples)))
+        linked-page-ids (set/union linked-page-ids
+                                   (link-node-ids (concat property-link-tuples
+                                                          parent-link-tuples
+                                                          extends-link-tuples)))
         visible-page-ids (if orphan-pages?
                            base-visible-page-ids
                            (set/intersection base-visible-page-ids linked-page-ids))
@@ -846,11 +850,17 @@
             tagged-pages (vec (page-tag-links (tagged-page-links db) page-id-set))
             rendered-tagged-pages (vec (rendered-page-tag-links tagged-pages page-id-set))
             property-link-tuples (property-ref-link-tuples db page-id-set :page :page)
+            parent-link-tuples (page-parent-links db page-id-set)
+            extends-link-tuples (all-pages-class-extends-links db page-id-set ident-by-name-page-id)
             tag-id->ident (tag-ident-by-id db (set (map second tagged-pages)))
             page-id->tag-idents (build-page-id->tag-idents tagged-pages tag-id->ident)
             relation (page-relation-links db journal? page-id->tag-idents)
-            links (concat relation rendered-tagged-pages property-link-tuples)
-            linked (set (mapcat (juxt first second) links))
+            links (concat relation
+                          rendered-tagged-pages
+                          property-link-tuples
+                          parent-link-tuples
+                          extends-link-tuples)
+            linked (link-node-ids links)
             build-in-pages (->> sqlite-create-graph/built-in-pages-names
                                 (map string/lower-case)
                                 set)
@@ -972,6 +982,8 @@
           tags (set (remove #(= page-id %) tags))
           ref-pages (get-page-referenced-pages db page-id)
           mentioned-pages (get-pages-that-mentioned-page db page-id show-journal)
+          extends-links (visible-page-class-extends-links db page-id)
+          extends-page-ids (link-node-ids extends-links)
           links (concat
                  (map (fn [ref-page]
                         [page-id ref-page]) ref-pages)
@@ -979,7 +991,8 @@
                         [page-id page]) mentioned-pages)
                  (map (fn [tag]
                         [page-id tag])
-                      tags))
+                      tags)
+                 extends-links)
           other-pages-links (build-page-graph-other-page-links db (concat ref-pages mentioned-pages) show-journal)
           links (->> (concat links other-pages-links)
                      (remove nil?)
@@ -989,7 +1002,8 @@
                       [page-id]
                       ref-pages
                       mentioned-pages
-                      tags)
+                      tags
+                      extends-page-ids)
                      (remove nil?)
                      (map #(d/entity db %))
                      (common-util/distinct-by :db/id))

@@ -66,11 +66,13 @@
     background: color-mix(in srgb, var(--ls-link-text-color) 16%, transparent);
 }
 
-.graph-settings-toggle {
+.graph-settings-toggle,
+.graph-interaction-reset {
     width: 46px;
     height: 46px;
     min-width: 46px;
     min-height: 46px;
+    max-height: 46px;
     border: 1px solid color-mix(in srgb, var(--ls-link-text-color) 18%, var(--ls-border-color));
     background: color-mix(in srgb, var(--ls-primary-background-color) 82%, transparent);
     box-shadow: 0 12px 34px rgba(15, 23, 42, 0.16);
