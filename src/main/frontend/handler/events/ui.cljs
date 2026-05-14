@@ -356,7 +356,10 @@
           video? (contains? config/video-formats asset-type)
           pdf? (= :pdf asset-type)
           file-name (str (:block/uuid asset) "." asset-type-str)
-          rel-path (path/path-join (str "../" common-config/local-assets-dir) file-name)]
+          ;; Prefer external-url so plugin-sandboxed assets resolve to their
+          ;; real on-disk path; mirrors the asset-cp render-side fix.
+          rel-path (or (:logseq.property.asset/external-url asset)
+                       (path/path-join (str "../" common-config/local-assets-dir) file-name))]
       (cond
         image?
         (p/let [url (assets-handler/<make-asset-url rel-path)]
