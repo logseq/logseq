@@ -142,6 +142,15 @@ data class EditorAction(
 private class EditorToolbarView(context: android.content.Context) : FrameLayout(context) {
     var onAction: ((String) -> Unit)? = null
 
+    private val showAfterImeSettles = Runnable {
+        pendingShowAfterImeSettles = null
+        if (imeVisible && visibility != VISIBLE) {
+            visibility = VISIBLE
+        }
+    }
+    private var pendingShowAfterImeSettles: Runnable? = null
+    private var imeVisible: Boolean = false
+
     private val composeView = ComposeView(context).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
@@ -153,6 +162,7 @@ private class EditorToolbarView(context: android.content.Context) : FrameLayout(
     private var backgroundColor: Int = defaultBackground()
 
     init {
+        visibility = GONE
         addView(composeView)
     }
 
@@ -171,6 +181,9 @@ private class EditorToolbarView(context: android.content.Context) : FrameLayout(
     }
 
     fun clearKeyboardTopBinding() {
+        cancelPendingShow()
+        imeVisible = false
+        visibility = GONE
         ViewCompat.setOnApplyWindowInsetsListener(this, null)
     }
 
@@ -193,10 +206,33 @@ private class EditorToolbarView(context: android.content.Context) : FrameLayout(
     }
 
     private fun updateVisibilityForIme(imeVisible: Boolean) {
-        val targetVisibility = if (imeVisible) VISIBLE else GONE
-        if (visibility != targetVisibility) {
-            visibility = targetVisibility
+        this.imeVisible = imeVisible
+        if (!imeVisible) {
+            cancelPendingShow()
+            if (visibility != GONE) {
+                visibility = GONE
+            }
+            return
         }
+
+        if (visibility == VISIBLE) {
+            return
+        }
+
+        cancelPendingShow()
+        pendingShowAfterImeSettles = showAfterImeSettles
+        postDelayed(showAfterImeSettles, TOOLBAR_SHOW_DELAY_MS)
+    }
+
+    private fun cancelPendingShow() {
+        pendingShowAfterImeSettles?.let {
+            removeCallbacks(it)
+            pendingShowAfterImeSettles = null
+        }
+    }
+
+    companion object {
+        private const val TOOLBAR_SHOW_DELAY_MS = 160L
     }
 
     private fun bottomOverlap(root: View, decorView: View, bottomInset: Int): Int {
