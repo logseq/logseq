@@ -962,11 +962,14 @@
         (assert (every? uuid? values') "existing values should all be UUIDs")
         (let [values (keep #(d/entity @conn [:block/uuid %]) values')]
           (when (seq values)
-            (let [value-property-tx (map (fn [id]
+            (let [property-db-id (:db/id property)
+                  value-property-tx (map (fn [id]
                                            {:db/id id
-                                            :block/closed-value-property (:db/id property)})
+                                            :block/closed-value-property property-db-id
+                                            :block/parent property-db-id
+                                            :block/page property-db-id})
                                          (map :db/id values))
-                  property-tx (outliner-core/block-with-updated-at {:db/id (:db/id property)})]
+                  property-tx (outliner-core/block-with-updated-at {:db/id property-db-id})]
               (ldb/transact! conn (cons property-tx value-property-tx)
                              {:outliner-op :add-existing-values-to-closed-values}))))))))
 
