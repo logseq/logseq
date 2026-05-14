@@ -2,8 +2,12 @@
   (:require [cljs.test :refer [is testing async use-fixtures]]
             [datascript.core :as d]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
+            [frontend.db.model :as db-model]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor]
+            [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async load-test-files]]
             [frontend.util :as util]
@@ -198,5 +202,36 @@
                 "The pending block should still enter edit mode after applying queued Tab")))
         (p/finally (fn []
                      (state/set-state! :editor/edit-block-fn nil)
-                     (state/set-state! :editor/pending-new-block nil)
-                     (set! (.-document js/globalThis) previous-document))))))
+            (state/set-state! :editor/pending-new-block nil)
+            (set! (.-document js/globalThis) previous-document))))))
+
+(deftest-async db-based-save-assets-appends-to-today-page-without-editor
+  (let [today-page {:block/uuid (random-uuid)
+                    :block/title "today"}
+        inserted (atom nil)]
+    (-> (p/with-redefs [assets-handler/ensure-assets-dir! (fn [_repo]
+                                                            (p/resolved ["/repo" "assets"]))
+                        assets-handler/get-file-checksum (constantly "checksum")
+                        db-async/<get-asset-with-checksum (fn [& _] (p/resolved nil))
+                        db-model/get-today-journal-title (constantly "today")
+                        db-model/get-journal-page (constantly today-page)
+                        state/get-edit-block (constantly nil)
+                        state/get-edit-content (constantly "")
+                        outliner-op/insert-blocks! (fn [blocks target opts]
+                                                     (reset! inserted {:blocks blocks
+                                                                       :target target
+                                                                       :opts opts})
+                                                     [:insert-blocks [blocks target opts]])
+                        db/entity (fn [[_lookup uuid]]
+                                    {:block/uuid uuid})]
+          (editor/db-based-save-assets! "repo" [{:src "image.png"
+                                                 :title "image"}]))
+        (p/then
+         (fn [_]
+           (is (= today-page (:target @inserted)))
+           (is (= {:keep-uuid? true
+                   :bottom? true
+                   :sibling? false
+                   :replace-empty-target? false}
+                  (:opts @inserted))
+               "Page-target asset insertion must allow :bottom? to take effect"))))))
