@@ -93,7 +93,6 @@
  :block/open-block-references "Blok referanslarını aç"
  :block/practice "Alıştırma"
  :block/practice-cards "Kartlarla alıştırma"
- :block/ref-nesting-too-deep "Blok referansı iç içe geçmesi çok derin"
  :block/remove-tag "Etiketi kaldır"
  :block/remove-this-tag "Bu etiketi kaldır"
  :block/render-error "Blok İşleme Hatası:"

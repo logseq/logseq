@@ -93,7 +93,6 @@
  :block/open-block-references "Відкрити посилання на блок"
  :block/practice "Практика"
  :block/practice-cards "Практикувати картки"
- :block/ref-nesting-too-deep "Занадто глибока вкладеність посилань на блок"
  :block/remove-tag "Видалити тег"
  :block/remove-this-tag "Видалити цей тег"
  :block/render-error "Помилка відображення блоку:"
