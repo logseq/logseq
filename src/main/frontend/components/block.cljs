@@ -726,17 +726,11 @@
                     (or (model/untitled-page? (:block/title page-entity))
                         (and (ldb/page? page-entity) (string/blank? (:block/title page-entity)))))
         show-icon? (:show-icon? config)
-        ;; Only override the icon's intrinsic default size when we're
-        ;; actually inside a heading — heading-icon-size returns a
-        ;; meaningful value for h1-h6 (e.g. 28 for h1, 12 for h6) but
-        ;; defaults to 14 for non-heading contexts. The 14 was getting
-        ;; applied to inline refs everywhere and forcing avatars to
-        ;; render at 14×14 instead of the photo-icon default of 20×20
-        ;; (icon.cljs:917-919). With `icon-size` nil for non-headings,
-        ;; `get-node-icon-cp` keeps each icon type at its own intrinsic
-        ;; default — 20 for avatars/images, 14 for tabler/emoji.
+        ;; Inline page-refs render every icon type at 20px so avatar /
+        ;; image / tabler / emoji / text share the same visual slot.
+        ;; Headings override via `heading-icon-size` (28→12 for h1→h6).
         heading-level (:parent-heading config)
-        icon-size (when heading-level (heading-icon-size heading-level))]
+        icon-size (if heading-level (heading-icon-size heading-level) 20)]
     [:a.relative
      (cond->
       {:tabIndex "0"
@@ -785,8 +779,7 @@
      (when (and show-icon? (not tag?))
        (let [own-icon (get page-entity :logseq.property/icon)
              emoji? (and (map? own-icon) (= (:type own-icon) :emoji))
-             icon-opts (cond-> {:color? true :not-text-or-page? true}
-                         icon-size (assoc :size icon-size))]
+             icon-opts {:color? true :not-text-or-page? true :size icon-size}]
          (when-let [icon (icon-component/get-node-icon-cp page-entity icon-opts)]
            [:span {:class (str "icon-emoji-wrap " (when emoji? "as-emoji"))}
             icon])))

@@ -57,12 +57,17 @@
 .page-ref {
   @apply inline;
 
+  /* .page-ref stays pure `inline` (not inline-flex) so its baseline
+     derives from text metrics, not from the tallest flex child. The
+     icon wrappers are inline-flex *internally* so the glyph centers
+     against parent x-height via `vertical-align: middle`. Wrappers
+     shrink-to-fit the 20px icon — at 20px tall they fit within the
+     24px body line-box (font 16 × line-height 1.5) without inflating
+     it. Heading line-boxes are taller still, so heading-sized icons
+     also fit. */
   .icon-emoji-wrap {
-    position: relative;
-    top: 0;
     display: inline-flex;
     align-items: center;
-    line-height: 1;
     vertical-align: middle;
     padding-left: 1px;
 
@@ -71,8 +76,18 @@
     }
   }
 
+  /* 20×20 visual slot — same dimensions the left-sidebar's `.page-icon`
+     uses, so a `[[Page]]` icon reads at the same scale as its sidebar
+     entry. Photo icons (avatar / image) fill the slot. Tabler / text /
+     emoji glyphs render smaller (16px, see SVG / em-emoji rules below)
+     and center in the slot. `flex-shrink: 0` prevents wrapping text
+     from squeezing the slot. */
   .icon-cp-container {
-    @apply inline-flex items-center pr-0.5;
+    @apply inline-flex items-center justify-center pr-0.5;
+    width: 20px;
+    height: 20px;
+    box-sizing: content-box;
+    flex-shrink: 0;
     vertical-align: middle;
 
     &.photo-icon {
@@ -80,11 +95,12 @@
     }
   }
 
-  &:has(> .icon-emoji-wrap),
-  &:has(> .icon-cp-container) {
-    display: inline-flex;
-    align-items: center;
-    vertical-align: baseline;
+  /* Non-photo glyphs (tabler / text) render at 16 inside the slot —
+     same inset the sidebar uses. Avatars / images keep their inline
+     `style: { width: 20px }` and fill the 20×20 slot. */
+  .icon-cp-container:not(.photo-icon) svg {
+    width: 16px;
+    height: 16px;
   }
 
   .icon-emoji-wrap em-emoji,
@@ -1246,6 +1262,15 @@ html.is-mac {
   height: 18px;
 }
 
+/* Inline page-ref / tag icons set their own size via SVG width/height
+   attributes (icon.cljs text + tabler branches) or inline style (avatar).
+   The 18px clamp above overrides those attributes, so opt the icon
+   wrappers out — `auto` falls back to the attribute. */
+.block-content-wrapper :is(.icon-emoji-wrap, .icon-cp-container, .ls-icon-color-wrap) svg {
+  width: auto;
+  height: auto;
+}
+
 .katex svg {
   width: 100%;
   height: inherit;
@@ -1326,10 +1351,6 @@ html.is-mac {
   height: initial;
 }
 
-.page-ref svg {
-  width: 16px;
-  height: 16px;
-}
 
 .ls-page-title {
   .positioned-properties, .time-spent {
