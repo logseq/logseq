@@ -182,12 +182,21 @@ private class EditorToolbarView(context: android.content.Context) : FrameLayout(
     ) {
         val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
         val navInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-        val coveredBySystemUi = if (insets.isVisible(WindowInsetsCompat.Type.ime())) {
+        val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+        updateVisibilityForIme(imeVisible)
+        val coveredBySystemUi = if (imeVisible) {
             bottomOverlap(root, decorView, imeInsets.bottom)
         } else {
             bottomOverlap(root, decorView, navInsets.bottom)
         }
         updateBottomMargin(coveredBySystemUi + margin)
+    }
+
+    private fun updateVisibilityForIme(imeVisible: Boolean) {
+        val targetVisibility = if (imeVisible) VISIBLE else GONE
+        if (visibility != targetVisibility) {
+            visibility = targetVisibility
+        }
     }
 
     private fun bottomOverlap(root: View, decorView: View, bottomInset: Int): Int {
