@@ -12,6 +12,7 @@
             [electron.ipc :as ipc]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.block.drop :as block-drop]
+            [frontend.components.block.image :as block-image]
             [frontend.components.block.macros :as block-macros]
             [frontend.components.block.selection :as block-selection]
             [frontend.components.icon :as icon-component]
@@ -391,6 +392,7 @@
         positioned? (:property-position config)
         asset-block (:asset-block config)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
+        metadata (block-image/effective-image-metadata config asset-block metadata)
         width (:width metadata)
         *width (get state ::size)
         width (or @*width width)
