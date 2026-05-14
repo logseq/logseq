@@ -275,6 +275,10 @@
       ;; recur unit
       [:div.w-20
        (property-value block (db/entity :logseq.property.repeat/recur-unit) (assoc opts :property property))]]
+     [:div.flex.flex-col.gap-1.min-w-0.ls-repeat-type-setting
+      [:div.text-muted-foreground
+       (t :property.repeat/next-date)]
+      (property-value block (db/entity :logseq.property.repeat/repeat-type) opts)]
      (let [properties (->>
                        (outliner-property/get-block-full-properties (db/get-db) (:db/id block))
                        (filter (fn [property]
