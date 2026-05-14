@@ -55,6 +55,14 @@
       (is (string/includes? message "--inputs"))
       (is (not (string/includes? message "identity")))))
 
+  (testing "two-element :db/id datom clauses are rejected"
+    (let [result (query-command/build-action
+                  {:query "[:find ?b :where [?b :db/id]]"}
+                  "logseq_db_demo"
+                  {})]
+      (is (false? (:ok? result)))
+      (is (= :invalid-query (get-in result [:error :code])))))
+
   (testing ":db/id can still be used in pull selectors"
     (let [result (query-command/build-action
                   {:query "[:find [(pull ?b [:db/id :block/title]) ...] :where [?b :block/title]]"}
