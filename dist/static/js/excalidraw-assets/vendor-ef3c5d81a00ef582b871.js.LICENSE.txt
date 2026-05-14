@@ -1,0 +1,12 @@
+/*
+object-assign
+(c) Sindre Sorhus
+@license MIT
+*/
+
+/*!
+
+pica
+https://github.com/nodeca/pica
+
+*/

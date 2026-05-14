@@ -7,6 +7,7 @@
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]))
 
 (def repo test-helper/test-db)
@@ -47,6 +48,27 @@
         property (d/entity db :user.property/closed-values-visibility)
         values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
     (is (= ["Visible closed value"] (map :block/title values)))))
+
+(deftest deleting-block-removes-cli-created-default-property-values-test
+  (let [property-ident :user.property/xxx-IiHzt48w
+        conn (db-test/create-conn-with-blocks
+              {:properties {property-ident {:logseq.property/type :default
+                                            :db/cardinality :db.cardinality/many
+                                            :logseq.property/public? true
+                                            :block/title "xxx"}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "block1"}]}]})
+        block (db-test/find-block-by-content @conn "block1")
+        block-uuid (:block/uuid block)]
+    (outliner-property/batch-set-property! conn [block-uuid] property-ident "x1")
+    (let [block (d/entity @conn [:block/uuid block-uuid])
+          value (first (get block property-ident))
+          value-id (:db/id value)]
+      (is (= (:db/id block) (:db/id (:block/parent value)))
+          "Generated default property value blocks should be owned by their block")
+      (outliner-core/delete-blocks! conn [block] {})
+      (is (nil? (d/entity @conn value-id))
+          "Deleting the owning block removes its generated property value block"))))
 
 (deftest class-add-property-keeps-scoped-choices-unchanged-test
   (let [conn (db-test/create-conn-with-blocks
