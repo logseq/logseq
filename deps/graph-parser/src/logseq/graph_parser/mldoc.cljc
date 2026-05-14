@@ -319,12 +319,18 @@
        (or (string/includes? content "^{")
            (string/includes? content "_{"))))
 
-(declare inline->edn)
-
-(defn- markdown-config?
-  [config]
-  (and (string? config)
-       (boolean (re-find #"\"format\"\s*:\s*\"Markdown\"" config))))
+(defn inline->edn
+  [text config]
+  (try
+    (if (string/blank? text)
+      {}
+      (-> text
+          (inline-parse-json config)
+          (common-util/json->clj)
+          (cond-> (macro-with-script-markup? text)
+            (normalize-macro-asts))))
+    (catch :default _e
+      [])))
 
 (defn- backtick-run-length
   [s idx]
@@ -413,11 +419,10 @@
             :else
             (recur (inc idx) start code-end cells)))
         (let [cells' (conj cells (subs s start))]
-          (mapv string/trim
-                (if (and trailing-pipe?
-                         (string/blank? (peek cells')))
-                  (pop cells')
-                  cells')))))))
+          (if (and trailing-pipe?
+                   (string/blank? (peek cells')))
+            (pop cells')
+            cells'))))))
 
 (defn- markdown-table-separator-line?
   [line]
@@ -460,7 +465,10 @@
   (let [cell' (unescape-markdown-table-pipes (string/trim cell))]
     (if (string/blank? cell')
       [["Plain" ""]]
-      (inline->edn cell' config))))
+      (let [ast (inline->edn cell' config)]
+        (if (seq ast)
+          ast
+          [["Plain" cell']])))))
 
 (defn- table-row->inline-asts
   [line config]
@@ -505,13 +513,18 @@
                :col_groups (table-col-groups fallback-table col-count)))
       fallback-table)))
 
+(defn- table-ast-item?
+  [[block _pos-meta]]
+  (and (vector? block)
+       (= "Table" (first block))))
+
 (defn- normalize-markdown-table-asts
   [ast content config]
-  (if (markdown-config? config)
+  (if-not (some table-ast-item? ast)
+    ast
     (let [payload (utf8/encode content)]
       (mapv (fn [[block pos-meta :as item]]
-              (if (and (vector? block)
-                       (= "Table" (first block)))
+              (if (table-ast-item? item)
                 (let [{:keys [start_pos end_pos]} pos-meta
                       source (utf8/substring payload start_pos end_pos)]
                   (if (markdown-table-source-needs-normalization? source)
@@ -519,8 +532,7 @@
                      pos-meta]
                     item))
                 item))
-            ast))
-    ast))
+            ast))))
 
 (defn collect-page-properties
   [ast config]
@@ -578,19 +590,6 @@
   "Wrapper around ->edn for DB graphs"
   [content format]
   (->edn "logseq_db_repo_stub" content format))
-
-(defn inline->edn
-  [text config]
-  (try
-    (if (string/blank? text)
-      {}
-      (-> text
-          (inline-parse-json config)
-          (common-util/json->clj)
-          (cond-> (macro-with-script-markup? text)
-            (normalize-macro-asts))))
-    (catch :default _e
-      [])))
 
 (defn ast-link?
   [[type link]]

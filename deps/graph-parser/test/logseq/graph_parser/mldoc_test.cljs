@@ -189,18 +189,6 @@
               []]
              [header groups col_groups]))))
 
-  (testing "non-markdown configs are not normalized"
-    (let [ast [[["Table" {:header [[["Plain" "A"]]
-                                    [["Plain" "B"]]]
-                          :groups []
-                          :col_groups [1 1]}]
-                {:start_pos 0 :end_pos 14}]]]
-      (is (= ast
-             (normalize-markdown-table-asts
-              ast
-              "|A \\||`B | C`|"
-              (gp-mldoc/default-config :org))))))
-
   (testing "fallback table column groups are preserved"
     (let [ast [[["Table" {:header [[["Plain" "A"]]
                                     [["Plain" "B"]]]
@@ -213,6 +201,21 @@
            "|A \\||`B | C`|"
            md-config)]
       (is (= [1 1] (:col_groups table)))))
+
+  (testing "cell content is preserved when inline parsing fails"
+    (let [ast [[["Table" {:header [[["Plain" "A"]]]
+                          :groups []
+                          :col_groups [1]}]
+                {:start_pos 0 :end_pos 6}]]
+          [[[_ table] _pos-meta]]
+          (normalize-markdown-table-asts
+           ast
+           "|A \\||"
+           "invalid config")]
+      (is (= [[[["Plain" "A |"]]]
+              []
+              [1]]
+             [(:header table) (:groups table) (:col_groups table)]))))
 
   (testing "unclosed code spans do not hide cell boundaries"
     (let [{:keys [header groups col_groups]}
