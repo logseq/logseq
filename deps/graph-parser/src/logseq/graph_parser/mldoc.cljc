@@ -323,7 +323,7 @@
   [text config]
   (try
     (if (string/blank? text)
-      {}
+      []
       (-> text
           (inline-parse-json config)
           (common-util/json->clj)
