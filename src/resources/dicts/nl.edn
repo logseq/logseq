@@ -93,7 +93,6 @@
  :block/open-block-references "Blokreferenties openen"
  :block/practice "Oefenen"
  :block/practice-cards "Kaarten oefenen"
- :block/ref-nesting-too-deep "Blokreferentie is te diep genest"
  :block/remove-tag "Tag verwijderen"
  :block/remove-this-tag "Deze tag verwijderen"
  :block/render-error "Blok-renderfout:"

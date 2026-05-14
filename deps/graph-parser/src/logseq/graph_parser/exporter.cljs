@@ -1294,6 +1294,13 @@
        (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs))))
      :properties-tx (concat properties-tx (when pvalues-tx pvalues-tx))}))
 
+(defn- convert-block-refs-to-page-refs
+  "Converts ((uuid)) block-ref syntax to [[uuid]] page-ref syntax in a title string.
+  DB graphs use [[uuid]] for all node references."
+  [title]
+  (string/replace title block-ref/block-ref-re
+                  (fn [[_ id]] (page-ref/->page-ref id))))
+
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
    updates block content effected by refs"
@@ -1320,7 +1327,8 @@
                                           ;; ignore deadline related refs that don't affect content
                                           (and (keyword? %) (db-malli-schema/internal-ident? %))))
                              (map #(add-uuid-to-page-map % page-names-to-uuids)))]
-               (db-content/title-ref->id-ref (:block/title block) refs {:replace-tag? false}))))
+               (-> (db-content/title-ref->id-ref (:block/title block) refs {:replace-tag? false})
+                   convert-block-refs-to-page-refs))))
     block))
 
 (defn- fix-pre-block-references
@@ -2456,6 +2464,7 @@
   (when (string? title)
     (-> title
         (string/replace (block-ref/->block-ref block-uuid) "")
+        (string/replace (page-ref/->page-ref block-uuid) "")
         (string/replace #" {2,}" " ")
         string/trim)))
 

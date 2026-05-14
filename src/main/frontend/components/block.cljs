@@ -105,9 +105,6 @@
   (atom nil))
 (def *move-to (atom nil))
 
-;; TODO: dynamic
-(defonce max-depth-of-links 5)
-
 ;; TODO:
 ;; add `key`
 
@@ -1405,16 +1402,7 @@
   (let [{:keys [url label title metadata full_text]} link]
     (match url
       ["Block_ref" id]
-      (let [label* (if (seq (mldoc/plain->text label)) label nil)
-            {:keys [link-depth]} config
-            link-depth (or link-depth 0)]
-        (if (> link-depth max-depth-of-links)
-          [:p.warning.text-sm (t :block/ref-nesting-too-deep)]
-          (block-reference (assoc config
-                                  :reference? true
-                                  :link-depth (inc link-depth)
-                                  :block/uuid id)
-                           id label*)))
+      (str block-ref/left-parens id block-ref/right-parens)
 
       ["Page_ref" page]
       (let [label* (if (seq (mldoc/plain->text label)) label nil)]

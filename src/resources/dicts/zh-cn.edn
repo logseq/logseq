@@ -93,7 +93,6 @@
  :block/open-block-references "打开块引用"
  :block/practice "练习"
  :block/practice-cards "练习卡片"
- :block/ref-nesting-too-deep "块引用嵌套层级过深"
  :block/remove-tag "移除标签"
  :block/remove-this-tag "移除此标签"
  :block/render-error "块渲染错误："
