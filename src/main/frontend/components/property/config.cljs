@@ -933,19 +933,21 @@
                             (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
                             (:db/id property))]
               (dropdown-editor-menuitem
-               {:icon :checkbox})
-              :title (if class-schema? (t :property/show-as-checkbox-on-tagged-nodes) (t :property/show-as-checkbox-on-node))
-              :disabled? config/publishing?
-              :desc (when owner-block
-                      (shui/switch
-                       {:id "show as checkbox" :size "sm"
-                        :checked checked?
-                        :on-click util/stop-propagation
-                        :on-checked-change
-                        (fn [value]
-                          (if value
-                            (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
-                            (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))))))
+               {:icon :checkbox
+                :title (if class-schema?
+                         (t :property/show-as-checkbox-on-tagged-nodes)
+                         (t :property/show-as-checkbox-on-node))
+                :disabled? config/publishing?
+                :desc (when owner-block
+                        (shui/switch
+                         {:id "show as checkbox" :size "sm"
+                          :checked checked?
+                          :on-click util/stop-propagation
+                          :on-checked-change
+                          (fn [value]
+                            (if value
+                              (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
+                              (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
 
       (when (and owner-block
                 ;; Any property should be removable from Tag Properties
