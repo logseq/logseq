@@ -137,6 +137,16 @@
       max-width: 20px;
       overflow: hidden;
     }
+
+    /* Emoji clamp — see block.css's `.page-ref ... em-emoji` rule for
+       the rationale (emoji-mart inline-styles win over `!important` on
+       the ancestor, so target both em-emoji and its descendant span).
+       At font-size 14 the glyph lands ~18-19px, fitting inside the
+       20×20 tile without bleeding into adjacent rows. */
+    em-emoji, em-emoji span {
+      font-size: 16px !important;
+      line-height: 1 !important;
+    }
   }
 
   .icon-cp-container {

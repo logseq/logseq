@@ -69,6 +69,12 @@
     display: inline-flex;
     align-items: center;
     vertical-align: middle;
+    /* Optical lift: `vertical-align: middle` centers on the parent's
+       x-height middle, but readers compare the icon against the cap-
+       height middle (~2px higher in Inter at body size). The pure
+       geometric answer reads as "icon sags." translateY corrects
+       the optical center without disturbing layout flow. */
+    transform: translateY(-1px);
     padding-left: 1px;
 
     &.as-emoji {
@@ -101,6 +107,21 @@
   .icon-cp-container:not(.photo-icon) svg {
     width: 16px;
     height: 16px;
+  }
+
+  /* Emoji glyphs render via the native font (Apple Color Emoji etc.),
+     whose bounding box is ~32% taller than `font-size`. emoji-mart's
+     `<em-emoji size="20">` sets `font-size: 20px` on its inner span
+     and the visual lands at ~26.5px — overflowing the 20×20 slot.
+     Clamp the inner span's font-size to land at ~18-19px visual,
+     comfortably inside the slot. Both selectors are load-bearing:
+     emoji-mart's inline `font-size` on the descendant span wins over
+     `!important` on the ancestor, so we target both directly. (Same
+     pattern as icon.css:2214 for the customize-band's compact state.) */
+  .icon-cp-container:not(.photo-icon) em-emoji,
+  .icon-cp-container:not(.photo-icon) em-emoji span {
+    font-size: 16px !important;
+    line-height: 1 !important;
   }
 
   .icon-emoji-wrap em-emoji,
