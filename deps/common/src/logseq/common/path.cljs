@@ -134,7 +134,7 @@
   [scheme encoded-path]
   (cond-> encoded-path
     (= scheme "file:")
-    (string/replace #"^/([a-zA-Z])%3A(?=/|$)" "/$1:")))
+    (string/replace #"^/([a-zA-Z])%3[Aa](?=/|$)" "/$1:")))
 
 (defn url-join
   "Segments are not URL-encoded"
