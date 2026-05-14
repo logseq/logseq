@@ -110,7 +110,7 @@ values are:
 ### UI
 
 The repeat-setting popover in
-`src/main/frontend/components/property/value.cljs` exposes an "Anchor"
+`src/main/frontend/components/property/value.cljs` exposes a "Next date"
 selector bound to the `repeat-type` property. It appears whenever the
 task's repeat checkbox is enabled.
 
