@@ -45,12 +45,14 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Follow `logseq-cli` write rules and re-run the sync gate immediately before writing to `Lambda RTC`.
    - Stop if the root block cannot be updated as a task.
 
-4. Enable reproducibility tracking for bug and regression tasks.
-   - If the fetched task block or its children clearly identify the task as a bug or regression, update the fetched root block's `Reproducible?` property to `true` before doing the described work.
-   - Use the exact property name string key: `logseq upsert block --graph "Lambda RTC" --uuid "$normalized_uuid" --update-properties "{\"Reproducible?\" true}"`.
+4. Record reproducibility for bug and regression tasks.
+   - If the fetched task block or its children clearly identify the task as a bug or regression, update the fetched root block's `Reproducible?` property with one exact choice: `Not sure`, `Yes`, or `No`.
+   - Use `Yes` if the issue was reproduced, `No` if reproduction was actively attempted and failed, and `Not sure` if reproduction was not attempted or the evidence is insufficient.
+   - If the value is not known before doing the described work, set `Reproducible?` to `Not sure` first; if later evidence changes the value, update it before adding the completion summary.
+   - Use the exact property name string key and a string choice value: `logseq upsert block --graph "Lambda RTC" --uuid "$normalized_uuid" --update-properties "{\"Reproducible?\" \"$reproducible_value\"}"`.
    - Follow `logseq-cli` write rules and re-run the sync gate immediately before writing to `Lambda RTC`.
-   - Do not update or enable `Reproducible?` for idea or enhancement tasks.
-   - Stop if a clear bug or regression task cannot be updated with `Reproducible?`.
+   - Do not update `Reproducible?` for idea or enhancement tasks.
+   - Stop if a clear bug or regression task cannot be updated with one of the exact `Reproducible?` choices.
 
 5. Complete the described task.
    - Follow the fetched block tree, not assumptions from the UUID or graph name.
@@ -90,7 +92,7 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Mention the normalized UUID.
    - State that the sync gate passed, including `ws-state`, `pending-local`, and `pending-server`.
    - State that the task status was moved to `doing`, a summary child block was added, and the task status was moved to `in-review`.
-   - State whether `Reproducible?` was enabled for a bug or regression task, or skipped because the task was not a bug or regression.
+   - State which `Reproducible?` choice was recorded for a bug or regression task, or that it was skipped because the task was not a bug or regression.
    - If a PR was explicitly requested and created, include the PR URL and state that the `GitHub Url` property was updated. For bug or regression PRs with a linked GitHub issue, state that the commit message mentioned `fix $github_issue_url`. If no PR was requested, do not create one.
    - Summarize the task outcome and any verification performed.
 
@@ -104,7 +106,8 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
 - Never leave a created PR unrecorded on the fetched root block's `GitHub Url` property.
 - Never overwrite a bug or regression task's linked GitHub issue URL before preserving it for the commit message.
 - Never create a bug or regression PR for a task with a linked GitHub issue URL unless the commit message mentions `fix $github_issue_url`.
-- Never enable `Reproducible?` for idea or enhancement tasks.
-- Never skip enabling `Reproducible?` for a fetched task that is clearly a bug or regression.
+- Never set `Reproducible?` for idea or enhancement tasks.
+- Never use boolean values for `Reproducible?`; it is a default property with exact choices `Not sure`, `Yes`, and `No`.
+- Never skip recording one exact `Reproducible?` choice for a fetched task that is clearly a bug or regression.
 - Never skip the `doing` status write, completion summary child block, or final `in-review` status write when the described task completes successfully.
 - Stop on the first command error other than a sync status showing unopened sync, invalid JSON result, missing block, sync timeout, non-idle sync state, or non-actionable task brief.
