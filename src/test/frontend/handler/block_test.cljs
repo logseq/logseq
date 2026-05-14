@@ -47,3 +47,19 @@
     (with-redefs [db/get-db (fn [] @conn)]
       (is (= "Project/Milestone" (block-handler/block-unique-title project-milestone)))
       (is (= "Area/Milestone" (block-handler/block-unique-title area-milestone))))))
+
+(deftest block-unique-title-resolves-plain-class-map-before-title-formatting
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Project {:block/title "Project"}
+                         :Area {:block/title "Area"}
+                         :user.class/Milestone {:block/title "Milestone"
+                                                :build/class-extends [:Project]}
+                         :other.class/Milestone {:block/title "Milestone"
+                                                 :build/class-extends [:Area]}}})
+        project-milestone (d/entity @conn :user.class/Milestone)
+        plain-class-map {:db/id (:db/id project-milestone)
+                         :block/title (:block/title project-milestone)
+                         :block/tags [(d/entid @conn :logseq.class/Tag)]}]
+    (with-redefs [db/get-db (fn [] @conn)
+                  db/entity (fn [eid] (d/entity @conn eid))]
+      (is (= "Project/Milestone" (block-handler/block-unique-title plain-class-map))))))
