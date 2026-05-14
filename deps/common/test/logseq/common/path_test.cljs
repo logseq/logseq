@@ -22,6 +22,7 @@
     (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar" "baz")))
     (is (= "assets:///foo.bar/baz" (path/path-join "assets:///foo.bar/" "baz")))
     (is (= "file:///D:/a.txt" (path/path-join "file://" "D:/a.txt")))
+    (is (= "file:///c:/x" (path/path-join "file://" "c:/x")))
     (is (= "//NAS/MyGraph/logseq/config.edn" (path/path-join "//NAS/MyGraph" "logseq/config.edn")))))
 
 (deftest prepend-protocol
@@ -32,10 +33,14 @@
         "Windows UNC URL")))
 
 (deftest file-url-or-path->path
-  (testing "file URL and mldoc file link paths"
+  (testing "file URL paths"
     (is (= "D:/a.txt" (path/file-url-or-path->path "file:///D:/a.txt")))
-    (is (= "D:/a.txt" (path/file-url-or-path->path "/D:/a.txt")))
+    (is (= "c:/x" (path/file-url-or-path->path "file:///c:/x")))
+    (is (= "//nas/share/x" (path/file-url-or-path->path "file://NAS/share/x")))
+    (is (= "D:/a.txt" (path/file-url-or-path->path "file:///D%3A/a.txt")))
     (is (= "/home/admin/a.txt" (path/file-url-or-path->path "file:///home/admin/a.txt")))
+    (is (= "/D:/a.txt" (path/file-url-or-path->path "/D:/a.txt")))
+    (is (= "/D:\\a.txt" (path/file-url-or-path->path "/D:\\a.txt")))
     (is (= "/home/admin/a.txt" (path/file-url-or-path->path "/home/admin/a.txt")))))
 
 (deftest path-absolute

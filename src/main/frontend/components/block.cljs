@@ -1311,7 +1311,12 @@
 
 (defn- file-link-path->open-path
   [file-path]
-  (let [file-path (path/file-url-or-path->path file-path)]
+  (let [file-path (path/file-url-or-path->path file-path)
+        file-path (if (and util/win32?
+                           (string? file-path)
+                           (re-find #"^/[A-Za-z]:(?:[/\\]|$)" file-path))
+                    (subs file-path 1)
+                    file-path)]
     (if (or (path/absolute? file-path)
             (path/protocol-url? file-path))
       file-path
@@ -1441,8 +1446,8 @@
 
       :else
       (let [href (string-of-url url)
-            [protocol path] (or (and (= "Complex" (first url)) [(:protocol (second url)) (:link (second url))])
-                                (and (= "File" (first url)) ["file" (second url)]))
+            [protocol _path] (or (and (= "Complex" (first url)) [(:protocol (second url)) (:link (second url))])
+                                 (and (= "File" (first url)) ["file" (second url)]))
             config (cond-> config
                      (not (string/blank? protocol))
                      (assoc :link-js-url (try (js/URL. href)
@@ -1451,7 +1456,7 @@
           (= protocol "file")
           (if (show-link? href full_text)
             (media-link config url href label metadata full_text)
-            (let [file-path (file-link-path->open-path path)
+            (let [file-path (file-link-path->open-path href)
                   href* (if (util/electron?)
                           file-path
                           href)]

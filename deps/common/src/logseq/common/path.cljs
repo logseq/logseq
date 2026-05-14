@@ -228,15 +228,11 @@
     original-url))
 
 (defn file-url-or-path->path
-  "Converts a file URL or mldoc file link path to a local filesystem path."
+  "Converts a file URL to a local filesystem path."
   [s]
-  (let [path (if (is-file-url? s)
-               (url-to-path s)
-               s)]
-    (if (and (string? path)
-             (re-find #"(?i)^/[a-z]:(?:/|\\|$)" path))
-      (subs path 1)
-      path)))
+  (if (is-file-url? s)
+    (url-to-path s)
+    s))
 
 (defn trim-dir-prefix
   "Trim dir prefix from path"
