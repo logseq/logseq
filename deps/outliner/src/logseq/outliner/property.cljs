@@ -514,6 +514,14 @@
      (if (number? v) (d/entity @conn v) v)
      (map #(d/entity @conn %) block-eids))))
 
+(defn- normalize-default-url-property-value
+  [conn property value]
+  (if (number? value)
+    (do
+      (throw-error-if-invalid-property-value @conn property value)
+      (:block/title (d/entity @conn value)))
+    value))
+
 (defn batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
    Does no validation of property values. For :many properties, passing a collection
@@ -548,17 +556,10 @@
                  (fn [eid]
                    (if-let [block (d/entity @conn eid)]
                      (let [v' (if (and default-url-not-closed?
-                                       (not (and (keyword? v) entity-id?)))
-                                (let [normalize-default-url-value
-                                      (fn [value]
-                                        (if (number? value)
-                                          (do
-                                            (throw-error-if-invalid-property-value @conn property value)
-                                            (:block/title (d/entity @conn value)))
-                                          value))
-                                      value' (if (and many? (or (sequential? v') (set? v')))
-                                               (mapv normalize-default-url-value v')
-                                               (normalize-default-url-value v'))]
+                                        (not (and (keyword? v) entity-id?)))
+                                (let [value' (if (and many? (or (sequential? v') (set? v')))
+                                               (mapv #(normalize-default-url-property-value conn property %) v')
+                                               (normalize-default-url-property-value conn property v'))]
                                   (convert-ref-property-values conn property-id value' property-type
                                                                {:many? many?
                                                                 :block-id (:db/id block)}))
