@@ -465,8 +465,24 @@ a:hover {
 }
 
 .block-children .blocks {
-  list-style: initial;
-  padding-left: 18px;
+  list-style: none;
+  padding-left: 0;
+}
+
+.block-children .block {
+  position: relative;
+  padding-left: 24px;
+}
+
+.block-children .block::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 13px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--muted);
 }
 
 .block {
@@ -494,7 +510,8 @@ a:hover {
 }
 
 .block-content > .positioned-properties.block-left {
-  align-self: center;
+  align-self: flex-start;
+  margin-top: 6px;
 }
 
 .positioned-properties.block-right {
