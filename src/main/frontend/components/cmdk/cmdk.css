@@ -88,3 +88,15 @@
 .dark [data-cmdk-item][data-hoverable][data-highlighted]:hover {
   box-shadow: none;
 }
+
+/* Photo icons (avatar with image, or colored-circle initials fallback)
+   carry their own shape and color, so the slot's gray chip becomes a
+   frame around a frame and visually muddies the avatar's circle. Hide
+   the chip background while preserving the 20×20 slot for row alignment.
+   `.icon-cp-container.photo-icon` is set by `get-node-icon-cp` for any
+   icon of `:type :avatar` or `:image` (icon.cljs:953). Broken-asset
+   fallbacks (`.image-error`) keep their own bordered tile so they
+   still read as "settled but broken" without needing the chip. */
+.cp__cmdk-list-item-icon:has(> .icon-cp-container.photo-icon) {
+  background: transparent !important;
+}

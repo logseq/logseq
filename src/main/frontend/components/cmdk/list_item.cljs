@@ -98,7 +98,12 @@
       [:div.w-5.h-5.rounded.flex.items-center.justify-center
        {:style {:background (when (#{:gradient} icon-theme) "linear-gradient(-65deg, #8AE8FF, #5373E7, #369EFF, #00B1CC)")
                 :box-shadow (when (#{:gradient} icon-theme) "inset 0 0 0 1px rgba(255,255,255,0.3) ")}
-        :class (cond-> "w-5 h-5 rounded flex items-center justify-center"
+        ;; `cp__cmdk-list-item-icon` is a hook for the chip-suppression
+        ;; rule in cmdk.css — when this slot contains a photo-icon
+        ;; (avatar with image OR colored-circle initials fallback), the
+        ;; gray chip becomes transparent so the icon's own shape and
+        ;; color read cleanly. Tabler / text / emoji rows keep the chip.
+        :class (cond-> "w-5 h-5 rounded flex items-center justify-center cp__cmdk-list-item-icon"
                  (= icon-theme :color) (str
                                         " "
                                         (if highlighted "bg-accent-07-alpha" "bg-gray-05")
