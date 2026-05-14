@@ -1602,6 +1602,8 @@
                       non-page-block?
                       (conj (db/entity :logseq.class/Page)))
         classes (->> all-classes
+                     (mapcat (fn [class]
+                               (conj (:block/alias class) class)))
                      (common-util/distinct-by :db/id)
                      (map (fn [e] (select-keys e [:block/uuid :block/title]))))]
     (search/fuzzy-search classes q {:extract-fn :block/title})))
