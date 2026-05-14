@@ -219,7 +219,7 @@
 (defn- db-id-datom-clause?
   [form]
   (and (vector? form)
-       (<= 3 (count form))
+       (<= 2 (count form))
        (= :db/id (second form))))
 
 (def ^:private logical-clause-ops
