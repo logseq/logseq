@@ -1309,6 +1309,19 @@
         (join (config/get-repo-dir (state/get-current-repo))
               (config/get-local-asset-absolute-path path)))))
 
+(defn- file-link-path->open-path
+  [file-path]
+  (let [file-path (path/file-url-or-path->path file-path)
+        file-path (if (and util/win32?
+                           (string? file-path)
+                           (re-find #"^/[A-Za-z]:(?:[/\\]|$)" file-path))
+                    (subs file-path 1)
+                    file-path)]
+    (if (or (path/absolute? file-path)
+            (path/protocol-url? file-path))
+      file-path
+      (relative-assets-path->absolute-path file-path))))
+
 (rum/defc audio-link
   [config url href _label metadata full_text]
   (if (common-config/local-relative-asset? href)
@@ -1391,13 +1404,14 @@
     (util/electron?)
     (let [path (cond
                  (string/starts-with? s "file://")
-                 (string/replace s "file://" "")
+                 s
 
                  (string/starts-with? s "/")
                  s
 
                  :else
-                 (relative-assets-path->absolute-path s))]
+                 (relative-assets-path->absolute-path s))
+          path (file-link-path->open-path path)]
       (->elem
        :a
        (cond->
@@ -1432,8 +1446,8 @@
 
       :else
       (let [href (string-of-url url)
-            [protocol path] (or (and (= "Complex" (first url)) [(:protocol (second url)) (:link (second url))])
-                                (and (= "File" (first url)) ["file" (second url)]))
+            [protocol _path] (or (and (= "Complex" (first url)) [(:protocol (second url)) (:link (second url))])
+                                 (and (= "File" (first url)) ["file" (second url)]))
             config (cond-> config
                      (not (string/blank? protocol))
                      (assoc :link-js-url (try (js/URL. href)
@@ -1442,8 +1456,9 @@
           (= protocol "file")
           (if (show-link? href full_text)
             (media-link config url href label metadata full_text)
-            (let [href* (if (util/electron?)
-                          (relative-assets-path->absolute-path href)
+            (let [file-path (file-link-path->open-path href)
+                  href* (if (util/electron?)
+                          file-path
                           href)]
               [:div.flex.flex-row.items-center
                (ui/icon "file" {:class "opacity-50"})
@@ -1452,7 +1467,7 @@
                 (cond-> (if (util/electron?)
                           {:on-click (fn [e]
                                        (util/stop e)
-                                       (js/window.apis.openPath path))
+                                       (js/window.apis.openPath file-path))
                            :data-href href*}
                           {:href (path/path-join "file://" href*)
                            :data-href href*
