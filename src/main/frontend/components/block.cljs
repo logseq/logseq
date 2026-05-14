@@ -1391,13 +1391,14 @@
     (util/electron?)
     (let [path (cond
                  (string/starts-with? s "file://")
-                 (string/replace s "file://" "")
+                 (path/file-url-or-path->path s)
 
                  (string/starts-with? s "/")
                  s
 
                  :else
-                 (relative-assets-path->absolute-path s))]
+                 (relative-assets-path->absolute-path s))
+          path (path/file-url-or-path->path path)]
       (->elem
        :a
        (cond->
@@ -1442,8 +1443,9 @@
           (= protocol "file")
           (if (show-link? href full_text)
             (media-link config url href label metadata full_text)
-            (let [href* (if (util/electron?)
-                          (relative-assets-path->absolute-path href)
+            (let [file-path (path/file-url-or-path->path path)
+                  href* (if (util/electron?)
+                          file-path
                           href)]
               [:div.flex.flex-row.items-center
                (ui/icon "file" {:class "opacity-50"})
@@ -1452,7 +1454,7 @@
                 (cond-> (if (util/electron?)
                           {:on-click (fn [e]
                                        (util/stop e)
-                                       (js/window.apis.openPath path))
+                                       (js/window.apis.openPath file-path))
                            :data-href href*}
                           {:href (path/path-join "file://" href*)
                            :data-href href*
