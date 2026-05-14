@@ -694,6 +694,10 @@
              (mapv :db/id (:block/refs (db-test/find-block-by-content @conn #"ref to"))))
           "block with a block-ref has correct :block/refs")
 
+      (is (= "ref to [[65cbb772-fb79-462d-87c8-6f0dad751dee]]"
+             (:block/title (db-test/find-block-by-content @conn #"ref to")))
+          "block-ref ((uuid)) is converted to page-ref [[uuid]] in block title on import")
+
       (is (= 20221126
              (-> (db-test/readable-properties (db-test/find-block-by-content @conn "only deadline"))
                  :logseq.property/deadline

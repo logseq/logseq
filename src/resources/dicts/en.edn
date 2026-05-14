@@ -93,7 +93,6 @@
  :block/open-block-references "Open block references"
  :block/practice "Practice"
  :block/practice-cards "Practice cards"
- :block/ref-nesting-too-deep "Block ref nesting is too deep"
  :block/remove-tag "Remove tag"
  :block/remove-this-tag "Remove this tag"
  :block/render-error "Block Render Error:"

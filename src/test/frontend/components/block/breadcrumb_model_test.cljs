@@ -134,7 +134,64 @@
                {:db/id 1
                 :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
                 :block/raw-title "plain text"})]
-      (is (= "plain text" (:text seg))))))
+      (is (= "plain text" (:text seg)))))
+
+  (testing "block uuid page refs are resolved to page title refs"
+    (let [ref-uuid #uuid "00000000-0000-0000-0000-000000000002"
+          seg (model/block->breadcrumb-segment
+               {:db/id 1
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
+                :block/raw-title (str "See [[" ref-uuid "]]")
+                :block/refs [{:db/id 2
+                              :block/uuid ref-uuid
+                              :block/name "aaa"
+                              :block/title "aaa"}]})]
+      (is (= "See [[aaa]]" (:text seg)))
+      (is (= "See [[aaa]]" (:full-text seg)))))
+
+  (testing "block uuid tag refs are resolved to tag labels"
+    (let [ref-uuid #uuid "00000000-0000-0000-0000-000000000002"
+          seg (model/block->breadcrumb-segment
+               {:db/id 1
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
+                :block/raw-title (str "Tagged #[[" ref-uuid "]]")
+                :block/refs [{:db/id 2
+                              :block/uuid ref-uuid
+                              :block/name "aaa"
+                              :block/title "aaa"}]})]
+      (is (= "Tagged #aaa" (:text seg)))
+      (is (= "Tagged #aaa" (:full-text seg)))))
+
+  (testing "unloaded uuid refs stay unchanged in partial UI db"
+    (let [ref-uuid #uuid "00000000-0000-0000-0000-000000000002"
+          seg (model/block->breadcrumb-segment
+               {:db/id 1
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
+                :block/raw-title (str "See [[" ref-uuid "]]")
+                :block/refs [{:db/id 2
+                              :block/uuid ref-uuid}]})]
+      (is (= (str "See [[" ref-uuid "]]") (:text seg)))
+      (is (= (str "See [[" ref-uuid "]]") (:full-text seg))))))
+
+(deftest block->breadcrumb-segment-title-ref-ids-test
+  (testing "returns uuid refs from the breadcrumb label line"
+    (let [visible-uuid #uuid "00000000-0000-0000-0000-000000000002"
+          hidden-uuid #uuid "00000000-0000-0000-0000-000000000003"
+          seg (model/block->breadcrumb-segment
+               {:db/id 1
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
+                :block/raw-title (str "See [[" visible-uuid "]]\nIgnore [[" hidden-uuid "]]")})]
+      (is (= [visible-uuid]
+             (vec (:title-ref-ids seg))))))
+
+  (testing "includes tag-style uuid refs"
+    (let [ref-uuid #uuid "00000000-0000-0000-0000-000000000002"
+          seg (model/block->breadcrumb-segment
+               {:db/id 1
+                :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
+                :block/raw-title (str "Tagged #[[" ref-uuid "]]")})]
+      (is (= [ref-uuid]
+             (vec (:title-ref-ids seg)))))))
 
 ;; ---------------------------------------------------------------------------
 ;; block->breadcrumb-segment — structural type detection

@@ -93,6 +93,44 @@
     ;; return global fn back to previous behavior
     (ldb/register-transact-pipeline-fn! identity)))
 
+(deftest code-block-tag-addition-preserves-explicit-code-lang-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page1"}}]})
+        page (ldb/get-page @conn "page1")
+        now (js/Date.now)
+        code-block-uuid (random-uuid)
+        code-block-without-lang-uuid (random-uuid)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn [{:db/ident :logseq.kv/latest-code-lang
+                            :kv/value "pascal"}])
+      (ldb/transact! conn [{:block/uuid code-block-uuid
+                            :block/title "1 + 2"
+                            :block/created-at now
+                            :block/updated-at now
+                            :block/page (:db/id page)
+                            :block/parent (:db/id page)
+                            :block/order (db-order/gen-key)
+                            :block/tags [:logseq.class/Code-block]
+                            :logseq.property.code/lang "calc"}])
+      (let [block (d/entity @conn [:block/uuid code-block-uuid])]
+        (is (= :code (:logseq.property.node/display-type block)))
+        (is (= "calc" (:logseq.property.code/lang block))))
+      (ldb/transact! conn [{:block/uuid code-block-without-lang-uuid
+                            :block/title "plain code"
+                            :block/created-at now
+                            :block/updated-at now
+                            :block/page (:db/id page)
+                            :block/parent (:db/id page)
+                            :block/order (db-order/gen-key)
+                            :block/tags [:logseq.class/Code-block]}])
+      (let [block (d/entity @conn [:block/uuid code-block-without-lang-uuid])]
+        (is (= :code (:logseq.property.node/display-type block)))
+        (is (= "pascal" (:logseq.property.code/lang block))))
+      (finally
+        ;; return global fn back to previous behavior
+        (ldb/register-transact-pipeline-fn! identity)))))
+
 (deftest journal-name-title-updates-throw-in-transact-pipeline-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks [{:page {:build/journal 20250203}}
