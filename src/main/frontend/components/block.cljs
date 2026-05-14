@@ -105,9 +105,6 @@
   (atom nil))
 (def *move-to (atom nil))
 
-;; TODO: dynamic
-(defonce max-depth-of-links 5)
-
 ;; TODO:
 ;; add `key`
 
@@ -1347,11 +1344,23 @@
       :else
       (asset-reference config label s))))
 
+(defn- hashtag-search-tag-page-name
+  [s]
+  (when (and (not (string/blank? s))
+             (= \# (first s)))
+    (let [page-name (text/page-ref-un-brackets! (subs s 1))
+          page (db/get-page page-name)]
+      (when (some #(= :logseq.class/Tag (:db/ident %)) (:block/tags page))
+        page-name))))
+
 (defn- search-link-cp
   [config url s label title metadata full_text]
   (cond
     (string/blank? s)
     [:span.warning {:title (t :block/invalid-link)} full_text]
+
+    (hashtag-search-tag-page-name s)
+    (page-reference config (hashtag-search-tag-page-name s) label)
 
     (= \# (first s))
     (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
@@ -1405,16 +1414,7 @@
   (let [{:keys [url label title metadata full_text]} link]
     (match url
       ["Block_ref" id]
-      (let [label* (if (seq (mldoc/plain->text label)) label nil)
-            {:keys [link-depth]} config
-            link-depth (or link-depth 0)]
-        (if (> link-depth max-depth-of-links)
-          [:p.warning.text-sm (t :block/ref-nesting-too-deep)]
-          (block-reference (assoc config
-                                  :reference? true
-                                  :link-depth (inc link-depth)
-                                  :block/uuid id)
-                           id label*)))
+      (str block-ref/left-parens id block-ref/right-parens)
 
       ["Page_ref" page]
       (let [label* (if (seq (mldoc/plain->text label)) label nil)]
@@ -3218,6 +3218,21 @@
   (when (:db/id seg)
     (db/entity (:db/id seg))))
 
+(defn- missing-breadcrumb-ref-ids
+  [segments]
+  (->> segments
+       (mapcat :title-ref-ids)
+       distinct
+       (remove (fn [id]
+                 (some-> (db/entity [:block/uuid id]) :block/title string?)))
+       vec))
+
+(defn- <hydrate-breadcrumb-ref-titles!
+  [repo segments]
+  (let [ref-ids (missing-breadcrumb-ref-ids segments)]
+    (when (seq ref-ids)
+      (db-async/<get-blocks repo ref-ids {:children? false}))))
+
 (rum/defc breadcrumb-search-overflow-tooltip
   [title]
   (ui/tooltip
@@ -3238,8 +3253,14 @@
         target-db-id (:db/id target-entity)
         load-full-hidden! (fn []
                             (when (and target-db-id (nil? @full-hidden))
-                              (p/let [parents (db-async/<get-block-parents repo target-db-id 1000)]
-                                (let [parents (remove nil? (concat parents [from-property]))
+                              (p/let [parents (db-async/<get-block-parents repo target-db-id 1000)
+                                      _ (<hydrate-breadcrumb-ref-titles!
+                                         repo
+                                         (breadcrumb-segments target-entity parents))]
+                                (let [target-entity (or (db/entity target-db-id) target-entity)
+                                      from-property (or (some-> from-property :db/id db/entity) from-property)
+                                      parents (remove nil? (concat (db/get-block-parents repo (:block/uuid target-entity) {:depth 1000})
+                                                                   [from-property]))
                                       segments (breadcrumb-segments target-entity parents)
                                       view (breadcrumb-model/build-breadcrumb-view
                                             segments
@@ -3349,13 +3370,19 @@
         load-depth (:load-depth (breadcrumb-model/variant-options effective-variant))]
     (hooks/use-effect!
      (fn []
-       (p/let [block (db-async/<get-block (state/get-current-repo)
-                                          block-id
-                                          {:children? false
-                                           :skip-refresh? true})
-               _ (when-let [id (:db/id block)]
-                   (db-async/<get-block-parents (state/get-current-repo) id load-depth))]
-         (set-block! block)))
+       (let [repo (state/get-current-repo)]
+         (p/let [block (db-async/<get-block repo
+                                            block-id
+                                            {:children? false
+                                             :skip-refresh? true})
+                 parents (when-let [id (:db/id block)]
+                           (db-async/<get-block-parents repo id load-depth))
+                 ;; Parent blocks can arrive before the UI DB has loaded page refs
+                 ;; used in their titles. Hydrate only those refs before rendering.
+                 _ (<hydrate-breadcrumb-ref-titles! repo (breadcrumb-segments block parents))]
+           (set-block! (or (when-let [uuid (:block/uuid block)]
+                             (db/entity [:block/uuid uuid]))
+                           block)))))
      [])
     (when block
       (breadcrumb-aux config repo block-id opts))))
