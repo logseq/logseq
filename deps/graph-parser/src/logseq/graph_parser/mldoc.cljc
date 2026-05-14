@@ -375,7 +375,9 @@
           (= \` c)
           (let [run-length (backtick-run-length source idx)
                 end-idx (matching-backtick-index source idx run-length)]
-            (recur (+ idx run-length) end-idx))
+            (if end-idx
+              (recur (+ idx run-length) end-idx)
+              true))
 
           (and (= \| c)
                (some? code-end))
