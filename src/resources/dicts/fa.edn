@@ -93,7 +93,6 @@
  :block/open-block-references "باز کردن مراجع بلوک"
  :block/practice "تمرین"
  :block/practice-cards "تمرین کارت‌ها"
- :block/ref-nesting-too-deep "تودرتویی مرجع بلوک بیش از حد عمیق است"
  :block/remove-tag "حذف برچسب"
  :block/remove-this-tag "حذف این برچسب"
  :block/render-error "خطای رندر بلوک:"
