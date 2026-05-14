@@ -433,7 +433,7 @@
         property (rum/react *property)
         property-key (rum/react *property-key)
         batch? (pv/batch-operation?)
-        hide-property-key? (or (contains? #{:date :datetime} (:logseq.property/type property))
+        hide-property-key? (or (pv/direct-value-picker-type? (:logseq.property/type property))
                                (= (:db/ident property) :logseq.property/icon)
                                (pv/select-type? block property)
                                (and

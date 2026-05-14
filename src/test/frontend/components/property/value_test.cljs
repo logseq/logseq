@@ -66,6 +66,38 @@
     (is (= (:logseq.property/default-value property)
            (#'property-value/resolved-property-value-for-render loaded-block property false)))))
 
+(deftest direct-value-picker-type-test
+  (is (true? (property-value/direct-value-picker-type? :date)))
+  (is (true? (property-value/direct-value-picker-type? :datetime)))
+  (is (true? (property-value/direct-value-picker-type? :asset)))
+  (is (false? (property-value/direct-value-picker-type? :default))))
+
+(deftest asset-picker-layout-is-viewport-constrained-test
+  (is (= "min(640px, calc(100vw - 32px))"
+         (:width property-value/asset-picker-grid-style)))
+  (is (= "100%" (:max-width property-value/asset-picker-grid-style)))
+  (is (= "repeat(auto-fill, minmax(140px, 1fr))"
+         (:grid-template-columns property-value/asset-picker-items-grid-style))))
+
+(deftest asset-selected-ids-test
+  (let [property {:db/ident :asset}]
+    (is (= #{1}
+           (#'property-value/asset-selected-ids {:asset {:db/id 1}} property)))
+    (is (= #{1 2}
+           (#'property-value/asset-selected-ids {:asset #{{:db/id 1} {:db/id 2}}} property)))
+    (is (= #{}
+           (#'property-value/asset-selected-ids {} property)))))
+
+(deftest assets-selected-first-test
+  (let [assets [{:db/id 1 :block/title "one"}
+                {:db/id 2 :block/title "two"}
+                {:db/id 3 :block/title "three"}]]
+    (is (= [2 1 3]
+           (mapv :db/id (#'property-value/assets-selected-first assets #{2}))))
+    (is (= [1 3 2]
+           (mapv :db/id (#'property-value/assets-selected-first assets #{1 3})))
+        "Selected assets stay in their original relative order")))
+
 (deftest add-initial-node-choice-dedupes-existing-db-id-test
   (let [existing {:value {:db/id 100
                           :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}

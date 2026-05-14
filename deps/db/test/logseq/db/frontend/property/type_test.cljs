@@ -14,9 +14,8 @@
   (testing ":asset validator requires a datascript db"
     (is (contains? db-property-type/property-types-with-db :asset)))
 
-  (testing ":asset is deliberately excluded from single-value-only sets"
-    (is (not (contains? db-property-type/cardinality-property-types :asset))
-        ":asset should not be in cardinality-property-types yet — many-cardinality UI isn't supported")
+  (testing ":asset can be configured as multiple values"
+    (is (contains? db-property-type/cardinality-property-types :asset))
     (is (not (contains? db-property-type/closed-value-property-types :asset))
         ":asset should not support closed values")))
 
