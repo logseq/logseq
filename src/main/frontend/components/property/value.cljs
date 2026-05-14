@@ -347,9 +347,12 @@
            [:span (str "Clear " diverged-count " customized icon"
                        (when (not= 1 diverged-count) "s"))]))
          (shui/tooltip-content
-          (str "Clear " diverged-count " customized icon"
-               (when (not= 1 diverged-count) "s")
-               " — these rows will inherit from this default again")))))]))
+          {:side "top" :align "center" :show-arrow true}
+          [:div.text-center
+           [:div.font-medium "Reset to this default"]
+           [:div.text-xs.opacity-70.mt-0.5
+            (str "Replaces " diverged-count " custom icon"
+                 (when (not= 1 diverged-count) "s"))]]))))]))
 
 (defn select-type?
   [block property]
