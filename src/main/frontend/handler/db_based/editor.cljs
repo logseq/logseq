@@ -98,7 +98,6 @@
                        (when (tag-page? page)
                          page)))))))
        (map #(select-keys % [:db/id :block/uuid :block/title :block/name :db/ident :block/tags]))
-       (remove nil?)
        (util/distinct-by-last-wins :block/uuid)))
 
 (defn wrap-parse-block
