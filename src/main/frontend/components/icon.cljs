@@ -362,13 +362,32 @@
                 state)
    :did-update (fn [state]
                  (let [[asset-uuid asset-type-arg _opts] (:rum/args state)
+                       *url (::url state)
+                       *error (::error state)
                        *loaded-uuid (::loaded-uuid state)]
-                   (when (and asset-uuid (not= @*loaded-uuid asset-uuid))
+                   (cond
+                     ;; New uuid → fresh load.
+                     (and asset-uuid (not= @*loaded-uuid asset-uuid))
                      (let [asset-type (or asset-type-arg
-                                          (get-asset-type-from-db asset-uuid))
-                           *url (::url state)
-                           *error (::error state)]
+                                          (get-asset-type-from-db asset-uuid))]
                        (reset! *loaded-uuid asset-uuid)
+                       (<load-asset-url! *url *error asset-uuid asset-type
+                                         {:try-extensions? (nil? asset-type)
+                                          :*load-id (::load-id state)}))
+                     ;; Retraction: this uuid appears in the latest tx's
+                     ;; :deleted-ids. Clear *url so the image vanishes; a
+                     ;; follow-up load attempt fails (file deleted by the
+                     ;; outliner pipeline) and *error flips → image-error
+                     ;; fallback renders.
+                     (and asset-uuid (string? asset-uuid) @*url
+                          (let [uuid-val (try (uuid asset-uuid) (catch :default _ nil))
+                                deleted (some-> @(get @state/state :db/latest-transacted-entity-uuids)
+                                                :deleted-ids)]
+                            (and uuid-val deleted (contains? deleted uuid-val))))
+                     (let [asset-type (or asset-type-arg
+                                          (get-asset-type-from-db asset-uuid))]
+                       (reset! *url nil)
+                       (reset! *error false)
                        (<load-asset-url! *url *error asset-uuid asset-type
                                          {:try-extensions? (nil? asset-type)
                                           :*load-id (::load-id state)}))))
@@ -377,26 +396,30 @@
    Tries common extensions if asset-type is unknown.
    Accepts optional :on-click-error callback in opts for error state clicks."
   [state asset-uuid _asset-type-arg opts]
-  (let [;; Reactive existence check. `model/sub-block` cannot drive
-        ;; this — the worker's affected-keys pipeline
-        ;; (worker/react.cljs:63-67) calls `(d/entity db-after id)`,
-        ;; which returns nil for retracted entities, so no
-        ;; `[::block id]` is emitted and subscriptions on retracted
-        ;; entities never fire. Subscribe to
-        ;; `:db/latest-transacted-entity-uuids` instead — set at
-        ;; modules/outliner/pipeline.cljs:56-58 after every main-thread
-        ;; tx, carrying the `:deleted-ids` uuid set. Any tx flips the
-        ;; atom, we re-render, and the follow-up `db/entity` returns
-        ;; nil → fallback / placeholder renders. Self-healing: if a
-        ;; same-uuid asset is later recreated, the next tx re-renders
-        ;; and the entity lookup hydrates.
+  (let [;; Re-render on any main-thread tx so we can react to retractions.
+        ;; `model/sub-block` can't drive this — the worker's affected-keys
+        ;; pipeline (worker/react.cljs:63-67) calls `(d/entity db-after id)`,
+        ;; which returns nil for retracted entities, so no `[::block id]`
+        ;; is emitted and subscriptions on retracted entities never fire.
+        ;; `:db/latest-transacted-entity-uuids` (modules/outliner/pipeline.cljs:56-58)
+        ;; flips on every tx and is the reliable retraction signal.
         _latest-tx (state/sub :db/latest-transacted-entity-uuids)
-        asset-entity (when (and asset-uuid (string? asset-uuid))
-                       (try (db/entity [:block/uuid (uuid asset-uuid)])
-                            (catch :default _ nil)))
-        asset-missing? (and asset-uuid (string? asset-uuid) (nil? asset-entity))
         url @(::url state)
-        error? (or @(::error state) asset-missing?)
+        load-error? @(::error state)
+        ;; Render decision is driven purely by load outcome: URL set →
+        ;; image; load-error → fallback; otherwise → loading placeholder.
+        ;; Entity presence is *not* part of this gate — on cold reload
+        ;; the asset block hasn't transacted into the main-thread DB yet
+        ;; even though the file loads fine from the worker, so gating
+        ;; the URL on `(db/entity …)` masks a working blob URL with the
+        ;; image-error fallback until an unrelated query (e.g. visiting
+        ;; `#Asset`) hydrates the block.
+        ;;
+        ;; Retraction is handled in `:did-update` by watching
+        ;; `:db/latest-transacted-entity-uuids :deleted-ids` and
+        ;; clearing `*url` so the next load attempt fails into the
+        ;; fallback (see below).
+        error? load-error?
         size (or (:size opts) 20)
         on-click-error (:on-click-error opts)]
     (cond
@@ -463,27 +486,41 @@
                 state)
    :did-update (fn [state]
                  (let [[asset-uuid asset-type _avatar-data _opts] (:rum/args state)
+                       *url (::url state)
+                       *error (::error state)
                        *loaded-for (::loaded-for state)]
-                   (when (and asset-uuid (not= @*loaded-for [asset-uuid asset-type]))
-                     (let [*url (::url state)
-                           *error (::error state)]
-                       (reset! *loaded-for [asset-uuid asset-type])
-                       (<load-asset-url! *url *error asset-uuid asset-type
-                                         {:try-extensions? (nil? asset-type)
-                                          :*load-id (::load-id state)}))))
+                   (cond
+                     (and asset-uuid (not= @*loaded-for [asset-uuid asset-type]))
+                     (do (reset! *loaded-for [asset-uuid asset-type])
+                         (<load-asset-url! *url *error asset-uuid asset-type
+                                           {:try-extensions? (nil? asset-type)
+                                            :*load-id (::load-id state)}))
+                     ;; Retraction signal — see `image-icon-cp` :did-update.
+                     (and asset-uuid (string? asset-uuid) @*url
+                          (let [uuid-val (try (uuid asset-uuid) (catch :default _ nil))
+                                deleted (some-> @(get @state/state :db/latest-transacted-entity-uuids)
+                                                :deleted-ids)]
+                            (and uuid-val deleted (contains? deleted uuid-val))))
+                     (do (reset! *url nil)
+                         (reset! *error false)
+                         (<load-asset-url! *url *error asset-uuid asset-type
+                                           {:try-extensions? (nil? asset-type)
+                                            :*load-id (::load-id state)}))))
                  state)}
   "Renders an avatar with an image, with initials as fallback.
    Uses shui/avatar for circular display with object-fit: cover."
   [state asset-uuid _asset-type avatar-data opts]
-  (let [;; Reactive existence check — see `image-icon-cp` above for
-        ;; the design rationale (subscribing to the per-tx atom is
-        ;; what catches retractions; `model/sub-block` doesn't).
+  (let [;; Re-render on every tx so :did-update can react to retractions
+        ;; (it watches `:deleted-ids` and clears `*url`).
         _latest-tx (state/sub :db/latest-transacted-entity-uuids)
-        asset-entity (when (and asset-uuid (string? asset-uuid))
-                       (try (db/entity [:block/uuid (uuid asset-uuid)])
-                            (catch :default _ nil)))
-        asset-missing? (and asset-uuid (string? asset-uuid) (nil? asset-entity))
-        url (when-not asset-missing? @(::url state))
+        url @(::url state)
+        ;; Render is driven purely by load outcome. Don't gate on
+        ;; `(db/entity …)` presence: on cold reload the asset block
+        ;; hasn't transacted into the main-thread DB yet even though
+        ;; the file loads fine from the worker, and gating here masks a
+        ;; working blob URL with the initials fallback until an
+        ;; unrelated query hydrates the block.
+        _load-error? @(::error state)
         ;; Size from opts, default to 20px
         size (or (:size opts) 20)
         ;; Fallback data from avatar
@@ -505,17 +542,17 @@
                                                :bg explicit-bg
                                                :color explicit-color})]
     (shui/avatar
-     {;; Force-remount when the asset transitions present <-> missing.
+     {;; Force-remount when the URL transitions absent <-> present.
       ;; Radix's Avatar primitive tracks image-loading status in
       ;; context. Once Avatar.Image reports "loaded", that status
       ;; sticks even after Avatar.Image unmounts — Avatar.Fallback
       ;; reads the status and stays hidden because it thinks the
-      ;; image is still loaded. Toggling the key on `asset-missing?`
+      ;; image is still loaded. Toggling the key on URL presence
       ;; forces a fresh mount with a clean status machine, so the
-      ;; fallback renders the moment the asset disappears (and the
-      ;; image is shown afresh if the asset is re-created or hydrates
-      ;; lazily later).
-      :key (if asset-missing? "no-image" "with-image")
+      ;; fallback renders the moment the URL clears (e.g. retraction
+      ;; clears `*url`) and the image renders afresh when a new URL
+      ;; lands.
+      :key (if url "with-image" "no-image")
       :style {:width size :height size}
       :data-shape (name shape)}
      ;; Image (shows when loaded, circular with cover fit)
