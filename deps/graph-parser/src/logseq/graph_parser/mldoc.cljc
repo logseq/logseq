@@ -494,10 +494,10 @@
         (seq current) (conj current)))))
 
 (defn- table-col-groups
-  [fallback-table col-count]
+  [fallback-table header-col-count col-count]
   (let [col-groups (:col_groups fallback-table)]
     (if (and (seq col-groups)
-             (= col-count (reduce + col-groups)))
+             (= header-col-count (reduce + col-groups)))
       col-groups
       [col-count])))
 
@@ -513,7 +513,7 @@
         (assoc fallback-table
                :header header
                :groups groups
-               :col_groups (table-col-groups fallback-table col-count)))
+               :col_groups (table-col-groups fallback-table (count header) col-count)))
       fallback-table)))
 
 (defn- table-ast-item?
