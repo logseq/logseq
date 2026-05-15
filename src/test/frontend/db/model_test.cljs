@@ -79,6 +79,18 @@
                     conn (:db/id already-a) :block/alias (:db/id new-target)))
           "page that is an alias cannot gain its own aliases"))))
 
+(deftest page-alias-converts-string-value-via-set-block-property
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "canonical-string-alias"}}]})
+        canonical (db-test/find-page-by-title @conn "canonical-string-alias")]
+    (outliner-property/set-block-property!
+     conn (:db/id canonical) :block/alias "string-alias")
+    (let [alias-page (db-test/find-page-by-title @conn "string-alias")
+          canonical' (d/entity @conn (:db/id canonical))]
+      (is alias-page)
+      (is (= #{(:db/id alias-page)}
+             (set (map :db/id (:block/alias canonical'))))))))
+
 (deftest page-alias-invariants-reject-invalid-via-batch-set-property
   (testing "batch path: duplicate owner is rejected"
     (let [conn (db-test/create-conn-with-blocks

@@ -669,14 +669,20 @@
 
         :else
         (batch-remove-property! conn [eid] property-id)))))
+
 (defn- set-block-db-attribute!
-  [conn db block property property-id v]
-  (throw-error-if-invalid-property-value db property v)
-  (when (= property-id :block/alias)
-    (throw-error-if-invalid-alias db block v))
-  (when-not (and (= property-id :block/alias) (= v (:db/id block)))
+  [conn block property property-id raw-v tx-v]
+  (let [validation-db @conn
+        validation-v (if (and (= :db.type/ref (:db/valueType property))
+                              (some? tx-v))
+                       tx-v
+                       raw-v)]
+    (throw-error-if-invalid-property-value validation-db property validation-v)
+    (when (= property-id :block/alias)
+      (doseq [alias-id (if (coll? tx-v) tx-v [tx-v])]
+        (throw-error-if-invalid-alias validation-db block alias-id)))
     (let [tx-data (cond->
-                   [{:db/id (:db/id block) property-id v}]
+                   [{:db/id (:db/id block) property-id tx-v}]
                     (= property-id :logseq.property.class/extends)
                     (conj [:db/retract (:db/id block) :logseq.property.class/extends :logseq.class/Root]))]
       (ldb/transact! conn tx-data
@@ -719,7 +725,7 @@
              (outliner-validate/validate-extends-property @conn v' [block]))
            (cond
              db-attribute?
-             (set-block-db-attribute! conn db block property property-id v)
+             (set-block-db-attribute! conn block property property-id v v')
 
              :else
              (let [_ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
