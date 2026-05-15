@@ -524,11 +524,29 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- block-search-title
   "Build display title from block entity with original casing."
   [block]
-  (cond->
-    (let [block' (update block :block/title ldb/get-title-with-parents)]
-      (db-content/recur-replace-uuid-in-block-title block'))
-    (ldb/journal? block)
-    (str " " (:block/journal-day block))))
+  (let [title (db-content/recur-replace-uuid-in-block-title
+               (assoc block :block/title (ldb/get-title-with-parents block)))
+        title (cond-> title
+                (ldb/journal? block)
+                (str " " (:block/journal-day block)))]
+    (if (page-or-object? block)
+      (->> (concat [title] (keep :block/title (:block/alias block)))
+           (remove string/blank?)
+           distinct
+           (string/join " "))
+      title)))
+
+(defn- matched-alias
+  [q block]
+  (when-not (string/blank? q)
+    (let [q' (string/lower-case q)]
+      (when-let [alias (->> (:block/alias block)
+                            (filter (fn [alias]
+                                      (some-> (:block/title alias)
+                                              string/lower-case
+                                              (string/includes? q'))))
+                            first)]
+        (select-keys alias [:block/uuid :block/title])))))
 
 (defn block->index
   "Convert a block to the index for searching"
@@ -647,9 +665,14 @@ DROP TRIGGER IF EXISTS blocks_au;
     (when-let [block (or (get result search-result-block-key)
                          (d/entity @conn [:block/uuid block-id]))]
       (when (include-search-block? conn block code-class option)
-        (let [display-title (if (:enable-snippet? option)
+        (let [alias-source (some-> (first (:block/_alias block))
+                                   (select-keys [:block/uuid :block/title]))
+              alias-match (matched-alias q block)
+              display-title (if (:enable-snippet? option)
                               (ensure-highlighted-snippet snippet title q)
-                              (or snippet title))
+                              (if alias-match
+                                (:block/title block)
+                                (or snippet title)))
               block-page (or
                           (:block/uuid (:block/page block))
                           (when (and page (common-util/uuid-string? page))
@@ -657,8 +680,7 @@ DROP TRIGGER IF EXISTS blocks_au;
               parent-id (:db/id (:block/parent block))
               tag-ids (seq (map :db/id (:block/tags block)))
               icon (:logseq.property/icon block)
-              alias (some-> (first (:block/_alias block))
-                            (select-keys [:block/uuid :block/title]))]
+              alias (or alias-source alias-match)]
           (cond-> {:db/id (:db/id block)
                    :block/uuid (:block/uuid block)
                    :block/title display-title
@@ -792,7 +814,10 @@ DROP TRIGGER IF EXISTS blocks_au;
           (referrer-eids [db eids]
             (->> eids
                  (mapcat (fn [id]
-                           (map :db/id (:block/_refs (d/entity db id)))))
+                           (let [entity (d/entity db id)]
+                             (concat
+                              (map :db/id (:block/_refs entity))
+                              (map :db/id (:block/_alias entity))))))
                  set))
           (entities-for [db eids {:keys [include-tree? include-refs?]}]
             (let [entities (keep #(d/entity db %) eids)
@@ -808,11 +833,14 @@ DROP TRIGGER IF EXISTS blocks_au;
                    distinct
                    (remove nil?))))]
     (when (seq datoms)
-      (let [ref-affecting-attrs #{:block/uuid :block/name :block/title :block/properties}
+      (let [ref-affecting-attrs #{:block/uuid :block/name :block/title :block/properties :block/alias}
             visibility-affecting-attrs #{:logseq.property/deleted-at :block/parent :block/page}
             ref-eids (->> datoms
                           (filter #(contains? ref-affecting-attrs (:a %)))
-                          (map :e)
+                          (mapcat (fn [{:keys [a e v]}]
+                                    (cond-> [e]
+                                      (= :block/alias a)
+                                      (conj v))))
                           set)
             visibility-eids (->> datoms
                                  (filter #(contains? visibility-affecting-attrs (:a %)))
@@ -829,8 +857,8 @@ DROP TRIGGER IF EXISTS blocks_au;
   (let [data (:tx-data tx-report)
         datoms (filter
                 (fn [datom]
-                  ;; Capture any direct change on page display title, page ref or block content
-                  (contains? #{:block/uuid :block/name :block/title :block/properties} (:a datom)))
+                  ;; Capture direct changes on searchable block content, refs, and aliases.
+                  (contains? #{:block/uuid :block/name :block/title :block/properties :block/alias} (:a datom)))
                 data)]
     (when (seq datoms)
       (get-blocks-from-datoms-impl tx-report datoms))))
