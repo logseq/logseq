@@ -6,6 +6,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.util :as util]
@@ -58,6 +59,71 @@
          (editor/extract-nearest-link-from-text
           "[[https://github.com/logseq/logseq][logseq]] is #awesome :)" 0 editor/url-regex))
       "Finds url in org link correctly"))
+
+(defn- follow-page-link-result
+  [{:keys [page-title existing-page? worker-page?]}]
+  (let [events (atom [])
+        redirects (atom [])
+        worker-page-uuid (random-uuid)
+        input-id "edit-block-test"
+        input #js {:value (str "Open [[" page-title "]]")}]
+    (p/with-redefs [state/get-edit-block (constantly {:block/uuid (random-uuid)})
+                    state/get-edit-input-id (constantly input-id)
+                    gdom/getElement (fn [id]
+                                      (when (= input-id id)
+                                        input))
+                    cursor/pos (constantly 10)
+                    editor/save-current-block! (constantly nil)
+                    state/clear-editor-action! (constantly nil)
+                    state/clear-edit! (constantly nil)
+                    db/get-page (fn [title]
+                                  (when (and existing-page? (= page-title title))
+                                    {:block/title title
+                                     :block/uuid (random-uuid)}))
+                    db-async/<get-block (fn [_repo title _opts]
+                                          (p/resolved
+                                           (when (and worker-page? (= page-title title))
+                                             {:block/title title
+                                              :block/uuid worker-page-uuid})))
+                    state/pub-event! (fn [event]
+                                       (swap! events conj event)
+                                       (p/resolved nil))
+                    route-handler/redirect-to-page! (fn [& args]
+                                                      (swap! redirects conj args))]
+      (p/let [_ (editor/follow-link-under-cursor!)]
+        {:events @events
+         :redirects @redirects}))))
+
+(deftest follow-link-under-cursor-opens-existing-page-test
+  (async done
+    (-> (follow-page-link-result {:page-title "Project"
+                                  :existing-page? true})
+        (p/then
+         (fn [{:keys [events redirects]}]
+           (is (empty? events))
+           (is (= [["Project"]] redirects))
+           (done))))))
+
+(deftest follow-link-under-cursor-creates-missing-page-test
+  (async done
+    (-> (follow-page-link-result {:page-title "May 15th, 2026"
+                                  :existing-page? false})
+        (p/then
+         (fn [{:keys [events redirects]}]
+           (is (= [[:page/create "May 15th, 2026"]] events))
+           (is (empty? redirects))
+           (done))))))
+
+(deftest follow-link-under-cursor-uses-worker-page-before-creating-test
+  (async done
+    (-> (follow-page-link-result {:page-title "May 15th, 2026"
+                                  :existing-page? false
+                                  :worker-page? true})
+        (p/then
+         (fn [{:keys [events redirects]}]
+           (is (empty? events))
+           (is (= [["May 15th, 2026"]] redirects))
+           (done))))))
 
 (defn- keyup-handler
   "Spied version of editor/keyup-handler"
