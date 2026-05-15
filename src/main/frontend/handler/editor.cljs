@@ -1094,6 +1094,17 @@
             (let [value (gobj/get input "value")]
               (extract-nearest-link-from-text value pos))))))))
 
+(defn- <follow-page-link!
+  [page]
+  (state/clear-edit!)
+  (if (util/uuid-string? page)
+    (route-handler/redirect-to-page! page)
+    (p/let [page-entity (or (db/get-page page)
+                            (db-async/<get-block (state/get-current-repo) page {:children? false}))]
+      (if page-entity
+        (route-handler/redirect-to-page! page)
+        (state/pub-event! [:page/create page])))))
+
 (defn follow-link-under-cursor!
   []
   (when-let [page (get-nearest-page-or-url)]
@@ -1103,9 +1114,7 @@
        (save-current-block!)
        (if (re-find url-regex page)
          (js/window.open page)
-         (do
-           (state/clear-edit!)
-           (route-handler/redirect-to-page! page)))))))
+         (<follow-page-link! page))))))
 
 (defn open-link-in-sidebar!
   []
