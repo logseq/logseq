@@ -2042,6 +2042,94 @@
 
 (def ^:private gallery-custom-dimension-debounce-ms 250)
 
+(defn- gallery-saved-dimensions
+  "User-saved named gallery dimensions, graph-wide. Reading the KV entity
+   here makes consuming rum components reactive to changes."
+  []
+  (or (:kv/value (db/entity :logseq.kv/gallery-custom-dimensions)) []))
+
+(defn- gallery-builtin-names
+  "Lower-cased display names of the built-in dimension options."
+  []
+  (->> gallery-dimension-idents
+       (keep db/entity)
+       (keep #(some-> (or (:block/title %) (name (:db/ident %))) string/lower-case))
+       set))
+
+(defn- save-gallery-dimension!
+  "Upserts a named dimension into the graph-wide saved list. Names match
+   case-insensitively, so an existing entry with the same name is
+   replaced. No-op when the name is blank, the size is not a pair of
+   positive integers, or the name collides with a built-in option."
+  [name w h]
+  (let [name (string/trim (str name))
+        lname (string/lower-case name)]
+    (when (and (seq name)
+               (pos-int? w)
+               (pos-int? h)
+               (not (contains? (gallery-builtin-names) lname)))
+      (let [without (remove #(= lname (string/lower-case (str (:name %))))
+                            (gallery-saved-dimensions))
+            new-vec (conj (vec without) {:name name :width w :height h})]
+        (db/transact! [(ldb/kv :logseq.kv/gallery-custom-dimensions new-vec)])))))
+
+(defn- gallery-saved-match
+  "First saved dimension whose width/height equal the view entity's
+   current custom width/height, or nil."
+  [view-entity]
+  (let [w (gallery-custom-width view-entity)
+        h (gallery-custom-height view-entity)]
+    (when (and w h)
+      (some (fn [d] (when (and (= w (:width d)) (= h (:height d))) d))
+            (gallery-saved-dimensions)))))
+
+(rum/defc gallery-save-dimension-dialog
+  "Prompts for a name and saves the given width/height as a graph-wide
+   named dimension. Save is blocked while the name is blank or collides
+   with a built-in option name."
+  [view-entity w h on-saved]
+  (let [[name set-name!] (hooks/use-state "")
+        trimmed (string/trim name)
+        builtin? (contains? (gallery-builtin-names) (string/lower-case trimmed))
+        invalid? (or (empty? trimmed) builtin?)
+        submit! (fn []
+                  (when-not invalid?
+                    (save-gallery-dimension! trimmed w h)
+                    ;; Pin the view's custom size to exactly what was
+                    ;; saved so the dropdown can resolve it back to this
+                    ;; name on reopen (and the cards render at this size).
+                    (db-property-handler/set-block-property!
+                     (:db/id view-entity)
+                     :logseq.property.view/gallery-card-custom-width
+                     w)
+                    (db-property-handler/set-block-property!
+                     (:db/id view-entity)
+                     :logseq.property.view/gallery-card-custom-height
+                     h)
+                    (when on-saved (on-saved (str "saved:" trimmed)))
+                    (shui/dialog-close!)))]
+    [:form.flex.flex-col.gap-4.p-2
+     {:on-submit (fn [e] (.preventDefault e) (submit!))}
+     [:div.text-lg.font-medium "What should this custom dimension be named?"]
+     (shui/input
+      {:auto-focus true
+       :placeholder "Dimension name"
+       :value name
+       :on-change (fn [e] (set-name! (util/evalue e)))})
+     (when builtin?
+       [:div.text-sm.text-red-800
+        "That name is reserved by a built-in dimension. Choose another."])
+     [:div.flex.justify-end.gap-2
+      (shui/button
+       {:variant "ghost"
+        :type "button"
+        :on-click #(shui/dialog-close!)}
+       "Cancel")
+      (shui/button
+       {:type "submit"
+        :disabled invalid?}
+       "Save")]]))
+
 (rum/defc gallery-custom-dimension-inputs
   "Two text inputs for the custom Width and Height, separated by `:`.
    Non-digit keystrokes are filtered before they reach local state, and
@@ -2049,7 +2137,7 @@
    not produce a burst of db writes. Commit happens on-change rather
    than on-blur because the surrounding popup tears the input out of
    the DOM before blur would fire."
-  [view-entity]
+  [view-entity on-saved]
   (let [initial-w (or (gallery-custom-width view-entity) gallery-custom-dimension-default)
         initial-h (or (gallery-custom-height view-entity) gallery-custom-dimension-default)
         [w-input set-w-input!] (hooks/use-state (str initial-w))
@@ -2077,6 +2165,20 @@
           v)))
      [debounced-h])
     [:div.flex.flex-row.items-center.gap-2.self-end
+     (shui/button
+      {:variant "outline"
+       :size :sm
+       :class "!px-2 !py-0 !h-8"
+       :type "button"
+       :title "Save these dimensions as a named option"
+       :on-click (fn [_]
+                   (let [w (parse-dimension-input w-input)
+                         h (parse-dimension-input h-input)]
+                     (when (and w h)
+                       (shui/dialog-open!
+                        (fn [] (gallery-save-dimension-dialog view-entity w h on-saved))
+                        {:class "w-auto max-w-sm"}))))}
+      "Save as")
      [:input
       {:type "text"
        :input-mode "numeric"
@@ -2101,9 +2203,12 @@
         default-image-id (or (and (some #(= current-image-id (:db/id %)) candidates) current-image-id)
                              (:db/id (db/entity :block/title)))
         dimension-ents (keep db/entity gallery-dimension-idents)
+        saved (gallery-saved-dimensions)
         initial-custom? (gallery-custom? view-entity)
         initial-dimension-value (if initial-custom?
-                                  "custom"
+                                  (if-let [m (gallery-saved-match view-entity)]
+                                    (str "saved:" (:name m))
+                                    "custom")
                                   (str (or (:db/id (:logseq.property.view/gallery-card-dimensions view-entity))
                                            (:db/id (db/entity :logseq.property.view/gallery-card-dimensions.square)))))
         ;; Local state so switching to Custom immediately reveals the
@@ -2114,7 +2219,8 @@
         set-dimension!
         (fn [v]
           (set-dimension-value! v)
-          (if (= v "custom")
+          (cond
+            (= v "custom")
             (do
               (when-not (gallery-custom-width view-entity)
                 (db-property-handler/set-block-property!
@@ -2126,6 +2232,21 @@
                  (:db/id view-entity)
                  :logseq.property.view/gallery-card-custom-height
                  gallery-custom-dimension-default)))
+
+            (string/starts-with? v "saved:")
+            (when-let [d (let [nm (subs v 6)]
+                           (some #(when (= nm (:name %)) %)
+                                 (gallery-saved-dimensions)))]
+              (db-property-handler/set-block-property!
+               (:db/id view-entity)
+               :logseq.property.view/gallery-card-custom-width
+               (:width d))
+              (db-property-handler/set-block-property!
+               (:db/id view-entity)
+               :logseq.property.view/gallery-card-custom-height
+               (:height d)))
+
+            :else
             (when-let [new-id (parse-long v)]
               (db-property-handler/set-block-property!
                (:db/id view-entity)
@@ -2187,17 +2308,22 @@
           (shui/select-content
            (shui/select-group
             (concat
-             (for [ent dimension-ents]
-               (shui/select-item
-                {:key (str (:db/id ent))
-                 :value (str (:db/id ent))}
-                (or (:block/title ent) (name (:db/ident ent)))))
+             (->> (concat
+                   (for [ent dimension-ents]
+                     {:value (str (:db/id ent))
+                      :label (or (:block/title ent) (name (:db/ident ent)))})
+                   (for [d saved]
+                     {:value (str "saved:" (:name d))
+                      :label (:name d)}))
+                  (sort-by (comp string/lower-case str :label))
+                  (map (fn [{:keys [value label]}]
+                         (shui/select-item {:key value :value value} label))))
              [(shui/select-item
                {:key "custom"
                 :value "custom"}
                "Custom")]))))]
         (when custom?
-          (gallery-custom-dimension-inputs view-entity))])]))
+          (gallery-custom-dimension-inputs view-entity set-dimension-value!))])]))
 
 (rum/defc gallery-settings
   [view-entity table columns]
