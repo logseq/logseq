@@ -2101,15 +2101,27 @@
    kept). Reuses the by-name upsert and re-applies the new size to the
    current view."
   [view-entity dim on-done]
-  (let [[w-input set-w-input!] (hooks/use-state (str (:width dim)))
-        [h-input set-h-input!] (hooks/use-state (str (:height dim)))
+  ;; Re-resolve from the DB at open time: the captured `view-entity`
+  ;; and `dim` are snapshots from the last settings render and go stale
+  ;; after a prior Save. Read the fresh saved record (source of truth
+  ;; for a saved dimension), then the live view size, then the snapshot.
+  (let [nm (:name dim)
+        fresh-rec (some #(when (= nm (:name %)) %) (gallery-saved-dimensions))
+        view (or (db/entity (:db/id view-entity)) view-entity)
+        initial-w (or (:width fresh-rec) (gallery-custom-width view) (:width dim))
+        initial-h (or (:height fresh-rec) (gallery-custom-height view) (:height dim))
+        [w-input set-w-input!] (hooks/use-state (str initial-w))
+        [h-input set-h-input!] (hooks/use-state (str initial-h))
         w (parse-dimension-input w-input)
         h (parse-dimension-input h-input)
         invalid? (or (nil? w) (nil? h))
+        on-digit-change! (fn [set-input!]
+                           (fn [e]
+                             (set-input! (string/replace (.. e -target -value) #"[^0-9]" ""))))
         input-cls "!px-2 !py-0 !h-8 w-[96px] text-sm border rounded bg-transparent text-right tabular-nums"
         submit! (fn []
                   (when-not invalid?
-                    (save-gallery-dimension! (:name dim) w h)
+                    (save-gallery-dimension! nm w h)
                     (db-property-handler/set-block-property!
                      (:db/id view-entity)
                      :logseq.property.view/gallery-card-custom-width
@@ -2125,23 +2137,23 @@
      [:div.text-lg.font-medium "Change the custom dimensions"]
      [:div.flex.flex-row.items-center.justify-between.gap-2
       [:div.text-muted-foreground "Width"]
-      (shui/input
-       {:type "number"
-        :min 1
+      [:input
+       {:type "text"
+        :input-mode "numeric"
         :auto-focus true
         :class input-cls
         :value w-input
         :aria-label "Custom card width in pixels"
-        :on-change (fn [e] (set-w-input! (util/evalue e)))})]
+        :on-change (on-digit-change! set-w-input!)}]]
      [:div.flex.flex-row.items-center.justify-between.gap-2
       [:div.text-muted-foreground "Height"]
-      (shui/input
-       {:type "number"
-        :min 1
+      [:input
+       {:type "text"
+        :input-mode "numeric"
         :class input-cls
         :value h-input
         :aria-label "Custom card height in pixels"
-        :on-change (fn [e] (set-h-input! (util/evalue e)))})]
+        :on-change (on-digit-change! set-h-input!)}]]
      [:div.flex.justify-end.gap-2
       (shui/button
        {:variant "ghost"
