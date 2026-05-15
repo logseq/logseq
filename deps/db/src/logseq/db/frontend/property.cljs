@@ -454,24 +454,6 @@
        :hide? true}
       :queryable? true}
 
-     :logseq.property.view/gallery-card-dimensions
-     {:title "Gallery card dimensions"
-      :schema
-      {:type :default
-       :public? false
-       :hide? true}
-      :closed-values
-      (mapv (fn [[db-ident value]]
-              {:db-ident db-ident
-               :value value
-               :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
-            [[:logseq.property.view/gallery-card-dimensions.square "Square"]
-             [:logseq.property.view/gallery-card-dimensions.header "Header"]
-             [:logseq.property.view/gallery-card-dimensions.capsule "Capsule"]
-             [:logseq.property.view/gallery-card-dimensions.hero "Hero"]])
-      :properties {:logseq.property/default-value :logseq.property.view/gallery-card-dimensions.square}
-      :queryable? true}
-
      :logseq.property.view/gallery-card-custom-width
      {:title "Gallery card custom width"
       :schema

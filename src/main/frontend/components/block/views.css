@@ -41,33 +41,9 @@
     @apply flex;
   }
 
-  /* Square: 290x290 image area + 64px title row = 354px card height */
-  &.ls-cards-square {
-    .ls-card-item { @apply h-[354px]; }
-    .virtuoso-grid-item { @apply w-[290px]; }
-  }
-
-  /* Header: landscape header aspect ratio (460:215 ≈ 2.14:1) */
-  &.ls-cards-header {
-    .ls-card-item { @apply h-[14rem]; }
-    .virtuoso-grid-item { @apply w-[344px]; }
-  }
-
-  /* Capsule: portrait capsule aspect ratio (2:3) */
-  &.ls-cards-capsule {
-    .ls-card-item { @apply h-[23rem]; }
-    .virtuoso-grid-item { @apply w-[200px]; }
-  }
-
-  /* Hero: ultra-wide banner aspect ratio (1920:620 ≈ 3.1:1) */
-  &.ls-cards-hero {
-    .ls-card-item { @apply h-[12rem]; }
-    .virtuoso-grid-item { @apply w-[400px]; }
-  }
-
   /* Custom: user-defined width and height, driven by CSS variables set
-     inline on .ls-cards by gallery-view when a custom dimension is
-     active. */
+     inline on .ls-cards by gallery-view (falls back to a default size
+     when the view has no explicit width/height set). */
   &.ls-cards-custom {
     .ls-card-item { height: var(--ls-card-custom-height); }
     .virtuoso-grid-item { width: var(--ls-card-custom-width); }

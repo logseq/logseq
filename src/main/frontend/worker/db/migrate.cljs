@@ -101,7 +101,6 @@
                                  :logseq.property.embedding/hnsw-label-updated-at]}]
    ["65.26" {:properties [:logseq.property.repeat/repeat-type]}]
    ["65.27" {:properties [:logseq.property.view/gallery-image-property
-                          :logseq.property.view/gallery-card-dimensions
                           :logseq.property.view/gallery-card-custom-width
                           :logseq.property.view/gallery-card-custom-height]}]])
 

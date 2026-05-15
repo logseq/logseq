@@ -1830,25 +1830,11 @@
         n (db-property/property-value-content v)]
     (when (and (number? n) (pos? n)) n)))
 
-(defn- gallery-custom?
-  "A view is in Custom dimensions mode iff it has positive numeric
-   values stored in both custom width and height."
-  [view-entity]
-  (and (gallery-custom-width view-entity)
-       (gallery-custom-height view-entity)))
-
-(defn- gallery-dimension-key
-  "Returns the short dimension key (e.g. \"square\") for a view entity's
-   :logseq.property.view/gallery-card-dimensions value, defaulting to
-   \"square\". Returns \"custom\" when the view has custom width/height
-   stored."
-  [view-entity]
-  (cond
-    (gallery-custom? view-entity) "custom"
-    :else
-    (let [ident (:db/ident (:logseq.property.view/gallery-card-dimensions view-entity))]
-      (or (some-> ident name (string/split #"\.") last)
-          "square"))))
+;; Fallback card size for views with no explicit width/height set yet
+;; (and graphs created before the built-in dimensions were removed).
+;; These reproduce the old "Square" look.
+(def ^:private gallery-default-width 290)
+(def ^:private gallery-default-height 354)
 
 (rum/defc gallery-card-item
   [view-entity block config image-prop-ident]
@@ -1900,32 +1886,25 @@
                          block)])]))
 
 (defn- apply-gallery-custom-vars!
-  "Callback-ref helper: sets or clears the CSS custom properties that
-   drive `.ls-cards-custom` on the given DOM element."
+  "Callback-ref helper: sets the CSS custom properties that drive
+   `.ls-cards-custom` on the given DOM element."
   [custom-w custom-h ^js el]
   (when el
-    (if (and custom-w custom-h)
-      (do
-        (.setProperty (.-style el) "--ls-card-custom-width" (str custom-w "px"))
-        (.setProperty (.-style el) "--ls-card-custom-height" (str custom-h "px")))
-      (do
-        (.removeProperty (.-style el) "--ls-card-custom-width")
-        (.removeProperty (.-style el) "--ls-card-custom-height")))))
+    (.setProperty (.-style el) "--ls-card-custom-width" (str custom-w "px"))
+    (.setProperty (.-style el) "--ls-card-custom-height" (str custom-h "px"))))
 
 (rum/defcs gallery-view < rum/static mixins/container-id
   [state {:keys [config]} table view-entity blocks *scroller-ref]
   (let [config' (assoc config :container-id (:container-id state))
-        dimension-key (gallery-dimension-key view-entity)
-        custom-w (gallery-custom-width view-entity)
-        custom-h (gallery-custom-height view-entity)
+        custom-w (or (gallery-custom-width view-entity) gallery-default-width)
+        custom-h (or (gallery-custom-height view-entity) gallery-default-height)
         ;; Resolved at the gallery-view level so switching the gallery
         ;; image property invalidates the virtuoso item key below and
         ;; forces card items to re-render with the new ident.
         image-prop-ident (or (:db/ident (:logseq.property.view/gallery-image-property view-entity))
                              :block/title)]
-    [:div.ls-cards
-     {:class (str "ls-cards-" dimension-key)
-      ;; Callback ref runs whenever React attaches the div; no hooks
+    [:div.ls-cards.ls-cards-custom
+     {;; Callback ref runs whenever React attaches the div; no hooks
       ;; involved so it is safe inside this class-based component.
       :ref (fn [el] (apply-gallery-custom-vars! custom-w custom-h el))}
      (when (seq blocks)
@@ -1935,7 +1914,7 @@
          :custom-scroll-parent (get-scroll-parent config)
          :skipAnimationFrameInResizeObserver true
          :compute-item-key (fn [idx]
-                             (str (:db/id view-entity) "-" image-prop-ident "-" dimension-key "-card-" idx))
+                             (str (:db/id view-entity) "-" image-prop-ident "-" custom-w "x" custom-h "-card-" idx))
          :item-content (fn [idx]
                          (lazy-item (:data table) idx {}
                                     (fn [block]
@@ -2019,12 +1998,6 @@
       (ui/icon "trash" {:size 15})
       [:span.ml-1 (t :view.table/delete-sort)])]))
 
-(def ^:private gallery-dimension-idents
-  [:logseq.property.view/gallery-card-dimensions.square
-   :logseq.property.view/gallery-card-dimensions.header
-   :logseq.property.view/gallery-card-dimensions.capsule
-   :logseq.property.view/gallery-card-dimensions.hero])
-
 (defn- gallery-candidate-label
   "Display label for a gallery-value candidate. The :block/title entity
    represents the Title option."
@@ -2032,8 +2005,6 @@
   (cond
     (= :block/title (:db/ident candidate)) "Title"
     :else (or (:block/title candidate) (some-> (:db/ident candidate) name))))
-
-(def ^:private gallery-custom-dimension-default 290)
 
 (defn- parse-dimension-input
   [s]
@@ -2048,26 +2019,17 @@
   []
   (or (:kv/value (db/entity :logseq.kv/gallery-custom-dimensions)) []))
 
-(defn- gallery-builtin-names
-  "Lower-cased display names of the built-in dimension options."
-  []
-  (->> gallery-dimension-idents
-       (keep db/entity)
-       (keep #(some-> (or (:block/title %) (name (:db/ident %))) string/lower-case))
-       set))
-
 (defn- save-gallery-dimension!
   "Upserts a named dimension into the graph-wide saved list. Names match
    case-insensitively, so an existing entry with the same name is
-   replaced. No-op when the name is blank, the size is not a pair of
-   positive integers, or the name collides with a built-in option."
+   replaced. No-op when the name is blank or the size is not a pair of
+   positive integers."
   [name w h]
   (let [name (string/trim (str name))
         lname (string/lower-case name)]
     (when (and (seq name)
                (pos-int? w)
-               (pos-int? h)
-               (not (contains? (gallery-builtin-names) lname)))
+               (pos-int? h))
       (let [without (remove #(= lname (string/lower-case (str (:name %))))
                             (gallery-saved-dimensions))
             new-vec (conj (vec without) {:name name :width w :height h})]
@@ -2085,13 +2047,11 @@
 
 (rum/defc gallery-save-dimension-dialog
   "Prompts for a name and saves the given width/height as a graph-wide
-   named dimension. Save is blocked while the name is blank or collides
-   with a built-in option name."
+   named dimension. Save is blocked while the name is blank."
   [view-entity w h on-saved]
   (let [[name set-name!] (hooks/use-state "")
         trimmed (string/trim name)
-        builtin? (contains? (gallery-builtin-names) (string/lower-case trimmed))
-        invalid? (or (empty? trimmed) builtin?)
+        invalid? (empty? trimmed)
         submit! (fn []
                   (when-not invalid?
                     (save-gallery-dimension! trimmed w h)
@@ -2116,9 +2076,6 @@
        :placeholder "Dimension name"
        :value name
        :on-change (fn [e] (set-name! (util/evalue e)))})
-     (when builtin?
-       [:div.text-sm.text-red-800
-        "That name is reserved by a built-in dimension. Choose another."])
      [:div.flex.justify-end.gap-2
       (shui/button
        {:variant "ghost"
@@ -2138,8 +2095,8 @@
    than on-blur because the surrounding popup tears the input out of
    the DOM before blur would fire."
   [view-entity on-saved]
-  (let [initial-w (or (gallery-custom-width view-entity) gallery-custom-dimension-default)
-        initial-h (or (gallery-custom-height view-entity) gallery-custom-dimension-default)
+  (let [initial-w (or (gallery-custom-width view-entity) gallery-default-width)
+        initial-h (or (gallery-custom-height view-entity) gallery-default-height)
         [w-input set-w-input!] (hooks/use-state (str initial-w))
         [h-input set-h-input!] (hooks/use-state (str initial-h))
         debounced-w (hooks/use-debounced-value w-input gallery-custom-dimension-debounce-ms)
@@ -2202,15 +2159,10 @@
         current-image-id (:db/id (:logseq.property.view/gallery-image-property view-entity))
         default-image-id (or (and (some #(= current-image-id (:db/id %)) candidates) current-image-id)
                              (:db/id (db/entity :block/title)))
-        dimension-ents (keep db/entity gallery-dimension-idents)
         saved (gallery-saved-dimensions)
-        initial-custom? (gallery-custom? view-entity)
-        initial-dimension-value (if initial-custom?
-                                  (if-let [m (gallery-saved-match view-entity)]
-                                    (str "saved:" (:name m))
-                                    "custom")
-                                  (str (or (:db/id (:logseq.property.view/gallery-card-dimensions view-entity))
-                                           (:db/id (db/entity :logseq.property.view/gallery-card-dimensions.square)))))
+        initial-dimension-value (if-let [m (gallery-saved-match view-entity)]
+                                  (str "saved:" (:name m))
+                                  "custom")
         ;; Local state so switching to Custom immediately reveals the
         ;; width/height inputs without needing the popup to re-subscribe
         ;; to the view entity.
@@ -2219,21 +2171,7 @@
         set-dimension!
         (fn [v]
           (set-dimension-value! v)
-          (cond
-            (= v "custom")
-            (do
-              (when-not (gallery-custom-width view-entity)
-                (db-property-handler/set-block-property!
-                 (:db/id view-entity)
-                 :logseq.property.view/gallery-card-custom-width
-                 gallery-custom-dimension-default))
-              (when-not (gallery-custom-height view-entity)
-                (db-property-handler/set-block-property!
-                 (:db/id view-entity)
-                 :logseq.property.view/gallery-card-custom-height
-                 gallery-custom-dimension-default)))
-
-            (string/starts-with? v "saved:")
+          (if (string/starts-with? v "saved:")
             (when-let [d (let [nm (subs v 6)]
                            (some #(when (= nm (:name %)) %)
                                  (gallery-saved-dimensions)))]
@@ -2245,21 +2183,19 @@
                (:db/id view-entity)
                :logseq.property.view/gallery-card-custom-height
                (:height d)))
-
-            :else
-            (when-let [new-id (parse-long v)]
-              (db-property-handler/set-block-property!
-               (:db/id view-entity)
-               :logseq.property.view/gallery-card-dimensions
-               new-id)
-              (when (gallery-custom-width view-entity)
-                (db-property-handler/remove-block-property!
+            ;; "custom": seed the inputs with the current size or the
+            ;; default fallback so the width/height fields are populated.
+            (do
+              (when-not (gallery-custom-width view-entity)
+                (db-property-handler/set-block-property!
                  (:db/id view-entity)
-                 :logseq.property.view/gallery-card-custom-width))
-              (when (gallery-custom-height view-entity)
-                (db-property-handler/remove-block-property!
+                 :logseq.property.view/gallery-card-custom-width
+                 gallery-default-width))
+              (when-not (gallery-custom-height view-entity)
+                (db-property-handler/set-block-property!
                  (:db/id view-entity)
-                 :logseq.property.view/gallery-card-custom-height)))))]
+                 :logseq.property.view/gallery-card-custom-height
+                 gallery-default-height)))))]
     (hooks/use-effect!
      (fn []
        (try
@@ -2295,35 +2231,31 @@
                :value (str (:db/id p))}
               (gallery-candidate-label p))))))])
 
-     (when (seq dimension-ents)
-       [:<>
-        [:div.flex.flex-row.items-center.justify-between.gap-2
-         [:div.text-muted-foreground "Dimensions"]
-         (shui/select
-          {:value dimension-value
-           :on-value-change set-dimension!}
-          (shui/select-trigger
-           {:class "!px-2 !py-0 !h-8 w-[160px]"}
-           (shui/select-value {:placeholder "Select dimensions"}))
-          (shui/select-content
-           (shui/select-group
-            (concat
-             (->> (concat
-                   (for [ent dimension-ents]
-                     {:value (str (:db/id ent))
-                      :label (or (:block/title ent) (name (:db/ident ent)))})
-                   (for [d saved]
-                     {:value (str "saved:" (:name d))
-                      :label (:name d)}))
-                  (sort-by (comp string/lower-case str :label))
-                  (map (fn [{:keys [value label]}]
-                         (shui/select-item {:key value :value value} label))))
-             [(shui/select-item
-               {:key "custom"
-                :value "custom"}
-               "Custom")]))))]
-        (when custom?
-          (gallery-custom-dimension-inputs view-entity set-dimension-value!))])]))
+     [:<>
+      [:div.flex.flex-row.items-center.justify-between.gap-2
+       [:div.text-muted-foreground "Dimensions"]
+       (shui/select
+        {:value dimension-value
+         :on-value-change set-dimension!}
+        (shui/select-trigger
+         {:class "!px-2 !py-0 !h-8 w-[160px]"}
+         (shui/select-value {:placeholder "Select dimensions"}))
+        (shui/select-content
+         (shui/select-group
+          (concat
+           (->> saved
+                (map (fn [d]
+                       {:value (str "saved:" (:name d))
+                        :label (:name d)}))
+                (sort-by (comp string/lower-case str :label))
+                (map (fn [{:keys [value label]}]
+                       (shui/select-item {:key value :value value} label))))
+           [(shui/select-item
+             {:key "custom"
+              :value "custom"}
+             "Custom")]))))]
+      (when custom?
+        (gallery-custom-dimension-inputs view-entity set-dimension-value!))]]))
 
 (rum/defc gallery-settings
   [view-entity table columns]
