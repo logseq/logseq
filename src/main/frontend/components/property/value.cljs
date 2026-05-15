@@ -754,6 +754,9 @@
         alias? (= :block/alias (:db/ident property))
         tags-or-alias? (or tags? alias?)
         block (or (db/entity (:db/id block)) block)
+        alias-source-page (when alias? (or (:block/page block) block))
+        alias-source-page-id (:db/id alias-source-page)
+        alias-source-page-owned? (and alias? (seq (:block/_alias alias-source-page)))
         selected-choices (when block
                            (when-let [v (get block (:db/ident property))]
                              (if (every? entity-map? v)
@@ -806,17 +809,15 @@
                                   node (or (some-> (:db/id node') db/entity) node)]
                               (or (= (:db/id block) (:db/id node))
                                   ;; A page's alias can't be itself
-                                  (and alias? (= (or (:db/id (:block/page block))
-                                                     (:db/id block))
-                                                 (:db/id node)))
+                                  (and alias? (= alias-source-page-id (:db/id node)))
                                   ;; Candidate is already owned by a different page as an alias
                                   (and alias?
                                        (when-let [owner (first (:block/_alias node))]
-                                         (not= (:db/id owner) (or (:db/id (:block/page block)) (:db/id block)))))
+                                         (not= (:db/id owner) alias-source-page-id)))
                                   ;; Candidate already owns aliases (alias pages must be leaf nodes)
                                   (and alias? (seq (:block/alias node)))
                                   ;; Source page is already an alias of another page
-                                  (and alias? (seq (:block/_alias (or (:block/page block) block))))
+                                  alias-source-page-owned?
                                   (= :logseq.property/empty-placeholder (:db/ident node))
                                   (cond
                                     (= property-type :class)
