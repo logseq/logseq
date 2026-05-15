@@ -1,6 +1,6 @@
 ---
 name: logseq-task-on-lambda
-description: Use when Codex needs to execute a task described by a Logseq block in the Lambda RTC graph. The request must provide a block UUID directly or as a double-bracket UUID reference. This skill validates sync state, fetches the target block tree with the Logseq CLI, and then completes the task described by that block.
+description: Use when Codex needs to execute or continue a task described by a Logseq block in the Lambda RTC graph. The request must provide a block UUID directly or as a double-bracket UUID reference. This skill validates sync state, fetches the target block tree with the Logseq CLI, handles in-review tasks with TODO #agent-steer guidance blocks, and then completes the task described by the active block tree.
 ---
 
 # Logseq Task On Lambda
@@ -39,14 +39,23 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Do not fetch block content before this script succeeds.
    - Treat the script stdout root block and children as the complete task description.
 
-3. Mark the task as DOING.
+3. Choose the active task brief.
+   - If the fetched root task is not `in-review`, treat the fetched root block and its children as the active task brief.
+   - If the fetched root task is already `in-review`, continue the previous work from its review guidance instead of redoing the whole fetched root task.
+   - For an `in-review` root task, primarily focus on child block-trees whose root block has both the `#agent-steer` tag and `TODO` status.
+   - Treat each matching `#agent-steer` TODO block-tree as the next guidance prompt for continuing the previous work.
+   - Preserve the UUID of every matching `#agent-steer` TODO block so it can be marked `done` after the guidance has been handled.
+   - If the fetched text does not expose the needed `#agent-steer` block UUIDs or task statuses, re-run the sync gate and use the smallest structured `logseq` read needed to identify only those blocks.
+   - Stop if an `in-review` task has no actionable `#agent-steer` TODO block-tree, or if the matching blocks cannot be identified unambiguously.
+
+4. Mark the root task as DOING.
    - Immediately after the fetch script succeeds and before doing the described work, update the fetched root block status to `doing`.
    - Use the normalized UUID from the fetch script stderr: `logseq upsert task --graph "Lambda RTC" --uuid "$normalized_uuid" --status doing`.
    - Follow `logseq-cli` write rules and re-run the sync gate immediately before writing to `Lambda RTC`.
    - Stop if the root block cannot be updated as a task.
 
-4. Record reproducibility for bug and regression tasks.
-   - If the fetched task block or its children clearly identify the task as a bug or regression, update the fetched root block's `Reproducible?` property with one exact choice: `Not sure`, `Yes`, or `No`.
+5. Record reproducibility for bug and regression tasks.
+   - If the active task brief clearly identifies the task as a bug or regression, update the fetched root block's `Reproducible?` property with one exact choice: `Not sure`, `Yes`, or `No`.
    - Use `Yes` if the issue was reproduced, `No` if reproduction was actively attempted and failed, and `Not sure` if reproduction was not attempted or the evidence is insufficient.
    - If the value is not known before doing the described work, set `Reproducible?` to `Not sure` first; if later evidence changes the value, update it before adding the completion summary.
    - Use the exact property name string key and a string choice value: `logseq upsert block --graph "Lambda RTC" --uuid "$normalized_uuid" --update-properties "{\"Reproducible?\" \"$reproducible_value\"}"`.
@@ -54,24 +63,24 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Do not update `Reproducible?` for idea or enhancement tasks.
    - Stop if a clear bug or regression task cannot be updated with one of the exact `Reproducible?` choices.
 
-5. Complete the described task.
-   - Follow the fetched block tree, not assumptions from the UUID or graph name.
-   - If the block tree is ambiguous or not actionable, stop with a concise error instead of guessing.
+6. Complete the described task.
+   - Follow the active task brief, not assumptions from the UUID or graph name.
+   - If the active task brief is ambiguous or not actionable, stop with a concise error instead of guessing.
    - If the task requires code edits, follow repo `AGENTS.md` files and load any matching repo-local skills before editing.
    - If the task requires Logseq graph writes, follow `logseq-cli` write rules and re-run the sync gate immediately before writes to `Lambda RTC`.
 
-6. Generate the PR title and git branch name before optional PR creation.
-   - Do this only when the fetched task block or the user's current request explicitly asks for a pull request.
+7. Generate the PR title and git branch name before optional PR creation.
+   - Do this only when the active task brief or the user's current request explicitly asks for a pull request.
    - Generate both values after completing the described task and before staging, committing, pushing, or opening a PR.
    - Follow the repo `AGENTS.md` PR title format: `feat|enhance|fix(<module>): <short description>`.
    - Choose the PR type from the task outcome: use `fix` for bug or regression tasks, `enhance` for improvements to existing behavior, and `feat` for new behavior.
    - Generate a concise, lowercase, hyphenated git branch name with the `codex/` prefix unless the user explicitly asks for a different branch prefix.
    - Reuse the generated PR title and branch name in the GitHub publishing workflow.
 
-7. Optionally create a pull request.
+8. Optionally create a pull request.
    - Default behavior is to not create a PR.
-   - Create a PR only when the fetched task block or the user's current request explicitly asks for one.
-   - For bug or regression tasks with an existing GitHub issue URL in the fetched task block, its properties, or its children, preserve that issue URL before overwriting any task property with the PR URL.
+   - Create a PR only when the active task brief or the user's current request explicitly asks for one.
+   - For bug or regression tasks with an existing GitHub issue URL in the active task brief, the fetched root block properties, or their children, preserve that issue URL before overwriting any task property with the PR URL.
    - For those bug or regression PRs, make the commit message mention the linked issue with `fix $github_issue_url`, for example `fix https://github.com/logseq/db-test/issues/1`.
    - Use the linked GitHub issue URL, not the newly created PR URL, in the `fix ...` line.
    - When creating a PR, follow the loaded GitHub publishing workflow for branch, staging, commit, push, and PR creation.
@@ -83,7 +92,14 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Include the PR URL in the final report.
    - Stop if PR creation is explicitly requested but cannot be completed safely.
 
-8. Add a completion summary under the task block.
+9. Mark handled `#agent-steer` guidance blocks as done.
+   - Do this only for an originally `in-review` root task with matching `#agent-steer` TODO block-trees selected in step 3.
+   - After completing the guidance and before adding the completion summary, update every handled `#agent-steer` block's status to `done`.
+   - Use each preserved `#agent-steer` block UUID: `logseq upsert task --graph "Lambda RTC" --uuid "$agent_steer_uuid" --status done`.
+   - Follow `logseq-cli` write rules and re-run the sync gate immediately before writing to `Lambda RTC`.
+   - Stop if any handled `#agent-steer` block cannot be updated as a task.
+
+10. Add a completion summary under the task block.
    - When the described work is finished, create a `Summary:` child block under the fetched root block before changing the final task status.
    - Use the normalized UUID as the parent target for the top-level summary block: `logseq upsert block --graph "Lambda RTC" --target-uuid "$normalized_uuid" --content "Summary:"`.
    - Write the summary as an outline-style block tree with nested child blocks, not as a long single block.
@@ -95,16 +111,17 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Do not include the PR URL in the summary child block.
    - Stop if the summary block cannot be created.
 
-9. Mark the task as in review.
+11. Mark the root task as in review.
    - After the summary child block is created, update the fetched root block status to `in-review`.
    - Use the normalized UUID from the fetch script stderr: `logseq upsert task --graph "Lambda RTC" --uuid "$normalized_uuid" --status in-review`.
    - Follow `logseq-cli` write rules and re-run the sync gate immediately before writing to `Lambda RTC`.
    - Stop if the root block cannot be updated as a task.
 
-10. Report the result.
+12. Report the result.
    - Mention the normalized UUID.
    - State that the sync gate passed, including `ws-state`, `pending-local`, and `pending-server`.
    - State that the task status was moved to `doing`, a completion summary was added, and the task status was moved to `in-review`.
+   - If the task started in `in-review`, state which `#agent-steer` TODO block UUIDs were used as guidance and moved to `done`.
    - For `logseq-answer-machine` tasks, state that the completion summary was written as a specific Markdown block tree.
    - State which `Reproducible?` choice was recorded for a bug or regression task, or that it was skipped because the task was not a bug or regression.
    - If a PR was explicitly requested and created, include the PR URL and state that the `GitHub Url` property was updated. For bug or regression PRs with a linked GitHub issue, state that the commit message mentioned `fix $github_issue_url`. If no PR was requested, do not create one.
@@ -116,7 +133,9 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
 - Never fetch block content before the fetch script reports a passed sync gate.
 - Never silently substitute another graph, block, page, db id, or query result.
 - Never mask invalid sync state with defaults.
-- Never create a pull request unless the fetched task block or the user's current request explicitly asks for one.
+- Never redo a whole `in-review` root task when actionable `#agent-steer` TODO guidance exists; continue from the `#agent-steer` block-tree.
+- Never complete an `in-review` continuation without marking every handled `#agent-steer` TODO block as `done`.
+- Never create a pull request unless the active task brief or the user's current request explicitly asks for one.
 - Never leave a created PR unrecorded on the fetched root block's `GitHub Url` property.
 - Never overwrite a bug or regression task's linked GitHub issue URL before preserving it for the commit message.
 - Never create a bug or regression PR for a task with a linked GitHub issue URL unless the commit message mentions `fix $github_issue_url`.
