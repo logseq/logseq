@@ -715,8 +715,11 @@
 
 (defn- node-matches-scoped-classes?
   [class-ids node]
-  (let [node (or (:value node) node)]
-    (some #(contains? class-ids (if (integer? %) % (:db/id %))) (:block/tags node))))
+  (let [node-value (or (:value node) node)
+        node' (if (and (:db/id node-value) (nil? (:block/tags node-value)))
+                (or (db/entity (:db/id node-value)) node-value)
+                node-value)]
+    (some #(contains? class-ids (if (integer? %) % (:db/id %))) (:block/tags node'))))
 
 (defn- scoped-class-nodes
   [repo property classes result]

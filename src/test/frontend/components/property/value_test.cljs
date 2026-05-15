@@ -1,6 +1,7 @@
 (ns frontend.components.property.value-test
   (:require [cljs.test :refer [async deftest is]]
             [frontend.components.property.value :as property-value]
+            [frontend.db :as db]
             [frontend.db.model :as model]
             [promesa.core :as p]))
 
@@ -214,3 +215,26 @@
       (is (= choices
              (#'property-value/scoped-class-nodes
               "repo" property [tag-class] nil))))))
+
+(deftest scoped-class-nodes-keeps-hydrated-broad-scope-initial-choices-test
+  (let [property {:logseq.property/type :node}
+        page-class {:db/id 1
+                    :db/ident :logseq.class/Page}
+        matching-choice {:value {:db/id 100
+                                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+                         :label "Existing page"}
+        unrelated-choice {:value {:db/id 101
+                                  :block/uuid #uuid "22222222-2222-2222-2222-222222222222"}
+                          :label "Unrelated block"}]
+    (with-redefs [db/entity (fn [id]
+                              (case id
+                                100 {:db/id 100
+                                     :block/title "Existing page"
+                                     :block/tags [1]}
+                                101 {:db/id 101
+                                     :block/title "Unrelated block"}
+                                nil))
+                  model/get-structured-children (fn [_repo _class-id] [])]
+      (is (= [matching-choice]
+             (#'property-value/scoped-class-nodes
+              "repo" property [page-class] [matching-choice unrelated-choice]))))))
