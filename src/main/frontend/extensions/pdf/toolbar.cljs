@@ -528,108 +528,109 @@
     [:div.extensions__pdf-header
      [:div.extensions__pdf-toolbar
       [:div.inner
-       ;; appearance
-       [:a.button
-        {:title    (t :pdf/more-settings)
-         :on-click #(set-settings-visible! (not settings-visible?))}
-        (svg/adjustments 18)]
+       [:div.r.flex.buttons
+        ;; appearance
+        [:a.button
+         {:title (t :pdf/more-settings)
+          :on-click #(set-settings-visible! (not settings-visible?))}
+         (svg/adjustments 18)]
 
-       ;; selection
-       [:a.button
-        {:title (t :pdf/area-highlight-shortcut (if util/mac? "⌘" "Shift"))
-         :class (when area-mode? "is-active")
-         :on-click #(set-area-mode! (not area-mode?))}
-        (svg/icon-area 18)]
+        ;; selection
+        [:a.button
+         {:title (t :pdf/area-highlight-shortcut (if util/mac? "⌘" "Shift"))
+          :class (when area-mode? "is-active")
+          :on-click #(set-area-mode! (not area-mode?))}
+         (svg/icon-area 18)]
 
-       [:a.button
-        {:title    (t :pdf/highlight-mode)
-         :class    (when highlight-mode? "is-active")
-         :on-click #(set-highlight-mode! (not highlight-mode?))}
-        (svg/highlighter 16)]
+        [:a.button
+         {:title (t :pdf/highlight-mode)
+          :class (when highlight-mode? "is-active")
+          :on-click #(set-highlight-mode! (not highlight-mode?))}
+         (svg/highlighter 16)]
 
-       ;; zoom
-       [:a.button
-        {:title    (t :pdf/zoom-out)
-         :on-click (fn []
-                     (pdf-utils/zoom-out-viewer viewer)
-                     (dispatch-extra-state!))}
-        (svg/zoom-out 18)]
+        ;; zoom
+        [:a.button
+         {:title (t :pdf/zoom-out)
+          :on-click (fn []
+                      (pdf-utils/zoom-out-viewer viewer)
+                      (dispatch-extra-state!))}
+         (svg/zoom-out 18)]
 
-       [:a.button
-        {:title    (t :pdf/zoom-in)
-         :on-click (fn []
-                     (pdf-utils/zoom-in-viewer viewer)
-                     (dispatch-extra-state!))}
-        (svg/zoom-in 18)]
+        [:a.button
+         {:title (t :pdf/zoom-in)
+          :on-click (fn []
+                      (pdf-utils/zoom-in-viewer viewer)
+                      (dispatch-extra-state!))}
+         (svg/zoom-in 18)]
 
-       [:a.button
-        {:title    (t :pdf/auto-fit)
-         :on-click (fn []
-                     (pdf-utils/reset-viewer-auto! viewer)
-                     (dispatch-extra-state!))}
-        (svg/auto-fit 18)]
+        [:a.button
+         {:title (t :pdf/auto-fit)
+          :on-click (fn []
+                      (pdf-utils/reset-viewer-auto! viewer)
+                      (dispatch-extra-state!))}
+         (svg/auto-fit 18)]
 
-       [:a.button
-        {:title    (t :pdf/outline)
-         :on-click #(set-outline-visible! (not outline-visible?))}
-        (svg/view-list 16)]
+        [:a.button
+         {:title (t :pdf/outline)
+          :on-click #(set-outline-visible! (not outline-visible?))}
+         (svg/view-list 16)]
 
-       ;; search
-       [:a.button
-        {:title    (t :pdf/search)
-         :on-click #(set-finder-visible! (not finder-visible?))}
-        (svg/search2 19)]
+        ;; search
+        [:a.button
+         {:title (t :pdf/search)
+          :on-click #(set-finder-visible! (not finder-visible?))}
+         (svg/search2 19)]
 
-       ;; annotations
-       [:a.button
-        {:title    (t :pdf/annotations-page)
-         :on-click (fn []
-                     (if asset-block
-                       (pdf-assets/goto-annotations-page! (:pdf/current @state/state))
-                       (state/pub-event! [:asset/dialog-edit-external-url nil pdf-current])))}
-        (svg/annotations 16)]
+        ;; annotations
+        [:a.button
+         {:title (t :pdf/annotations-page)
+          :on-click (fn []
+                      (if asset-block
+                        (pdf-assets/goto-annotations-page! (:pdf/current @state/state))
+                        (state/pub-event! [:asset/dialog-edit-external-url nil pdf-current])))}
+         (svg/annotations 16)]
 
-       ;; system window
-       [:a.button
-        {:title    (if in-system-window?
-                     (t :pdf/open-in-app-window)
-                     (t :pdf/open-in-external-window))
-         :on-click #(if in-system-window?
-                      (pdf-windows/exit-pdf-in-system-window! true)
-                      (on-external-window!))}
-        (ui/icon (if in-system-window?
-                   "window-minimize"
-                   "window-maximize"))]
+        ;; system window
+        [:a.button
+         {:title (if in-system-window?
+                   (t :pdf/open-in-app-window)
+                   (t :pdf/open-in-external-window))
+          :on-click #(if in-system-window?
+                       (pdf-windows/exit-pdf-in-system-window! true)
+                       (on-external-window!))}
+         (ui/icon (if in-system-window?
+                    "window-minimize"
+                    "window-maximize"))]
 
-       ;; pager
-       [:div.pager.flex.items-center.ml-1
+        ;; pager
+        [:div.pager.flex.items-center.ml-1
 
-        [:span.nu.flex.items-center.opacity-70
-         [:input {:ref            *page-ref
-                  :type           "number"
-                  :min            1
-                  :max            total-page-num
-                  :class          (util/classnames [{:is-long (> (util/safe-parse-int current-page-num) 999)}])
-                  :default-value  current-page-num
-                  :on-mouse-enter #(.select ^js (.-target %))
-                  :on-key-up      (fn [^js e]
-                                    (let [^js input (.-target e)
-                                          value     (util/safe-parse-int (.-value input))]
-                                      (set-current-page-num! value)
-                                      (when (and (= (.-keyCode e) 13) value (> value 0))
-                                        (->> (if (> value total-page-num) total-page-num value)
-                                             (set! (. viewer -currentPageNumber))))))}]
-         [:small "/ " total-page-num]]
+         [:span.nu.flex.items-center.opacity-70
+          [:input {:ref *page-ref
+                   :type "number"
+                   :min 1
+                   :max total-page-num
+                   :class (util/classnames [{:is-long (> (util/safe-parse-int current-page-num) 999)}])
+                   :default-value current-page-num
+                   :on-mouse-enter #(.select ^js (.-target %))
+                   :on-key-up (fn [^js e]
+                                (let [^js input (.-target e)
+                                      value (util/safe-parse-int (.-value input))]
+                                  (set-current-page-num! value)
+                                  (when (and (= (.-keyCode e) 13) value (> value 0))
+                                    (->> (if (> value total-page-num) total-page-num value)
+                                      (set! (. viewer -currentPageNumber))))))}]
+          [:small "/ " total-page-num]]
 
-        [:span.ct.flex.items-center
-         [:a.button {:on-click #(. viewer previousPage)} (svg/up-narrow)]
-         [:a.button {:on-click #(. viewer nextPage)} (svg/down-narrow)]]]
+         [:span.ct.flex.items-center
+          [:a.button {:on-click #(. viewer previousPage)} (svg/up-narrow)]
+          [:a.button {:on-click #(. viewer nextPage)} (svg/down-narrow)]]]
 
-       [:a.button
-        {:on-click #(if in-system-window?
-                      (pdf-windows/exit-pdf-in-system-window! false)
-                      (state/set-current-pdf! nil))}
-        (t :ui/close)]]]
+        [:a.button
+         {:on-click #(if in-system-window?
+                       (pdf-windows/exit-pdf-in-system-window! false)
+                       (state/set-current-pdf! nil))}
+         (t :ui/close)]]]]
 
      ;; contents outline
      (pdf-outline-&-highlights viewer outline-visible? set-outline-visible!)
