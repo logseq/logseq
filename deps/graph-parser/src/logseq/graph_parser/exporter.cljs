@@ -526,13 +526,24 @@
    "Month" :logseq.property.repeat/recur-unit.month
    "Year" :logseq.property.repeat/recur-unit.year})
 
+(def ^:private repeat-types
+  "Maps the mldoc repetition kind to the corresponding `:repeat-type`
+  closed-value db-ident. `:double-plus` matches the scheduler's fallback for
+  unknown values."
+  {"Dotted"     :logseq.property.repeat/repeat-type.dotted-plus
+   "Plus"       :logseq.property.repeat/repeat-type.plus
+   "DoublePlus" :logseq.property.repeat/repeat-type.double-plus})
+
 (defn- repeat-properties
   [temporal-property value]
-  (when-let [[_ unit frequency] (and (map? value) (:repetition value))]
-    (let [unit-ident (get repeat-recur-units (first unit))]
+  (when-let [[kind unit frequency] (and (map? value) (:repetition value))]
+    (let [unit-ident (get repeat-recur-units (first unit))
+          repeat-type-ident (get repeat-types (first kind)
+                                 :logseq.property.repeat/repeat-type.double-plus)]
       (assert unit-ident (str "Unknown repeat unit: " (pr-str unit)))
       {:logseq.property.repeat/repeated? true
        :logseq.property.repeat/temporal-property temporal-property
+       :logseq.property.repeat/repeat-type repeat-type-ident
        :logseq.property.repeat/recur-frequency frequency
        :logseq.property.repeat/recur-unit unit-ident})))
 

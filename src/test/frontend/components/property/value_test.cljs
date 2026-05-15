@@ -1,6 +1,7 @@
 (ns frontend.components.property.value-test
   (:require [cljs.test :refer [async deftest is]]
             [frontend.components.property.value :as property-value]
+            [frontend.db.model :as model]
             [promesa.core :as p]))
 
 (deftest resolve-journal-page-for-date-returns-existing-page-test
@@ -66,6 +67,38 @@
     (is (= (:logseq.property/default-value property)
            (#'property-value/resolved-property-value-for-render loaded-block property false)))))
 
+(deftest direct-value-picker-type-test
+  (is (true? (property-value/direct-value-picker-type? :date)))
+  (is (true? (property-value/direct-value-picker-type? :datetime)))
+  (is (true? (property-value/direct-value-picker-type? :asset)))
+  (is (false? (property-value/direct-value-picker-type? :default))))
+
+(deftest asset-picker-layout-is-viewport-constrained-test
+  (is (= "min(640px, calc(100vw - 32px))"
+         (:width property-value/asset-picker-grid-style)))
+  (is (= "100%" (:max-width property-value/asset-picker-grid-style)))
+  (is (= "repeat(auto-fill, minmax(140px, 1fr))"
+         (:grid-template-columns property-value/asset-picker-items-grid-style))))
+
+(deftest asset-selected-ids-test
+  (let [property {:db/ident :asset}]
+    (is (= #{1}
+           (#'property-value/asset-selected-ids {:asset {:db/id 1}} property)))
+    (is (= #{1 2}
+           (#'property-value/asset-selected-ids {:asset #{{:db/id 1} {:db/id 2}}} property)))
+    (is (= #{}
+           (#'property-value/asset-selected-ids {} property)))))
+
+(deftest assets-selected-first-test
+  (let [assets [{:db/id 1 :block/title "one"}
+                {:db/id 2 :block/title "two"}
+                {:db/id 3 :block/title "three"}]]
+    (is (= [2 1 3]
+           (mapv :db/id (#'property-value/assets-selected-first assets #{2}))))
+    (is (= [1 3 2]
+           (mapv :db/id (#'property-value/assets-selected-first assets #{1 3})))
+        "Selected assets stay in their original relative order")))
+
 (deftest add-initial-node-choice-dedupes-existing-db-id-test
   (let [existing {:value {:db/id 100
                           :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
@@ -103,3 +136,81 @@
                     :label "Shared title"}]
     (is (= [existing new-choice]
            (#'property-value/add-initial-node-choice [existing] new-choice)))))
+
+(deftest scoped-class-nodes-skips-broad-node-property-preload-test
+  (let [calls* (atom [])
+        property {:logseq.property/type :node}
+        page-class {:db/id 1
+                    :db/ident :logseq.class/Page}
+        tag-class {:db/id 2
+                   :db/ident :logseq.class/Tag}]
+    (with-redefs [model/get-class-objects (fn [_repo class-id]
+                                            (swap! calls* conj class-id)
+                                            [{:db/id 100
+                                              :block/title "Page 100"}])
+                  model/get-structured-children (fn [_repo _class-id] [])]
+      (is (= []
+             (#'property-value/scoped-class-nodes
+              "repo" property [page-class tag-class] nil)))
+      (is (= [] @calls*)))))
+
+(deftest scoped-class-nodes-filters-search-results-by-scoped-classes-test
+  (let [calls* (atom [])
+        property {:logseq.property/type :node}
+        topic-class {:db/id 10
+                     :db/ident :user.class/Topic}
+        matching-parent {:db/id 100
+                         :block/title "Parent topic"
+                         :block/tags [10]}
+        matching-child {:db/id 101
+                        :block/title "Child topic"
+                        :block/tags [11]}
+        matching-wrapped {:value {:db/id 103
+                                  :block/title "Wrapped topic"
+                                  :block/tags [10]}
+                          :label "Wrapped topic"}
+        matching-entity-tags {:db/id 104
+                              :block/title "Entity-shaped topic"
+                              :block/tags [topic-class]}
+        unrelated {:db/id 102
+                   :block/title "Other"
+                   :block/tags [20]}]
+    (with-redefs [model/get-class-objects (fn [_repo class-id]
+                                            (swap! calls* conj class-id)
+                                            [])
+                  model/get-structured-children (fn [_repo class-id]
+                                                  (case class-id
+                                                    10 [11]
+                                                    []))]
+      (is (= [matching-parent matching-child matching-wrapped matching-entity-tags]
+             (#'property-value/scoped-class-nodes
+              "repo" property [topic-class] [matching-parent matching-child matching-wrapped matching-entity-tags unrelated])))
+      (is (= [] @calls*)))))
+
+(deftest scoped-class-nodes-preloads-narrow-node-property-choices-test
+  (let [property {:logseq.property/type :node}
+        topic-class {:db/id 10
+                     :db/ident :user.class/Topic}
+        choices [{:db/id 100
+                  :block/title "Topic 100"}]]
+    (with-redefs [model/get-class-objects (fn [_repo class-id]
+                                            (when (= 10 class-id)
+                                              choices))
+                  model/get-structured-children (fn [_repo _class-id] [])]
+      (is (= choices
+             (#'property-value/scoped-class-nodes
+              "repo" property [topic-class] nil))))))
+
+(deftest scoped-class-nodes-preloads-tag-only-node-property-choices-test
+  (let [property {:logseq.property/type :node}
+        tag-class {:db/id 2
+                   :db/ident :logseq.class/Tag}
+        choices [{:db/id 100
+                  :block/title "Tag 100"}]]
+    (with-redefs [model/get-class-objects (fn [_repo class-id]
+                                            (when (= 2 class-id)
+                                              choices))
+                  model/get-structured-children (fn [_repo _class-id] [])]
+      (is (= choices
+             (#'property-value/scoped-class-nodes
+              "repo" property [tag-class] nil))))))

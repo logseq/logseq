@@ -281,17 +281,20 @@
           "Repeated scheduled timestamp keeps its time")
       (is (= {:logseq.property.repeat/repeated? true
               :logseq.property.repeat/temporal-property :logseq.property/scheduled
+              :logseq.property.repeat/repeat-type :logseq.property.repeat/repeat-type.dotted-plus
               :logseq.property.repeat/recur-frequency 1
               :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.year}
              (select-keys birthday-properties
                           [:logseq.property.repeat/repeated?
                            :logseq.property.repeat/temporal-property
+                           :logseq.property.repeat/repeat-type
                            :logseq.property.repeat/recur-frequency
                            :logseq.property.repeat/recur-unit]))
-          "Repeated scheduled timestamp keeps its repeat properties")
+          "Repeated scheduled timestamp keeps its repeat properties including the `.+` cookie kind")
       (is (= {:logseq.property/deadline 20251107
               :logseq.property.repeat/repeated? true
               :logseq.property.repeat/temporal-property :logseq.property/deadline
+              :logseq.property.repeat/repeat-type :logseq.property.repeat/repeat-type.plus
               :logseq.property.repeat/recur-frequency 2
               :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}
              (-> report-properties
@@ -299,9 +302,10 @@
                  (select-keys [:logseq.property/deadline
                                :logseq.property.repeat/repeated?
                                :logseq.property.repeat/temporal-property
+                               :logseq.property.repeat/repeat-type
                                :logseq.property.repeat/recur-frequency
                                :logseq.property.repeat/recur-unit])))
-          "Repeated deadline timestamp keeps its repeat properties")
+          "Repeated deadline timestamp keeps its repeat properties including the `+` cookie kind")
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
 

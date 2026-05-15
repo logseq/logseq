@@ -20,6 +20,10 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
+            [frontend.extensions.lightbox :as lightbox]
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.fs :as fs]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
@@ -37,9 +41,20 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
+
+(defn- <asset-file-ready?
+  [asset file-name]
+  (if (or config/publishing?
+          (seq (:logseq.property.asset/external-url asset)))
+    (p/resolved true)
+    (fs/file-exists?
+     (config/get-repo-dir (state/get-current-repo))
+     (path/path-join common-config/local-assets-dir file-name))))
 
 (defmethod events/handle :go/search [_]
   (when-not (editor-handler/dialog-exists? :ls-dialog-cmdk)
@@ -333,6 +348,55 @@
    {:id :edit-external-asset-source-dialog
     :title (if asset-block (t :asset/edit-title) (t :asset/create-title))
     :center? true}))
+
+(defmethod events/handle :asset/show-preview [[_ asset]]
+  (when-let [asset-type-str (:logseq.property.asset/type asset)]
+    (let [asset-type (keyword asset-type-str)
+          image? (contains? (common-config/img-formats) asset-type)
+          video? (contains? config/video-formats asset-type)
+          pdf? (= :pdf asset-type)
+          file-name (str (:block/uuid asset) "." asset-type-str)
+          rel-path (path/path-join (str "../" common-config/local-assets-dir) file-name)]
+      (cond
+        image?
+        (p/let [url (assets-handler/<make-asset-url rel-path)]
+          (when url
+            (lightbox/preview-images!
+             [{:src url
+               :w (or (:logseq.property.asset/width asset) 1200)
+               :h (or (:logseq.property.asset/height asset) 800)}])))
+
+        video?
+        (p/let [file-ready? (<asset-file-ready? asset file-name)
+                requested? (assets-handler/maybe-request-remote-asset-download!
+                            (state/get-current-repo)
+                            asset
+                            file-ready?)]
+          (if requested?
+            (notification/show! (t :asset/downloading))
+            (p/let [url (assets-handler/<make-asset-url rel-path)]
+              (when url
+                (shui/dialog-open!
+                 (fn []
+                   [:div.flex.flex-col.gap-2.items-center
+                    [:div.font-medium.text-sm.self-start.truncate.max-w-full
+                     (:block/title asset)]
+                    [:video.rounded.max-w-full
+                     {:src url
+                      :controls true
+                      :autoPlay true
+                      :style {:max-height "80vh"}}]])
+                 {:id :asset-video-preview
+                  :auto-width? true
+                  :center? true})))))
+
+        pdf?
+        (p/let [url (assets-handler/<make-asset-url rel-path)]
+          (when-let [current (pdf-assets/inflate-asset rel-path {:block asset :href url})]
+            (state/set-current-pdf! current)))
+
+        :else
+        (route-handler/redirect-to-page! (:block/uuid asset))))))
 
 (defn ensure-user-rsa-keys-if-possible!
   []

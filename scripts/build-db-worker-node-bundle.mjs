@@ -89,6 +89,7 @@ async function main() {
 
   await build({
     configFile: false,
+    publicDir: false,
     logLevel: "error",
     build: {
       codeSplitting: false,
