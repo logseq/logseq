@@ -699,8 +699,7 @@
    {:outliner-op :set-block-property}
    (fn [conn]
      (throw-error-if-read-only-property property-id)
-     (let [db @conn
-           block-eid (->eid block-eid)
+     (let [block-eid (->eid block-eid)
            _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
            block (d/entity @conn block-eid)
            db-attribute? (some? (db-schema/schema property-id))
