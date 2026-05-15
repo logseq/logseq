@@ -2067,6 +2067,11 @@
                                   cross-owner (get @alias-owners-atom aname)
                                   batch-owner (get batch-alias->owner aname)]
                               (cond
+                                (= aname canonical)
+                                (do (swap! ignored-properties-atom conj
+                                           {:property :block/alias :value aname
+                                            :location canonical :reason :alias/self})
+                                    false)
                                 (and cross-owner (not= cross-owner canonical))
                                 (do (swap! ignored-properties-atom conj
                                            {:property :block/alias :value aname

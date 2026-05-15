@@ -1799,7 +1799,17 @@
       (is (= 1 (count (filter #(= :alias/alias-owns-aliases (:reason %)) @ignored-props)))
           "alias-of-alias is reported in ignored-properties")
       (is (nil? (:block/alias (first result)))
-          "alias pointing to a page that owns aliases is removed"))))
+          "alias pointing to a page that owns aliases is removed")))
+  (testing "self-alias is dropped and reported"
+    (let [alias-owners  (atom {})
+          ignored-props (atom [])
+          pages         [{:block/name "self" :block/alias [{:block/name "self"}]}]
+          result        (gp-exporter/sanitize-page-aliases-for-import!
+                         pages alias-owners ignored-props)]
+      (is (nil? (:block/alias (first result)))
+          "self-alias declaration is removed")
+      (is (some #(= :alias/self (:reason %)) @ignored-props)
+          "self-alias is reported in ignored-properties"))))
 
 (deftest page-alias-sanitise-for-import-cross-file
   (testing "source-is-alias caught across files (root->mid in file 1, mid->leaf in file 2)"
