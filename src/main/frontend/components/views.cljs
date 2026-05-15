@@ -2434,16 +2434,32 @@
 (rum/defc view-cp
   [view-entity table option* {:keys [*scroller-ref display-type row-selection]}]
   (let [[viewid] (hooks/use-state #(random-uuid))
+        gallery? (= display-type :logseq.property.view/type.gallery)
+        ;; The view entity's gallery custom-dimension property values are
+        ;; ref blocks that may not be loaded on the cold Table→Gallery
+        ;; switch, so the cards would render at the fallback size until
+        ;; something (e.g. opening the settings popup) pulled them. Load
+        ;; the view block up front and re-render once it resolves.
+        [_gallery-loaded? set-gallery-loaded!] (hooks/use-state false)
         option (assoc option*
                       :view-entity view-entity
                       :viewid viewid)]
+    (hooks/use-effect!
+     (fn []
+       (when gallery?
+         (-> (db-async/<get-block (state/get-current-repo) (:db/id view-entity) {})
+             (p/then (fn [_] (set-gallery-loaded! true)))
+             (p/catch (fn [_] (set-gallery-loaded! true))))))
+     [gallery? (:db/id view-entity)])
     [:div {:id viewid}
      (case display-type
        :logseq.property.view/type.list
        (list-view option view-entity table *scroller-ref)
 
        :logseq.property.view/type.gallery
-       (gallery-view option table view-entity (:rows table) *scroller-ref)
+       (gallery-view option table
+                     (or (db/entity (:db/id view-entity)) view-entity)
+                     (:rows table) *scroller-ref)
 
        (table-view table option row-selection *scroller-ref))]))
 
