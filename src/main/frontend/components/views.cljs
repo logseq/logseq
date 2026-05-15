@@ -2075,7 +2075,7 @@
                      (:db/id view-entity)
                      :logseq.property.view/gallery-card-custom-height
                      h)
-                    (when on-saved (on-saved (str "saved:" trimmed)))
+                    (when on-saved (on-saved {:name trimmed :width w :height h}))
                     (shui/dialog-close!)))]
     [:form.flex.flex-col.gap-4.p-2
      {:on-submit (fn [e] (.preventDefault e) (submit!))}
@@ -2101,15 +2101,15 @@
    kept). Reuses the by-name upsert and re-applies the new size to the
    current view."
   [view-entity dim on-done]
-  ;; Re-resolve from the DB at open time: the captured `view-entity`
-  ;; and `dim` are snapshots from the last settings render and go stale
-  ;; after a prior Save. Read the fresh saved record (source of truth
-  ;; for a saved dimension), then the live view size, then the snapshot.
+  ;; `dim` comes from the settings popup's optimistic saved-list state,
+  ;; so it already reflects prior Saves this session — prefer it. Fall
+  ;; back to the live view size, then the DB record (which lags the
+  ;; async write right after a Save).
   (let [nm (:name dim)
-        fresh-rec (some #(when (= nm (:name %)) %) (gallery-saved-dimensions))
         view (or (db/entity (:db/id view-entity)) view-entity)
-        initial-w (or (:width fresh-rec) (gallery-custom-width view) (:width dim))
-        initial-h (or (:height fresh-rec) (gallery-custom-height view) (:height dim))
+        fresh-rec (some #(when (= nm (:name %)) %) (gallery-saved-dimensions))
+        initial-w (or (:width dim) (gallery-custom-width view) (:width fresh-rec))
+        initial-h (or (:height dim) (gallery-custom-height view) (:height fresh-rec))
         [w-input set-w-input!] (hooks/use-state (str initial-w))
         [h-input set-h-input!] (hooks/use-state (str initial-h))
         w (parse-dimension-input w-input)
@@ -2130,7 +2130,7 @@
                      (:db/id view-entity)
                      :logseq.property.view/gallery-card-custom-height
                      h)
-                    (when on-done (on-done))
+                    (when on-done (on-done {:name nm :width w :height h}))
                     (shui/dialog-close!)))]
     [:form.flex.flex-col.gap-4.p-2
      {:on-submit (fn [e] (.preventDefault e) (submit!))}
@@ -2257,7 +2257,25 @@
         current-image-id (:db/id (:logseq.property.view/gallery-image-property view-entity))
         default-image-id (or (and (some #(= current-image-id (:db/id %)) candidates) current-image-id)
                              (:db/id (db/entity :block/title)))
-        saved (gallery-saved-dimensions)
+        ;; Local mirror of the graph-wide saved list. The DB write in
+        ;; the Save/Modify/Delete dialogs is async (worker round-trip),
+        ;; so re-reading it on the next render is stale and the dropdown
+        ;; would render a value with no matching item (blank trigger).
+        ;; The dialog callbacks update this optimistically instead.
+        [saved set-saved!] (hooks/use-state (gallery-saved-dimensions))
+        upsert-saved! (fn [{:keys [name] :as rec}]
+                        (set-saved!
+                         (fn [cur]
+                           (conj (vec (remove #(= (string/lower-case (str (:name %)))
+                                                  (string/lower-case (str name)))
+                                              cur))
+                                 rec))))
+        remove-saved! (fn [name]
+                        (set-saved!
+                         (fn [cur]
+                           (vec (remove #(= (string/lower-case (str (:name %)))
+                                            (string/lower-case (str name)))
+                                        cur)))))
         initial-dimension-value (if-let [m (gallery-saved-match view-entity)]
                                   (str "saved:" (:name m))
                                   "custom")
@@ -2269,13 +2287,15 @@
         selected-saved (when (string/starts-with? dimension-value "saved:")
                          (let [nm (subs dimension-value 6)]
                            (some #(when (= nm (:name %)) %) saved)))
+        on-saved (fn [{:keys [name] :as rec}]
+                   (upsert-saved! rec)
+                   (set-dimension-value! (str "saved:" name)))
         set-dimension!
         (fn [v]
           (set-dimension-value! v)
           (if (string/starts-with? v "saved:")
             (when-let [d (let [nm (subs v 6)]
-                           (some #(when (= nm (:name %)) %)
-                                 (gallery-saved-dimensions)))]
+                           (some #(when (= nm (:name %)) %) saved))]
               (db-property-handler/set-block-property!
                (:db/id view-entity)
                :logseq.property.view/gallery-card-custom-width
@@ -2356,7 +2376,7 @@
               :value "custom"}
              "Custom")]))))]
       (when custom?
-        (gallery-custom-dimension-inputs view-entity set-dimension-value!))
+        (gallery-custom-dimension-inputs view-entity on-saved))
       (when selected-saved
         [:div.flex.flex-row.items-center.gap-2.self-end
          (shui/button
@@ -2366,7 +2386,7 @@
            :type "button"
            :on-click #(shui/dialog-open!
                        (fn [] (gallery-modify-dimension-dialog
-                               view-entity selected-saved nil))
+                               view-entity selected-saved upsert-saved!))
                        {:class "w-auto max-w-sm"})}
           "Modify")
          (shui/button
@@ -2377,7 +2397,9 @@
            :on-click #(shui/dialog-open!
                        (fn [] (gallery-delete-dimension-dialog
                                selected-saved
-                               (fn [] (set-dimension-value! "custom"))))
+                               (fn []
+                                 (remove-saved! (:name selected-saved))
+                                 (set-dimension-value! "custom"))))
                        {:class "w-auto max-w-sm"})}
           "Delete")])]]))
 
