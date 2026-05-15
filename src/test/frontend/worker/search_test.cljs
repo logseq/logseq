@@ -224,7 +224,42 @@
                       result)]
         (is (empty? (search/search-blocks (atom :large-db) db "\"" {:limit 10})))
         (is (empty? (search/search-blocks (atom :large-db) db "foo \"bar" {:limit 10})))
-        (is (= ["\"\"\"\"*" "\"foo \"\"bar\"*"] @fts-binds))))))
+        (is (empty? (search/search-blocks (atom :large-db) db "foo \"bar AND baz" {:limit 10})))
+        (is (empty? (search/search-blocks (atom :large-db) db "foo \"bar or baz" {:limit 10})))
+        (is (empty? (search/search-blocks (atom :large-db) db "foo \"bar not baz" {:limit 10})))
+        (is (= ["\"\"\"\"*"
+                "\"foo \"\"bar\"*"
+                "\"foo \"\"bar AND baz\"*"
+                "\"foo \"\"bar OR baz\"*"
+                "\"foo \"\"bar NOT baz\"*"]
+               @fts-binds))))))
+
+(deftest search-blocks-quotes-dangling-boolean-operators-for-fts
+  (testing "dangling boolean operators are treated as literal text before SQLite FTS receives them"
+    (let [fts-binds (atom [])
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")
+                                bind (js->clj (aget opts "bind"))]
+                            (when (string/includes? sql "title match ?")
+                              (swap! fts-binds conj (first bind)))
+                            #js []))}]
+      (with-redefs [search/combine-results (fn [_db results] results)
+                    search/search-result->block-result
+                    (fn [_conn _q _code-class _option result]
+                      result)]
+        (is (empty? (search/search-blocks (atom :large-db) db "xxx and " {:limit 10})))
+        (is (empty? (search/search-blocks (atom :large-db) db "xxx AND " {:limit 10})))
+        (is (empty? (search/search-blocks (atom :large-db) db "xxx or " {:limit 10})))
+        (is (empty? (search/search-blocks (atom :large-db) db "xxx NOT " {:limit 10})))
+        (is (empty? (search/search-blocks (atom :large-db) db "xxx & " {:limit 10})))
+        (is (empty? (search/search-blocks (atom :large-db) db "xxx | " {:limit 10})))
+        (is (= ["\"xxx AND \"*"
+                "\"xxx AND \"*"
+                "\"xxx OR \"*"
+                "\"xxx NOT \"*"
+                "\"xxx AND \"*"
+                "\"xxx OR \"*"]
+               @fts-binds))))))
 
 (deftest search-blocks-large-graph-benchmark-regression
   (testing "cmd-k and autocomplete queries must not scan the full Datascript graph while typing"
