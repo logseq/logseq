@@ -342,7 +342,7 @@ DROP TRIGGER IF EXISTS blocks_au;
       (and (re-find #"[^\w\s]" q)
            (or (not (some #(string/includes? match-input %) ["AND" "OR" "NOT"]))
                (string/includes? q "/")))            ; punctuations
-      (str "\"" match-input "\"*")
+      (str "\"" (string/replace match-input "\"" "\"\"") "\"*")
       (not= q match-input)
       (string/replace match-input "," "")
       :else
