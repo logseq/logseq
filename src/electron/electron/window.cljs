@@ -9,6 +9,7 @@
             [electron.context-menu :as context-menu]
             [electron.db-worker :as db-worker]
             [electron.i18n :refer [t]]
+            [electron.link :as link]
             [electron.logger :as logger]
             [electron.spell-check :as spell-check]
             [electron.state :as state]
@@ -126,7 +127,7 @@
   (let [URL (.-URL URL)
         parsed-url (try (URL. url) (catch :default _ nil))]
     (when parsed-url
-      (if (contains? #{"https:" "http:" "mailto:"} (.-protocol parsed-url))
+      (if (link/shell-open-url? parsed-url)
         (.openExternal shell url)
         (when-let [^js res (and (fn? default-open)
                                 (.showMessageBoxSync dialog
