@@ -2026,6 +2026,76 @@
                  ::original-name (:block/name block')
                  ::original-title (:block/title block')}))))))
 
+(defn sanitize-page-aliases-for-import!
+  "Removes alias declarations that violate ownership invariants across imported files.
+  Mutates alias-owners-atom (alias-name -> canonical-name map) and ignored-properties-atom.
+  Violations detected: duplicate owner (two pages claiming same alias),
+  alias-of-alias (a page used as alias that itself owns aliases),
+  cross-file source-is-alias (a page that is already an alias across files trying to own aliases), and
+  cross-file alias-owns-aliases (an alias target that already owns aliases in a previous file).
+  Returns a vec of pages with conflicting aliases stripped."
+  [pages alias-owners-atom ignored-properties-atom]
+  (let [;; Within this batch: first-declared owner wins for duplicate detection
+        batch-alias->owner
+        (reduce (fn [acc page]
+                  (reduce (fn [acc2 alias-m]
+                            (let [n (:block/name alias-m)]
+                              (if (contains? acc2 n) acc2 (assoc acc2 n (:block/name page)))))
+                          acc (:block/alias page)))
+                {} pages)
+        ;; Names of pages in this batch that themselves declare aliases
+        batch-pages-with-aliases
+        (->> pages (filter #(seq (:block/alias %))) (map :block/name) set)
+        ;; Pages that already own aliases across previously imported files (values of alias-owners-atom)
+        ;; Computed once per call for O(1) per-alias lookup
+        cross-file-alias-owners
+        (set (vals @alias-owners-atom))]
+    (mapv
+     (fn [page]
+       (if-let [aliases (seq (:block/alias page))]
+         (let [canonical (:block/name page)]
+           ;; Cross-file source-is-alias: this canonical page is already registered as someone else's alias
+           (if (contains? @alias-owners-atom canonical)
+             (do (doseq [alias-m aliases]
+                   (swap! ignored-properties-atom conj
+                          {:property :block/alias :value (:block/name alias-m)
+                           :location canonical :reason :alias/source-is-alias}))
+                 (dissoc page :block/alias))
+             (let [valid (filterv
+                          (fn [alias-m]
+                            (let [aname (:block/name alias-m)
+                                  cross-owner (get @alias-owners-atom aname)
+                                  batch-owner (get batch-alias->owner aname)]
+                              (cond
+                                (and cross-owner (not= cross-owner canonical))
+                                (do (swap! ignored-properties-atom conj
+                                           {:property :block/alias :value aname
+                                            :location canonical :reason :alias/duplicate-owner})
+                                    false)
+                                (and batch-owner (not= batch-owner canonical))
+                                (do (swap! ignored-properties-atom conj
+                                           {:property :block/alias :value aname
+                                            :location canonical :reason :alias/duplicate-owner})
+                                    false)
+                                ;; Cross-file alias-owns-aliases: aname already owns aliases from a previous file
+                                (contains? cross-file-alias-owners aname)
+                                (do (swap! ignored-properties-atom conj
+                                           {:property :block/alias :value aname
+                                            :location canonical :reason :alias/alias-owns-aliases})
+                                    false)
+                                (contains? batch-pages-with-aliases aname)
+                                (do (swap! ignored-properties-atom conj
+                                           {:property :block/alias :value aname
+                                            :location canonical :reason :alias/alias-owns-aliases})
+                                    false)
+                                :else true)))
+                          aliases)]
+               (doseq [alias-m valid]
+                 (swap! alias-owners-atom assoc (:block/name alias-m) canonical))
+               (if (seq valid) (assoc page :block/alias valid) (dissoc page :block/alias)))))
+         page))
+     pages)))
+
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
   all pages to be transacted, pages' properties and additional
@@ -2038,7 +2108,10 @@
                                                  (keyword (:block/name %)))
                                       (not (:block/file %))))
                         ;; remove file path relative
-                        (map #(dissoc % :block/file)))
+                        (map #(dissoc % :block/file))
+                        ;; sanitize alias declarations before transacting
+                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
+                                                           (:ignored-properties import-state)))
         ;; Build all named ents once per import file to speed up named lookups
         all-existing-page-uuids (get-all-existing-page-uuids @(:classes-from-property-parents import-state)
                                                              @(:all-existing-page-uuids import-state))
@@ -2167,7 +2240,10 @@
    ;; Used if a property value changes to :default
    :block-properties-text-values (atom {})
    ;; Track asset data for use across asset and doc import steps
-   :assets (atom {})})
+   :assets (atom {})
+   ;; Map from alias-page-name (string) to canonical-page-name (string) for duplicate-owner detection.
+   ;; Populated as files are imported and used to drop conflicting alias declarations.
+   :alias-owners (atom {})})
 
 (defn- build-tx-options [{:keys [user-options] :as options}]
   (merge

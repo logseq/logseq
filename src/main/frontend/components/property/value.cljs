@@ -809,6 +809,14 @@
                                   (and alias? (= (or (:db/id (:block/page block))
                                                      (:db/id block))
                                                  (:db/id node)))
+                                  ;; Candidate is already owned by a different page as an alias
+                                  (and alias?
+                                       (when-let [owner (first (:block/_alias node))]
+                                         (not= (:db/id owner) (or (:db/id (:block/page block)) (:db/id block)))))
+                                  ;; Candidate already owns aliases (alias pages must be leaf nodes)
+                                  (and alias? (seq (:block/alias node)))
+                                  ;; Source page is already an alias of another page
+                                  (and alias? (seq (:block/_alias (or (:block/page block) block))))
                                   (= :logseq.property/empty-placeholder (:db/ident node))
                                   (cond
                                     (= property-type :class)

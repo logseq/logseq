@@ -1132,6 +1132,10 @@
  :page.delete/total "总计: {1}"
  :page.delete/warning "这些页面的内容已删除，但无法删除：{1}。有关更多详细信息，请参阅 JavaScript 控制台。"
 
+ :page.validation/alias-duplicate-owner "该页面已是另一个页面的别名。"
+ :page.validation/alias-owns-aliases "已有别名的页面不能再作为别名使用。"
+ :page.validation/alias-self "别名不能是页面本身。"
+ :page.validation/alias-source-is-alias "已作为别名的页面不能拥有自己的别名。"
  :page.validation/cant-set-built-in-tags "新页面不能设置内置标签：{1}"
  :page.validation/duplicate "另一个名为“{1}”的页面已存在，其标签为：{2}。"
  :page.validation/name-blank "页面名称不能为空。"

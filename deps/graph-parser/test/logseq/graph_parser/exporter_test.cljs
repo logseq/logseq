@@ -1774,3 +1774,61 @@
             "Block with text surrounding code has no children extracted")
         (is (string/includes? (:block/title b) "```")
             "Block title retains raw code fence markup")))))
+
+(deftest page-alias-sanitise-for-import
+  (testing "duplicate-owner alias is dropped and reported"
+    (let [alias-owners  (atom {})
+          ignored-props (atom [])
+          pages         [{:block/name "p1" :block/alias [{:block/name "shared"}]}
+                         {:block/name "p2" :block/alias [{:block/name "shared"}]}]
+          result        (gp-exporter/sanitize-page-aliases-for-import!
+                         pages alias-owners ignored-props)]
+      (is (= "p1" (get @alias-owners "shared"))
+          "first declarer wins ownership")
+      (is (= 1 (count (filter #(= :alias/duplicate-owner (:reason %)) @ignored-props)))
+          "duplicate alias is reported in ignored-properties")
+      (is (nil? (:block/alias (second result)))
+          "second page's conflicting alias is removed")))
+  (testing "alias-of-alias is dropped and reported"
+    (let [alias-owners  (atom {})
+          ignored-props (atom [])
+          pages         [{:block/name "root" :block/alias [{:block/name "mid"}]}
+                         {:block/name "mid"  :block/alias [{:block/name "leaf"}]}]
+          result        (gp-exporter/sanitize-page-aliases-for-import!
+                         pages alias-owners ignored-props)]
+      (is (= 1 (count (filter #(= :alias/alias-owns-aliases (:reason %)) @ignored-props)))
+          "alias-of-alias is reported in ignored-properties")
+      (is (nil? (:block/alias (first result)))
+          "alias pointing to a page that owns aliases is removed"))))
+
+(deftest page-alias-sanitise-for-import-cross-file
+  (testing "source-is-alias caught across files (root->mid in file 1, mid->leaf in file 2)"
+    (let [alias-owners  (atom {})
+          ignored-props (atom [])]
+      ;; File 1: root claims mid as alias → registers "mid" -> "root"
+      (gp-exporter/sanitize-page-aliases-for-import!
+       [{:block/name "root" :block/alias [{:block/name "mid"}]}]
+       alias-owners ignored-props)
+      ;; File 2: mid tries to declare leaf as its alias — but mid is already an alias
+      (let [result (gp-exporter/sanitize-page-aliases-for-import!
+                    [{:block/name "mid" :block/alias [{:block/name "leaf"}]}]
+                    alias-owners ignored-props)]
+        (is (nil? (:block/alias (first result)))
+            "mid's alias declaration dropped: mid is already an alias")
+        (is (some #(= :alias/source-is-alias (:reason %)) @ignored-props)
+            "source-is-alias reason recorded"))))
+  (testing "alias-owns-aliases caught across files (mid->leaf in file 1, root->mid in file 2)"
+    (let [alias-owners  (atom {})
+          ignored-props (atom [])]
+      ;; File 1: mid claims leaf as alias → registers "leaf" -> "mid"; mid is now an owner
+      (gp-exporter/sanitize-page-aliases-for-import!
+       [{:block/name "mid" :block/alias [{:block/name "leaf"}]}]
+       alias-owners ignored-props)
+      ;; File 2: root tries to use mid as alias — but mid already owns aliases
+      (let [result (gp-exporter/sanitize-page-aliases-for-import!
+                    [{:block/name "root" :block/alias [{:block/name "mid"}]}]
+                    alias-owners ignored-props)]
+        (is (nil? (:block/alias (first result)))
+            "root's alias pointing to mid dropped: mid already owns aliases")
+        (is (some #(= :alias/alias-owns-aliases (:reason %)) @ignored-props)
+            "alias-owns-aliases reason recorded")))))
