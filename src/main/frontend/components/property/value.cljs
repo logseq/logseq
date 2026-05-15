@@ -715,8 +715,11 @@
 
 (defn- node-matches-scoped-classes?
   [class-ids node]
-  (let [node (or (:value node) node)]
-    (some #(contains? class-ids (if (integer? %) % (:db/id %))) (:block/tags node))))
+  (let [node-value (or (:value node) node)
+        node' (if (and (:db/id node-value) (nil? (:block/tags node-value)))
+                (or (db/entity (:db/id node-value)) node-value)
+                node-value)]
+    (some #(contains? class-ids (if (integer? %) % (:db/id %))) (:block/tags node'))))
 
 (defn- scoped-class-nodes
   [repo property classes result]
@@ -730,6 +733,15 @@
           (model/get-class-objects repo (:db/id class)))
         classes)
        distinct))))
+
+(defn- <load-initial-node-choices
+  [repo property non-root-classes]
+  (if (seq non-root-classes)
+    (if (broad-scoped-node-property? property non-root-classes)
+      (db-async/<get-property-values (:db/ident property))
+      (p/let [result (p/all (map (fn [class] (db-async/<get-tag-objects repo (:db/id class))) non-root-classes))]
+        (distinct (apply concat result))))
+    (db-async/<get-property-values (:db/ident property))))
 
 (rum/defc ^:large-vars/cleanup-todo select-node < rum/static
   [property
@@ -919,8 +931,14 @@
 (rum/defc property-value-select-node < rum/static
   [block property opts
    {:keys [*show-new-property-config?]}]
-  (let [[initial-choices set-initial-choices!] (hooks/use-state nil)
+  (let [[initial-choices set-initial-choices-state!] (hooks/use-state nil)
         [result set-result!] (hooks/use-state nil)
+        *initial-choices (rum/use-ref nil)
+        current-initial-choices (fn []
+                                  (or (rum/deref *initial-choices) initial-choices))
+        set-initial-choices! (fn [value]
+                               (rum/set-ref! *initial-choices value)
+                               (set-initial-choices-state! value))
         set-result-and-initial-choices! (fn [value]
                                           (set-initial-choices! value)
                                           (set-result! value))
@@ -939,13 +957,13 @@
                      :input-opts input-opts
                      :on-input (fn [v]
                                  (if (string/blank? v)
-                                   (set-result! initial-choices)
+                                   (set-result! (current-initial-choices))
                                    ;; TODO rank initial choices higher
                                    (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
                                                                                                    :built-in? false})]
                                      (set-result! result))))
                      :add-new-choice! (fn [new-choice]
-                                        (set-initial-choices! (add-initial-node-choice initial-choices new-choice))))
+                                        (set-initial-choices! (add-initial-node-choice (current-initial-choices) new-choice))))
         repo (state/get-current-repo)
         classes (:logseq.property/classes property)
         class? (= :class (:logseq.property/type property))
@@ -961,15 +979,8 @@
          extends-property?
          nil
 
-         (seq non-root-classes)
-         (if (broad-scoped-node-property? property non-root-classes)
-           (set-result-and-initial-choices! [])
-           (p/let [result (p/all (map (fn [class] (db-async/<get-tag-objects repo (:db/id class))) non-root-classes))
-                   result' (distinct (apply concat result))]
-             (set-result-and-initial-choices! result')))
-
          :else
-         (p/let [result (db-async/<get-property-values (:db/ident property))]
+         (p/let [result (<load-initial-node-choices repo property non-root-classes)]
            (set-result-and-initial-choices! result))))
      [])
 
