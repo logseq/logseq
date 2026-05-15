@@ -2102,16 +2102,16 @@
   data for subsequent steps"
   [conn pages blocks {:keys [import-state user-options]
                       :as options}]
-  (let [all-pages* (->> (extract/with-ref-pages pages blocks)
-                        ;; remove unused property pages unless the page has content
-                        (remove #(and (contains? (into (:property-classes user-options) (:property-parent-classes user-options))
-                                                 (keyword (:block/name %)))
-                                      (not (:block/file %))))
-                        ;; remove file path relative
-                        (map #(dissoc % :block/file))
-                        ;; sanitize alias declarations before transacting
-                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
-                                                           (:ignored-properties import-state)))
+  (let [all-pages* (-> (->> (extract/with-ref-pages pages blocks)
+                            ;; remove unused property pages unless the page has content
+                            (remove #(and (contains? (into (:property-classes user-options) (:property-parent-classes user-options))
+                                                     (keyword (:block/name %)))
+                                          (not (:block/file %))))
+                            ;; remove file path relative
+                            (map #(dissoc % :block/file)))
+                       ;; sanitize alias declarations before transacting
+                       (sanitize-page-aliases-for-import! (:alias-owners import-state)
+                                                          (:ignored-properties import-state)))
         ;; Build all named ents once per import file to speed up named lookups
         all-existing-page-uuids (get-all-existing-page-uuids @(:classes-from-property-parents import-state)
                                                              @(:all-existing-page-uuids import-state))
