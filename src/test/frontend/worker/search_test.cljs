@@ -562,6 +562,35 @@
                   :block/title "ai"}
                  (:alias result))))))))
 
+(deftest search-result-detects-alias-match-from-pulled-result-map
+  (testing "pulled search result maps include aliases for alias-match detection"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000238"
+          alias-id #uuid "00000000-0000-0000-0000-000000000239"
+          block-key :frontend.worker.search/block
+          page {:db/id 1
+                :block/uuid page-id
+                :block/title "Artificial Intelligence"
+                :block/alias [{:block/uuid alias-id
+                               :block/title "ai"}]}]
+      (with-redefs [d/entity (fn [& _]
+                               (throw (js/Error. "search result block should come from pull map")))
+                    ldb/page? (fn [entity] (= (:db/id entity) (:db/id page)))
+                    ldb/built-in? (constantly false)
+                    ldb/hidden? (constantly false)]
+        (let [result (#'search/search-result->block-result
+                      (atom :db)
+                      "ai"
+                      nil
+                      {:enable-snippet? false}
+                      {:id (str page-id)
+                       :page (str page-id)
+                       :title "Artificial Intelligence ai"
+                       block-key page})]
+          (is (= "Artificial Intelligence" (:block/title result)))
+          (is (= {:block/uuid alias-id
+                  :block/title "ai"}
+                 (:alias result))))))))
+
 (deftest upsert-blocks-batches-rows-into-single-sql-statement
   (let [calls (atom [])
         tx #js {:exec (fn [opts]

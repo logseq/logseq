@@ -575,6 +575,7 @@ DROP TRIGGER IF EXISTS blocks_au;
     {:block/parent [:db/id :block/uuid :block/title :logseq.property/built-in?
                     :logseq.property/hide? :logseq.property/deleted-at]}
     {:block/tags [:db/id :db/ident :block/title :logseq.property/icon]}
+    {:block/alias [:block/uuid :block/title]}
     {:block/_alias [:block/uuid :block/title]}
     :logseq.property/icon
     :logseq.property.node/display-type
