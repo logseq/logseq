@@ -11,7 +11,7 @@ Use this skill to turn one block in the `Lambda RTC` graph into the current task
 
 ## Required Companion Skill
 
-Load `.agents/skills/logseq-cli/SKILL.md` before running any ad hoc `logseq` command. Use the fixed fetch script below for the initial task-block retrieval instead of rewriting the sync and `show` command sequence.
+The parent agent owns every `Lambda RTC` graph interaction in this workflow. Load `.agents/skills/logseq-cli/SKILL.md` in the parent agent before running any ad hoc `logseq` command against `Lambda RTC`. Use the fixed fetch script below for the initial task-block retrieval instead of rewriting the sync and `show` command sequence.
 
 If the task explicitly requests a pull request, load the matching GitHub publishing skill for the current environment, such as `github:yeet` when available, before staging, committing, pushing, or opening a PR.
 
@@ -63,13 +63,28 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Do not update `Reproducible?` for idea or enhancement tasks.
    - Stop if a clear bug or regression task cannot be updated with one of the exact `Reproducible?` choices.
 
-6. Complete the described task.
-   - Follow the active task brief, not assumptions from the UUID or graph name.
-   - If the active task brief is ambiguous or not actionable, stop with a concise error instead of guessing.
-   - If the task requires code edits, follow repo `AGENTS.md` files and load any matching repo-local skills before editing.
-   - If the task requires Logseq graph writes, follow `logseq-cli` write rules and re-run the sync gate immediately before writes to `Lambda RTC`.
+6. Complete the described task with a worker subagent.
+   - Spawn a worker subagent to complete the active task brief. This step is an explicit delegation requirement of this skill.
+   - Keep all `Lambda RTC` graph interactions and Lambda orchestration in the parent agent: fetching, sync gates, root task status updates, `Reproducible?`, `Lambda RTC` graph reads/writes, optional PR metadata writes, completion summary creation, completed `#agent-steer` status updates, and final `in-review` status remain parent-owned.
+   - Pass the worker subagent the active task brief, the full fetched block tree for context, normalized UUID, repo path, relevant branch/worktree state, and the exact boundaries above.
+   - Instruct the worker subagent to load every required skill in its own context before working, including skills named by the active task brief's `agent-skills` property or children, `.agents/skills/logseq-cli/SKILL.md` when the task itself needs non-`Lambda RTC` Logseq CLI work, and any matching repo-local skills required by the task or touched files.
+   - Instruct the worker subagent not to read from, write to, sync, or otherwise communicate with the `Lambda RTC` graph. Any needed `Lambda RTC` operation must be reported to the parent agent instead of performed by the worker.
+   - Instruct the worker subagent to follow the active task brief, not assumptions from the UUID or graph name.
+   - Instruct the worker subagent that it is not alone in the codebase, must not revert edits made by others, and must adjust its work to accommodate existing changes.
+   - If the task requires code edits, the worker subagent must follow repo `AGENTS.md` files and load any matching repo-local skills before editing.
+   - If the task itself requires non-`Lambda RTC` Logseq CLI reads or graph writes, the worker subagent may load `logseq-cli` and perform them according to that skill's rules.
+   - Require the worker subagent's final report to list loaded skills, files changed, non-`Lambda RTC` Logseq CLI operations performed, requested `Lambda RTC` operations, verification run, completed `#agent-steer` block ids or UUIDs, and any blockers.
+   - Stop if the worker subagent cannot be spawned, reads from or writes to `Lambda RTC`, fails to load required skills, returns an ambiguous result, or reports that the task is not actionable.
 
-7. Generate the PR title and git branch name before optional PR creation.
+7. Mark handled `#agent-steer` guidance blocks as done.
+   - Do this only for an originally `in-review` root task with matching `#agent-steer` TODO block-trees selected in step 3.
+   - After completing the guidance and before adding the completion summary, update every handled `#agent-steer` block's status to `done`.
+   - Use each preserved `#agent-steer` block UUID: `logseq upsert task --graph "Lambda RTC" --uuid "$agent_steer_uuid" --status done`.
+   - Mark only the `#agent-steer` blocks whose instructions were actually completed; do not mark unrelated or incomplete steer blocks.
+   - Follow `logseq-cli` write rules and re-run the sync gate immediately before writing to `Lambda RTC`.
+   - Stop if any handled `#agent-steer` block cannot be updated as a task.
+
+8. Generate the PR title and git branch name before optional PR creation.
    - Do this only when the active task brief or the user's current request explicitly asks for a pull request.
    - Generate both values after completing the described task and before staging, committing, pushing, or opening a PR.
    - Follow the repo `AGENTS.md` PR title format: `feat|enhance|fix(<module>): <short description>`.
@@ -77,7 +92,7 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Generate a concise, lowercase, hyphenated git branch name with the `codex/` prefix unless the user explicitly asks for a different branch prefix.
    - Reuse the generated PR title and branch name in the GitHub publishing workflow.
 
-8. Optionally create a pull request.
+9. Optionally create a pull request.
    - Default behavior is to not create a PR.
    - Create a PR only when the active task brief or the user's current request explicitly asks for one.
    - For bug or regression tasks with an existing GitHub issue URL in the active task brief, the fetched root block properties, or their children, preserve that issue URL before overwriting any task property with the PR URL.
@@ -91,13 +106,6 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Stop if PR creation succeeds but the `GitHub Url` property cannot be updated.
    - Include the PR URL in the final report.
    - Stop if PR creation is explicitly requested but cannot be completed safely.
-
-9. Mark handled `#agent-steer` guidance blocks as done.
-   - Do this only for an originally `in-review` root task with matching `#agent-steer` TODO block-trees selected in step 3.
-   - After completing the guidance and before adding the completion summary, update every handled `#agent-steer` block's status to `done`.
-   - Use each preserved `#agent-steer` block UUID: `logseq upsert task --graph "Lambda RTC" --uuid "$agent_steer_uuid" --status done`.
-   - Follow `logseq-cli` write rules and re-run the sync gate immediately before writing to `Lambda RTC`.
-   - Stop if any handled `#agent-steer` block cannot be updated as a task.
 
 10. Add a completion summary under the task block.
    - When the described work is finished, create a `Summary:` child block under the fetched root block before changing the final task status.
@@ -121,7 +129,9 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Mention the normalized UUID.
    - State that the sync gate passed, including `ws-state`, `pending-local`, and `pending-server`.
    - State that the task status was moved to `doing`, a completion summary was added, and the task status was moved to `in-review`.
+   - State that step 6 was completed by a worker subagent, list the skills the worker reported loading, and state that all `Lambda RTC` graph interactions were handled by the parent agent.
    - If the task started in `in-review`, state which `#agent-steer` TODO block UUIDs were used as guidance and moved to `done`.
+   - If the task did not start in `in-review`, state that no `#agent-steer` guidance block was completed.
    - For `logseq-answer-machine` tasks, state that the completion summary was written as a specific Markdown block tree.
    - State which `Reproducible?` choice was recorded for a bug or regression task, or that it was skipped because the task was not a bug or regression.
    - If a PR was explicitly requested and created, include the PR URL and state that the `GitHub Url` property was updated. For bug or regression PRs with a linked GitHub issue, state that the commit message mentioned `fix $github_issue_url`. If no PR was requested, do not create one.
@@ -142,6 +152,9 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
 - Never set `Reproducible?` for idea or enhancement tasks.
 - Never use boolean values for `Reproducible?`; it is a default property with exact choices `Not sure`, `Yes`, and `No`.
 - Never skip recording one exact `Reproducible?` choice for a fetched task that is clearly a bug or regression.
+- Never complete workflow step 6 locally; use a worker subagent and require it to load the task-required skills.
+- Never delegate `Lambda RTC` graph reads/writes, sync gates, or orchestration status writes to the worker subagent.
+- Never leave a completed `#agent-steer` block in a non-done status.
 - Never skip the `doing` status write, completion summary child block, or final `in-review` status write when the described task completes successfully.
 - Never flatten the completion summary into a vague single block; write the specific summary as a Markdown outline block tree.
 - Stop on the first command error other than a sync status showing unopened sync, invalid JSON result, missing block, sync timeout, non-idle sync state, or non-actionable task brief.

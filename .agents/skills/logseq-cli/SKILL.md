@@ -69,6 +69,7 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - Replace placeholder ids/uuids in retrieved examples with real entities from the target graph.
 - Use `logseq list ...`, `logseq show ...`, or `logseq query ...` first to discover valid ids/uuids.
 - For graph transfer flows, keep `graph export --file` and `graph import --input` paths consistent.
+- Quote `--content` values with single quotes in shell examples, for example `--content 'Block content'`, so markdown backticks are not interpreted by the shell.
 
 ## Structured block writes
 
@@ -91,15 +92,15 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 
 ### Task status in block content
 
-- Anti-pattern: store task state in content, for example `--content "DONE Implemented and verified ..."` with `upsert block`.
+- Anti-pattern: store task state in content, for example `--content 'DONE Implemented and verified ...'` with `upsert block`.
 - Correct usage: store task state as structured task data with `upsert task --status <status>` and keep content free of `TODO`, `DOING`, `DONE`, or other status markers.
 - Example:
-  1. `logseq upsert task --graph "Lambda RTC" --target-page "May 4th, 2026" --content "Some content here" --status done --output json`
+  1. `logseq upsert task --graph "Lambda RTC" --target-page "May 4th, 2026" --content 'Some content here' --status done --output json`
   2. If tags are needed, use the returned block id: `logseq upsert block --graph "Lambda RTC" --id <returned-block-id> --update-tags '["AI-GENERATED" "CLI" "db-sync"]'`
 
 ### Hashtags in content instead of tag association
 
-- Anti-pattern: treat content hashtags as tag association, for example `--content "Summary #AI-GENERATED"`.
+- Anti-pattern: treat content hashtags as tag association, for example `--content 'Summary #AI-GENERATED'`.
 - Correct usage: keep tags in explicit tag options, for example `upsert block --update-tags '["AI-GENERATED"]'`.
 
 ### Comma-separated tag lists
