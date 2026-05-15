@@ -671,7 +671,7 @@ DROP TRIGGER IF EXISTS blocks_au;
               alias-match (matched-alias q block)
               display-title (if (:enable-snippet? option)
                               (ensure-highlighted-snippet snippet title q)
-                              (if alias-match
+                              (if (page-or-object? block)
                                 (:block/title block)
                                 (or snippet title)))
               block-page (or

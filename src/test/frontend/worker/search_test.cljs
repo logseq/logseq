@@ -591,6 +591,32 @@
                   :block/title "ai"}
                  (:alias result))))))))
 
+(deftest search-result-keeps-page-title-when-canonical-title-matches
+  (testing "page results display the canonical title when the indexed title also contains aliases"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000240"
+          page {:db/id 1
+                :block/uuid page-id
+                :block/title "Artificial Intelligence"
+                :block/alias [{:db/id 2
+                               :block/uuid #uuid "00000000-0000-0000-0000-000000000241"
+                               :block/title "ai"}]}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (when (= id page-id)
+                                 page))
+                    ldb/page? (fn [entity] (= (:db/id entity) (:db/id page)))
+                    ldb/built-in? (constantly false)
+                    ldb/hidden? (constantly false)]
+        (let [result (#'search/search-result->block-result
+                      (atom :db)
+                      "Artificial"
+                      nil
+                      {:enable-snippet? false}
+                      {:id (str page-id)
+                       :page (str page-id)
+                       :title "Artificial Intelligence ai"})]
+          (is (= "Artificial Intelligence" (:block/title result)))
+          (is (not (contains? result :alias))))))))
+
 (deftest upsert-blocks-batches-rows-into-single-sql-statement
   (let [calls (atom [])
         tx #js {:exec (fn [opts]
