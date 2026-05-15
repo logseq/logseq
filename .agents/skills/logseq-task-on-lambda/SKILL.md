@@ -60,7 +60,15 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - If the task requires code edits, follow repo `AGENTS.md` files and load any matching repo-local skills before editing.
    - If the task requires Logseq graph writes, follow `logseq-cli` write rules and re-run the sync gate immediately before writes to `Lambda RTC`.
 
-6. Optionally create a pull request.
+6. Generate the PR title and git branch name before optional PR creation.
+   - Do this only when the fetched task block or the user's current request explicitly asks for a pull request.
+   - Generate both values after completing the described task and before staging, committing, pushing, or opening a PR.
+   - Follow the repo `AGENTS.md` PR title format: `feat|enhance|fix(<module>): <short description>`.
+   - Choose the PR type from the task outcome: use `fix` for bug or regression tasks, `enhance` for improvements to existing behavior, and `feat` for new behavior.
+   - Generate a concise, lowercase, hyphenated git branch name with the `codex/` prefix unless the user explicitly asks for a different branch prefix.
+   - Reuse the generated PR title and branch name in the GitHub publishing workflow.
+
+7. Optionally create a pull request.
    - Default behavior is to not create a PR.
    - Create a PR only when the fetched task block or the user's current request explicitly asks for one.
    - For bug or regression tasks with an existing GitHub issue URL in the fetched task block, its properties, or its children, preserve that issue URL before overwriting any task property with the PR URL.
@@ -75,27 +83,25 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
    - Include the PR URL in the final report.
    - Stop if PR creation is explicitly requested but cannot be completed safely.
 
-7. Add a completion summary under the task block.
-   - When the described work is finished, create one concise child block under the fetched root block before changing the final task status.
-   - Use the normalized UUID as the parent target: `logseq upsert block --graph "Lambda RTC" --target-uuid "$normalized_uuid" --content "Summary: ..."`.
-   - Include the outcome and verification performed. Keep the summary factual and scoped to this task.
-   - For tasks completed with `.agents/skills/logseq-answer-machine/SKILL.md`, write a specific answer summary as a block tree instead of a single flat block:
-     - Create a `Summary:` child block under the fetched root block.
-     - Add nested child blocks under `Summary:` for the useful sections from the answer, such as `Short Answer`, `Evidence`, `How It Works`, `Runtime Verification`, `Edge Cases and Open Questions`, and `Practical Takeaways`.
-     - Keep the block tree proportional to the question, but include concrete file paths, namespaces, command names, runtime surfaces, observed behavior, and verification results when they support the answer.
-     - Do not write vague summaries such as only "Answered the question" or "Investigated the codebase".
-     - Format code and technical terms with Markdown where appropriate, including backticks for code symbols, namespaces, file paths, commands, properties, keywords, and literal values.
-     - Use additional `logseq upsert block --graph "Lambda RTC" --target-uuid "$summary_or_section_uuid" --content "$child_content"` calls to create the nested summary blocks.
+8. Add a completion summary under the task block.
+   - When the described work is finished, create a `Summary:` child block under the fetched root block before changing the final task status.
+   - Use the normalized UUID as the parent target for the top-level summary block: `logseq upsert block --graph "Lambda RTC" --target-uuid "$normalized_uuid" --content "Summary:"`.
+   - Write the summary as an outline-style block tree with nested child blocks, not as a long single block.
+   - Add concise nested sections under `Summary:` for the useful parts of the outcome, such as `Outcome`, `Changes`, `Verification`, `PR`, `Evidence`, `How It Works`, `Edge Cases and Open Questions`, or `Practical Takeaways`.
+   - Keep the block tree proportional to the task; include concrete file paths, namespaces, command names, runtime surfaces, observed behavior, and verification results when they support the summary.
+   - Do not write vague summaries such as only "Completed the task", "Answered the question", or "Investigated the codebase".
+   - Format code and technical terms with Markdown where appropriate, including backticks for code symbols, namespaces, file paths, commands, properties, keywords, and literal values.
+   - Use additional `logseq upsert block --graph "Lambda RTC" --target-uuid "$summary_or_section_uuid" --content "$child_content"` calls to create the nested summary blocks.
    - Do not include the PR URL in the summary child block.
    - Stop if the summary block cannot be created.
 
-8. Mark the task as in review.
+9. Mark the task as in review.
    - After the summary child block is created, update the fetched root block status to `in-review`.
    - Use the normalized UUID from the fetch script stderr: `logseq upsert task --graph "Lambda RTC" --uuid "$normalized_uuid" --status in-review`.
    - Follow `logseq-cli` write rules and re-run the sync gate immediately before writing to `Lambda RTC`.
    - Stop if the root block cannot be updated as a task.
 
-9. Report the result.
+10. Report the result.
    - Mention the normalized UUID.
    - State that the sync gate passed, including `ws-state`, `pending-local`, and `pending-server`.
    - State that the task status was moved to `doing`, a completion summary was added, and the task status was moved to `in-review`.
@@ -118,5 +124,5 @@ Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DO
 - Never use boolean values for `Reproducible?`; it is a default property with exact choices `Not sure`, `Yes`, and `No`.
 - Never skip recording one exact `Reproducible?` choice for a fetched task that is clearly a bug or regression.
 - Never skip the `doing` status write, completion summary child block, or final `in-review` status write when the described task completes successfully.
-- Never flatten a `logseq-answer-machine` completion summary into a vague single block; write the specific answer summary as a Markdown block tree.
+- Never flatten the completion summary into a vague single block; write the specific summary as a Markdown outline block tree.
 - Stop on the first command error other than a sync status showing unopened sync, invalid JSON result, missing block, sync timeout, non-idle sync state, or non-actionable task brief.
