@@ -330,6 +330,14 @@ DROP TRIGGER IF EXISTS blocks_au;
               result))
           base)))))
 
+(defn- fts-phrase-input
+  [match-input]
+  (str "\"" (string/replace match-input "\"" "\"\"") "\"*"))
+
+(defn- dangling-boolean-operator?
+  [match-input]
+  (boolean (re-find #"(?:^|\s)(?:AND|OR|NOT)\s*$" match-input)))
+
 (defn- get-match-input
   [q]
   (let [match-input (-> q
@@ -339,12 +347,18 @@ DROP TRIGGER IF EXISTS blocks_au;
                         (string/replace " | " " OR ")
                         (string/replace " not " " NOT "))]
     (cond
+      (dangling-boolean-operator? match-input)
+      (fts-phrase-input match-input)
+
       (and (re-find #"[^\w\s]" q)
-           (or (not (some #(string/includes? match-input %) ["AND" "OR" "NOT"]))
+           (or (string/includes? match-input "\"")
+               (not (some #(string/includes? match-input %) ["AND" "OR" "NOT"]))
                (string/includes? q "/")))            ; punctuations
-      (str "\"" (string/replace match-input "\"" "\"\"") "\"*")
+      (fts-phrase-input match-input)
+
       (not= q match-input)
       (string/replace match-input "," "")
+
       :else
       match-input)))
 
