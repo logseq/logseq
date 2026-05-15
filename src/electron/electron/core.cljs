@@ -216,7 +216,7 @@
                               :accelerator false}])
                           [{:label "Always on Top"
                             :type "checkbox"
-                            :click (fn [menuItem browserWindow]
+                            :click (fn [^js menuItem ^js browserWindow]
                                      ;; switch alwaysOnTop state
                                      (.setAlwaysOnTop browserWindow (.-checked menuItem)))}])})
         ;; Windows has no about role
