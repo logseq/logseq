@@ -161,6 +161,7 @@
 
 (defn complete-datoms-import!
   [repo graph-id remote-tx]
+  (prn :debug ::complete-datoms-import! :remote-tx remote-tx)
   (-> (p/do!
        (when-let [search-db (worker-state/get-sqlite-conn repo :search)]
          (search/truncate-table! search-db))
@@ -168,15 +169,19 @@
                                   {:sub-type :download-progress
                                    :graph-uuid graph-id
                                    :message "Saving data to DB"})
-       (if-let [rehydrate-f (@thread-api/*thread-apis :thread-api/db-sync-rehydrate-large-titles)]
-         (rehydrate-f repo graph-id)
-         (fail-fast :db-sync/missing-field {:field :thread-api/db-sync-rehydrate-large-titles}))
+       (->
+        (if-let [rehydrate-f (@thread-api/*thread-apis :thread-api/db-sync-rehydrate-large-titles)]
+          (rehydrate-f repo graph-id)
+          (fail-fast :db-sync/missing-field {:field :thread-api/db-sync-rehydrate-large-titles}))
+        (p/catch (fn [error]
+                   (log/error ::rehydrate-large-title-failed error))))
        (rtc-log-and-state/rtc-log :rtc.log/download
                                   {:sub-type :download-completed
                                    :graph-uuid graph-id
                                    :message "Graph is ready!"})
        (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
          (.exec db "PRAGMA wal_checkpoint(TRUNCATE)"))
+       (prn :debug ::update-local-tx remote-tx)
        (client-op/update-local-tx repo remote-tx)
        (shared-service/broadcast-to-clients! :add-repo {:repo repo}))
       (p/catch (fn [error]
