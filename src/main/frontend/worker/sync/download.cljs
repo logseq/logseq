@@ -161,7 +161,6 @@
 
 (defn complete-datoms-import!
   [repo graph-id remote-tx]
-  (prn :debug ::complete-datoms-import! :remote-tx remote-tx)
   (-> (p/do!
        (when-let [search-db (worker-state/get-sqlite-conn repo :search)]
          (search/truncate-table! search-db))
@@ -181,7 +180,6 @@
                                    :message "Graph is ready!"})
        (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
          (.exec db "PRAGMA wal_checkpoint(TRUNCATE)"))
-       (prn :debug ::update-local-tx remote-tx)
        (client-op/update-local-tx repo remote-tx)
        (shared-service/broadcast-to-clients! :add-repo {:repo repo}))
       (p/catch (fn [error]
