@@ -2035,6 +2035,15 @@
             new-vec (conj (vec without) {:name name :width w :height h})]
         (db/transact! [(ldb/kv :logseq.kv/gallery-custom-dimensions new-vec)])))))
 
+(defn- delete-gallery-dimension!
+  "Removes the named dimension from the graph-wide saved list. Names
+   match case-insensitively."
+  [name]
+  (let [lname (string/lower-case (string/trim (str name)))
+        new-vec (vec (remove #(= lname (string/lower-case (str (:name %))))
+                             (gallery-saved-dimensions)))]
+    (db/transact! [(ldb/kv :logseq.kv/gallery-custom-dimensions new-vec)])))
+
 (defn- gallery-saved-match
   "First saved dimension whose width/height equal the view entity's
    current custom width/height, or nil."
@@ -2086,6 +2095,83 @@
        {:type "submit"
         :disabled invalid?}
        "Save")]]))
+
+(rum/defc gallery-modify-dimension-dialog
+  "Edits the width/height of an existing saved dimension (its name is
+   kept). Reuses the by-name upsert and re-applies the new size to the
+   current view."
+  [view-entity dim on-done]
+  (let [[w-input set-w-input!] (hooks/use-state (str (:width dim)))
+        [h-input set-h-input!] (hooks/use-state (str (:height dim)))
+        w (parse-dimension-input w-input)
+        h (parse-dimension-input h-input)
+        invalid? (or (nil? w) (nil? h))
+        input-cls "!px-2 !py-0 !h-8 w-[96px] text-sm border rounded bg-transparent text-right tabular-nums"
+        submit! (fn []
+                  (when-not invalid?
+                    (save-gallery-dimension! (:name dim) w h)
+                    (db-property-handler/set-block-property!
+                     (:db/id view-entity)
+                     :logseq.property.view/gallery-card-custom-width
+                     w)
+                    (db-property-handler/set-block-property!
+                     (:db/id view-entity)
+                     :logseq.property.view/gallery-card-custom-height
+                     h)
+                    (when on-done (on-done))
+                    (shui/dialog-close!)))]
+    [:form.flex.flex-col.gap-4.p-2
+     {:on-submit (fn [e] (.preventDefault e) (submit!))}
+     [:div.text-lg.font-medium "Change the custom dimensions"]
+     [:div.flex.flex-row.items-center.justify-between.gap-2
+      [:div.text-muted-foreground "Width"]
+      (shui/input
+       {:type "number"
+        :min 1
+        :auto-focus true
+        :class input-cls
+        :value w-input
+        :aria-label "Custom card width in pixels"
+        :on-change (fn [e] (set-w-input! (util/evalue e)))})]
+     [:div.flex.flex-row.items-center.justify-between.gap-2
+      [:div.text-muted-foreground "Height"]
+      (shui/input
+       {:type "number"
+        :min 1
+        :class input-cls
+        :value h-input
+        :aria-label "Custom card height in pixels"
+        :on-change (fn [e] (set-h-input! (util/evalue e)))})]
+     [:div.flex.justify-end.gap-2
+      (shui/button
+       {:variant "ghost"
+        :type "button"
+        :on-click #(shui/dialog-close!)}
+       "Cancel")
+      (shui/button
+       {:type "submit"
+        :disabled invalid?}
+       "Save")]]))
+
+(rum/defc gallery-delete-dimension-dialog
+  "Confirms removal of a saved dimension from the graph-wide list."
+  [dim on-deleted]
+  (let [submit! (fn []
+                  (delete-gallery-dimension! (:name dim))
+                  (when on-deleted (on-deleted))
+                  (shui/dialog-close!))]
+    [:form.flex.flex-col.gap-4.p-2
+     {:on-submit (fn [e] (.preventDefault e) (submit!))}
+     [:div.text-lg.font-medium "Are you sure you want to delete this custom dimension?"]
+     [:div.flex.justify-end.gap-2
+      (shui/button
+       {:variant "ghost"
+        :type "button"
+        :on-click #(shui/dialog-close!)}
+       "Cancel")
+      (shui/button
+       {:type "submit"}
+       "Submit")]]))
 
 (rum/defc gallery-custom-dimension-inputs
   "Two text inputs for the custom Width and Height, separated by `:`.
@@ -2168,6 +2254,9 @@
         ;; to the view entity.
         [dimension-value set-dimension-value!] (hooks/use-state initial-dimension-value)
         custom? (= dimension-value "custom")
+        selected-saved (when (string/starts-with? dimension-value "saved:")
+                         (let [nm (subs dimension-value 6)]
+                           (some #(when (= nm (:name %)) %) saved)))
         set-dimension!
         (fn [v]
           (set-dimension-value! v)
@@ -2255,7 +2344,30 @@
               :value "custom"}
              "Custom")]))))]
       (when custom?
-        (gallery-custom-dimension-inputs view-entity set-dimension-value!))]]))
+        (gallery-custom-dimension-inputs view-entity set-dimension-value!))
+      (when selected-saved
+        [:div.flex.flex-row.items-center.gap-2.self-end
+         (shui/button
+          {:variant "outline"
+           :size :sm
+           :class "!px-2 !py-0 !h-8"
+           :type "button"
+           :on-click #(shui/dialog-open!
+                       (fn [] (gallery-modify-dimension-dialog
+                               view-entity selected-saved nil))
+                       {:class "w-auto max-w-sm"})}
+          "Modify")
+         (shui/button
+          {:variant "outline"
+           :size :sm
+           :class "!px-2 !py-0 !h-8"
+           :type "button"
+           :on-click #(shui/dialog-open!
+                       (fn [] (gallery-delete-dimension-dialog
+                               selected-saved
+                               (fn [] (set-dimension-value! "custom"))))
+                       {:class "w-auto max-w-sm"})}
+          "Delete")])]]))
 
 (rum/defc gallery-settings
   [view-entity table columns]
