@@ -620,6 +620,7 @@
  :export/view-nodes-data-copied "Copied view nodes' data!"
  :export/zip "Export both SQLite DB and assets"
  :export/zip-error "Export zip failed."
+ :export/zip-exported "ZIP exported to {1}."
 
  :export.backup/backup-now "Backup now"
  :export.backup/cancel "Cancel backup"

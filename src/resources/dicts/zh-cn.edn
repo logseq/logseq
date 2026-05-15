@@ -617,6 +617,7 @@
  :export/view-nodes-data-copied "已复制视图节点数据！"
  :export/zip "导出 SQLite 数据库和资源"
  :export/zip-error "导出 ZIP 失败。"
+ :export/zip-exported "ZIP 已导出到 {1}。"
 
  :export.backup/backup-now "立即备份"
  :export.backup/cancel "取消备份"

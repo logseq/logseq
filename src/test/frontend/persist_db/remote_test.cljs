@@ -183,18 +183,55 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
-(deftest remote-import-db-uses-binary-thread-api
+(deftest remote-import-db-uses-raw-binary-endpoint
   (async done
-    (let [calls (atom [])
-          client {:base-url "http://127.0.0.1:9101"}
+    (let [captured (atom nil)
+          client (remote/create-client
+                  {:base-url "http://127.0.0.1:9101"
+                   :fetch-fn (fn [req]
+                               (reset! captured req)
+                               (p/resolved {:status 200
+                                            :body (js/JSON.stringify
+                                                   #js {:ok true
+                                                        :resultTransit (ldb/write-transit-str nil)})}))})
           db (remote/->InRemote client nil nil)
-          payload (.from js/Buffer "sqlite-bytes")]
-      (-> (p/with-redefs [remote/invoke! (fn [client' method args]
-                                          (swap! calls conj [client' method args])
-                                          (p/resolved nil))]
-            (p/let [_ (protocol/<import-db db "graph-a" payload)]
-              (is (= [client "thread-api/import-db-binary" ["graph-a" payload]]
-                     (first @calls)))))
+          payload (js/Uint8Array. #js [1 2 3])]
+      (-> (p/let [_ (protocol/<import-db db "graph-a" payload)]
+            (is (= "POST" (:method @captured)))
+            (is (= "http://127.0.0.1:9101/v1/import-db-binary?repo=graph-a"
+                   (:url @captured)))
+            (is (identical? payload (:body @captured))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest remote-import-db-posts-raw-binary-body
+  (async done
+    (let [captured (atom nil)
+          client (remote/create-client
+                  {:base-url "http://127.0.0.1:9101"
+                   :auth-token "token-1"
+                   :fetch-fn (fn [req]
+                               (reset! captured req)
+                               (p/resolved {:status 200
+                                            :body (js/JSON.stringify
+                                                   #js {:ok true
+                                                        :resultTransit (ldb/write-transit-str nil)})}))})
+          db (remote/->InRemote client nil nil)
+          payload (js/ArrayBuffer. 3)
+          view (js/Uint8Array. payload)]
+      (aset view 0 1)
+      (aset view 1 2)
+      (aset view 2 3)
+      (-> (p/let [_ (protocol/<import-db db "graph-a" payload)]
+            (is (= "POST" (:method @captured)))
+            (is (= "http://127.0.0.1:9101/v1/import-db-binary?repo=graph-a"
+                   (:url @captured)))
+            (is (= "application/octet-stream"
+                   (get-in @captured [:headers "Content-Type"])))
+            (is (= "Bearer token-1"
+                   (get-in @captured [:headers "Authorization"])))
+            (is (identical? payload (:body @captured))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
