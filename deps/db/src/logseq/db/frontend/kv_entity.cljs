@@ -31,4 +31,4 @@ RTC won't start when major-schema-versions don't match"
                                               :rtc {:rtc/ignore-entity-when-init-upload true}}
      :logseq.kv/graph-rtc-e2ee?              {:doc "true if it's a rtc graph with E2EE enabled"}
      :logseq.kv/graph-remote?                {:doc "true if it's a remote graph"}
-     :logseq.kv/gallery-custom-dimensions    {:doc "User-saved named gallery card dimensions: vector of {:name :width :height}"})))
+     :logseq.kv/gallery-custom-dimensions    {:doc "User-saved named gallery card dimensions: an EDN string (pr-str) of a vector of {:name :width :height}"})))
