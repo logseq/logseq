@@ -1998,10 +1998,15 @@
     (= :block/title (:db/ident candidate)) "Title"
     :else (or (:block/title candidate) (some-> (:db/ident candidate) name))))
 
+;; Hard ceiling for a single card dimension. A value larger than this is
+;; almost certainly a typo; clamp instead of rendering a giant card.
+(def ^:private gallery-dimension-max 2000)
+
 (defn- parse-dimension-input
   [s]
   (let [n (when (string? s) (parse-long (string/replace s #"[^0-9]" "")))]
-    (when (and (number? n) (pos? n)) n)))
+    (when (and (number? n) (pos? n))
+      (min n gallery-dimension-max))))
 
 (def ^:private gallery-custom-dimension-debounce-ms 250)
 
