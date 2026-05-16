@@ -1844,8 +1844,7 @@
            (set-refs-loaded! true))))
      [(:db/id block)])
     [:div.ls-card-item.content
-     {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))
-      :class (if image-layout? "ls-card-image-layout" "ls-card-fallback-layout")}
+     {:class (if image-layout? "ls-card-image-layout" "ls-card-fallback-layout")}
      (if image-layout?
        [:<>
         [:div.ls-card-image
