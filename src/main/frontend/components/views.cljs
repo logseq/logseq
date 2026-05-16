@@ -2055,27 +2055,31 @@
   (when (and (string? v) (string/starts-with? v gallery-saved-prefix))
     (subs v (count gallery-saved-prefix))))
 
+(defn- upsert-saved-dimension
+  "Pure: `saved` with `name` upserted (case-insensitive) to {w,h}."
+  [saved name w h]
+  (conj (vec (remove #(same-name? (:name %) name) saved))
+        {:name name :width w :height h}))
+
 (defn- save-gallery-dimension!
   "Upserts a named dimension into the graph-wide saved list. Names match
    case-insensitively, so an existing entry with the same name is
-   replaced. No-op when the name is blank or the size is not a pair of
-   positive integers."
-  [name w h]
+   replaced. Computed from the caller's current `saved` list (the
+   in-session source of truth) rather than a fresh DB read, so a second
+   save before the async write lands can't drop the first. No-op when
+   the name is blank or the size is not a pair of positive integers."
+  [saved name w h]
   (let [name (string/trim (str name))]
     (when (and (seq name)
                (pos-int? w)
                (pos-int? h))
-      (let [without (remove #(same-name? (:name %) name)
-                            (gallery-saved-dimensions))
-            new-vec (conj (vec without) {:name name :width w :height h})]
-        (persist-saved-dimensions! new-vec)))))
+      (persist-saved-dimensions! (upsert-saved-dimension saved name w h)))))
 
 (defn- delete-gallery-dimension!
-  "Removes the named dimension from the graph-wide saved list. Names
-   match case-insensitively."
-  [name]
-  (persist-saved-dimensions! (remove #(same-name? (:name %) name)
-                                     (gallery-saved-dimensions))))
+  "Removes the named dimension from `saved` (the caller's current list)
+   and persists the result. Names match case-insensitively."
+  [saved name]
+  (persist-saved-dimensions! (remove #(same-name? (:name %) name) saved)))
 
 (defn- gallery-saved-match
   "First saved dimension whose width/height equal the view entity's
@@ -2090,13 +2094,13 @@
 (rum/defc gallery-save-dimension-dialog
   "Prompts for a name and saves the given width/height as a graph-wide
    named dimension. Save is blocked while the name is blank."
-  [view-entity w h on-saved]
+  [view-entity w h on-saved saved]
   (let [[name set-name!] (hooks/use-state "")
         trimmed (string/trim name)
         invalid? (empty? trimmed)
         submit! (fn []
                   (when-not invalid?
-                    (save-gallery-dimension! trimmed w h)
+                    (save-gallery-dimension! saved trimmed w h)
                     ;; Pin the view's custom size to exactly what was
                     ;; saved so the dropdown can resolve it back to this
                     ;; name on reopen (and the cards render at this size).
@@ -2126,14 +2130,14 @@
   "Edits the width/height of an existing saved dimension (its name is
    kept). Reuses the by-name upsert and re-applies the new size to the
    current view."
-  [view-entity dim on-done]
+  [view-entity dim on-done saved]
   ;; `dim` comes from the settings popup's optimistic saved-list state,
   ;; so it already reflects prior Saves this session — prefer it. Fall
-  ;; back to the live view size, then the DB record (which lags the
-  ;; async write right after a Save).
+  ;; back to the live view size, then the in-session saved record (the
+  ;; DB lags the async write right after a Save).
   (let [nm (:name dim)
         view (or (db/entity (:db/id view-entity)) view-entity)
-        fresh-rec (find-saved (gallery-saved-dimensions) nm)
+        fresh-rec (find-saved saved nm)
         initial-w (or (:width dim) (gallery-custom-width view) (:width fresh-rec))
         initial-h (or (:height dim) (gallery-custom-height view) (:height fresh-rec))
         [w-input set-w-input!] (hooks/use-state (str initial-w))
@@ -2147,7 +2151,7 @@
         input-cls "!px-2 !py-0 !h-8 w-[96px] text-sm border rounded bg-transparent text-right tabular-nums"
         submit! (fn []
                   (when-not invalid?
-                    (save-gallery-dimension! nm w h)
+                    (save-gallery-dimension! saved nm w h)
                     (apply-gallery-size! view-entity w h)
                     (when on-done (on-done {:name nm :width w :height h}))
                     (shui/dialog-close!)))]
@@ -2186,9 +2190,9 @@
 
 (rum/defc gallery-delete-dimension-dialog
   "Confirms removal of a saved dimension from the graph-wide list."
-  [dim on-deleted]
+  [dim on-deleted saved]
   (let [submit! (fn []
-                  (delete-gallery-dimension! (:name dim))
+                  (delete-gallery-dimension! saved (:name dim))
                   (when on-deleted (on-deleted))
                   (shui/dialog-close!))]
     [:form.flex.flex-col.gap-4.p-2
@@ -2211,7 +2215,7 @@
    not produce a burst of db writes. Commit happens on-change rather
    than on-blur because the surrounding popup tears the input out of
    the DOM before blur would fire."
-  [view-entity on-saved seed]
+  [view-entity on-saved seed saved]
   (let [initial-w (or (:width seed) (gallery-custom-width view-entity) gallery-default-width)
         initial-h (or (:height seed) (gallery-custom-height view-entity) gallery-default-height)
         [w-input set-w-input!] (hooks/use-state (str initial-w))
@@ -2261,7 +2265,7 @@
                          h (parse-dimension-input h-input)]
                      (when (and w h)
                        (shui/dialog-open!
-                        (fn [] (gallery-save-dimension-dialog view-entity w h on-saved))
+                        (fn [] (gallery-save-dimension-dialog view-entity w h on-saved saved))
                         {:class "w-auto max-w-sm"}))))}
       "Save as")
      [:input
@@ -2382,7 +2386,7 @@
               :value "custom"}
              "Custom")]))))]
       (when custom?
-        (gallery-custom-dimension-inputs view-entity on-saved applied))
+        (gallery-custom-dimension-inputs view-entity on-saved applied saved))
       (when selected-saved
         [:div.flex.flex-row.items-center.gap-2.self-end
          (shui/button
@@ -2395,7 +2399,8 @@
                                view-entity selected-saved
                                (fn [{:keys [width height] :as rec}]
                                  (upsert-saved! rec)
-                                 (set-applied! {:width width :height height}))))
+                                 (set-applied! {:width width :height height}))
+                               saved))
                        {:class "w-auto max-w-sm"})}
           "Modify")
          (shui/button
@@ -2408,7 +2413,8 @@
                                selected-saved
                                (fn []
                                  (remove-saved! (:name selected-saved))
-                                 (set-dimension-value! "custom"))))
+                                 (set-dimension-value! "custom"))
+                               saved))
                        {:class "w-auto max-w-sm"})}
           "Delete")])]]))
 
