@@ -2192,9 +2192,9 @@
    not produce a burst of db writes. Commit happens on-change rather
    than on-blur because the surrounding popup tears the input out of
    the DOM before blur would fire."
-  [view-entity on-saved]
-  (let [initial-w (or (gallery-custom-width view-entity) gallery-default-width)
-        initial-h (or (gallery-custom-height view-entity) gallery-default-height)
+  [view-entity on-saved seed]
+  (let [initial-w (or (:width seed) (gallery-custom-width view-entity) gallery-default-width)
+        initial-h (or (:height seed) (gallery-custom-height view-entity) gallery-default-height)
         [w-input set-w-input!] (hooks/use-state (str initial-w))
         [h-input set-h-input!] (hooks/use-state (str initial-h))
         debounced-w (hooks/use-debounced-value w-input gallery-custom-dimension-debounce-ms)
@@ -2294,12 +2294,20 @@
         ;; width/height inputs without needing the popup to re-subscribe
         ;; to the view entity.
         [dimension-value set-dimension-value!] (hooks/use-state initial-dimension-value)
+        ;; The size currently in effect for this view, tracked locally
+        ;; so switching back to "Custom" can prefill it without reading
+        ;; the (async, stale) view entity. Updated whenever a size is
+        ;; explicitly applied (saved pick, Save-as, Modify).
+        [applied set-applied!] (hooks/use-state
+                                {:width (gallery-custom-width view-entity)
+                                 :height (gallery-custom-height view-entity)})
         custom? (= dimension-value "custom")
         selected-saved (when (string/starts-with? dimension-value "saved:")
                          (let [nm (subs dimension-value 6)]
                            (some #(when (= nm (:name %)) %) saved)))
-        on-saved (fn [{:keys [name] :as rec}]
+        on-saved (fn [{:keys [name width height] :as rec}]
                    (upsert-saved! rec)
+                   (set-applied! {:width width :height height})
                    (set-dimension-value! (str "saved:" name)))
         set-dimension!
         ;; Selecting "Custom" must NOT write anything — dimensions are
@@ -2312,6 +2320,7 @@
           (when (string/starts-with? v "saved:")
             (when-let [d (let [nm (subs v 6)]
                            (some #(when (= nm (:name %)) %) saved))]
+              (set-applied! {:width (:width d) :height (:height d)})
               (db-property-handler/set-block-property!
                (:db/id view-entity)
                :logseq.property.view/gallery-card-custom-width
@@ -2379,7 +2388,7 @@
               :value "custom"}
              "Custom")]))))]
       (when custom?
-        (gallery-custom-dimension-inputs view-entity on-saved))
+        (gallery-custom-dimension-inputs view-entity on-saved applied))
       (when selected-saved
         [:div.flex.flex-row.items-center.gap-2.self-end
          (shui/button
@@ -2389,7 +2398,10 @@
            :type "button"
            :on-click #(shui/dialog-open!
                        (fn [] (gallery-modify-dimension-dialog
-                               view-entity selected-saved upsert-saved!))
+                               view-entity selected-saved
+                               (fn [{:keys [width height] :as rec}]
+                                 (upsert-saved! rec)
+                                 (set-applied! {:width width :height height}))))
                        {:class "w-auto max-w-sm"})}
           "Modify")
          (shui/button
