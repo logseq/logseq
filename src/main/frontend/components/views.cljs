@@ -4,6 +4,7 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
+            [clojure.edn :as edn]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.impl.entity :as de]
@@ -2006,9 +2007,26 @@
 
 (defn- gallery-saved-dimensions
   "User-saved named gallery dimensions, graph-wide. Reading the KV entity
-   here makes consuming rum components reactive to changes."
+   here makes consuming rum components reactive to changes. Stored as an
+   EDN string: a structured (vector-of-maps) :kv/value does not survive
+   the worker<->main round-trip the way a scalar one does, so it would
+   read back empty on reopen. The vector? branch tolerates any value
+   written by an older build."
   []
-  (or (:kv/value (db/entity :logseq.kv/gallery-custom-dimensions)) []))
+  (let [v (:kv/value (db/entity :logseq.kv/gallery-custom-dimensions))]
+    (cond
+      (string? v) (try
+                    (let [parsed (edn/read-string v)]
+                      (if (vector? parsed) parsed []))
+                    (catch :default _ []))
+      (vector? v) v
+      :else [])))
+
+(defn- persist-saved-dimensions!
+  "Writes the saved-dimensions list as an EDN string (see
+   gallery-saved-dimensions for why it is not stored structured)."
+  [v]
+  (db/transact! [(ldb/kv :logseq.kv/gallery-custom-dimensions (pr-str (vec v)))]))
 
 (defn- same-name?
   "Saved dimensions are unique by name, compared trimmed and
@@ -2050,15 +2068,14 @@
       (let [without (remove #(same-name? (:name %) name)
                             (gallery-saved-dimensions))
             new-vec (conj (vec without) {:name name :width w :height h})]
-        (db/transact! [(ldb/kv :logseq.kv/gallery-custom-dimensions new-vec)])))))
+        (persist-saved-dimensions! new-vec)))))
 
 (defn- delete-gallery-dimension!
   "Removes the named dimension from the graph-wide saved list. Names
    match case-insensitively."
   [name]
-  (let [new-vec (vec (remove #(same-name? (:name %) name)
-                             (gallery-saved-dimensions)))]
-    (db/transact! [(ldb/kv :logseq.kv/gallery-custom-dimensions new-vec)])))
+  (persist-saved-dimensions! (remove #(same-name? (:name %) name)
+                                     (gallery-saved-dimensions))))
 
 (defn- gallery-saved-match
   "First saved dimension whose width/height equal the view entity's
