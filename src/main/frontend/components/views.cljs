@@ -2066,14 +2066,17 @@
    case-insensitively, so an existing entry with the same name is
    replaced. Computed from the caller's current `saved` list (the
    in-session source of truth) rather than a fresh DB read, so a second
-   save before the async write lands can't drop the first. No-op when
-   the name is blank or the size is not a pair of positive integers."
+   save before the async write lands can't drop the first. Returns the
+   new list when it persists, nil when the name is blank or the size is
+   not a pair of positive integers (callers gate optimistic UI on this)."
   [saved name w h]
   (let [name (string/trim (str name))]
     (when (and (seq name)
                (pos-int? w)
                (pos-int? h))
-      (persist-saved-dimensions! (upsert-saved-dimension saved name w h)))))
+      (let [new-vec (upsert-saved-dimension saved name w h)]
+        (persist-saved-dimensions! new-vec)
+        new-vec))))
 
 (defn- delete-gallery-dimension!
   "Removes the named dimension from `saved` (the caller's current list)
@@ -2097,10 +2100,12 @@
   [view-entity w h on-saved saved]
   (let [[name set-name!] (hooks/use-state "")
         trimmed (string/trim name)
-        invalid? (empty? trimmed)
+        invalid? (or (empty? trimmed) (not (pos-int? w)) (not (pos-int? h)))
         submit! (fn []
-                  (when-not invalid?
-                    (save-gallery-dimension! saved trimmed w h)
+                  ;; Gate the optimistic callback / apply / close on the
+                  ;; write actually persisting, so the dropdown can't
+                  ;; show a dimension that was never saved.
+                  (when (save-gallery-dimension! saved trimmed w h)
                     ;; Pin the view's custom size to exactly what was
                     ;; saved so the dropdown can resolve it back to this
                     ;; name on reopen (and the cards render at this size).
@@ -2150,8 +2155,7 @@
                              (set-input! (string/replace (.. e -target -value) #"[^0-9]" ""))))
         input-cls "!px-2 !py-0 !h-8 w-[96px] text-sm border rounded bg-transparent text-right tabular-nums"
         submit! (fn []
-                  (when-not invalid?
-                    (save-gallery-dimension! saved nm w h)
+                  (when (save-gallery-dimension! saved nm w h)
                     (apply-gallery-size! view-entity w h)
                     (when on-done (on-done {:name nm :width w :height h}))
                     (shui/dialog-close!)))]
