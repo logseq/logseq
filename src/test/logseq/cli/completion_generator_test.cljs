@@ -236,6 +236,17 @@
     (let [token (gen/spec->token [:output {:validate #{"human" "json" "edn"} :desc "Format"}])]
       (is (= :enum (:type token)))
       (is (= ["edn" "human" "json"] (:values token)))))
+  (testing "spec with :validate {:pred set} → :enum type"
+    (let [token (gen/spec->token [:priority {:validate {:pred #{"low" "medium" "high" "urgent"}
+                                                        :ex-msg (fn [_] "bad")}
+                                             :desc "Priority"}])]
+      (is (= :enum (:type token)))
+      (is (= ["high" "low" "medium" "urgent"] (:values token)))))
+  (testing "spec with :validate {:pred fn} → :free type (predicate is not enumerable)"
+    (let [token (gen/spec->token [:id {:validate {:pred number? :ex-msg (fn [_] "bad")}
+                                       :desc "Id"}])]
+      (is (= :free (:type token)))
+      (is (nil? (:values token)))))
   (testing "spec with :complete :graphs → :dynamic type"
     (let [token (gen/spec->token [:graph {:complete :graphs :desc "Graph name"}])]
       (is (= :dynamic (:type token)))
