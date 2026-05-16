@@ -1995,6 +1995,20 @@
   []
   (or (:kv/value (db/entity :logseq.kv/gallery-custom-dimensions)) []))
 
+(def ^:private gallery-saved-prefix "saved:")
+
+(defn- saved-dim-value
+  "Dimensions-select option value for a saved dimension named `nm`."
+  [nm]
+  (str gallery-saved-prefix nm))
+
+(defn- saved-dim-name
+  "The saved name encoded in a Dimensions-select value, or nil when the
+   value is not a saved entry (e.g. \"custom\")."
+  [v]
+  (when (and (string? v) (string/starts-with? v gallery-saved-prefix))
+    (subs v (count gallery-saved-prefix))))
+
 (defn- save-gallery-dimension!
   "Upserts a named dimension into the graph-wide saved list. Names match
    case-insensitively, so an existing entry with the same name is
@@ -2249,7 +2263,7 @@
                                             (string/lower-case (str name)))
                                         cur)))))
         initial-dimension-value (if-let [m (gallery-saved-match view-entity)]
-                                  (str "saved:" (:name m))
+                                  (saved-dim-value (:name m))
                                   "custom")
         ;; Local state so switching to Custom immediately reveals the
         ;; width/height inputs without needing the popup to re-subscribe
@@ -2263,13 +2277,12 @@
                                 {:width (gallery-custom-width view-entity)
                                  :height (gallery-custom-height view-entity)})
         custom? (= dimension-value "custom")
-        selected-saved (when (string/starts-with? dimension-value "saved:")
-                         (let [nm (subs dimension-value 6)]
-                           (some #(when (= nm (:name %)) %) saved)))
+        selected-saved (when-let [nm (saved-dim-name dimension-value)]
+                         (some #(when (= nm (:name %)) %) saved))
         on-saved (fn [{:keys [name width height] :as rec}]
                    (upsert-saved! rec)
                    (set-applied! {:width width :height height})
-                   (set-dimension-value! (str "saved:" name)))
+                   (set-dimension-value! (saved-dim-value name)))
         set-dimension!
         ;; Selecting "Custom" must NOT write anything — dimensions are
         ;; only persisted on an explicit user edit (typing in the
@@ -2278,9 +2291,8 @@
         ;; size.
         (fn [v]
           (set-dimension-value! v)
-          (when (string/starts-with? v "saved:")
-            (when-let [d (let [nm (subs v 6)]
-                           (some #(when (= nm (:name %)) %) saved))]
+          (when-let [nm (saved-dim-name v)]
+            (when-let [d (some #(when (= nm (:name %)) %) saved)]
               (set-applied! {:width (:width d) :height (:height d)})
               (apply-gallery-size! view-entity (:width d) (:height d)))))]
     [:div.ls-gallery-settings.flex.flex-col.gap-3.p-2.text-sm
@@ -2321,7 +2333,7 @@
           (concat
            (->> saved
                 (map (fn [d]
-                       {:value (str "saved:" (:name d))
+                       {:value (saved-dim-value (:name d))
                         :label (:name d)}))
                 (sort-by (comp string/lower-case str :label))
                 (map (fn [{:keys [value label]}]
