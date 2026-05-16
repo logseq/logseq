@@ -2199,25 +2199,36 @@
         [h-input set-h-input!] (hooks/use-state (str initial-h))
         debounced-w (hooks/use-debounced-value w-input gallery-custom-dimension-debounce-ms)
         debounced-h (hooks/use-debounced-value h-input gallery-custom-dimension-debounce-ms)
+        ;; Skip the commit on the initial effect run: the inputs are
+        ;; seeded from the view (or the fallback default), and merely
+        ;; opening the popup must not persist a size. Only an actual
+        ;; edit (which is the only thing that changes w-input/h-input,
+        ;; and therefore the debounced value) commits.
+        first-w? (hooks/use-ref true)
+        first-h? (hooks/use-ref true)
         on-digit-change! (fn [set-input!]
                            (fn [e]
                              (set-input! (string/replace (.. e -target -value) #"[^0-9]" ""))))
         input-cls "!px-2 !py-0 !h-8 w-[72px] text-sm border rounded bg-transparent text-right tabular-nums"]
     (hooks/use-effect!
      (fn []
-       (when-let [v (parse-dimension-input debounced-w)]
-         (db-property-handler/set-block-property!
-          (:db/id view-entity)
-          :logseq.property.view/gallery-card-custom-width
-          v)))
+       (if (hooks/deref first-w?)
+         (hooks/set-ref! first-w? false)
+         (when-let [v (parse-dimension-input debounced-w)]
+           (db-property-handler/set-block-property!
+            (:db/id view-entity)
+            :logseq.property.view/gallery-card-custom-width
+            v))))
      [debounced-w])
     (hooks/use-effect!
      (fn []
-       (when-let [v (parse-dimension-input debounced-h)]
-         (db-property-handler/set-block-property!
-          (:db/id view-entity)
-          :logseq.property.view/gallery-card-custom-height
-          v)))
+       (if (hooks/deref first-h?)
+         (hooks/set-ref! first-h? false)
+         (when-let [v (parse-dimension-input debounced-h)]
+           (db-property-handler/set-block-property!
+            (:db/id view-entity)
+            :logseq.property.view/gallery-card-custom-height
+            v))))
      [debounced-h])
     [:div.flex.flex-row.items-center.gap-2.self-end
      (shui/button
@@ -2291,9 +2302,14 @@
                    (upsert-saved! rec)
                    (set-dimension-value! (str "saved:" name)))
         set-dimension!
+        ;; Selecting "Custom" must NOT write anything — dimensions are
+        ;; only persisted on an explicit user edit (typing in the
+        ;; width/height inputs, Save-as, or Modify). Picking a saved
+        ;; dimension IS an explicit choice, so that still applies its
+        ;; size.
         (fn [v]
           (set-dimension-value! v)
-          (if (string/starts-with? v "saved:")
+          (when (string/starts-with? v "saved:")
             (when-let [d (let [nm (subs v 6)]
                            (some #(when (= nm (:name %)) %) saved))]
               (db-property-handler/set-block-property!
@@ -2303,20 +2319,7 @@
               (db-property-handler/set-block-property!
                (:db/id view-entity)
                :logseq.property.view/gallery-card-custom-height
-               (:height d)))
-            ;; "custom": seed the inputs with the current size or the
-            ;; default fallback so the width/height fields are populated.
-            (do
-              (when-not (gallery-custom-width view-entity)
-                (db-property-handler/set-block-property!
-                 (:db/id view-entity)
-                 :logseq.property.view/gallery-card-custom-width
-                 gallery-default-width))
-              (when-not (gallery-custom-height view-entity)
-                (db-property-handler/set-block-property!
-                 (:db/id view-entity)
-                 :logseq.property.view/gallery-card-custom-height
-                 gallery-default-height)))))]
+               (:height d)))))]
     (hooks/use-effect!
      (fn []
        (try
