@@ -1815,10 +1815,10 @@
 ;; Single source of truth for the default card size, used both to
 ;; pre-fill the Custom width/height inputs and as the size gallery-view
 ;; writes to the --ls-card-custom-* CSS vars when the view has no
-;; explicit dimension yet. Reproduces the old "Square" look for graphs
-;; created before the built-in dimensions were removed.
+;; explicit dimension yet. The height is the image area only; the card
+;; adds the title strip on top (see views.css --ls-card-title-height).
 (def ^:private gallery-default-width 290)
-(def ^:private gallery-default-height 354)
+(def ^:private gallery-default-height 290)
 
 (rum/defc gallery-card-item
   [view-entity block config image-prop-ident]

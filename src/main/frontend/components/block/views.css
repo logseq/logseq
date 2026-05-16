@@ -1,4 +1,8 @@
 .ls-cards {
+  /* Title strip height. --ls-card-custom-height is the image area only;
+     the card's total height adds this back (see .ls-cards-custom). */
+  --ls-card-title-height: 4rem;
+
   .ls-card-item {
     @apply dark:shadow-gray-700 shadow-md rounded-md w-full;
   }
@@ -22,7 +26,8 @@
   }
 
   .ls-card-title {
-    @apply h-16 px-3 py-2 border-t flex items-center text-sm cursor-pointer overflow-hidden;
+    @apply px-3 py-2 border-t flex items-center text-sm cursor-pointer overflow-hidden;
+    height: var(--ls-card-title-height);
   }
 
   .ls-card-title:hover {
@@ -46,9 +51,13 @@
      apply-gallery-custom-vars! callback ref), using the view's explicit
      size or the gallery-default-* fallback in views.cljs — so the
      default lives there, not here, and these declarations only read
-     the resolved value. */
+     the resolved value. --ls-card-custom-height is the image area only;
+     the title strip is added on top so the configured number maps to
+     the visible image, not the whole card. */
   &.ls-cards-custom {
-    .ls-card-item { height: var(--ls-card-custom-height); }
+    .ls-card-item {
+      height: calc(var(--ls-card-custom-height) + var(--ls-card-title-height));
+    }
     .virtuoso-grid-item { width: var(--ls-card-custom-width); }
   }
 }
