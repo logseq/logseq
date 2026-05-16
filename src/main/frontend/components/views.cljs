@@ -1792,6 +1792,15 @@
         n (db-property/property-value-content v)]
     (when (and (number? n) (pos? n)) n)))
 
+(defn- apply-gallery-size!
+  "Persists the view's custom card width/height. Every explicit size
+   change (saved pick, Save-as, Modify) routes through here."
+  [view-entity w h]
+  (db-property-handler/set-block-property!
+   (:db/id view-entity) :logseq.property.view/gallery-card-custom-width w)
+  (db-property-handler/set-block-property!
+   (:db/id view-entity) :logseq.property.view/gallery-card-custom-height h))
+
 ;; Fallback card size for views with no explicit width/height set yet
 ;; (and graphs created before the built-in dimensions were removed).
 ;; These reproduce the old "Square" look.
@@ -2034,14 +2043,7 @@
                     ;; Pin the view's custom size to exactly what was
                     ;; saved so the dropdown can resolve it back to this
                     ;; name on reopen (and the cards render at this size).
-                    (db-property-handler/set-block-property!
-                     (:db/id view-entity)
-                     :logseq.property.view/gallery-card-custom-width
-                     w)
-                    (db-property-handler/set-block-property!
-                     (:db/id view-entity)
-                     :logseq.property.view/gallery-card-custom-height
-                     h)
+                    (apply-gallery-size! view-entity w h)
                     (when on-saved (on-saved {:name trimmed :width w :height h}))
                     (shui/dialog-close!)))]
     [:form.flex.flex-col.gap-4.p-2
@@ -2089,14 +2091,7 @@
         submit! (fn []
                   (when-not invalid?
                     (save-gallery-dimension! nm w h)
-                    (db-property-handler/set-block-property!
-                     (:db/id view-entity)
-                     :logseq.property.view/gallery-card-custom-width
-                     w)
-                    (db-property-handler/set-block-property!
-                     (:db/id view-entity)
-                     :logseq.property.view/gallery-card-custom-height
-                     h)
+                    (apply-gallery-size! view-entity w h)
                     (when on-done (on-done {:name nm :width w :height h}))
                     (shui/dialog-close!)))]
     [:form.flex.flex-col.gap-4.p-2
@@ -2287,14 +2282,7 @@
             (when-let [d (let [nm (subs v 6)]
                            (some #(when (= nm (:name %)) %) saved))]
               (set-applied! {:width (:width d) :height (:height d)})
-              (db-property-handler/set-block-property!
-               (:db/id view-entity)
-               :logseq.property.view/gallery-card-custom-width
-               (:width d))
-              (db-property-handler/set-block-property!
-               (:db/id view-entity)
-               :logseq.property.view/gallery-card-custom-height
-               (:height d)))))]
+              (apply-gallery-size! view-entity (:width d) (:height d)))))]
     [:div.ls-gallery-settings.flex.flex-col.gap-3.p-2.text-sm
      {:style {:min-width 260}}
      [:div.flex.flex-row.items-center.justify-between.gap-2
