@@ -1,15 +1,19 @@
 ---
 name: logseq-task-on-lambda
-description: Use when Codex needs to execute or continue a task described by a Logseq block in the Lambda RTC graph. The request must provide a block UUID directly or as a double-bracket UUID reference. This skill validates sync state, fetches the target block tree with the Logseq CLI, handles in-review tasks with TODO #agent-steer guidance blocks, and then completes the task described by the active block tree.
+description: Use when Codex needs to execute or continue a task described by a Logseq block in the Lambda RTC graph. The request may provide a block UUID directly or as a double-bracket UUID reference; when no UUID is provided, discover TODO tasks from today's Journal Page, ask the user which one to run, and then continue with the selected UUID. This skill validates sync state, fetches the target block tree with the Logseq CLI, handles in-review tasks with TODO #agent-steer guidance blocks, and then completes the task described by the active block tree.
 ---
 
 # Logseq Task On Lambda
 
-Use one block in the `Lambda RTC` graph as the current task brief. The parent agent owns every `Lambda RTC` read, write, sync gate, and orchestration step. Load `.agents/skills/logseq-cli/SKILL.md` in the parent before running any ad hoc `logseq` command against `Lambda RTC`.
+Use one block in the `Lambda RTC` graph as the current task brief. The parent agent owns every `Lambda RTC` read, write, sync gate, selection prompt, and orchestration step. Load `.agents/skills/logseq-cli/SKILL.md` in the parent before running any ad hoc `logseq` command against `Lambda RTC`.
 
 If the task explicitly requests a pull request, load the matching GitHub publishing skill for the current environment before staging, committing, pushing, or opening a PR.
 
-## Fetch Script
+## Selection and Fetch Scripts
+
+When the user does not provide a UUID, run `.agents/skills/logseq-task-on-lambda/scripts/list-today-todo-tasks.sh` from the repo root. Pass no arguments.
+
+The list script targets only `Lambda RTC`, starts sync at most once, waits up to 20 seconds for `ws-state=open`, `pending-local=0`, and `pending-server=0`, queries TODO tasks whose `:block/page` is today's Journal Page, validates the structured query result, prints numbered candidates with UUIDs, then runs `logseq show --graph "Lambda RTC" --uuid "$uuid" --level 100` for every candidate and prints each full block tree to stdout. It prints the journal day plus sync gate summary to stderr. Stop on any non-zero exit status. If no TODO tasks are found, report that and stop unless the user provides a UUID.
 
 Run `.agents/skills/logseq-task-on-lambda/scripts/fetch-task-block.sh UUID_OR_DOUBLE_BRACKET_UUID` from the repo root. Pass exactly one bare UUID or one double-bracket UUID reference.
 
@@ -26,10 +30,11 @@ For every parent-owned `Lambda RTC` write:
 
 ## Workflow
 
-1. Fetch the task block tree.
-   - Accept only one UUID in bare form, such as `11111111-1111-1111-1111-111111111111`, or double-bracket form, such as `[[11111111-1111-1111-1111-111111111111]]`.
-   - Reject page names, db ids, block refs with extra text, multiple UUIDs, malformed UUIDs, and empty input.
-   - Run the fetch script and treat stdout as the complete root block tree.
+1. Resolve the task UUID and fetch the task block tree.
+   - If the request includes one UUID, accept only bare form, such as `11111111-1111-1111-1111-111111111111`, or double-bracket form, such as `[[11111111-1111-1111-1111-111111111111]]`.
+   - If the request includes no UUID, run the list script, present the numbered TODO task candidates to the user, and ask which task to solve. Accept only one listed index or one listed UUID from the user's answer.
+   - Reject page names, db ids, block refs with extra text, multiple UUIDs, malformed UUIDs, empty answers, and answers that do not select exactly one listed task.
+   - After resolving one UUID, run the fetch script and treat stdout as the complete root block tree.
    - Read stderr for `normalized-uuid` and `sync-gate`.
 
 2. Select the active task brief.
@@ -88,6 +93,7 @@ For every parent-owned `Lambda RTC` write:
 
 10. Report the result.
    - Include the normalized UUID and sync gate values: `ws-state`, `pending-local`, and `pending-server`.
+   - If the UUID was selected from today's Journal Page, state which listed task was selected.
    - State that the root moved to `doing`, a completion summary was added, and the root moved to `in-review`.
    - State that step 5 was completed by a worker subagent, list the worker-reported skills, and confirm the parent handled all `Lambda RTC` graph interactions.
    - Report selected `#agent-steer` TODO UUIDs moved to `done`, or state that no steer guidance was completed.
@@ -97,7 +103,8 @@ For every parent-owned `Lambda RTC` write:
 
 ## Hard Stops
 
-- Never fetch block content before the fetch script reports a passed sync gate.
+- Never fetch the selected block tree before the fetch script reports a passed sync gate.
+- Never run no-UUID discovery from anywhere except today's Journal Page TODO list in `Lambda RTC` after the list script reports a passed sync gate.
 - Never redo a whole `in-review` root task when actionable `#agent-steer` TODO guidance exists.
 - Never create a PR unless the active task brief or current user request explicitly asks for one.
 - Never leave a created PR unrecorded on the root block's `GitHub Url` property.
