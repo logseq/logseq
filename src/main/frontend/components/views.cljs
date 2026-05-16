@@ -1995,6 +1995,19 @@
   []
   (or (:kv/value (db/entity :logseq.kv/gallery-custom-dimensions)) []))
 
+(defn- same-name?
+  "Saved dimensions are unique by name, compared trimmed and
+   case-insensitively. Used for both persistence dedupe and the
+   optimistic in-component list, so the two never disagree."
+  [a b]
+  (= (string/lower-case (string/trim (str a)))
+     (string/lower-case (string/trim (str b)))))
+
+(defn- find-saved
+  "The saved dimension in `saved` named `nm` (see same-name?), or nil."
+  [saved nm]
+  (some #(when (same-name? (:name %) nm) %) saved))
+
 (def ^:private gallery-saved-prefix "saved:")
 
 (defn- saved-dim-value
@@ -2015,12 +2028,11 @@
    replaced. No-op when the name is blank or the size is not a pair of
    positive integers."
   [name w h]
-  (let [name (string/trim (str name))
-        lname (string/lower-case name)]
+  (let [name (string/trim (str name))]
     (when (and (seq name)
                (pos-int? w)
                (pos-int? h))
-      (let [without (remove #(= lname (string/lower-case (str (:name %))))
+      (let [without (remove #(same-name? (:name %) name)
                             (gallery-saved-dimensions))
             new-vec (conj (vec without) {:name name :width w :height h})]
         (db/transact! [(ldb/kv :logseq.kv/gallery-custom-dimensions new-vec)])))))
@@ -2029,8 +2041,7 @@
   "Removes the named dimension from the graph-wide saved list. Names
    match case-insensitively."
   [name]
-  (let [lname (string/lower-case (string/trim (str name)))
-        new-vec (vec (remove #(= lname (string/lower-case (str (:name %))))
+  (let [new-vec (vec (remove #(same-name? (:name %) name)
                              (gallery-saved-dimensions)))]
     (db/transact! [(ldb/kv :logseq.kv/gallery-custom-dimensions new-vec)])))
 
@@ -2090,7 +2101,7 @@
   ;; async write right after a Save).
   (let [nm (:name dim)
         view (or (db/entity (:db/id view-entity)) view-entity)
-        fresh-rec (some #(when (= nm (:name %)) %) (gallery-saved-dimensions))
+        fresh-rec (find-saved (gallery-saved-dimensions) nm)
         initial-w (or (:width dim) (gallery-custom-width view) (:width fresh-rec))
         initial-h (or (:height dim) (gallery-custom-height view) (:height fresh-rec))
         [w-input set-w-input!] (hooks/use-state (str initial-w))
@@ -2252,16 +2263,12 @@
         upsert-saved! (fn [{:keys [name] :as rec}]
                         (set-saved!
                          (fn [cur]
-                           (conj (vec (remove #(= (string/lower-case (str (:name %)))
-                                                  (string/lower-case (str name)))
-                                              cur))
+                           (conj (vec (remove #(same-name? (:name %) name) cur))
                                  rec))))
         remove-saved! (fn [name]
                         (set-saved!
                          (fn [cur]
-                           (vec (remove #(= (string/lower-case (str (:name %)))
-                                            (string/lower-case (str name)))
-                                        cur)))))
+                           (vec (remove #(same-name? (:name %) name) cur)))))
         initial-dimension-value (if-let [m (gallery-saved-match view-entity)]
                                   (saved-dim-value (:name m))
                                   "custom")
@@ -2278,7 +2285,7 @@
                                  :height (gallery-custom-height view-entity)})
         custom? (= dimension-value "custom")
         selected-saved (when-let [nm (saved-dim-name dimension-value)]
-                         (some #(when (= nm (:name %)) %) saved))
+                         (find-saved saved nm))
         on-saved (fn [{:keys [name width height] :as rec}]
                    (upsert-saved! rec)
                    (set-applied! {:width width :height height})
@@ -2292,7 +2299,7 @@
         (fn [v]
           (set-dimension-value! v)
           (when-let [nm (saved-dim-name v)]
-            (when-let [d (some #(when (= nm (:name %)) %) saved)]
+            (when-let [d (find-saved saved nm)]
               (set-applied! {:width (:width d) :height (:height d)})
               (apply-gallery-size! view-entity (:width d) (:height d)))))]
     [:div.ls-gallery-settings.flex.flex-col.gap-3.p-2.text-sm
