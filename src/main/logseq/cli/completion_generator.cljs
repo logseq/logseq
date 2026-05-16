@@ -38,6 +38,15 @@
                        (> (count (:cmds (first entries))) 1))))
          (mapv first))))
 
+(defn- validate->values
+  "Extract an enumerable value set from a babashka.cli `:validate` entry.
+   Accepts either a plain set (`#{...}`) or a `{:pred ...}` map whose `:pred`
+   is a set. Returns nil for predicate functions that aren't enumerable."
+  [validate]
+  (cond
+    (set? validate) validate
+    (and (map? validate) (set? (:pred validate))) (:pred validate)))
+
 (defn spec->token
   "Convert a single spec entry [key spec-map] to a token descriptor.
    Returns {:key k :type t ...} with type being one of:
@@ -47,7 +56,7 @@
         desc (or (:desc spec-map) "")
         coerce (:coerce spec-map)
         validate (:validate spec-map)
-        values (if (set? validate) validate (:values spec-map))
+        values (or (validate->values validate) (:values spec-map))
         multiple-values (:multiple-values spec-map)
         complete (:complete spec-map)]
     (cond-> {:key k
@@ -980,7 +989,7 @@ _logseq_multi_values_bash() {
   "Extract completion-relevant signature from a spec-map entry."
   [{:keys [coerce validate values multiple-values complete]}]
   {:flag? (= coerce :boolean)
-   :values (if (set? validate) validate values)
+   :values (or (validate->values validate) values)
    :multiple-values multiple-values
    :complete complete})
 
