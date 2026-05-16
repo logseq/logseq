@@ -41,11 +41,13 @@
     @apply flex;
   }
 
-  /* Custom: user-defined width and height, driven by CSS variables set
-     inline on .ls-cards by gallery-view (falls back to a default size
-     when the view has no explicit width/height set). */
+  /* Card size is driven by the --ls-card-custom-* custom properties
+     that gallery-view sets inline on .ls-cards whenever the view has
+     an explicit width/height. The var() fallbacks below cover the
+     unset case (and the first paint before the callback ref attaches);
+     they must mirror gallery-default-width/height in views.cljs. */
   &.ls-cards-custom {
-    .ls-card-item { height: var(--ls-card-custom-height); }
-    .virtuoso-grid-item { width: var(--ls-card-custom-width); }
+    .ls-card-item { height: var(--ls-card-custom-height, 354px); }
+    .virtuoso-grid-item { width: var(--ls-card-custom-width, 290px); }
   }
 }
