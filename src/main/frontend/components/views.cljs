@@ -1913,8 +1913,13 @@
          :total-count (count blocks)
          :custom-scroll-parent (get-scroll-parent config)
          :skipAnimationFrameInResizeObserver true
+         ;; Size is intentionally NOT part of the key: it is driven by
+         ;; CSS vars on the container (apply-gallery-custom-vars!), so
+         ;; cards resize in place. Keying on size would remount every
+         ;; card on each resize. image-prop-ident stays because it
+         ;; changes the card's image source.
          :compute-item-key (fn [idx]
-                             (str (:db/id view-entity) "-" image-prop-ident "-" custom-w "x" custom-h "-card-" idx))
+                             (str (:db/id view-entity) "-" image-prop-ident "-card-" idx))
          :item-content (fn [idx]
                          (lazy-item (:data table) idx {}
                                     (fn [block]
