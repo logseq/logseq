@@ -64,6 +64,13 @@
        (= :block/uuid (first value))
        (uuid? (second value))))
 
+(defn- db-id-ref?
+  [value]
+  (and (vector? value)
+       (= 2 (count value))
+       (= :db/id (first value))
+       (number? (second value))))
+
 (defn- property-value->string
   ([value] (property-value->string value nil nil))
   ([value labels] (property-value->string value labels nil))
@@ -76,6 +83,8 @@
        (string? value) (render-visible value)
        (number? value) (render-visible (or (get labels value) (str value)))
        (uuid? value) (render-visible (or (get labels value) (str value)))
+       (db-id-ref? value) (let [id (second value)]
+                            (render-visible (get labels id)))
        (lookup-ref? value) (let [uuid (second value)]
                              (render-visible (or (get labels uuid) (str uuid))))
        (boolean? value) (str value)
@@ -100,6 +109,8 @@
   ([value labels uuid->label]
    (let [values (cond
                   (set? value) (seq value)
+                  (or (db-id-ref? value)
+                      (lookup-ref? value)) [value]
                   (sequential? value) value
                   (nil? value) nil
                   :else [value])
