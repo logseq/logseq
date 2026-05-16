@@ -1717,12 +1717,6 @@
             (lazy-item-render rows idx)
             (str "partition-" idx)))))))
 
-(defn- row->db-id
-  [row]
-  (cond (map? row) (:db/id row)
-        (number? row) row
-        :else nil))
-
 (defn- property-values-seq
   "Normalises a block's property value to a seq: nil -> nil, set/coll -> as-is,
    single entity -> [v]."
@@ -1742,18 +1736,6 @@
                  (when (= :asset (:logseq.property/type p))
                    (:id column)))))))
 
-(defn- ungroup-view-rows
-  "Returns a flat seq of row db-ids regardless of whether rows come in the
-   flat form (`[id id ...]`) or the grouped form produced when
-   :logseq.property.view/group-by-property is set
-   (`[[by-value [id id ...]] ...]`)."
-  [rows]
-  (if (and (seq rows)
-           (let [r (first rows)]
-             (and (sequential? r) (not (map? r)) (= 2 (count r)))))
-    (mapcat (comp ungroup-view-rows second) rows)
-    rows))
-
 (defn- block-title-referenced-uuids
   "Returns the uuids embedded inline in the given block's title via
    [[uuid]] refs. Returned as uuids (not db-ids) so callers can pass
@@ -1761,26 +1743,6 @@
   [block]
   (when-let [title (:block/title block)]
     (seq (db-content/get-matched-ids title))))
-
-(defn- <load-gallery-card-data!
-  "Ensures the gallery's rows and any inline title refs they reference
-  are loaded into the local DB so gallery-card-item can resolve title
-  refs synchronously. Returns a promise that resolves when loading is
-  done (or nil-safe)."
-  [table]
-  (let [repo (state/get-current-repo)
-        rows (ungroup-view-rows (:rows table))]
-    (p/let [_ (when (seq rows)
-                (db-async/<get-blocks repo (vec rows) {}))
-            referenced (->> rows
-                            (mapcat (fn [row]
-                                      (when-let [block (some-> (row->db-id row) db/entity)]
-                                        (block-title-referenced-uuids block))))
-                            distinct
-                            vec)
-            _ (when (seq referenced)
-                (db-async/<get-blocks repo referenced {}))]
-      nil)))
 
 (defn- gallery-image-candidate-properties
   "Returns candidate entities for the Gallery value picker, in display
@@ -2267,9 +2229,8 @@
        :on-change (on-digit-change! set-h-input!)}]]))
 
 (rum/defc gallery-settings-config
-  [view-entity table columns]
-  (let [[loaded? set-loaded!] (hooks/use-state false)
-        candidates (when loaded? (gallery-image-candidate-properties columns))
+  [view-entity columns]
+  (let [candidates (gallery-image-candidate-properties columns)
         current-image-id (:db/id (:logseq.property.view/gallery-image-property view-entity))
         default-image-id (or (and (some #(= current-image-id (:db/id %)) candidates) current-image-id)
                              (:db/id (db/entity :block/title)))
@@ -2334,40 +2295,29 @@
                (:db/id view-entity)
                :logseq.property.view/gallery-card-custom-height
                (:height d)))))]
-    (hooks/use-effect!
-     (fn []
-       (try
-         (-> (<load-gallery-card-data! table)
-             (p/then (fn [_] (set-loaded! true)))
-             (p/catch (fn [_] (set-loaded! true))))
-         (catch :default _
-           (set-loaded! true))))
-     [])
     [:div.ls-gallery-settings.flex.flex-col.gap-3.p-2.text-sm
      {:style {:min-width 260}}
-     (if-not loaded?
-       [:div.text-muted-foreground.px-2.py-1 "Loading…"]
-       [:div.flex.flex-row.items-center.justify-between.gap-2
-        [:div.text-muted-foreground "Gallery value"]
-        (shui/select
-         {:default-value (str default-image-id)
-          :on-value-change
-          (fn [v]
-            (when-let [new-id (parse-long v)]
-              (db-property-handler/set-block-property!
-               (:db/id view-entity)
-               :logseq.property.view/gallery-image-property
-               new-id)))}
-         (shui/select-trigger
-          {:class "!px-2 !py-0 !h-8 w-[160px]"}
-          (shui/select-value {:placeholder "Select value"}))
-         (shui/select-content
-          (shui/select-group
-           (for [p candidates]
-             (shui/select-item
-              {:key (str (:db/id p))
-               :value (str (:db/id p))}
-              (gallery-candidate-label p))))))])
+     [:div.flex.flex-row.items-center.justify-between.gap-2
+      [:div.text-muted-foreground "Gallery value"]
+      (shui/select
+       {:default-value (str default-image-id)
+        :on-value-change
+        (fn [v]
+          (when-let [new-id (parse-long v)]
+            (db-property-handler/set-block-property!
+             (:db/id view-entity)
+             :logseq.property.view/gallery-image-property
+             new-id)))}
+       (shui/select-trigger
+        {:class "!px-2 !py-0 !h-8 w-[160px]"}
+        (shui/select-value {:placeholder "Select value"}))
+       (shui/select-content
+        (shui/select-group
+         (for [p candidates]
+           (shui/select-item
+            {:key (str (:db/id p))
+             :value (str (:db/id p))}
+            (gallery-candidate-label p))))))]
 
      [:<>
       [:div.flex.flex-row.items-center.justify-between.gap-2
@@ -2424,7 +2374,7 @@
           "Delete")])]]))
 
 (rum/defc gallery-settings
-  [view-entity table columns]
+  [view-entity columns]
   (shui/button
    {:variant "ghost"
     :class "text-muted-foreground !px-1"
@@ -2433,7 +2383,7 @@
     :on-click (fn [e]
                 (shui/popup-show!
                  (.-target e)
-                 (fn [] (gallery-settings-config view-entity table columns))
+                 (fn [] (gallery-settings-config view-entity columns))
                  {:align :end
                   :dropdown-menu? true}))}
    (ui/icon "photo")))
@@ -2644,7 +2594,7 @@
                  action))])
 
       (when gallery?
-        (gallery-settings view-entity table columns))
+        (gallery-settings view-entity columns))
 
       (when (seq sorting)
         (view-sorting table columns sorting))
