@@ -1792,13 +1792,24 @@
         n (db-property/property-value-content v)]
     (when (and (number? n) (pos? n)) n)))
 
+(defn- set-gallery-dimension!
+  "Persists one gallery card dimension. The pixel value is written as a
+   string on purpose: these are :number properties, and passing a bare
+   integer makes convert-ref-property-value treat it as a :db/id when it
+   collides with the eid of an existing value-block of this property
+   (see outliner/property.cljs), silently corrupting the saved size so
+   it falls back to the default. A string takes the parse-double value
+   path, which always stores it as a value entity."
+  [view-id property-id n]
+  (db-property-handler/set-block-property! view-id property-id (str n)))
+
 (defn- apply-gallery-size!
   "Persists the view's custom card width/height. Every explicit size
    change (saved pick, Save-as, Modify) routes through here."
   [view-entity w h]
-  (db-property-handler/set-block-property!
+  (set-gallery-dimension!
    (:db/id view-entity) :logseq.property.view/gallery-card-custom-width w)
-  (db-property-handler/set-block-property!
+  (set-gallery-dimension!
    (:db/id view-entity) :logseq.property.view/gallery-card-custom-height h))
 
 ;; Single source of truth for the default card size, used both to
@@ -2206,7 +2217,7 @@
        (if (hooks/deref first-w?)
          (hooks/set-ref! first-w? false)
          (when-let [v (parse-dimension-input debounced-w)]
-           (db-property-handler/set-block-property!
+           (set-gallery-dimension!
             (:db/id view-entity)
             :logseq.property.view/gallery-card-custom-width
             v))))
@@ -2216,7 +2227,7 @@
        (if (hooks/deref first-h?)
          (hooks/set-ref! first-h? false)
          (when-let [v (parse-dimension-input debounced-h)]
-           (db-property-handler/set-block-property!
+           (set-gallery-dimension!
             (:db/id view-entity)
             :logseq.property.view/gallery-card-custom-height
             v))))
