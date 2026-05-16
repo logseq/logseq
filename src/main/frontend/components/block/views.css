@@ -55,8 +55,14 @@
      the title strip is added on top so the configured number maps to
      the visible image, not the whole card. */
   &.ls-cards-custom {
-    .ls-card-item {
+    /* Image cards add the title strip on top of the configured image
+       area; fallback cards have no title strip, so the configured
+       height is the whole card. */
+    .ls-card-item.ls-card-image-layout {
       height: calc(var(--ls-card-custom-height) + var(--ls-card-title-height));
+    }
+    .ls-card-item.ls-card-fallback-layout {
+      height: var(--ls-card-custom-height);
     }
     .virtuoso-grid-item { width: var(--ls-card-custom-width); }
   }
