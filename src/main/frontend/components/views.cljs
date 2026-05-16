@@ -1801,11 +1801,11 @@
   (db-property-handler/set-block-property!
    (:db/id view-entity) :logseq.property.view/gallery-card-custom-height h))
 
-;; Default card size: pre-filled in the Custom width/height inputs when
-;; the view has no size yet. Must mirror the var() fallbacks in
-;; views.css (.ls-cards-custom), which render this size when no explicit
-;; dimension is set. Reproduces the old "Square" look for graphs created
-;; before the built-in dimensions were removed.
+;; Single source of truth for the default card size, used both to
+;; pre-fill the Custom width/height inputs and as the size gallery-view
+;; writes to the --ls-card-custom-* CSS vars when the view has no
+;; explicit dimension yet. Reproduces the old "Square" look for graphs
+;; created before the built-in dimensions were removed.
 (def ^:private gallery-default-width 290)
 (def ^:private gallery-default-height 354)
 
@@ -1860,25 +1860,19 @@
 
 (defn- apply-gallery-custom-vars!
   "Callback-ref helper: sets the CSS custom properties that drive
-   `.ls-cards-custom`, or removes them when the dimension is nil so the
-   var() fallback in views.css takes over."
+   `.ls-cards-custom` on the given DOM element. Always sets an explicit
+   px value (callers pass the resolved size, never nil) so the rendered
+   size never depends on a CSS-level fallback."
   [custom-w custom-h ^js el]
   (when el
-    (let [style (.-style el)]
-      (if custom-w
-        (.setProperty style "--ls-card-custom-width" (str custom-w "px"))
-        (.removeProperty style "--ls-card-custom-width"))
-      (if custom-h
-        (.setProperty style "--ls-card-custom-height" (str custom-h "px"))
-        (.removeProperty style "--ls-card-custom-height")))))
+    (.setProperty (.-style el) "--ls-card-custom-width" (str custom-w "px"))
+    (.setProperty (.-style el) "--ls-card-custom-height" (str custom-h "px"))))
 
 (rum/defcs gallery-view < rum/static mixins/container-id
   [state {:keys [config]} table view-entity blocks *scroller-ref]
   (let [config' (assoc config :container-id (:container-id state))
-        ;; nil when unset → apply-gallery-custom-vars! clears the inline
-        ;; property and views.css supplies the default via var() fallback.
-        custom-w (gallery-custom-width view-entity)
-        custom-h (gallery-custom-height view-entity)
+        custom-w (or (gallery-custom-width view-entity) gallery-default-width)
+        custom-h (or (gallery-custom-height view-entity) gallery-default-height)
         ;; Resolved at the gallery-view level so switching the gallery
         ;; image property invalidates the virtuoso item key below and
         ;; forces card items to re-render with the new ident.
