@@ -474,9 +474,9 @@
 
 (defn auto-hide-tabs-typing-row [auto-hide-tabs-typing?]
   (toggle "auto_hide_tabs_typing"
-          ["Auto hide tabs when typing"
+          [(t :settings.editor/auto-hide-tabs-typing)
            (ui/tooltip [:span.flex.px-2 (svg/info)]
-                       [:span.block.w-64 "Auto hides the tabs when typing, visible again when you're trying to switch tabs: either using mouse pointer or keyboard shortcuts."])]
+                       [:span.block.w-64 (t :settings.editor/auto-hide-tabs-typing-desc)])]
           auto-hide-tabs-typing?
           ui-handler/toggle-auto-hide-tabs-typing!))
 

@@ -240,7 +240,7 @@
                      (:block/uuid page)
                      :logseq.property/icon
                      nil))}
-       "Remove icon")
+       (t :context-menu/remove-icon))
       (shui/button
         {:variant :ghost
          :size :sm

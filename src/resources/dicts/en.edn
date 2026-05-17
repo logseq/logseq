@@ -408,6 +408,7 @@
 
  :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Make a Flashcard"
+ :context-menu/remove-icon "Remove icon"
  :context-menu/set-icon "Set icon"
  :context-menu/toggle-number-list "Toggle number list"
 
@@ -1687,6 +1688,8 @@
  :settings.editor/show-brackets "Show brackets"
  :settings.editor/show-full-blocks "Show all lines of a block reference"
  :settings.editor/spell-checker "Spell checker"
+ :settings.editor/auto-hide-tabs-typing "Auto hide tabs when typing"
+ :settings.editor/auto-hide-tabs-typing-desc "Auto hides the tabs when typing, visible again when you're trying to switch tabs: either using mouse pointer or keyboard shortcuts."
  :settings.editor/wide-mode "Wide mode"
 
  :settings.features/enable-flashcards "Flashcards"
