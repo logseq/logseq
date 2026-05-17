@@ -2134,10 +2134,10 @@
                     (shui/dialog-close!)))]
     [:form.flex.flex-col.gap-4.p-2
      {:on-submit (fn [e] (.preventDefault e) (submit!))}
-     [:div.text-lg.font-medium "What should this custom dimension be named?"]
+     [:div.text-lg.font-medium (t :view.gallery/dimension-name-prompt)]
      (shui/input
       {:auto-focus true
-       :placeholder "Dimension name"
+       :placeholder (t :view.gallery/dimension-name-placeholder)
        :value name
        :on-change (fn [e] (set-name! (util/evalue e)))})
      [:div.flex.justify-end.gap-2
@@ -2145,11 +2145,11 @@
        {:variant "ghost"
         :type "button"
         :on-click #(shui/dialog-close!)}
-       "Cancel")
+       (t :ui/cancel))
       (shui/button
        {:type "submit"
         :disabled invalid?}
-       "Save")]]))
+       (t :ui/save))]]))
 
 (rum/defc gallery-modify-dimension-dialog
   "Edits the width/height of an existing saved dimension (its name is
@@ -2177,36 +2177,36 @@
                     (shui/dialog-close!)))]
     [:form.flex.flex-col.gap-4.p-2
      {:on-submit (fn [e] (.preventDefault e) (submit!))}
-     [:div.text-lg.font-medium "Change the custom dimensions"]
+     [:div.text-lg.font-medium (t :view.gallery/modify-dimensions-prompt)]
      [:div.flex.flex-row.items-center.justify-between.gap-2
-      [:div.text-muted-foreground "Width"]
+      [:div.text-muted-foreground (t :view.gallery/width)]
       [:input
        {:type "text"
         :input-mode "numeric"
         :auto-focus true
         :class input-cls
         :value w-input
-        :aria-label "Custom card width in pixels"
+        :aria-label (t :view.gallery/width-input-title)
         :on-change (on-digit-change! set-w-input!)}]]
      [:div.flex.flex-row.items-center.justify-between.gap-2
-      [:div.text-muted-foreground "Height"]
+      [:div.text-muted-foreground (t :view.gallery/height)]
       [:input
        {:type "text"
         :input-mode "numeric"
         :class input-cls
         :value h-input
-        :aria-label "Custom card height in pixels"
+        :aria-label (t :view.gallery/height-input-title)
         :on-change (on-digit-change! set-h-input!)}]]
      [:div.flex.justify-end.gap-2
       (shui/button
        {:variant "ghost"
         :type "button"
         :on-click #(shui/dialog-close!)}
-       "Cancel")
+       (t :ui/cancel))
       (shui/button
        {:type "submit"
         :disabled invalid?}
-       "Save")]]))
+       (t :ui/save))]]))
 
 (rum/defc gallery-delete-dimension-dialog
   "Confirms removal of a saved dimension from the graph-wide list."
@@ -2217,16 +2217,16 @@
                   (shui/dialog-close!))]
     [:form.flex.flex-col.gap-4.p-2
      {:on-submit (fn [e] (.preventDefault e) (submit!))}
-     [:div.text-lg.font-medium "Are you sure you want to delete this custom dimension?"]
+     [:div.text-lg.font-medium (t :view.gallery/delete-dimension-confirm)]
      [:div.flex.justify-end.gap-2
       (shui/button
        {:variant "ghost"
         :type "button"
         :on-click #(shui/dialog-close!)}
-       "Cancel")
+       (t :ui/cancel))
       (shui/button
        {:type "submit"}
-       "Submit")]]))
+       (t :ui/submit))]]))
 
 (rum/defc gallery-custom-dimension-inputs
   "Two text inputs for the custom Width and Height, separated by `:`.
@@ -2279,7 +2279,7 @@
        :size :sm
        :class "!px-2 !py-0 !h-8"
        :type "button"
-       :title "Save these dimensions as a named option"
+       :title (t :view.gallery/save-as-title)
        :on-click (fn [_]
                    (let [w (parse-dimension-input w-input)
                          h (parse-dimension-input h-input)]
@@ -2287,13 +2287,13 @@
                        (shui/dialog-open!
                         (fn [] (gallery-save-dimension-dialog view-entity w h on-saved))
                         {:class "w-auto max-w-sm"}))))}
-      "Save as")
+      (t :view.gallery/save-as))
      [:input
       {:type "text"
        :input-mode "numeric"
        :value w-input
        :class input-cls
-       :aria-label "Custom card width in pixels"
+       :aria-label (t :view.gallery/width-input-title)
        :on-change (on-digit-change! set-w-input!)}]
      [:div.text-muted-foreground ":"]
      [:input
@@ -2301,19 +2301,43 @@
        :input-mode "numeric"
        :value h-input
        :class input-cls
-       :aria-label "Custom card height in pixels"
+       :aria-label (t :view.gallery/height-input-title)
        :on-change (on-digit-change! set-h-input!)}]]))
+
+(rum/defc gallery-image-property-select
+  [view columns]
+  (let [candidates (gallery-image-candidate-properties columns)
+        current-image-id (:db/id (:logseq.property.view/gallery-image-property view))
+        default-image-id (or (and (some #(= current-image-id (:db/id %)) candidates) current-image-id)
+                             (:db/id (db/entity :block/title)))]
+    [:div.flex.flex-row.items-center.justify-between.gap-2
+     [:div.text-muted-foreground (t :view.gallery/value)]
+     (shui/select
+      {:default-value (str default-image-id)
+       :on-value-change
+       (fn [v]
+         (when-let [new-id (parse-long v)]
+           (db-property-handler/set-block-property!
+            (:db/id view)
+            :logseq.property.view/gallery-image-property
+            new-id)))}
+      (shui/select-trigger
+       {:class "!px-2 !py-0 !h-8 w-[160px]"}
+       (shui/select-value {:placeholder (t :view.gallery/select-value)}))
+      (shui/select-content
+       (shui/select-group
+        (for [p candidates]
+          (shui/select-item
+           {:key (str (:db/id p))
+            :value (str (:db/id p))}
+           (gallery-candidate-label p))))))]))
 
 (rum/defc gallery-settings-config-inner
   ;; Plain function component (no class mixins) so React hooks are valid.
   ;; Receives the live `view` and reactive `saved` from the wrapper below
   ;; and re-renders when either changes.
   [view saved columns]
-  (let [candidates (gallery-image-candidate-properties columns)
-        current-image-id (:db/id (:logseq.property.view/gallery-image-property view))
-        default-image-id (or (and (some #(= current-image-id (:db/id %)) candidates) current-image-id)
-                             (:db/id (db/entity :block/title)))
-        ;; Local UI state: which Dimensions option is selected. Seeded
+  (let [;; Local UI state: which Dimensions option is selected. Seeded
         ;; once from the live size match; thereafter user-controlled. It
         ;; is NOT fully derived — picking "Custom" while the size still
         ;; matches a saved dim must stick, and an external resize while
@@ -2342,37 +2366,17 @@
               (apply-gallery-size! view (:width d) (:height d)))))]
     [:div.ls-gallery-settings.flex.flex-col.gap-3.p-2.text-sm
      {:style {:min-width 260}}
-     [:div.flex.flex-row.items-center.justify-between.gap-2
-      [:div.text-muted-foreground "Gallery value"]
-      (shui/select
-       {:default-value (str default-image-id)
-        :on-value-change
-        (fn [v]
-          (when-let [new-id (parse-long v)]
-            (db-property-handler/set-block-property!
-             (:db/id view)
-             :logseq.property.view/gallery-image-property
-             new-id)))}
-       (shui/select-trigger
-        {:class "!px-2 !py-0 !h-8 w-[160px]"}
-        (shui/select-value {:placeholder "Select value"}))
-       (shui/select-content
-        (shui/select-group
-         (for [p candidates]
-           (shui/select-item
-            {:key (str (:db/id p))
-             :value (str (:db/id p))}
-            (gallery-candidate-label p))))))]
+     (gallery-image-property-select view columns)
 
      [:<>
       [:div.flex.flex-row.items-center.justify-between.gap-2
-       [:div.text-muted-foreground "Dimensions"]
+       [:div.text-muted-foreground (t :view.gallery/dimensions)]
        (shui/select
         {:value dimension-value
          :on-value-change set-dimension!}
         (shui/select-trigger
          {:class "!px-2 !py-0 !h-8 w-[160px]"}
-         (shui/select-value {:placeholder "Select dimensions"}))
+         (shui/select-value {:placeholder (t :view.gallery/select-dimensions)}))
         (shui/select-content
          (shui/select-group
           (concat
@@ -2386,7 +2390,7 @@
            [(shui/select-item
              {:key "custom"
               :value "custom"}
-             "Custom")]))))]
+             (t :view.gallery/custom))]))))]
       (when custom?
         (gallery-custom-dimension-inputs view on-saved))
       (when selected-saved
@@ -2399,7 +2403,7 @@
            :on-click #(shui/dialog-open!
                        (fn [] (gallery-modify-dimension-dialog view selected-saved))
                        {:class "w-auto max-w-sm"})}
-          "Modify")
+          (t :view.gallery/modify))
          (shui/button
           {:variant "outline"
            :size :sm
@@ -2410,7 +2414,7 @@
                                selected-saved
                                (fn [] (set-dimension-value! "custom"))))
                        {:class "w-auto max-w-sm"})}
-          "Delete")])]]))
+          (t :ui/delete))])]]))
 
 (rum/defc gallery-settings-config < rum/reactive db-mixins/query
   ;; Thin reactive wrapper: subscribes to the live view entity and the
@@ -2428,7 +2432,7 @@
    {:variant "ghost"
     :class "text-muted-foreground !px-1"
     :size :sm
-    :title "Gallery view settings"
+    :title (t :view.gallery/settings)
     :on-click (fn [e]
                 (shui/popup-show!
                  (.-target e)
