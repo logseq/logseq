@@ -6,6 +6,12 @@
 
 (defonce ^:private handler-installed? (atom false))
 
+(defn- bounded-pr-str
+  [value limit]
+  (binding [*print-length* (inc limit)
+            *print-level* 4]
+    (pr-str value)))
+
 (defn truncate-preview
   "Returns a preview map with `:preview`, `:length`, and `:truncated?` for `value`.
 
@@ -17,9 +23,9 @@
   ([value]
    (truncate-preview value default-preview-limit))
   ([value max-len]
-   (let [text (if (string? value) value (pr-str value))
+   (let [limit (max 0 (or max-len 0))
+         text (if (string? value) value (bounded-pr-str value limit))
          length (count text)
-         limit (max 0 (or max-len 0))
          truncated? (> length limit)
          preview (if truncated?
                    (subs text 0 limit)
