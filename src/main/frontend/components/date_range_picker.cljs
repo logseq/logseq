@@ -85,13 +85,13 @@
        (when-let [[_ y m] (re-matches #"(\d{4})-(\d{2})" s)]
          (let [yi (pi y) mi (pi m)]
            (when (valid-ym? yi mi)
-             {:precision :month :start (ymd->int yi mi 1)})))
+             {:precision :month :start (ymd->int yi mi 0)})))
 
        ;; ── Four-digit year alone ────────────────────────────────────────────
        (when-let [[_ y] (re-matches #"(\d{4})" s)]
          (let [yi (pi y)]
            (when (<= 1000 yi 9999)
-             {:precision :year :start (ymd->int yi 1 1)})))
+             {:precision :year :start (ymd->int yi 0 0)})))
 
        ;; ── Slash: M/D/YYYY or M/D/YY ───────────────────────────────────────
        (when-let [[_ m d y] (re-matches #"(\d{1,2})/(\d{1,2})/(\d{2,4})" s)]
@@ -104,7 +104,7 @@
        (when-let [[_ m y] (re-matches #"(\d{1,2})/(\d{4})" s)]
          (let [mi (pi m) yi (pi y)]
            (when (valid-ym? yi mi)
-             {:precision :month :start (ymd->int yi mi 1)})))
+             {:precision :month :start (ymd->int yi mi 0)})))
 
        ;; ── Day-first: "1 Sep 2025", "1 Sep. 2025", "01 September, 2025" ────
        (when-let [[_ d mon y] (re-matches #"(\d{1,2})\s+([A-Za-z]+\.?)[,\s]+(\d{4})" s)]
@@ -122,7 +122,7 @@
        (when-let [[_ mon y] (re-matches #"([A-Za-z]+\.?)\s+(\d{4})" s)]
          (let [mi (parse-month-name mon) yi (pi y)]
            (when (and mi (valid-ym? yi mi))
-             {:precision :month :start (ymd->int yi mi 1)})))))))
+             {:precision :month :start (ymd->int yi mi 0)})))))))
 
 (def ^:private range-sep-re
   "Matches an en-dash, em-dash, or a space-prefixed hyphen as a range separator.
@@ -218,7 +218,7 @@
               :variant (if selected? :default :ghost)
               :size    :sm
               :class   "flex-1"
-              :on-click #(on-select (ymd->int year m 1))}
+              :on-click #(on-select (ymd->int year m 0))}
              label)))])]))
 
 (rum/defc day-calendar
@@ -253,7 +253,7 @@
        (year-picker {:year        display-year
                      :on-navigate (fn [y] (reset! *display-year y))
                      :on-select   (fn [y]
-                                    (on-select (ymd->int y 1 1)))})
+                                    (on-select (ymd->int y 0 0)))})
 
        :month
        (month-grid  {:year        display-year
@@ -313,15 +313,15 @@
             (when cur-start
               (let [[y m d] (int->parts cur-start)]
                 (reset! *draft-start (case p
-                                       :year  (ymd->int y 1 1)
-                                       :month (ymd->int y m 1)
-                                       (ymd->int y m d)))))
+                                       :year  (ymd->int y 0 0)
+                                       :month (ymd->int y m 0)
+                                       (ymd->int y (max m 1) (max d 1))))))
             (when cur-end
               (let [[ey em ed] (int->parts cur-end)]
                 (reset! *draft-end (case p
-                                     :year  (ymd->int ey 1 1)
-                                     :month (ymd->int ey em 1)
-                                     (ymd->int ey em ed)))))))
+                                     :year  (ymd->int ey 0 0)
+                                     :month (ymd->int ey em 0)
+                                     (ymd->int ey (max em 1) (max ed 1))))))))
 
         ;; Apply a successfully parsed text result to the draft atoms.
         ;; When the parsed map includes :end, also update *draft-end and

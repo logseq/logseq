@@ -59,10 +59,10 @@
                             :logseq.property.date/start    20250315}
                            {:db/id -2
                             :logseq.property.date/precision :month
-                            :logseq.property.date/start    20250301}
+                            :logseq.property.date/start    20250300}
                            {:db/id -3
                             :logseq.property.date/precision :year
-                            :logseq.property.date/start    20250101}
+                            :logseq.property.date/start    20250000}
                            {:db/id -4
                             :logseq.property.date/precision :day
                             :logseq.property.date/start    20250101

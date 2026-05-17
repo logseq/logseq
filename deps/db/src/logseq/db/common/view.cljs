@@ -51,16 +51,10 @@
                                 (if (de/entity? property)
                                   (case (:logseq.property/type property)
                                     :date     (:block/journal-day (get entity db-ident))
-                                    :daterange (let [v (get entity db-ident)
-                                                       sort-val (fn [dr]
-                                                                  (when-let [start (:logseq.property.date/start dr)]
-                                                                    (case (:logseq.property.date/precision dr)
-                                                                      :year  (* (quot start 10000) 10000)
-                                                                      :month (* (quot start 100) 100)
-                                                                      start)))]
+                                    :daterange (let [v (get entity db-ident)]
                                                  (if (de/entity? v)
-                                                   (sort-val v)
-                                                   (some sort-val v)))
+                                                   (:logseq.property.date/start v)
+                                                   (some :logseq.property.date/start v)))
                                     (get-property-value-for-search entity property))
                                   (get entity db-ident)))]
     (fn [entity]

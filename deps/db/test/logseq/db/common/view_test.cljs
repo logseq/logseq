@@ -169,20 +169,20 @@
                          {:logseq.property/type :daterange}
                          {:title "Publication Date"})])
         ;; 2. Create three daterange value entities (year precision).
-        ;;    ymd->int: year 2015 → 20150101, 2020 → 20200101, 2023 → 20230101
+        ;;    year 2015 → 20150000, 2020 → 20200000, 2023 → 20230000
         tx2 (d/transact! conn
                          [{:db/id -10
                            :block/uuid (random-uuid)
                            :logseq.property.date/precision :year
-                           :logseq.property.date/start 20150101}
+                           :logseq.property.date/start 20150000}
                           {:db/id -20
                            :block/uuid (random-uuid)
                            :logseq.property.date/precision :year
-                           :logseq.property.date/start 20200101}
+                           :logseq.property.date/start 20200000}
                           {:db/id -30
                            :block/uuid (random-uuid)
                            :logseq.property.date/precision :year
-                           :logseq.property.date/start 20230101}])
+                           :logseq.property.date/start 20230000}])
         dr-2015-id (get-in tx2 [:tempids -10])
         dr-2020-id (get-in tx2 [:tempids -20])
         dr-2023-id (get-in tx2 [:tempids -30])
@@ -231,13 +231,13 @@
           tx (d/transact! conn
                           [{:db/id -10
                             :logseq.property.date/precision :month
-                            :logseq.property.date/start 20200215}   ; Feb 2020
+                            :logseq.property.date/start 20200200}   ; Feb 2020
                            {:db/id -20
                             :logseq.property.date/precision :month
-                            :logseq.property.date/start 20190512}   ; May 2019
+                            :logseq.property.date/start 20190500}   ; May 2019
                            {:db/id -30
                             :logseq.property.date/precision :month
-                            :logseq.property.date/start 20211107}]) ; Nov 2021
+                            :logseq.property.date/start 20211100}]) ; Nov 2021
           book-id #(d/q '[:find ?e . :in $ ?t :where [?e :block/title ?t]] @conn %)
           _ (d/transact! conn
                          [{:db/id (book-id "Book A") :user.property/pub-date (get-in tx [:tempids -10])}
@@ -324,15 +324,15 @@
                            {:title "Publication Date"})])
           tx (d/transact! conn
                           [{:db/id -10
-                            :logseq.property.date/precision :year
+                            :logseq.property.date/precision :day
                             :logseq.property.date/start 20220101
                             :logseq.property.date/end   20221231}
                            {:db/id -20
-                            :logseq.property.date/precision :year
+                            :logseq.property.date/precision :day
                             :logseq.property.date/start 20200601
                             :logseq.property.date/end   20210531}
                            {:db/id -30
-                            :logseq.property.date/precision :year
+                            :logseq.property.date/precision :day
                             :logseq.property.date/start 20230301
                             :logseq.property.date/end   20230930}])
           book-id #(d/q '[:find ?e . :in $ ?t :where [?e :block/title ?t]] @conn %)
@@ -368,7 +368,7 @@
           tx (d/transact! conn
                           [{:db/id -10
                             :logseq.property.date/precision :year
-                            :logseq.property.date/start 20200101}])
+                            :logseq.property.date/start 20200000}])
           book-id #(d/q '[:find ?e . :in $ ?t :where [?e :block/title ?t]] @conn %)
           _ (d/transact! conn
                          [{:db/id (book-id "Book A") :user.property/pub-date (get-in tx [:tempids -10])}])
