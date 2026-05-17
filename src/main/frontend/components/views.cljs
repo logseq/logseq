@@ -2304,11 +2304,12 @@
        :aria-label "Custom card height in pixels"
        :on-change (on-digit-change! set-h-input!)}]]))
 
-(rum/defc gallery-settings-config < rum/reactive db-mixins/query
-  [view-entity columns]
-  (let [view (or (some-> (:db/id view-entity) db/sub-block) view-entity)
-        saved (sub-gallery-saved-dimensions)
-        candidates (gallery-image-candidate-properties columns)
+(rum/defc gallery-settings-config-inner
+  ;; Plain function component (no class mixins) so React hooks are valid.
+  ;; Receives the live `view` and reactive `saved` from the wrapper below
+  ;; and re-renders when either changes.
+  [view saved columns]
+  (let [candidates (gallery-image-candidate-properties columns)
         current-image-id (:db/id (:logseq.property.view/gallery-image-property view))
         default-image-id (or (and (some #(= current-image-id (:db/id %)) candidates) current-image-id)
                              (:db/id (db/entity :block/title)))
@@ -2410,6 +2411,16 @@
                                (fn [] (set-dimension-value! "custom"))))
                        {:class "w-auto max-w-sm"})}
           "Delete")])]]))
+
+(rum/defc gallery-settings-config < rum/reactive db-mixins/query
+  ;; Thin reactive wrapper: subscribes to the live view entity and the
+  ;; saved-dimensions KV, then delegates to the plain inner component
+  ;; that owns hook state. Reactive class mixins and React hooks can't
+  ;; share one component (mirrors table-row / table-row-inner).
+  [view-entity columns]
+  (let [view (or (some-> (:db/id view-entity) db/sub-block) view-entity)
+        saved (sub-gallery-saved-dimensions)]
+    (gallery-settings-config-inner view saved columns)))
 
 (rum/defc gallery-settings
   [view-entity columns]
