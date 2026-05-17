@@ -1822,7 +1822,7 @@
 (def ^:private gallery-default-height 290)
 
 (rum/defc gallery-card-item
-  [view-entity block config image-prop-ident]
+  [block config image-prop-ident]
   (let [;; refs-loaded? state is only used to trigger a re-render once
         ;; the effect below has finished loading referenced blocks, so
         ;; gallery-card-image-block can resolve title refs synchronously.
@@ -1909,7 +1909,7 @@
          :item-content (fn [idx]
                          (lazy-item (:data table) idx {}
                                     (fn [block]
-                                      (gallery-card-item view-entity block config' image-prop-ident))))}))]))
+                                      (gallery-card-item block config' image-prop-ident))))}))]))
 
 (defn- run-effects!
   [option {:keys [data]} *scroller-ref gallery? set-ready?]
