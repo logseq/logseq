@@ -18,7 +18,7 @@
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
-  [:default :number :date :date-range :datetime :checkbox :url :node :asset])
+  [:default :number :date :daterange :datetime :checkbox :url :node :asset])
 
 (def user-allowed-internal-property-types
   "Internal property types that users are allowed to store. These aren't available in the UI
@@ -33,7 +33,7 @@
 
 (def cardinality-property-types
   "Valid property types that can change cardinality"
-  #{:default :number :url :date :date-range :node :asset})
+  #{:default :number :url :date :daterange :node :asset})
 
 (def default-value-ref-property-types
   "Valid ref property :type for default value support"
@@ -63,8 +63,8 @@
 (def user-ref-property-types
   "User ref types. Property values that users see are stored in either
   :logseq.property/value or :block/title. :block/title is for all the page related types.
-  :date-range stores its value across three attributes on a dedicated entity."
-  (into #{:date :date-range :node :asset} value-ref-property-types))
+  :daterange stores its value across three attributes on a dedicated entity."
+  (into #{:date :daterange :node :asset} value-ref-property-types))
 
 (assert (set/subset? user-ref-property-types
                      (set user-built-in-property-types))
@@ -217,9 +217,9 @@
     :date     [:fn
                {:error/message "should be a journal date"}
                date?]
-    :date-range [:fn
-                 {:error/message "should be a date-range value entity"}
-                 date-range?]
+    :daterange [:fn
+                {:error/message "should be a daterange value entity"}
+                date-range?]
     :datetime [:fn
                {:error/message "should be a datetime"}
                number?]
@@ -244,7 +244,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:default :url :number :date :date-range :node :asset :entity :class :property :page})
+  #{:default :url :number :date :daterange :node :asset :entity :class :property :page})
 
 ;; Helper fns
 ;; ==========

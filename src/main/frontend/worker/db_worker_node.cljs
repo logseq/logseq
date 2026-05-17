@@ -378,7 +378,11 @@
                             (log/error :db-worker-node-invoke-failed
                                        {:status status
                                         :code code
-                                        :message message})
+                                        :message message
+                                        :ex-data-keys (str (keys data))
+                                        :raw-data (str (.-data error))
+                                        :validation-errors (str (or (:errors data)
+                                                                     (get (js->clj (.-data error)) "errors")))})
                             (send-json! res status payload)))))
            (send-text! res 405 "method-not-allowed"))
 

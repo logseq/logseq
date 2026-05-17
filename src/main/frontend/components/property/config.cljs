@@ -720,7 +720,7 @@
     :default (t :property/type-text)
     :number (t :property/type-number)
     :date (t :property/type-date)
-    :date-range (t :property/type-date-range)
+    :daterange (t :property/type-daterange)
     :datetime (t :property/type-datetime)
     :checkbox (t :property/type-checkbox)
     :url (t :property/type-url)

@@ -139,6 +139,15 @@
   (let [debug-data (invalid-tx-debug-data tx-meta tx-data errors tx-report)]
     (prn :debug :invalid-data debug-data)
     (prn :debug :errors errors)
+    (try
+      (let [fs (js/require "fs")
+            log-path "/Users/kleer/logseq-invalid-tx.log"
+            content (str (js/Date.) "\n"
+                         "tx-meta: " (pr-str tx-meta) "\n"
+                         "errors: " (pr-str errors) "\n"
+                         "tx-data: " (pr-str tx-data) "\n\n")]
+        (.appendFileSync fs log-path content))
+      (catch :default _))
     (throw (ex-info "DB write failed with invalid data" debug-data))))
 
 (defn- transact-sync
