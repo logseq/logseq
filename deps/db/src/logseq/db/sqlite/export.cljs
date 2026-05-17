@@ -774,6 +774,8 @@
   [db {:keys [include-timestamps?]}]
   (->> (d/q '[:find [(pull ?b [:file/path :file/content :file/created-at :file/last-modified-at]) ...]
               :where [?b :file/path]] db)
+       ;; Sort so the export is deterministic across DB backends and import order
+       (sort-by :file/path)
        (mapv #(if include-timestamps?
                 (select-keys % [:file/path :file/content :file/created-at :file/last-modified-at])
                 (select-keys % [:file/path :file/content])))))
