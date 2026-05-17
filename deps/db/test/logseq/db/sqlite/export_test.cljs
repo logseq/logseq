@@ -949,6 +949,24 @@
            (sqlite-export/diff-exports export-map export-map2))
         "No diff between original export and export after importing into a new graph")))
 
+(deftest import-graph-preserves-graph-files-order
+  (let [conn (db-test/create-conn-with-import-map {})
+        ;; Transact files one at a time in non-alphabetical order to ensure
+        ;; the test isn't satisfied just by happening to query in input order.
+        _ (doseq [file [{:file/path "logseq/publish.js" :file/content ""}
+                        {:file/path "logseq/custom.css" :file/content ".foo {}"}
+                        {:file/path "logseq/publish.css" :file/content ""}
+                        {:file/path "logseq/custom.js" :file/content "// hi"}
+                        {:file/path "logseq/config.edn" :file/content "{:foo :bar}"}]]
+            (d/transact! conn [file]))
+        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        valid-result (sqlite-export/validate-export export-map)
+        _ (assert (not (:error valid-result)) "No error when importing export-map into new graph")
+        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type :graph})]
+    (is (= nil
+           (sqlite-export/diff-exports export-map export-map2))
+        "No diff between original export and export after importing into a new graph")))
+
 (deftest import-graph-with-different-property-value-cases
   (let [pvalue-uuid1 (random-uuid)
         original-data
