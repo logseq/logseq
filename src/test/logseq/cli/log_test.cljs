@@ -31,6 +31,14 @@
       (is (= "nil" (:preview result)))
       (is (false? (:truncated? result)))))
 
+  (testing "preserves deep values when the preview limit is large enough"
+    (let [value {:a {:b {:c {:d {:e 1}}}}}
+          expected (pr-str value)
+          result (cli-log/truncate-preview value 1000)]
+      (is (= expected (:preview result)))
+      (is (= (count expected) (:length result)))
+      (is (false? (:truncated? result)))))
+
   (testing "does not realize a full lazy collection for a short preview"
     (let [realized (atom 0)
           value (map (fn [n]
