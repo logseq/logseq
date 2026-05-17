@@ -384,8 +384,16 @@
                              (into {}))
         new-properties-tx (vec
                            (mapcat (partial build-property-tx properties' page-uuids all-idents property-db-ids class-property-orders options)
-                                   properties'))]
-    new-properties-tx))
+                                   properties'))
+        ;; Apply the topological :block/order to properties that already exist in
+        ;; the target DB (e.g. built-ins) so per-class property order survives a
+        ;; round-trip alongside the user-defined properties built above.
+        existing-property-orders-tx
+        (->> class-property-orders
+             (keep (fn [[ident order]]
+                     (when-not (contains? properties' ident)
+                       {:db/ident ident :block/order order}))))]
+    (into new-properties-tx existing-property-orders-tx)))
 
 (defn- build-class-extends [{:build/keys [class-parent class-extends]} class-db-ids]
   (when-let [class-extends' (if class-parent
