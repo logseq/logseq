@@ -8,8 +8,7 @@
 
 (defn- bounded-pr-str
   [value limit]
-  (binding [*print-length* (inc limit)
-            *print-level* 4]
+  (binding [*print-length* (inc limit)]
     (pr-str value)))
 
 (defn truncate-preview
