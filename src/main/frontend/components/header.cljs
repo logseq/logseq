@@ -50,7 +50,7 @@
                                            (state/set-left-sidebar-open! false))
                                          (route-handler/redirect-to-home!))})
    (t :nav/home)
-   {:trigger-props {:as-child true}}))
+   :trigger-props {:as-child true}))
 
 (defn current-local-uploadable-graph
   []
@@ -237,7 +237,7 @@
                                                    :content-props {:class "w-64"
                                                                    :align-offset -32}}))})
      (t :header/more)
-     {:trigger-props {:as-child true}})))
+     :trigger-props {:as-child true})))
 
 (hsx/defc back-and-forward
   []

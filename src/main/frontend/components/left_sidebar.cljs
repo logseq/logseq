@@ -21,6 +21,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
@@ -180,7 +181,8 @@
     :all-pages :nav.all-pages/label
     :graph-view :nav/graph-view
     :tag/tasks :nav/tasks
-    :tag/assets :nav/assets))
+    :tag/assets :nav/assets
+    :nav/unknown))
 
 (hsx/defc sidebar-navigations-edit-content
   [{:keys [_id navs checked-navs set-checked-navs!]}]

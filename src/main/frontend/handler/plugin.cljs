@@ -1318,7 +1318,8 @@
                                    (notification/show!
                                     "The logseq-tabs plugin has been automatically uninstalled. Logseq now has built-in tabs support!"
                                     :success
-                                    false)))))
+                                    false))))))
+
 
               default-plugins (get-user-default-plugins)
               [plugins0, plugins-async] (if (and (seq default-plugins)
@@ -1326,7 +1327,7 @@
                                           ((juxt (fn [its] (filterv #(:theme %) its))
                                              (fn [its] (filterv #(not (:theme %)) its)))
                                            default-plugins)
-                                          [default-plugins])
+                                          [default-plugins []])
               _ (.register js/LSPluginCore (bean/->js (if (seq plugins0) plugins0 [])) true)]
         plugins-async)
 

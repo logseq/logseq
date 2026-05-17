@@ -456,39 +456,51 @@
                                              :fn       window-handler/close!}
 
    :tab/close-active                        {:binding "mod+w"
+                                             :desc    "Close current tab"
                                              :fn      tabs-handler/close-active-tab!}
 
    :tab/switch-to-1                         {:binding "mod+1"
+                                             :desc    "Switch to tab 1"
                                              :fn      #(tabs-handler/switch-to-tab-by-index! 1)}
 
    :tab/switch-to-2                         {:binding "mod+2"
+                                             :desc    "Switch to tab 2"
                                              :fn      #(tabs-handler/switch-to-tab-by-index! 2)}
 
    :tab/switch-to-3                         {:binding "mod+3"
+                                             :desc    "Switch to tab 3"
                                              :fn      #(tabs-handler/switch-to-tab-by-index! 3)}
 
    :tab/switch-to-4                         {:binding "mod+4"
+                                             :desc    "Switch to tab 4"
                                              :fn      #(tabs-handler/switch-to-tab-by-index! 4)}
 
    :tab/switch-to-5                         {:binding "mod+5"
+                                             :desc    "Switch to tab 5"
                                              :fn      #(tabs-handler/switch-to-tab-by-index! 5)}
 
    :tab/switch-to-6                         {:binding "mod+6"
+                                             :desc    "Switch to tab 6"
                                              :fn      #(tabs-handler/switch-to-tab-by-index! 6)}
 
    :tab/switch-to-7                         {:binding "mod+7"
+                                             :desc    "Switch to tab 7"
                                              :fn      #(tabs-handler/switch-to-tab-by-index! 7)}
 
    :tab/switch-to-8                         {:binding "mod+8"
+                                             :desc    "Switch to tab 8"
                                              :fn      #(tabs-handler/switch-to-tab-by-index! 8)}
 
    :tab/switch-to-last                      {:binding "mod+9"
+                                             :desc    "Switch to last tab"
                                              :fn      #(tabs-handler/switch-to-tab-by-index! 9)}
 
    :tab/switch-to-prev                      {:binding "mod+shift+open-square-bracket"
+                                             :desc    "Switch to previous tab"
                                              :fn      tabs-handler/switch-to-prev-tab!}
 
    :tab/switch-to-next                      {:binding "mod+shift+close-square-bracket"
+                                             :desc    "Switch to next tab"
                                              :fn      tabs-handler/switch-to-next-tab!}
 
    :ui/toggle-wide-mode                     {:binding "t w"
