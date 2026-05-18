@@ -214,6 +214,32 @@
   opacity: 0.45;
 }
 
+.ls-block.has-comment-thread:hover > .block-main-container,
+.ls-block.has-comment-thread.is-comment-thread-hovered > .block-main-container {
+  border-radius: 6px;
+  background: var(--lx-gray-03-alpha, var(--rx-gray-03-alpha));
+}
+
+.ls-block-comment-thread-button {
+  flex: none;
+  align-self: center;
+  width: 24px !important;
+  min-width: 24px;
+  height: 24px !important;
+  min-height: 24px;
+  margin-left: 4px;
+  padding: 0 !important;
+  border-radius: 6px;
+  color: var(--ls-secondary-text-color);
+  opacity: 0.75;
+}
+
+.ls-block-comment-thread-button:hover {
+  color: var(--ls-primary-text-color);
+  background: var(--lx-gray-04-alpha, var(--rx-gray-04-alpha));
+  opacity: 1;
+}
+
 .ls-comments-area {
   width: 100%;
   overflow: hidden;

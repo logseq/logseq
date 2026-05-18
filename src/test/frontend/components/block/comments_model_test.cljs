@@ -34,6 +34,40 @@
     (testing "ordinary moves outside comments stay allowed"
       (is (true? (comments-model/move-allowed? [ordinary-block] ordinary-target))))))
 
+(deftest comment-target-blocks
+  (let [comments-area {:block/title "Comments"
+                       :block/tags [{:db/ident :logseq.class/Comments}]}
+        comment-block {:block/title "comment"
+                       :block/parent comments-area}
+        first-block {:block/title "first"}
+        second-block {:block/title "second"}]
+    (is (= [first-block second-block]
+           (comments-model/comment-target-blocks
+            [first-block comments-area comment-block first-block second-block]))
+        "Selected-block comment actions should target normal blocks only once")))
+
+(deftest range-comment-threads
+  (let [target-a {:block/title "a"}
+        target-b {:block/title "b"}
+        deleted-target {:block/title "deleted"
+                        :logseq.property/deleted-at 1}
+        comments-area {:block/title "Comments"
+                       :block/tags [{:db/ident :logseq.class/Comments}]
+                       comments-model/comments-blocks-property [target-a deleted-target target-b]}
+        deleted-comments-area (assoc comments-area :logseq.property/deleted-at 1)
+        ordinary-block {:block/title "ordinary"
+                        :logseq.property.comments/_blocks [comments-area deleted-comments-area]}]
+    (testing "range comment areas are comments blocks that point at target blocks"
+      (is (true? (comments-model/range-comments-area? comments-area)))
+      (is (false? (comments-model/range-comments-area?
+                   {:block/tags [{:db/ident :logseq.class/Comments}]}))))
+    (testing "deleted targets do not participate in the rendered target set"
+      (is (= [target-a target-b]
+             (comments-model/comment-thread-target-blocks comments-area))))
+    (testing "blocks expose live comment threads through the reverse property"
+      (is (= [comments-area]
+             (comments-model/comment-threads-for-block ordinary-block))))))
+
 (deftest comment-row-derivation
   (testing "uses the created-by ref as the comment author"
     (is (= {:author "tienson"

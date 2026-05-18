@@ -1,6 +1,7 @@
 (ns frontend.handler.editor-async-test
   (:require [cljs.test :refer [is testing async use-fixtures]]
             [datascript.core :as d]
+            [frontend.components.block.comments-model :as comments-model]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
@@ -311,3 +312,57 @@
                    :replace-empty-target? false}
                   (:opts @inserted))
                "Explicit target asset insertion should append as children, not replace the temp edit block"))))))
+
+(deftest-async ensure-comments-area-for-selected-blocks
+  (let [first-uuid (random-uuid)
+        second-uuid (random-uuid)
+        created-comments-area-uuid (random-uuid)
+        first-block {:block/uuid first-uuid
+                     :db/id 1
+                     :block/title "first"
+                     :block/page {:db/id 10}}
+        second-block {:block/uuid second-uuid
+                      :db/id 2
+                      :block/title "second"
+                      :block/page {:db/id 10}}
+        comments-area {:block/uuid (random-uuid)
+                       :block/title "Comments"
+                       :block/tags #{comments-model/comments-tag-ident}}
+        comment-block {:block/uuid (random-uuid)
+                       :block/title "comment"
+                       :block/parent comments-area}
+        created-comments-area {:block/uuid created-comments-area-uuid
+                               :block/title "Comments"
+                               :block/tags #{comments-model/comments-tag-ident}
+                               comments-model/comments-blocks-property [first-block second-block]}
+        inserts (atom [])
+        expanded (atom [])]
+    (-> (p/with-redefs [db/entity (fn [lookup-ref]
+                                    (case lookup-ref
+                                      [:block/uuid first-uuid] first-block
+                                      [:block/uuid second-uuid] second-block
+                                      nil))
+                        block-handler/get-top-level-blocks identity
+                        editor/api-insert-new-block! (fn [content opts]
+                                                       (swap! inserts conj {:content content
+                                                                           :opts opts})
+                                                       (p/resolved created-comments-area))
+                        editor/expand-block! (fn [block-uuid]
+                                               (swap! expanded conj block-uuid)
+                                               (p/resolved nil))]
+          (p/let [area (editor/ensure-comments-area-for-selected-blocks! [first-block
+                                                                          comments-area
+                                                                          comment-block
+                                                                          second-block])]
+            (is (= created-comments-area area)
+                "Selected blocks should share one comments area")
+            (is (= [{:content "Comments"
+                     :opts {:block-uuid second-uuid
+                            :sibling? true
+                            :edit-block? false
+                            :other-attrs {:block/tags #{comments-model/comments-tag-ident}
+                                          comments-model/comments-blocks-property #{1 2}}}}]
+                   @inserts)
+                "A range comments area should be inserted after the last selected top block")
+            (is (= [created-comments-area-uuid] @expanded)
+                "The range comments area should be expanded inline"))))))

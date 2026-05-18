@@ -89,3 +89,19 @@
                :logseq.property.repeat/repeat-type.plus
                :logseq.property.repeat/repeat-type.double-plus}
              (set (map :db/ident (:property/closed-values property))))))))
+
+(deftest migrate-65-27-adds-comments-blocks-property
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 27}}])
+
+    (db-migrate/migrate conn :target-version {:major 65 :minor 28})
+
+    (is (= {:major 65 :minor 28}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (let [property (d/entity @conn :logseq.property.comments/blocks)]
+      (is (some? property))
+      (is (= "Commented blocks" (:block/title property)))
+      (is (= :node (:logseq.property/type property)))
+      (is (true? (:logseq.property/hide? property)))
+      (is (false? (:logseq.property/public? property))))))

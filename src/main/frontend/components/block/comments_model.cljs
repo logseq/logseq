@@ -3,6 +3,7 @@
             [goog.object :as gobj]))
 
 (def comments-tag-ident :logseq.class/Comments)
+(def comments-blocks-property :logseq.property.comments/blocks)
 
 (defn comments-area?
   [block]
@@ -34,6 +35,32 @@
          (not (comment-block? target-block))
          (or (:sibling? opts)
              (not (comments-area? target-block)))))))
+
+(defn comment-target-blocks
+  [blocks]
+  (->> blocks
+       (remove protected-comment-block?)
+       distinct
+       vec))
+
+(defn range-comments-area?
+  [block]
+  (boolean
+   (and (comments-area? block)
+        (seq (get block comments-blocks-property)))))
+
+(defn comment-thread-target-blocks
+  [comments-area]
+  (->> (get comments-area comments-blocks-property)
+       (remove :logseq.property/deleted-at)
+       vec))
+
+(defn comment-threads-for-block
+  [block]
+  (->> (get block :logseq.property.comments/_blocks)
+       (filter comments-area?)
+       (remove :logseq.property/deleted-at)
+       vec))
 
 (defn- author-initials
   [author]

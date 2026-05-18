@@ -651,6 +651,99 @@
                (when-let [id (:block/uuid new-block)]
                  (db/entity [:block/uuid id]))))))))))
 
+(defn- block-ref->entity
+  [block-ref]
+  (cond
+    (map? block-ref)
+    block-ref
+
+    (uuid? block-ref)
+    (db/entity [:block/uuid block-ref])
+
+    (and (string? block-ref) (util/uuid-string? block-ref))
+    (db/entity [:block/uuid (uuid block-ref)])
+
+    (number? block-ref)
+    (db/entity block-ref)
+
+    :else
+    nil))
+
+(defn- comments-area-child
+  [block]
+  (some (fn [child]
+          (when (comments-model/comments-area? child)
+            child))
+        (db/sort-by-order (:block/_parent block))))
+
+(defn- block-ref-id
+  [block-ref]
+  (cond
+    (map? block-ref) (:db/id block-ref)
+    (number? block-ref) block-ref
+    :else nil))
+
+(defn ensure-comments-area!
+  [block-id]
+  (when-let [block (db/entity [:block/uuid block-id])]
+    (if-let [comments-area (comments-area-child block)]
+      (p/resolved comments-area)
+      (api-insert-new-block!
+       "Comments"
+       {:block-uuid block-id
+        :end? true
+        :edit-block? false
+        :other-attrs {:block/tags #{comments-model/comments-tag-ident}}}))))
+
+(declare expand-block!)
+
+(defn- same-comment-targets?
+  [comments-area target-ids]
+  (= target-ids
+     (->> (comments-model/comment-thread-target-blocks comments-area)
+          (keep block-ref-id)
+          set)))
+
+(defn- existing-comments-area-for-targets
+  [blocks]
+  (let [target-ids (set (keep :db/id blocks))]
+    (some (fn [comments-area]
+            (when (same-comment-targets? comments-area target-ids)
+              comments-area))
+          (comments-model/comment-threads-for-block (first blocks)))))
+
+(defn ensure-comments-area-for-selected-blocks!
+  [block-refs]
+  (let [blocks (->> block-refs
+                    (keep block-ref->entity)
+                    block-handler/get-top-level-blocks
+                    comments-model/comment-target-blocks)]
+    (when-let [last-block (last blocks)]
+      (if-let [comments-area (existing-comments-area-for-targets blocks)]
+        (p/do!
+         (expand-block! (:block/uuid comments-area))
+         comments-area)
+        (p/let [comments-area (api-insert-new-block!
+                               "Comments"
+                               {:block-uuid (:block/uuid last-block)
+                                :sibling? true
+                                :edit-block? false
+                                :other-attrs {:block/tags #{comments-model/comments-tag-ident}
+                                              comments-model/comments-blocks-property (set (keep :db/id blocks))}})]
+          (when comments-area
+            (expand-block! (:block/uuid comments-area)))
+          comments-area)))))
+
+(defn reveal-comments-area!
+  [comments-area]
+  (when-let [uuid (:block/uuid comments-area)]
+    (p/do!
+     (expand-block! uuid)
+     (js/requestAnimationFrame
+      #(some-> (gdom/getElement (str "ls-block-" uuid))
+               (.scrollIntoView #js {:block "nearest"
+                                     :behavior "smooth"}))))))
+
 (defn get-selected-blocks
   []
   (distinct (seq (state/get-selection-blocks))))
@@ -740,8 +833,6 @@
                                           :container-id container-id})}))))))
 
 (declare save-block!)
-
-(declare expand-block!)
 
 (defn- one-page-another-block
   [block1 block2]

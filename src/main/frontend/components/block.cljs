@@ -4038,6 +4038,16 @@
   [^js el]
   (set! (.-scrollTop el) (.-scrollHeight el)))
 
+(defn- set-comment-thread-targets-hover!
+  [comments-area hover?]
+  (doseq [target (comments-model/comment-thread-target-blocks comments-area)
+          :let [uuid (:block/uuid target)]
+          :when uuid]
+    (when-let [el (gdom/getElement (str "ls-block-" uuid))]
+      (if hover?
+        (dom/add-class! el "is-comment-thread-hovered")
+        (dom/remove-class! el "is-comment-thread-hovered")))))
+
 (rum/defc comments-area-view
   [config block children collapsed? *hide-block-refs? *show-query?]
   (let [*comments-list-ref (hooks/use-ref nil)
@@ -4054,6 +4064,11 @@
        nil)
      [collapsed? render-token])
     [:div.ls-comments-area
+     (when (comments-model/range-comments-area? block)
+       {:on-mouse-enter #(set-comment-thread-targets-hover! block true)
+        :on-mouse-leave #(set-comment-thread-targets-hover! block false)
+        :on-focus #(set-comment-thread-targets-hover! block true)
+        :on-blur #(set-comment-thread-targets-hover! block false)})
      (if collapsed?
        [:button.ls-comments-summary
         {:type "button"
@@ -4076,7 +4091,7 @@
            (for [comment-block children]
              (rum/with-key
                (comment-row-view config comment-block *hide-block-refs? *show-query?)
-               (str (:block/uuid comment-block))))])
+             (str (:block/uuid comment-block))))])
         (add-comment-button config block)])]))
 
 (defn- block-renderer-outline-view
@@ -4214,6 +4229,8 @@
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
         comments-area? (comments-model/comments-area? block)
+        comment-thread (when-not comments-area?
+                         (first (comments-model/comment-threads-for-block block)))
         protected-comment-block? (comments-model/protected-comment-block? block)
         page-icon (when (:page-title? config)
                     (let [icon' (get block :logseq.property/icon)]
@@ -4303,6 +4320,7 @@
                  (when (ldb/recycled? block) " line-through opacity-70")
                  (when order-list? " is-order-list")
                  (when comments-area? " is-comments-area")
+                 (when comment-thread " has-comment-thread")
                  (when (string/blank? title) " is-blank")
                  (when original-block " embed-block"))
         :haschild (str (boolean has-child?))
@@ -4425,7 +4443,20 @@
               (str "block-renderer-" (:key matched-block-renderer) "-" uuid))]]
 
           ;; --- Original outline ---
-          outline-view-cp)])
+          outline-view-cp)
+
+        (when (and comment-thread (not table?) (not property?))
+          (shui/button
+           {:variant :ghost
+            :size :icon
+            :class "ls-block-comment-thread-button"
+            :title (t :block.comments/label)
+            :aria-label (t :block.comments/label)
+            :on-pointer-down util/stop
+            :on-click (fn [e]
+                        (util/stop e)
+                        (editor-handler/reveal-comments-area! comment-thread))}
+           (shui/tabler-icon "message-circle" {:size 15})))])
 
      (when (and (not (:library? config))
              (or (:tag-dialog? config)

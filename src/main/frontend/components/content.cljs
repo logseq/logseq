@@ -35,30 +35,11 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-;; TODO i18n support
-
-(defn- comments-area-child
-  [block]
-  (some (fn [child]
-          (when (comments-model/comments-area? child)
-            child))
-        (db/sort-by-order (:block/_parent block))))
-
-(defn- ensure-comments-area!
-  [block-id]
-  (when-let [block (db/entity [:block/uuid block-id])]
-    (if-let [comments-area (comments-area-child block)]
-      (p/resolved comments-area)
-      (editor-handler/api-insert-new-block!
-       "Comments"
-       {:block-uuid block-id
-        :end? true
-        :edit-block? false
-        :other-attrs {:block/tags #{comments-model/comments-tag-ident}}}))))
-
 (rum/defc ^:large-vars/cleanup-todo custom-context-menu-content
   []
-  (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)]
+  (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)
+        comment-targets (comments-model/comment-target-blocks
+                         (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids)))]
     [:<>
      (ui/menu-background-color #(property-handler/batch-set-block-property! (state/get-selection-block-ids)
                                                                             :logseq.property/background-color
@@ -142,6 +123,18 @@
          :on-click #(fsrs/batch-make-cards!)}
         (t :context-menu/make-a-flashcard)))
 
+     (when (seq comment-targets)
+       (shui/dropdown-menu-item
+        {:key "Add comment"
+         :on-click (fn [_e]
+                     (p/let [comments-area (editor-handler/ensure-comments-area-for-selected-blocks!
+                                            comment-targets)]
+                       (when comments-area
+                         (editor-handler/reveal-comments-area! comments-area))
+                       (state/hide-custom-context-menu!)
+                       (shui/popup-hide!)))}
+        (t :block.comments/add-comment)))
+
      (shui/dropdown-menu-item
       {:key "Toggle number list"
        :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
@@ -213,7 +206,7 @@
          (shui/dropdown-menu-item
           {:key "Add comment"
            :on-click (fn [_e]
-                       (p/let [comments-area (ensure-comments-area! block-id)]
+                       (p/let [comments-area (editor-handler/ensure-comments-area! block-id)]
                          (when-let [uuid (:block/uuid comments-area)]
                            (editor-handler/expand-block! uuid))))}
           (t :block.comments/add-comment))
