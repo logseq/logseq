@@ -62,9 +62,85 @@
    (state/set-state! :editor/cursor-range nil)
    (when (number? cursor-position)
      (state/set-editor-last-pos! cursor-position))
-   (when sync-input?
-     (when-let [input (gdom/getElement input-id)]
-       (util/set-change-value input (or content ""))))))
+      (when sync-input?
+        (when-let [input (gdom/getElement input-id)]
+          (util/set-change-value input (or content ""))))))
+
+(defn- comment-box-editor-view
+  [{:keys [active? editor-box editor-block input-id config focus-editor? draft
+           placeholder container-id update-draft! asset-target-block submit!
+           exit-comment-editor! activate-reply! draft']}]
+  [:div.ls-comment-box-editor
+   (if (and active? editor-box)
+     (editor-box
+      {:block editor-block
+       :block-id (:block/uuid editor-block)
+       :format :markdown}
+      input-id
+      (assoc config
+             :comment-editor? true
+             :skip-focus? (not focus-editor?)
+             :editor-opts
+             {:default-value draft
+              :placeholder placeholder
+              :aria-label placeholder
+              :on-focus (fn [_e]
+                          (activate-comment-editor! input-id
+                                                    (assoc editor-block :block/title draft)
+                                                    (or (comment-editor-value input-id) draft)
+                                                    container-id))
+              :on-blur (fn [_e]
+                         (js/setTimeout
+                          #(when-not (inside-comments-area? js/document.activeElement)
+                             (exit-comment-editor!))
+                          0))
+              :on-pointer-down util/stop-propagation
+              :on-change (fn [_e] (update-draft!))
+              :on-key-up (fn [_e] (update-draft!))
+              :on-paste (fn [e]
+                          (when-not (comments-handler/paste-assets! asset-target-block e)
+                            ((paste-handler/editor-on-paste! input-id) e)
+                            (js/setTimeout update-draft! 0)))
+              :on-key-down (fn [e]
+                             (cond
+                               (comments-model/comment-submit-shortcut? e (state/get-editor-action))
+                               (submit! e)
+
+                               (= "Escape" (util/ekey e))
+                               (do
+                                 (util/stop e)
+                                 (exit-comment-editor!))))}))
+     [:div.ls-comment-reply-placeholder
+      {:role "button"
+       :tab-index 0
+       :on-pointer-down util/stop-propagation
+       :on-click activate-reply!
+       :on-key-down (fn [e]
+                      (when (contains? #{"Enter" " "} (util/ekey e))
+                        (activate-reply! e)))}
+      (or draft' placeholder)])])
+
+(defn- comment-box-actions
+  [{:keys [content on-cancel submit!]}]
+  [:div.ls-comment-box-actions
+   (when on-cancel
+     (shui/button
+      {:size :sm
+       :variant :ghost
+       :on-pointer-down util/stop-propagation
+       :on-click (fn [e]
+                   (util/stop e)
+                   (on-cancel))}
+      (t :ui/cancel)))
+   (shui/button
+    {:size :sm
+     :class "ls-comment-submit"
+     :disabled (nil? content)
+     :title (t :ui/submit)
+     :aria-label (t :ui/submit)
+     :on-pointer-down util/stop-propagation
+     :on-click submit!}
+    (shui/tabler-icon "send" {:size 16}))])
 
 (rum/defc comment-box
   [{:keys [config comments-block comment-block initial-value placeholder on-submit on-cancel refocus-after-submit? focus-on-mount?]
@@ -81,13 +157,9 @@
         input-id (str "edit-block-" (:block/uuid editor-block))
         editor-box (state/get-component :editor/box)
         container-id (:container-id config)
-        asset-target-block (or comments-block (:block/parent comment-block))
-        comments-block-current-page? (comments-model/comments-block-current-page?
-                                      comments-block
-                                      (state/get-current-page))
         initial-active? (or comment-block
                             focus-on-mount?
-                            comments-block-current-page?)
+                            (comments-model/comments-block-current-page? comments-block (state/get-current-page)))
         [active? set-active!] (hooks/use-state initial-active?)
         [focus-editor? set-focus-editor!] (hooks/use-state focus-on-mount?)
         activate-reply! (fn [e]
@@ -133,9 +205,9 @@
                         (when refocus-after-submit?
                           (set-draft! "")
                           (state/set-edit-content! input-id "")
-                          (if comments-block-current-page?
-                            (focus-comment-input! input-id)
-                            (set-active! false)))))))]
+                          (set-active! true)
+                          (set-focus-editor! true)
+                          (focus-comment-input! input-id))))))]
     (hooks/use-effect!
      (fn []
        clear-comment-edit!)
@@ -150,74 +222,26 @@
            #(.removeEventListener js/document "pointerdown" on-pointer-down true))))
      [active? (:block/uuid editor-block)])
     [:div.ls-comment-box
-     [:div.ls-comment-box-editor
-      (if (and active? editor-box)
-        (editor-box
-         {:block editor-block
-          :block-id (:block/uuid editor-block)
-          :format :markdown}
-         input-id
-         (assoc config
-                :comment-editor? true
-                :skip-focus? (not focus-editor?)
-                :editor-opts
-                {:default-value draft
-                 :placeholder placeholder
-                 :aria-label placeholder
-                 :on-focus (fn [_e]
-                             (activate-comment-editor! input-id
-                                                       (assoc editor-block :block/title draft)
-                                                       (or (comment-editor-value input-id) draft)
-                                                       container-id))
-                 :on-blur (fn [_e]
-                            (js/setTimeout
-                             #(when-not (inside-comments-area? js/document.activeElement)
-                                (exit-comment-editor!))
-                             0))
-                 :on-pointer-down util/stop-propagation
-                 :on-change (fn [_e] (update-draft!))
-                 :on-key-up (fn [_e] (update-draft!))
-                 :on-paste (fn [e]
-                             (when-not (comments-handler/paste-assets! asset-target-block e)
-                               ((paste-handler/editor-on-paste! input-id) e)
-                               (js/setTimeout update-draft! 0)))
-                 :on-key-down (fn [e]
-                                (cond
-                                  (comments-model/comment-submit-shortcut? e (state/get-editor-action))
-                                  (submit! e)
-
-                                  (= "Escape" (util/ekey e))
-                                  (do
-                                    (util/stop e)
-                                    (exit-comment-editor!))))}))
-        [:div.ls-comment-reply-placeholder
-         {:role "button"
-          :tab-index 0
-          :on-pointer-down util/stop-propagation
-          :on-click activate-reply!
-          :on-key-down (fn [e]
-                         (when (contains? #{"Enter" " "} (util/ekey e))
-                           (activate-reply! e)))}
-         (or draft' placeholder)])]
-     [:div.ls-comment-box-actions
-      (when on-cancel
-        (shui/button
-         {:size :sm
-          :variant :ghost
-          :on-pointer-down util/stop-propagation
-          :on-click (fn [e]
-                      (util/stop e)
-                      (on-cancel))}
-         (t :ui/cancel)))
-      (shui/button
-       {:size :sm
-        :class "ls-comment-submit"
-        :disabled (nil? content)
-        :title (t :ui/submit)
-        :aria-label (t :ui/submit)
-        :on-pointer-down util/stop-propagation
-        :on-click submit!}
-       (shui/tabler-icon "send" {:size 16}))]]))
+     (comment-box-editor-view
+      {:active? active?
+       :editor-box editor-box
+       :editor-block editor-block
+       :input-id input-id
+       :config config
+       :focus-editor? focus-editor?
+       :draft draft
+       :placeholder placeholder
+       :container-id container-id
+       :update-draft! update-draft!
+       :asset-target-block (or comments-block (:block/parent comment-block))
+       :submit! submit!
+       :exit-comment-editor! exit-comment-editor!
+       :activate-reply! activate-reply!
+       :draft' draft'})
+     (comment-box-actions
+      {:content content
+       :on-cancel on-cancel
+       :submit! submit!})]))
 
 (defn- open-comment-reaction-picker!
   [comment-block e]

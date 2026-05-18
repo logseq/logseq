@@ -4121,7 +4121,7 @@
             :on-pointer-down util/stop
             :on-click (fn [e]
                         (util/stop e)
-                        (comments-handler/reveal-comments-area! comment-thread))}
+                        (comments-handler/reveal-comments-area! comment-thread {:focus-editor? true}))}
            (shui/tabler-icon "message-circle" {:size 15})))])
 
      (when (and (not (:library? config))

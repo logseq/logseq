@@ -3457,6 +3457,10 @@
   (let [config (last (state/get-editor-args))]
     (:ref? config)))
 
+(defn- comment-editor?
+  []
+  (:comment-editor? (last (state/get-editor-args))))
+
 (defn set-blocks-collapsed!
   [block-ids value]
   (let [block-ids (map (fn [block-id] (if (string? block-id) (uuid block-id) block-id)) block-ids)
@@ -3493,8 +3497,9 @@
    (util/stop e)
    (cond
      (state/editing?)
-     (when-let [block-id (:block/uuid (state/get-edit-block))]
-       (expand-block! block-id))
+     (when-not (comment-editor?)
+       (when-let [block-id (:block/uuid (state/get-edit-block))]
+         (expand-block! block-id)))
 
      (state/selection?)
      (do
@@ -3527,8 +3532,9 @@
    (when e (util/stop e))
    (cond
      (state/editing?)
-     (when-let [block-id (:block/uuid (state/get-edit-block))]
-       (collapse-block! block-id))
+     (when-not (comment-editor?)
+       (when-let [block-id (:block/uuid (state/get-edit-block))]
+         (collapse-block! block-id)))
 
      (state/selection?)
      (do
@@ -3563,7 +3569,8 @@
    (when e (util/stop e))
    (cond
      (state/editing?)
-     (when-let [block (state/get-edit-block)]
+     (when-let [block (when-not (comment-editor?)
+                        (state/get-edit-block))]
         ;; get-edit-block doesn't track the latest collapsed state, so we need to reload from db.
        (let [block-id (:block/uuid block)
              block (db/entity [:block/uuid block-id])]

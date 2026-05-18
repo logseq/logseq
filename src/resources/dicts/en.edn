@@ -111,9 +111,8 @@
  :block/untitled-query "Untitled query"
 
  :block.comments/add-comment "Add comment"
+ :block.comments/add-comment-command-desc "Add a comment to this block."
  :block.comments/collapsed-summary "{1} comments · latest from {2}"
- :block.comments/comment-area-command "Comments area"
- :block.comments/comment-area-command-desc "Create a comments area for this block."
  :block.comments/count "{1} comments"
  :block.comments/date-at-time "{1} at {2}"
  :block.comments/label "Comments"

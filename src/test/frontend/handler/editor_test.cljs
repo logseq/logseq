@@ -442,6 +442,23 @@
   ;; Reset state
   (state/set-editor-action! nil))
 
+(deftest comment-editor-collapse-expand-shortcuts-do-not-touch-draft-blocks
+  (let [draft-uuid #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
+        expanded (atom [])
+        collapsed (atom [])]
+    (with-redefs [state/editing? (constantly true)
+                  state/get-editor-args (constantly [nil nil {:comment-editor? true}])
+                  state/get-edit-block (constantly {:block/uuid draft-uuid})
+                  editor/expand-block! (fn [block-id] (swap! expanded conj block-id))
+                  editor/collapse-block! (fn [block-id] (swap! collapsed conj block-id))
+                  util/stop (constantly nil)]
+      (editor/expand! nil)
+      (editor/collapse! nil)
+      (is (empty? @expanded)
+          "Comment editor expand shortcut should not expand synthetic draft blocks")
+      (is (empty? @collapsed)
+          "Comment editor collapse shortcut should not collapse synthetic draft blocks"))))
+
 (deftest save-block!
   (testing "Saving blocks with and without properties"
     (test-helper/load-test-files [{:page {:block/title "foo"}

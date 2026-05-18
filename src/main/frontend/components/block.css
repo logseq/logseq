@@ -231,7 +231,12 @@
   padding: 0 !important;
   border-radius: 6px;
   color: var(--ls-secondary-text-color);
-  opacity: 0.75;
+  opacity: 0.35;
+}
+
+.ls-block.has-comment-thread:hover .ls-block-comment-thread-button,
+.ls-block.has-comment-thread.is-comment-thread-hovered .ls-block-comment-thread-button {
+  opacity: 0.65;
 }
 
 .ls-block-comment-thread-button:hover {
@@ -263,14 +268,14 @@
 
 .ls-comments-summary {
   border: 0;
-  background: transparent;
+  background: var(--lx-gray-02, var(--ls-secondary-background-color));
   cursor: pointer;
   text-align: left;
 }
 
 .ls-comments-summary:hover {
   color: var(--ls-primary-text-color);
-  background: var(--lx-gray-03, var(--rx-gray-03));
+  background: var(--lx-gray-03-alpha, var(--rx-gray-03-alpha));
 }
 
 .ls-comments-label {
@@ -280,9 +285,13 @@
 }
 
 .ls-comments-count,
-.ls-comment-time,
 .ls-comment-edited {
   color: var(--ls-secondary-text-color);
+}
+
+.ls-comment-time {
+  color: var(--ls-secondary-text-color);
+  opacity: 0.72;
 }
 
 .ls-comments-list {
@@ -413,9 +422,12 @@
   align-items: center;
   width: 100%;
   min-height: 34px;
-  padding: 3px 7px;
+  padding: 5px 7px;
   color: var(--ls-secondary-text-color);
   cursor: text;
+  font-size: 1rem;
+  line-height: 1.5;
+  opacity: 0.72;
 }
 
 .ls-comment-reply-placeholder:focus {
@@ -423,27 +435,39 @@
 }
 
 .ls-comment-box-editor .editor-inner {
+  display: flex;
+  align-items: center;
   width: 100%;
   min-height: 34px;
 }
 
 .ls-comment-box-editor .block-editor {
   display: flex;
+  align-items: center;
   width: 100%;
   min-width: 0;
+  min-height: 34px;
   border: 0;
   border-radius: 0;
   background: transparent;
-  padding: 3px 7px;
+  padding: 5px 7px;
   box-shadow: none;
 }
 
 .ls-comment-box-editor textarea {
   width: 100% !important;
-  min-height: 26px;
+  min-height: 24px;
+  padding: 0 !important;
   border: 0 !important;
   outline: 0 !important;
   box-shadow: none !important;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.ls-comment-box-editor textarea::placeholder {
+  color: var(--ls-secondary-text-color);
+  opacity: 0.72;
 }
 
 .ls-comment-box-editor textarea:focus {

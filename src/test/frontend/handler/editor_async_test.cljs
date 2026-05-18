@@ -8,6 +8,7 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.comments :as comments-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
@@ -368,3 +369,66 @@
                 "A range comments area should be inserted after the last selected top block with lookup-ref targets")
             (is (= [created-comments-area-uuid] @expanded)
                 "The range comments area should be expanded inline"))))))
+
+(deftest-async ensure-comments-area-for-single-selected-block
+  (let [block-uuid (random-uuid)
+        created-comments-area-uuid (random-uuid)
+        block {:block/uuid block-uuid
+               :db/id 1
+               :block/title "target"
+               :block/page {:db/id 10}}
+        created-comments-area {:block/uuid created-comments-area-uuid
+                               :block/title "Comments"
+                               :block/tags #{comments-model/comments-tag-ident}}
+        inserts (atom [])
+        expanded (atom [])]
+    (-> (p/with-redefs [db/entity (fn [lookup-ref]
+                                    (case lookup-ref
+                                      [:block/uuid block-uuid] block
+                                      nil))
+                        db/sort-by-order identity
+                        block-handler/get-top-level-blocks identity
+                        editor/api-insert-new-block! (fn [content opts]
+                                                       (swap! inserts conj {:content content
+                                                                           :opts opts})
+                                                       (p/resolved created-comments-area))
+                        editor/expand-block! (fn [block-uuid]
+                                               (swap! expanded conj block-uuid)
+                                               (p/resolved nil))]
+          (p/let [area (comments-handler/ensure-comments-area-for-selected-blocks! [block])]
+            (is (= created-comments-area area)
+                "A single selected block should use a child comments area")
+            (is (= [{:content "Comments"
+                     :opts {:block-uuid block-uuid
+                            :end? true
+                            :edit-block? false
+                            :other-attrs {:block/tags #{comments-model/comments-tag-ident}}}}]
+                   @inserts)
+                "Single-block comments area should be inserted as a child without range targets")
+            (is (= [created-comments-area-uuid] @expanded)
+                "The single-block comments area should be expanded inline"))))))
+
+(deftest-async add-comment-to-empty-edit-block
+  (let [block {:block/uuid (random-uuid)
+               :db/id 1
+               :block/title ""}
+        saved? (atom false)
+        cleared? (atom false)
+        properties (atom [])]
+    (-> (p/with-redefs [state/editing? (constantly true)
+                        state/get-edit-block (constantly block)
+                        state/get-edit-content (constantly "")
+                        editor/save-current-block! #(reset! saved? true)
+                        db-property-handler/set-block-property! (fn [db-id property value]
+                                                                  (swap! properties conj [db-id property value]))
+                        state/clear-edit! #(reset! cleared? true)
+                        editor/api-insert-new-block! (fn [& _]
+                                                       (is false "Empty /Add comment should not insert a child comments block"))]
+          (comments-handler/add-comment-to-current-context!)
+          (p/resolved nil))
+        (p/then (fn [_]
+                  (is @saved?)
+                  (is @cleared?)
+                  (is (= [[1 :block/tags comments-model/comments-tag-ident]]
+                         @properties)
+                      "Empty /Add comment should turn the current block into a comments area"))))))

@@ -1,6 +1,9 @@
 (ns frontend.handler.comments
-  (:require [frontend.components.block.comments-model :as comments-model]
+  "Handles creation, editing, deletion, and focus behavior for block comment threads."
+  (:require [clojure.string :as string]
+            [frontend.components.block.comments-model :as comments-model]
             [frontend.db :as db]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.op :as outliner-op]
@@ -82,30 +85,52 @@
                     block-handler/get-top-level-blocks
                     comments-model/comment-target-blocks)]
     (when-let [last-block (last blocks)]
-      (if-let [comments-area (existing-comments-area-for-targets blocks)]
-        (p/do!
-         (editor-handler/expand-block! (:block/uuid comments-area))
-         comments-area)
-        (p/let [comments-area (editor-handler/api-insert-new-block!
-                               "Comments"
-                               {:block-uuid (:block/uuid last-block)
-                                :sibling? true
-                                :edit-block? false
-                                :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                                              comments-model/comments-blocks-property (set (map block-lookup-ref blocks))}})]
+      (if (= 1 (count blocks))
+        (p/let [comments-area (ensure-comments-area! (:block/uuid last-block))]
           (when comments-area
             (editor-handler/expand-block! (:block/uuid comments-area)))
-          comments-area)))))
+          comments-area)
+        (if-let [comments-area (existing-comments-area-for-targets blocks)]
+          (p/do!
+           (editor-handler/expand-block! (:block/uuid comments-area))
+           comments-area)
+          (p/let [comments-area (editor-handler/api-insert-new-block!
+                                 "Comments"
+                                 {:block-uuid (:block/uuid last-block)
+                                  :sibling? true
+                                  :edit-block? false
+                                  :other-attrs {:block/tags #{comments-model/comments-tag-ident}
+                                                comments-model/comments-blocks-property (set (map block-lookup-ref blocks))}})]
+            (when comments-area
+              (editor-handler/expand-block! (:block/uuid comments-area)))
+            comments-area))))))
+
+(defn- focus-comments-reply!
+  [comments-area-el]
+  (when comments-area-el
+    (if-let [input (.querySelector comments-area-el ".ls-comment-add textarea, .ls-comment-box textarea, .ls-comment-box input, .ls-comment-box [contenteditable='true']")]
+      (.focus input)
+      (some-> comments-area-el
+              (.querySelector ".ls-comment-reply-placeholder")
+              (.click)))))
 
 (defn reveal-comments-area!
-  [comments-area]
-  (when-let [uuid (:block/uuid comments-area)]
-    (p/do!
-     (editor-handler/expand-block! uuid)
-     (js/requestAnimationFrame
-      #(some-> (gdom/getElement (str "ls-block-" uuid))
-               (.scrollIntoView #js {:block "nearest"
-                                     :behavior "smooth"}))))))
+  ([comments-area]
+   (reveal-comments-area! comments-area nil))
+  ([comments-area {:keys [focus-editor?]}]
+   (when-let [uuid (:block/uuid comments-area)]
+     (p/do!
+      (editor-handler/expand-block! uuid)
+      (js/requestAnimationFrame
+       #(when-let [comments-area-el (gdom/getElement (str "ls-block-" uuid))]
+          (.scrollIntoView comments-area-el #js {:block "nearest"
+                                                 :behavior "smooth"})
+          (when focus-editor?
+            (js/setTimeout
+             (fn []
+               (some-> (gdom/getElement (str "ls-block-" uuid))
+                       (focus-comments-reply!)))
+             0))))))))
 
 (defn expand-comments-area!
   [comments-area]
@@ -126,6 +151,23 @@
   (or (seq (selected-block-entities))
       (some-> (edit-block-entity) vector)))
 
+(defn- current-edit-block-blank?
+  []
+  (when-let [block (state/get-edit-block)]
+    (string/blank? (or (state/get-edit-content)
+                       (:block/title block)
+                       ""))))
+
+(defn- set-current-block-as-comments-area!
+  []
+  (when-let [block (state/get-edit-block)]
+    (editor-handler/save-current-block!)
+    (db-property-handler/set-block-property! (:db/id block)
+                                             :block/tags
+                                             comments-model/comments-tag-ident)
+    (state/clear-edit!)
+    block))
+
 (defn add-comment-to-blocks!
   [blocks]
   (when-let [comment-targets (seq (comments-model/comment-target-blocks blocks))]
@@ -137,9 +179,13 @@
 
 (defn add-comment-to-current-context!
   [& _]
-  (when (state/editing?)
-    (editor-handler/save-current-block!))
-  (add-comment-to-blocks! (comment-shortcut-targets)))
+  (if (and (state/editing?)
+           (current-edit-block-blank?))
+    (set-current-block-as-comments-area!)
+    (do
+      (when (state/editing?)
+        (editor-handler/save-current-block!))
+      (add-comment-to-blocks! (comment-shortcut-targets)))))
 
 (defn insert-comment!
   [comments-block content]
