@@ -133,7 +133,7 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     /// Update native graph list from JS.
-    /// { sections: [{ id, title, refreshable?, graphs: [...] }], labels: { refresh, preparing, downloading } }
+    /// { sections: [{ id, title, refreshable?, graphs: [...] }], labels: { refresh, preparing, downloading }, refreshing? }
     @objc func updateNativeGraphs(_ call: CAPPluginCall) {
         guard let sectionDicts = call.getArray("sections", JSObject.self) else {
             call.reject("Missing 'sections'")
@@ -210,7 +210,8 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
         store.updateGraphs(
             sections: sections,
             labels: labels,
-            visible: call.getBool("visible")
+            visible: call.getBool("visible"),
+            refreshing: call.getBool("refreshing")
         )
         call.resolve()
     }
@@ -245,6 +246,7 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     func refreshGraphs() {
+        store.startGraphRefresh()
         notifyListeners("nativeGraphAction", data: ["action": "refresh"])
     }
 
