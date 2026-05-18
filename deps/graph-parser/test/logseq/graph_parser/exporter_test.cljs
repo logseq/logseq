@@ -9,7 +9,10 @@
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [logseq.common.path :as path]
+            [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.asset :as db-asset]
@@ -1295,6 +1298,77 @@
         (is (= #{"LargeLanguageModel" "fun" "ai"}
                (:logseq.property/page-tags (db-test/readable-properties (db-test/find-page-by-title @conn "chat-gpt"))))
             "tagged page has new page and other pages marked with '#' and '[[]]` imported as tags to page-tags")))))
+
+(deftest-async import-journals-use-standard-uuids-and-keep-uuid-refs
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2026_01_27.md"])
+          conn (db-test/create-conn)
+          _ (import-files-to-db files conn {})]
+    (let [journal (db-test/find-journal-by-journal-day @conn 20260127)
+          ref-journal (db-test/find-journal-by-journal-day @conn 20260101)
+          ref-block (some->> (d/q '[:find [?b ...]
+                                    :in $ ?page ?ref-page
+                                    :where
+                                    [?b :block/page ?page]
+                                    [?b :block/refs ?ref-page]]
+                                  @conn (:db/id journal) (:db/id ref-journal))
+                           first
+                           (d/entity @conn))]
+      (is (= (common-uuid/gen-uuid :journal-page-uuid 20260127)
+             (:block/uuid journal))
+          "Imported journal page keeps the standard journal uuid")
+      (is (= (common-uuid/gen-uuid :journal-page-uuid 20260101)
+             (:block/uuid ref-journal))
+          "Referenced journal page keeps the standard journal uuid")
+      (is (= #{(:block/uuid ref-journal)}
+             (set (map :block/uuid (:block/refs ref-block))))
+          "Journal refs point at the standard journal uuid"))))
+
+(deftest-async import-journal-with-slash-title-format-does-not-create-namespace-pages
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2026_01_27.md"])
+          conn (db-test/create-conn)
+          _ (import-files-to-db files conn {:user-config {:journal/page-title-format "yyyy/MM/dd"}})
+          journal (db-test/find-journal-by-journal-day @conn 20260127)]
+    (is (= "2026/01/27" (:block/title journal))
+          "Journal title follows slash title format")
+    (is (= (common-uuid/gen-uuid :journal-page-uuid 20260127)
+             (:block/uuid journal))
+          "Slash-formatted journal keeps the standard journal uuid")
+    (is (nil? (:block/namespace journal))
+        "Slash-formatted journal does not keep a namespace attribute")
+    (is (nil? (db-test/find-page-by-title @conn "2026"))
+          "Journal title is not split into a year namespace page")
+    (is (nil? (db-test/find-page-by-title @conn "01"))
+          "Journal title is not split into a month namespace page")
+    (is (nil? (db-test/find-page-by-title @conn "27"))
+          "Journal title is not split into a day namespace page")))
+
+(deftest-async import-normalizes-existing-random-journal-uuid-and-text-refs
+  (let [old-journal-uuid (random-uuid)
+        standard-journal-uuid (common-uuid/gen-uuid :journal-page-uuid 20260127)
+        title (str "refs " (page-ref/->page-ref old-journal-uuid)
+                   " and " (block-ref/->block-ref old-journal-uuid))
+        conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:build/journal 20260127
+                        :block/uuid old-journal-uuid
+                        :build/keep-uuid? true}
+                 :blocks [{:block/title title}]}]})
+        file (write-temp-graph-file "pages/trigger-normalize.md" "- trigger normalize\n")]
+    (p/let [_ (import-files-to-db [file] conn {})
+            journal (db-test/find-journal-by-journal-day @conn 20260127)
+            ref-block (db-test/find-block-by-content @conn #"refs")]
+      (is (= standard-journal-uuid (:block/uuid journal))
+          "Existing random journal uuid is normalized to the standard journal uuid")
+      (is (nil? (d/entity @conn [:block/uuid old-journal-uuid]))
+          "Old journal uuid no longer resolves after normalization")
+      (is (= (str "refs " (page-ref/->page-ref standard-journal-uuid)
+                  " and " (block-ref/->block-ref standard-journal-uuid))
+             (:block/title ref-block))
+          "Text references are rewritten to the standard journal uuid")
+      (is (= (:db/id journal) (get-in ref-block [:block/page :db/id]))
+          "Structured block page reference still points to the same journal entity"))))
 
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
