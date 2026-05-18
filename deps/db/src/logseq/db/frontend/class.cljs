@@ -43,7 +43,9 @@
 
      :logseq.class/Comments
      {:title "Comments"
-      :properties {:logseq.property.class/hide-from-node true}}
+      :properties {:logseq.property.class/hide-from-node true
+                   :logseq.property/icon {:type :emoji, :id "speech_balloon"}}
+      :schema {:properties [:logseq.property.comments/blocks]}}
 
      :logseq.class/Query
      {:title "Query"
