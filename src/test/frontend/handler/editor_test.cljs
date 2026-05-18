@@ -362,12 +362,13 @@
 
 (defn- handle-last-input-handler
   "Spied version of editor/handle-last-input"
-  [{:keys [value cursor-pos]}]
+  [{:keys [value cursor-pos editor-config]}]
   ;; Reset editor action in order to test result
   (state/set-editor-action! nil)
   ;; Default cursor pos to end of line
   (let [pos (or cursor-pos (count value))]
     (with-redefs [state/get-input (constantly #js {:value value})
+                  state/get-editor-args (constantly [nil nil editor-config])
                   cursor/pos (constantly pos)
                   cursor/move-cursor-backward (constantly nil) ;; ignore if called
                   cursor/get-caret-pos (constantly {})]
@@ -386,6 +387,11 @@
     (handle-last-input-handler {:value "a line\n/"})
     (is (= :commands (state/get-editor-action))
         "Command search on start of a new line")
+
+    (handle-last-input-handler {:value "/"
+                                :editor-config {:comment-editor? true}})
+    (is (= nil (state/get-editor-action))
+        "No command search in comment editors")
 
     (handle-last-input-handler {:value "https://"})
     (is (= nil (state/get-editor-action))

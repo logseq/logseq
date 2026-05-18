@@ -99,7 +99,8 @@
    ["65.25" {:delete-properties [:block/pre-block?
                                  :logseq.property.embedding/hnsw-label
                                  :logseq.property.embedding/hnsw-label-updated-at]}]
-   ["65.26" {:properties [:logseq.property.repeat/repeat-type]}]])
+   ["65.26" {:properties [:logseq.property.repeat/repeat-type]}]
+   ["65.27" {:classes [:logseq.class/Comments]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

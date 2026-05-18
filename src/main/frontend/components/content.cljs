@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
+            [frontend.components.block.comments-model :as comments-model]
             [frontend.components.editor :as editor]
             [frontend.components.export :as export]
             [frontend.components.icon :as icon-component]
@@ -35,6 +36,25 @@
             [rum.core :as rum]))
 
 ;; TODO i18n support
+
+(defn- comments-area-child
+  [block]
+  (some (fn [child]
+          (when (comments-model/comments-area? child)
+            child))
+        (db/sort-by-order (:block/_parent block))))
+
+(defn- ensure-comments-area!
+  [block-id]
+  (when-let [block (db/entity [:block/uuid block-id])]
+    (if-let [comments-area (comments-area-child block)]
+      (p/resolved comments-area)
+      (editor-handler/api-insert-new-block!
+       "Comments"
+       {:block-uuid block-id
+        :end? true
+        :edit-block? false
+        :other-attrs {:block/tags #{comments-model/comments-tag-ident}}}))))
 
 (rum/defc ^:large-vars/cleanup-todo custom-context-menu-content
   []
@@ -189,6 +209,14 @@
                        (editor-handler/open-block-in-sidebar! block-id))}
           (t :sidebar.right/open)
           (ui/dropdown-shortcut "shift+click"))
+
+         (shui/dropdown-menu-item
+          {:key "Add comment"
+           :on-click (fn [_e]
+                       (p/let [comments-area (ensure-comments-area! block-id)]
+                         (when-let [uuid (:block/uuid comments-area)]
+                           (editor-handler/expand-block! uuid))))}
+          (t :block.comments/add-comment))
 
          (shui/dropdown-menu-sub
           (shui/dropdown-menu-sub-trigger

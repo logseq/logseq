@@ -1862,6 +1862,7 @@
   (let [input           (state/get-input)
         input-id        (state/get-edit-input-id)
         edit-block      (state/get-edit-block)
+        [_ _ config]    (state/get-editor-args)
         pos             (cursor/pos input)
         content         (.-value input)
         last-input-char (util/nth-safe content (dec pos))
@@ -1875,7 +1876,8 @@
       (p/let [_ (state/pub-event! [:editor/toggle-own-number-list edit-block])]
         (state/set-edit-content! input-id ""))
 
-      (and (= last-input-char commands/command-trigger)
+      (and (not (:comment-editor? config))
+           (= last-input-char commands/command-trigger)
            (or (re-find #"(?m)^/" (str (.-value input))) (start-of-new-word? input pos)))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})

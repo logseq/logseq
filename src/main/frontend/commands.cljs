@@ -310,7 +310,14 @@
          :icon/numberedChildren]]
 
        ;; advanced
-       [[(t-fn :property.built-in/query) (query-steps) (query-doc) :icon/query (t-fn :editor.slash/group-advanced)]
+       [[(t-fn :block.comments/comment-area-command)
+         [[:editor/clear-current-slash]
+          [:editor/set-property :block/tags :logseq.class/Comments]
+          [:editor/exit]]
+         (t-fn :block.comments/comment-area-command-desc)
+         :icon/messageCircle
+         (t-fn :editor.slash/group-advanced)]
+        [(t-fn :property.built-in/query) (query-steps) (query-doc) :icon/query (t-fn :editor.slash/group-advanced)]
         [(t-fn :editor.slash/advanced-query) (advanced-query-steps) (t-fn :editor.slash/advanced-query-desc) :icon/query]
         [(t-fn :editor.slash/query-function)
          [[:editor/input "{{function }}" {:backward-pos 2}]]

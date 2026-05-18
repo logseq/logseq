@@ -11,6 +11,7 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
+            [frontend.components.block.comments-model :as comments-model]
             [frontend.components.block.drop :as block-drop]
             [frontend.components.block.image :as block-image]
             [frontend.components.block.macros :as block-macros]
@@ -50,6 +51,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.paste :as paste-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
@@ -62,7 +64,9 @@
             [frontend.mobile.haptics :as haptics]
             [frontend.mobile.intent :as mobile-intent]
             [frontend.mobile.util :as mobile-util]
+            [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as tree]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.reaction :as reaction]
             [frontend.security :as security]
             [frontend.state :as state]
@@ -3748,6 +3752,318 @@
   (boolean (and (= :plugin display-mode)
              (true? (:include-children matched-block-renderer)))))
 
+(defn- comment-time-label
+  [created-at]
+  (when (number? created-at)
+    (.toLocaleTimeString (js/Date. created-at)
+                         js/undefined
+                         #js {:hour "2-digit"
+                              :minute "2-digit"})))
+
+(defn- comment-time-title
+  [created-at]
+  (when (number? created-at)
+    (date/int->local-time-2 created-at)))
+
+(defn- focus-comment-input!
+  [input-id]
+  (js/setTimeout
+   #(some-> (gdom/getElement input-id)
+            (.focus))
+   0))
+
+(defn- comment-editor-value
+  [input-id]
+  (some-> (gdom/getElement input-id)
+          (gobj/get "value")))
+
+(defn- activate-comment-editor!
+  ([input-id block content container-id]
+   (activate-comment-editor! input-id block content container-id true nil))
+  ([input-id block content container-id sync-input?]
+   (activate-comment-editor! input-id block content container-id sync-input? nil))
+  ([input-id block content container-id sync-input? cursor-position]
+   (state/set-state! :editor/block-refs #{})
+   (state/set-state! :editor/block block)
+   (state/set-editing-block-id! [(or container-id :comments-area) (:block/uuid block)])
+   (state/set-state! :editor/container-id container-id)
+   (state/set-state! :editor/content (or content "") :path-in-sub-atom (:block/uuid block))
+   (state/set-state! :editor/last-key-code nil)
+   (state/set-state! :editor/set-timestamp-block nil)
+   (state/set-state! :editor/cursor-range nil)
+   (when (number? cursor-position)
+     (state/set-editor-last-pos! cursor-position))
+   (when sync-input?
+     (when-let [input (gdom/getElement input-id)]
+       (util/set-change-value input (or content ""))))))
+
+(rum/defc comment-box
+  [{:keys [config comments-block comment-block initial-value placeholder on-submit on-cancel refocus-after-submit? focus-on-mount?]
+    :or {refocus-after-submit? true
+         focus-on-mount? false}}]
+  (let [[draft-uuid] (hooks/use-state (random-uuid))
+        [draft set-draft!] (hooks/use-state (or initial-value ""))
+        editor-block (or comment-block
+                         (comments-model/comment-draft-block comments-block draft-uuid draft))
+        input-id (str "edit-block-" (:block/uuid editor-block))
+        editor-box (state/get-component :editor/box)
+        container-id (:container-id config)
+        update-draft! (fn []
+                        (let [value (or (comment-editor-value input-id) "")]
+                          (activate-comment-editor! input-id
+                                                    (assoc editor-block :block/title value)
+                                                    value
+                                                    container-id
+                                                    false)
+                          (set-draft! value)))
+        _ (when focus-on-mount?
+            (activate-comment-editor! input-id
+                                      (assoc editor-block :block/title draft)
+                                      draft
+                                      container-id
+                                      true
+                                      (comments-model/comment-edit-cursor-position draft)))
+        content (comments-model/submittable-comment-content draft)
+        submit! (fn [e]
+                  (util/stop e)
+                  (let [content (comments-model/submittable-comment-content
+                                 (or (comment-editor-value input-id) draft))]
+                    (when content
+                      (p/let [_ (on-submit content)]
+                        (when refocus-after-submit?
+                          (set-draft! "")
+                          (state/set-edit-content! input-id "")
+                          (focus-comment-input! input-id))))))]
+    (hooks/use-effect!
+     (fn []
+       #(when (= (:block/uuid (state/get-edit-block)) (:block/uuid editor-block))
+          (state/clear-edit!)))
+     [(:block/uuid editor-block)])
+    [:div.ls-comment-box
+     [:div.ls-comment-box-editor
+      (when editor-box
+        (editor-box
+         {:block editor-block
+          :block-id (:block/uuid editor-block)
+          :format :markdown}
+         input-id
+         (assoc config
+                :comment-editor? true
+                :skip-focus? (not focus-on-mount?)
+                :editor-opts
+                {:default-value draft
+                 :placeholder placeholder
+                 :aria-label placeholder
+                 :on-focus (fn [_e]
+                             (activate-comment-editor! input-id
+                                                       (assoc editor-block :block/title draft)
+                                                       (or (comment-editor-value input-id) draft)
+                                                       container-id))
+                 :on-pointer-down util/stop-propagation
+                 :on-change (fn [_e] (update-draft!))
+                 :on-key-up (fn [_e] (update-draft!))
+                 :on-paste (fn [e]
+                             ((paste-handler/editor-on-paste! input-id) e)
+                             (js/setTimeout update-draft! 0))
+                 :on-key-down (fn [e]
+                                (cond
+                                  (comments-model/comment-submit-shortcut? e (state/get-editor-action))
+                                  (submit! e)
+
+                                  (and on-cancel (= "Escape" (util/ekey e)))
+                                  (do
+                                    (util/stop e)
+                                    (on-cancel))))})))]
+     [:div.ls-comment-box-actions
+      (when on-cancel
+        (shui/button
+         {:size :sm
+          :variant :ghost
+          :on-pointer-down util/stop-propagation
+          :on-click (fn [e]
+                      (util/stop e)
+                      (on-cancel))}
+         (t :ui/cancel)))
+      (shui/button
+       {:size :sm
+        :class "ls-comment-submit"
+        :disabled (nil? content)
+        :title (t :ui/submit)
+        :aria-label (t :ui/submit)
+        :on-pointer-down util/stop-propagation
+        :on-click submit!}
+       (shui/tabler-icon "send" {:size 16}))]]))
+
+(defn- open-comment-reaction-picker!
+  [comment-block e]
+  (util/stop e)
+  (let [target (.-currentTarget e)]
+    (shui/popup-show!
+     target
+     (fn [{:keys [id]}]
+       (icon-component/icon-search
+        {:on-chosen (fn [_emoji-event emoji _keep-popup?]
+                      (reaction-handler/toggle-reaction! (:block/uuid comment-block) (:id emoji))
+                      (shui/popup-hide! id))
+         :tabs [[:emoji (t :icon/tab-emojis)]]
+         :default-tab :emoji
+         :show-used? true
+         :icon-value nil}))
+     {:align :end
+      :content-props {:class "ls-icon-picker"}})))
+
+(defn- delete-comment!
+  [comment-block]
+  (ui-outliner-tx/transact!
+   {:outliner-op :delete-blocks}
+   (outliner-op/delete-blocks! [comment-block] nil)))
+
+(defn- comment-display-block
+  [comment-block]
+  (let [comment-uuid (:block/uuid comment-block)]
+    (merge comment-block
+           (block/parse-title-and-body comment-uuid
+                                       (get comment-block :block/format :markdown)
+                                       (:block/title comment-block)))))
+
+(rum/defc comment-row-view
+  [config comment-block *hide-block-refs? *show-query?]
+  (let [[editing? set-editing!] (hooks/use-state false)
+        {:keys [author avatar body created-at]} (comments-model/comment-row comment-block)
+        comment-uuid (:block/uuid comment-block)
+        edit-input-id (str "edit-block-" comment-uuid)
+        parsed-block (comment-display-block comment-block)
+        time-label (comment-time-label created-at)
+        time-title (comment-time-title created-at)
+        actions (set (comments-model/comment-actions comment-block (user-handler/user-uuid)))
+        placeholder (t :block.comments/placeholder)]
+    [:div.ls-comment-row
+     [:div.ls-comment-avatar avatar]
+     [:div.ls-comment-main
+      [:div.ls-comment-meta
+       [:span.ls-comment-author author]
+       (when time-label
+         [:span.ls-comment-time {:title time-title} time-label])]
+      (if editing?
+        (comment-box
+         {:config config
+          :comment-block comment-block
+          :initial-value body
+          :placeholder placeholder
+          :focus-on-mount? true
+          :refocus-after-submit? false
+          :on-cancel #(set-editing! false)
+          :on-submit (fn [content]
+                       (editor-handler/save-block! (state/get-current-repo) comment-block content)
+                       (set-editing! false))})
+         [:div.ls-comment-body
+          (block-content-or-editor
+           config
+           parsed-block
+           {:edit-input-id edit-input-id
+            :block-id comment-uuid
+            :edit? false
+            :refs-count nil
+            :*hide-block-refs? *hide-block-refs?
+            :hide-block-refs-count? true
+            :*show-query? *show-query?})
+          (block-reactions comment-block)])]
+     (when-not config/publishing?
+       [:div.ls-comment-actions
+        (shui/button
+         {:size :sm
+          :variant :ghost
+          :class "ls-comment-action"
+          :title (t :command.editor/add-reaction)
+          :aria-label (t :command.editor/add-reaction)
+          :on-pointer-down util/stop-propagation
+          :on-click #(open-comment-reaction-picker! comment-block %)}
+         (shui/tabler-icon "mood-smile" {:size 14}))
+        (when (contains? actions :edit)
+          (shui/button
+           {:size :sm
+            :variant :ghost
+            :class "ls-comment-action"
+            :title (t :editor/click-to-edit)
+            :aria-label (t :editor/click-to-edit)
+            :on-pointer-down util/stop-propagation
+            :on-click (fn [e]
+                        (util/stop e)
+                        (set-editing! true))}
+           (shui/tabler-icon "edit" {:size 14})))
+        (when (contains? actions :delete)
+          (shui/button
+           {:size :sm
+            :variant :ghost
+            :class "ls-comment-action ls-comment-delete"
+            :title (t :ui/delete)
+            :aria-label (t :ui/delete)
+            :on-pointer-down util/stop-propagation
+            :on-click (fn [e]
+                        (util/stop e)
+                        (delete-comment! comment-block))}
+           (shui/tabler-icon "trash" {:size 14})))])]))
+
+(rum/defc add-comment-button
+  [config comments-block]
+  (let [placeholder (t :block.comments/placeholder)]
+    [:div.ls-comment-add
+     (comment-box
+      {:config config
+       :comments-block comments-block
+       :placeholder placeholder
+       :on-submit (fn [content]
+                    (editor-handler/api-insert-new-block!
+                     content
+                     {:block-uuid (:block/uuid comments-block)
+                      :end? true
+                      :edit-block? false}))})]))
+
+(defn- scroll-comments-list-to-bottom!
+  [^js el]
+  (set! (.-scrollTop el) (.-scrollHeight el)))
+
+(rum/defc comments-area-view
+  [config block children collapsed? *hide-block-refs? *show-query?]
+  (let [*comments-list-ref (hooks/use-ref nil)
+        render-token (comments-model/comments-render-token children)
+        summary (comments-model/comments-summary children)
+        count (count children)]
+    (hooks/use-effect!
+     (fn []
+       (when (and (not collapsed?)
+                  (seq children))
+         (js/requestAnimationFrame
+          #(some-> (hooks/deref *comments-list-ref)
+                   (scroll-comments-list-to-bottom!))))
+       nil)
+     [collapsed? render-token])
+    [:div.ls-comments-area
+     (if collapsed?
+       [:button.ls-comments-summary
+        {:type "button"
+         :on-pointer-down util/stop
+         :on-click (fn [e]
+                     (util/stop e)
+                     (editor-handler/expand-block! (:block/uuid block)))}
+        (if summary
+          (t :block.comments/collapsed-summary
+             (:count summary)
+             (:latest-author summary))
+          (t :block.comments/count 0))]
+        [:<>
+         [:div.ls-comments-header
+          [:span.ls-comments-label (t :block.comments/label)]
+          [:span.ls-comments-count count]]
+        (when (seq children)
+          [:div.ls-comments-list
+           {:ref *comments-list-ref}
+           (for [comment-block children]
+             (rum/with-key
+               (comment-row-view config comment-block *hide-block-refs? *show-query?)
+               (str (:block/uuid comment-block))))])
+        (add-comment-button config block)])]))
+
 (defn- block-renderer-outline-view
   [config block uuid title table? property? edit-input-id editing? refs-count *hide-block-refs? *show-query? page-icon block-id collapsed?]
   [:div.flex.flex-col.w-full
@@ -3756,19 +4072,22 @@
       page-icon)
 
     [:div.flex.flex-col.w-full
-     (let [parsed-block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) title))
+     (let [comments-area? (comments-model/comments-area? block)
+           parsed-block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) title))
            hide-block-refs-count? (or (and (:embed? config)
                                         (= (:block/uuid parsed-block) (:embed-id config)))
                                     table?)]
-       (block-content-or-editor config
-         parsed-block
-         {:edit-input-id edit-input-id
-          :block-id block-id
-          :edit? editing?
-          :refs-count refs-count
-          :*hide-block-refs? *hide-block-refs?
-          :hide-block-refs-count? hide-block-refs-count?
-          :*show-query? *show-query?}))]]
+       (if comments-area?
+         (comments-area-view config block (ldb/get-children block) collapsed? *hide-block-refs? *show-query?)
+         (block-content-or-editor config
+           parsed-block
+           {:edit-input-id edit-input-id
+            :block-id block-id
+            :edit? editing?
+            :refs-count refs-count
+            :*hide-block-refs? *hide-block-refs?
+            :hide-block-refs-count? hide-block-refs-count?
+            :*show-query? *show-query?})))]]
 
    (when (and (not collapsed?) (not (or table? property?)))
      (block-positioned-properties config block :block-below))
@@ -3879,6 +4198,7 @@
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
+        comments-area? (comments-model/comments-area? block)
         page-icon (when (:page-title? config)
                     (let [icon' (get block :logseq.property/icon)]
                       (when-let [icon (and (ldb/page? block)
@@ -3960,11 +4280,13 @@
         :blockid (str uuid)
         :containerid container-id
         :data-is-property (ldb/property? block)
+        :data-comments-area comments-area?
         :ref #(when (nil? @*ref) (reset! *ref %))
         :data-collapsed (and collapsed? has-child?)
         :class (str (when selected? "selected")
                  (when (ldb/recycled? block) " line-through opacity-70")
                  (when order-list? " is-order-list")
+                 (when comments-area? " is-comments-area")
                  (when (string/blank? title) " is-blank")
                  (when original-block " embed-block"))
         :haschild (str (boolean has-child?))
@@ -4136,6 +4458,7 @@
      (when-not (or (:hide-children? config)
                  table?
                  property?
+                 comments-area?
                  (block-renderer-hides-outline-children?
                    renderer-display-mode
                    {:matched-block-renderer matched-block-renderer}))
