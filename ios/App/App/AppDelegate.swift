@@ -34,6 +34,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     // Each stack has its own native VC stack, just like paths.
     private var stackViewControllerStacks: [String: [UIViewController]] = [:]
 
+    private var routeChangeObserver: NSObjectProtocol?
+
     // ---------------------------------------------------------
     // MARK: Helpers
     // ---------------------------------------------------------
@@ -278,8 +280,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             // -----------------------------
             let previousStack = pathStack
 
-            if pathStack.count > 1 {
+            if let to = toIndex {
+                pathStack = Array(pathStack.prefix(to + 1))
+            } else if pathStack.count > 1 {
                 _ = pathStack.popLast()
+            }
+            if pathStack.isEmpty {
+                pathStack = [toVC.targetPath]
             }
             if let last = pathStack.last, last != toVC.targetPath {
                 pathStack[pathStack.count - 1] = toVC.targetPath
@@ -382,7 +389,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     // ---------------------------------------------------------
 
     private func observeRouteChanges() {
-        NotificationCenter.default.addObserver(
+        if routeChangeObserver != nil {
+            return
+        }
+
+        routeChangeObserver = NotificationCenter.default.addObserver(
           forName: UILocalPlugin.routeChangeNotification,
           object: nil,
           queue: .main
@@ -417,8 +428,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 let vc = NativePageViewController(path: "/")
                 nav.setViewControllers([vc], animated: false)
                 self.setViewControllers([vc], for: "home")
-
-                // 👈 Do NOTHING to nav.viewControllers or SharedWebViewController here.
+                SharedWebViewController.instance.clearPlaceholder()
+                SharedWebViewController.instance.attach(to: vc)
                 return
             }
 
