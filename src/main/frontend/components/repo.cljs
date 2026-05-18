@@ -552,7 +552,6 @@
 
 (rum/defc new-db-graph-inner
   [rtc-group?]
-  (prn :debug :rtc-group? rtc-group?)
   (let [[creating-db? set-creating-db?] (hooks/use-state false)
         [cloud? set-cloud?] (hooks/use-state false)
         [graph-e2ee? set-graph-e2ee?] (hooks/use-state true)
