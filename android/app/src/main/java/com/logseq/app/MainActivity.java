@@ -6,15 +6,22 @@ import android.content.Context;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.os.Build;
 import android.webkit.WebView;
 import androidx.activity.OnBackPressedCallback;
+import androidx.activity.BackEventCompat;
 import androidx.activity.EdgeToEdge;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.PluginHandle;
+import com.getcapacitor.Plugin;
 import android.util.Log;
 import android.view.View;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 
+import java.lang.reflect.Field;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -22,6 +29,7 @@ public class MainActivity extends BridgeActivity {
     private static final String NAV_STACK_DEBUG_PREFIX = "[DEBUG-navstack]";
     private final NavigationCoordinator navigationCoordinator = new NavigationCoordinator();
     private BroadcastReceiver routeChangeReceiver;
+    private OnBackInvokedCallback overlayBackInvokedCallback;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -35,6 +43,14 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(Utils.class);
 
         super.onCreate(savedInstanceState);
+        // @capacitor/app installs its own OnBackPressedCallback during plugin load (inside
+        // super.onCreate above). Its callback consumes the first system/edge back press by
+        // calling webView.goBack(), which both makes the WebView flash and prevents our
+        // MainActivity-level handler (below) from ever running. We route back through JS
+        // instead, so disable that plugin's back handler defensively even if the config
+        // entry "App.disableBackButtonHandler" hasn't been synced yet.
+        disableCapacitorAppBackHandler();
+
         EdgeToEdge.enable(this);
         WebView webView = getBridge().getWebView();
         webView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
@@ -47,9 +63,46 @@ public class MainActivity extends BridgeActivity {
         // Android back is still delegated to JS from the Activity back dispatcher.
         ComposeHost.INSTANCE.renderWithSystemInsets(this, webView);
 
+        // On API 33+ (Android 13+), predictive back routes through the platform-level
+        // OnBackInvokedDispatcher. AndroidX's OnBackPressedDispatcher bridges into it at
+        // PRIORITY_DEFAULT, so plugin / Compose / WebView callbacks registered through
+        // AndroidX can pre-empt ours. Register OUR callback directly on the platform
+        // dispatcher at PRIORITY_OVERLAY to guarantee the first edge-back gesture is
+        // delivered to handleNativeBack().
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            overlayBackInvokedCallback = () -> {
+                Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.onBackInvoked source=window-overlay");
+                handleNativeBack();
+            };
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_OVERLAY,
+                overlayBackInvokedCallback
+            );
+            Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.onBackInvoked.registered priority=OVERLAY");
+        }
+
+        // Fallback for API < 33 and as defense in depth. Predictive-back lifecycle methods
+        // log so we can see whether the system is starting/cancelling vs committing.
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
+            public void handleOnBackStarted(BackEventCompat backEvent) {
+                Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.onBackStarted progress=" + backEvent.getProgress() + " edge=" + backEvent.getSwipeEdge());
+            }
+
+            @Override
+            public void handleOnBackProgressed(BackEventCompat backEvent) {
+                // Intentionally not logging every progress tick; uncomment for tracing.
+                // Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.onBackProgressed progress=" + backEvent.getProgress());
+            }
+
+            @Override
+            public void handleOnBackCancelled() {
+                Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.onBackCancelled");
+            }
+
+            @Override
             public void handleOnBackPressed() {
+                Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.onBackPressed source=androidx-dispatcher");
                 handleNativeBack();
             }
         });
@@ -176,6 +229,13 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onDestroy() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && overlayBackInvokedCallback != null) {
+            try {
+                getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(overlayBackInvokedCallback);
+            } catch (Exception ignored) {
+            }
+            overlayBackInvokedCallback = null;
+        }
         if (routeChangeReceiver != null) {
             unregisterReceiver(routeChangeReceiver);
             routeChangeReceiver = null;
@@ -190,5 +250,37 @@ public class MainActivity extends BridgeActivity {
             "window.LogseqNative && window.LogseqNative.onNativePop && window.LogseqNative.onNativePop();",
             null
         ));
+    }
+
+    private void disableCapacitorAppBackHandler() {
+        try {
+            if (getBridge() == null) {
+                Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.appPluginBack bridge=null skip");
+                return;
+            }
+            PluginHandle handle = getBridge().getPlugin("App");
+            if (handle == null) {
+                Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.appPluginBack pluginHandle=null skip");
+                return;
+            }
+            Plugin instance = handle.getInstance();
+            if (instance == null) {
+                Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.appPluginBack pluginInstance=null skip");
+                return;
+            }
+            Field field = instance.getClass().getDeclaredField("onBackPressedCallback");
+            field.setAccessible(true);
+            Object callback = field.get(instance);
+            if (callback instanceof OnBackPressedCallback) {
+                ((OnBackPressedCallback) callback).setEnabled(false);
+                Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.appPluginBack disabled");
+            } else {
+                Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.appPluginBack unexpectedType=" + (callback == null ? "null" : callback.getClass().getName()));
+            }
+        } catch (NoSuchFieldException e) {
+            Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.appPluginBack noField=" + e.getMessage());
+        } catch (Exception e) {
+            Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.appPluginBack error=" + e.getClass().getSimpleName() + ":" + e.getMessage());
+        }
     }
 }

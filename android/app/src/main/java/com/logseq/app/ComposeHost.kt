@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -112,6 +113,14 @@ private fun ComposeNavigationHost(
     webView: WebView
 ) {
     val navController = rememberNavController()
+
+    DisposableEffect(navController) {
+        navController.enableOnBackPressed(false)
+        Log.d("NavStack", "$DEBUG_NAV_STACK_PREFIX compose.navController.backHandling disabled")
+        onDispose {
+            navController.enableOnBackPressed(true)
+        }
+    }
 
     // Track the last navigation type so we can change slide direction.
     val lastNavTypeState = remember { mutableStateOf("push") }
