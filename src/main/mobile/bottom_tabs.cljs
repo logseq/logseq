@@ -79,7 +79,7 @@
     (.addListener
      liquid-tabs
      "openSearchResultBlock"
-     (fn [data]
+     (fn [^js data]
        (when-let [id (.-id data)]
          (when-not (string/blank? id)
            (let [native-push? (not= false (.-nativePush data))]
@@ -87,7 +87,7 @@
                                                               (mobile-util/native-platform?))}))))))))
 
 (defn add-keyboard-hack-listener!
-  "Listen for Backspace or Enter while the invisible keyboard field is focused."
+  "Listen for Backspace or Enter forwarded by the native iOS webview key bridge."
   []
   (when (and (util/capacitor?) liquid-tabs)
     (.addListener

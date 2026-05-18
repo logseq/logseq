@@ -22,6 +22,7 @@
   (reset! @#'mobile-nav/active-stack "home")
   (reset! @#'mobile-nav/stack-history {})
   (reset! @#'mobile-nav/pending-navigation nil)
+  (reset! mobile-state/*search-input "")
   (reset! mobile-state/*tab "home"))
 
 (use-fixtures :each
@@ -101,3 +102,19 @@
         (is (= [[:home {} {}]
                 [:page {} {}]]
                @replace-calls))))))
+
+(deftest leaving-search-does-not-clear-query-during-tab-transition
+  (testing "native clears search state when Search opens, not while Home is appearing"
+    (let [replace-calls (atom [])]
+      (reset! mobile-state/*tab "search")
+      (reset! mobile-state/*search-input "Hello")
+      (reset! @#'mobile-nav/active-stack "search")
+      (reset! @#'mobile-nav/stack-history
+              {"search" {:history [(stack-entry :search "/__stack__/search")]}
+               "home" {:history [(stack-entry :home "/")]}})
+      (with-redefs [mobile-nav/orig-replace-state (fn [& args] (swap! replace-calls conj args))
+                    route-handler/set-route-match! (constantly nil)
+                    mobile-util/native-platform? (constantly false)]
+        (mobile-state/set-tab! "home")
+        (is (= "Hello" @mobile-state/*search-input))
+        (is (= [[:home {} {}]] @replace-calls))))))

@@ -28,6 +28,7 @@ final class LiquidTabsStore: ObservableObject {
 
     // Native-rendered search results supplied by JS.
     @Published var searchResults: [NativeSearchResult] = []
+    var suppressSearchNotifications = false
 
     // Helper to get a stable selection if JS forgets
     func effectiveSelectedId() -> String? {
