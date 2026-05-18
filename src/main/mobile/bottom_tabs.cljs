@@ -3,11 +3,15 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [mobile.navigation :as mobile-nav]
             [mobile.search :as mobile-search]
             [mobile.state :as mobile-state]
@@ -43,6 +47,12 @@
   [results]
   (when (and (util/capacitor?) liquid-tabs (.-updateNativeSearchResults liquid-tabs))
     (.updateNativeSearchResults liquid-tabs (clj->js {:results results}))))
+
+(defn update-native-graphs!
+  "Send native graph list to the iOS plugin."
+  [payload]
+  (when (and (mobile-util/native-ios?) liquid-tabs (.-updateNativeGraphs liquid-tabs))
+    (.updateNativeGraphs liquid-tabs (clj->js payload))))
 
 (defn add-tab-selected-listener!
   "Listen to native tab selection.
@@ -85,6 +95,99 @@
            (let [native-push? (not= false (.-nativePush data))]
              (route-handler/redirect-to-page! id {:push (and native-push?
                                                               (mobile-util/native-platform?))}))))))))
+
+(defn- repo-by-url
+  [url]
+  (some #(when (= url (:url %)) %) (state/get-repos)))
+
+(defn- delete-local-graph!
+  [url]
+  (when-let [repo (repo-by-url url)]
+    (repo-handler/remove-repo! repo)))
+
+(defn- delete-remote-graph!
+  [url graph-uuid graph-schema-version]
+  (state/set-state! :rtc/loading-graphs? true)
+  (-> (p/do!
+       (when (= (state/get-current-repo) url)
+         (state/<invoke-db-worker :thread-api/rtc-stop))
+       (rtc-handler/<rtc-delete-graph! graph-uuid graph-schema-version)
+       (rtc-handler/<get-remote-graphs))
+      (p/finally
+       (fn []
+         (state/set-state! :rtc/loading-graphs? false)))))
+
+(defn- leave-remote-graph!
+  [url graph-uuid]
+  (state/set-state! :rtc/loading-graphs? true)
+  (-> (p/do!
+       (when (= (state/get-current-repo) url)
+         (state/<invoke-db-worker :thread-api/rtc-stop))
+       (rtc-handler/<rtc-leave-graph! graph-uuid))
+      (p/then
+       (fn []
+         (notification/show! (t :graph/left) :success)
+         (rtc-handler/<get-remote-graphs)))
+      (p/catch
+       (fn [e]
+         (notification/show! (t :graph/leave-error) :error)
+         (log/error :db-sync/leave-graph-failed
+                    {:error e
+                     :graph-uuid graph-uuid})))
+      (p/finally
+       (fn []
+         (state/set-state! :rtc/loading-graphs? false)))))
+
+(defn add-graph-action-listener!
+  []
+  (when (and (mobile-util/native-ios?) liquid-tabs)
+    (.addListener
+     liquid-tabs
+     "nativeGraphAction"
+     (fn [^js data]
+       (case (.-action data)
+         "open"
+         (when-let [url (.-url data)]
+           (when-not (string/blank? url)
+             (state/pub-event! [:graph/switch url])))
+
+         "download"
+         (let [graph-name (.-graphName data)
+               graph-uuid (.-graphUUID data)
+               graph-schema-version (.-graphSchemaVersion data)]
+           (when (and (not (string/blank? graph-name))
+                      (not (string/blank? graph-uuid))
+                      (not (string/blank? graph-schema-version)))
+             (state/pub-event!
+              [:rtc/download-remote-graph
+               graph-name
+               graph-uuid
+               graph-schema-version
+               (boolean (.-graphE2ee data))])))
+
+         "refresh"
+         (rtc-handler/<get-remote-graphs)
+
+         "deleteLocal"
+         (when-let [url (.-url data)]
+           (when-not (string/blank? url)
+             (delete-local-graph! url)))
+
+         "deleteRemote"
+         (let [url (.-url data)
+               graph-uuid (.-graphUUID data)
+               graph-schema-version (.-graphSchemaVersion data)]
+           (when (and (not (string/blank? graph-uuid))
+                      (not (string/blank? graph-schema-version)))
+             (delete-remote-graph! url graph-uuid graph-schema-version)))
+
+         "leaveRemote"
+         (let [url (.-url data)
+               graph-uuid (.-graphUUID data)]
+           (when-not (string/blank? graph-uuid)
+             (leave-remote-graph! url graph-uuid)))
+
+         nil)))))
 
 (defn add-keyboard-hack-listener!
   "Listen for Backspace or Enter forwarded by the native iOS webview key bridge."
@@ -141,6 +244,7 @@
        (p/let [result (mobile-search/search q)]
          (update-native-search-results! result))))
     (add-search-result-item-listener!)
+    (add-graph-action-listener!)
     (add-keyboard-hack-listener!)))
 
 (defn configure
