@@ -227,7 +227,9 @@ public class UILocalPlugin: CAPPlugin, CAPBridgedPlugin {
 
         let drop = Drop(
           title: title,
+          titleNumberOfLines: 0,
           subtitle: subtitle,
+          subtitleNumberOfLines: 0,
           icon: buildIcon(type: type, iconName: iconName, hexColor: iconColorHex),
           action: nil,
           position: position,
