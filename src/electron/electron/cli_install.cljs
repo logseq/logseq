@@ -60,7 +60,10 @@
         (throw (js/Error. (str "Missing CLI script at " cli-path)))
 
         (nil? cli-dir)
-        (throw (js/Error. "No CLI install directory found"))
+        (throw (js/Error.
+                (if windows?
+                  "No CLI install directory found. The configured install directory could not be selected or is not writable."
+                  "No CLI install directory found. Expected to install the launcher in ~/.local/bin, but that directory could not be created or is not writable.")))
 
         :else
         (let [target-path (path-join cli-dir (if windows? "logseq.cmd" "logseq"))
