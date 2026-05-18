@@ -97,9 +97,7 @@ private struct LiquidTabs26View: View {
     }
 
     private func focusSearchField() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            isSearchFocused = true
-        }
+        isSearchFocused = true
     }
 
     private func prepareForSelectionChange(to selection: LiquidTabsTabSelection) {
@@ -179,11 +177,9 @@ private struct LiquidTabs26View: View {
                 .onChange(of: store.searchText) { query in
                     if query.isEmpty {
                         store.searchResults = []
-                        DispatchQueue.main.async {
-                            guard selectedTab == .search,
-                                  !store.suppressSearchNotifications else { return }
-                            LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
-                        }
+                        guard selectedTab == .search,
+                              !store.suppressSearchNotifications else { return }
+                        LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
                     } else {
                         guard selectedTab == .search,
                               !store.suppressSearchNotifications else { return }
@@ -361,12 +357,6 @@ private struct LiquidTabs16View: View {
                                 }
                                 store.selectedId = id
                                 LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
-                                if id == "search" {
-                                    DispatchQueue.main.async {
-                                        guard store.selectedId == "search" else { return }
-                                        store.suppressSearchNotifications = false
-                                    }
-                                }
                             }
                         }
                     )) {
@@ -397,8 +387,10 @@ private struct LiquidTabs16View: View {
                     }
                     .onChange(of: store.selectedId) { newId in
                         if newId == "search" {
-                            store.suppressSearchNotifications = true
-                            resetSearchState()
+                            if !store.suppressSearchNotifications {
+                                store.suppressSearchNotifications = true
+                                resetSearchState()
+                            }
                             DispatchQueue.main.async {
                                 guard store.selectedId == "search" else { return }
                                 store.suppressSearchNotifications = false
@@ -444,6 +436,14 @@ private struct SearchTab16Host: View {
     let isActive: Bool
     @Binding var searchPath: NavigationPath
     @ObservedObject var store: LiquidTabsStore
+    @FocusState private var isSearchFocused: Bool
+
+    private func focusSearchFieldIfActive() {
+        DispatchQueue.main.async {
+            guard store.selectedId == "search" else { return }
+            isSearchFocused = true
+        }
+    }
 
     var body: some View {
         NavigationStack(path: $searchPath) {
@@ -471,6 +471,7 @@ private struct SearchTab16Host: View {
                         TextField("Search", text: $searchText)
                             .textInputAutocapitalization(.none)
                             .disableAutocorrection(true)
+                            .focused($isSearchFocused)
 
                         if !searchText.isEmpty {
                             Button("Clear") {
@@ -490,14 +491,26 @@ private struct SearchTab16Host: View {
                 }
             }
         }
+        .onAppear {
+            if isActive {
+                focusSearchFieldIfActive()
+            } else {
+                isSearchFocused = false
+            }
+        }
+        .onChange(of: isActive) { active in
+            if active {
+                focusSearchFieldIfActive()
+            } else {
+                isSearchFocused = false
+            }
+        }
         .onChange(of: searchText) { query in
             if query.isEmpty {
                 store.searchResults = []
-                DispatchQueue.main.async {
-                    guard store.selectedId == "search",
-                          !store.suppressSearchNotifications else { return }
-                    LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
-                }
+                guard store.selectedId == "search",
+                      !store.suppressSearchNotifications else { return }
+                LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
             } else {
                 guard isActive,
                       !store.suppressSearchNotifications else { return }
