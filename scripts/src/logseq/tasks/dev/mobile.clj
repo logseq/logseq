@@ -6,7 +6,7 @@
             [logseq.tasks.util :as task-util])
   (:import [java.nio.file FileAlreadyExistsException]))
 
-(def ^:private dev-server-port "3001")
+(def ^:private dev-server-port "3002")
 (def ^:private ssl-dir "ssl/mobile-dev")
 (def ^:private ssl-lock-file "ssl/mobile-dev/.cert.lock")
 (def ^:private ssl-ca-keystore "ssl/mobile-dev/ca-keystore.jks")

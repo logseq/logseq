@@ -6,13 +6,13 @@
   ```shell
   sudo gem install cocoapods
   ```
-  Note: use the following commands from *ios/App* directory to fix **ffi_c.bundle** related issue for M1 MacBook [^1].  
+  Note: use the following commands from *ios/App* directory to fix **ffi_c.bundle** related issue for M1 MacBook [^1].
   (Working directory: `ios/App`)
   ```shell
   arch -x86_64 sudo gem install ffi
   arch -x86_64 pod install
   ```
- 
+
 ## Set up development environment
 ### Build the development app
 - Generate the local HTTPS certificate used by Shadow CLJS:
@@ -22,7 +22,7 @@
 - Install `ssl/mobile-dev/logseq-dev-ca.cer` on the iOS device and enable full trust for it in iOS Settings.
 - Working directory: Logseq root directory
 - Run `LOGSEQ_SHADOW_HTTPS=true pnpm mobile-watch` from the logseq project root directory in terminal.
-- Run `LOGSEQ_APP_SERVER_URL=https://your-local-ip-address:3001/mobile pnpm exec cap sync ios` in another terminal to copy web assets from public to *ios/App/App/public*, create *capacitor.config.json* in *ios/App/App*, and update iOS plugins.
+- Run `LOGSEQ_APP_SERVER_URL=https://your-local-ip-address:3002/mobile pnpm exec cap sync ios` in another terminal to copy web assets from public to *ios/App/App/public*, create *capacitor.config.json* in *ios/App/App*, and update iOS plugins.
 - Connect your iOS device to MacBook.
 - Run `pnpm exec cap open ios` to open Logseq project in Xcode, and build the app there.
 
@@ -40,11 +40,11 @@ or, you can run `bb release:ios-app` to do those steps with one command.
 [^1] https://github.com/CocoaPods/CocoaPods/issues/10220#issuecomment-730963835
 
 
-# Android development  
+# Android development
 ## Installation
 - Install Android studio [^1] and SDK (newer than 30) tools
   Note: for M1 MacBook users.
-  - Download version **Mac with Apple Chip** 
+  - Download version **Mac with Apple Chip**
   - unzip it and move **Android Studio.app** file to **Applications**, or you will get the following error later.
     ```
      [error] Unable to launch Android Studio. Is it installed?
@@ -61,7 +61,7 @@ or, you can run `bb release:ios-app` to do those steps with one command.
 ## Set up development environment
 ### Build the development app
 - Run `pnpm install && pnpm mobile-watch` from the logseq project root directory in terminal.
-- Run `LOGSEQ_APP_SERVER_URL=https://your-local-ip-address:3001/mobile pnpm exec cap sync android` in another terminal.
+- Run `LOGSEQ_APP_SERVER_URL=https://your-local-ip-address:3002/mobile pnpm exec cap sync android` in another terminal.
 - Run `pnpm exec cap run android` to install app into your device.
 
 or, you can run `bb dev:android-app` to do those steps with one command if you are on macOS.
@@ -73,7 +73,7 @@ Then,
 - For browser console print and devtool remote debug, open chrome, type url chrome://inspect/#devices, you should see your device there, click inspect
 
 
-### Build a release and install it to your android device 
+### Build a release and install it to your android device
 - Comment out `server` section above in **capacitor.config.ts**.
 - Connect your device to PC.
 - Run `pnpm run-android-release`.
