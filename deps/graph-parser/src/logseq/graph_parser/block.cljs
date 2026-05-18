@@ -443,7 +443,9 @@
                                                 p)]
                                         (when (string? p)
                                           (let [p (or (text/get-nested-page-name p) p)]
-                                            (if (and (text/namespace-page? p) (not tag?))
+                                            (if (and (text/namespace-page? p)
+                                                     (not (common-date/valid-journal-title-with-slash? p))
+                                                     (not tag?))
                                               (common-util/split-namespace-pages p)
                                               [p])))))
                                     col)

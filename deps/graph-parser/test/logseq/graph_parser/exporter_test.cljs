@@ -1344,6 +1344,20 @@
     (is (nil? (db-test/find-page-by-title @conn "27"))
           "Journal title is not split into a day namespace page")))
 
+(deftest-async import-slash-journal-ref-does-not-create-namespace-pages
+  (p/let [file (write-temp-graph-file "journals/2026_05_18.md" "- yes\n- [[Sun, 2026/05/17]]\n")
+          conn (db-test/create-conn)
+          _ (import-files-to-db [file] conn {:user-config {:journal/page-title-format "EEE, yyyy/MM/dd"}})
+          ref-journal (db-test/find-journal-by-journal-day @conn 20260517)]
+    (is (= "Sun, 2026/05/17" (:block/title ref-journal))
+        "Journal reference is imported as a journal page")
+    (is (nil? (:block/namespace ref-journal))
+        "Referenced slash-formatted journal does not keep a namespace attribute")
+    (is (nil? (db-test/find-page-by-title @conn "Sun, 2026"))
+        "Journal reference is not split into a parent namespace page")
+    (is (nil? (db-test/find-page-by-title @conn "05"))
+        "Journal reference is not split into a child namespace page")))
+
 (deftest-async import-normalizes-existing-random-journal-uuid-and-text-refs
   (let [old-journal-uuid (random-uuid)
         standard-journal-uuid (common-uuid/gen-uuid :journal-page-uuid 20260127)
