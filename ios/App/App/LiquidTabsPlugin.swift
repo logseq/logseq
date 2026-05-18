@@ -107,8 +107,8 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // MARK: - Events to JS
 
-    func notifyTabSelected(id: String) {
-        notifyListeners("tabSelected", data: ["id": id])
+    func notifyTabSelected(id: String, reselected: Bool = false) {
+        notifyListeners("tabSelected", data: ["id": id, "reselected": reselected])
     }
 
     func notifySearchChanged(query: String) {
