@@ -52,6 +52,69 @@
       (is (nil? parent'))
       (is (nil? child')))))
 
+(deftest delete-blocks-removes-range-comments-when-all-targets-are-deleted
+  (let [comments-uuid (random-uuid)
+        comment-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "target 1"}
+                         {:block/title "target 2"}]}])
+        page (ldb/get-page @conn "page1")
+        target-1 (db-test/find-block-by-content @conn "target 1")
+        target-2 (db-test/find-block-by-content @conn "target 2")]
+    (d/transact! conn [{:db/ident :logseq.class/Comments
+                        :block/uuid (random-uuid)
+                        :block/title "Comments"}
+                       {:db/id -1
+                        :block/uuid comments-uuid
+                        :block/title "Comments"
+                        :block/page (:db/id page)
+                        :block/parent (:db/id page)
+                        :block/order "z"
+                        :block/tags #{:logseq.class/Comments}
+                        :logseq.property.comments/blocks #{(:db/id target-1)
+                                                           (:db/id target-2)}}
+                       {:block/uuid comment-uuid
+                        :block/title "comment"
+                        :block/page (:db/id page)
+                        :block/parent -1
+                        :block/order "a"}])
+    (outliner-core/delete-blocks! conn [target-1 target-2] {})
+    (is (nil? (d/entity @conn [:block/uuid comments-uuid])))
+    (is (nil? (d/entity @conn [:block/uuid comment-uuid])))))
+
+(deftest delete-blocks-keeps-range-comments-when-some-targets-remain
+  (let [comments-uuid (random-uuid)
+        comment-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "target 1"}
+                         {:block/title "target 2"}]}])
+        page (ldb/get-page @conn "page1")
+        target-1 (db-test/find-block-by-content @conn "target 1")
+        target-2 (db-test/find-block-by-content @conn "target 2")]
+    (d/transact! conn [{:db/ident :logseq.class/Comments
+                        :block/uuid (random-uuid)
+                        :block/title "Comments"}
+                       {:db/id -1
+                        :block/uuid comments-uuid
+                        :block/title "Comments"
+                        :block/page (:db/id page)
+                        :block/parent (:db/id page)
+                        :block/order "z"
+                        :block/tags #{:logseq.class/Comments}
+                        :logseq.property.comments/blocks #{(:db/id target-1)
+                                                           (:db/id target-2)}}
+                       {:block/uuid comment-uuid
+                        :block/title "comment"
+                        :block/page (:db/id page)
+                        :block/parent -1
+                        :block/order "a"}])
+    (outliner-core/delete-blocks! conn [target-1] {})
+    (is (some? (d/entity @conn [:block/uuid comments-uuid])))
+    (is (some? (d/entity @conn [:block/uuid comment-uuid])))
+    (is (some? (d/entity @conn (:db/id target-2))))))
+
 (deftest delete-blocks-rejects-built-in-entities
   (let [conn (db-test/create-conn)]
     (testing "built-in page is rejected"

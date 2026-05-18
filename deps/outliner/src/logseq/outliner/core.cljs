@@ -837,6 +837,55 @@
                                    (:block/order (second top-level-blocks))) 0))]
     (if reversed? (reverse top-level-blocks) top-level-blocks)))
 
+(def ^:private comments-tag-ident :logseq.class/Comments)
+(def ^:private comments-blocks-property :logseq.property.comments/blocks)
+
+(defn- comments-area?
+  [block]
+  (boolean
+   (some (fn [tag]
+           (= comments-tag-ident
+              (if (keyword? tag) tag (:db/ident tag))))
+         (:block/tags block))))
+
+(defn- block-subtree-ids
+  [db block]
+  (into #{(:db/id block)}
+        (ldb/get-block-full-children-ids db (:db/id block))))
+
+(defn- datom-value-ids
+  [value]
+  (if (set? value)
+    value
+    #{value}))
+
+(defn- orphaned-range-comments-areas
+  [db deleted-block-ids]
+  (let [comments-area-target-ids
+        (->> (d/datoms db :aevt comments-blocks-property)
+             (mapcat (fn [datom]
+                       (map (fn [target-id] [(:e datom) target-id])
+                            (datom-value-ids (:v datom)))))
+             (group-by first)
+             (map (fn [[comments-area-id entries]]
+                    [comments-area-id (set (map second entries))]))
+             (into {}))
+        candidate-comments-areas
+        (->> comments-area-target-ids
+             (filter (fn [[_comments-area-id target-ids]]
+                       (seq (set/intersection deleted-block-ids target-ids))))
+             (map first)
+             (keep #(d/entity db %))
+             (filter comments-area?)
+             (remove #(contains? deleted-block-ids (:db/id %)))
+             (common-util/distinct-by :db/id))]
+    (filter
+     (fn [comments-area]
+       (let [targets (seq (get comments-area-target-ids (:db/id comments-area)))]
+         (and targets
+              (every? #(contains? deleted-block-ids %) targets))))
+     candidate-comments-areas)))
+
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree."
   [db blocks _opts]
@@ -844,6 +893,9 @@
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
         top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
         top-level-blocks (remove outliner-validate/built-in-entity? top-level-blocks*)
+        deleted-block-ids (into #{} (mapcat #(block-subtree-ids db %) top-level-blocks))
+        orphaned-comments-areas (orphaned-range-comments-areas db deleted-block-ids)
+        top-level-blocks (concat top-level-blocks orphaned-comments-areas)
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
