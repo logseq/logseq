@@ -146,7 +146,7 @@ private struct LiquidTabs26View: View {
         navController.popToRootViewController(animated: true)
 
         if let id = store.tabId(for: selection) {
-            LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+            LiquidTabsPlugin.shared?.notifyTabSelected(id: id, reselected: true)
         }
     }
 
@@ -386,7 +386,7 @@ private struct LiquidTabs16View: View {
                             // Re-tap: pop to root
                             if id == store.selectedId {
                                 navController.popToRootViewController(animated: true)
-                                LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+                                LiquidTabsPlugin.shared?.notifyTabSelected(id: id, reselected: true)
                             } else {
                                 store.selectedId = id
                                 LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
