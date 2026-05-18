@@ -16,6 +16,7 @@
 
 (defonce ^:private *graph->aes-key (atom {}))
 (defonce ^:private *user-rsa-key-pair-inflight (atom {}))
+(defonce ^:private *ensure-user-rsa-key-pair-inflight (atom {}))
 (defonce ^:private node-default-auth-file "~/logseq/auth.json")
 (defonce ^:private e2ee-password-secret-key "logseq-encrypted-password")
 (def ^:private invalid-transit ::invalid-transit)
@@ -377,7 +378,8 @@
           exported-public-key (crypt/<export-public-key publicKey)
           public-key-str (ldb/write-transit-str exported-public-key)
           encrypted-private-key-str (ldb/write-transit-str encrypted-private-key)]
-    (p/let [_ (<upload-user-rsa-key-pair! base public-key-str encrypted-private-key-str)]
+    (p/let [_ (<save-e2ee-password password)
+            _ (<upload-user-rsa-key-pair! base public-key-str encrypted-private-key-str)]
       {:public-key public-key-str
        :encrypted-private-key encrypted-private-key-str
        :password password})))
@@ -404,13 +406,31 @@
       :else
       (<generate-and-upload-user-rsa-key-pair! base opts))))
 
+(defn- <ensure-user-rsa-key-pair
+  [base {:keys [password ensure-server? server-rsa-keys-exists?] :as opts}]
+  (if (seq password)
+    (<ensure-user-rsa-key-pair-raw base opts)
+    (p/let [user-id (<resolve-user-uuid)]
+      (when-not (and (string? base) (string? user-id))
+        (fail-fast :db-sync/missing-field {:base base
+                                           :user-id user-id
+                                           :field :user-rsa-key-pair}))
+      (let [k [base user-id ensure-server? server-rsa-keys-exists?]]
+        (if-let [inflight (get @*ensure-user-rsa-key-pair-inflight k)]
+          inflight
+          (let [task (-> (<ensure-user-rsa-key-pair-raw base opts)
+                         (p/finally (fn []
+                                      (swap! *ensure-user-rsa-key-pair-inflight dissoc k))))]
+            (swap! *ensure-user-rsa-key-pair-inflight assoc k task)
+            task))))))
+
 (defn ensure-user-rsa-keys!
   ([]
    (ensure-user-rsa-keys! nil))
   ([opts]
    (let [base (e2ee-base)]
      (if (string? base)
-       (<ensure-user-rsa-key-pair-raw base opts)
+       (<ensure-user-rsa-key-pair base opts)
        (do
          (log/info :db-sync/skip-ensure-user-rsa-keys {:reason :missing-e2ee-base})
          (p/resolved nil))))))

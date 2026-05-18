@@ -736,6 +736,7 @@
  :graph/time-travel-now "Now"
  :graph/toggle-tag "Toggle tag {1}"
  :graph/updated-switching "Graph updated! Switching to graph ..."
+ :graph/upload-local-confirm-desc "Upload graph \"{1}\" to Logseq Server?"
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
  :graph/view-mode "View mode"

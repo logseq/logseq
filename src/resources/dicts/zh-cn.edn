@@ -732,6 +732,7 @@
  :graph/time-travel-now "现在"
  :graph/toggle-tag "切换标签 {1}"
  :graph/updated-switching "图谱已更新！正在切换到图谱……"
+ :graph/upload-local-confirm-desc "要将图谱“{1}”上传到 Logseq Server 吗？"
  :graph/use-sync-beta "使用 Logseq Sync（Beta 测试）"
  :graph/use-sync-label "使用 Logseq Sync？"
  :graph/view-mode "视图模式"
