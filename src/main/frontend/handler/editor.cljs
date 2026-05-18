@@ -684,6 +684,10 @@
     (and (string? block-ref) (util/uuid-string? block-ref)) (uuid block-ref)
     :else nil))
 
+(defn- block-lookup-ref
+  [block]
+  [:block/uuid (:block/uuid block)])
+
 (defn ensure-comments-area!
   [block-id]
   (when-let [block (db/entity [:block/uuid block-id])]
@@ -730,7 +734,7 @@
                                 :sibling? true
                                 :edit-block? false
                                 :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                                              comments-model/comments-blocks-property (set (keep :block/uuid blocks))}})]
+                                              comments-model/comments-blocks-property (set (map block-lookup-ref blocks))}})]
           (when comments-area
             (expand-block! (:block/uuid comments-area)))
           comments-area)))))
@@ -1378,6 +1382,7 @@
           element (navigable-sibling-block (first (state/get-selection-blocks))
                                            f
                                            {:up-down? true
+                                            :direction direction
                                             :exclude-property? true})]
       (when element
         (util/scroll-to-block element)
@@ -1392,6 +1397,7 @@
           element (navigable-sibling-block (first-last (state/get-selection-blocks))
                                            f
                                            {:up-down? true
+                                            :direction direction
                                             :exclude-property? true})]
       (when element
         (util/scroll-to-block element)
@@ -1404,6 +1410,7 @@
           element (navigable-sibling-block (last-first (state/get-selection-blocks))
                                            f
                                            {:up-down? true
+                                            :direction direction
                                             :exclude-property? true})]
       (when element
         (util/scroll-to-block element)
@@ -2375,6 +2382,7 @@
         sibling-block (navigable-sibling-block selected
                                                f
                                                {:up-down? true
+                                                :direction direction
                                                 :exclude-property? true})]
     (when (and sibling-block
                (or (dom/attr sibling-block "blockid") (dom/attr sibling-block "parentblockid")))
@@ -2410,13 +2418,67 @@
   [node]
   (= "true" (node-attr node "data-comments-area")))
 
+(defn- comments-area-ancestor-node
+  [node]
+  (or (when (comments-area-node? node) node)
+      (some-> node (util/rec-get-node "is-comments-area"))))
+
+(defn- comments-area-collapsed-node?
+  [node]
+  (= "true" (node-attr node "data-collapsed")))
+
+(defn- block-node-outside-comments-area
+  [comments-node direction]
+  (when direction
+    (let [blocks (vec (util/get-blocks-noncollapse))
+          index (first (keep-indexed (fn [idx node]
+                                       (when (= comments-node node) idx))
+                                     blocks))
+          step (case direction
+                 (:up :left) -1
+                 (:down :right) 1
+                 1)]
+      (loop [idx (some-> index (+ step))]
+        (when (and idx (<= 0 idx) (< idx (count blocks)))
+          (let [node (nth blocks idx)]
+            (if (and (gobj/get node "nodeType")
+                     (gdom/contains comments-node node))
+              (recur (+ idx step))
+              node)))))))
+
 (defn- navigable-sibling-block
-  [block sibling-f opts]
+  [block sibling-f {:keys [up-down? direction] :as opts}]
   (loop [sibling-block (sibling-f block opts)]
-    (if (or (comment-item-node? sibling-block)
-            (comments-area-node? sibling-block))
+    (cond
+      (nil? sibling-block)
+      nil
+
+      (comments-area-ancestor-node sibling-block)
+      (let [comments-node (comments-area-ancestor-node sibling-block)]
+        (if up-down?
+          comments-node
+          (or (block-node-outside-comments-area comments-node direction)
+              (recur (sibling-f sibling-block opts)))))
+
+      (comment-item-node? sibling-block)
       (recur (sibling-f sibling-block opts))
+
+      :else
       sibling-block)))
+
+(defn- comments-reply-input
+  [comments-node]
+  (some-> comments-node
+          (.querySelector ".ls-comment-add textarea, .ls-comment-box textarea, .ls-comment-box input, .ls-comment-box [contenteditable='true']")))
+
+(defn- enter-comments-area-node!
+  [comments-node]
+  (state/clear-edit!)
+  (if (comments-area-collapsed-node? comments-node)
+    (state/exit-editing-and-set-selected-blocks! [comments-node])
+    (if-let [input (comments-reply-input comments-node)]
+      (.focus input)
+      (state/exit-editing-and-set-selected-blocks! [comments-node]))))
 
 (defn- focus-trigger
   [_current-block sibling-block]
@@ -2438,7 +2500,8 @@
                 :up util/get-prev-block-non-collapsed
                 :down util/get-next-block-non-collapsed)
             current-block (util/rec-get-node input-or-active-element "ls-block")
-            sibling-block (navigable-sibling-block current-block f {:up-down? true})
+            sibling-block (navigable-sibling-block current-block f {:up-down? true
+                                                                    :direction direction})
             {:block/keys [uuid title]} (state/get-edit-block)
             sibling-block (or (when (property-value-node? sibling-block)
                                 (first (dom/by-class sibling-block "ls-block")))
@@ -2460,6 +2523,9 @@
 
                property-value-container?
                (focus-trigger current-block sibling-block)
+
+               (comments-area-node? sibling-block)
+               (enter-comments-area-node! sibling-block)
 
                :else
                (when-let [sibling-block-id (node-attr sibling-block "blockid")]
@@ -2511,10 +2577,10 @@
         repo (state/get-current-repo)
         editing-block (state/get-editor-block-container)
         f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
-        sibling-block (navigable-sibling-block editing-block f {})
+        sibling-block (navigable-sibling-block editing-block f {:direction direction})
         sibling-block (or (when (and sibling-block (property-value-node? sibling-block))
                             (if (and up? editing-block (gdom/contains sibling-block editing-block))
-                              (navigable-sibling-block sibling-block f {})
+                              (navigable-sibling-block sibling-block f {:direction direction})
                               (first (dom/by-class sibling-block "ls-block"))))
                           sibling-block)]
     (when sibling-block

@@ -580,3 +580,56 @@
                       (= node comments-node) target-node))]
     (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {}))
         "Cursor boundary navigation should skip comments area")))
+
+(deftest navigable-sibling-block-enters-comments-area-for-up-down-test
+  (let [current-node (js-obj "id" "current")
+        comments-node (js-obj "id" "comments"
+                              "data-comments-area" "true")
+        target-node (js-obj "id" "target")
+        sibling-f (fn [node _opts]
+                    (cond
+                      (= node current-node) comments-node
+                      (= node comments-node) target-node))]
+    (is (= comments-node (#'editor/navigable-sibling-block current-node sibling-f {:up-down? true}))
+        "Up/down navigation should enter comments instead of skipping the comments area")))
+
+(deftest navigable-sibling-block-skips-open-comments-subtree-for-left-right-test
+  (let [current-node (js-obj "id" "current")
+        comment-node (js-obj "id" "comment" "nodeType" 1)
+        comments-node (js-obj "id" "comments"
+                              "data-comments-area" "true"
+                              "nodeType" 1
+                              "contains" (fn [node] (= node comment-node)))
+        target-node (js-obj "id" "target")
+        sibling-f (fn [node _opts]
+                    (cond
+                      (= node current-node) comments-node
+                      (= node comments-node) comment-node))]
+    (with-redefs [util/get-blocks-noncollapse (fn [] [current-node comments-node comment-node target-node])]
+      (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {:direction :right}))
+          "Left/right navigation should skip the whole open comments subtree"))))
+
+(deftest enter-comments-area-node-focuses-reply-input-test
+  (let [focused? (atom false)
+        selected (atom nil)
+        input (js-obj "focus" #(reset! focused? true))
+        comments-node (js-obj "id" "comments"
+                              "data-collapsed" "false"
+                              "querySelector" (fn [_selector] input))]
+    (with-redefs [state/clear-edit! (fn [])
+                  state/exit-editing-and-set-selected-blocks! (fn [blocks] (reset! selected blocks))]
+      (#'editor/enter-comments-area-node! comments-node)
+      (is (true? @focused?)
+          "Open comments should focus the reply input")
+      (is (nil? @selected)
+          "Open comments should not select the comments area when the reply input exists"))))
+
+(deftest enter-comments-area-node-selects-collapsed-comments-test
+  (let [selected (atom nil)
+        comments-node (js-obj "id" "comments"
+                              "data-collapsed" "true")]
+    (with-redefs [state/clear-edit! (fn [])
+                  state/exit-editing-and-set-selected-blocks! (fn [blocks] (reset! selected blocks))]
+      (#'editor/enter-comments-area-node! comments-node)
+      (is (= [comments-node] @selected)
+          "Collapsed comments should be selected for keyboard shortcuts"))))
