@@ -82,12 +82,9 @@
      (fn [data]
        (when-let [id (.-id data)]
          (when-not (string/blank? id)
-           (when (= "search" @mobile-state/*tab)
-             (reset! mobile-state/*search-input "")
-             (mobile-nav/reset-stack-history! "search")
-             (reset! mobile-state/*tab "home")
-             (mobile-nav/set-current-stack! "home"))
-           (route-handler/redirect-to-page! id {:push (mobile-util/native-platform?)})))))))
+           (let [native-push? (not= false (.-nativePush data))]
+             (route-handler/redirect-to-page! id {:push (and native-push?
+                                                              (mobile-util/native-platform?))}))))))))
 
 (defn add-keyboard-hack-listener!
   "Listen for Backspace or Enter while the invisible keyboard field is focused."

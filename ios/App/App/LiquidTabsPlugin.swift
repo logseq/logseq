@@ -123,8 +123,11 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
         notifyListeners("keyboardHackKey", data: ["key": key])
     }
 
-    func openResult(id: String) {
-        notifyListeners("openSearchResultBlock", data: ["id": id])
+    func openResult(id: String, nativePush: Bool = true) {
+        notifyListeners("openSearchResultBlock", data: [
+            "id": id,
+            "nativePush": nativePush
+        ])
     }
 
     private func installKeyboardHackScript() {
