@@ -187,6 +187,7 @@
         (is (false? (owned? {:logseq.property/created-by-ref {:block/uuid other-id}}
                             (str user-id))))
         (is (false? (owned? {} (str user-id))))
+        (is (true? (owned? {} nil)))
         (is (false? (owned? {:logseq.property/created-by-ref {:block/uuid user-id}}
                             nil)))))))
 
@@ -194,14 +195,19 @@
   (let [actions (resolve 'frontend.components.block.comments-model/comment-actions)
         user-id #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
         other-id #uuid "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154"]
-    (testing "always exposes reaction and edit actions"
+    (testing "exposes reaction for comments created by other users"
       (is (fn? actions))
       (when (fn? actions)
-        (is (= [:reaction :edit]
+        (is (= [:reaction]
                (actions {:logseq.property/created-by-ref {:block/uuid other-id}}
                         (str user-id))))))
 
-    (testing "exposes delete only for comments created by current user"
+    (testing "exposes edit and delete when logged out and created-by ref is absent"
+      (when (fn? actions)
+        (is (= [:reaction :edit :delete]
+               (actions {} nil)))))
+
+    (testing "exposes edit and delete only for comments created by current user"
       (when (fn? actions)
         (is (= [:reaction :edit :delete]
                (actions {:logseq.property/created-by-ref {:block/uuid user-id}}

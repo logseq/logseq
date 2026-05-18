@@ -230,15 +230,16 @@
   (let [created-by (created-by-uuid block)
         current-user (uuid-string current-user-uuid)]
     (boolean
-     (and created-by
-          current-user
-          (= created-by current-user)))))
+     (if created-by
+       (and current-user
+            (= created-by current-user))
+       (nil? current-user)))))
 
 (defn comment-actions
   [block current-user-uuid]
-  (cond-> [:reaction :edit]
+  (cond-> [:reaction]
     (comment-owned-by? block current-user-uuid)
-    (conj :delete)))
+    (conj :edit :delete)))
 
 (defn comment-edit-cursor-position
   [body]
