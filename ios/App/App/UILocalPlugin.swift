@@ -46,6 +46,7 @@ class DatePickerDialogViewController: UIViewController {
     private var lastDate: Date?
     private var initialMonthLabel: UILabel?
     private var currentMonthText: String?
+    private var didFinish = false
 
     var onDateSelected: ((Date?) -> Void)?
 
@@ -100,17 +101,22 @@ class DatePickerDialogViewController: UIViewController {
     }
 
 
+    private func finish(_ date: Date?) {
+        guard !didFinish else { return }
+        didFinish = true
+        onDateSelected?(date)
+        dismiss(animated: false, completion: nil)
+    }
+
     @objc private func confirmDate() {
         let label = findMonthLabel(in: datePicker)
         if isOnlyDayDifferentOrSame(date1: lastDate!, date2: datePicker.date) || (label != nil && label?.text != currentMonthText && (inCalendarWheelPickerMode(in: datePicker) != true)) {
-            onDateSelected?(datePicker.date)
-            dismiss(animated: false, completion: nil)
+            finish(datePicker.date)
         }
     }
 
     @objc private func dismissDialog() {
-        onDateSelected?(nil)
-        dismiss(animated: false, completion: nil)
+        finish(nil)
     }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -180,7 +186,7 @@ class DatePickerDialogViewController: UIViewController {
         if let touch = touches.first {
             let location = touch.location(in: view)
             if !dialogView.frame.contains(location) {
-                dismiss(animated: true, completion: nil)
+                finish(nil)
             }
         }
     }
@@ -199,7 +205,6 @@ public class UILocalPlugin: CAPPlugin, CAPBridgedPlugin {
     private var navigationObserver: NSObjectProtocol?
 
     private var call: CAPPluginCall?
-    private var selectedDate: Date?
     private var datepickerViewController: UIViewController?
     private var datepickerDialogView: UIView?
 
@@ -565,27 +570,18 @@ private func scoreTranscript(_ text: String, locale: Locale) -> Int {
     }
 
     private func dateChanged(_ date: Date?) {
-        self.selectedDate = date
-        self.call?.keepAlive = true  // Keep calling until confirmed or canceled
-        onDateSelected()
-    }
+        guard let call = self.call else { return }
+        self.call = nil
 
-    private func onDateSelected() {
-        if let date = self.selectedDate {
+        if let date {
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
             let dateString = formatter.string(from: date)
             let result: PluginCallResultData = ["value": dateString]
-            self.call?.resolve(result)
+            call.resolve(result)
         } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            let dateString = formatter.string(from: Date())
-            let result: PluginCallResultData = ["value": dateString]
-            self.call?.resolve(result)
+            call.resolve([:])
         }
-
-        self.bridge?.viewController?.dismiss(animated: true, completion: nil)
     }
 
     override public func load() {
