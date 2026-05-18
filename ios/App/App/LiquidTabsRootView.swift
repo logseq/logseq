@@ -355,6 +355,34 @@ private struct SearchTabHost26: View {
 
     @Environment(\.isSearching) private var isSearching
     @State private var wasSearching: Bool = false
+    @State private var suppressSearchDismissalForAppLifecycle = false
+    @State private var searchDismissalRequestId = 0
+
+    private func cancelPendingSearchDismissal() {
+        searchDismissalRequestId += 1
+    }
+
+    private func scheduleSearchDismissal() {
+        guard wasSearching else { return }
+
+        searchDismissalRequestId += 1
+        let currentRequestId = searchDismissalRequestId
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            guard searchDismissalRequestId == currentRequestId,
+                  wasSearching,
+                  !suppressSearchDismissalForAppLifecycle,
+                  case .search = selectedTab.wrappedValue,
+                  let firstId = firstTabId else {
+                return
+            }
+
+            wasSearching = false
+            searchPath = NavigationPath()
+            selectedTab.wrappedValue = .content(0)
+            store.selectedId = firstId
+        }
+    }
 
     var body: some View {
         NavigationStack(path: $searchPath) {
@@ -375,15 +403,30 @@ private struct SearchTabHost26: View {
           .onChange(of: isSearching) { searching in
               if searching {
                   wasSearching = true
-              } else if wasSearching,
-                        case .search = selectedTab.wrappedValue,
-                        let firstId = firstTabId {
-
-                  wasSearching = false
-                  searchPath = NavigationPath()
-                  selectedTab.wrappedValue = .content(0)
-                  store.selectedId = firstId
+                  cancelPendingSearchDismissal()
+              } else {
+                  scheduleSearchDismissal()
               }
+          }
+          .onReceive(NotificationCenter.default.publisher(
+              for: UIApplication.willResignActiveNotification
+          )) { _ in
+              suppressSearchDismissalForAppLifecycle = true
+              wasSearching = false
+              cancelPendingSearchDismissal()
+          }
+          .onReceive(NotificationCenter.default.publisher(
+              for: UIApplication.didEnterBackgroundNotification
+          )) { _ in
+              suppressSearchDismissalForAppLifecycle = true
+              wasSearching = false
+              cancelPendingSearchDismissal()
+          }
+          .onReceive(NotificationCenter.default.publisher(
+              for: UIApplication.didBecomeActiveNotification
+          )) { _ in
+              suppressSearchDismissalForAppLifecycle = false
+              wasSearching = isSearching
           }
     }
 
