@@ -78,6 +78,7 @@ final class LiquidTabsStore: ObservableObject {
     @Published var graphSections: [NativeGraphSection] = []
     @Published var graphLabels = NativeGraphLabels()
     @Published var nativeGraphsVisible = true
+    @Published var graphsRefreshing = false
     @Published var pendingWebTabId: String?
     private var pendingWebTabRequestId = 0
 
@@ -99,12 +100,25 @@ final class LiquidTabsStore: ObservableObject {
         }
     }
 
-    func updateGraphs(sections: [NativeGraphSection], labels: NativeGraphLabels, visible: Bool?) {
+    func updateGraphs(sections: [NativeGraphSection], labels: NativeGraphLabels, visible: Bool?, refreshing: Bool?) {
         DispatchQueue.main.async {
             self.graphSections = sections
             self.graphLabels = labels
             if let visible {
                 self.nativeGraphsVisible = visible
+            }
+            if let refreshing {
+                self.graphsRefreshing = refreshing
+            }
+        }
+    }
+
+    func startGraphRefresh() {
+        if Thread.isMainThread {
+            self.graphsRefreshing = true
+        } else {
+            DispatchQueue.main.async {
+                self.graphsRefreshing = true
             }
         }
     }
