@@ -3,19 +3,34 @@
   (:require [logseq.outliner.page :as outliner-page]))
 
 (defn create!
-  "Create page. Has the following options:
+  "Creates a page through the outliner page service.
 
-   * :uuid                     - when set, use this uuid instead of generating a new one.
-   * :class?                   - when true, adds a :block/tags ':logseq.class/Tag'
-   * :tags                     - tag uuids that are added to :block/tags
-   * :persist-op?              - when true, add an update-page op
-   * :properties               - properties to add to the page
-  TODO: Add other options"
+   Supported options:
+
+   * :uuid                    - when set, use this uuid instead of generating a new one.
+   * :class?                  - create the page as a Tag class page.
+   * :journal?                - create the page as a Journal page.
+   * :today-journal?          - mark the create-page tx as today's journal creation.
+   * :tags                    - tag uuids or tag entities added to :block/tags.
+   * :properties              - properties to add to the page.
+   * :split-namespace?        - create namespace parent pages for non-journal slash pages.
+   * :class-ident-namespace   - namespace used when creating a class ident.
+   * :persist-op?             - when true, persist the create-page outliner op."
   [conn title & {:as options}]
   (outliner-page/create! conn title options))
 
 (defn delete!
-  "Deletes a page. Returns true if able to delete page. If unable to delete,
-  calls error-handler fn and returns false"
+  "Deletes a page through the outliner page service.
+
+   Returns true when the page can be deleted. If deletion is rejected, calls
+   :error-handler and returns false.
+
+   Supported options:
+
+   * :persist-op?      - when true, persist the delete-page outliner op.
+   * :rename?          - mark the tx as part of a rename flow.
+   * :error-handler    - callback invoked with {:msg string} on rejection.
+   * :deleted-by-uuid  - user uuid recorded in the delete op metadata.
+   * :now-ms           - timestamp recorded in the delete op metadata."
   [conn page-uuid & {:as options}]
   (outliner-page/delete! conn page-uuid options))
