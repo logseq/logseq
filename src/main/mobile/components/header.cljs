@@ -27,6 +27,7 @@
             [missionary.core :as m]
             [mobile.components.settings :as mobile-settings]
             [mobile.components.ui :as ui-component]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -62,11 +63,24 @@
       ;;   "Export"])
 
       (ui/menu-link
-       {:on-click (fn [] (route-handler/redirect! {:to :import}))}
+       {:on-click (fn []
+                    (p/do!
+                     (shui/popup-hide!)
+                     (route-handler/redirect! {:to :import})))}
        [:span.text-lg.flex.gap-2.items-center
         (shui/tabler-icon "file-upload" {:class "opacity-80" :size 22})
         (t :import/title)])])
    {:default-height false}))
+
+(defn- open-new-db-graph! []
+  (if (and (mobile-util/native-ios?) (= @mobile-state/*tab "graphs"))
+    (ui-component/open-popup!
+     (fn []
+       [:div.px-2
+        [:h2.py-2.opacity-40 (t :graph/create-new)]
+        (repo/new-db-graph)])
+     {:default-height false})
+    (state/pub-event! [:graph/new-db-graph])))
 
 (defn open-page-settings
   [block]
@@ -111,7 +125,7 @@
       (ui/menu-link
        {:on-click #(p/do!
                     (shui/popup-hide!)
-                    (state/pub-event! [:graph/new-db-graph]))}
+                    (open-new-db-graph!))}
        (t :mobile.header/create-graph))])
    {:default-height false}))
 
@@ -138,7 +152,7 @@
                                   (state/clear-edit!)
                                   (editor-handler/quick-add-blocks!))
                       "audio-record" (state/pub-event! [:mobile/start-audio-record])
-                      "add-graph" (state/pub-event! [:graph/new-db-graph])
+                      "add-graph" (open-new-db-graph!)
                       "home-setting" (open-home-settings-actions!)
                       "graph-setting" (open-graph-settings-actions!)
                       "sync" (if-let [graph (current-local-uploadable-graph)]
@@ -175,7 +189,9 @@
                 {:hidden hidden?}
                  (not (mobile-util/native-ipad?))
                  (assoc :title title))
-          page? (= route-name :page)
+          page? (and (= route-name :page)
+                     (not (and (mobile-util/native-ios?)
+                               (= tab "graphs"))))
           left-buttons (cond
                          page? [{:id "back" :systemIcon "chevron.backward"}]
                          (and (= tab "home") (nil? route-view))
@@ -221,7 +237,8 @@
   (let [route-name (get-in route-match [:data :name])
         route-view (get-in route-match [:data :view])
         route-id (get-in route-match [:parameters :path :name])
-        page-route? (= route-name :page)
+        native-ios-graphs? (and (mobile-util/native-ios?) (= tab "graphs"))
+        page-route? (and (= route-name :page) (not native-ios-graphs?))
         [*configure-top-bar-f _] (hooks/use-state (atom nil))
         detail-info (hooks/use-flow-state (m/watch rtc-indicator/*detail-info))
         _ (hooks/use-flow-state flows/current-login-user-flow)
@@ -242,6 +259,9 @@
 
                          (= tab "search")
                          (t :nav/search)
+
+                         (= tab "graphs")
+                         (t :mobile.tab/graphs)
 
                          :else
                          (string/capitalize tab))
