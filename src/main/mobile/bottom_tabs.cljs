@@ -82,7 +82,7 @@
      (fn [data]
        (when-let [id (.-id data)]
          (when-not (string/blank? id)
-           (route-handler/redirect-to-page! id {:push (mobile-util/native-android?)})))))))
+           (route-handler/redirect-to-page! id {:push (mobile-util/native-platform?)})))))))
 
 (defn add-keyboard-hack-listener!
   "Listen for Backspace or Enter while the invisible keyboard field is focused."
@@ -112,7 +112,7 @@
          (cond
            reselected?
            (do
-             (when (mobile-util/native-android?)
+             (when (mobile-util/native-platform?)
                (mobile-nav/pop-to-root! tab))
              (mobile-state/set-tab! tab)
              (when (= "home" tab)
