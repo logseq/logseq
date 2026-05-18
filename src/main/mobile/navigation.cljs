@@ -211,17 +211,20 @@
         stack (or stack (current-stack))
         path (-> (or path (current-path))
                  (strip-fragment))
-        path (if (string/blank? path) "/" path)]
-    (set-current-stack! stack)
-    (remember-route! stack navigation-type route path route-match)
-    (when (and (mobile-util/native-platform?)
-               mobile-util/ui-local)
-      (let [payload (cond-> {:navigationType navigation-type
-                             :push push?
-                             :stack stack}
-                      route (assoc :route route)
-                      path (assoc :path (strip-fragment path)))]
-        (notify-route-payload! payload)))))
+        path (if (string/blank? path) "/" path)
+        duplicate-push? (and (= navigation-type "push")
+                             (= path (:path (stack-top stack))))]
+    (when-not duplicate-push?
+      (set-current-stack! stack)
+      (remember-route! stack navigation-type route path route-match)
+      (when (and (mobile-util/native-platform?)
+                 mobile-util/ui-local)
+        (let [payload (cond-> {:navigationType navigation-type
+                               :push push?
+                               :stack stack}
+                        route (assoc :route route)
+                        path (assoc :path (strip-fragment path)))]
+          (notify-route-payload! payload))))))
 
 (comment
   (defn reset-route!
