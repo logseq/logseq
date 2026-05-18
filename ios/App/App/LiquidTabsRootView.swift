@@ -117,6 +117,7 @@ private struct LiquidTabs26View: View {
 
     @State private var hackShowKeyboard: Bool = false
     @State private var selectedTab: LiquidTabsTabSelection = .content(0)
+    @State private var searchPath = NavigationPath()
 
     private let maxMainTabs = 6
 
@@ -143,6 +144,9 @@ private struct LiquidTabs26View: View {
 
     private func handleRetap(on selection: LiquidTabsTabSelection) {
         print("User re-tapped tab: \(selection)")
+        if case .search = selection {
+            searchPath = NavigationPath()
+        }
         navController.popToRootViewController(animated: true)
 
         if let id = store.tabId(for: selection) {
@@ -220,6 +224,7 @@ private struct LiquidTabs26View: View {
                             navController: navController,
                             selectedTab: $selectedTab,
                             firstTabId: store.tabs.first?.id,
+                            searchPath: $searchPath,
                             store: store
                         )
                         .ignoresSafeArea()
@@ -281,6 +286,7 @@ private struct LiquidTabs26View: View {
                     focusSearchField()
 
                 case .content:
+                    searchPath = NavigationPath()
                     isSearchFocused = false
                     hackShowKeyboard = false
                 }
@@ -314,13 +320,14 @@ private struct SearchTabHost26: View {
     let navController: UINavigationController
     var selectedTab: Binding<LiquidTabsTabSelection>
     let firstTabId: String?
+    @Binding var searchPath: NavigationPath
     @ObservedObject var store: LiquidTabsStore
 
     @Environment(\.isSearching) private var isSearching
     @State private var wasSearching: Bool = false
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $searchPath) {
             ZStack {
                 Color.logseqBackground
                   .ignoresSafeArea()
@@ -339,6 +346,7 @@ private struct SearchTabHost26: View {
                         let firstId = firstTabId {
 
                   wasSearching = false
+                  searchPath = NavigationPath()
                   selectedTab.wrappedValue = .content(0)
                   store.selectedId = firstId
               }
@@ -355,6 +363,7 @@ private struct LiquidTabs16View: View {
     let navController: UINavigationController
 
     @State private var hackShowKeyboard: Bool = false
+    @State private var searchPath = NavigationPath()
 
     private var searchTextBinding: Binding<String> {
         Binding(
@@ -385,9 +394,15 @@ private struct LiquidTabs16View: View {
 
                             // Re-tap: pop to root
                             if id == store.selectedId {
+                                if id == "search" {
+                                    searchPath = NavigationPath()
+                                }
                                 navController.popToRootViewController(animated: true)
                                 LiquidTabsPlugin.shared?.notifyTabSelected(id: id, reselected: true)
                             } else {
+                                if store.selectedId == "search" {
+                                    searchPath = NavigationPath()
+                                }
                                 store.selectedId = id
                                 LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
                             }
@@ -408,6 +423,7 @@ private struct LiquidTabs16View: View {
                         SearchTab16Host(
                             navController: navController,
                             searchText: searchTextBinding,
+                            searchPath: $searchPath,
                             store: store
                         )
                         .ignoresSafeArea()
@@ -415,6 +431,11 @@ private struct LiquidTabs16View: View {
                             Label("Search", systemImage: "magnifyingglass")
                         }
                         .tag("search" as String?)
+                    }
+                    .onChange(of: store.selectedId) { newId in
+                        if newId != "search" {
+                            searchPath = NavigationPath()
+                        }
                     }
 
                     // Hidden UITextField that pre-invokes keyboard
@@ -453,10 +474,11 @@ private struct LiquidTabs16View: View {
 private struct SearchTab16Host: View {
     let navController: UINavigationController
     @Binding var searchText: String
+    @Binding var searchPath: NavigationPath
     @ObservedObject var store: LiquidTabsStore
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $searchPath) {
             ZStack {
                 Color.logseqBackground
                   .ignoresSafeArea()
