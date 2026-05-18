@@ -426,9 +426,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 return
             }
 
-            // ⚡️ Fast-path: cancel search → home root.
+            // Fast-path: cancel search -> home root.
             if previousStackId == "search",
-               stackId == "home"{
+               stackId == "home",
+               path == self.rootPath(for: "home") {
 
                 self.setPaths(["/__stack__/search"], for: "search")
                 self.activeStackId = "home"
@@ -462,6 +463,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 } else if newPaths.isEmpty {
                     // First time visiting this stack
                     newPaths = [path]
+                } else if navigationType == "push",
+                          let last = newPaths.last,
+                          last != path {
+                    newPaths.append(path)
                 } else if let last = newPaths.last, last != path {
                     // Same history, but different top path → align the top.
                     newPaths[newPaths.count - 1] = path
