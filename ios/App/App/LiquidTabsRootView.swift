@@ -200,10 +200,14 @@ private struct LiquidTabs26View: View {
 
     @ViewBuilder
     private func mainTabContent(index: Int, tab: LiquidTab) -> some View {
-        // Normal content tab → shared webview
-        NativeNavHost(navController: navController)
-          .ignoresSafeArea()
-          .background(Color.logseqBackground)
+        if tab.id == "graphs" {
+            NativeGraphsTabHost(navController: navController, store: store)
+        } else {
+            // Normal content tab → shared webview
+            NativeNavHost(navController: navController)
+              .ignoresSafeArea()
+              .background(Color.logseqBackground)
+        }
     }
 
     @ViewBuilder
@@ -333,6 +337,292 @@ private struct LiquidTabs26View: View {
                 }
             }
             .animation(nil, value: selectedTab)
+        }
+    }
+}
+
+private struct NativeGraphsTabHost: View {
+    let navController: UINavigationController
+    @ObservedObject var store: LiquidTabsStore
+
+    var body: some View {
+        ZStack {
+            NativeNavHost(navController: navController)
+                .ignoresSafeArea()
+                .background(Color.logseqBackground)
+
+            if store.nativeGraphsVisible {
+                VStack(spacing: 0) {
+                    Color.clear
+                        .frame(height: 44)
+                        .allowsHitTesting(false)
+
+                    NativeGraphsContent(store: store)
+                        .background(Color.logseqBackground)
+                }
+            }
+        }
+    }
+}
+
+private struct NativeGraphsContent: View {
+    @ObservedObject var store: LiquidTabsStore
+    @State private var pendingAction: PendingNativeGraphAction?
+
+    private var actionDialogPresented: Binding<Bool> {
+        Binding(
+            get: { pendingAction != nil },
+            set: { presented in
+                if !presented {
+                    pendingAction = nil
+                }
+            }
+        )
+    }
+
+    private func open(_ graph: NativeGraphItem) {
+        guard graph.tappable else { return }
+
+        if graph.local {
+            LiquidTabsPlugin.shared?.openGraph(graph)
+        } else {
+            LiquidTabsPlugin.shared?.downloadGraph(graph)
+        }
+    }
+
+    var body: some View {
+        List {
+            ForEach(store.graphSections) { section in
+                Section {
+                    ForEach(section.graphs) { graph in
+                        NativeGraphListRow(
+                            graph: graph,
+                            labels: store.graphLabels,
+                            pendingAction: $pendingAction,
+                            open: open
+                        )
+                        .listRowBackground(Color.clear)
+                    }
+                } header: {
+                    NativeGraphSectionHeader(
+                        section: section,
+                        refreshLabel: store.graphLabels.refresh
+                    )
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color.logseqBackground.ignoresSafeArea())
+        .confirmationDialog(
+            pendingAction?.action.confirmTitle ?? "",
+            isPresented: actionDialogPresented,
+            titleVisibility: .visible
+        ) {
+            if let pending = pendingAction {
+                if pending.action.destructive {
+                    Button(pending.action.confirmButton, role: .destructive) {
+                        LiquidTabsPlugin.shared?.performGraphAction(
+                            pending.action,
+                            graph: pending.graph
+                        )
+                        pendingAction = nil
+                    }
+                } else {
+                    Button(pending.action.confirmButton) {
+                        LiquidTabsPlugin.shared?.performGraphAction(
+                            pending.action,
+                            graph: pending.graph
+                        )
+                        pendingAction = nil
+                    }
+                }
+
+                Button(pending.action.cancelButton, role: .cancel) {
+                    pendingAction = nil
+                }
+            }
+        } message: {
+            if let pending = pendingAction {
+                Text(pending.action.confirmMessage)
+            }
+        }
+    }
+}
+
+private struct PendingNativeGraphAction: Identifiable {
+    let id = UUID()
+    let graph: NativeGraphItem
+    let action: NativeGraphAction
+}
+
+private struct NativeGraphListRow: View {
+    let graph: NativeGraphItem
+    let labels: NativeGraphLabels
+    @Binding var pendingAction: PendingNativeGraphAction?
+    let open: (NativeGraphItem) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                open(graph)
+            } label: {
+                NativeGraphRow(graph: graph, labels: labels)
+            }
+            .buttonStyle(.plain)
+            .disabled(!graph.tappable)
+
+            if !graph.actions.isEmpty {
+                NativeGraphActionsMenu(
+                    graph: graph,
+                    pendingAction: $pendingAction
+                )
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            ForEach(graph.actions) { action in
+                NativeGraphActionButton(
+                    graph: graph,
+                    action: action,
+                    pendingAction: $pendingAction
+                )
+            }
+        }
+    }
+}
+
+private struct NativeGraphActionsMenu: View {
+    let graph: NativeGraphItem
+    @Binding var pendingAction: PendingNativeGraphAction?
+
+    var body: some View {
+        Menu {
+            ForEach(graph.actions) { action in
+                NativeGraphActionButton(
+                    graph: graph,
+                    action: action,
+                    pendingAction: $pendingAction
+                )
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.body.weight(.semibold))
+                .foregroundColor(.secondary)
+                .frame(width: 32, height: 32)
+        }
+    }
+}
+
+private struct NativeGraphActionButton: View {
+    let graph: NativeGraphItem
+    let action: NativeGraphAction
+    @Binding var pendingAction: PendingNativeGraphAction?
+
+    var body: some View {
+        if action.destructive {
+            Button(role: .destructive) {
+                pendingAction = PendingNativeGraphAction(graph: graph, action: action)
+            } label: {
+                Text(action.title)
+            }
+        } else {
+            Button {
+                pendingAction = PendingNativeGraphAction(graph: graph, action: action)
+            } label: {
+                Text(action.title)
+            }
+        }
+    }
+}
+
+private struct NativeGraphSectionHeader: View {
+    let section: NativeGraphSection
+    let refreshLabel: String
+
+    var body: some View {
+        HStack {
+            Text(section.title)
+                .font(.headline)
+                .foregroundColor(.primary)
+                .textCase(nil)
+
+            Spacer()
+
+            if section.refreshable {
+                Button {
+                    LiquidTabsPlugin.shared?.refreshGraphs()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .imageScale(.medium)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(refreshLabel)
+            }
+        }
+        .padding(.top, 8)
+    }
+}
+
+private struct NativeGraphRow: View {
+    let graph: NativeGraphItem
+    let labels: NativeGraphLabels
+
+    private var syncImage: String? {
+        guard graph.remote else { return nil }
+        return graph.e2ee ? "lock" : "icloud"
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: syncImage ?? "cylinder.split.1x2")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(.primary.opacity(0.75))
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(graph.displayName)
+                        .font(.body)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+
+                    if graph.downloading {
+                        NativeGraphBadge(text: labels.downloading)
+                    } else if !graph.readyForUse {
+                        NativeGraphBadge(text: labels.preparing)
+                    }
+                }
+
+                if let subtitle = graph.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct NativeGraphBadge: View {
+    let text: String
+
+    var body: some View {
+        if !text.isEmpty {
+            Text(text)
+                .font(.caption2.weight(.medium))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.12))
+                )
+                .lineLimit(1)
         }
     }
 }
@@ -490,9 +780,15 @@ private struct LiquidTabs16View: View {
                     )) {
                         // --- Normal dynamic tabs ---
                         ForEach(store.tabs) { tab in
-                            NativeNavHost(navController: navController)
-                                .ignoresSafeArea()
-                                .background(Color.logseqBackground)
+                            Group {
+                                if tab.id == "graphs" {
+                                    NativeGraphsTabHost(navController: navController, store: store)
+                                } else {
+                                    NativeNavHost(navController: navController)
+                                        .ignoresSafeArea()
+                                        .background(Color.logseqBackground)
+                                }
+                            }
                                 .tabItem {
                                     Label(tab.title, systemImage: tab.systemImage)
                                 }
