@@ -676,11 +676,12 @@
             child))
         (db/sort-by-order (:block/_parent block))))
 
-(defn- block-ref-id
+(defn- block-ref-uuid
   [block-ref]
   (cond
-    (map? block-ref) (:db/id block-ref)
-    (number? block-ref) block-ref
+    (map? block-ref) (:block/uuid block-ref)
+    (uuid? block-ref) block-ref
+    (and (string? block-ref) (util/uuid-string? block-ref)) (uuid block-ref)
     :else nil))
 
 (defn ensure-comments-area!
@@ -698,17 +699,17 @@
 (declare expand-block!)
 
 (defn- same-comment-targets?
-  [comments-area target-ids]
-  (= target-ids
+  [comments-area target-uuids]
+  (= target-uuids
      (->> (comments-model/comment-thread-target-blocks comments-area)
-          (keep block-ref-id)
+          (keep block-ref-uuid)
           set)))
 
 (defn- existing-comments-area-for-targets
   [blocks]
-  (let [target-ids (set (keep :db/id blocks))]
+  (let [target-uuids (set (keep :block/uuid blocks))]
     (some (fn [comments-area]
-            (when (same-comment-targets? comments-area target-ids)
+            (when (same-comment-targets? comments-area target-uuids)
               comments-area))
           (comments-model/comment-threads-for-block (first blocks)))))
 
@@ -729,7 +730,7 @@
                                 :sibling? true
                                 :edit-block? false
                                 :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                                              comments-model/comments-blocks-property (set (keep :db/id blocks))}})]
+                                              comments-model/comments-blocks-property (set (keep :block/uuid blocks))}})]
           (when comments-area
             (expand-block! (:block/uuid comments-area)))
           comments-area)))))

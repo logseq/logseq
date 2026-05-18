@@ -361,8 +361,8 @@
                             :sibling? true
                             :edit-block? false
                             :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                                          comments-model/comments-blocks-property #{1 2}}}}]
+                                          comments-model/comments-blocks-property #{first-uuid second-uuid}}}}]
                    @inserts)
-                "A range comments area should be inserted after the last selected top block")
+                "A range comments area should be inserted after the last selected top block with node UUID targets")
             (is (= [created-comments-area-uuid] @expanded)
                 "The range comments area should be expanded inline"))))))
