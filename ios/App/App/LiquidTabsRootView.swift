@@ -295,7 +295,6 @@ private struct LiquidTabs26View: View {
 // Search host for 26+
 // Only responsible for cancel behaviour and tab switching.
 // It does NOT own the focus anymore.
-@available(iOS 26.0, *)
 private enum SearchRoute: Hashable {
     case result(String)
 }
@@ -318,8 +317,13 @@ private struct SearchTabHost26: View {
                   .ignoresSafeArea()
 
                 SearchResultsContent(
+                    searchPath: $searchPath,
                     store: store
                 )
+            }
+            .navigationDestination(for: SearchRoute.self) { _ in
+                NativeNavHost(navController: navController)
+                    .ignoresSafeArea()
             }
         }
           .onChange(of: isSearching) { searching in
@@ -461,8 +465,13 @@ private struct SearchTab16Host: View {
                   .ignoresSafeArea()
 
                 SearchResultsContent(
+                    searchPath: $searchPath,
                     store: store
                 )
+                .navigationDestination(for: SearchRoute.self) { _ in
+                    NativeNavHost(navController: navController)
+                        .ignoresSafeArea()
+                }
 
                 // Bottom search bar
                 VStack {
@@ -501,12 +510,16 @@ private struct SearchTab16Host: View {
 }
 
 private struct SearchResultsContent: View {
+    @Binding var searchPath: NavigationPath
     @ObservedObject var store: LiquidTabsStore
 
     var body: some View {
         List(store.searchResults) { result in
             Button {
-                LiquidTabsPlugin.shared?.openResult(id: result.id)
+                searchPath.append(SearchRoute.result(result.id))
+                DispatchQueue.main.async {
+                    LiquidTabsPlugin.shared?.openResult(id: result.id, nativePush: false)
+                }
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     if let subtitle = result.subtitle,
