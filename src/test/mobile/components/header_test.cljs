@@ -20,8 +20,11 @@
         :show-local-upload? true}))
     (is (= ["home-setting" "sync"]
            (mapv :id (:rightButtons @configured))))
-    (is (= "circle.fill"
-           (-> @configured :rightButtons second :systemIcon)))))
+    (is (= "icloud.and.arrow.up"
+           (-> @configured :rightButtons second :systemIcon)))
+    (is (nil? (-> @configured :rightButtons second :color)))
+    (is (= "medium"
+           (-> @configured :rightButtons second :size)))))
 
 (deftest native-top-bar-sync-tap-uploads-local-graph-test
   (let [listener (atom nil)

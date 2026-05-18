@@ -3,6 +3,7 @@ package com.logseq.app
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.Circle
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Layers
@@ -78,6 +79,7 @@ object MaterialIconResolver {
             "go-to", "goto" -> Icons.Outlined.Explore
             "bookmark" -> Icons.Filled.Bookmarks
             "sync" -> Icons.Outlined.Equalizer
+            "cloud", "cloud-upload", "icloud-and-arrow-up" -> Icons.Filled.CloudUpload
             else -> null
         }
     }

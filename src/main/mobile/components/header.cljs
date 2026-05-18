@@ -191,7 +191,10 @@
                           (cond-> []
                             (nil? route-view)
                             (conj {:id "home-setting" :systemIcon "ellipsis"})
-                            (and (or show-local-upload? show-sync?) (not page?))
+                            (and show-local-upload? (not page?))
+                            (conj {:id "sync" :systemIcon "icloud.and.arrow.up"
+                                   :size "medium"})
+                            (and (not show-local-upload?) show-sync? (not page?))
                             (conj {:id "sync" :systemIcon "circle.fill" :color sync-color
                                    :size "small"}))
 
