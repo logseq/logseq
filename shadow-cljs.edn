@@ -8,8 +8,7 @@
        :password "shadow-cljs"}
 
  ;; "." for /static
- :dev-http {3001 ["static" "."]
-            3002 "static/mobile"}
+ :dev-http {3001 ["static" "."]}
 
  :js-options {:js-package-dirs ["node_modules"]}
 

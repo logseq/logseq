@@ -3,10 +3,12 @@
   (:require [babashka.fs :as fs]
             [babashka.tasks :refer [shell]]
             [clojure.string :as string]
-            [logseq.tasks.util :as task-util]))
+            [logseq.tasks.util :as task-util])
+  (:import [java.nio.file FileAlreadyExistsException]))
 
-(def ^:private dev-server-port "3002")
+(def ^:private dev-server-port "3001")
 (def ^:private ssl-dir "ssl/mobile-dev")
+(def ^:private ssl-lock-file "ssl/mobile-dev/.cert.lock")
 (def ^:private ssl-ca-keystore "ssl/mobile-dev/ca-keystore.jks")
 (def ^:private ssl-ca-cert "ssl/mobile-dev/logseq-dev-ca.cer")
 (def ^:private ssl-keystore "ssl/mobile-dev/keystore.jks")
@@ -16,12 +18,42 @@
 
 (defn- local-ip
   []
-  (string/trim (:out (or (shell {:out :string :continue true :shutdown nil} "ipconfig getifaddr en0")
-                         (shell {:out :string :shutdown nil} "ipconfig getifaddr en1")))))
+  (letfn [(interface-ip [interface]
+            (let [{:keys [exit out]} (shell {:out :string
+                                             :err :string
+                                             :continue true
+                                             :shutdown nil}
+                                            (str "ipconfig getifaddr " interface))
+                  ip (string/trim (or out ""))]
+              (when (and (zero? exit) (not (string/blank? ip)))
+                ip)))]
+    (or (interface-ip "en0")
+        (interface-ip "en1")
+        (throw (ex-info "Failed to detect local network IP" {})))))
 
 (defn- dev-server-url
   []
-  (format "https://%s:%s" (local-ip) dev-server-port))
+  (format "https://%s:%s/mobile" (local-ip) dev-server-port))
+
+(defn- with-ssl-cert-lock!
+  [f]
+  (fs/create-dirs ssl-dir)
+  (loop [attempt 0]
+    (let [locked? (try
+                    (fs/create-file ssl-lock-file)
+                    true
+                    (catch FileAlreadyExistsException _
+                      false))]
+      (when-not locked?
+        (when (> attempt 600)
+          (throw (ex-info "Timed out waiting for mobile HTTPS certificate lock"
+                          {:lock-file ssl-lock-file})))
+        (Thread/sleep 100)
+        (recur (inc attempt)))))
+  (try
+    (f)
+    (finally
+      (fs/delete-if-exists ssl-lock-file))))
 
 (defn- usable-keystore?
   []
@@ -121,14 +153,15 @@
 (defn ensure-dev-ssl-cert!
   "Creates the local Shadow CLJS dev HTTPS keystore and exported iOS trust CA."
   []
-  (let [ip (local-ip)]
-    (fs/create-dirs ssl-dir)
-    (backup-existing-ssl-files!)
-    (when-not (usable-keystore?)
-      (generate-dev-ssl-cert! ip))
-    (println "Shadow CLJS HTTPS keystore:" ssl-keystore)
-    (println "Install and fully trust this CA certificate on iOS:" ssl-ca-cert)
-    (println "iOS dev server URL:" (dev-server-url))))
+  (with-ssl-cert-lock!
+   (fn []
+     (let [ip (local-ip)]
+       (backup-existing-ssl-files!)
+       (when-not (usable-keystore?)
+         (generate-dev-ssl-cert! ip))
+       (println "Shadow CLJS HTTPS keystore:" ssl-keystore)
+       (println "Install and fully trust this CA certificate on iOS:" ssl-ca-cert)
+       (println "Mobile dev server URL:" (dev-server-url))))))
 
 (defn ensure-dev-ssl-cert-task
   []
@@ -172,7 +205,9 @@
 (defn cap-run-android
   "Copy assets files to Android build directory, and run app in Android Studio"
   []
-  (open-dev-app {} "pnpm exec cap sync android")
+  (ensure-dev-ssl-cert!)
+  (open-dev-app {:extra-env {"LOGSEQ_APP_SERVER_URL" (dev-server-url)}}
+                "pnpm exec cap sync android")
   (shell {:shutdown nil} "pnpm exec cap open android"))
 
 (defn run-ios-release
