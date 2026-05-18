@@ -11,6 +11,7 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
+            [frontend.components.block.asset :as block-asset]
             [frontend.components.block.drop :as block-drop]
             [frontend.components.block.image :as block-image]
             [frontend.components.block.macros :as block-macros]
@@ -511,8 +512,8 @@
     (:image-placeholder config)
     (if (and (:image-placeholder config) (nil? @src))
       (:image-placeholder config)
-      (let [ext (keyword (or (util/get-file-ext @src)
-                             (util/get-file-ext href)))
+      (let [asset-block (:asset-block config)
+            ext (block-asset/link-ext @src href asset-block)
             repo (state/get-current-repo)
             repo-dir (config/get-repo-dir repo)
             share-fn (fn [event]
@@ -553,15 +554,14 @@
            title]
 
           util/web-platform?
-          (let [file-name (str (:block/title (:asset-block config)) "." (name ext))]
+          (let [file-name (block-asset/link-file-name asset-block ext)]
             [:a.asset-ref
              {:href @src
               :download file-name}
              file-name])
 
-          (and (util/electron?) (:asset-block config))
-          (let [asset-block (:asset-block config)
-                file-name (str (:block/title asset-block) "." (name ext))]
+          (and (util/electron?) asset-block)
+          (let [file-name (block-asset/link-file-name asset-block ext)]
             [:a.asset-ref
              {:on-click (fn [e]
                           (util/stop e)
@@ -575,7 +575,7 @@
                                  file-fpath (if local-ext-url?
                                               ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
                                               (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
-                                              (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) "." (name ext))))]
+                                              (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) (when ext (str "." (name ext))))))]
                              (if remote-ext-url?
                                (js/window.apis.openExternal ext-url)
                                (js/window.apis.openPath file-fpath))))}
