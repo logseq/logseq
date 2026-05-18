@@ -106,6 +106,12 @@
    :editor/new-block                        {:binding "enter"
                                              :fn      editor-handler/keydown-new-block-handler}
 
+   :editor/new-block-before                 {:binding "alt+enter"
+                                             :fn      editor-handler/keydown-new-block-before-handler}
+
+   :editor/new-block-after                  {:binding []
+                                             :fn      editor-handler/keydown-new-block-after-handler}
+
    :editor/new-line                         {:binding "shift+enter"
                                              :fn      editor-handler/keydown-new-line-handler}
 
@@ -609,6 +615,8 @@
           :editor/zoom-in
           :editor/zoom-out
           :editor/new-block
+          :editor/new-block-before
+          :editor/new-block-after
           :editor/new-line
           :editor/follow-link
           :editor/open-link-in-sidebar
@@ -759,6 +767,8 @@
     [:go/search
      :go/search-themes
      :editor/new-block
+     :editor/new-block-before
+     :editor/new-block-after
      :editor/new-line
      :editor/indent
      :editor/outdent
@@ -812,6 +822,8 @@
      :editor/indent
      :editor/outdent
      :editor/new-block
+     :editor/new-block-before
+     :editor/new-block-after
      :editor/new-line
      :editor/zoom-in
      :editor/zoom-out
