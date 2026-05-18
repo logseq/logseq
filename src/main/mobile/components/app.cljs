@@ -296,6 +296,18 @@
     (use-theme-effects! current-repo theme)
     (hooks/use-effect!
      (fn []
+       (when (mobile-util/native-ios?)
+         (.requestAnimationFrame
+          js/window
+          (fn []
+            (.requestAnimationFrame
+             js/window
+             (fn []
+               (bottom-tabs/mark-tab-content-ready! tab))))))
+       nil)
+     [tab route-match])
+    (hooks/use-effect!
+     (fn []
        (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element)))
      [])

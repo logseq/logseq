@@ -19,6 +19,7 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
       CAPPluginMethod(name: "selectTab", returnType: CAPPluginReturnPromise),
       CAPPluginMethod(name: "updateNativeSearchResults", returnType: CAPPluginReturnPromise),
       CAPPluginMethod(name: "updateNativeGraphs", returnType: CAPPluginReturnPromise),
+      CAPPluginMethod(name: "markTabContentReady", returnType: CAPPluginReturnPromise),
     ]
 
     public override func load() {
@@ -211,6 +212,18 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
             labels: labels,
             visible: call.getBool("visible")
         )
+        call.resolve()
+    }
+
+    /// Clear the native transition cover after JS has rendered a WebView-backed tab.
+    /// { id: string }
+    @objc func markTabContentReady(_ call: CAPPluginCall) {
+        guard let id = call.getString("id") else {
+            call.reject("Missing 'id'")
+            return
+        }
+
+        store.markWebTabReady(id)
         call.resolve()
     }
 
