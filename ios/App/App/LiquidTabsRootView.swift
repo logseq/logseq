@@ -1,6 +1,89 @@
 import SwiftUI
 import UIKit
 
+private struct SearchFocusBridge: UIViewRepresentable {
+    let isActive: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        UIView(frame: .zero)
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        context.coordinator.update(isActive: isActive, anchor: view)
+    }
+
+    final class Coordinator {
+        private var requestId = 0
+        private var lastIsActive = false
+
+        func update(isActive: Bool, anchor: UIView) {
+            guard isActive != lastIsActive else { return }
+
+            lastIsActive = isActive
+            requestId += 1
+
+            guard isActive else { return }
+
+            let currentRequest = requestId
+
+            [0.0, 0.02, 0.05, 0.1, 0.2, 0.35].forEach { delay in
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak anchor] in
+                    guard self.requestId == currentRequest,
+                          let anchor else {
+                        return
+                    }
+
+                    _ = Self.focusSearchField(from: anchor)
+                }
+            }
+        }
+
+        private static func focusSearchField(from anchor: UIView) -> Bool {
+            guard let root = anchor.window ?? UIApplication.shared.activeKeyWindow else {
+                return false
+            }
+
+            guard let textField = findSearchTextField(in: root) else {
+                return false
+            }
+
+            if !textField.isFirstResponder {
+                textField.becomeFirstResponder()
+            }
+
+            return true
+        }
+
+        private static func findSearchTextField(in view: UIView) -> UISearchTextField? {
+            if let textField = view as? UISearchTextField {
+                return textField
+            }
+
+            for subview in view.subviews {
+                if let textField = findSearchTextField(in: subview) {
+                    return textField
+                }
+            }
+
+            return nil
+        }
+    }
+}
+
+private extension UIApplication {
+    var activeKeyWindow: UIWindow? {
+        connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }
+    }
+}
+
 // MARK: - Root Tabs View (dispatch to 26+ vs 16–25)
 
 struct LiquidTabsRootView: View {
@@ -105,6 +188,7 @@ private struct LiquidTabs26View: View {
         case .search:
             store.suppressSearchNotifications = true
             resetSearchState()
+            isSearchFocused = true
         case .content:
             if selectedTab == .search {
                 store.suppressSearchNotifications = true
@@ -187,6 +271,10 @@ private struct LiquidTabs26View: View {
                     }
                 }
                 .background(Color.logseqBackground)
+                .overlay {
+                    SearchFocusBridge(isActive: selectedTab == .search)
+                        .frame(width: 0, height: 0)
+                }
 
             }
             .onAppear {
@@ -224,11 +312,8 @@ private struct LiquidTabs26View: View {
 
                 switch newValue {
                 case .search:
-                    DispatchQueue.main.async {
-                        guard selectedTab == .search else { return }
-                        store.suppressSearchNotifications = false
-                        focusSearchField()
-                    }
+                    store.suppressSearchNotifications = false
+                    focusSearchField()
 
                 case .content:
                     store.suppressSearchNotifications = true
