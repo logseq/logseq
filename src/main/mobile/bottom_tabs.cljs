@@ -134,8 +134,6 @@
 
     (add-search-listener!
      (fn [q]
-       ;; wire up search handler
-       (js/console.log "Native search query" q)
        (reset! mobile-state/*search-input q)
        (p/let [result (mobile-search/search q)]
          (update-native-search-results! result))))

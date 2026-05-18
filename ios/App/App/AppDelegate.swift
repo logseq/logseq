@@ -28,6 +28,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     /// Used to ignore JS-driven pops when we're popping in response to a native gesture.
     private var ignoreRoutePopCount: Int = 0
 
+    /// Suppresses JS callbacks for native pops that already originated from JS history.
+    private var suppressNextNativePopCallback: Bool = false
+
     /// Temporary snapshot image for smooth pop transitions.
     private var popSnapshotView: UIView?
 
@@ -245,8 +248,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         guard let nav = navController else { return }
 
         if nav.viewControllers.count > 1 {
-            _ = pathStack.popLast()
-            setPaths(pathStack, for: activeStackId)
+            suppressNextNativePopCallback = true
             nav.popViewController(animated: animated)
         }
     }
@@ -310,6 +312,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 guard !ctx.isCancelled else {
                     self.pathStack = previousStack
                     self.setPaths(previousStack, for: self.activeStackId)
+                    self.suppressNextNativePopCallback = false
 
                     if let fromVC {
                         SharedWebViewController.instance.attach(to: fromVC)
@@ -320,11 +323,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
 
                 // 🔑 DO NOT call webView.goBack().
                 // Tell JS explicitly that native popped.
-                self.ignoreRoutePopCount += 1
+                let shouldNotifyNativePop = !self.suppressNextNativePopCallback
+                self.suppressNextNativePopCallback = false
 
-                if let bridge = SharedWebViewController.instance.bridgeController.bridge {
-                    let js = "window.LogseqNative && window.LogseqNative.onNativePop && window.LogseqNative.onNativePop();"
-                    bridge.webView?.evaluateJavaScript(js, completionHandler: nil)
+                if shouldNotifyNativePop {
+                    self.ignoreRoutePopCount += 1
+
+                    if let bridge = SharedWebViewController.instance.bridgeController.bridge {
+                        let js = "window.LogseqNative && window.LogseqNative.onNativePop && window.LogseqNative.onNativePop();"
+                        bridge.webView?.evaluateJavaScript(js, completionHandler: nil)
+                    }
                 }
 
                 SharedWebViewController.instance.attach(
@@ -415,12 +423,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             }
 
             // ⚡️ Fast-path: cancel search → home root.
-            // We do NOT rebuild nav stack and we do NOT reattach the WebView.
-            // JS will just navigate the existing shared WKWebView to "/".
             if previousStackId == "search",
                stackId == "home"{
 
-                // Just update bookkeeping so future home pushes/pop work correctly.
                 self.setPaths(["/__stack__/search"], for: "search")
                 self.activeStackId = "home"
                 self.setPaths(["/"], for: "home")

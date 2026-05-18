@@ -60,9 +60,13 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         DispatchQueue.main.async {
+            let selectedId = self.store.selectedId
             self.store.tabs = tabs
-            if let firstId = tabs.first?.id {
-                self.store.selectedId = firstId
+            if let selectedId = selectedId,
+               selectedId == "search" || tabs.contains(where: { $0.id == selectedId }) {
+                self.store.selectedId = selectedId
+            } else {
+                self.store.selectedId = tabs.first?.id
             }
         }
 
