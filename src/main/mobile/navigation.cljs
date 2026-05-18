@@ -241,8 +241,7 @@
   "Activate a stack and restore its last known route."
   [stack]
   (when stack
-    (let [stack (ensure-stack stack)
-          current @active-stack]
+    (let [stack (ensure-stack stack)]
       (set-current-stack! stack)
       (when-let [{:keys [path route route-match]} (stack-top stack)]
         (let [route-match (or route-match (:route-match (stack-defaults stack)))
