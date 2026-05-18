@@ -1326,10 +1326,25 @@ html.is-mac {
    on this element top-aligned the icon, which left every type relying on
    its own intrinsic baseline (emoji on font baseline, SVG on bottom
    anchor, etc.) — visible as cross-type misalignment when the hover
-   preview swapped types mid-row. */
+   preview swapped types mid-row.
+
+   `align-self: flex-start` + fixed `height` constrain the icon box to
+   the title's first line. Without this, the flex parent stretches the
+   icon to the column height; in narrow viewports the inner row wraps
+   to a column (#tag below title) and the icon ends up centered between
+   title and tag instead of next to the title. */
 .ls-page-title .ls-page-icon {
   display: flex;
   align-items: center;
+  align-self: flex-start;
+  height: calc(var(--ls-page-title-size, 32px) * 1.38);
+  /* Optical alignment: a glyph's visual centroid sits a few px below the
+     line box's geometric center (cap-height + descender asymmetry), so
+     a mathematically centered icon reads as slightly too high. Nudge
+     the centered icon down to match what the eye expects. Applies to
+     every icon type because the shift happens on the container, not on
+     the inner button. */
+  padding-top: 4px;
 }
 
 /* Trigger button: fixed-size flex-center box. All icon types (emoji,
@@ -1395,6 +1410,17 @@ html.is-mac {
 
 .ls-page-title .block-tags {
   @apply relative min-h-full;
+}
+
+/* In narrow containers the page-title row wraps and the tag drops below
+   the title. The 17px margin-top above offsets the tag for the inline
+   (flex-row) layout; once wrapped it creates a disconnected gap, so
+   collapse it. Must be placed after the rule above to win on source
+   order. */
+@container (max-width: 600px) {
+  .ls-page-title .block-tags {
+    margin-top: 0;
+  }
 }
 
 .ls-code-editor-wrap {
