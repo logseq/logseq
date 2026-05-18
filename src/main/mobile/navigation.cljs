@@ -20,8 +20,9 @@
 (defonce ^:private hooks-installed? (atom false))
 
 ;; Track whether the latest change came from a native back gesture / popstate.
-(.addEventListener js/window "popstate" (fn [_]
-                                          (reset! navigation-source :pop)))
+(when (fn? (.-addEventListener js/window))
+  (.addEventListener js/window "popstate" (fn [_]
+                                            (reset! navigation-source :pop))))
 
 (defn current-stack
   []
@@ -220,8 +221,8 @@
         (let [route-match (or route-match (:route-match (stack-defaults stack)))
               path        (or path (current-path))]
           (route-handler/set-route-match! route-match)
-          (when (= current "search")
-            ;; reset to :home
+          (when (and (= current "search")
+                     (= stack primary-stack))
             (orig-replace-state :home nil nil))
           (notify-route-change!
            {:route {:to          (or (get-in route [:data :name])
@@ -308,7 +309,7 @@
        (route-handler/set-route-match! route-match)
        (notify-route-change!
         {:route route
-         :route-match route-match
+         :route-match (assoc route-match :navigation-type "reset")
          :path path
          :stack stack
          :push false})))))

@@ -1,0 +1,74 @@
+(ns mobile.navigation-test
+  (:require [cljs.test :refer [deftest is testing use-fixtures]]
+            [frontend.handler.route :as route-handler]
+            [frontend.mobile.util :as mobile-util]
+            [mobile.navigation :as mobile-nav]))
+
+(defn- route-match
+  [name]
+  {:data {:name name}
+   :parameters {:path {} :query {}}})
+
+(defn- stack-entry
+  [name path]
+  {:path path
+   :route {:to name :path-params {} :query-params {}}
+   :route-match (route-match name)})
+
+(defn- reset-navigation-state! []
+  (reset! @#'mobile-nav/navigation-source nil)
+  (reset! @#'mobile-nav/initialised-stacks {})
+  (reset! @#'mobile-nav/active-stack "home")
+  (reset! @#'mobile-nav/stack-history {})
+  (reset! @#'mobile-nav/pending-navigation nil))
+
+(use-fixtures :each
+  {:before reset-navigation-state!
+   :after reset-navigation-state!})
+
+(deftest switch-stack-from-search-to-non-home-does-not-replace-browser-route-with-home
+  (testing "closing native search while selecting another tab should keep the selected stack route"
+    (let [replace-calls (atom [])
+          route-matches (atom [])]
+      (reset! @#'mobile-nav/active-stack "search")
+      (reset! @#'mobile-nav/stack-history
+              {"search" {:history [(stack-entry :search "/__stack__/search")]}
+               "graphs" {:history [(stack-entry :graphs "/__stack__/graphs")]}})
+      (with-redefs [mobile-nav/orig-replace-state (fn [& args] (swap! replace-calls conj args))
+                    route-handler/set-route-match! (fn [match] (swap! route-matches conj match))
+                    mobile-util/native-platform? (constantly false)]
+        (mobile-nav/switch-stack! "graphs")
+        (is (empty? @replace-calls))
+        (is (= :graphs (get-in (last @route-matches) [:data :name])))))))
+
+(deftest switch-stack-from-search-to-home-closes-search-with-home-route
+  (testing "closing native search to Home still updates the browser route to Home"
+    (let [replace-calls (atom [])]
+      (reset! @#'mobile-nav/active-stack "search")
+      (reset! @#'mobile-nav/stack-history
+              {"search" {:history [(stack-entry :search "/__stack__/search")]}
+               "home" {:history [(stack-entry :home "/")]}})
+      (with-redefs [mobile-nav/orig-replace-state (fn [& args] (swap! replace-calls conj args))
+                    route-handler/set-route-match! (constantly nil)
+                    mobile-util/native-platform? (constantly false)]
+        (mobile-nav/switch-stack! "home")
+        (is (= [[:home nil nil]] @replace-calls))))))
+
+(deftest pop-to-root-notifies-native-reset
+  (testing "collapsing a logical stack tells native to rebuild it as a single root view controller"
+    (let [payloads (atom [])]
+      (reset! @#'mobile-nav/active-stack "home")
+      (reset! @#'mobile-nav/stack-history
+              {"home" {:history [(stack-entry :home "/")
+                                  (stack-entry :page "/page/alpha")]}})
+      (with-redefs [mobile-nav/orig-replace-state (constantly nil)
+                    route-handler/set-route-match! (constantly nil)
+                    mobile-util/native-platform? (constantly true)
+                    mobile-util/ui-local #js {:routeDidChange
+                                               (fn [payload]
+                                                 (swap! payloads conj
+                                                        (js->clj payload :keywordize-keys true))
+                                                 (js/Promise.resolve nil))}]
+        (mobile-nav/pop-to-root! "home")
+        (is (= "reset" (:navigationType (last @payloads))))
+        (is (= "/" (:path (last @payloads))))))))
