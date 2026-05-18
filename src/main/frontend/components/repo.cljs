@@ -10,6 +10,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -31,7 +32,8 @@
 
 (defn local-uploadable-graph?
   [{:keys [root remote?]}]
-  (and root
+  (and (or root
+           (mobile-util/native-platform?))
        (not remote?)
        (user-handler/logged-in?)
        (user-handler/rtc-group?)))
@@ -176,6 +178,7 @@
                :class "delete-local-graph-menu-item"
                :on-click #(delete-local-graph! repo)}
               (t :graph/delete-local-action)))
+
            (when (and root
                       (user-handler/logged-in?)
                       (user-handler/rtc-group?)

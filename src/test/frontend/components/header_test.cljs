@@ -3,6 +3,7 @@
             [frontend.components.header :as header]
             [frontend.components.repo :as repo]
             [frontend.handler.user :as user-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]))
@@ -28,6 +29,15 @@
                 user-handler/logged-in? (constantly true)
                 user-handler/rtc-group? (constantly true)]
     (is (nil? (header/current-local-uploadable-graph)))))
+
+(deftest current-local-uploadable-graph-selects-native-mobile-local-graph-test
+  (with-redefs [mobile-util/native-platform? (constantly true)
+                state/get-current-repo (constantly "logseq_db_mobile")
+                state/get-repos (constantly [{:url "logseq_db_mobile"}])
+                user-handler/logged-in? (constantly true)
+                user-handler/rtc-group? (constantly true)]
+    (is (= {:url "logseq_db_mobile"}
+           (header/current-local-uploadable-graph)))))
 
 (deftest local-graph-sync-button-uses-cloud-icon-and-upload-confirmation-test
   (let [upload-calls (atom [])]

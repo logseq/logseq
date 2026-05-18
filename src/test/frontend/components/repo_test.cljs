@@ -5,7 +5,9 @@
             [frontend.db :as db]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.state :as state]
+            [frontend.mobile.util :as mobile-util]
             [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
@@ -14,6 +16,12 @@
 (defn- ensure-rsa-key-fn
   []
   #'repo/ensure-e2ee-rsa-key-for-cloud!)
+
+(deftest local-uploadable-graph-allows-native-mobile-local-graph-without-root-test
+  (with-redefs [mobile-util/native-platform? (constantly true)
+                user-handler/logged-in? (constantly true)
+                user-handler/rtc-group? (constantly true)]
+    (is (true? (repo/local-uploadable-graph? {:url "logseq_db_mobile"})))))
 
 (deftest upload-local-graph-with-confirm-asks-before-upload-test
   (async done
