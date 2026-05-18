@@ -19,6 +19,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 public class MainActivity extends BridgeActivity {
+    private static final String NAV_STACK_DEBUG_PREFIX = "[DEBUG-navstack]";
     private final NavigationCoordinator navigationCoordinator = new NavigationCoordinator();
     private BroadcastReceiver routeChangeReceiver;
 
@@ -60,7 +61,19 @@ public class MainActivity extends BridgeActivity {
                 String stack = intent.getStringExtra("stack");
                 String navigationType = intent.getStringExtra("navigationType");
                 String path = intent.getStringExtra("path");
+                Log.d(
+                    "NavStack",
+                    NAV_STACK_DEBUG_PREFIX + " activity.routeChange.received stack=" + stack
+                        + " type=" + navigationType
+                        + " path=" + path
+                        + " before=" + navigationCoordinator.debugState()
+                );
                 navigationCoordinator.onRouteChange(stack, navigationType, path);
+                Log.d(
+                    "NavStack",
+                    NAV_STACK_DEBUG_PREFIX + " activity.routeChange.applied after="
+                        + navigationCoordinator.debugState()
+                );
             }
         };
         IntentFilter filter = new IntentFilter(UILocal.ACTION_ROUTE_CHANGED);
@@ -133,6 +146,11 @@ public class MainActivity extends BridgeActivity {
 
     private void handleNativeBack() {
         Log.d("onBackPressed", "Debug");
+        Log.d(
+            "NavStack",
+            NAV_STACK_DEBUG_PREFIX + " activity.nativeBack source=system-or-edge before="
+                + navigationCoordinator.debugState()
+        );
 
         WebView webView = getBridge().getWebView();
         if (webView != null) {
@@ -167,6 +185,7 @@ public class MainActivity extends BridgeActivity {
 
     private void sendJsBack(WebView webView) {
         if (webView == null) return;
+        Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.sendJsBack dispatching onNativePop");
         webView.post(() -> webView.evaluateJavascript(
             "window.LogseqNative && window.LogseqNative.onNativePop && window.LogseqNative.onNativePop();",
             null

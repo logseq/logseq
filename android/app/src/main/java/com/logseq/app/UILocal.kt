@@ -2,6 +2,7 @@ package com.logseq.app
 
 import android.app.DatePickerDialog
 import android.content.Intent
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.DatePicker
@@ -21,6 +22,7 @@ class UILocal : Plugin() {
   private var toast: Toast? = null
   companion object {
     const val ACTION_ROUTE_CHANGED = "com.logseq.app.ROUTE_DID_CHANGE"
+    private const val DEBUG_PREFIX = "[DEBUG-navstack]"
   }
 
   @PluginMethod
@@ -118,6 +120,11 @@ class UILocal : Plugin() {
     val push = call.getBoolean("push") ?: (navigationType == "push")
     val path = call.getString("path") ?: "/"
     val stack = call.getString("stack") ?: "home"
+
+    Log.d(
+      "NavStack",
+      "$DEBUG_PREFIX uiLocal.routeDidChange stack=$stack type=$navigationType push=$push path=$path"
+    )
 
     // Drive Compose Nav for native animations/back handling.
     ComposeHost.applyNavigation(navigationType, path)

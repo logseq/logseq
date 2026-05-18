@@ -1,6 +1,13 @@
 package com.logseq.app
 
+import android.util.Log
+
 class NavigationCoordinator {
+    companion object {
+        private const val TAG = "NavStack"
+        private const val DEBUG_PREFIX = "[DEBUG-navstack]"
+    }
+
     private val primaryStack = "home"
     private val stackPaths: MutableMap<String, MutableList<String>> = mutableMapOf(
         primaryStack to mutableListOf("/")
@@ -14,10 +21,21 @@ class NavigationCoordinator {
     private fun normalizedPath(raw: String?): String =
         raw?.takeIf { it.isNotBlank() } ?: "/"
 
+    fun debugState(): String =
+        "active=$activeStackId stacks=" + stackPaths.entries.joinToString(
+            prefix = "{",
+            postfix = "}"
+        ) { (stack, paths) -> "$stack=${paths.joinToString(prefix = "[", postfix = "]")}" }
+
     fun onRouteChange(stack: String?, navigationType: String?, path: String?) {
         val stackId = stack?.takeIf { it.isNotBlank() } ?: primaryStack
         val navType = navigationType?.lowercase() ?: "push"
         val resolvedPath = normalizedPath(path)
+
+        Log.d(
+            TAG,
+            "$DEBUG_PREFIX coordinator.onRouteChange.before stack=$stackId type=$navType path=$resolvedPath ${debugState()}"
+        )
 
         val paths = stackPaths.getOrPut(stackId) { mutableListOf(defaultPath(stackId)) }
 
@@ -58,6 +76,11 @@ class NavigationCoordinator {
 
         activeStackId = stackId
         stackPaths[stackId] = paths
+
+        Log.d(
+            TAG,
+            "$DEBUG_PREFIX coordinator.onRouteChange.after stack=$stackId type=$navType path=$resolvedPath ${debugState()} canPop=${canPop()}"
+        )
     }
 
     fun canPop(): Boolean {
@@ -69,6 +92,8 @@ class NavigationCoordinator {
         val paths = stackPaths[activeStackId] ?: return null
         if (paths.size <= 1) return null
         paths.removeAt(paths.lastIndex)
-        return paths.lastOrNull()
+        return paths.lastOrNull().also { target ->
+            Log.d(TAG, "$DEBUG_PREFIX coordinator.pop target=$target ${debugState()} canPop=${canPop()}")
+        }
     }
 }
