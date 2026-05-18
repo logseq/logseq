@@ -2321,18 +2321,10 @@
 (defn- navigable-sibling-block
   [block sibling-f opts]
   (loop [sibling-block (sibling-f block opts)]
-    (if (comment-item-node? sibling-block)
+    (if (or (comment-item-node? sibling-block)
+            (comments-area-node? sibling-block))
       (recur (sibling-f sibling-block opts))
       sibling-block)))
-
-(defn- focus-comments-area-input!
-  [comments-area-node]
-  (when-let [input (or (some-> ^js comments-area-node (.querySelector ".ls-comment-box-editor textarea"))
-                       (some-> ^js comments-area-node (.querySelector ".ls-comment-box-editor [contenteditable='true']")))]
-    (state/clear-edit!)
-    (util/scroll-to-block comments-area-node)
-    (.focus input)
-    true))
 
 (defn- focus-trigger
   [_current-block sibling-block]
@@ -2373,9 +2365,6 @@
                (and (dom/has-class? sibling-block "block-add-button")
                     (util/rec-get-node current-block "ls-page-title"))
                (.click sibling-block)
-
-               (comments-area-node? sibling-block)
-               (focus-comments-area-input! sibling-block)
 
                property-value-container?
                (focus-trigger current-block sibling-block)
@@ -2443,9 +2432,6 @@
           (save-block! repo uuid value)))
       (let [sibling-block-id (node-attr sibling-block "blockid")]
         (cond
-          (comments-area-node? sibling-block)
-          (focus-comments-area-input! sibling-block)
-
           sibling-block-id
           (let [container-id (some-> (node-attr sibling-block "containerid") js/parseInt)
                 block (db/entity repo [:block/uuid (cljs.core/uuid sibling-block-id)])]

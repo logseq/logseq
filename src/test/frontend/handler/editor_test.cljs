@@ -547,23 +547,6 @@
       (is (false? (#'editor/block-eligible-for-move-up-down? comments-area focused-root-block)))
       (is (false? (#'editor/block-eligible-for-move-up-down? comment-block focused-root-block))))))
 
-(deftest comments-navigation-targets-test
-  (let [comments-node (js-obj "id" "comments"
-                              "blockid" "6a073572-fefe-44c5-8b43-267ccc715077"
-                              "data-comments-area" "true")
-        editor-node #js {}
-        focused? (atom false)]
-    (set! (.-focus editor-node) #(reset! focused? true))
-    (set! (.-querySelector comments-node)
-          (fn [selector]
-            (when (= selector ".ls-comment-box-editor textarea")
-              editor-node)))
-    (with-redefs [state/clear-edit! (constantly nil)
-                  util/scroll-to-block (constantly nil)]
-      (is (true? (#'editor/comments-area-node? comments-node)))
-      (is (true? (#'editor/focus-comments-area-input! comments-node)))
-      (is (true? @focused?)))))
-
 (deftest navigable-sibling-block-skips-comment-items-test
   (let [current-node (js-obj "id" "current")
         comment-node (js-obj "id" "comment"
@@ -585,3 +568,15 @@
                                 nil))]
       (is (true? (#'editor/comment-item-node? comment-node)))
       (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {}))))))
+
+(deftest navigable-sibling-block-skips-comments-area-test
+  (let [current-node (js-obj "id" "current")
+        comments-node (js-obj "id" "comments"
+                              "data-comments-area" "true")
+        target-node (js-obj "id" "target")
+        sibling-f (fn [node _opts]
+                    (cond
+                      (= node current-node) comments-node
+                      (= node comments-node) target-node))]
+    (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {}))
+        "Cursor boundary navigation should skip comments area")))
