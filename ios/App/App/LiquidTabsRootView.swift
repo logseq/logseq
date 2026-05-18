@@ -1,68 +1,6 @@
 import SwiftUI
 import UIKit
 
-// MARK: - Hidden UITextField that forces the keyboard to appear early
-//
-// This invisible UITextField becomes first responder immediately when the user
-// switches to the Search tab. This lets us show the keyboard *before*
-// SwiftUI’s searchable view finishes its expansion animation.
-//
-struct KeyboardHackField: UIViewRepresentable {
-    @Binding var shouldShow: Bool
-
-    // Capture Backspace/Enter on the hidden field and forward to JS.
-    class KeyboardHackTextField: UITextField {
-        var onKeyPress: ((String) -> Void)?
-
-        override func deleteBackward() {
-            super.deleteBackward()
-            onKeyPress?("backspace")
-            text = ""
-        }
-
-        override func insertText(_ text: String) {
-            super.insertText(text)
-            if text == "\n" {
-                onKeyPress?("enter")
-            }
-            self.text = ""
-        }
-    }
-
-    class Coordinator {
-        let textField = KeyboardHackTextField()
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeUIView(context: Context) -> UIView {
-        let container = UIView(frame: .zero)
-        let tf = context.coordinator.textField
-        tf.isHidden = true
-        tf.keyboardType = .default
-        tf.onKeyPress = { key in
-            LiquidTabsPlugin.shared?.notifyKeyboardHackKey(key: key)
-        }
-        container.addSubview(tf)
-        return container
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {
-        let tf = context.coordinator.textField
-        if shouldShow {
-            if !tf.isFirstResponder {
-                tf.becomeFirstResponder()
-            }
-        } else {
-            if tf.isFirstResponder {
-                tf.resignFirstResponder()
-            }
-        }
-    }
-}
-
 // MARK: - Root Tabs View (dispatch to 26+ vs 16–25)
 
 struct LiquidTabsRootView: View {
@@ -115,7 +53,6 @@ private struct LiquidTabs26View: View {
 
     @FocusState private var isSearchFocused: Bool
 
-    @State private var hackShowKeyboard: Bool = false
     @State private var selectedTab: LiquidTabsTabSelection = .content(0)
     @State private var searchPath = NavigationPath()
 
@@ -126,6 +63,7 @@ private struct LiquidTabs26View: View {
             get: { selectedTab },
             set: { newValue in
                 if newValue != selectedTab {
+                    prepareForSelectionChange(to: newValue)
                     selectedTab = newValue
                 }
             }
@@ -137,6 +75,12 @@ private struct LiquidTabs26View: View {
             get: { store.searchText },
             set: { store.searchText = $0 }
         )
+    }
+
+    private func resetSearchState() {
+        searchPath = NavigationPath()
+        store.searchText = ""
+        store.searchResults = []
     }
 
     private func initialSelection() -> LiquidTabsTabSelection {
@@ -155,6 +99,20 @@ private struct LiquidTabs26View: View {
     private func focusSearchField() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             isSearchFocused = true
+        }
+    }
+
+    private func prepareForSelectionChange(to selection: LiquidTabsTabSelection) {
+        switch selection {
+        case .search:
+            store.suppressSearchNotifications = true
+            resetSearchState()
+        case .content:
+            if selectedTab == .search {
+                store.suppressSearchNotifications = true
+                searchPath = NavigationPath()
+                isSearchFocused = false
+            }
         }
     }
 
@@ -221,18 +179,26 @@ private struct LiquidTabs26View: View {
                 .onChange(of: store.searchText) { query in
                     if query.isEmpty {
                         store.searchResults = []
+                        DispatchQueue.main.async {
+                            guard selectedTab == .search,
+                                  !store.suppressSearchNotifications else { return }
+                            LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
+                        }
+                    } else {
+                        guard selectedTab == .search,
+                              !store.suppressSearchNotifications else { return }
+                        LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
                     }
-                    LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
                 }
                 .background(Color.logseqBackground)
 
-                // Hidden UITextField that pre-invokes keyboard (optional)
-                KeyboardHackField(shouldShow: $hackShowKeyboard)
-                    .frame(width: 0, height: 0)
             }
             .onAppear {
                 let initial = initialSelection()
-                selectedTab = initial
+                if initial != selectedTab {
+                    prepareForSelectionChange(to: initial)
+                    selectedTab = initial
+                }
 
                 let appearance = UITabBarAppearance()
                 appearance.configureWithTransparentBackground()
@@ -262,18 +228,16 @@ private struct LiquidTabs26View: View {
 
                 switch newValue {
                 case .search:
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        hackShowKeyboard = true
+                    DispatchQueue.main.async {
+                        guard selectedTab == .search else { return }
+                        store.suppressSearchNotifications = false
+                        focusSearchField()
                     }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                        hackShowKeyboard = false
-                    }
-                    focusSearchField()
 
                 case .content:
+                    store.suppressSearchNotifications = true
                     searchPath = NavigationPath()
                     isSearchFocused = false
-                    hackShowKeyboard = false
                 }
             }
             .onChange(of: store.selectedId) { newId in
@@ -283,6 +247,7 @@ private struct LiquidTabs26View: View {
                 }
 
                 if newSelection != selectedTab {
+                    prepareForSelectionChange(to: newSelection)
                     selectedTab = newSelection
                 }
             }
@@ -350,7 +315,6 @@ private struct LiquidTabs16View: View {
     @StateObject private var store = LiquidTabsStore.shared
     let navController: UINavigationController
 
-    @State private var hackShowKeyboard: Bool = false
     @State private var searchPath = NavigationPath()
 
     private var searchTextBinding: Binding<String> {
@@ -358,6 +322,12 @@ private struct LiquidTabs16View: View {
             get: { store.searchText },
             set: { store.searchText = $0 }
         )
+    }
+
+    private func resetSearchState() {
+        searchPath = NavigationPath()
+        store.searchText = ""
+        store.searchResults = []
     }
 
     var body: some View {
@@ -381,11 +351,22 @@ private struct LiquidTabs16View: View {
                             guard let id = newValue else { return }
 
                             if id != store.selectedId {
+                                if id == "search" {
+                                    store.suppressSearchNotifications = true
+                                    resetSearchState()
+                                }
                                 if store.selectedId == "search" {
+                                    store.suppressSearchNotifications = true
                                     searchPath = NavigationPath()
                                 }
                                 store.selectedId = id
                                 LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+                                if id == "search" {
+                                    DispatchQueue.main.async {
+                                        guard store.selectedId == "search" else { return }
+                                        store.suppressSearchNotifications = false
+                                    }
+                                }
                             }
                         }
                     )) {
@@ -404,6 +385,7 @@ private struct LiquidTabs16View: View {
                         SearchTab16Host(
                             navController: navController,
                             searchText: searchTextBinding,
+                            isActive: store.selectedId == "search",
                             searchPath: $searchPath,
                             store: store
                         )
@@ -414,14 +396,18 @@ private struct LiquidTabs16View: View {
                         .tag("search" as String?)
                     }
                     .onChange(of: store.selectedId) { newId in
-                        if newId != "search" {
+                        if newId == "search" {
+                            store.suppressSearchNotifications = true
+                            resetSearchState()
+                            DispatchQueue.main.async {
+                                guard store.selectedId == "search" else { return }
+                                store.suppressSearchNotifications = false
+                            }
+                        } else {
+                            store.suppressSearchNotifications = true
                             searchPath = NavigationPath()
                         }
                     }
-
-                    // Hidden UITextField that pre-invokes keyboard
-                    KeyboardHackField(shouldShow: $hackShowKeyboard)
-                        .frame(width: 0, height: 0)
                 }
                 .onAppear {
                     if store.selectedId == nil {
@@ -455,6 +441,7 @@ private struct LiquidTabs16View: View {
 private struct SearchTab16Host: View {
     let navController: UINavigationController
     @Binding var searchText: String
+    let isActive: Bool
     @Binding var searchPath: NavigationPath
     @ObservedObject var store: LiquidTabsStore
 
@@ -504,7 +491,18 @@ private struct SearchTab16Host: View {
             }
         }
         .onChange(of: searchText) { query in
-            LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
+            if query.isEmpty {
+                store.searchResults = []
+                DispatchQueue.main.async {
+                    guard store.selectedId == "search",
+                          !store.suppressSearchNotifications else { return }
+                    LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
+                }
+            } else {
+                guard isActive,
+                      !store.suppressSearchNotifications else { return }
+                LiquidTabsPlugin.shared?.notifySearchChanged(query: query)
+            }
         }
     }
 }
