@@ -848,6 +848,17 @@
               (if (keyword? tag) tag (:db/ident tag))))
          (:block/tags block))))
 
+(defn- protected-comment-block?
+  [block]
+  (or (comments-area? block)
+      (comments-area? (:block/parent block))))
+
+(defn- move-target-allowed-for-comments?
+  [target-block sibling?]
+  (and (not (comments-area? (:block/parent target-block)))
+       (or sibling?
+           (not (comments-area? target-block)))))
+
 (defn- block-subtree-ids
   [db block]
   (into #{(:db/id block)}
@@ -999,46 +1010,49 @@
                            :payload {:message "Built-in nodes can't be modified"
                                      :type :error}})))))
     (let [db @conn
-          top-level-blocks (filter-top-level-blocks db blocks)
-          [target-block sibling?] (get-target-block db top-level-blocks target-block opts)
-          non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
-          top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)
-          blocks (->> (if non-consecutive?
-                        (sort-non-consecutive-blocks db top-level-blocks)
-                        top-level-blocks)
-                      (map (fn [block]
-                             (if (de/entity? block)
-                               block
-                               (d/entity db (:db/id block))))))
-          original-position? (move-to-original-position? blocks target-block sibling? non-consecutive?)]
-      (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
-                 (not original-position?))
-        (let [parents' (->> (ldb/get-block-parents db (:block/uuid target-block) {})
-                            (map :db/id)
-                            (set))
-              move-parents-to-child? (some parents' (map :db/id blocks))
-              op-entry [:move-blocks [(mapv :block/uuid top-level-blocks)
-                                      (:block/uuid target-block)
-                                      opts]]]
-          (when-not move-parents-to-child?
-            (ldb/batch-transact-with-temp-conn!
-             conn
-             {:outliner-op :move-blocks
-              :outliner-ops [op-entry]}
-             (fn [conn]
-               (doseq [[idx block] (map vector (range (count blocks)) blocks)]
-                 (let [first-block? (zero? idx)
-                       sibling? (if first-block? sibling? true)
-                       target-block (if first-block? target-block
-                                        (d/entity @conn (:db/id (nth blocks (dec idx)))))
-                       block (d/entity @conn (:db/id block))]
-                   (when-not (move-to-original-position? [block] target-block sibling? false)
-                     (let [tx-data (move-block @conn block target-block sibling?)]
-                     ;; FIXME: move-blocks should be pure fn
-                     ;; (prn "==>> move blocks tx:" tx-data)
-                       (ldb/transact! conn tx-data {:sibling? sibling?
-                                                    :outliner-op (or outliner-op :move-blocks)})))))))
-            nil))))))
+          top-level-blocks (remove protected-comment-block?
+                                   (filter-top-level-blocks db blocks))]
+      (when (seq top-level-blocks)
+        (let [[target-block sibling?] (get-target-block db top-level-blocks target-block opts)
+              non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
+              top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)
+              blocks (->> (if non-consecutive?
+                            (sort-non-consecutive-blocks db top-level-blocks)
+                            top-level-blocks)
+                          (map (fn [block]
+                                 (if (de/entity? block)
+                                   block
+                                   (d/entity db (:db/id block))))))
+              original-position? (move-to-original-position? blocks target-block sibling? non-consecutive?)]
+          (when (and (move-target-allowed-for-comments? target-block sibling?)
+                     (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
+                     (not original-position?))
+            (let [parents' (->> (ldb/get-block-parents db (:block/uuid target-block) {})
+                                (map :db/id)
+                                (set))
+                  move-parents-to-child? (some parents' (map :db/id blocks))
+                  op-entry [:move-blocks [(mapv :block/uuid top-level-blocks)
+                                          (:block/uuid target-block)
+                                          opts]]]
+              (when-not move-parents-to-child?
+                (ldb/batch-transact-with-temp-conn!
+                 conn
+                 {:outliner-op :move-blocks
+                  :outliner-ops [op-entry]}
+                 (fn [conn]
+                   (doseq [[idx block] (map vector (range (count blocks)) blocks)]
+                     (let [first-block? (zero? idx)
+                           sibling? (if first-block? sibling? true)
+                           target-block (if first-block? target-block
+                                            (d/entity @conn (:db/id (nth blocks (dec idx)))))
+                           block (d/entity @conn (:db/id block))]
+                       (when-not (move-to-original-position? [block] target-block sibling? false)
+                         (let [tx-data (move-block @conn block target-block sibling?)]
+                           ;; FIXME: move-blocks should be pure fn
+                           ;; (prn "==>> move blocks tx:" tx-data)
+                           (ldb/transact! conn tx-data {:sibling? sibling?
+                                                        :outliner-op (or outliner-op :move-blocks)})))))))
+                nil))))))))
 
 (defn- move-blocks-up-down
   "Move blocks up/down."
@@ -1136,7 +1150,8 @@
                   result
                   ;; direct outdenting (default behavior)
                   (let [last-top-block (d/entity db (:db/id (last blocks')))
-                        right-siblings (get-right-siblings last-top-block)]
+                        right-siblings (remove protected-comment-block?
+                                               (get-right-siblings last-top-block))]
                     (if (seq right-siblings)
                       (if-let [last-direct-child-id (ldb/get-block-last-direct-child-id db (:db/id last-top-block))]
                         (move-blocks conn right-siblings (d/entity db last-direct-child-id) (merge opts {:sibling? true}))
