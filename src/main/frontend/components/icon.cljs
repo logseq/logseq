@@ -17,6 +17,7 @@
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.fs :as fs]
+            [frontend.extensions.lightbox :as lightbox]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.icon-color :as icon-color]
@@ -1229,27 +1230,35 @@
   "Get image assets from frontend Datascript (fast, but may be empty on cold start)"
   []
   (let [image-extensions (set (map name config/image-formats))
-        results (db-utils/q '[:find ?uuid ?type ?title ?updated ?checksum ?source-url
+        results (db-utils/q '[:find ?uuid ?type ?title ?updated ?checksum ?source-url ?source-name ?license
                               :where
                               [?e :logseq.property.asset/type ?type]
                               [?e :logseq.property.asset/checksum ?checksum]
                               [?e :block/uuid ?uuid]
                               [(get-else $ ?e :block/title "") ?title]
                               [(get-else $ ?e :block/updated-at 0) ?updated]
-                              [(get-else $ ?e :logseq.property.asset/source-url "") ?source-url]])]
+                              [(get-else $ ?e :logseq.property.asset/source-url "") ?source-url]
+                              [(get-else $ ?e :logseq.property.asset/source-name "") ?source-name]
+                              [(get-else $ ?e :logseq.property.asset/license "") ?license]])]
     (->> results
-         (filter (fn [[_uuid type _title _updated _checksum _source-url]]
+         (filter (fn [[_uuid type & _]]
                    (contains? image-extensions (some-> type string/lower-case))))
-         (sort-by (fn [[_uuid _type _title updated _checksum _source-url]] updated) >)
+         (sort-by (fn [[_uuid _type _title updated & _]] updated) >)
          ;; Deduplicate by checksum — keep the most recently updated entry
-         (medley/distinct-by (fn [[_uuid _type _title _updated checksum _source-url]] checksum))
-         (map (fn [[uuid type title _updated checksum source-url]]
+         (medley/distinct-by (fn [[_uuid _type _title _updated checksum & _]] checksum))
+         (map (fn [[uuid type title _updated checksum source-url source-name license]]
                 (cond-> {:block/uuid uuid
                          :block/title (if (string/blank? title) (str uuid) title)
                          :logseq.property.asset/type type
                          :logseq.property.asset/checksum checksum}
                   (not (string/blank? source-url))
-                  (assoc :logseq.property.asset/source-url source-url)))))))
+                  (assoc :logseq.property.asset/source-url source-url)
+
+                  (not (string/blank? source-name))
+                  (assoc :logseq.property.asset/source-name source-name)
+
+                  (not (string/blank? license))
+                  (assoc :logseq.property.asset/license license)))))))
 
 (defn <get-image-assets
   "Async fetch image assets from DB worker (works on cold start).
@@ -1259,7 +1268,7 @@
   (when-let [graph (state/get-current-repo)]
     (p/let [results (db-async/<q graph
                                  {:transact-db? false}
-                                 '[:find (pull ?e [:block/uuid :block/title :logseq.property.asset/type :logseq.property.asset/checksum :logseq.property.asset/source-url :block/updated-at])
+                                 '[:find (pull ?e [:block/uuid :block/title :logseq.property.asset/type :logseq.property.asset/checksum :logseq.property.asset/source-url :logseq.property.asset/source-name :logseq.property.asset/license :block/updated-at])
                                    :where
                                    [?e :logseq.property.asset/type ?type]
                                    [?e :logseq.property.asset/checksum _]])]
@@ -1672,8 +1681,9 @@
         ;; Fallback: trim, replace internal spaces with dashes
         (-> license string/trim (string/replace #"\s+" "-")))))
 
-(defn- license->description
-  "Convert license code to human-readable description"
+(defn license->description
+  "Convert license code to human-readable description. Public so both the
+   web-image search path and the asset-block hover preview can consume it."
   [license]
   (when license
     (let [license-lower (string/lower-case license)]
@@ -2542,6 +2552,38 @@
 
 ;; <load-asset-url! is defined near the top of the file (unified loader with retry + extension guessing)
 
+(declare web-image-card-content)
+
+(defn- asset->preview-data
+  "Normalize an asset block + its resolved blob URL into the shape that
+   `web-image-card-content` consumes (the same hover-preview component
+   used by the web-image search results). Returns nil when no URL is
+   resolved yet — the preview body needs an image to render meaningfully.
+
+   `:source` is derived from `source-name` so the existing case in the
+   preview body still routes Wikipedia/Wikimedia Commons to their named
+   labels. For other sources we let `source-name` drive the display
+   directly (the preview component prefers explicit `source-name` over
+   the keyword)."
+  [asset url]
+  (when url
+    (let [source-name (:logseq.property.asset/source-name asset)
+          source-url  (:logseq.property.asset/source-url asset)
+          license     (:logseq.property.asset/license asset)
+          source-kw   (cond
+                        (not source-name) nil
+                        (re-find #"(?i)wikimedia\s+commons" source-name) :wikipedia-commons
+                        (re-find #"(?i)wikipedia" source-name)            :wikipedia
+                        :else                                              :other)]
+      {:url         url
+       :thumb-url   url
+       :title       (:block/title asset)
+       :source      source-kw
+       :source-name source-name
+       :source-url  source-url
+       :license     license
+       :license-desc (license->description license)})))
+
 (rum/defcs image-asset-item < rum/reactive
   (rum/local nil ::url)
   (rum/local false ::error)
@@ -2556,59 +2598,79 @@
                 state)}
   "Renders a single image asset thumbnail in the asset picker grid.
    When avatar-context is provided, renders circular previews and returns avatar data.
-   Returns nil if asset file doesn't exist (ghost asset)."
+   Returns nil if asset file doesn't exist (ghost asset).
+
+   The button is wrapped in a `shui/tooltip` that surfaces the same
+   hover-preview card the web-image lane uses — bigger thumbnail, plus
+   `From:` and license badge when the asset has source / license metadata
+   (web-downloaded assets do; locally-uploaded assets gracefully degrade
+   to image + title only). Preview only renders once the blob URL has
+   resolved; ghost assets (load errors) skip it."
   [state asset {:keys [on-chosen avatar-context selected? item-id highlighted? ghost-highlighted?]}]
   (let [url @(::url state)
         error? @(::error state)
         asset-type (:logseq.property.asset/type asset)
         asset-uuid (:block/uuid asset)
         asset-title (or (:block/title asset) (str asset-uuid))
-        avatar-mode? (some? avatar-context)]
-    [:button.image-asset-item
-     {:title asset-title
-      :data-item-id item-id
-      :class (util/classnames [{:avatar-mode avatar-mode?
-                                :selected selected?
-                                :ghost-asset error?
-                                :is-highlighted highlighted?
-                                :is-ghost-highlighted ghost-highlighted?}])
-      :on-click (fn [e]
-                  (if error?
-                    ;; Click-to-retry on ghost assets
-                    (do (reset! (::error state) false)
-                        (<load-asset-url! (::url state) (::error state) asset-uuid asset-type {}))
-                    (do
-                      ;; Track as recently used
-                      (add-used-asset! asset-uuid)
-                      (let [image-data {:asset-uuid (str asset-uuid)
-                                        :asset-type asset-type}]
-                        (on-chosen e
-                                   (if avatar-context
-                                     ;; Merge image into existing avatar
-                                     {:type :avatar
-                                      :id (:id avatar-context)
-                                      :label (:label avatar-context)
-                                      :data (merge (:data avatar-context) image-data)}
-                                     ;; Standard image selection
-                                     {:type :image
-                                      :id (str "image-" asset-uuid)
-                                      :label asset-title
-                                      :data image-data}))))))
-      :disabled false}
-     (cond
-       error?
-       [:div.ghost-asset-placeholder
-        {:title "Click to retry loading"}
-        (ui/icon "refresh" {:size 16})]
-       url
-       [:img {:src url
-              :loading "lazy"
-              :on-error (fn [_e]
-                          ;; Blob URL became invalid — mark as error so user can retry
-                          (reset! (::url state) nil)
-                          (reset! (::error state) true))}]
-       :else
-       [:div.bg-gray-04.animate-pulse])]))
+        avatar-mode? (some? avatar-context)
+        button-hiccup
+        [:button.image-asset-item
+         {:title asset-title
+          :data-item-id item-id
+          :class (util/classnames [{:avatar-mode avatar-mode?
+                                    :selected selected?
+                                    :ghost-asset error?
+                                    :is-highlighted highlighted?
+                                    :is-ghost-highlighted ghost-highlighted?}])
+          :on-click (fn [e]
+                      (if error?
+                        ;; Click-to-retry on ghost assets
+                        (do (reset! (::error state) false)
+                            (<load-asset-url! (::url state) (::error state) asset-uuid asset-type {}))
+                        (do
+                          ;; Track as recently used
+                          (add-used-asset! asset-uuid)
+                          (let [image-data {:asset-uuid (str asset-uuid)
+                                            :asset-type asset-type}]
+                            (on-chosen e
+                                       (if avatar-context
+                                         ;; Merge image into existing avatar
+                                         {:type :avatar
+                                          :id (:id avatar-context)
+                                          :label (:label avatar-context)
+                                          :data (merge (:data avatar-context) image-data)}
+                                         ;; Standard image selection
+                                         {:type :image
+                                          :id (str "image-" asset-uuid)
+                                          :label asset-title
+                                          :data image-data}))))))
+          :disabled false}
+         (cond
+           error?
+           [:div.ghost-asset-placeholder
+            {:title "Click to retry loading"}
+            (ui/icon "refresh" {:size 16})]
+           url
+           [:img {:src url
+                  :loading "lazy"
+                  :on-error (fn [_e]
+                              ;; Blob URL became invalid — mark as error so user can retry
+                              (reset! (::url state) nil)
+                              (reset! (::error state) true))}]
+           :else
+           [:div.bg-gray-04.animate-pulse])]]
+    (if-let [preview (and (not error?) (asset->preview-data asset url))]
+      (shui/tooltip-provider
+       {:delay-duration 400 :skip-delay-duration 100}
+       (shui/tooltip
+        (shui/tooltip-trigger
+         {:as-child true}
+         button-hiccup)
+        (shui/tooltip-content
+         {:side "top" :align "center" :class "web-image-card-popup"
+          :side-offset 8 :collision-padding 8}
+         (web-image-card-content preview))))
+      button-hiccup)))
 
 (defn- should-use-blur-bg?
   "Determine if blurred background should be used based on image format.
@@ -2625,26 +2687,27 @@
     ;; Skip for SVG (uses PNG thumbnail anyway) and potentially transparent formats
     (not (or is-svg? likely-transparent?))))
 
-(rum/defc full-image-view
-  "Full image view popover - shows uncropped image with object-fit: contain"
-  [{:keys [url on-close]}]
-  [:div.full-image-view-pane
-   [:div.image-container
-    [:img {:src url}]]
-   [:button.close-btn
-    {:on-click on-close}
-    (shui/tabler-icon "x" {:size 16})]])
-
 (rum/defc web-image-card-content
   "Pure-render preview block: blurred-bg + sharp overlay + maximize button +
    title + source · license + license badge. Used as the tooltip content for
-   web-image tiles. No buttons, no checkbox — clicking the tile commits."
-  [{:keys [url thumb-url title license license-desc source]}]
-  (let [source-text (str (case source
-                           :wikipedia "From: Wikipedia"
-                           :wikipedia-commons "From: Wikipedia Commons"
-                           "From: Web")
-                         (when license (str " · " license)))
+   web-image tiles AND for asset-block tiles in the recents / available
+   lanes (via `asset->preview-data`). No buttons, no checkbox — clicking
+   the tile commits.
+
+   Adapts to missing metadata: when `source` and `source-name` are nil
+   (e.g. a locally-uploaded asset), the source row is omitted entirely
+   rather than rendering a misleading 'From: Web' fallback. The license
+   badge already gates on `license-desc`. Result: local uploads render
+   image + title only, fitting the card without empty bands."
+  [{:keys [url thumb-url title license license-desc source source-name]}]
+  (let [source-label (cond
+                       source-name source-name
+                       (= source :wikipedia) "Wikipedia"
+                       (= source :wikipedia-commons) "Wikipedia Commons"
+                       :else nil)
+        source-text (when source-label
+                      (str "From: " source-label
+                           (when license (str " · " license))))
         display-url (or thumb-url url)
         use-blur? (should-use-blur-bg? display-url)]
     [:div.web-image-card
@@ -2652,33 +2715,65 @@
       (when use-blur?
         [:img.blur-bg {:src display-url :alt ""}])
       [:img.preview-img {:src display-url
-                         :alt (str title " from " (case source
-                                                    :wikipedia "Wikipedia"
-                                                    :wikipedia-commons "Wikipedia Commons"
-                                                    "Web"))}]
+                         :alt (if source-label
+                                (str (or title "Image") " from " source-label)
+                                (or title "Image"))}]
       [:button.maximize-btn
-       {:on-pointer-down (fn [e]
+       {:aria-label "View full size"
+        :on-pointer-down (fn [e]
                            ;; Stop the click bubbling to the underlying tile.
-                           ;; Without this, opening the maximize popover would
-                           ;; also commit the image to the page-icon.
+                           ;; Without this, opening the lightbox would also
+                           ;; commit the image to the page-icon.
                            (.stopPropagation e))
         :on-click (fn [e]
                     (.stopPropagation e)
-                    (shui/popup-show!
-                     (.-target e)
-                     (fn [{:keys [id]}]
-                       (full-image-view
-                        {:url (or thumb-url url)
-                         :on-close #(shui/popup-hide! id)}))
-                     {:align :center
-                      :side "top"
-                      :content-props {:class "full-image-view-popup"
-                                      :sideOffset 8}}))}
+                    ;; The lightbox wrapper (extensions/lightbox.cljs)
+                    ;; installs a window-capture pointerdown/click swallow
+                    ;; for any target outside `.pswp` for its lifetime, so
+                    ;; the asset picker stays visually open behind the
+                    ;; lightbox but Radix's dismiss handler never runs
+                    ;; and stray clicks don't fall through to the page.
+                    ;; PhotoSwipe restores focus to this button on close.
+                    ;;
+                    ;; Pick the URL we feed to PhotoSwipe with care:
+                    ;; - For Wikimedia results, `:url` may be the original
+                    ;;   source file (sometimes a PDF or DJVU for scanned
+                    ;;   documents). `:thumb-url` is always a server-
+                    ;;   rendered JPG. We upscale the thumb URL's
+                    ;;   `/NNNpx-` segment to a high-res value so the
+                    ;;   lightbox loads a large JPG render rather than a
+                    ;;   PDF that PhotoSwipe can't display.
+                    ;; - For local blob URLs the regex doesn't match and
+                    ;;   `(or url thumb-url)` flows through unchanged.
+                    ;; Then PhotoSwipe needs real dimensions (passing 0/0
+                    ;; stretches the image without a backdrop). Always
+                    ;; probe via `new Image()` after upscaling so the
+                    ;; declared dims match the actual image we serve.
+                    (let [base-thumb thumb-url
+                          upscaled (when (and base-thumb
+                                              (re-find #"/\d+px-" base-thumb))
+                                     (string/replace base-thumb
+                                                     #"/\d+px-"
+                                                     "/1600px-"))
+                          src (or upscaled url thumb-url)
+                          open! (fn [w h]
+                                  (lightbox/preview-images!
+                                   [{:src src :w w :h h}]))]
+                      (let [^js probe (js/Image.)]
+                        (set! (.-onload probe)
+                              (fn [_] (open! (.-naturalWidth probe)
+                                             (.-naturalHeight probe))))
+                        (set! (.-onerror probe)
+                              ;; Safe default if the URL fails — 4:3
+                              ;; landscape keeps the layout sane.
+                              (fn [_] (open! 1600 1200)))
+                        (set! (.-src probe) src))))}
        (shui/tabler-icon "arrows-maximize" {:size 16})]]
      [:div.content-wrapper
       [:div.image-info
-       [:div.image-title (or title "Web image")]
-       [:div.image-source {:style {:color "var(--lx-gray-11)"}} source-text]
+       [:div.image-title (or title "Untitled image")]
+       (when source-text
+         [:div.image-source {:style {:color "var(--lx-gray-11)"}} source-text])
        (when license-desc
          [:div.license-badge license-desc])]]]))
 

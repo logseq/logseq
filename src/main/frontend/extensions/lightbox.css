@@ -1,0 +1,11 @@
+/* PhotoSwipe is mounted as a child of `document.body`. When the lightbox
+   opens over a Radix `modal: true` popup (e.g. the asset picker), Radix
+   sets `body.style.pointerEvents = 'none'` to enforce its dismissal
+   semantics — that inheritance kills PhotoSwipe's backdrop click handler
+   too (only the top-bar buttons survive because PhotoSwipe ships its own
+   `pointer-events: auto` on the top-bar UI controls). Force the lightbox
+   root to opt back in so `bgClickAction: 'close'` works regardless of
+   what the surrounding popup did to body. */
+.pswp {
+  pointer-events: auto !important;
+}
