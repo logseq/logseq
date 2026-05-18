@@ -55,11 +55,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             return existing
         }
 
+        return [rootPath(for: stackId)]
+    }
+
+    private func rootPath(for stackId: String) -> String {
         if stackId == "home" {
-            return ["/"]
+            return "/"
         } else {
             // Virtual stacks (e.g. capture, search, goto) default to a stack-root path.
-            return ["/__stack__/\(stackId)"]
+            return "/__stack__/\(stackId)"
         }
     }
 
@@ -448,7 +452,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                 var newPaths = self.paths(for: stackId)
 
                 // 🔑 Special rules for shaping the new stack
-                if stackId == "home", path == "/" {
+                if path == self.rootPath(for: stackId) {
+                    newPaths = [path]
+                } else if navigationType == "reset" {
+                    newPaths = [path]
+                } else if stackId == "home", path == "/" {
                     // 👉 ALWAYS reset home to a single root VC.
                     newPaths = ["/"]
                 } else if newPaths.isEmpty {

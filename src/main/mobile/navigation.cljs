@@ -110,6 +110,30 @@
   [stack]
   (-> @stack-history (get stack) :history last))
 
+(defn- virtual-stack-path?
+  [path]
+  (and (string? path)
+       (string/starts-with? path "/__stack__/")))
+
+(def ^:private browser-routes
+  #{:home :page :import :export})
+
+(defn- sync-browser-route!
+  [stack route route-match path]
+  (when-not (virtual-stack-path? path)
+    (let [route-name (or (:to route)
+                         (get-in route [:data :name])
+                         (get-in route-match [:data :name]))
+          path-params (or (:path-params route)
+                          (get-in route-match [:parameters :path]))
+          query-params (or (:query-params route)
+                           (get-in route-match [:parameters :query]))]
+      (when (contains? browser-routes route-name)
+        (record-navigation-intent! {:type :replace
+                                    :stack stack})
+        (orig-replace-state route-name path-params query-params)
+        true))))
+
 (defn- remember-route!
   [stack nav-type route path route-match]
   (when stack
@@ -221,19 +245,17 @@
         (let [route-match (or route-match (:route-match (stack-defaults stack)))
               path        (or path (current-path))]
           (route-handler/set-route-match! route-match)
-          (when (and (= current "search")
-                     (= stack primary-stack))
-            (orig-replace-state :home nil nil))
-          (notify-route-change!
-           {:route {:to          (or (get-in route [:data :name])
-                                     (get-in route-match [:data :name]))
-                    :path-params (or (:path-params route)
-                                     (get-in route-match [:parameters :path]))
-                    :query-params (or (:query-params route)
-                                      (get-in route-match [:parameters :query]))}
-            :path  path
-            :stack stack
-            :push  false}))))))
+          (when-not (sync-browser-route! stack route route-match path)
+            (notify-route-change!
+             {:route {:to          (or (get-in route [:data :name])
+                                       (get-in route-match [:data :name]))
+                      :path-params (or (:path-params route)
+                                       (get-in route-match [:parameters :path]))
+                      :query-params (or (:query-params route)
+                                        (get-in route-match [:parameters :query]))}
+              :path  path
+              :stack stack
+              :push  false})))))))
 
 (defn pop-modal!
   []
