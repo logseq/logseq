@@ -33,17 +33,23 @@
 
 (defonce native-top-bar-listener? (atom false))
 (defonce native-top-bar-listener-version (atom nil))
+(defonce *journal-calendar-open? (atom false))
 (def ^:private native-top-bar-listener-current-version :sync-upload-v2)
 
 (defn- open-journal-calendar! []
-  (let [apply-date! (fn [date]
-                      (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
-                        (if-let [journal (db/get-page page-name)]
-                          (route-handler/redirect-to-page! (:block/uuid journal))
-                          (p/let [page (page-handler/<create! page-name {:redirect? false})]
-                            (route-handler/redirect-to-page! (:block/uuid page))))))]
-    (-> (.showDatePicker mobile-util/ui-local)
-        (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))))
+  (when (compare-and-set! *journal-calendar-open? false true)
+    (let [apply-date! (fn [date]
+                        (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
+                          (if-let [journal (db/get-page page-name)]
+                            (route-handler/redirect-to-page! (:block/uuid journal))
+                            (p/let [page (page-handler/<create! page-name {:redirect? false})]
+                              (route-handler/redirect-to-page! (:block/uuid page))))))]
+      (-> (.showDatePicker mobile-util/ui-local)
+          (p/then (fn [^js e]
+                    (when-let [value (some-> e (.-value))]
+                      (apply-date! value))))
+          (p/finally (fn []
+                       (reset! *journal-calendar-open? false)))))))
 
 (defn- open-home-settings-actions! []
   (ui-component/open-popup!
