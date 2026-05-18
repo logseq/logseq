@@ -22,7 +22,7 @@
 - Install `ssl/mobile-dev/logseq-dev-ca.cer` on the iOS device and enable full trust for it in iOS Settings.
 - Working directory: Logseq root directory
 - Run `LOGSEQ_SHADOW_HTTPS=true pnpm mobile-watch` from the logseq project root directory in terminal.
-- Run `LOGSEQ_APP_SERVER_URL=https://your-local-ip-address:3002 pnpm exec cap sync ios` in another terminal to copy web assets from public to *ios/App/App/public*, create *capacitor.config.json* in *ios/App/App*, and update iOS plugins.
+- Run `LOGSEQ_APP_SERVER_URL=https://your-local-ip-address:3001/mobile pnpm exec cap sync ios` in another terminal to copy web assets from public to *ios/App/App/public*, create *capacitor.config.json* in *ios/App/App*, and update iOS plugins.
 - Connect your iOS device to MacBook.
 - Run `pnpm exec cap open ios` to open Logseq project in Xcode, and build the app there.
 
@@ -60,15 +60,8 @@ or, you can run `bb release:ios-app` to do those steps with one command.
 
 ## Set up development environment
 ### Build the development app
-- comment in `server` section in **capacitor.config.ts**, and replace `process.env.LOGSEQ_APP_ASERVER_URL` with your `http://your-local-ip-address:3001` (run `ifconfig` to check).
-    ```typescript
-    server: {
-        url: "process.env.LOGSEQ_APP_ASERVER_URL",
-        cleartext: true
-        } 
-    ```
 - Run `pnpm install && pnpm mobile-watch` from the logseq project root directory in terminal.
-- Run `pnpm exec cap sync android` in another terminal.
+- Run `LOGSEQ_APP_SERVER_URL=https://your-local-ip-address:3001/mobile pnpm exec cap sync android` in another terminal.
 - Run `pnpm exec cap run android` to install app into your device.
 
 or, you can run `bb dev:android-app` to do those steps with one command if you are on macOS.

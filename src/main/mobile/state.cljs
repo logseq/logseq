@@ -10,8 +10,8 @@
 (defn set-tab! [tab]
   (let [prev @*tab]
     ;; When leaving the search tab, clear its stack so reopening starts fresh.
-    ;; The query/results are cleared by native when Search is opened again; doing
-    ;; it here makes the Search UI redraw during the Home tab transition.
+    ;; Native search UI owns query/result clearing on each platform; doing it here
+    ;; makes the Search UI redraw during the Home tab transition on iOS.
     (when (and (= prev "search")
                (not= tab "search"))
       (mobile-nav/reset-stack-history! "search"))

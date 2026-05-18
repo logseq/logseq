@@ -84,6 +84,94 @@ private extension UIApplication {
     }
 }
 
+private struct TabReselectObserver: UIViewControllerRepresentable {
+    let selectedId: () -> String?
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(selectedId: selectedId)
+    }
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        UIViewController()
+    }
+
+    func updateUIViewController(_ viewController: UIViewController, context: Context) {
+        context.coordinator.selectedId = selectedId
+
+        DispatchQueue.main.async {
+            context.coordinator.attach(from: viewController)
+        }
+    }
+
+    final class Coordinator: NSObject, UITabBarControllerDelegate {
+        var selectedId: () -> String?
+
+        private weak var tabBarController: UITabBarController?
+        private weak var previousDelegate: UITabBarControllerDelegate?
+        private var lastSelectedIndex: Int?
+
+        init(selectedId: @escaping () -> String?) {
+            self.selectedId = selectedId
+        }
+
+        deinit {
+            if let tabBarController,
+               tabBarController.delegate === self {
+                tabBarController.delegate = previousDelegate
+            }
+        }
+
+        func attach(from viewController: UIViewController) {
+            guard let tabBarController = findTabBarController(from: viewController) else {
+                return
+            }
+
+            if self.tabBarController === tabBarController,
+               tabBarController.delegate === self {
+                return
+            }
+
+            previousDelegate = tabBarController.delegate
+            self.tabBarController = tabBarController
+            lastSelectedIndex = tabBarController.selectedIndex
+            tabBarController.delegate = self
+        }
+
+        func tabBarController(
+            _ tabBarController: UITabBarController,
+            didSelect viewController: UIViewController
+        ) {
+            let selectedIndex = tabBarController.selectedIndex
+
+            if selectedIndex == lastSelectedIndex,
+               let id = selectedId() {
+                LiquidTabsPlugin.shared?.notifyTabSelected(id: id, reselected: true)
+            }
+
+            lastSelectedIndex = selectedIndex
+            previousDelegate?.tabBarController?(tabBarController, didSelect: viewController)
+        }
+
+        private func findTabBarController(from viewController: UIViewController) -> UITabBarController? {
+            var current: UIViewController? = viewController
+
+            while let viewController = current {
+                if let tabBarController = viewController as? UITabBarController {
+                    return tabBarController
+                }
+
+                current = viewController.parent
+            }
+
+            if let tabBarController = viewController.tabBarController {
+                return tabBarController
+            }
+
+            return nil
+        }
+    }
+}
+
 // MARK: - Root Tabs View (dispatch to 26+ vs 16–25)
 
 struct LiquidTabsRootView: View {
@@ -296,6 +384,12 @@ private struct LiquidTabs26View: View {
                 .overlay {
                     SearchFocusBridge(isActive: selectedTab == .search)
                         .frame(width: 0, height: 0)
+                }
+                .background {
+                    TabReselectObserver(selectedId: {
+                        store.tabId(for: selectedTab)
+                    })
+                    .frame(width: 0, height: 0)
                 }
                 .overlay {
                     if store.pendingWebTabId != nil {
@@ -841,6 +935,12 @@ private struct LiquidTabs16View: View {
                             store.suppressSearchNotifications = true
                             searchPath = NavigationPath()
                         }
+                    }
+                    .background {
+                        TabReselectObserver(selectedId: {
+                            store.selectedId ?? store.firstTab?.id
+                        })
+                        .frame(width: 0, height: 0)
                     }
                 }
                 .onAppear {
