@@ -31,6 +31,8 @@
             [rum.core :as rum]))
 
 (defonce native-top-bar-listener? (atom false))
+(defonce native-top-bar-listener-version (atom nil))
+(def ^:private native-top-bar-listener-current-version :sync-upload-v2)
 
 (defn- open-journal-calendar! []
   (let [apply-date! (fn [date]
@@ -125,7 +127,7 @@
 (defn- register-native-top-bar-events! [*configure-top-bar-f]
   (when (and (mobile-util/native-platform?)
              mobile-util/native-top-bar
-             (not @native-top-bar-listener?))
+             (not= native-top-bar-listener-current-version @native-top-bar-listener-version))
     (.addListener ^js mobile-util/native-top-bar "buttonTapped"
                   (fn [^js e]
                     (case (.-id e)
@@ -139,11 +141,11 @@
                       "add-graph" (state/pub-event! [:graph/new-db-graph])
                       "home-setting" (open-home-settings-actions!)
                       "graph-setting" (open-graph-settings-actions!)
-                      "upload-local-graph" (when-let [graph (current-local-uploadable-graph)]
-                                             (repo/upload-local-graph-with-confirm! graph))
-                      "sync" (shui/popup-show! nil
-                                               (rtc-indicator/details)
-                                               {})
+                      "sync" (if-let [graph (current-local-uploadable-graph)]
+                               (repo/upload-local-graph-with-confirm! graph)
+                               (shui/popup-show! nil
+                                                 (rtc-indicator/details)
+                                                 {}))
                       "favorite" (when-let [id (state/get-current-page)]
                                    (when (common-util/uuid-string? id)
                                      (when-let [block (db/entity [:block/uuid (uuid id)])]
@@ -161,7 +163,8 @@
                                            (open-page-settings block))))
 
                       nil)))
-    (reset! native-top-bar-listener? true)))
+    (reset! native-top-bar-listener? true)
+    (reset! native-top-bar-listener-version native-top-bar-listener-current-version)))
 
 (defn- configure-native-top-bar!
   [{:keys [tab title route-name route-view sync-color favorited? show-sync? show-local-upload?]}]
@@ -188,9 +191,7 @@
                           (cond-> []
                             (nil? route-view)
                             (conj {:id "home-setting" :systemIcon "ellipsis"})
-                            (and show-local-upload? (not page?))
-                            (conj {:id "upload-local-graph" :systemIcon "icloud.and.arrow.up"})
-                            (and show-sync? (not page?))
+                            (and (or show-local-upload? show-sync?) (not page?))
                             (conj {:id "sync" :systemIcon "circle.fill" :color sync-color
                                    :size "small"}))
 
