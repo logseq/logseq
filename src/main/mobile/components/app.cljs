@@ -254,7 +254,8 @@
        (route-view route-match)
        ;; NOTE: `case` caused IllegalArgumentException: Duplicate case test constant
        (cond
-         (= tab "graphs") (graphs/page)
+         (= tab "graphs") (when-not (mobile-util/native-ios?)
+                            (graphs/page))
          (= tab "go to") (favorites/favorites)
          (= tab "search") nil
          (= tab "capture") (component-with-restoring (capture))))]))
