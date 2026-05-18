@@ -355,8 +355,10 @@
 
 (defn rtc-group?
   []
-  (boolean (or (some? (config/get-custom-sync-server-url))
-               (seq (set/intersection (state/user-groups) #{"team" "rtc_2025_07_10"})))))
+  (boolean (or
+            config/dev?
+            (some? (config/get-custom-sync-server-url))
+            (seq (set/intersection (state/user-groups) #{"team" "rtc_2025_07_10"})))))
 
 (defn alpha-user?
   []
