@@ -11,8 +11,29 @@
            (= comments-tag-ident
               (if (keyword? tag)
                 tag
-                (:db/ident tag))))
+              (:db/ident tag))))
          (:block/tags block))))
+
+(defn comment-block?
+  [block]
+  (comments-area? (:block/parent block)))
+
+(defn protected-comment-block?
+  [block]
+  (or (comments-area? block)
+      (comment-block? block)))
+
+(defn move-allowed?
+  ([blocks target-block]
+   (move-allowed? blocks target-block {}))
+  ([blocks target-block opts]
+   (boolean
+    (and (seq blocks)
+         target-block
+         (not-any? protected-comment-block? blocks)
+         (not (comment-block? target-block))
+         (or (:sibling? opts)
+             (not (comments-area? target-block)))))))
 
 (defn- author-initials
   [author]

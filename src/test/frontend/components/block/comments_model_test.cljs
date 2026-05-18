@@ -13,6 +13,27 @@
     (is (false? (comments-model/comments-area?
                  {:block/tags [{:db/ident :logseq.class/Task}]})))))
 
+(deftest comment-move-guards
+  (let [comments-area {:block/tags [{:db/ident :logseq.class/Comments}]}
+        comment-block {:block/title "comment"
+                       :block/parent comments-area}
+        ordinary-block {:block/title "ordinary"}
+        ordinary-target {:block/title "target"}]
+    (testing "comment area and its children are protected comment blocks"
+      (is (true? (comments-model/protected-comment-block? comments-area)))
+      (is (true? (comments-model/protected-comment-block? comment-block)))
+      (is (false? (comments-model/protected-comment-block? ordinary-block))))
+    (testing "comment blocks cannot be moved"
+      (is (false? (comments-model/move-allowed? [comments-area] ordinary-target)))
+      (is (false? (comments-model/move-allowed? [comment-block] ordinary-target))))
+    (testing "ordinary blocks cannot be moved into comments"
+      (is (false? (comments-model/move-allowed? [ordinary-block] comments-area)))
+      (is (false? (comments-model/move-allowed? [ordinary-block] comment-block))))
+    (testing "ordinary blocks can still move next to the comments area"
+      (is (true? (comments-model/move-allowed? [ordinary-block] comments-area {:sibling? true}))))
+    (testing "ordinary moves outside comments stay allowed"
+      (is (true? (comments-model/move-allowed? [ordinary-block] ordinary-target))))))
+
 (deftest comment-row-derivation
   (testing "uses the created-by ref as the comment author"
     (is (= {:author "tienson"

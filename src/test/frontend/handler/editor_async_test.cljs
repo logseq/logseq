@@ -235,3 +235,79 @@
                    :replace-empty-target? false}
                   (:opts @inserted))
                "Page-target asset insertion must allow :bottom? to take effect"))))))
+
+(deftest-async db-based-save-assets-uses-last-edit-block-title-without-editor-state
+  (let [last-edit-block {:block/uuid (random-uuid)
+                         :block/title "existing content"}
+        inserted (atom nil)]
+    (-> (p/with-redefs [assets-handler/ensure-assets-dir! (fn [_repo]
+                                                            (p/resolved ["/repo" "assets"]))
+                        assets-handler/get-file-checksum (constantly "checksum")
+                        db-async/<get-asset-with-checksum (fn [& _] (p/resolved nil))
+                        db-model/get-today-journal-title (constantly "today")
+                        db-model/get-journal-page (constantly {:block/uuid (random-uuid)
+                                                               :block/title "today"})
+                        state/get-edit-block (constantly nil)
+                        state/get-edit-content (constantly "")
+                        outliner-op/insert-blocks! (fn [blocks target opts]
+                                                     (reset! inserted {:blocks blocks
+                                                                       :target target
+                                                                       :opts opts})
+                                                     [:insert-blocks [blocks target opts]])
+                        db/entity (fn [[_lookup uuid]]
+                                    {:block/uuid uuid})]
+          (editor/db-based-save-assets! "repo"
+                                        [{:src "image.png"
+                                          :title "image"}]
+                                        :last-edit-block last-edit-block))
+        (p/then
+         (fn [_]
+           (is (= last-edit-block (:target @inserted)))
+           (is (not= (:block/uuid last-edit-block)
+                     (:block/uuid (first (:blocks @inserted))))
+               "Non-empty last edit block must not be replaced by the pasted asset")
+           (is (= {:keep-uuid? true
+                   :bottom? true
+                   :sibling? true
+                   :replace-empty-target? true}
+                  (:opts @inserted))))))))
+
+(deftest-async db-based-save-assets-appends-to-explicit-target-block
+  (let [target-block {:block/uuid (random-uuid)
+                      :block/title "comments"}
+        temp-edit-block {:block/uuid (random-uuid)
+                         :block/title ""}
+        inserted (atom nil)]
+    (-> (p/with-redefs [assets-handler/ensure-assets-dir! (fn [_repo]
+                                                            (p/resolved ["/repo" "assets"]))
+                        assets-handler/get-file-checksum (constantly "checksum")
+                        db-async/<get-asset-with-checksum (fn [& _] (p/resolved nil))
+                        db-model/get-today-journal-title (constantly "today")
+                        db-model/get-journal-page (constantly {:block/uuid (random-uuid)
+                                                               :block/title "today"})
+                        state/get-edit-block (constantly temp-edit-block)
+                        state/get-edit-content (constantly "")
+                        outliner-op/insert-blocks! (fn [blocks target opts]
+                                                     (reset! inserted {:blocks blocks
+                                                                       :target target
+                                                                       :opts opts})
+                                                     [:insert-blocks [blocks target opts]])
+                        db/entity (fn [[_lookup uuid]]
+                                    {:block/uuid uuid})]
+          (editor/db-based-save-assets! "repo"
+                                        [{:src "image.png"
+                                          :title "image"}]
+                                        :target-block target-block
+                                        :last-edit-block temp-edit-block))
+        (p/then
+         (fn [_]
+           (is (= target-block (:target @inserted)))
+           (is (not= (:block/uuid temp-edit-block)
+                     (:block/uuid (first (:blocks @inserted))))
+               "Explicit target insertion must not replace a temporary editor block")
+           (is (= {:keep-uuid? true
+                   :bottom? true
+                   :sibling? false
+                   :replace-empty-target? false}
+                  (:opts @inserted))
+               "Explicit target asset insertion should append as children, not replace the temp edit block"))))))

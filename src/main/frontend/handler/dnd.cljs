@@ -1,6 +1,7 @@
 (ns frontend.handler.dnd
   "Provides fns for drag and drop"
   (:require [frontend.db :as db]
+            [frontend.components.block.comments-model :as comments-model]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.op :as outliner-op]
@@ -37,22 +38,23 @@
 
       (every? map? (conj blocks' target-block))
       (let [blocks' (block-handler/get-top-level-blocks blocks')]
-        (ui-outliner-tx/transact!
-         {:outliner-op :move-blocks}
-         (editor-handler/save-current-block!)
-         (if top?
-           (let [first-child?
-                 (= (:block/uuid (:block/parent target-block))
-                    (:block/uuid (ldb/get-left-sibling target-block)))]
-             (if first-child?
-               (when-let [parent (:block/parent target-block)]
-                 (outliner-op/move-blocks! blocks' parent {:sibling? false}))
-               (if-let [before-node (ldb/get-left-sibling target-block)]
-                 (outliner-op/move-blocks! blocks' before-node {:sibling? true})
+        (when (comments-model/move-allowed? blocks' target-block {:sibling? (not nested?)})
+          (ui-outliner-tx/transact!
+           {:outliner-op :move-blocks}
+           (editor-handler/save-current-block!)
+           (if top?
+             (let [first-child?
+                   (= (:block/uuid (:block/parent target-block))
+                      (:block/uuid (ldb/get-left-sibling target-block)))]
+               (if first-child?
                  (when-let [parent (:block/parent target-block)]
-                   (outliner-op/move-blocks! blocks' parent {:sibling? false})))))
-           (outliner-op/move-blocks! blocks' target-block
-                                     {:sibling? (not nested?)}))))
+                   (outliner-op/move-blocks! blocks' parent {:sibling? false}))
+                 (if-let [before-node (ldb/get-left-sibling target-block)]
+                   (outliner-op/move-blocks! blocks' before-node {:sibling? true})
+                   (when-let [parent (:block/parent target-block)]
+                     (outliner-op/move-blocks! blocks' parent {:sibling? false})))))
+             (outliner-op/move-blocks! blocks' target-block
+                                       {:sibling? (not nested?)})))))
 
       :else
       nil)))

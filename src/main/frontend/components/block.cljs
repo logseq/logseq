@@ -2107,7 +2107,8 @@
                             (:logseq.property/icon block)
                             link?
                             (some :logseq.property/icon (:block/tags block))
-                            (contains? #{"pdf"} (:logseq.property.asset/type block))))]
+                            (contains? #{"pdf"} (:logseq.property.asset/type block))))
+        movable? (not (comments-model/protected-comment-block? block))]
     [:div.block-control-wrap.flex.flex-row.items-center.h-6
      {:class (util/classnames [{:is-order-list order-list?
                                 :is-with-icon with-icon?
@@ -2151,7 +2152,7 @@
                                                (not collapsed?))
                                       " hide-inner-bullet")
                                     (when order-list? " as-order-list typed-list"))}
-                        (not (util/mobile?))
+                        (and movable? (not (util/mobile?)))
                         (assoc
                          :draggable true
                          :on-drag-start (fn [event]
@@ -3777,6 +3778,18 @@
   (some-> (gdom/getElement input-id)
           (gobj/get "value")))
 
+(defn- comment-paste-files!
+  [target-block e]
+  (let [clipboard-data (gobj/get e "clipboardData")
+        files (some-> clipboard-data (gobj/get "files"))]
+    (when (and target-block (seq files))
+      (util/stop e)
+      (editor-handler/db-based-save-assets!
+       (state/get-current-repo)
+       (js->clj files)
+       :target-block target-block)
+      true)))
+
 (defn- activate-comment-editor!
   ([input-id block content container-id]
    (activate-comment-editor! input-id block content container-id true nil))
@@ -3808,6 +3821,7 @@
         input-id (str "edit-block-" (:block/uuid editor-block))
         editor-box (state/get-component :editor/box)
         container-id (:container-id config)
+        asset-target-block (or comments-block (:block/parent comment-block))
         update-draft! (fn []
                         (let [value (or (comment-editor-value input-id) "")]
                           (activate-comment-editor! input-id
@@ -3863,8 +3877,9 @@
                  :on-change (fn [_e] (update-draft!))
                  :on-key-up (fn [_e] (update-draft!))
                  :on-paste (fn [e]
-                             ((paste-handler/editor-on-paste! input-id) e)
-                             (js/setTimeout update-draft! 0))
+                             (when-not (comment-paste-files! asset-target-block e)
+                               ((paste-handler/editor-on-paste! input-id) e)
+                               (js/setTimeout update-draft! 0)))
                  :on-key-down (fn [e]
                                 (cond
                                   (comments-model/comment-submit-shortcut? e (state/get-editor-action))
@@ -4199,6 +4214,7 @@
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
         comments-area? (comments-model/comments-area? block)
+        protected-comment-block? (comments-model/protected-comment-block? block)
         page-icon (when (:page-title? config)
                     (let [icon' (get block :logseq.property/icon)]
                       (when-let [icon (and (ldb/page? block)
@@ -4300,7 +4316,7 @@
         :on-touch-cancel (fn [e]
                            (block-handler/on-touch-cancel e))}
 
-       (and (util/capacitor?) (not (ldb/page? block)))
+       (and (util/capacitor?) (not (ldb/page? block)) (not protected-comment-block?))
        (assoc
          :draggable true
          :on-drag-start

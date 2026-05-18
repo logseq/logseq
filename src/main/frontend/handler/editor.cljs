@@ -5,6 +5,7 @@
             [clojure.walk :as w]
             [dommy.core :as dom]
             [frontend.commands :as commands]
+            [frontend.components.block.comments-model :as comments-model]
             [frontend.components.block.selection :as block-selection]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -839,7 +840,7 @@
 
 (defn move-blocks!
   [blocks target opts]
-  (when (seq blocks)
+  (when (comments-model/move-allowed? blocks target opts)
     (if (or (some ldb/recycled? blocks)
             (ldb/recycled? target))
       (notification/show! (t :storage.recycle/readonly) :warning)
@@ -1242,6 +1243,8 @@
 
 (defonce *action-bar-timeout (atom nil))
 
+(declare navigable-sibling-block)
+
 (defn popup-exists?
   [id]
   (some->> (shui-popup/get-popups)
@@ -1277,21 +1280,27 @@
 
     ;; when selection and one block selected, select next block
     (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
-    (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
-          element (f (first (state/get-selection-blocks))
-                     {:up-down? true
-                      :exclude-property? true})]
+    (let [f (if (= :up direction)
+              util/get-prev-block-non-collapsed
+              (fn [block _opts] (util/get-next-block-non-collapsed-skip block)))
+          element (navigable-sibling-block (first (state/get-selection-blocks))
+                                           f
+                                           {:up-down? true
+                                            :exclude-property? true})]
       (when element
         (util/scroll-to-block element)
         (state/conj-selection-block! element direction)))
 
     ;; if same direction, keep conj on same direction
     (and (state/selection?) (= direction (state/get-selection-direction)))
-    (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
+    (let [f (if (= :up direction)
+              util/get-prev-block-non-collapsed
+              (fn [block _opts] (util/get-next-block-non-collapsed-skip block)))
           first-last (if (= :up direction) first last)
-          element (f (first-last (state/get-selection-blocks))
-                     {:up-down? true
-                      :exclude-property? true})]
+          element (navigable-sibling-block (first-last (state/get-selection-blocks))
+                                           f
+                                           {:up-down? true
+                                            :exclude-property? true})]
       (when element
         (util/scroll-to-block element)
         (state/conj-selection-block! element direction)))
@@ -1300,9 +1309,10 @@
     (state/selection?)
     (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
           last-first (if (= :up direction) last first)
-          element (f (last-first (state/get-selection-blocks))
-                     {:up-down? true
-                      :exclude-property? true})]
+          element (navigable-sibling-block (last-first (state/get-selection-blocks))
+                                           f
+                                           {:up-down? true
+                                            :exclude-property? true})]
       (when element
         (util/scroll-to-block element)
         (state/drop-last-selection-block!))))
@@ -1445,17 +1455,22 @@
   "Save incoming(pasted) assets to assets directory.
 
    Returns: asset entities"
-  [repo files & {:keys [pdf-area? last-edit-block save-to-page]}]
+  [repo files & {:keys [pdf-area? last-edit-block save-to-page target-block]}]
   (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
           today-page-name (db-model/get-today-journal-title)
           today-page-e (db-model/get-journal-page today-page-name)
           today-page (if (nil? today-page-e)
                        (state/pub-event! [:page/create today-page-name])
                        today-page-e)
-          edit-block (or (state/get-edit-block) last-edit-block)
-          empty-target? (if (state/get-edit-block)
-                          (string/blank? (state/get-edit-content))
-                          (string/blank? (:block/title last-edit-block)))
+          state-edit-block (when-not target-block
+                             (state/get-edit-block))
+          edit-block (when-not target-block
+                       (or state-edit-block last-edit-block))
+          empty-target? (cond
+                          target-block false
+                          state-edit-block (string/blank? (state/get-edit-content))
+                          last-edit-block (string/blank? (:block/title last-edit-block))
+                          :else false)
           blocks* (p/all
                    (for [^js [idx file] (medley/indexed files)]
                      (new-asset-block repo file
@@ -1464,8 +1479,11 @@
                                        :block/uuid (when (and (zero? idx) empty-target?)
                                                      (:block/uuid edit-block))})))
           blocks (remove nil? blocks*)
-          insert-to-current-block-page? (boolean (and (:block/uuid edit-block) (not pdf-area?)))
+          insert-to-current-block-page? (boolean (and (not target-block) (:block/uuid edit-block) (not pdf-area?)))
           target (cond
+                   target-block
+                   target-block
+
                    insert-to-current-block-page?
                    edit-block
                    save-to-page
@@ -1482,7 +1500,7 @@
         {:outliner-op :insert-blocks}
         (outliner-op/insert-blocks! blocks target {:keep-uuid? true
                                                    :bottom? true
-                                                   :sibling? (= edit-block target)
+                                                   :sibling? (boolean (and edit-block (= edit-block target)))
                                                    :replace-empty-target? insert-to-current-block-page?}))
        (p/let [blocks (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)]
          (when-let [block (some (fn [block] (when (= (:block/uuid block) (:block/uuid edit-block)) block)) blocks)]
@@ -1699,6 +1717,7 @@
 (defn- block-eligible-for-indent-outdent?
   [block indent? root-block]
   (and block
+       (not (comments-model/protected-comment-block? block))
        (not (focused-root-block? block root-block))
        (or indent?
            (not (outdent-past-focused-root? block root-block)))))
@@ -1706,6 +1725,7 @@
 (defn- block-eligible-for-move-up-down?
   [block root-block]
   (and block
+       (not (comments-model/protected-comment-block? block))
        (not (focused-root-block? block root-block))))
 
 (defn move-up-down
@@ -2260,8 +2280,10 @@
         f (case direction
             :up util/get-prev-block-non-collapsed
             :down util/get-next-block-non-collapsed)
-        sibling-block (f selected {:up-down? true
-                                   :exclude-property? true})]
+        sibling-block (navigable-sibling-block selected
+                                               f
+                                               {:up-down? true
+                                                :exclude-property? true})]
     (when (and sibling-block
                (or (dom/attr sibling-block "blockid") (dom/attr sibling-block "parentblockid")))
       (util/scroll-to-block sibling-block)
@@ -2274,6 +2296,43 @@
 (defn- property-value-node?
   [node]
   (some-> node (dom/has-class? "property-value-container")))
+
+(defn- node-attr
+  [node attr]
+  (or (some-> node (gobj/get attr))
+      (when (and node (gobj/get node "getAttribute"))
+        (dom/attr node attr))))
+
+(defn- block-node-entity
+  [node]
+  (when-let [block-id (node-attr node "blockid")]
+    (db/entity [:block/uuid (uuid block-id)])))
+
+(defn- comment-item-node?
+  [node]
+  (boolean
+   (when-let [block (block-node-entity node)]
+     (comments-model/comment-block? block))))
+
+(defn- comments-area-node?
+  [node]
+  (= "true" (node-attr node "data-comments-area")))
+
+(defn- navigable-sibling-block
+  [block sibling-f opts]
+  (loop [sibling-block (sibling-f block opts)]
+    (if (comment-item-node? sibling-block)
+      (recur (sibling-f sibling-block opts))
+      sibling-block)))
+
+(defn- focus-comments-area-input!
+  [comments-area-node]
+  (when-let [input (or (some-> ^js comments-area-node (.querySelector ".ls-comment-box-editor textarea"))
+                       (some-> ^js comments-area-node (.querySelector ".ls-comment-box-editor [contenteditable='true']")))]
+    (state/clear-edit!)
+    (util/scroll-to-block comments-area-node)
+    (.focus input)
+    true))
 
 (defn- focus-trigger
   [_current-block sibling-block]
@@ -2295,16 +2354,14 @@
                 :up util/get-prev-block-non-collapsed
                 :down util/get-next-block-non-collapsed)
             current-block (util/rec-get-node input-or-active-element "ls-block")
-            sibling-block (f current-block {:up-down? true})
+            sibling-block (navigable-sibling-block current-block f {:up-down? true})
             {:block/keys [uuid title]} (state/get-edit-block)
             sibling-block (or (when (property-value-node? sibling-block)
                                 (first (dom/by-class sibling-block "ls-block")))
                               sibling-block)
             property-value-container? (property-value-node? sibling-block)]
         (if sibling-block
-          (let [sibling-block-id (dom/attr sibling-block "blockid")
-                container-id (some-> (dom/attr sibling-block "containerid") js/parseInt)
-                value (state/get-edit-content)]
+          (let [value (state/get-edit-content)]
             (p/do!
              (when (and
                     uuid
@@ -2317,18 +2374,23 @@
                     (util/rec-get-node current-block "ls-page-title"))
                (.click sibling-block)
 
+               (comments-area-node? sibling-block)
+               (focus-comments-area-input! sibling-block)
+
                property-value-container?
                (focus-trigger current-block sibling-block)
 
                :else
-               (let [new-uuid (cljs.core/uuid sibling-block-id)
-                     block (db/entity [:block/uuid new-uuid])]
-                 (edit-block! block
-                              (or (:pos move-opts)
-                                  (when input [direction (util/get-line-pos (.-value input) (util/get-selection-start input))])
-                                  0)
-                              {:container-id container-id
-                               :direction direction})))))
+               (when-let [sibling-block-id (node-attr sibling-block "blockid")]
+                 (let [container-id (some-> (node-attr sibling-block "containerid") js/parseInt)
+                       new-uuid (cljs.core/uuid sibling-block-id)
+                       block (db/entity [:block/uuid new-uuid])]
+                   (edit-block! block
+                                (or (:pos move-opts)
+                                    (when input [direction (util/get-line-pos (.-value input) (util/get-selection-start input))])
+                                    0)
+                                {:container-id container-id
+                                 :direction direction}))))))
           (case direction
             :up (cursor/move-cursor-to input 0)
             :down (cursor/move-cursor-to-end input)))))))
@@ -2368,10 +2430,10 @@
         repo (state/get-current-repo)
         editing-block (state/get-editor-block-container)
         f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
-        sibling-block (f editing-block)
+        sibling-block (navigable-sibling-block editing-block f {})
         sibling-block (or (when (and sibling-block (property-value-node? sibling-block))
                             (if (and up? editing-block (gdom/contains sibling-block editing-block))
-                              (f sibling-block)
+                              (navigable-sibling-block sibling-block f {})
                               (first (dom/by-class sibling-block "ls-block"))))
                           sibling-block)]
     (when sibling-block
@@ -2379,10 +2441,13 @@
             value (state/get-edit-content)]
         (when (and value (not= content (string/trim value)))
           (save-block! repo uuid value)))
-      (let [sibling-block-id (dom/attr sibling-block "blockid")]
+      (let [sibling-block-id (node-attr sibling-block "blockid")]
         (cond
+          (comments-area-node? sibling-block)
+          (focus-comments-area-input! sibling-block)
+
           sibling-block-id
-          (let [container-id (some-> (dom/attr sibling-block "containerid") js/parseInt)
+          (let [container-id (some-> (node-attr sibling-block "containerid") js/parseInt)
                 block (db/entity repo [:block/uuid (cljs.core/uuid sibling-block-id)])]
             (edit-block! block pos {:container-id container-id}))
 

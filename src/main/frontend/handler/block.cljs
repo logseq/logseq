@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [dommy.core :as dom]
+            [frontend.components.block.comments-model :as comments-model]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -270,16 +271,18 @@
     (when (seq blocks)
       (let [blocks-container (when-let [first-selected-node (first (state/get-selection-blocks))]
                                (util/rec-get-blocks-container first-selected-node))
-            blocks' (get-top-level-blocks blocks)]
+            blocks' (remove comments-model/protected-comment-block?
+                            (get-top-level-blocks blocks))]
         (p/do!
-         (ui-outliner-tx/transact!
-          {:outliner-op :move-blocks
-           :source-outliner-op :indent-outdent}
-          (when save-current-block (save-current-block))
-          (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks')
-                                              indent?
-                                              {:parent-original (get-first-block-original)
-                                               :logical-outdenting? (state/logical-outdenting?)}))
+         (when (seq blocks')
+           (ui-outliner-tx/transact!
+            {:outliner-op :move-blocks
+             :source-outliner-op :indent-outdent}
+            (when save-current-block (save-current-block))
+            (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks')
+                                                indent?
+                                                {:parent-original (get-first-block-original)
+                                                 :logical-outdenting? (state/logical-outdenting?)})))
          (when blocks-container
            ;; Update selection nodes to be the new ones
            (reset! *timeout

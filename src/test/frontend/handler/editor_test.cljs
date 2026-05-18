@@ -522,7 +522,11 @@
         root-child-block {:db/id 2
                           :block/parent {:db/id 1}}
         non-root-block {:db/id 3
-                        :block/parent {:db/id 9}}]
+                        :block/parent {:db/id 9}}
+        comments-area {:db/id 4
+                       :block/tags [{:db/ident :logseq.class/Comments}]}
+        comment-block {:db/id 5
+                       :block/parent comments-area}]
     (testing "Root block cannot be indented or outdented when focused"
       (is (false? (#'editor/block-eligible-for-indent-outdent? root-block true focused-root-block)))
       (is (false? (#'editor/block-eligible-for-indent-outdent? root-block false focused-root-block))))
@@ -534,4 +538,50 @@
       (is (true? (#'editor/block-eligible-for-indent-outdent? non-root-block false focused-root-block))))
     (testing "Root block cannot move up/down when focused"
       (is (false? (#'editor/block-eligible-for-move-up-down? root-block focused-root-block)))
-      (is (true? (#'editor/block-eligible-for-move-up-down? non-root-block focused-root-block))))))
+      (is (true? (#'editor/block-eligible-for-move-up-down? non-root-block focused-root-block))))
+    (testing "Comment area and comment blocks cannot be indented, outdented, or moved up/down"
+      (is (false? (#'editor/block-eligible-for-indent-outdent? comments-area true focused-root-block)))
+      (is (false? (#'editor/block-eligible-for-indent-outdent? comment-block true focused-root-block)))
+      (is (false? (#'editor/block-eligible-for-indent-outdent? comments-area false focused-root-block)))
+      (is (false? (#'editor/block-eligible-for-indent-outdent? comment-block false focused-root-block)))
+      (is (false? (#'editor/block-eligible-for-move-up-down? comments-area focused-root-block)))
+      (is (false? (#'editor/block-eligible-for-move-up-down? comment-block focused-root-block))))))
+
+(deftest comments-navigation-targets-test
+  (let [comments-node (js-obj "id" "comments"
+                              "blockid" "6a073572-fefe-44c5-8b43-267ccc715077"
+                              "data-comments-area" "true")
+        editor-node #js {}
+        focused? (atom false)]
+    (set! (.-focus editor-node) #(reset! focused? true))
+    (set! (.-querySelector comments-node)
+          (fn [selector]
+            (when (= selector ".ls-comment-box-editor textarea")
+              editor-node)))
+    (with-redefs [state/clear-edit! (constantly nil)
+                  util/scroll-to-block (constantly nil)]
+      (is (true? (#'editor/comments-area-node? comments-node)))
+      (is (true? (#'editor/focus-comments-area-input! comments-node)))
+      (is (true? @focused?)))))
+
+(deftest navigable-sibling-block-skips-comment-items-test
+  (let [current-node (js-obj "id" "current")
+        comment-node (js-obj "id" "comment"
+                             "blockid" "6a073572-fefe-44c5-8b43-267ccc715077")
+        target-node (js-obj "id" "target"
+                            "blockid" "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154")
+        comments-area {:block/tags [{:db/ident :logseq.class/Comments}]}
+        comment-uuid #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
+        target-uuid #uuid "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154"
+        sibling-f (fn [node _opts]
+                    (cond
+                      (= node current-node) comment-node
+                      (= node comment-node) target-node))]
+    (with-redefs [db/entity (fn [& args]
+                              (case (second (first args))
+                                #uuid "6a073572-fefe-44c5-8b43-267ccc715077" {:block/uuid comment-uuid
+                                                                              :block/parent comments-area}
+                                #uuid "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154" {:block/uuid target-uuid}
+                                nil))]
+      (is (true? (#'editor/comment-item-node? comment-node)))
+      (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {}))))))
