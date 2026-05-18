@@ -54,6 +54,11 @@
   (when (and (mobile-util/native-ios?) liquid-tabs (.-updateNativeGraphs liquid-tabs))
     (.updateNativeGraphs liquid-tabs (clj->js payload))))
 
+(defn mark-tab-content-ready!
+  [id]
+  (when (and (mobile-util/native-ios?) liquid-tabs (.-markTabContentReady liquid-tabs))
+    (.markTabContentReady liquid-tabs #js {:id id})))
+
 (defn add-tab-selected-listener!
   "Listen to native tab selection.
 
