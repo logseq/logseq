@@ -12,6 +12,7 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defn- block-ref->entity
@@ -51,17 +52,29 @@
   [block]
   [:block/uuid (:block/uuid block)])
 
+(defn- comments-area-title
+  [block]
+  (if (ldb/page? block)
+    "Comments on this page"
+    "Comments"))
+
+(defn- comments-area-insert-position
+  [block]
+  (if (ldb/page? block)
+    {:start? true}
+    {:end? true}))
+
 (defn ensure-comments-area!
   [block-id]
   (when-let [block (db/entity [:block/uuid block-id])]
     (if-let [comments-area (comments-area-child block)]
       (p/resolved comments-area)
       (editor-handler/api-insert-new-block!
-       "Comments"
-       {:block-uuid block-id
-        :end? true
-        :edit-block? false
-        :other-attrs {:block/tags #{comments-model/comments-tag-ident}}}))))
+       (comments-area-title block)
+       (merge {:block-uuid block-id
+               :edit-block? false
+               :other-attrs {:block/tags #{comments-model/comments-tag-ident}}}
+              (comments-area-insert-position block))))))
 
 (defn- same-comment-targets?
   [comments-area target-uuids]
