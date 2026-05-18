@@ -14,6 +14,7 @@
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.common.developer :as dev-common-handler]
+            [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
@@ -125,12 +126,12 @@
 
      (when (seq comment-targets)
        (shui/dropdown-menu-item
-        {:key "Add comment"
-         :on-click (fn [_e]
-                     (p/let [comments-area (editor-handler/ensure-comments-area-for-selected-blocks!
+         {:key "Add comment"
+          :on-click (fn [_e]
+                     (p/let [comments-area (comments-handler/ensure-comments-area-for-selected-blocks!
                                             comment-targets)]
                        (when comments-area
-                         (editor-handler/reveal-comments-area! comments-area))
+                         (comments-handler/reveal-comments-area! comments-area))
                        (state/hide-custom-context-menu!)
                        (shui/popup-hide!)))}
         (t :block.comments/add-comment)))
@@ -204,11 +205,10 @@
           (ui/dropdown-shortcut "shift+click"))
 
          (shui/dropdown-menu-item
-          {:key "Add comment"
-           :on-click (fn [_e]
-                       (p/let [comments-area (editor-handler/ensure-comments-area! block-id)]
-                         (when-let [uuid (:block/uuid comments-area)]
-                           (editor-handler/expand-block! uuid))))}
+         {:key "Add comment"
+          :on-click (fn [_e]
+                       (p/let [comments-area (comments-handler/ensure-comments-area! block-id)]
+                         (comments-handler/expand-comments-area! comments-area)))}
           (t :block.comments/add-comment))
 
          (shui/dropdown-menu-sub

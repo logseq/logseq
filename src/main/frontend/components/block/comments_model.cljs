@@ -1,5 +1,6 @@
 (ns frontend.components.block.comments-model
   (:require [clojure.string :as string]
+            [frontend.context.i18n :refer [t]]
             [goog.object :as gobj]))
 
 (def comments-tag-ident :logseq.class/Comments)
@@ -121,6 +122,49 @@
          :latest-author (:author latest)
          :latest-created-at (:created-at latest)}))))
 
+(defn- same-local-day?
+  [^js a ^js b]
+  (and (= (.getFullYear a) (.getFullYear b))
+       (= (.getMonth a) (.getMonth b))
+       (= (.getDate a) (.getDate b))))
+
+(defn- yesterday?
+  [^js date ^js now]
+  (let [yesterday (js/Date. (.getFullYear now) (.getMonth now) (dec (.getDate now)))]
+    (same-local-day? date yesterday)))
+
+(defn- comment-time
+  [^js date]
+  (.toLocaleTimeString date
+                       js/undefined
+                       #js {:hour "numeric"
+                            :minute "2-digit"}))
+
+(defn- comment-date
+  [^js date]
+  (.toLocaleDateString date
+                       js/undefined
+                       #js {:year "numeric"
+                            :month "short"
+                            :day "numeric"}))
+
+(defn comment-time-label
+  ([created-at]
+   (comment-time-label created-at (js/Date.)))
+  ([created-at now]
+   (when (number? created-at)
+     (let [date (js/Date. created-at)
+           time (comment-time date)]
+       (cond
+         (same-local-day? date now)
+         time
+
+         (yesterday? date now)
+         (t :block.comments/yesterday-at time)
+
+         :else
+         (t :block.comments/date-at-time (comment-date date) time))))))
+
 (defn comments-render-token
   [blocks]
   (mapv (fn [block]
@@ -140,6 +184,42 @@
 (defn submittable-comment-content
   [draft]
   (not-empty (string/trim (or draft ""))))
+
+(defn comment-draft-storage-key
+  [comments-block]
+  (when-let [comments-uuid (:block/uuid comments-block)]
+    (str "comments-" comments-uuid "-draft")))
+
+(defn- local-storage
+  []
+  (gobj/get js/globalThis "localStorage"))
+
+(defn saved-comment-draft
+  [comments-block]
+  (when-let [key (comment-draft-storage-key comments-block)]
+    (some-> (local-storage)
+            (.getItem key))))
+
+(defn clear-comment-draft!
+  [comments-block]
+  (when-let [key (comment-draft-storage-key comments-block)]
+    (some-> (local-storage)
+            (.removeItem key))))
+
+(defn save-comment-draft!
+  [comments-block draft]
+  (if-not (string/blank? (or draft ""))
+    (when-let [key (comment-draft-storage-key comments-block)]
+      (some-> (local-storage)
+              (.setItem key draft)))
+    (clear-comment-draft! comments-block)))
+
+(defn comments-block-current-page?
+  [comments-block current-page]
+  (boolean
+   (and (:block/uuid comments-block)
+        current-page
+        (= (str (:block/uuid comments-block)) (str current-page)))))
 
 (defn comment-owned-by?
   [block current-user-uuid]

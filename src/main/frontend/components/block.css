@@ -408,6 +408,20 @@
   min-width: 0;
 }
 
+.ls-comment-reply-placeholder {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 34px;
+  padding: 3px 7px;
+  color: var(--ls-secondary-text-color);
+  cursor: text;
+}
+
+.ls-comment-reply-placeholder:focus {
+  outline: 0;
+}
+
 .ls-comment-box-editor .editor-inner {
   width: 100%;
   min-height: 34px;

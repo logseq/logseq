@@ -3,17 +3,24 @@
   (:require [frontend.components.block.comments-model :as comments-model]
             [frontend.db :as db]
             [frontend.context.i18n :refer [t]]
+            [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
             [rum.core :as rum]))
 
+(defn show-comment-action?
+  [outliner? comment-targets]
+  (boolean
+   (and outliner?
+        (seq comment-targets))))
+
 (rum/defc action-bar < rum/reactive
-  [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent]
-      :or {on-cut #(editor-handler/cut-selection-blocks true)}}]
+  [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent outliner?]
+      :or {on-cut #(editor-handler/cut-selection-blocks true)
+           outliner? true}}]
   (when-not (or (state/sub :search/mode)
                 (state/sub :ui/show-property-dialog?))
     (let [selected-blocks (or (seq selected-blocks)
@@ -41,17 +48,12 @@
                                                                             :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
          (ui/tooltip (ui/icon "hash" {:size 13}) (t :property/set-tags)
                      {:trigger-props {:class "flex"}}))
-        (when (seq comment-targets)
+        (when (show-comment-action? outliner? comment-targets)
           (shui/button
            (assoc button-opts
                   :on-pointer-down (fn [e]
                                      (util/stop e)
-                                     (p/let [comments-area (editor-handler/ensure-comments-area-for-selected-blocks!
-                                                            comment-targets)]
-                                       (when comments-area
-                                         (editor-handler/reveal-comments-area! comments-area))
-                                       (state/clear-selection!)
-                                       (state/pub-event! [:editor/hide-action-bar]))))
+                                     (comments-handler/add-comment-to-blocks! comment-targets)))
            (ui/tooltip (ui/icon "message-circle" {:size 13}) (t :block.comments/add-comment)
                        {:trigger-props {:class "flex"}})))
         (shui/button

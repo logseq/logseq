@@ -115,8 +115,10 @@
  :block.comments/comment-area-command "Comments area"
  :block.comments/comment-area-command-desc "Create a comments area for this block."
  :block.comments/count "{1} comments"
+ :block.comments/date-at-time "{1} at {2}"
  :block.comments/label "Comments"
  :block.comments/placeholder "Reply..."
+ :block.comments/yesterday-at "Yesterday at {1}"
 
  :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
  :block.macro/namespace-deprecated "{{namespace}} is deprecated. Use the {1} feature instead."
@@ -268,6 +270,7 @@
 
  :command.command-palette/toggle "Search commands"
 
+ :command.editor/add-comment "Add comment"
  :command.editor/add-property "Add property"
  :command.editor/add-property-deadline "Add task deadline to selected block"
  :command.editor/add-property-icon "Add icon"

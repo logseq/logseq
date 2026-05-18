@@ -7,6 +7,7 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.srs.handler :as srs]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export-handler]
             [frontend.handler.history :as history]
@@ -288,6 +289,10 @@
                                              :selection? true
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-reaction {}]))}
+
+   :editor/add-comment                      {:binding "mod+alt+c"
+                                             :selection? true
+                                             :fn      comments-handler/add-comment-to-current-context!}
 
    :editor/toggle-display-hidden-properties {:binding "p a"
                                              :fn      ui-handler/toggle-show-empty-hidden-properties!}
@@ -627,7 +632,8 @@
           :editor/backward-kill-word
           :editor/copy-embed
           :editor/paste-text-in-one-block-at-point
-          :editor/insert-youtube-timestamp])
+          :editor/insert-youtube-timestamp
+          :editor/add-comment])
         (with-meta {:before m/enable-when-editing-mode!}))
 
     :shortcut.handler/editor-global
@@ -720,6 +726,7 @@
           :editor/add-property-priority
           :editor/add-property-icon
           :editor/add-reaction
+          :editor/add-comment
           :editor/toggle-display-hidden-properties
           :ui/toggle-wide-mode
           :ui/select-theme-color
@@ -854,6 +861,7 @@
      :editor/add-property-priority
      :editor/add-property-icon
      :editor/add-reaction
+     :editor/add-comment
      :editor/toggle-display-hidden-properties]
 
     :shortcut.category/toggle

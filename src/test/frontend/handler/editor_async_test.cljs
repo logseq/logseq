@@ -7,6 +7,7 @@
             [frontend.db.model :as db-model]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
@@ -350,10 +351,10 @@
                         editor/expand-block! (fn [block-uuid]
                                                (swap! expanded conj block-uuid)
                                                (p/resolved nil))]
-          (p/let [area (editor/ensure-comments-area-for-selected-blocks! [first-block
-                                                                          comments-area
-                                                                          comment-block
-                                                                          second-block])]
+          (p/let [area (comments-handler/ensure-comments-area-for-selected-blocks! [first-block
+                                                                                    comments-area
+                                                                                    comment-block
+                                                                                    second-block])]
             (is (= created-comments-area area)
                 "Selected blocks should share one comments area")
             (is (= [{:content "Comments"

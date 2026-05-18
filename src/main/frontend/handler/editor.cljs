@@ -651,104 +651,6 @@
                (when-let [id (:block/uuid new-block)]
                  (db/entity [:block/uuid id]))))))))))
 
-(defn- block-ref->entity
-  [block-ref]
-  (cond
-    (map? block-ref)
-    block-ref
-
-    (uuid? block-ref)
-    (db/entity [:block/uuid block-ref])
-
-    (and (string? block-ref) (util/uuid-string? block-ref))
-    (db/entity [:block/uuid (uuid block-ref)])
-
-    (number? block-ref)
-    (db/entity block-ref)
-
-    :else
-    nil))
-
-(defn- comments-area-child
-  [block]
-  (some (fn [child]
-          (when (comments-model/comments-area? child)
-            child))
-        (db/sort-by-order (:block/_parent block))))
-
-(defn- block-ref-uuid
-  [block-ref]
-  (cond
-    (map? block-ref) (:block/uuid block-ref)
-    (uuid? block-ref) block-ref
-    (and (string? block-ref) (util/uuid-string? block-ref)) (uuid block-ref)
-    :else nil))
-
-(defn- block-lookup-ref
-  [block]
-  [:block/uuid (:block/uuid block)])
-
-(defn ensure-comments-area!
-  [block-id]
-  (when-let [block (db/entity [:block/uuid block-id])]
-    (if-let [comments-area (comments-area-child block)]
-      (p/resolved comments-area)
-      (api-insert-new-block!
-       "Comments"
-       {:block-uuid block-id
-        :end? true
-        :edit-block? false
-        :other-attrs {:block/tags #{comments-model/comments-tag-ident}}}))))
-
-(declare expand-block!)
-
-(defn- same-comment-targets?
-  [comments-area target-uuids]
-  (= target-uuids
-     (->> (comments-model/comment-thread-target-blocks comments-area)
-          (keep block-ref-uuid)
-          set)))
-
-(defn- existing-comments-area-for-targets
-  [blocks]
-  (let [target-uuids (set (keep :block/uuid blocks))]
-    (some (fn [comments-area]
-            (when (same-comment-targets? comments-area target-uuids)
-              comments-area))
-          (comments-model/comment-threads-for-block (first blocks)))))
-
-(defn ensure-comments-area-for-selected-blocks!
-  [block-refs]
-  (let [blocks (->> block-refs
-                    (keep block-ref->entity)
-                    block-handler/get-top-level-blocks
-                    comments-model/comment-target-blocks)]
-    (when-let [last-block (last blocks)]
-      (if-let [comments-area (existing-comments-area-for-targets blocks)]
-        (p/do!
-         (expand-block! (:block/uuid comments-area))
-         comments-area)
-        (p/let [comments-area (api-insert-new-block!
-                               "Comments"
-                               {:block-uuid (:block/uuid last-block)
-                                :sibling? true
-                                :edit-block? false
-                                :other-attrs {:block/tags #{comments-model/comments-tag-ident}
-                                              comments-model/comments-blocks-property (set (map block-lookup-ref blocks))}})]
-          (when comments-area
-            (expand-block! (:block/uuid comments-area)))
-          comments-area)))))
-
-(defn reveal-comments-area!
-  [comments-area]
-  (when-let [uuid (:block/uuid comments-area)]
-    (p/do!
-     (expand-block! uuid)
-     (js/requestAnimationFrame
-      #(some-> (gdom/getElement (str "ls-block-" uuid))
-               (.scrollIntoView #js {:block "nearest"
-                                     :behavior "smooth"}))))))
-
 (defn get-selected-blocks
   []
   (distinct (seq (state/get-selection-blocks))))
@@ -2427,6 +2329,14 @@
   [node]
   (= "true" (node-attr node "data-collapsed")))
 
+(defn- node-contains?
+  [parent child]
+  (boolean
+   (or (and (gobj/get parent "nodeType")
+            (gdom/contains parent child))
+       (when-let [contains-fn (gobj/get parent "contains")]
+         (contains-fn child)))))
+
 (defn- block-node-outside-comments-area
   [comments-node direction]
   (when direction
@@ -2441,10 +2351,36 @@
       (loop [idx (some-> index (+ step))]
         (when (and idx (<= 0 idx) (< idx (count blocks)))
           (let [node (nth blocks idx)]
-            (if (and (gobj/get node "nodeType")
-                     (gdom/contains comments-node node))
+            (if (node-contains? comments-node node)
               (recur (+ idx step))
               node)))))))
+
+(defn- horizontal-direction?
+  [direction]
+  (contains? #{:left :right} direction))
+
+(defn- comment-navigation-node?
+  [node]
+  (boolean
+   (or (comments-area-ancestor-node node)
+       (comment-item-node? node))))
+
+(defn- block-node-outside-comments
+  [node direction]
+  (when (and node (horizontal-direction? direction))
+    (let [blocks (vec (util/get-blocks-noncollapse))
+          index (first (keep-indexed (fn [idx block-node]
+                                       (when (= node block-node) idx))
+                                     blocks))
+          step (case direction
+                 :left -1
+                 :right 1)]
+      (loop [idx index]
+        (when (and idx (<= 0 idx) (< idx (count blocks)))
+          (let [block-node (nth blocks idx)]
+            (if (comment-navigation-node? block-node)
+              (recur (+ idx step))
+              block-node)))))))
 
 (defn- navigable-sibling-block
   [block sibling-f {:keys [up-down? direction] :as opts}]
@@ -2458,10 +2394,14 @@
         (if up-down?
           comments-node
           (or (block-node-outside-comments-area comments-node direction)
+              (block-node-outside-comments sibling-block direction)
               (recur (sibling-f sibling-block opts)))))
 
       (comment-item-node? sibling-block)
-      (recur (sibling-f sibling-block opts))
+      (if up-down?
+        (recur (sibling-f sibling-block opts))
+        (or (block-node-outside-comments sibling-block direction)
+            (recur (sibling-f sibling-block opts))))
 
       :else
       sibling-block)))
@@ -2471,6 +2411,11 @@
   (some-> comments-node
           (.querySelector ".ls-comment-add textarea, .ls-comment-box textarea, .ls-comment-box input, .ls-comment-box [contenteditable='true']")))
 
+(defn- comments-reply-placeholder
+  [comments-node]
+  (some-> comments-node
+          (.querySelector ".ls-comment-reply-placeholder")))
+
 (defn- enter-comments-area-node!
   [comments-node]
   (state/clear-edit!)
@@ -2478,7 +2423,9 @@
     (state/exit-editing-and-set-selected-blocks! [comments-node])
     (if-let [input (comments-reply-input comments-node)]
       (.focus input)
-      (state/exit-editing-and-set-selected-blocks! [comments-node]))))
+      (if-let [placeholder (comments-reply-placeholder comments-node)]
+        (.click placeholder)
+        (state/exit-editing-and-set-selected-blocks! [comments-node])))))
 
 (defn- focus-trigger
   [_current-block sibling-block]

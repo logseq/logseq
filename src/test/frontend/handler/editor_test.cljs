@@ -609,20 +609,63 @@
       (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {:direction :right}))
           "Left/right navigation should skip the whole open comments subtree"))))
 
+(deftest navigable-sibling-block-skips-comment-item-before-block-below-comments-test
+  (let [target-node (js-obj "id" "target")
+        comments-node (js-obj "id" "comments"
+                              "data-comments-area" "true")
+        comment-uuid #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
+        comment-node (js-obj "id" "comment"
+                             "blockid" (str comment-uuid))
+        current-node (js-obj "id" "current")
+        comments-area {:block/tags [{:db/ident :logseq.class/Comments}]}
+        sibling-f (fn [node _opts]
+                    (when (= node current-node)
+                      comment-node))]
+    (with-redefs [db/entity (fn [& args]
+                              (case (second (first args))
+                                #uuid "6a073572-fefe-44c5-8b43-267ccc715077" {:block/uuid comment-uuid
+                                                                              :block/parent comments-area}
+                                nil))
+                  util/get-blocks-noncollapse (fn [] [target-node comments-node comment-node current-node])]
+      (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {:direction :left}))
+          "Left/right navigation from a block below open comments should skip comment items and the comments area"))))
+
 (deftest enter-comments-area-node-focuses-reply-input-test
-  (let [focused? (atom false)
+  (let [comments-id #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
+        focused? (atom false)
         selected (atom nil)
         input (js-obj "focus" #(reset! focused? true))
         comments-node (js-obj "id" "comments"
+                              "blockid" (str comments-id)
                               "data-collapsed" "false"
                               "querySelector" (fn [_selector] input))]
     (with-redefs [state/clear-edit! (fn [])
+                  state/get-current-page (fn [] (str comments-id))
                   state/exit-editing-and-set-selected-blocks! (fn [blocks] (reset! selected blocks))]
       (#'editor/enter-comments-area-node! comments-node)
       (is (true? @focused?)
-          "Open comments should focus the reply input")
+          "Open comments should focus the reply input when the comments block is the current page")
       (is (nil? @selected)
           "Open comments should not select the comments area when the reply input exists"))))
+
+(deftest enter-comments-area-node-activates-inline-reply-placeholder-test
+  (let [selected (atom nil)
+        clicked? (atom false)
+        comments-id #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
+        placeholder (js-obj "click" #(reset! clicked? true))
+        comments-node (js-obj "id" "comments"
+                              "blockid" (str comments-id)
+                              "data-collapsed" "false"
+                              "querySelector" (fn [selector]
+                                                (when (= selector ".ls-comment-reply-placeholder")
+                                                  placeholder)))]
+    (with-redefs [state/clear-edit! (fn [])
+                  state/get-current-page (fn [] "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154")
+                  state/exit-editing-and-set-selected-blocks! (fn [blocks] (reset! selected blocks))]
+      (#'editor/enter-comments-area-node! comments-node)
+      (is (true? @clicked?)
+          "Open inline comments should activate the reply placeholder when entered by arrow navigation")
+      (is (nil? @selected)))))
 
 (deftest enter-comments-area-node-selects-collapsed-comments-test
   (let [selected (atom nil)

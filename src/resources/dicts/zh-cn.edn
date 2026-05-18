@@ -112,8 +112,10 @@
  :block.comments/comment-area-command "评论区域"
  :block.comments/comment-area-command-desc "为此块创建评论区域。"
  :block.comments/count "{1} 条评论"
+ :block.comments/date-at-time "{1} {2}"
  :block.comments/label "评论"
  :block.comments/placeholder "回复..."
+ :block.comments/yesterday-at "昨天 {1}"
 
  :block.macro/embed-deprecated "{{embed}} 已弃用。请改用“/节点嵌入”命令。"
  :block.macro/namespace-deprecated "{{namespace}} 已弃用。请改用 {1} 功能。"
@@ -265,6 +267,7 @@
 
  :command.command-palette/toggle "切换命令面板"
 
+ :command.editor/add-comment "添加评论"
  :command.editor/add-property "添加属性"
  :command.editor/add-property-deadline "添加截止日期属性"
  :command.editor/add-property-icon "添加图标属性"

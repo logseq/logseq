@@ -1,6 +1,7 @@
 (ns frontend.components.block.comments-model-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.components.block.comments-model :as comments-model]))
+            [frontend.components.block.comments-model :as comments-model]
+            [goog.object :as gobj]))
 
 (deftest comments-area-detection
   (testing "detects blocks tagged with the built-in Comments tag"
@@ -114,6 +115,22 @@
   (testing "returns no summary for empty comment areas"
     (is (nil? (comments-model/comments-summary [])))))
 
+(deftest comment-time-label
+  (let [time-label (resolve 'frontend.components.block.comments-model/comment-time-label)
+        now (js/Date. 2026 4 18 9 0)
+        today (.getTime (js/Date. 2026 4 18 17 5))
+        yesterday (.getTime (js/Date. 2026 4 17 17 5))
+        older (.getTime (js/Date. 2026 3 5 17 5))]
+    (is (fn? time-label))
+    (when (fn? time-label)
+      (is (= "5:05 PM" (time-label today now))
+          "Today's comments should display only the time")
+      (is (= "Yesterday at 5:05 PM" (time-label yesterday now))
+          "Yesterday's comments should include the relative day")
+      (is (= "Apr 5, 2026 at 5:05 PM" (time-label older now))
+          "Older comments should include the date and time")
+      (is (nil? (time-label nil now))))))
+
 (deftest comment-submit-content
   (let [submit-content (resolve 'frontend.components.block.comments-model/submittable-comment-content)]
     (testing "keeps comment drafts local until an explicit submit asks for content"
@@ -224,3 +241,52 @@
                 :block/page {:block/uuid page-id}
                 :block/parent comments-block}
                (draft-block comments-block draft-id "draft")))))))
+
+(deftest comment-draft-storage
+  (let [draft-key (resolve 'frontend.components.block.comments-model/comment-draft-storage-key)
+        load-draft (resolve 'frontend.components.block.comments-model/saved-comment-draft)
+        save-draft! (resolve 'frontend.components.block.comments-model/save-comment-draft!)
+        clear-draft! (resolve 'frontend.components.block.comments-model/clear-comment-draft!)
+        comments-id #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
+        comments-block {:block/uuid comments-id}]
+    (is (fn? draft-key))
+    (is (fn? load-draft))
+    (is (fn? save-draft!))
+    (is (fn? clear-draft!))
+    (when (every? fn? [draft-key load-draft save-draft! clear-draft!])
+      (is (= (str "comments-" comments-id "-draft")
+             (draft-key comments-block)))
+      (let [items (atom {})
+            old-storage (gobj/get js/globalThis "localStorage")
+            storage (js-obj
+                     "getItem" (fn [key] (get @items key))
+                     "setItem" (fn [key value] (swap! items assoc key value))
+                     "removeItem" (fn [key] (swap! items dissoc key)))]
+        (try
+          (gobj/set js/globalThis "localStorage" storage)
+          (save-draft! comments-block "  draft body\n")
+          (is (= "  draft body\n" (load-draft comments-block))
+              "Non-blank drafts should be restored exactly")
+          (save-draft! comments-block "  ")
+          (is (nil? (load-draft comments-block))
+              "Blank drafts should not leave stale local storage entries")
+          (save-draft! comments-block "another draft")
+          (clear-draft! comments-block)
+          (is (nil? (load-draft comments-block))
+              "Submitted comments should clear the stored draft")
+          (finally
+            (if old-storage
+              (gobj/set js/globalThis "localStorage" old-storage)
+              (gobj/remove js/globalThis "localStorage"))))))))
+
+(deftest comments-block-current-page
+  (let [current-page? (resolve 'frontend.components.block.comments-model/comments-block-current-page?)
+        comments-id #uuid "6a073572-fefe-44c5-8b43-267ccc715077"]
+    (is (fn? current-page?))
+    (when (fn? current-page?)
+      (is (true? (current-page? {:block/uuid comments-id}
+                                (str comments-id))))
+      (is (false? (current-page? {:block/uuid comments-id}
+                                 "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154")))
+      (is (false? (current-page? {:block/uuid comments-id} nil)))
+      (is (false? (current-page? {} (str comments-id)))))))
