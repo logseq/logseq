@@ -202,6 +202,7 @@
         [repos] (frum/use-atom-in state/state [:me :repos])
         [remotes] (frum/use-atom-in state/state :rtc/graphs)
         [downloading-graph-id] (frum/use-atom-in state/state :rtc/downloading-graph-uuid)
+        [loading-graphs?] (frum/use-atom-in state/state :rtc/loading-graphs?)
         [route-match] (frum/use-atom-in state/state :route-match)
         [_preferred-language] (frum/use-atom-in state/state :preferred-language)
         [tab] (frum/use-atom mobile-state/*tab)
@@ -225,9 +226,10 @@
      (fn []
        (bottom-tabs/update-native-graphs! {:labels labels
                                            :sections sections
-                                           :visible visible?})
+                                           :visible visible?
+                                           :refreshing (boolean loading-graphs?)})
        nil)
-     [labels sections visible?])))
+     [labels sections visible? loading-graphs?])))
 
 (rum/defc native-graphs-bridge
   []

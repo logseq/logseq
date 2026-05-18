@@ -414,6 +414,14 @@ private struct NativeGraphsContent: View {
         }
     }
 
+    private func refreshGraphs() async {
+        LiquidTabsPlugin.shared?.refreshGraphs()
+
+        while store.graphsRefreshing {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+    }
+
     var body: some View {
         List {
             ForEach(store.graphSections) { section in
@@ -428,15 +436,15 @@ private struct NativeGraphsContent: View {
                         .listRowBackground(Color.clear)
                     }
                 } header: {
-                    NativeGraphSectionHeader(
-                        section: section,
-                        refreshLabel: store.graphLabels.refresh
-                    )
+                    NativeGraphSectionHeader(section: section)
                 }
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .refreshable {
+            await refreshGraphs()
+        }
         .background(Color.logseqBackground.ignoresSafeArea())
         .confirmationDialog(
             pendingAction?.action.confirmTitle ?? "",
@@ -561,7 +569,6 @@ private struct NativeGraphActionButton: View {
 
 private struct NativeGraphSectionHeader: View {
     let section: NativeGraphSection
-    let refreshLabel: String
 
     var body: some View {
         HStack {
@@ -569,19 +576,6 @@ private struct NativeGraphSectionHeader: View {
                 .font(.headline)
                 .foregroundColor(.primary)
                 .textCase(nil)
-
-            Spacer()
-
-            if section.refreshable {
-                Button {
-                    LiquidTabsPlugin.shared?.refreshGraphs()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .imageScale(.medium)
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(refreshLabel)
-            }
         }
         .padding(.top, 8)
     }

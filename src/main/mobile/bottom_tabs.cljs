@@ -110,6 +110,14 @@
   (when-let [repo (repo-by-url url)]
     (repo-handler/remove-repo! repo)))
 
+(defn- refresh-remote-graphs!
+  []
+  (state/set-state! :rtc/loading-graphs? true)
+  (-> (rtc-handler/<get-remote-graphs)
+      (p/finally
+       (fn []
+         (state/set-state! :rtc/loading-graphs? false)))))
+
 (defn- delete-remote-graph!
   [url graph-uuid graph-schema-version]
   (state/set-state! :rtc/loading-graphs? true)
@@ -171,7 +179,7 @@
                (boolean (.-graphE2ee data))])))
 
          "refresh"
-         (rtc-handler/<get-remote-graphs)
+         (refresh-remote-graphs!)
 
          "deleteLocal"
          (when-let [url (.-url data)]
