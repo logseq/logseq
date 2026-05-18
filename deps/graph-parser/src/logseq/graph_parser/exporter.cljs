@@ -1571,14 +1571,15 @@
              (not (get @assets asset-link-or-name))
              (string/ends-with? path ".pdf")
              (fn? <get-file-stat))
-    (-> (p/let [^js stat (<get-file-stat path)]
+    (-> (p/let [stat (<get-file-stat path)]
           (swap! assets assoc asset-link-or-name
                  {:asset-id (d/squuid)
                   :type "pdf"
                   ;; avoid using the real checksum since it could be the same with in-graph asset
                   :checksum "0000000000000000000000000000000000000000000000000000000000000000"
                   ;; gracefully create stat-less assets so that references to them are still valid
-                  :size (if stat (.-size stat) 0)
+                  ;; Electron IPC returns a CLJS map, while Node import scripts return fs.Stats.
+                  :size (or (:size stat) (some-> stat .-size) 0)
                   :external-url (or asset-link-or-name path)
                   :external-file-name asset-path}))
         (p/catch (fn [error]
