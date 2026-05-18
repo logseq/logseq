@@ -13,7 +13,7 @@
            (= comments-tag-ident
               (if (keyword? tag)
                 tag
-              (:db/ident tag))))
+                (:db/ident tag))))
          (:block/tags block))))
 
 (defn comment-block?
@@ -112,6 +112,10 @@
 (defn comment-rows
   [blocks]
   (mapv comment-row blocks))
+
+(defn comment-author-visible?
+  [current-user-uuid]
+  (boolean (uuid-string current-user-uuid)))
 
 (defn comments-summary
   [blocks]

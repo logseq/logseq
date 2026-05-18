@@ -263,6 +263,13 @@
                                      last)]
        (get-original-block-by-dom last-block-node)))))
 
+(defn- indent-target-allowed?
+  [block indent?]
+  (or (not indent?)
+      (let [block (db/entity (:db/id block))
+            left (ldb/get-left-sibling block)]
+        (not (comments-model/comments-area? left)))))
+
 (let [*timeout (atom nil)]
   (defn indent-outdent-blocks!
     [blocks indent? save-current-block]
@@ -274,15 +281,16 @@
             blocks' (remove comments-model/protected-comment-block?
                             (get-top-level-blocks blocks))]
         (p/do!
-         (when (seq blocks')
-           (ui-outliner-tx/transact!
-            {:outliner-op :move-blocks
-             :source-outliner-op :indent-outdent}
-            (when save-current-block (save-current-block))
-            (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks')
-                                                indent?
-                                                {:parent-original (get-first-block-original)
-                                                 :logical-outdenting? (state/logical-outdenting?)})))
+         (let [blocks' (filter #(indent-target-allowed? % indent?) blocks')]
+           (when (seq blocks')
+             (ui-outliner-tx/transact!
+              {:outliner-op :move-blocks
+               :source-outliner-op :indent-outdent}
+              (when save-current-block (save-current-block))
+              (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks')
+                                                  indent?
+                                                  {:parent-original (get-first-block-original)
+                                                   :logical-outdenting? (state/logical-outdenting?)}))))
          (when blocks-container
            ;; Update selection nodes to be the new ones
            (reset! *timeout

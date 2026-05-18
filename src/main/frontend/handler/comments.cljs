@@ -3,8 +3,8 @@
   (:require [clojure.string :as string]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.db :as db]
-            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
@@ -166,6 +166,7 @@
                                              :block/tags
                                              comments-model/comments-tag-ident)
     (state/clear-edit!)
+    (reveal-comments-area! block {:focus-editor? true})
     block))
 
 (defn add-comment-to-blocks!
@@ -173,7 +174,7 @@
   (when-let [comment-targets (seq (comments-model/comment-target-blocks blocks))]
     (p/let [comments-area (ensure-comments-area-for-selected-blocks! comment-targets)]
       (when comments-area
-        (reveal-comments-area! comments-area))
+        (reveal-comments-area! comments-area {:focus-editor? true}))
       (state/clear-selection!)
       (state/pub-event! [:editor/hide-action-bar]))))
 
@@ -194,6 +195,14 @@
    {:block-uuid (:block/uuid comments-block)
     :end? true
     :edit-block? false}))
+
+(defn create-sibling-block-after-comments!
+  [comments-block]
+  (editor-handler/api-insert-new-block!
+   ""
+   {:block-uuid (:block/uuid comments-block)
+    :sibling? true
+    :edit-block? true}))
 
 (defn save-comment!
   [comment-block content]

@@ -62,14 +62,14 @@
    (state/set-state! :editor/cursor-range nil)
    (when (number? cursor-position)
      (state/set-editor-last-pos! cursor-position))
-      (when sync-input?
-        (when-let [input (gdom/getElement input-id)]
-          (util/set-change-value input (or content ""))))))
+   (when sync-input?
+     (when-let [input (gdom/getElement input-id)]
+       (util/set-change-value input (or content ""))))))
 
 (defn- comment-box-editor-view
   [{:keys [active? editor-box editor-block input-id config focus-editor? draft
            placeholder container-id update-draft! asset-target-block submit!
-           exit-comment-editor! activate-reply! draft']}]
+           create-sibling-block! exit-comment-editor! activate-reply! draft']}]
   [:div.ls-comment-box-editor
    (if (and active? editor-box)
      (editor-box
@@ -104,7 +104,10 @@
               :on-key-down (fn [e]
                              (cond
                                (comments-model/comment-submit-shortcut? e (state/get-editor-action))
-                               (submit! e)
+                               (if (comments-model/submittable-comment-content
+                                    (or (comment-editor-value input-id) draft))
+                                 (submit! e)
+                                 (create-sibling-block! e))
 
                                (= "Escape" (util/ekey e))
                                (do
@@ -141,6 +144,25 @@
      :on-pointer-down util/stop-propagation
      :on-click submit!}
     (shui/tabler-icon "send" {:size 16}))])
+
+(defn- clear-comment-box-draft!
+  [comments-block input-id set-draft!]
+  (when comments-block
+    (comments-model/clear-comment-draft! comments-block))
+  (state/set-edit-content! input-id "")
+  (set-draft! ""))
+
+(defn- use-comment-box-outside-click!
+  [active? editor-block exit-comment-editor!]
+  (hooks/use-effect!
+   (fn []
+     (when active?
+       (let [on-pointer-down (fn [e]
+                               (when-not (inside-comments-area? (.-target e))
+                                 (exit-comment-editor!)))]
+         (.addEventListener js/document "pointerdown" on-pointer-down true)
+         #(.removeEventListener js/document "pointerdown" on-pointer-down true))))
+   [active? (:block/uuid editor-block)]))
 
 (rum/defc comment-box
   [{:keys [config comments-block comment-block initial-value placeholder on-submit on-cancel refocus-after-submit? focus-on-mount?]
@@ -194,17 +216,21 @@
                                       true
                                       (comments-model/comment-edit-cursor-position draft)))
         content (comments-model/submittable-comment-content draft)
+        create-sibling-block! (fn [e]
+                                (util/stop e)
+                                (when (and comments-block (nil? comment-block))
+                                  (p/let [_ (comments-handler/create-sibling-block-after-comments! comments-block)]
+                                    (clear-comment-box-draft! comments-block input-id set-draft!)
+                                    (set-active! false)
+                                    (set-focus-editor! false))))
         submit! (fn [e]
                   (util/stop e)
                   (let [content (comments-model/submittable-comment-content
                                  (or (comment-editor-value input-id) draft))]
                     (when content
                       (p/let [_ (on-submit content)]
-                        (when comments-block
-                          (comments-model/clear-comment-draft! comments-block))
                         (when refocus-after-submit?
-                          (set-draft! "")
-                          (state/set-edit-content! input-id "")
+                          (clear-comment-box-draft! comments-block input-id set-draft!)
                           (set-active! true)
                           (set-focus-editor! true)
                           (focus-comment-input! input-id))))))]
@@ -212,15 +238,7 @@
      (fn []
        clear-comment-edit!)
      [(:block/uuid editor-block)])
-    (hooks/use-effect!
-     (fn []
-       (when active?
-         (let [on-pointer-down (fn [e]
-                                 (when-not (inside-comments-area? (.-target e))
-                                   (exit-comment-editor!)))]
-           (.addEventListener js/document "pointerdown" on-pointer-down true)
-           #(.removeEventListener js/document "pointerdown" on-pointer-down true))))
-     [active? (:block/uuid editor-block)])
+    (use-comment-box-outside-click! active? editor-block exit-comment-editor!)
     [:div.ls-comment-box
      (comment-box-editor-view
       {:active? active?
@@ -235,6 +253,7 @@
        :update-draft! update-draft!
        :asset-target-block (or comments-block (:block/parent comment-block))
        :submit! submit!
+       :create-sibling-block! create-sibling-block!
        :exit-comment-editor! exit-comment-editor!
        :activate-reply! activate-reply!
        :draft' draft'})
@@ -273,18 +292,22 @@
   [config comment-block *hide-block-refs? *show-query? {:keys [block-content-or-editor block-reactions]}]
   (let [[editing? set-editing!] (hooks/use-state false)
         {:keys [author avatar body created-at]} (comments-model/comment-row comment-block)
+        current-user-uuid (user-handler/user-uuid)
+        show-author? (comments-model/comment-author-visible? current-user-uuid)
         comment-uuid (:block/uuid comment-block)
         edit-input-id (str "edit-block-" comment-uuid)
         parsed-block (comment-display-block comment-block)
         time-label (comments-model/comment-time-label created-at)
         time-title (comment-time-title created-at)
-        actions (set (comments-model/comment-actions comment-block (user-handler/user-uuid)))
+        actions (set (comments-model/comment-actions comment-block current-user-uuid))
         placeholder (t :block.comments/placeholder)]
     [:div.ls-comment-row
-     [:div.ls-comment-avatar avatar]
+     (when show-author?
+       [:div.ls-comment-avatar avatar])
      [:div.ls-comment-main
       [:div.ls-comment-meta
-       [:span.ls-comment-author author]
+       (when show-author?
+         [:span.ls-comment-author author])
        (when time-label
          [:span.ls-comment-time {:title time-title} time-label])]
       (if editing?

@@ -280,7 +280,6 @@
 
 .ls-comments-label {
   font-weight: 600;
-  text-transform: lowercase;
   color: var(--ls-primary-text-color);
 }
 
@@ -297,7 +296,7 @@
 .ls-comments-list {
   max-height: 320px;
   overflow: auto;
-  padding: 10px 8px 4px;
+  padding: 4px 8px;
 }
 
 .ls-comment-row {

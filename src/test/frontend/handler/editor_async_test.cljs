@@ -208,6 +208,25 @@
             (state/set-state! :editor/pending-new-block nil)
             (set! (.-document js/globalThis) previous-document))))))
 
+(deftest-async indent-block-does-not-move-into-comments-area
+  (load-test-files
+   [{:page {:block/title "Comments indent"}
+     :blocks [{:block/title "ordinary"}
+              {:block/title "Comments"}
+              {:block/title "target"}]}])
+  (let [comments-area (test-helper/find-block-by-content "Comments")
+        target (test-helper/find-block-by-content "target")
+        original-parent-id (:db/id (:block/parent target))]
+    (db/transact! test-helper/test-db
+                  [[:db/add (:db/id comments-area) :block/tags comments-model/comments-tag-ident]])
+    (p/let [_ (block-handler/indent-outdent-blocks! [target] true nil)
+            target' (db/entity [:block/uuid (:block/uuid target)])
+            comments-area' (db/entity [:block/uuid (:block/uuid comments-area)])]
+      (is (= original-parent-id (:db/id (:block/parent target')))
+          "Indenting a block after #Comments should leave it at the same parent")
+      (is (not= (:db/id comments-area') (:db/id (:block/parent target')))
+          "The target block must not become a child of the comments area"))))
+
 (deftest-async db-based-save-assets-appends-to-today-page-without-editor
   (let [today-page {:block/uuid (random-uuid)
                     :block/title "today"}
@@ -408,13 +427,41 @@
             (is (= [created-comments-area-uuid] @expanded)
                 "The single-block comments area should be expanded inline"))))))
 
+(deftest-async add-comment-to-blocks-opens-comment-box
+  (let [block {:block/uuid (random-uuid)
+               :db/id 1
+               :block/title "target"
+               :block/page {:db/id 10}}
+        comments-area {:block/uuid (random-uuid)
+                       :block/title "Comments"
+                       :block/tags #{comments-model/comments-tag-ident}}
+        revealed (atom nil)
+        cleared-selection? (atom false)
+        events (atom [])]
+    (-> (p/with-redefs [comments-handler/ensure-comments-area-for-selected-blocks! (fn [blocks]
+                                                                                     (is (= [block] blocks))
+                                                                                     (p/resolved comments-area))
+                        comments-handler/reveal-comments-area! (fn [area opts]
+                                                                 (reset! revealed [area opts]))
+                        state/clear-selection! #(reset! cleared-selection? true)
+                        state/pub-event! #(swap! events conj %)]
+          (comments-handler/add-comment-to-blocks! [block])
+          (p/resolved nil))
+        (p/then (fn [_]
+                  (is (= [comments-area {:focus-editor? true}]
+                         @revealed)
+                      "Adding a comment should open the reply editor")
+                  (is @cleared-selection?)
+                  (is (= [[:editor/hide-action-bar]] @events)))))))
+
 (deftest-async add-comment-to-empty-edit-block
   (let [block {:block/uuid (random-uuid)
                :db/id 1
                :block/title ""}
         saved? (atom false)
         cleared? (atom false)
-        properties (atom [])]
+        properties (atom [])
+        revealed (atom nil)]
     (-> (p/with-redefs [state/editing? (constantly true)
                         state/get-edit-block (constantly block)
                         state/get-edit-content (constantly "")
@@ -422,6 +469,8 @@
                         db-property-handler/set-block-property! (fn [db-id property value]
                                                                   (swap! properties conj [db-id property value]))
                         state/clear-edit! #(reset! cleared? true)
+                        comments-handler/reveal-comments-area! (fn [area opts]
+                                                                 (reset! revealed [area opts]))
                         editor/api-insert-new-block! (fn [& _]
                                                        (is false "Empty /Add comment should not insert a child comments block"))]
           (comments-handler/add-comment-to-current-context!)
@@ -431,4 +480,28 @@
                   (is @cleared?)
                   (is (= [[1 :block/tags comments-model/comments-tag-ident]]
                          @properties)
-                      "Empty /Add comment should turn the current block into a comments area"))))))
+                      "Empty /Add comment should turn the current block into a comments area")
+                  (is (= [block {:focus-editor? true}]
+                         @revealed)
+                      "Empty /Add comment should open the reply editor"))))))
+
+(deftest-async empty-comment-submit-creates-sibling-block-after-comments
+  (let [comments-area {:block/uuid (random-uuid)
+                       :block/title "Comments"
+                       :block/tags #{comments-model/comments-tag-ident}}
+        inserted (atom nil)]
+    (-> (p/with-redefs [editor/api-insert-new-block! (fn [content opts]
+                                                       (reset! inserted {:content content
+                                                                         :opts opts})
+                                                       (p/resolved {:block/uuid (random-uuid)}))]
+          (let [create-sibling (resolve 'frontend.handler.comments/create-sibling-block-after-comments!)]
+            (is (fn? create-sibling))
+            (when (fn? create-sibling)
+              (create-sibling comments-area))))
+        (p/then (fn [_]
+                  (is (= {:content ""
+                          :opts {:block-uuid (:block/uuid comments-area)
+                                 :sibling? true
+                                 :edit-block? true}}
+                         @inserted)
+                      "Empty Enter in the reply box should create an editable sibling after #Comments"))))))

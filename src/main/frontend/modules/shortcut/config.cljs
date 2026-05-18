@@ -290,7 +290,7 @@
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-reaction {}]))}
 
-   :editor/add-comment                      {:binding "mod+alt+c"
+   :editor/add-comment                      {:binding "ctrl+space"
                                              :selection? true
                                              :fn      comments-handler/add-comment-to-current-context!}
 

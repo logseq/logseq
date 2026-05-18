@@ -1,6 +1,7 @@
 (ns frontend.components.block.comments-model-test
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.components.block.comments-model :as comments-model]
+            [frontend.context.i18n :refer [t]]
             [goog.object :as gobj]))
 
 (deftest comments-area-detection
@@ -99,6 +100,20 @@
                            :block/created-at 10
                            :block/updated-at 20}))))))
 
+(deftest comment-author-visibility
+  (let [visible? (resolve 'frontend.components.block.comments-model/comment-author-visible?)]
+    (is (fn? visible?))
+
+    (testing "hides comment avatar and username when there is no logged-in user"
+      (when (fn? visible?)
+        (is (false? (visible? nil)))
+        (is (false? (visible? "")))))
+
+    (testing "shows comment avatar and username when a user is logged in"
+      (when (fn? visible?)
+        (is (true? (visible? #uuid "6a073572-fefe-44c5-8b43-267ccc715077")))
+        (is (true? (visible? "6a073572-fefe-44c5-8b43-267ccc715077")))))))
+
 (deftest comments-summary
   (testing "summarizes count and latest author by timestamp"
     (is (= {:count 2
@@ -114,6 +129,16 @@
 
   (testing "returns no summary for empty comment areas"
     (is (nil? (comments-model/comments-summary [])))))
+
+(deftest comment-count-labels
+  (testing "uses singular English labels for one comment"
+    (is (= "1 comment" (t :block.comments/count 1)))
+    (is (= "1 comment · latest from tienson"
+           (t :block.comments/collapsed-summary 1 "tienson"))))
+
+  (testing "uses plural English labels for other counts"
+    (is (= "0 comments" (t :block.comments/count 0)))
+    (is (= "2 comments" (t :block.comments/count 2)))))
 
 (deftest comment-time-label
   (let [time-label (resolve 'frontend.components.block.comments-model/comment-time-label)

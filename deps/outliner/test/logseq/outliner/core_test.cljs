@@ -53,7 +53,8 @@
       (is (nil? child')))))
 
 (deftest delete-blocks-removes-range-comments-when-all-targets-are-deleted
-  (let [comments-uuid (random-uuid)
+  (let [now (js/Date.now)
+        comments-uuid (random-uuid)
         comment-uuid (random-uuid)
         conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -70,7 +71,9 @@
                         :block/title "Comments"
                         :block/page (:db/id page)
                         :block/parent (:db/id page)
-                        :block/order "z"
+                        :block/order "a3"
+                        :block/created-at now
+                        :block/updated-at now
                         :block/tags #{:logseq.class/Comments}
                         :logseq.property.comments/blocks #{(:db/id target-1)
                                                            (:db/id target-2)}}
@@ -78,13 +81,16 @@
                         :block/title "comment"
                         :block/page (:db/id page)
                         :block/parent -1
-                        :block/order "a"}])
+                        :block/order "a0"
+                        :block/created-at now
+                        :block/updated-at now}])
     (outliner-core/delete-blocks! conn [target-1 target-2] {})
     (is (nil? (d/entity @conn [:block/uuid comments-uuid])))
     (is (nil? (d/entity @conn [:block/uuid comment-uuid])))))
 
 (deftest delete-blocks-keeps-range-comments-when-some-targets-remain
-  (let [comments-uuid (random-uuid)
+  (let [now (js/Date.now)
+        comments-uuid (random-uuid)
         comment-uuid (random-uuid)
         conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -101,7 +107,9 @@
                         :block/title "Comments"
                         :block/page (:db/id page)
                         :block/parent (:db/id page)
-                        :block/order "z"
+                        :block/order "a3"
+                        :block/created-at now
+                        :block/updated-at now
                         :block/tags #{:logseq.class/Comments}
                         :logseq.property.comments/blocks #{(:db/id target-1)
                                                            (:db/id target-2)}}
@@ -109,7 +117,9 @@
                         :block/title "comment"
                         :block/page (:db/id page)
                         :block/parent -1
-                        :block/order "a"}])
+                        :block/order "a0"
+                        :block/created-at now
+                        :block/updated-at now}])
     (outliner-core/delete-blocks! conn [target-1] {})
     (is (some? (d/entity @conn [:block/uuid comments-uuid])))
     (is (some? (d/entity @conn [:block/uuid comment-uuid])))

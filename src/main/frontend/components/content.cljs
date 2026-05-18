@@ -205,10 +205,10 @@
           (ui/dropdown-shortcut "shift+click"))
 
          (shui/dropdown-menu-item
-         {:key "Add comment"
-          :on-click (fn [_e]
+          {:key "Add comment"
+           :on-click (fn [_e]
                        (p/let [comments-area (comments-handler/ensure-comments-area! block-id)]
-                         (comments-handler/expand-comments-area! comments-area)))}
+                         (comments-handler/reveal-comments-area! comments-area {:focus-editor? true})))}
           (t :block.comments/add-comment))
 
          (shui/dropdown-menu-sub
