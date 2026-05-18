@@ -78,6 +78,8 @@ final class LiquidTabsStore: ObservableObject {
     @Published var graphSections: [NativeGraphSection] = []
     @Published var graphLabels = NativeGraphLabels()
     @Published var nativeGraphsVisible = true
+    @Published var pendingWebTabId: String?
+    private var pendingWebTabRequestId = 0
 
     // Helper to get a stable selection if JS forgets
     func effectiveSelectedId() -> String? {
@@ -107,4 +109,28 @@ final class LiquidTabsStore: ObservableObject {
         }
     }
 
+    func waitForWebTab(_ id: String) {
+        DispatchQueue.main.async {
+            self.pendingWebTabRequestId += 1
+            let requestId = self.pendingWebTabRequestId
+            self.pendingWebTabId = id
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                guard self.pendingWebTabRequestId == requestId,
+                      self.pendingWebTabId == id else {
+                    return
+                }
+
+                self.pendingWebTabId = nil
+            }
+        }
+    }
+
+    func markWebTabReady(_ id: String) {
+        DispatchQueue.main.async {
+            guard self.pendingWebTabId == id else { return }
+            self.pendingWebTabRequestId += 1
+            self.pendingWebTabId = nil
+        }
+    }
 }

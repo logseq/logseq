@@ -183,7 +183,25 @@ private struct LiquidTabs26View: View {
         isSearchFocused = true
     }
 
+    private func webBackedTabId(for selection: LiquidTabsTabSelection) -> String? {
+        guard let id = store.tabId(for: selection),
+              id != "graphs",
+              id != "search" else {
+            return nil
+        }
+
+        return id
+    }
+
+    private func waitForWebBackedTab(_ selection: LiquidTabsTabSelection) {
+        if let id = webBackedTabId(for: selection) {
+            store.waitForWebTab(id)
+        }
+    }
+
     private func prepareForSelectionChange(to selection: LiquidTabsTabSelection) {
+        waitForWebBackedTab(selection)
+
         switch selection {
         case .search:
             store.suppressSearchNotifications = true
@@ -278,6 +296,12 @@ private struct LiquidTabs26View: View {
                 .overlay {
                     SearchFocusBridge(isActive: selectedTab == .search)
                         .frame(width: 0, height: 0)
+                }
+                .overlay {
+                    if store.pendingWebTabId != nil {
+                        Color.logseqBackground
+                            .ignoresSafeArea()
+                    }
                 }
 
             }
