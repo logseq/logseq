@@ -341,8 +341,11 @@
                                              (state/pub-event! [:graph/switch url])
 
                                              (and rtc-graph? remote?)
-                                             (state/pub-event!
-                                              [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion graph-e2ee?])
+                                             (do
+                                               (state/pub-event!
+                                                [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion graph-e2ee?])
+                                               (when (util/mobile?)
+                                                 false))
 
                                              :else
                                              (state/pub-event! [:graph/pull-down-remote-graph graph])))))}})))
