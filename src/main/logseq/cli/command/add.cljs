@@ -155,6 +155,19 @@
               block)))
         blocks))
 
+(defn- normalize-block-content-keys
+  [blocks]
+  (mapv (fn normalize-block-content-key [block]
+          (let [content (:block/content block)
+                block (cond-> (dissoc block :block/content)
+                        (and (contains? block :block/content)
+                             (not (contains? block :block/title)))
+                        (assoc :block/title content))]
+            (if (seq (:block/children block))
+              (update block :block/children normalize-block-content-keys)
+              block)))
+        blocks))
+
 (defn- normalize-created-ids
   [ids]
   (->> ids
@@ -1151,15 +1164,16 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               target-block-uuid (resolve-add-target cfg action)
-              ref-values (collect-page-refs (:blocks action))
+              action-blocks (normalize-block-content-keys (:blocks action))
+              ref-values (collect-page-refs action-blocks)
               {:keys [uuid-refs page-refs id-refs]} (partition-ref-values ref-values)
               _ (ensure-block-refs-exist! cfg (:repo action) uuid-refs)
               page-refs' (or (resolve-page-ref-entities cfg (:repo action) page-refs) [])
               id-refs' (or (resolve-id-ref-entities cfg (:repo action) id-refs) [])
               refs (into page-refs' id-refs')
               blocks (if (seq refs)
-                       (normalize-block-title-refs (:blocks action) refs)
-                       (:blocks action))
+                       (normalize-block-title-refs action-blocks refs)
+                       action-blocks)
               blocks-for-insert (flatten-block-tree blocks)
               status (:status action)
               tags (if (contains? action :resolved-tags)
