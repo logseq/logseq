@@ -121,14 +121,11 @@ private struct LiquidTabs26View: View {
 
     private let maxMainTabs = 6
 
-    // Proxy binding to intercept re-taps
     private var tabSelectionProxy: Binding<LiquidTabsTabSelection> {
         Binding(
             get: { selectedTab },
             set: { newValue in
-                if newValue == selectedTab {
-                    handleRetap(on: newValue)
-                } else {
+                if newValue != selectedTab {
                     selectedTab = newValue
                 }
             }
@@ -140,18 +137,6 @@ private struct LiquidTabs26View: View {
             get: { store.searchText },
             set: { store.searchText = $0 }
         )
-    }
-
-    private func handleRetap(on selection: LiquidTabsTabSelection) {
-        print("User re-tapped tab: \(selection)")
-        if case .search = selection {
-            searchPath = NavigationPath()
-        }
-        navController.popToRootViewController(animated: true)
-
-        if let id = store.tabId(for: selection) {
-            LiquidTabsPlugin.shared?.notifyTabSelected(id: id, reselected: true)
-        }
     }
 
     private func initialSelection() -> LiquidTabsTabSelection {
@@ -333,7 +318,6 @@ private struct SearchTabHost26: View {
                   .ignoresSafeArea()
 
                 SearchResultsContent(
-                    navController: navController,
                     store: store
                 )
             }
@@ -392,14 +376,7 @@ private struct LiquidTabs16View: View {
                         set: { newValue in
                             guard let id = newValue else { return }
 
-                            // Re-tap: pop to root
-                            if id == store.selectedId {
-                                if id == "search" {
-                                    searchPath = NavigationPath()
-                                }
-                                navController.popToRootViewController(animated: true)
-                                LiquidTabsPlugin.shared?.notifyTabSelected(id: id, reselected: true)
-                            } else {
+                            if id != store.selectedId {
                                 if store.selectedId == "search" {
                                     searchPath = NavigationPath()
                                 }
@@ -484,7 +461,6 @@ private struct SearchTab16Host: View {
                   .ignoresSafeArea()
 
                 SearchResultsContent(
-                    navController: navController,
                     store: store
                 )
 
@@ -525,12 +501,13 @@ private struct SearchTab16Host: View {
 }
 
 private struct SearchResultsContent: View {
-    let navController: UINavigationController
     @ObservedObject var store: LiquidTabsStore
 
     var body: some View {
         List(store.searchResults) { result in
-            NavigationLink(value: result) {
+            Button {
+                LiquidTabsPlugin.shared?.openResult(id: result.id)
+            } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     if let subtitle = result.subtitle,
                        !subtitle.isEmpty {
@@ -544,19 +521,14 @@ private struct SearchResultsContent: View {
                       .foregroundColor(.primary.opacity(0.9))
                 }
                 .padding(.vertical, 4)
-                .contentShape(Rectangle())   // improves tap area
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             .listRowBackground(Color.clear)
         }
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.immediately)
         .navigationTitle("Search")
-        .navigationDestination(for: NativeSearchResult.self) { result in
-            NativeNavHost(navController: navController)
-                .ignoresSafeArea()
-                .onAppear {
-                    LiquidTabsPlugin.shared?.openResult(id: result.id)
-                }
-        }
     }
 }

@@ -110,7 +110,8 @@
       (add-tab-selected-listener!
        (fn [tab reselected?]
          (cond
-           reselected?
+           (and reselected?
+                (= @*current-tab tab))
            (do
              (when (mobile-util/native-platform?)
                (mobile-nav/pop-to-root! tab))
