@@ -2740,33 +2740,57 @@
                     ;;   source file (sometimes a PDF or DJVU for scanned
                     ;;   documents). `:thumb-url` is always a server-
                     ;;   rendered JPG. We upscale the thumb URL's
-                    ;;   `/NNNpx-` segment to a high-res value so the
+                    ;;   `NNNpx-` segment to a high-res value so the
                     ;;   lightbox loads a large JPG render rather than a
-                    ;;   PDF that PhotoSwipe can't display.
+                    ;;   PDF that PhotoSwipe can't display. PDF and DJVU
+                    ;;   thumbs use `/pageN-NNNpx-` so we match the size
+                    ;;   token without anchoring to the slash.
+                    ;;   Wikimedia's PdfHandler caps PDF/DJVU thumbs at
+                    ;;   1280px wide; requesting 1600 returns HTTP 400.
+                    ;;   Clamp the target accordingly when we detect the
+                    ;;   `/pageN-` prefix.
                     ;; - For local blob URLs the regex doesn't match and
                     ;;   `(or url thumb-url)` flows through unchanged.
                     ;; Then PhotoSwipe needs real dimensions (passing 0/0
                     ;; stretches the image without a backdrop). Always
                     ;; probe via `new Image()` after upscaling so the
-                    ;; declared dims match the actual image we serve.
+                    ;; declared dims match the actual image we serve. If
+                    ;; the upscaled URL fails — some Wikimedia files
+                    ;; don't have every size cached — fall back to the
+                    ;; original thumb URL, which we know loaded in the
+                    ;; hover preview. Lose resolution to gain a viewable
+                    ;; image, rather than showing the "cannot be loaded"
+                    ;; placeholder.
                     (let [base-thumb thumb-url
+                          pdf-thumb? (and base-thumb
+                                          (re-find #"/page\d+-\d+px-" base-thumb))
+                          target-px (if pdf-thumb? "1280px-" "1600px-")
                           upscaled (when (and base-thumb
-                                              (re-find #"/\d+px-" base-thumb))
+                                              (re-find #"\d+px-" base-thumb))
                                      (string/replace base-thumb
-                                                     #"/\d+px-"
-                                                     "/1600px-"))
+                                                     #"\d+px-"
+                                                     target-px))
                           src (or upscaled url thumb-url)
-                          open! (fn [w h]
+                          open! (fn [s w h]
                                   (lightbox/preview-images!
-                                   [{:src src :w w :h h}]))]
+                                   [{:src s :w w :h h}]))]
                       (let [^js probe (js/Image.)]
                         (set! (.-onload probe)
-                              (fn [_] (open! (.-naturalWidth probe)
+                              (fn [_] (open! src
+                                             (.-naturalWidth probe)
                                              (.-naturalHeight probe))))
                         (set! (.-onerror probe)
-                              ;; Safe default if the URL fails — 4:3
-                              ;; landscape keeps the layout sane.
-                              (fn [_] (open! 1600 1200)))
+                              (fn [_]
+                                (if (and base-thumb (not= base-thumb src))
+                                  (let [^js retry (js/Image.)]
+                                    (set! (.-onload retry)
+                                          (fn [_] (open! base-thumb
+                                                         (.-naturalWidth retry)
+                                                         (.-naturalHeight retry))))
+                                    (set! (.-onerror retry)
+                                          (fn [_] (open! src 1600 1200)))
+                                    (set! (.-src retry) base-thumb))
+                                  (open! src 1600 1200))))
                         (set! (.-src probe) src))))}
        (shui/tabler-icon "arrows-maximize" {:size 16})]]
      [:div.content-wrapper
