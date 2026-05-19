@@ -16,8 +16,8 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
-            [frontend.fs :as fs]
             [frontend.extensions.lightbox :as lightbox]
+            [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.icon-color :as icon-color]
@@ -3356,9 +3356,10 @@
                    (reset! (::asset-picker-open? state) false)
 
                    state)}
-  [state {:keys [on-chosen on-back on-delete del-btn? current-icon avatar-context page-title
+  [state {:keys [on-chosen on-back on-delete del-btn? delete-mode current-icon avatar-context page-title
                  *color preview-target-db-id preview-target-db-ids preview-inheritor-db-ids property]
-          :or {property :logseq.property/icon}}]
+          :or {property :logseq.property/icon
+               delete-mode (if del-btn? :remove :hidden)}}]
   (let [*search-q (::search-q state)
         *loading? (::loading? state)
         *loaded-assets (::loaded-assets state)
@@ -3879,16 +3880,47 @@
                                            (dissoc-icon-preview-field! preview-base-target :color)))
                         :button-attrs {:data-topbar-stop "color"}
                         :popup-id :asset-picker-color))
-        (when del-btn?
-          (shui/button {:variant :outline :size :sm
-                        :data-action "del"
-                        :data-topbar-stop "trash"
-                        :on-click (fn []
-                                    (reset-picker-transient-state!
-                                     {:*pending-icon *pending-icon
-                                      :*upload-status *upload-status})
-                                    (on-delete))}
-                       (shui/tabler-icon "trash" {:size 17})))]]
+        ;; Trash button mirrors the outer icon-picker's three modes (per plan).
+        ;; on-delete is the 1-arg shim from icon-search that forwards the action
+        ;; keyword through the parent on-chosen. Use `cond` (not `case`) — see
+        ;; the outer trash site for the CLJS-case-vs-React-child gotcha.
+        (let [trash-icon (shui/tabler-icon "trash" {:size 17})
+              reset-and-call (fn [action]
+                               (reset-picker-transient-state!
+                                {:*pending-icon *pending-icon
+                                 :*upload-status *upload-status})
+                               (on-delete action))]
+          (cond
+            (= delete-mode :hidden) nil
+
+            (= delete-mode :remove)
+            (shui/button {:variant :outline :size :sm :data-action "del"
+                          :data-topbar-stop "trash"
+                          :title (t :icon/remove-icon)
+                          :aria-label (t :icon/remove-icon)
+                          :on-click #(reset-and-call :remove)}
+                         trash-icon)
+
+            (= delete-mode :two-option)
+            (shui/dropdown-menu
+             (shui/dropdown-menu-trigger
+              {:as-child true}
+              (shui/button {:variant :outline :size :sm :data-action "del"
+                            :data-topbar-stop "trash"
+                            :title (t :icon/remove-icon-options)
+                            :aria-label (t :icon/remove-icon-options)
+                            :aria-haspopup "menu"}
+                           trash-icon))
+             (shui/dropdown-menu-content
+              {:side "bottom" :align "end"}
+              (shui/dropdown-menu-item
+               {:on-select #(reset-and-call :revert)}
+               (shui/tabler-icon "arrow-back-up" {:size 14 :class "mr-2 opacity-80"})
+               (t :icon/revert-to-default))
+              (shui/dropdown-menu-item
+               {:on-select #(reset-and-call :remove-entirely)}
+               (shui/tabler-icon "trash" {:size 14 :class "mr-2 opacity-80"})
+               (t :icon/remove-entirely))))))]]
       (shui/separator {:class "my-0 opacity-50"})
       [:div.asset-picker-search
        [:div.search-input
@@ -6232,7 +6264,8 @@
                        (on-chosen nil icon-item true)
                        (add-used-item! icon-item)))
                    s)}
-  [state {:keys [on-chosen on-back on-delete del-btn? page-title]}]
+  [state {:keys [on-chosen on-back on-delete del-btn? delete-mode page-title]
+          :or {delete-mode (if del-btn? :remove :hidden)}}]
   (let [*text-value (::text-value state)
         *alignment (::alignment state)
         *color (::color state)
@@ -6295,12 +6328,42 @@
                                                         @*alignment (assoc :alignment @*alignment)
                                                         @*mode (assoc :mode @*mode))}]
                                  (on-chosen nil icon-item true))))
-        (when del-btn?
-          (shui/button {:variant :outline :size :sm :data-action "del"
-                        :on-click (fn []
-                                    (reset! *deleted? true)
-                                    (on-delete))}
-                       (shui/tabler-icon "trash" {:size 17})))]]
+        ;; Trash button — mirrors the outer icon-picker's three modes.
+        ;; ::deleted? must be flipped before any branch so the will-unmount
+        ;; doesn't re-commit the about-to-be-deleted text icon.
+        (let [trash-icon (shui/tabler-icon "trash" {:size 17})
+              flag-delete-and-call (fn [action]
+                                     (reset! *deleted? true)
+                                     (on-delete action))]
+          (cond
+            (= delete-mode :hidden) nil
+
+            (= delete-mode :remove)
+            (shui/button {:variant :outline :size :sm :data-action "del"
+                          :title (t :icon/remove-icon)
+                          :aria-label (t :icon/remove-icon)
+                          :on-click #(flag-delete-and-call :remove)}
+                         trash-icon)
+
+            (= delete-mode :two-option)
+            (shui/dropdown-menu
+             (shui/dropdown-menu-trigger
+              {:as-child true}
+              (shui/button {:variant :outline :size :sm :data-action "del"
+                            :title (t :icon/remove-icon-options)
+                            :aria-label (t :icon/remove-icon-options)
+                            :aria-haspopup "menu"}
+                           trash-icon))
+             (shui/dropdown-menu-content
+              {:side "bottom" :align "end"}
+              (shui/dropdown-menu-item
+               {:on-select #(flag-delete-and-call :revert)}
+               (shui/tabler-icon "arrow-back-up" {:size 14 :class "mr-2 opacity-80"})
+               (t :icon/revert-to-default))
+              (shui/dropdown-menu-item
+               {:on-select #(flag-delete-and-call :remove-entirely)}
+               (shui/tabler-icon "trash" {:size 14 :class "mr-2 opacity-80"})
+               (t :icon/remove-entirely))))))]]
       (shui/separator {:class "my-0 opacity-50"})]
 
      ;; Body
@@ -6837,12 +6900,15 @@
                                   (when-not keep-popup?
                                     (reset! *view :icon-picker)))
                      :on-back #(reset! *view :icon-picker)
-                     :on-delete (fn []
+                     ;; Now 1-arg — the sub-picker's own dropdown supplies the
+                     ;; action keyword (:revert | :remove | :remove-entirely).
+                     ;; Fall back to :remove if called without an action (defensive).
+                     :on-delete (fn [& [action]]
                                   (reset-picker-transient-state!
                                    {:*asset-picker-initial-mode *asset-picker-initial-mode})
-                                  (on-chosen nil nil
-                                             (if (= delete-mode :two-option) :revert :remove)))
+                                  (on-chosen nil nil (or action :remove)))
                      :del-btn? del-btn?
+                     :delete-mode delete-mode
                      :current-icon normalized-icon-value
                      :avatar-context (when (= :avatar (:type normalized-icon-value))
                                        normalized-icon-value)
@@ -6874,12 +6940,12 @@
       ;; Level 2: Text Picker view
       (text-picker {:on-chosen (:on-chosen opts)
                     :on-back #(reset! *view :icon-picker)
-                    :on-delete (fn []
+                    :on-delete (fn [& [action]]
                                  (reset-picker-transient-state!
                                   {:*asset-picker-initial-mode *asset-picker-initial-mode})
-                                 (on-chosen nil nil
-                                            (if (= delete-mode :two-option) :revert :remove)))
+                                 (on-chosen nil nil (or action :remove)))
                     :del-btn? del-btn?
+                    :delete-mode delete-mode
                     :current-icon normalized-icon-value
                     :selected-color @*color
                     :page-title page-title})
