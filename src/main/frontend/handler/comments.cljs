@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
@@ -52,6 +53,90 @@
   [block]
   [:block/uuid (:block/uuid block)])
 
+(def ^:private comment-thread-pull-selector
+  '[:db/id
+    :block/uuid
+    :block/title
+    :block/order
+    :block/created-at
+    :block/updated-at
+    :logseq.property/deleted-at
+    {:block/tags [:db/id :db/ident]}
+    {:block/parent [:db/id :block/uuid]}
+    {:logseq.property.comments/blocks [:db/id :block/uuid :block/title :logseq.property/deleted-at]}])
+
+(defn <get-comment-threads-for-block
+  [block-uuid]
+  (when-let [repo (and block-uuid (state/get-current-repo))]
+    (p/let [threads (db-async/<q repo
+                                 {:transact-db? true}
+                                 '[:find [(pull ?comments-area ?selector) ...]
+                                   :in $ ?block-uuid ?selector
+                                   :where
+                                   [?block :block/uuid ?block-uuid]
+                                   [?comments-area :logseq.property.comments/blocks ?block]
+                                   [?comments-area :block/tags :logseq.class/Comments]
+                                   [(missing? $ ?comments-area :logseq.property/deleted-at)]]
+                                 block-uuid
+                                 comment-thread-pull-selector)
+            _ (p/all
+               (mapv (fn [thread]
+                       (db-async/<get-block repo
+                                            (:block/uuid thread)
+                                            {:children? true
+                                             :include-collapsed-children? true
+                                             :skip-refresh? true}))
+                     threads))]
+      (->> threads
+           (keep (fn [thread]
+                   (db/entity [:block/uuid (:block/uuid thread)])))
+           vec))))
+
+(defn <get-comment-thread-block-uuids
+  ([block-uuids]
+   (<get-comment-thread-block-uuids (state/get-current-repo) block-uuids))
+  ([repo block-uuids]
+   (let [block-uuids (->> block-uuids
+                          (keep (fn [block-uuid]
+                                  (cond
+                                    (uuid? block-uuid)
+                                    block-uuid
+
+                                    (and (string? block-uuid) (util/uuid-string? block-uuid))
+                                    (uuid block-uuid)
+
+                                    :else
+                                    nil)))
+                          vec)]
+     (when (and repo (seq block-uuids))
+       (p/let [result (db-async/<q repo
+                                   {:transact-db? false}
+                                   '[:find [?block-uuid ...]
+                                     :in $ [?block-uuid ...]
+                                     :where
+                                     [?block :block/uuid ?block-uuid]
+                                     [?comments-area :logseq.property.comments/blocks ?block]
+                                     [?comments-area :block/tags :logseq.class/Comments]
+                                     [(missing? $ ?comments-area :logseq.property/deleted-at)]]
+                                   block-uuids)]
+         (mapv str result))))))
+
+(defn- single-comment-targets
+  [block]
+  #{(block-lookup-ref block)})
+
+(defn- comments-area-entity
+  [comments-area]
+  (when-let [uuid (:block/uuid comments-area)]
+    (db/entity [:block/uuid uuid])))
+
+(defn- ensure-single-comment-target-property!
+  [comments-area block]
+  (when (and comments-area block (not (seq (get comments-area comments-model/comments-blocks-property))))
+    (db-property-handler/set-block-property! (:db/id comments-area)
+                                             comments-model/comments-blocks-property
+                                             (single-comment-targets block))))
+
 (defn- comments-area-title
   [block]
   (if (ldb/page? block)
@@ -68,12 +153,14 @@
   [block-id]
   (when-let [block (db/entity [:block/uuid block-id])]
     (if-let [comments-area (comments-area-child block)]
-      (p/resolved comments-area)
+      (p/let [_ (ensure-single-comment-target-property! comments-area block)]
+        comments-area)
       (editor-handler/api-insert-new-block!
        (comments-area-title block)
        (merge {:block-uuid block-id
                :edit-block? false
-               :other-attrs {:block/tags #{comments-model/comments-tag-ident}}}
+               :other-attrs {:block/tags #{comments-model/comments-tag-ident}
+                             comments-model/comments-blocks-property (single-comment-targets block)}}
               (comments-area-insert-position block))))))
 
 (defn- same-comment-targets?
@@ -131,7 +218,7 @@
   ([comments-area]
    (reveal-comments-area! comments-area nil))
   ([comments-area {:keys [focus-editor?]}]
-   (when-let [uuid (:block/uuid comments-area)]
+   (when-let [uuid (:block/uuid (comments-area-entity comments-area))]
      (p/do!
       (editor-handler/expand-block! uuid)
       (js/requestAnimationFrame
@@ -147,7 +234,7 @@
 
 (defn expand-comments-area!
   [comments-area]
-  (when-let [uuid (:block/uuid comments-area)]
+  (when-let [uuid (:block/uuid (comments-area-entity comments-area))]
     (editor-handler/expand-block! uuid)))
 
 (defn- selected-block-entities

@@ -110,9 +110,9 @@
  :block.comments/add-comment "添加评论"
  :block.comments/add-comment-command-desc "为此块添加评论。"
  :block.comments/collapsed-summary "{1} 条评论 · 最新来自 {2}"
- :block.comments/count "{1} 条评论"
  :block.comments/date-at-time "{1} {2}"
  :block.comments/label "评论"
+ :block.comments/on-those-blocks "在这些块上"
  :block.comments/placeholder "回复..."
  :block.comments/yesterday-at "昨天 {1}"
 

@@ -439,8 +439,28 @@
                                 :cursor-pos (dec (count "`String#gsub and String#`"))})
     (is (= nil (state/get-editor-action))
         "No page search within backticks"))
+
+  (testing "Comment editors do not open tag autocompletion"
+    (handle-last-input-handler {:value "#"
+                                :cursor-pos 1
+                                :editor-config {:comment-editor? true}})
+    (is (= nil (state/get-editor-action))
+        "No tag search in comment editors"))
   ;; Reset state
   (state/set-editor-action! nil))
+
+(deftest comment-editor-quote-trigger-does-not-convert-draft-block
+  (let [input #js {:id "edit-block-test"
+                   :value ">"}
+        events (atom [])]
+    (with-redefs [cursor/pos (constantly 1)
+                  state/get-editor-args (constantly [nil nil {:comment-editor? true}])
+                  state/set-edit-content! (fn [& _])
+                  state/pub-event! (fn [event] (swap! events conj event))
+                  editor/default-case-for-keyup-handler (fn [& _])]
+      ((editor/keyup-handler nil input) #js {:key ">"} nil)
+      (is (empty? @events)
+          "Comment editor > should stay plain text instead of converting the draft to a quote block"))))
 
 (deftest comment-editor-collapse-expand-shortcuts-do-not-touch-draft-blocks
   (let [draft-uuid #uuid "6a073572-fefe-44c5-8b43-267ccc715077"

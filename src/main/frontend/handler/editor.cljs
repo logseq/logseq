@@ -1911,7 +1911,8 @@
       (state/clear-editor-action!)
 
       ;; Open "Search page or New page" auto-complete
-      (and (= last-input-char commands/hashtag)
+      (and (not (:comment-editor? config))
+           (= last-input-char commands/hashtag)
              ;; Only trigger at beginning of a line, before whitespace or after a reference
            (or (re-find #"(?m)^#" (str (.-value input)))
                (start-of-new-word? input pos)
@@ -3024,13 +3025,14 @@
                  :else
                  (str "Key" (string/upper-case c)))
                false]
-              [key-code
+            [key-code
+             (gobj/get e "key")
+             (if (mobile-util/native-android?)
                (gobj/get e "key")
-               (if (mobile-util/native-android?)
-                 (gobj/get e "key")
-                 (gobj/getValueByKeys e "event_" "code"))
+               (gobj/getValueByKeys e "event_" "code"))
                 ;; #3440
-               (util/goog-event-is-composing? e true)])]
+              (util/goog-event-is-composing? e true)])
+            comment-editor? (:comment-editor? (last (state/get-editor-args)))]
         (cond
           (= value "``````") ; turn this block into a code block
           (do
@@ -3039,7 +3041,7 @@
                                                           :type :code
                                                           :update-current-block? true}]))
 
-          (= value ">") ; turn this block into a quote block
+          (and (not comment-editor?) (= value ">")) ; turn this block into a quote block
           (do
             (state/set-edit-content! (.-id input) "")
             (state/pub-event! [:editor/upsert-type-block {:block (assoc (state/get-edit-block) :block/title "")

@@ -288,6 +288,21 @@
   color: var(--ls-secondary-text-color);
 }
 
+.ls-comments-targets-toggle {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--ls-secondary-text-color);
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.72;
+}
+
+.ls-comments-targets-toggle:hover {
+  color: var(--ls-primary-text-color);
+  opacity: 1;
+}
+
 .ls-comment-time {
   color: var(--ls-secondary-text-color);
   opacity: 0.72;
@@ -299,6 +314,32 @@
   padding: 4px 8px;
 }
 
+.ls-comments-targets {
+  display: grid;
+  gap: 4px;
+  padding: 0 10px 8px;
+}
+
+.ls-comments-target {
+  overflow: hidden;
+  padding: 4px 7px;
+  border-left: 2px solid var(--ls-link-text-color);
+  background: var(--ls-primary-background-color);
+  color: var(--ls-secondary-text-color);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ls-comments-target .page-reference {
+  display: inline;
+}
+
+.ls-inline-comments {
+  margin-top: 4px;
+}
+
 .ls-comment-row {
   position: relative;
   display: flex;
@@ -308,6 +349,7 @@
 }
 
 .ls-comment-avatar {
+  @apply mt-1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -315,10 +357,7 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--lx-gray-05, var(--rx-gray-05));
-  color: var(--ls-primary-text-color);
   font-size: 10px;
-  font-weight: 600;
 }
 
 .ls-comment-main {

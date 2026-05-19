@@ -421,9 +421,10 @@
                      :opts {:block-uuid block-uuid
                             :end? true
                             :edit-block? false
-                            :other-attrs {:block/tags #{comments-model/comments-tag-ident}}}}]
+                            :other-attrs {:block/tags #{comments-model/comments-tag-ident}
+                                          comments-model/comments-blocks-property #{[:block/uuid block-uuid]}}}}]
                    @inserts)
-                "Single-block comments area should be inserted as a child without range targets")
+                "Single-block comments area should be inserted as a child with the target property")
             (is (= [created-comments-area-uuid] @expanded)
                 "The single-block comments area should be expanded inline"))))))
 

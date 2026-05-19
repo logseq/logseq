@@ -113,9 +113,9 @@
  :block.comments/add-comment "Add comment"
  :block.comments/add-comment-command-desc "Add a comment to this block."
  :block.comments/collapsed-summary (fn [n author] (str n (if (= 1 n) " comment" " comments") " · latest from " author))
- :block.comments/count (fn [n] (str n (if (= 1 n) " comment" " comments")))
  :block.comments/date-at-time "{1} at {2}"
  :block.comments/label "Comments"
+ :block.comments/on-those-blocks "On those blocks"
  :block.comments/placeholder "Reply..."
  :block.comments/yesterday-at "Yesterday at {1}"
 
