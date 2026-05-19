@@ -30,6 +30,7 @@
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.db :as ldb]
@@ -1471,7 +1472,7 @@
                     (reject (ex-info "Failed to download"
                                      {:kind :http-status :status (.-status response) :url url})))))
          (.catch (fn [^js err]
-                   (js/console.error "Download via fetch failed for" url err)
+                   (log/error :icon/url-asset-fetch-failed {:url url :error err})
                    ;; In a browser build, TypeError from a CORS-mode fetch almost always
                    ;; means the target blocked cross-origin access. We can't distinguish
                    ;; true network failures from CORS rejections here — the browser
@@ -1536,7 +1537,7 @@
                        :kind final-kind
                        :status status})))))
       (p/catch (fn [^js err]
-                 (js/console.error "Download via IPC failed for" url err)
+                 (log/error :icon/url-asset-ipc-failed {:url url :error err})
                  (if (ex-data err)
                    (throw err)
                    (throw (ex-info "Network error"
@@ -2139,7 +2140,8 @@
                                             end (* (inc idx) (if (and last? (not (zero? mods))) mods step))
                                             icons (try (subvec items start end)
                                                        (catch js/Error e
-                                                         (js/console.error e)
+                                                         (log/error :icon/grid-subvec-failed
+                                                                    {:start start :end end :count (count items) :error e})
                                                          nil))]
                                         (vec (map-indexed
                                               (fn [c-idx item]
@@ -3708,7 +3710,7 @@
                    :error
                    (shui/toast! (t :icon.clipboard/read-error) :warning)))
                (p/catch (fn [err]
-                          (js/console.error "clipboard paste failed" err)
+                          (log/error :icon/clipboard-paste-failed {:error err})
                           (shui/toast! (url-save-error-copy err) :error))))))
 
         ;; Keep the DOM paste listener pointed at the freshest closure.
