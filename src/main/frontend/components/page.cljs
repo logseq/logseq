@@ -28,6 +28,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
@@ -243,21 +244,35 @@
   [page]
   [:div.ls-page-title-actions
    [:div.flex.flex-row.items-center.gap-2
-    (when (let [icon (:logseq.property/icon (db/entity (:db/id page)))]
-            (or (nil? icon)
-                (= (:type icon) :none)
-                ;; Recovery path: icon is stored but can't resolve to a visible
-                ;; element (e.g. legacy data from a now-filtered picker entry).
-                (not (icon-component/renderable-icon? icon))))
-      (shui/button
-       {:variant :ghost
-        :size :sm
-        :class "px-2 py-0 h-6 text-xs text-muted-foreground"
-        :on-click (fn [e]
-                    (state/pub-event! [:editor/new-property {:property-key "Icon"
-                                                             :block page
-                                                             :target (.-target e)}]))}
-       (t :command.editor/add-property-icon)))
+    (let [icon (:logseq.property/icon (db/entity (:db/id page)))
+          suppressed? (= (:type icon) :none)
+          no-renderable-icon? (or (nil? icon)
+                                  suppressed?
+                                  ;; Recovery path: icon is stored but can't resolve to a visible
+                                  ;; element (e.g. legacy data from a now-filtered picker entry).
+                                  (not (icon-component/renderable-icon? icon)))]
+      (when no-renderable-icon?
+        (shui/button
+         {:variant :ghost
+          :size :sm
+          :class "px-2 py-0 h-6 text-xs text-muted-foreground"
+          :on-click (fn [e]
+                      (if suppressed?
+                        ;; Entity was explicitly suppressed via the picker's
+                        ;; "Remove entirely" dropdown item — one-click retract
+                        ;; un-suppresses and lets inheritance (or absence)
+                        ;; resume.
+                        (property-handler/remove-block-property!
+                         (:db/id page) :logseq.property/icon)
+                        ;; Normal "Add icon" path opens the picker.
+                        (state/pub-event! [:editor/new-property {:property-key "Icon"
+                                                                 :block page
+                                                                 :target (.-target e)}])))}
+         (when suppressed?
+           (shui/tabler-icon "arrow-back-up" {:size 12 :class "mr-1 opacity-80"}))
+         (if suppressed?
+           (t :icon/restore-icon)
+           (t :command.editor/add-property-icon)))))
 
     (shui/button
      {:variant :ghost
