@@ -88,6 +88,15 @@
                    :headers {"Content-Type" "application/json"}}
                   payload)))
 
+(defn- invoke-import-db-binary-raw
+  [host port repo payload]
+  (http-request {:hostname host
+                 :port port
+                 :path (str "/v1/import-db-binary?repo=" (js/encodeURIComponent repo))
+                 :method "POST"
+                 :headers {"Content-Type" "application/octet-stream"}}
+                payload))
+
 (defn- lock-path
   [root-dir repo]
   (db-lock/lock-path root-dir repo))
@@ -964,6 +973,70 @@
                    (is (seq result))))
                (p/catch (fn [e]
                           (println "[db-worker-node-test] import-sqlite error:" e)
+                          (is false (str e))))
+               (p/finally (fn []
+                            (let [stop-a (:stop! @daemon-a)
+                                  stop-b (:stop! @daemon-b)]
+                              (cond
+                                (and stop-a stop-b)
+                                (-> (stop-a)
+                                    (p/finally (fn [] (-> (stop-b) (p/finally (fn [] (done)))))))
+
+                                stop-a
+                                (-> (stop-a) (p/finally (fn [] (done))))
+
+                                stop-b
+                                (-> (stop-b) (p/finally (fn [] (done))))
+
+                                :else
+                                (done)))))))))
+
+(deftest db-worker-node-import-db-binary-accepts-raw-request-body
+  (async done
+         (let [daemon-a (atom nil)
+               daemon-b (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-import-sqlite-raw")
+               repo-a (str "logseq_db_import_sqlite_raw_a_" (subs (str (random-uuid)) 0 8))
+               repo-b (str "logseq_db_import_sqlite_raw_b_" (subs (str (random-uuid)) 0 8))
+               now (js/Date.now)
+               page-uuid (random-uuid)]
+           (-> (p/let [{:keys [host port stop!]}
+                       (start-daemon! {:root-dir data-dir
+                                       :repo repo-a})
+                       _ (reset! daemon-a {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo-a {}])
+                       _ (invoke host port "thread-api/transact"
+                                 [repo-a
+                                  [{:block/uuid page-uuid
+                                    :block/title "Raw SQLite Import Page"
+                                    :block/name "raw-sqlite-import-page"
+                                    :block/tags #{:logseq.class/Page}
+                                    :block/created-at now
+                                    :block/updated-at now}]
+                                  {}
+                                  nil])
+                       export-binary (invoke host port "thread-api/export-db-binary" [repo-a])]
+                 (is (instance? js/Uint8Array export-binary))
+                 (is (pos? (.-byteLength export-binary)))
+                 (p/let [_ ((:stop! @daemon-a))
+                         {:keys [host port stop!]}
+                         (start-daemon! {:root-dir data-dir
+                                         :repo repo-b})
+                         _ (reset! daemon-b {:stop! stop!})
+                         {:keys [status body]} (invoke-import-db-binary-raw host port repo-b export-binary)
+                         parsed (js->clj (js/JSON.parse body) :keywordize-keys true)
+                         _ (invoke host port "thread-api/create-or-open-db" [repo-b {}])
+                         result (invoke host port "thread-api/q"
+                                        [repo-b
+                                         ['[:find ?e
+                                            :in $ ?title
+                                            :where [?e :block/title ?title]]
+                                          "Raw SQLite Import Page"]])]
+                   (is (= 200 status))
+                   (is (:ok parsed))
+                   (is (seq result))))
+               (p/catch (fn [e]
+                          (println "[db-worker-node-test] import-sqlite-raw error:" e)
                           (is false (str e))))
                (p/finally (fn []
                             (let [stop-a (:stop! @daemon-a)

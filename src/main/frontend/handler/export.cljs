@@ -6,6 +6,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.zip :as zip]
+            [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.notification :as notification]
@@ -16,6 +17,7 @@
             [goog.dom :as gdom]
             [logseq.db :as ldb]
             [logseq.db.common.sqlite :as common-sqlite]
+            [logseq.common.path :as path]
             [logseq.publishing.html :as publish-html]
             [promesa.core :as p]))
 
@@ -44,10 +46,42 @@
           (.setAttribute anchor "download" "index.html")
           (.click anchor))))))
 
+(defn- file-name [repo extension]
+  (-> repo
+      (string/replace #"^/+" "")
+      (str "_" (quot (util/time-ms) 1000))
+      (str "." (string/lower-case (name extension)))))
+
+(defn- normalize-zip-entry
+  [[filename data]]
+  (try
+    [filename (assets-handler/->uint8 data)]
+    (catch :default e
+      (throw (ex-info "unsupported zip entry payload"
+                      (assoc (or (ex-data e) {})
+                             :filename filename)
+                      e)))))
+
+(defn- <export-db-binary-for-zip
+  [repo]
+  (if (util/electron?)
+    (state/<invoke-db-worker :thread-api/export-db-binary repo)
+    (persist-db/<export-db repo {:return-data? true})))
+
+(defn- <export-zipfile-to-desktop!
+  [repo ^js zipfile]
+  (let [repo-name (common-sqlite/sanitize-db-name repo)
+        export-dir (path/path-join (config/get-repo-dir repo) "export")
+        export-path (path/path-join export-dir (file-name repo-name "zip"))]
+    (p/let [content (.arrayBuffer zipfile)
+            _ (fs/mkdir-if-not-exists export-dir)
+            _ (js/window.apis.writeFileBytes export-path content)]
+      export-path)))
+
 (defn db-based-export-repo-as-zip!
   [repo]
   (state/pub-event! [:dialog/export-zip (t :export/preparing-zip)])
-  (-> (p/let [db-data (persist-db/<export-db repo {:return-data? true})
+  (-> (p/let [db-data (<export-db-binary-for-zip repo)
               filename "db.sqlite"
               repo-name (common-sqlite/sanitize-db-name repo)
               _ (state/set-state! :graph/exporting-state {:total 100
@@ -55,7 +89,8 @@
                                                           :current-page (t :export/collecting-assets)
                                                           :label (t :export/exporting)})
               assets (assets-handler/<get-all-assets)
-              files (cons [filename db-data] assets)
+              files (map normalize-zip-entry
+                         (cons [filename db-data] assets))
               _ (state/set-state! :graph/exporting-state {:total 100
                                                           :current-idx 40
                                                           :current-page (t :export/creating-zip)
@@ -73,10 +108,13 @@
                                                   :current-idx 100
                                                   :current-page (t :export/finalizing)
                                                   :label (t :export/exporting)})
-        (when-let [anchor (gdom/getElement "download-as-zip")]
-          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-          (.setAttribute anchor "download" (.-name zipfile))
-          (.click anchor)))
+        (if (util/electron?)
+          (p/let [export-path (<export-zipfile-to-desktop! repo zipfile)]
+            (notification/show! (t :export/zip-exported export-path) :success false))
+          (when-let [anchor (gdom/getElement "download-as-zip")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor))))
       (p/catch (fn [error]
                  (js/console.error error)
                  (notification/show! (t :export/zip-error) :error)))
@@ -86,12 +124,6 @@
 (defn export-repo-as-zip!
   [repo]
   (db-based-export-repo-as-zip! repo))
-
-(defn- file-name [repo extension]
-  (-> repo
-      (string/replace #"^/+" "")
-      (str "_" (quot (util/time-ms) 1000))
-      (str "." (string/lower-case (name extension)))))
 
 (defn export-repo-as-debug-transit!
   [repo]

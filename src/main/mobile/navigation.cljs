@@ -5,7 +5,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.shui.dialog.core :as shui-dialog]
             [promesa.core :as p]
@@ -20,11 +19,10 @@
 (defonce ^:private pending-navigation (atom nil))
 (defonce ^:private hooks-installed? (atom false))
 
-(declare notify-route-payload!)
-
 ;; Track whether the latest change came from a native back gesture / popstate.
-(.addEventListener js/window "popstate" (fn [_]
-                                          (reset! navigation-source :pop)))
+(when (fn? (.-addEventListener js/window))
+  (.addEventListener js/window "popstate" (fn [_]
+                                            (reset! navigation-source :pop))))
 
 (defn current-stack
   []
@@ -112,56 +110,29 @@
   [stack]
   (-> @stack-history (get stack) :history last))
 
-(defn- native-route-payload!
-  [navigation-type stack path route]
-  (when (and (mobile-util/native-platform?)
-             mobile-util/ui-local)
-    (let [payload (cond-> {:navigationType navigation-type
-                           :push (= navigation-type "push")
-                           :stack stack
-                           :path path}
-                    route (assoc :route route))]
-      (notify-route-payload! payload))))
+(defn- virtual-stack-path?
+  [path]
+  (and (string? path)
+       (string/starts-with? path "/__stack__/")))
 
-(defn- prepare-browser-route-restore!
-  [navigation-type stack]
-  (case navigation-type
-    "pop" (reset! navigation-source :pop)
-    "replace" (record-navigation-intent! {:type :replace :stack stack})
-    "push" (record-navigation-intent! {:type :push :stack stack})
-    nil))
+(def ^:private browser-routes
+  #{:home :page :import :export})
 
-(defn- restore-stack-entry!
-  "Restore a stack entry into route state and native navigation.
-
-   If the entry has a real reitit route, update the browser hash and let the
-   router callback report to native. If the entry is a virtual tab root
-   (`graphs`, `capture`, `search`, etc.), there is no valid reitit route to
-   generate, so update route state and notify native directly."
-  [stack {:keys [path route route-match] :as _entry} navigation-type]
-  (let [route-match (or route-match (:route-match (stack-defaults stack)))
-        route (or route (:route (stack-defaults stack)))
-        path (or path (current-path))
-        path (if (string/blank? path) "/" path)
-        route-name (:to route)]
-    (set-current-stack! stack)
-    (route-handler/set-route-match! route-match)
-    (swap! initialised-stacks assoc stack true)
-    (if route-name
-      (if (= path (current-path))
-        ;; No router callback will fire if the hash is already at the target.
-        ;; Still keep the native animation/mirror stack in sync.
-        (do
-          (reset! navigation-source nil)
-          (reset! pending-navigation nil)
-          (native-route-payload! navigation-type stack path route))
-        (do
-          (prepare-browser-route-restore! navigation-type stack)
-          (orig-replace-state route-name (:path-params route) (:query-params route))))
-      (do
-        (reset! navigation-source nil)
-        (reset! pending-navigation nil)
-        (native-route-payload! navigation-type stack path nil)))))
+(defn- sync-browser-route!
+  [stack route route-match path]
+  (when-not (virtual-stack-path? path)
+    (let [route-name (or (:to route)
+                         (get-in route [:data :name])
+                         (get-in route-match [:data :name]))
+          path-params (or (:path-params route)
+                          (get-in route-match [:parameters :path]))
+          query-params (or (:query-params route)
+                           (get-in route-match [:parameters :query]))]
+      (when (contains? browser-routes route-name)
+        (record-navigation-intent! {:type :replace
+                                    :stack stack})
+        (orig-replace-state route-name path-params query-params)
+        true))))
 
 (defn- remember-route!
   [stack nav-type route path route-match]
@@ -240,17 +211,20 @@
         stack (or stack (current-stack))
         path (-> (or path (current-path))
                  (strip-fragment))
-        path (if (string/blank? path) "/" path)]
-    (set-current-stack! stack)
-    (remember-route! stack navigation-type route path route-match)
-    (when (and (mobile-util/native-platform?)
-               mobile-util/ui-local)
-      (let [payload (cond-> {:navigationType navigation-type
-                             :push push?
-                             :stack stack}
-                      route (assoc :route route)
-                      path (assoc :path (strip-fragment path)))]
-        (notify-route-payload! payload)))))
+        path (if (string/blank? path) "/" path)
+        duplicate-push? (and (= navigation-type "push")
+                             (= path (:path (stack-top stack))))]
+    (when-not duplicate-push?
+      (set-current-stack! stack)
+      (remember-route! stack navigation-type route path route-match)
+      (when (and (mobile-util/native-platform?)
+                 mobile-util/ui-local)
+        (let [payload (cond-> {:navigationType navigation-type
+                               :push push?
+                               :stack stack}
+                        route (assoc :route route)
+                        path (assoc :path (strip-fragment path)))]
+          (notify-route-payload! payload))))))
 
 (comment
   (defn reset-route!
@@ -268,11 +242,22 @@
   [stack]
   (when stack
     (let [stack (ensure-stack stack)]
+      (set-current-stack! stack)
       (when-let [{:keys [path route route-match]} (stack-top stack)]
-        (restore-stack-entry!
-         stack
-         {:path path :route route :route-match route-match}
-         "replace")))))
+        (let [route-match (or route-match (:route-match (stack-defaults stack)))
+              path        (or path (current-path))]
+          (route-handler/set-route-match! route-match)
+          (when-not (sync-browser-route! stack route route-match path)
+            (notify-route-change!
+             {:route {:to          (or (get-in route [:data :name])
+                                       (get-in route-match [:data :name]))
+                      :path-params (or (:path-params route)
+                                       (get-in route-match [:parameters :path]))
+                      :query-params (or (:query-params route)
+                                        (get-in route-match [:parameters :query]))}
+              :path  path
+              :stack stack
+              :push  false})))))))
 
 (defn pop-modal!
   []
@@ -299,19 +284,32 @@
   (let [stack (current-stack)
         {:keys [history]} (get @stack-history stack)
         history (vec history)]
-    (when (> (count history) 1)
-      ;; Back to the Android native search root.
-      (when (and (mobile-util/native-android?)
-                 (= stack "search")
-                 (= (count history) 2))
-        (when-let [^js plugin (some-> js/Capacitor .-Plugins .-LiquidTabsPlugin)]
-          (when (gobj/get plugin "showSearchUiNative")
-            (.showSearchUiNative plugin))))
-      (let [new-history (subvec history 0 (dec (count history)))
-            entry (peek new-history)]
+    ;; back to search root
+    (when (and
+           (mobile-util/native-android?)
+           (= stack "search")
+           (= (count history) 2))
+      (.showSearchUiNative ^js (.. js/Capacitor -Plugins -LiquidTabsPlugin)))
+    (when (>= (count history) 1)
+      (let [root-history? (= (count history) 1)
+            new-history (if root-history?
+                          history
+                          (subvec history 0 (dec (count history))))
+            {:keys [route-match]} (peek new-history)
+            route-match   (or route-match (:route-match (stack-defaults stack)))
+            route-name    (get-in route-match [:data :name])
+            path-params   (get-in route-match [:parameters :path])
+            query-params  (get-in route-match [:parameters :query])]
+
         (swap! stack-history assoc stack {:history new-history})
-        (restore-stack-entry! stack entry "pop")
-        true))))
+
+        ;; Pretend this came from a pop for next-navigation!
+        (reset! navigation-source :pop)
+
+        ;; Use *original* replace-state to avoid recording a :replace intent.
+        (orig-replace-state route-name path-params query-params)
+
+        (route-handler/set-route-match! route-match)))))
 
 (defn pop-to-root!
   "Pop current or given stack back to its root entry and notify navigation."
@@ -320,9 +318,25 @@
    (when stack
      (let [{:keys [history]} (get @stack-history stack)
            root (or (first history) (stack-defaults stack))
-           root (merge (stack-defaults stack) root)]
+           {:keys [route route-match path]} root
+           route-match (or route-match (:route-match (stack-defaults stack)))
+           path (or path (current-path))
+           route (or route {:to (get-in route-match [:data :name])
+                            :path-params (get-in route-match [:parameters :path])
+                            :query-params (get-in route-match [:parameters :query])})]
        (swap! stack-history assoc stack {:history [root]})
-       (restore-stack-entry! stack root "replace")))))
+       (set-current-stack! stack)
+       ;; Use original replace-state to avoid recording a push intent.
+       (orig-replace-state (get-in route-match [:data :name])
+                           (get-in route-match [:parameters :path])
+                           (get-in route-match [:parameters :query]))
+       (route-handler/set-route-match! route-match)
+       (notify-route-change!
+        {:route route
+         :route-match (assoc route-match :navigation-type "reset")
+         :path path
+         :stack stack
+         :push false})))))
 
 (defn ^:export install-native-bridge!
   []

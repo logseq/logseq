@@ -512,6 +512,15 @@
       (is (contains-bold? summary "sync config set"))
       (is (contains-bold? summary "sync grant-access")))))
 
+(deftest test-parse-args-help-sync-upload
+  (testing "sync upload command help explains full-graph initialization upload"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["sync" "upload" "--help"]))
+          summary (strip-ansi (:summary result))]
+      (is (true? (:help? result)))
+      (is (string/includes? summary "initializes upload of the entire graph"))
+      (is (string/includes? summary "not for incremental graph data syncing")))))
+
 (deftest test-parse-args-help-upsert-group
   (testing "add group is removed"
     (let [result (commands/parse-args ["add"])]

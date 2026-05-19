@@ -183,6 +183,7 @@ class LiquidTabsPlugin : Plugin() {
         if (tab.role == "search") {
             showSearchUi()
         } else {
+            clearSearchUi()
             hideSearchUi()
         }
 
@@ -418,6 +419,11 @@ class LiquidTabsPlugin : Plugin() {
         }
 
         container.visibility = View.VISIBLE
+    }
+
+    private fun clearSearchUi() {
+        searchInput?.setText("")
+        resultsContainer?.removeAllViews()
     }
 
     private fun hideSearchUi() {

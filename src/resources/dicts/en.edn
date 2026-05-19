@@ -529,6 +529,8 @@
  :electron/add-to-dictionary "Add to dictionary"
  :electron/block-not-exist "Open link failed. Block-id `{1}` doesn't exist in the graph."
  :electron/cancel "Cancel"
+ :electron/cli-install-failed "Failed to install Logseq CLI.\n{1}"
+ :electron/cli-installed "Logseq CLI was installed to {1}"
  :electron/copy-image "Copy Image"
  :electron/link-open-confirm "Are you sure you want to open this link? \n{1}"
  :electron/link-open-failed-missing-graph "Failed to open link. Missing graph identifier after `logseq://graph/`."
@@ -620,6 +622,7 @@
  :export/view-nodes-data-copied "Copied view nodes' data!"
  :export/zip "Export both SQLite DB and assets"
  :export/zip-error "Export zip failed."
+ :export/zip-exported "ZIP exported to {1}."
 
  :export.backup/backup-now "Backup now"
  :export.backup/cancel "Cancel backup"
@@ -733,6 +736,7 @@
  :graph/time-travel-now "Now"
  :graph/toggle-tag "Toggle tag {1}"
  :graph/updated-switching "Graph updated! Switching to graph ..."
+ :graph/upload-local-confirm-desc "Upload graph \"{1}\" to Logseq Server?"
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
  :graph/view-mode "View mode"
@@ -988,6 +992,7 @@
  :mobile.settings/github "GitHub"
  :mobile.settings/report-bug "Report bug"
  :mobile.settings/revision "Revision"
+ :mobile.settings/tabs "Tabs"
  :mobile.settings/theme "Theme"
  :mobile.settings/version "Version"
 

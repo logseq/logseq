@@ -495,10 +495,14 @@
   (rum/local nil ::src)
   [state config title href metadata full_text]
   (let [src (::src state)
-        ^js js-url (:link-js-url config)
         href (cond-> href
-               (nil? js-url)
-               (config/get-local-asset-absolute-path))]
+               (common-config/local-relative-asset? href)
+               (config/get-local-asset-absolute-path))
+        ^js js-url (or (:link-js-url config)
+                       (when (path/protocol-url? href)
+                         (try
+                           (js/URL. href)
+                           (catch :default _ nil))))]
     (when (nil? @src)
       (-> (assets-handler/<make-asset-url href js-url)
           (p/then (fn [url]
@@ -562,8 +566,19 @@
              {:on-click (fn [e]
                           (util/stop e)
                           (let [repo-dir (config/get-repo-dir repo)
-                                file-fpath (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) "." (name ext)))]
-                            (js/window.apis.openPath file-fpath)))}
+                                 ext-url (:logseq.property.asset/external-url asset-block)
+                                 remote-ext-url? (and (not (string/blank? ext-url))
+                                                      (path/protocol-url? ext-url)
+                                                      (not (common-config/local-protocol-asset? ext-url)))
+                                 local-ext-url? (and (not (string/blank? ext-url))
+                                                     (common-config/local-relative-asset? ext-url))
+                                 file-fpath (if local-ext-url?
+                                              ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
+                                              (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
+                                              (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) "." (name ext))))]
+                             (if remote-ext-url?
+                               (js/window.apis.openExternal ext-url)
+                               (js/window.apis.openPath file-fpath))))}
              file-name])
 
           :else
@@ -1113,13 +1128,19 @@
         img-placeholder (when image?
                           [:div.img-placeholder.asset-container
                            {:style img-metadata}])
+        ;; When external-url is set, use it as the render path so
+        ;; plugin-sandboxed assets (./assets/storages/<plugin-id>/...)
+        ;; resolve correctly; <make-asset-url handles both remote URLs
+        ;; and graph-root-relative paths.
+        href (or (:logseq.property.asset/external-url block)
+                 (path/path-join (str "../" common-config/local-assets-dir) file))
         content (cond
                   file-ready?
                   (asset-link (assoc config
                                      :asset-block block
                                      :image-placeholder img-placeholder)
                               (:block/title block)
-                              (path/path-join (str "../" common-config/local-assets-dir) file)
+                              href
                               img-metadata
                               nil)
                   image?

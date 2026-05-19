@@ -79,6 +79,7 @@ object MaterialIconResolver {
             "go-to", "goto" -> Icons.Outlined.Explore
             "bookmark" -> Icons.Filled.Bookmarks
             "sync" -> Icons.Outlined.Equalizer
+            "cloud", "cloud-upload", "icloud-and-arrow-up" -> Icons.Filled.CloudUpload
             else -> null
         }
     }
