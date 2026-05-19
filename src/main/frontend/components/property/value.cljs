@@ -1063,8 +1063,8 @@
                                                              ;; Single icon per row, same policy as CMD-K and the
                                                              ;; bracket popover. `get-node-icon-cp` resolves the
                                                              ;; committed icon (own → tag default → type default);
-                                                             ;; the title renders alone below — no inline icon via
-                                                             ;; `block-title-with-icon` (see cmdk/list_item.cljs:114-122).
+                                                             ;; the title renders alone below (see cmdk/list_item.cljs
+                                                             ;; for the de-dup rationale).
                                                              ;;
                                                              ;; Fixed 20×20 slot so all titles align regardless of
                                                              ;; icon type. Stays 20px even when the conditional
@@ -1074,11 +1074,10 @@
                                                               ;; Class/property pickers intentionally render iconless
                                                               ;; (the entities being picked ARE classes/properties — a
                                                               ;; leading icon would just repeat the picker's own context).
-                                                              ;; The `:logseq.property/classes` check used to be part of
-                                                              ;; this guard, but only because the old title path inlined
-                                                              ;; the icon via `block-title-with-icon`; with that path
-                                                              ;; removed, entity-reference properties (Attendees,
-                                                              ;; Collaborators, etc.) need the leading icon.
+                                                              ;; Entity-reference properties (Attendees, Collaborators,
+                                                              ;; etc.) keep the leading icon — the old title path used
+                                                              ;; to inline it, but the iconless guard now covers only
+                                                              ;; class/property to leave entity rows visible.
                                                               (when-not (contains? #{:class :property} property-type)
                                                                 (icon-component/get-node-icon-cp node {}))]
                                                              [:div title]]]

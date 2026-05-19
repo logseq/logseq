@@ -117,14 +117,13 @@
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
        [:div {:class "cp__cmdk-item-main-text text-sm font-medium text-gray-12 flex items-center gap-2 flex-wrap"}
         ;; Title only — the icon is already rendered in the dedicated
-        ;; slot above (lines ~97-109) via the caller's `:icon` prop,
-        ;; which uses `get-node-icon-cp` to resolve own/inherited icons
-        ;; consistently. `block-title-with-icon` would have prepended
-        ;; another `(:logseq.property/icon source-block)` inline, which
-        ;; for blocks with their own icon override (e.g. an instance row
-        ;; that diverges from its class default) renders the same icon
-        ;; twice side-by-side. Inheriting rows hid the bug because the
-        ;; inline render is nil when the block has no own icon.
+        ;; slot above via the caller's `:icon` prop (`get-node-icon-cp`
+        ;; resolves own/inherited icons consistently). Prepending the
+        ;; block's own `:logseq.property/icon` inline next to the title
+        ;; would render the same icon twice for instance rows that
+        ;; diverge from their class default. Inheriting rows would mask
+        ;; the bug since the inline render is nil when the block has no
+        ;; own icon.
         (or (highlight-query text) (:block/title source-block))
         text-badge
         (when info

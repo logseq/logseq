@@ -70,9 +70,9 @@
         (when-not db-tag?
           ;; Single icon per row, same policy as CMD-K. `get-node-icon-cp`
           ;; resolves the committed icon (own → tag default → type default),
-          ;; so the title text below can render alone — no need to inline
-          ;; another icon via `block-title-with-icon` (see cmdk/list_item.cljs:114-122
-          ;; for the de-dup rationale).
+          ;; so the title text below can render alone — see cmdk/list_item.cljs
+          ;; for the de-dup rationale (instance rows that diverge from a class
+          ;; default would otherwise render the same icon twice).
           ;;
           ;; Fixed `w-5 h-5` slot with `justify-center` so 14px tabler glyphs
           ;; center within a 20px column matching the avatar tile width. All
