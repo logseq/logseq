@@ -105,3 +105,42 @@
       (is (= :node (:logseq.property/type property)))
       (is (true? (:logseq.property/hide? property)))
       (is (false? (:logseq.property/public? property))))))
+
+(deftest migrate-65-28-tags-existing-comment-blocks
+  (let [conn (d/create-conn db-schema/schema)
+        comments-area-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        first-comment-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        second-comment-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        ordinary-child-uuid #uuid "44444444-4444-4444-4444-444444444444"]
+    (d/transact! conn
+                 [{:db/ident :logseq.kv/schema-version
+                   :kv/value {:major 65 :minor 27}}
+                  {:db/ident :logseq.class/Comments
+                   :block/title "Comments"}
+                  {:db/ident :logseq.class/Task
+                   :block/title "Task"}
+                  {:block/uuid comments-area-uuid
+                   :block/title "Comments"
+                   :block/tags #{:logseq.class/Comments}}
+                  {:block/uuid first-comment-uuid
+                   :block/title "first comment"
+                   :block/parent [:block/uuid comments-area-uuid]}
+                  {:block/uuid second-comment-uuid
+                   :block/title "second comment"
+                   :block/parent [:block/uuid comments-area-uuid]
+                   :block/tags #{:logseq.class/Task}}
+                  {:block/uuid ordinary-child-uuid
+                   :block/title "ordinary child"}])
+
+    (db-migrate/migrate conn :target-version {:major 65 :minor 28})
+
+    (is (= {:major 65 :minor 28}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? (d/entity @conn :logseq.class/Comment)))
+    (is (= #{:logseq.class/Comment}
+           (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid first-comment-uuid]))))))
+    (is (= #{:logseq.class/Task :logseq.class/Comment}
+           (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid second-comment-uuid]))))))
+    (is (= #{:logseq.class/Comments}
+           (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid comments-area-uuid]))))))
+    (is (empty? (:block/tags (d/entity @conn [:block/uuid ordinary-child-uuid]))))))
