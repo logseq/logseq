@@ -943,6 +943,13 @@
     @apply flex-none overflow-visible;
     min-height: auto;
   }
+
+  /* Search-results variant: parent (`.bd-scroll`) already scrolls, and we
+     don't want a 120px placeholder for tiny result sets. Override both. */
+  &.assets-search-grid {
+    @apply flex-none overflow-visible;
+    min-height: auto;
+  }
 }
 
 /* Empty state - spans all grid columns, centered */

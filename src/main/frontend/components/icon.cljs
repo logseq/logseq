@@ -307,6 +307,7 @@
 ;; stay in lockstep.
 (def ^:private icon-grid-cols 9)
 (def ^:private custom-tab-cols 3)
+(def ^:private asset-search-grid-cols 5)
 
 (defn- <load-asset-url!
   "Resolve an asset blob URL, retrying on transient failures (e.g. db-worker not ready).
@@ -1964,12 +1965,32 @@
                :label icon-name
                :data {:value icon-name}}))))
 
+(defn- search-assets
+  "Fuzzy-match local assets by :block/title. `assets` is the per-picker
+   in-memory cache (loaded once on mount). No DB query happens here."
+  [q assets]
+  (when (and (string? q) (not (string/blank? q)) (seq assets))
+    (->> (search/fuzzy-search assets q :limit 50 :extract-fn :block/title)
+         (map (fn [asset]
+                (let [uuid (:block/uuid asset)
+                      atype (:logseq.property.asset/type asset)]
+                  {:type :image
+                   :id (str "image-" uuid)
+                   :label (or (:block/title asset) (str uuid))
+                   :asset asset
+                   :data {:asset-uuid (str uuid)
+                          :asset-type atype}}))))))
+
 (defn- search
-  [q tab]
+  [q tab assets opts]
   (p/let [icons (when (not= tab :emoji) (search-tabler-icons q))
-          emojis' (when (not= tab :icon) (search-emojis q))]
+          emojis' (when (not= tab :icon) (search-emojis q))
+          assets' (when (and (= tab :all)
+                             (not (:no-assets? opts)))
+                    (search-assets q assets))]
     {:icons icons
-     :emojis emojis'}))
+     :emojis emojis'
+     :assets assets'}))
 
 (rum/defc icons-row
   [items]
@@ -2087,6 +2108,31 @@
                                        :color color})}
        display-text))]))
 
+(rum/defc image-cp < rum/static
+  "Compact image-asset tile for the flex-wrap row layout (recently-used).
+   Search-results assets render via a dedicated 5-col grid using
+   `image-asset-item` directly — that path bypasses `render-item`."
+  [icon-item {:keys [on-chosen hover on-tile-hover! highlighted-id ghost-highlighted-id wave]}]
+  (let [asset-uuid (get-in icon-item [:data :asset-uuid])
+        asset-type (get-in icon-item [:data :asset-type])
+        my-id (:id icon-item)
+        item-shape (select-keys icon-item [:type :id :label :data])]
+    (when (and (string? asset-uuid) (not (string/blank? asset-uuid)))
+      [:button.w-9.h-9.transition-opacity.overflow-hidden.rounded
+       {:tabIndex "-1"
+        :data-item-id my-id
+        :class (cond
+                 (= my-id highlighted-id) "is-highlighted"
+                 (= my-id ghost-highlighted-id) "is-ghost-highlighted")
+        :style (when wave {"--r" (:r wave) "--c" (:c wave)})
+        :title (:label icon-item)
+        :on-click (fn [e] (on-chosen e item-shape))
+        :on-mouse-over (fn []
+                         (some-> hover (reset! item-shape))
+                         (some-> on-tile-hover! (apply [item-shape])))
+        :on-mouse-out #()}
+       (image-icon-cp asset-uuid asset-type {:size 32})])))
+
 (defn render-item
   "Render an icon-item based on its type"
   [icon-item opts]
@@ -2095,6 +2141,7 @@
     :icon (icon-cp icon-item opts)
     :text (text-cp icon-item opts)
     :avatar (avatar-cp icon-item opts)
+    :image (image-cp icon-item opts)
     nil))
 
 (defn item-render
@@ -2654,25 +2701,32 @@
    (web-downloaded assets do; locally-uploaded assets gracefully degrade
    to image + title only). Preview only renders once the blob URL has
    resolved; ghost assets (load errors) skip it."
-  [state asset {:keys [on-chosen avatar-context selected? item-id highlighted? ghost-highlighted?]}]
+  [state asset {:keys [on-chosen avatar-context selected? item-id highlighted? ghost-highlighted? variant]}]
   (let [url @(::url state)
         error? @(::error state)
         asset-type (:logseq.property.asset/type asset)
         asset-uuid (:block/uuid asset)
         asset-title (or (:block/title asset) (str asset-uuid))
         avatar-mode? (some? avatar-context)
+        search-variant? (= variant :search)
         button-hiccup
         [:button.image-asset-item
          {:title asset-title
           :data-item-id item-id
           :class (util/classnames [{:avatar-mode avatar-mode?
+                                    :search-variant search-variant?
                                     :selected selected?
-                                    :ghost-asset error?
+                                    ;; Ghost icon is hidden in :search to avoid an ugly
+                                    ;; refresh-affordance in a short-lived results grid.
+                                    ;; The 3 silent retries still run below the surface;
+                                    ;; users see broken tiles as empty slots and skip them.
+                                    :ghost-asset (and error? (not search-variant?))
                                     :is-highlighted highlighted?
                                     :is-ghost-highlighted ghost-highlighted?}])
           :on-click (fn [e]
-                      (if error?
-                        ;; Click-to-retry on ghost assets
+                      (if (and error? (not search-variant?))
+                        ;; Click-to-retry on ghost assets (only in the asset-picker
+                        ;; surface; search variant doesn't surface the affordance).
                         (do (reset! (::error state) false)
                             (<load-asset-url! (::url state) (::error state) asset-uuid asset-type {}))
                         (do
@@ -2694,7 +2748,7 @@
                                           :data image-data}))))))
           :disabled false}
          (cond
-           error?
+           (and error? (not search-variant?))
            [:div.ghost-asset-placeholder
             {:title (t :icon.asset/retry-load-tooltip)}
             (ui/icon "refresh" {:size 16})]
@@ -2706,10 +2760,11 @@
                               (reset! (::url state) nil)
                               (reset! (::error state) true))}]
            :else
-           [:div.bg-gray-04.animate-pulse])]]
+           [:div.bg-gray-04 (when-not search-variant? {:class "animate-pulse"})])]]
     (if-let [preview (and (not error?) (asset->preview-data asset url))]
+      ;; Tooltip delay: 200ms in search (fast intent), 400ms in picker (browse intent).
       (shui/tooltip-provider
-       {:delay-duration 400 :skip-delay-duration 100}
+       {:delay-duration (if search-variant? 200 400) :skip-delay-duration 100}
        (shui/tooltip
         (shui/tooltip-trigger
          {:as-child true}
@@ -4615,6 +4670,12 @@
                         ;; the on-chosen dispatch above — they don't
                         ;; map to a meaningful avatar fallback.
                         :allowed-tabs [:all :icon :emoji]
+                        ;; Suppress image-asset search results in this sub-picker —
+                        ;; a fallback icon for an avatar must be an icon or emoji,
+                        ;; not a photo. Without this, typing in the search input
+                        ;; would surface user image assets as picks that, when
+                        ;; selected, would write nonsensical avatar fallbacks.
+                        :no-assets? true
                         :icon-value (when (and (#{:icon :emoji} current-fb-type) current-fb-icon)
                                       {:type (if (= :emoji current-fb-type) :emoji :icon)
                                        :data {:value current-fb-icon}})
@@ -4907,12 +4968,12 @@
 
 (rum/defc tab-observer
   "Re-runs the search when tab changes (if there's a query), preserving the search text."
-  [tab {:keys [q *result]}]
+  [tab {:keys [q *result assets no-assets?]}]
   (hooks/use-effect!
    (fn []
      ;; Re-run search with existing query for new tab context
      (when-not (string/blank? q)
-       (p/let [result (search q tab)]
+       (p/let [result (search q tab assets {:no-assets? no-assets?})]
          (reset! *result result))))
    [tab q])
   nil)
@@ -4949,11 +5010,13 @@
 
       ;; Search results active. Tabs are content-type categories — keep the
       ;; query persistent across tabs but only show matches that fit the
-      ;; current tab's type. :all shows both, :emoji only emoji matches,
-      ;; :icon only icon matches. (Custom is handled above.)
+      ;; current tab's type. :all shows everything, :emoji only emoji matches,
+      ;; :icon only icon matches, Assets section only on :all (since assets
+      ;; aren't a category the icon/emoji tabs are scoped to).
       (seq result)
       (let [tab-allows-emojis? (contains? #{:all :emoji} tab)
-            tab-allows-icons?  (contains? #{:all :icon} tab)]
+            tab-allows-icons?  (contains? #{:all :icon} tab)
+            tab-allows-assets? (= :all tab)]
         (build-sections
          {:label "Emojis"
           :items (when (and tab-allows-emojis?
@@ -4966,7 +5029,13 @@
                             (seq (:icons result))
                             (get section-states "Icons" true))
                    (:icons result))
-          :cols icon-grid-cols}))
+          :cols icon-grid-cols}
+         {:label "Assets"
+          :items (when (and tab-allows-assets?
+                            (seq (:assets result))
+                            (get section-states "Assets" true))
+                   (:assets result))
+          :cols asset-search-grid-cols}))
 
       ;; All tab: recently used + emojis + icons (non-virtualized, limited items)
       (= tab :all)
@@ -5315,13 +5384,15 @@
            (let [region @*focus-region
                  code (.-keyCode e)]
              (if (and *tab (util/meta-key? e) (.-altKey e))
-               ;; Alt+meta + 1/2/3 toggles section collapse on the All tab
-               ;; (icon-picker only). Mac: ⌥⌘1/2/3 — Win/Linux: Ctrl+Alt+1/2/3.
+               ;; Alt+meta + 1/2/3/4 toggles section collapse on the All tab
+               ;; (icon-picker only). Mac: ⌥⌘1-4 — Win/Linux: Ctrl+Alt+1-4.
+               ;; 4 toggles the Assets section (only visible in search results).
                (when (= @*tab :all)
                  (let [section-name (case (.-keyCode e)
                                       49 "Recently used"
                                       50 "Emojis"
                                       51 "Icons"
+                                      52 "Assets"
                                       nil)]
                    (when section-name
                      (swap! *section-states update section-name (fn [v] (if (nil? v) false (not v))))
@@ -6580,6 +6651,11 @@
   ;; previously they collided on a shared module-global atom.
   (rum/local false ::drag-active?)
   (rum/local 0     ::drag-depth)
+  ;; Cached local image assets, loaded once on mount. Search filters in-memory
+  ;; against this atom on every keystroke (microsecond cost vs. DB-query
+  ;; latency). Sync `get-image-assets` populates it immediately; the worker's
+  ;; async result overwrites once it lands. Mirrors the asset-picker's pattern.
+  (rum/local nil ::loaded-assets)
   {:will-mount (fn [s]
                  (let [opts (first (:rum/args s))
                        icon-value (:icon-value opts)
@@ -6613,7 +6689,27 @@
                        ;; the render reads via `(rum/react)` so re-render
                        ;; fires when the promise lands.
                        preview-target-db-id (:preview-target-db-id opts)
-                       property (or (:property opts) :logseq.property/icon)]
+                       property (or (:property opts) :logseq.property/icon)
+                       *loaded-assets (::loaded-assets s)
+                       no-assets? (:no-assets? opts)]
+                   ;; Load image assets once for search filtering. Skip
+                   ;; entirely when the caller opted out (avatar fallback
+                   ;; sub-picker etc.) — those contexts shouldn't surface
+                   ;; image assets in search results.
+                   (when-not no-assets?
+                     (let [sync-assets (get-image-assets)]
+                       (when (seq sync-assets)
+                         (reset! *loaded-assets sync-assets)))
+                     (-> (<get-image-assets)
+                         (p/then (fn [async-assets]
+                                   (when (some? @*loaded-assets)
+                                     (reset! *loaded-assets (vec async-assets)))
+                                   ;; First load may land empty when sync was
+                                   ;; empty too — populate so search can match.
+                                   (when (and (nil? @*loaded-assets)
+                                              (seq async-assets))
+                                     (reset! *loaded-assets (vec async-assets)))))
+                         (p/catch (fn [_] nil))))
                    ;; Avatar/image icons open asset picker, text icons open text-picker
                    (when (contains? #{:avatar :image :text} (:type normalized))
                      (reset! *view (if (= :text (:type normalized)) :text-picker :asset-picker)))
@@ -6697,6 +6793,7 @@
         *input-focused? (::input-focused? state)
         *view (::view state)
         *asset-picker-initial-mode (::asset-picker-initial-mode state)
+        *loaded-assets (::loaded-assets state)
         *input-ref (::input-ref state)
         *result-ref (::result-ref state)
         *virtuoso-ref (::virtuoso-ref state)
@@ -7099,7 +7196,9 @@
        ;; Topbar: tabs + separator + search
        [:div.icon-picker-topbar
         [:div.tabs-section {:role "tablist"}
-         (tab-observer @*tab {:q @*q :*result *result})
+         (tab-observer @*tab {:q @*q :*result *result
+                              :assets (rum/react *loaded-assets)
+                              :no-assets? (:no-assets? opts)})
          (keyboard-nav-controller
           {:*focus-region      *focus-region
            :*highlighted-index *highlighted-index
@@ -7322,7 +7421,9 @@
                            (reset! *highlighted-index nil)
                            (if (string/blank? @*q)
                              (reset! *result {})
-                             (p/let [result (search @*q @*tab)]
+                             (p/let [result (search @*q @*tab
+                                                    @*loaded-assets
+                                                    {:no-assets? (:no-assets? opts)})]
                                (reset! *result result))))
                          200)})]
           (when-not (string/blank? @*q)
@@ -7375,34 +7476,67 @@
              (let [section-states (rum/react *section-states)
                    tab-allows-emojis? (contains? #{:all :emoji} @*tab)
                    tab-allows-icons?  (contains? #{:all :icon} @*tab)
+                   tab-allows-assets? (= :all @*tab)
                    has-emojis? (and tab-allows-emojis? (seq (:emojis result)))
-                   has-icons?  (and tab-allows-icons?  (seq (:icons result)))]
-               (if (or has-emojis? has-icons?)
-                 (let [both? (and has-emojis? has-icons?)]
-                   [:div.flex.flex-1.flex-col.search-result
-                    ;; Emojis section
-                    (when has-emojis?
-                      (pane-section
-                       "Emojis"
-                       (:emojis result)
-                       (assoc opts
-                              :collapsible? both?
-                              :keyboard-hint (when both? "alt mod 2")
-                              :total-count (count (:emojis result))
-                              :virtual-list? false
-                              :expanded? (get section-states "Emojis" true))))
+                   has-icons?  (and tab-allows-icons?  (seq (:icons result)))
+                   has-assets? (and tab-allows-assets? (seq (:assets result)))
+                   sections-visible (count (filter true? [has-emojis? has-icons? has-assets?]))
+                   collapsible? (> sections-visible 1)]
+               (if (or has-emojis? has-icons? has-assets?)
+                 [:div.flex.flex-1.flex-col.search-result
+                  ;; Emojis section
+                  (when has-emojis?
+                    (pane-section
+                     "Emojis"
+                     (:emojis result)
+                     (assoc opts
+                            :collapsible? collapsible?
+                            :keyboard-hint (when collapsible? "alt mod 2")
+                            :total-count (count (:emojis result))
+                            :virtual-list? false
+                            :expanded? (get section-states "Emojis" true))))
 
-                    ;; Icons section
-                    (when has-icons?
-                      (pane-section
-                       "Icons"
-                       (:icons result)
-                       (assoc opts
-                              :collapsible? both?
-                              :keyboard-hint (when both? "alt mod 3")
-                              :total-count (count (:icons result))
-                              :virtual-list? false
-                              :expanded? (get section-states "Icons" true))))])
+                  ;; Icons section
+                  (when has-icons?
+                    (pane-section
+                     "Icons"
+                     (:icons result)
+                     (assoc opts
+                            :collapsible? collapsible?
+                            :keyboard-hint (when collapsible? "alt mod 3")
+                            :total-count (count (:icons result))
+                            :virtual-list? false
+                            :expanded? (get section-states "Icons" true))))
+
+                  ;; Assets section — bypasses pane-section because the 64px
+                  ;; tiles render in a dedicated 5-col grid (.asset-picker-grid)
+                  ;; rather than the 36px flex-wrap row that pane-section's
+                  ;; `.its` layout produces.
+                  (when has-assets?
+                    [:div.pane-section.assets-search-section.searching-result
+                     (section-header {:title "Assets"
+                                      :count (count (:assets result))
+                                      :total-count (count (:assets result))
+                                      :expanded? (get section-states "Assets" true)
+                                      :keyboard-hint (when collapsible? "alt mod 4")
+                                      :on-toggle (when collapsible?
+                                                   #(swap! *section-states update "Assets"
+                                                           (fn [v] (if (nil? v) false (not v)))))
+                                      :focus-region @*focus-region
+                                      :simple? (not collapsible?)})
+                     (when (get section-states "Assets" true)
+                       [:div.asset-picker-grid.assets-search-grid
+                        (for [item (:assets result)
+                              :let [my-id (:id item)
+                                    asset (:asset item)]]
+                          (rum/with-key
+                            (image-asset-item asset
+                                              (assoc opts
+                                                     :variant :search
+                                                     :item-id my-id
+                                                     :highlighted? (= my-id (:highlighted-id opts))
+                                                     :ghost-highlighted? (= my-id (:ghost-highlighted-id opts))))
+                            my-id))])])]
                  ;; Search returned no results
                  [:div.search-empty-state
                   (shui/tabler-icon "search-off" {:size 36})
