@@ -45,16 +45,54 @@
                    (.padStart (.toString b 16) 2 "0"))))))
       :else nil)))
 
+;; Memoize getComputedStyle results per CSS variable name.
+;;
+;; The bg-var pipeline is on the hot path for every colored icon — page
+;; lists, cmdk results, and sidebar entries all call into `read-bg-var`
+;; through `avatar-fallback-style` / `icon` (color?) / `get-node-icon-cp`.
+;; A graph with many tagged pages can render hundreds of icons per frame,
+;; each calling `getComputedStyle` synchronously and forcing the style
+;; recalc / layout flush phase.
+;;
+;; Cached values are stable for a given theme. A MutationObserver on
+;; `documentElement` watching `data-theme` + `class` invalidates the cache
+;; on theme flips (apply-theme-to-dom! writes both there). Observer
+;; callbacks fire at the microtask boundary, before React commits the
+;; render scheduled by the same set-state! that triggered the flip, so
+;; subscribers always see fresh values on the next paint. `contains?`
+;; check lets us cache nil too (var unset / unparseable).
+(defonce ^:private *bg-var-cache (atom {}))
+
+(defn- invalidate-bg-var-cache! []
+  (reset! *bg-var-cache {}))
+
+(defonce ^:private bg-var-theme-observer
+  (when (and (exists? js/MutationObserver) (exists? js/document))
+    (let [obs (js/MutationObserver. (fn [_] (invalidate-bg-var-cache!)))]
+      (.observe obs js/document.documentElement
+                #js {:attributes true
+                     :attributeFilter #js ["data-theme" "class"]})
+      obs)))
+
 (defn read-bg-var
   "Read a CSS background variable (e.g. \"--ls-primary-background-color\") and
    return its hex value. Tries body first (where Logseq sets theme vars), falls
-   back to documentElement. Returns nil if unset/unparseable."
+   back to documentElement. Returns nil if unset/unparseable.
+
+   Cached per theme; cache invalidates on `documentElement` attribute changes
+   (data-theme / class), so theme flips are observed without an explicit
+   invalidation call."
   [var-name]
-  (let [pick (fn [^js el]
-               (some-> el js/getComputedStyle (.getPropertyValue var-name) string/trim not-empty))]
-    (some-> (or (pick js/document.body)
-                (pick js/document.documentElement))
-            parse-css-color->hex)))
+  (let [cache @*bg-var-cache]
+    (if (contains? cache var-name)
+      (get cache var-name)
+      (let [pick (fn [^js el]
+                   (some-> el js/getComputedStyle (.getPropertyValue var-name) string/trim not-empty))
+            value (some-> (or (pick js/document.body)
+                              (pick js/document.documentElement))
+                          parse-css-color->hex)]
+        (swap! *bg-var-cache assoc var-name value)
+        value))))
 
 (defn ->hex
   "Resolve any inline CSS color string to its current-theme hex value:
