@@ -200,6 +200,13 @@
        (:latest-author summary))
     (t :block.comments/label)))
 
+(defn comments-area-title
+  [comments-area]
+  (or (some-> (:block/title comments-area)
+              string/trim
+              not-empty)
+      (t :block.comments/label)))
+
 (defn- same-local-day?
   [^js a ^js b]
   (and (= (.getFullYear a) (.getFullYear b))

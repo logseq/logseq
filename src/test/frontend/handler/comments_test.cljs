@@ -96,3 +96,20 @@
         (comments-handler/reveal-comments-area!
          {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"})
         (is (empty? @expanded))))))
+
+(deftest edit-comments-area-title-edits-comments-block
+  (let [comments-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        comments-area {:db/id 2
+                       :block/uuid comments-uuid
+                       :block/title "Comments"
+                       :block/tags [{:db/ident comments-model/comments-tag-ident}]}
+        edited (atom nil)]
+    (with-redefs [db/entity (fn [lookup]
+                              (case lookup
+                                [:block/uuid comments-uuid] comments-area
+                                nil))
+                  editor-handler/edit-block! (fn [block pos opts]
+                                               (reset! edited [block pos opts]))]
+      (comments-handler/edit-comments-area-title! comments-area :main)
+      (is (= [comments-area :max {:container-id :main}]
+             @edited)))))
