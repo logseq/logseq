@@ -609,6 +609,8 @@
           (install-file-logger! {:root-dir root-dir
                                  :repo repo
                                  :log-level (keyword (or log-level "info"))})
+          (log/info :db-worker-node-version {:build-time (build-version/build-time)
+                                             :revision (build-version/revision)})
           (reset! *ready? false)
           (reset! *lock-info nil)
           (reset! *server-list-file server-list-file)
