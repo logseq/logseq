@@ -65,12 +65,58 @@
        (remove :logseq.property/deleted-at)
        vec))
 
+(defn comment-thread-targets-toggle-visible?
+  [comments-area]
+  (> (count (comment-thread-target-blocks comments-area)) 1))
+
+(defn show-comment-thread-targets?
+  [comments-area targets-open?]
+  (boolean
+   (and targets-open?
+        (comment-thread-targets-toggle-visible? comments-area))))
+
+(defn comment-thread-click-action
+  [comments-area-visible?]
+  (if comments-area-visible?
+    :focus-comments-area
+    :show-inline-comments))
+
+(defn next-inline-comment-thread
+  [current-inline-thread target-block-uuid comments-area-uuid]
+  (let [next-thread {:target-block-uuid (str target-block-uuid)
+                     :comments-area-uuid (str comments-area-uuid)}]
+    (when-not (= current-inline-thread next-thread)
+      next-thread)))
+
+(defn inline-comment-container-id
+  [container-id]
+  (if (int? container-id)
+    container-id
+    :unknown-container))
+
+(defn- child-comments-area?
+  [block comments-area]
+  (let [block-id (:db/id block)
+        parent-id (some-> comments-area :block/parent :db/id)]
+    (boolean
+     (and block-id
+          parent-id
+          (= block-id parent-id)))))
+
 (defn comment-threads-for-block
   [block]
   (->> (get block :logseq.property.comments/_blocks)
        (filter comments-area?)
+       (remove #(child-comments-area? block %))
        (remove :logseq.property/deleted-at)
        vec))
+
+(defn comment-thread-for-block
+  ([block]
+   (first (comment-threads-for-block block)))
+  ([rendered-block fresh-block]
+   (or (some-> fresh-block comment-thread-for-block)
+       (comment-thread-for-block rendered-block))))
 
 (defn- author-initials
   [author]
@@ -90,6 +136,13 @@
           string/trim
           not-empty))
 
+(defn- created-by-avatar-src
+  [block]
+  (some-> (:logseq.property/created-by-ref block)
+          :logseq.property.user/avatar
+          string/trim
+          not-empty))
+
 (defn- uuid-string
   [value]
   (cond
@@ -106,10 +159,14 @@
 (defn comment-row
   [block]
   (let [author (created-by-title block)
+        avatar-src (created-by-avatar-src block)
+        author-uuid (created-by-uuid block)
         created-at (:block/created-at block)
         updated-at (:block/updated-at block)]
     {:author author
      :avatar (author-initials author)
+     :avatar-src avatar-src
+     :author-uuid author-uuid
      :body (string/trim (or (:block/title block) ""))
      :created-at created-at
      :updated-at updated-at
@@ -134,6 +191,14 @@
         {:count (count rows)
          :latest-author (:author latest)
          :latest-created-at (:created-at latest)}))))
+
+(defn collapsed-comments-label
+  [summary]
+  (if summary
+    (t :block.comments/collapsed-summary
+       (:count summary)
+       (:latest-author summary))
+    (t :block.comments/label)))
 
 (defn- same-local-day?
   [^js a ^js b]
