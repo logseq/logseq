@@ -10,6 +10,7 @@
             [datascript.impl.entity :as e]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.components.avatar :as avatar]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.block.comments :as block-comments]
             [frontend.components.block.comments-model :as comments-model]
@@ -92,7 +93,6 @@
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [logseq.shui.util :as shui-util]
             [medley.core :as medley]
             [missionary.core :as m]
             [promesa.core :as p]
@@ -108,6 +108,10 @@
 (defonce *drag-to-block
   (atom nil))
 (def *move-to (atom nil))
+(def ^:private comment-thread-presence-ttl-ms 30000)
+(defonce *comment-thread-presence (atom {}))
+(defonce *comment-thread-presence-requests (atom {}))
+(defonce *comment-thread-presence-flush-scheduled? (atom false))
 
 ;; TODO:
 ;; add `key`
@@ -2044,12 +2048,144 @@
   [block]
   (string/blank? (:block/title block)))
 
-(defn- user-initials
-  [user-name]
-  (when (string? user-name)
-    (let [name (string/trim user-name)]
-      (when-not (string/blank? name)
-        (-> name (subs 0 (min 2 (count name))) string/upper-case)))))
+(defn- element-in-viewport?
+  [^js el]
+  (when el
+    (let [rect (.getBoundingClientRect el)
+          viewport-height (or (.-innerHeight js/window)
+                              (some-> js/document .-documentElement .-clientHeight))
+          viewport-width (or (.-innerWidth js/window)
+                             (some-> js/document .-documentElement .-clientWidth))]
+      (and (< (.-top rect) viewport-height)
+           (> (.-bottom rect) 0)
+           (< (.-left rect) viewport-width)
+           (> (.-right rect) 0)))))
+
+(defn- comments-area-in-viewport?
+  [comments-area]
+  (some-> (:block/uuid comments-area)
+          (str)
+          ((fn [uuid] (gdom/getElement (str "ls-block-" uuid))))
+          element-in-viewport?))
+
+(defn- inline-comment-thread?
+  [inline-thread target-block-uuid comments-area]
+  (and comments-area
+       (= (:target-block-uuid inline-thread) (str target-block-uuid))
+       (= (:comments-area-uuid inline-thread) (str (:block/uuid comments-area)))))
+
+(defn- open-comment-thread!
+  [target-block-uuid comments-area]
+  (case (comments-model/comment-thread-click-action (comments-area-in-viewport? comments-area))
+    :focus-comments-area
+    (do
+      (state/set-state! :comments/inline-thread nil)
+      (comments-handler/reveal-comments-area! comments-area {:focus-editor? true}))
+
+    :show-inline-comments
+    (do
+      (comments-handler/expand-comments-area! comments-area)
+      (state/set-state! :comments/inline-thread
+                        (comments-model/next-inline-comment-thread
+                         (get @state/state :comments/inline-thread)
+                         target-block-uuid
+                         (:block/uuid comments-area))))))
+
+(defn- ui-comment-thread-for-block
+  [block]
+  (when-let [uuid (:block/uuid block)]
+    (comments-model/comment-thread-for-block
+     block
+     (db/entity [:block/uuid uuid]))))
+
+(defn- comment-thread-presence-key
+  [block]
+  (when-let [uuid (:block/uuid block)]
+    (when-let [repo (state/get-current-repo)]
+      [repo (str uuid)])))
+
+(defn- fresh-comment-thread-presence
+  [cache-key]
+  (when-let [{:keys [checked-at] :as entry} (get @*comment-thread-presence cache-key)]
+    (when (< (- (js/Date.now) checked-at) comment-thread-presence-ttl-ms)
+      entry)))
+
+(defn- cache-comment-thread-presence!
+  [cache-key present?]
+  (swap! *comment-thread-presence
+         assoc
+         cache-key
+         {:present? (boolean present?)
+          :checked-at (js/Date.now)}))
+
+(declare flush-comment-thread-presence!)
+
+(defn- schedule-comment-thread-presence-check!
+  [state block]
+  (when-let [cache-key (comment-thread-presence-key block)]
+    (let [*comment-thread-present? (get state ::comment-thread-present?)
+          cached-entry (fresh-comment-thread-presence cache-key)]
+      (cond
+        (or (comments-model/protected-comment-block? block)
+            (ui-comment-thread-for-block block))
+        (reset! *comment-thread-present? nil)
+
+        cached-entry
+        (reset! *comment-thread-present? (:present? cached-entry))
+
+        :else
+        (do
+          (swap! *comment-thread-presence-requests
+                 update
+                 cache-key
+                 (fnil conj #{})
+                 *comment-thread-present?)
+          (when (compare-and-set! *comment-thread-presence-flush-scheduled? false true)
+            (util/schedule flush-comment-thread-presence!)))))))
+
+(defn- flush-comment-thread-presence!
+  []
+  (let [requests @*comment-thread-presence-requests]
+    (reset! *comment-thread-presence-requests {})
+    (reset! *comment-thread-presence-flush-scheduled? false)
+    (doseq [[repo repo-requests] (group-by (fn [[cache-key _listeners]] (first cache-key))
+                                           requests)]
+      (let [repo-cache-keys (mapv first repo-requests)
+            block-uuids (mapv second repo-cache-keys)]
+        (when (seq block-uuids)
+          (p/let [commented-block-uuids (comments-handler/<get-comment-thread-block-uuids repo block-uuids)
+                  commented-block-uuids (into #{} commented-block-uuids)]
+            (doseq [[cache-key listeners] repo-requests
+                    :let [present? (contains? commented-block-uuids (second cache-key))]]
+              (cache-comment-thread-presence! cache-key present?)
+              (doseq [*listener listeners]
+                (reset! *listener present?)))))))))
+
+(defn- hydrate-comment-thread!
+  [state block]
+  (when-let [uuid (:block/uuid block)]
+    (let [*hydrated-comment-thread (get state ::hydrated-comment-thread)
+          cache-key (comment-thread-presence-key block)]
+      (p/let [threads (comments-handler/<get-comment-threads-for-block uuid)
+              thread (or (ui-comment-thread-for-block block)
+                         (comments-model/comment-thread-for-block
+                          (assoc block :logseq.property.comments/_blocks threads)))]
+        (when cache-key
+          (cache-comment-thread-presence! cache-key thread))
+        (reset! *hydrated-comment-thread (when thread
+                                           {:block-uuid uuid
+                                            :thread thread}))
+        (some-> (get state ::comment-thread-present?)
+                (reset! (boolean thread)))
+        thread))))
+
+(defn- open-comment-thread-for-block!
+  [state block comment-thread]
+  (if comment-thread
+    (open-comment-thread! (:block/uuid block) comment-thread)
+    (p/let [comment-thread (hydrate-comment-thread! state block)]
+      (when comment-thread
+        (open-comment-thread! (:block/uuid block) comment-thread)))))
 
 (defn- editing-user-for-block
   [block-uuid online-users current-user-uuid]
@@ -2063,18 +2199,15 @@
 
 (defn- editing-user-avatar
   [{:user/keys [name uuid]}]
-  (let [user-name (or name uuid)
-        initials (user-initials user-name)
-        color (when uuid (shui-util/uuid-color uuid))]
-    (when initials
+  (let [user-name (or name uuid)]
+    (when (avatar/initials user-name)
       [:span.block-editing-avatar-wrap
-       (shui/avatar
+       (avatar/user-avatar
         {:class "block-editing-avatar w-4 h-4 flex-none"
-         :title user-name}
-        (shui/avatar-fallback
-         {:style {:background-color (when color (str color "50"))
-                  :font-size 9}}
-         initials))])))
+         :title user-name
+         :name user-name
+         :uuid uuid
+         :fallback-props {:style {:font-size 9}}})])))
 
 (rum/defcs ^:large-vars/cleanup-todo block-control < rum/reactive
   (rum/local false ::dragging?)
@@ -3770,11 +3903,12 @@
           config
           block
           (ldb/get-children block)
-          collapsed?
-          *hide-block-refs?
-          *show-query?
-          {:block-content-or-editor block-content-or-editor
-           :block-reactions block-reactions})
+         collapsed?
+         *hide-block-refs?
+         *show-query?
+         {:block-content-or-editor block-content-or-editor
+          :block-reactions block-reactions}
+          {})
          (block-content-or-editor config
            parsed-block
            {:edit-input-id edit-input-id
@@ -3823,7 +3957,17 @@
                     ::show-query? (atom false)
                     ::refs-count *refs-count
                     ::plugin-renderer-error? (atom false)
-                    ::use-plugin-renderer? (atom true))))}
+                    ::use-plugin-renderer? (atom true)
+                    ::hydrated-comment-thread (atom nil)
+                    ::comment-thread-present? (atom nil))))
+   :did-mount (fn [state]
+                (let [[_container-state _repo _config block] (:rum/args state)]
+                  (schedule-comment-thread-presence-check! state block))
+                state)
+   :did-update (fn [state]
+                 (let [[_container-state _repo _config block] (:rum/args state)]
+                   (schedule-comment-thread-presence-check! state block))
+                 state)}
   (mixins/event-mixin
    (fn [state]
      (let [*ref (::ref state)]
@@ -3837,6 +3981,10 @@
         show-query? (rum/react *show-query?)
         *plugin-renderer-error? (get state ::plugin-renderer-error?)
         *use-plugin-renderer? (get state ::use-plugin-renderer?)
+        *hydrated-comment-thread (get state ::hydrated-comment-thread)
+        hydrated-comment-thread (rum/react *hydrated-comment-thread)
+        *comment-thread-present? (get state ::comment-thread-present?)
+        comment-thread-present? (rum/react *comment-thread-present?)
         plugin-renderer-error? (rum/react *plugin-renderer-error?)
         use-plugin-renderer? (rum/react *use-plugin-renderer?)
         switch-to-plugin-renderer! (fn []
@@ -3896,7 +4044,13 @@
         children (ldb/get-children block)
         comments-area? (comments-model/comments-area? block)
         comment-thread (when-not comments-area?
-                         (first (comments-model/comment-threads-for-block block)))
+                         (or (ui-comment-thread-for-block block)
+                             (when (= uuid (:block-uuid hydrated-comment-thread))
+                               (:thread hydrated-comment-thread))))
+        has-comment-thread? (or comment-thread
+                                (true? comment-thread-present?))
+        inline-thread (state/sub :comments/inline-thread)
+        show-inline-comments? (inline-comment-thread? inline-thread uuid comment-thread)
         protected-comment-block? (comments-model/protected-comment-block? block)
         page-icon (when (:page-title? config)
                     (let [icon' (get block :logseq.property/icon)]
@@ -3986,7 +4140,7 @@
                  (when (ldb/recycled? block) " line-through opacity-70")
                  (when order-list? " is-order-list")
                  (when comments-area? " is-comments-area")
-                 (when comment-thread " has-comment-thread")
+                 (when has-comment-thread? " has-comment-thread")
                  (when (string/blank? title) " is-blank")
                  (when original-block " embed-block"))
         :haschild (str (boolean has-child?))
@@ -4111,7 +4265,7 @@
           ;; --- Original outline ---
           outline-view-cp)
 
-        (when (and comment-thread (not table?) (not property?))
+        (when (and has-comment-thread? (not table?) (not property?))
           (shui/button
            {:variant :ghost
             :size :icon
@@ -4121,8 +4275,24 @@
             :on-pointer-down util/stop
             :on-click (fn [e]
                         (util/stop e)
-                        (comments-handler/reveal-comments-area! comment-thread {:focus-editor? true}))}
+                        (open-comment-thread-for-block! state block comment-thread))}
            (shui/tabler-icon "message-circle" {:size 15})))])
+
+     (when show-inline-comments?
+       [:div.ls-inline-comments
+        (when-not (:page-title? config)
+          {:style {:padding-left (if (util/mobile?) 12 45)}})
+        (block-comments/comments-area-view
+         (assoc config :container-id (comments-model/inline-comment-container-id (:container-id config)))
+         comment-thread
+         (ldb/get-children comment-thread)
+         false
+         *hide-block-refs?
+         *show-query?
+         {:block-content-or-editor block-content-or-editor
+          :block-reactions block-reactions}
+         {:focus-editor? true
+          :inline? true})])
 
      (when (and (not (:library? config))
              (or (:tag-dialog? config)

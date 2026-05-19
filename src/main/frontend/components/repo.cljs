@@ -119,10 +119,9 @@
         dialog-config {:cancel-label (t :ui/cancel)
                        :ok-label (t :ui/confirm)}]
     (-> (shui/dialog-confirm!
-         [:p.font-medium.-my-4 (t :graph/delete-local-confirm-desc graph-name)
-          [:span.my-2.flex.font-normal.opacity-75
-           [:small (t :graph/delete-warning)]]]
-         dialog-config)
+         (assoc dialog-config
+                :title (t :graph/delete-local-confirm-desc graph-name)
+                :description (t :graph/delete-warning)))
         (p/then (fn []
                   (repo-handler/remove-repo! repo))))))
 
@@ -198,10 +197,9 @@
                :on-click (fn []
                            (let [prompt-str (t :graph/delete-server-confirm-desc graph-name)]
                              (-> (shui/dialog-confirm!
-                                  [:p.font-medium.-my-4 prompt-str
-                                   [:span.my-2.flex.font-normal.opacity-75
-                                    [:small (t :graph/delete-warning)]]]
-                                  dialog-config)
+                                  (assoc dialog-config
+                                         :title prompt-str
+                                         :description (t :graph/delete-warning)))
                                  (p/then
                                   (fn []
                                     (state/set-state! :rtc/loading-graphs? true)
