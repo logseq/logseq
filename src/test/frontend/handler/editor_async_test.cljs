@@ -1,5 +1,5 @@
 (ns frontend.handler.editor-async-test
-  (:require [cljs.test :refer [is testing async use-fixtures]]
+  (:require [cljs.test :refer [deftest is testing async use-fixtures]]
             [datascript.core :as d]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.db :as db]
@@ -505,3 +505,31 @@
                                  :edit-block? true}}
                          @inserted)
                       "Empty Enter in the reply box should create an editable sibling after #Comments"))))))
+
+(deftest delete-comment-targets
+  (let [delete-targets (resolve 'frontend.handler.comments/comment-delete-targets)
+        first-comment {:block/uuid (random-uuid)
+                       :block/title "first"}
+        second-comment {:block/uuid (random-uuid)
+                        :block/title "second"}
+        deleted-comment (assoc second-comment :logseq.property/deleted-at 1)
+        comments-area {:block/uuid (random-uuid)
+                       :block/title "Comments"
+                       :block/tags #{comments-model/comments-tag-ident}}]
+    (is (fn? delete-targets))
+    (when (fn? delete-targets)
+      (testing "deletes the comments area when the deleted comment is the only live child"
+        (let [comments-area (assoc comments-area :block/_parent [first-comment])
+              first-comment (assoc first-comment :block/parent comments-area)]
+          (is (= [comments-area]
+                 (delete-targets first-comment)))))
+      (testing "keeps the comments area when other live comments remain"
+        (let [comments-area (assoc comments-area :block/_parent [first-comment second-comment])
+              first-comment (assoc first-comment :block/parent comments-area)]
+          (is (= [first-comment]
+                 (delete-targets first-comment)))))
+      (testing "ignores already deleted comment children"
+        (let [comments-area (assoc comments-area :block/_parent [first-comment deleted-comment])
+              first-comment (assoc first-comment :block/parent comments-area)]
+          (is (= [comments-area]
+                 (delete-targets first-comment))))))))

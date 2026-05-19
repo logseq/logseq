@@ -221,11 +221,22 @@
   [comment-block content]
   (editor-handler/save-block! (state/get-current-repo) comment-block content))
 
+(defn- comment-delete-targets
+  [comment-block]
+  (let [comments-area' (:block/parent comment-block)
+        comments-area (or (some-> comments-area' :db/id db/entity)
+                          comments-area')
+        live-children (remove :logseq.property/deleted-at (:block/_parent comments-area))]
+    (if (and (comments-model/comments-area? comments-area)
+             (<= (count live-children) 1))
+      [comments-area]
+      [comment-block])))
+
 (defn delete-comment!
   [comment-block]
   (ui-outliner-tx/transact!
    {:outliner-op :delete-blocks}
-   (outliner-op/delete-blocks! [comment-block] nil)))
+   (outliner-op/delete-blocks! (comment-delete-targets comment-block) nil)))
 
 (defn paste-assets!
   [target-block e]
