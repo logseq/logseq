@@ -11,6 +11,8 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
+            [frontend.components.block.comments :as block-comments]
+            [frontend.components.block.comments-model :as comments-model]
             [frontend.components.block.drop :as block-drop]
             [frontend.components.block.image :as block-image]
             [frontend.components.block.macros :as block-macros]
@@ -45,6 +47,7 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.comments :as comments-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
@@ -2103,7 +2106,8 @@
                             (:logseq.property/icon block)
                             link?
                             (some :logseq.property/icon (:block/tags block))
-                            (contains? #{"pdf"} (:logseq.property.asset/type block))))]
+                            (contains? #{"pdf"} (:logseq.property.asset/type block))))
+        movable? (not (comments-model/protected-comment-block? block))]
     [:div.block-control-wrap.flex.flex-row.items-center.h-6
      {:class (util/classnames [{:is-order-list order-list?
                                 :is-with-icon with-icon?
@@ -2147,7 +2151,7 @@
                                                (not collapsed?))
                                       " hide-inner-bullet")
                                     (when order-list? " as-order-list typed-list"))}
-                        (not (util/mobile?))
+                        (and movable? (not (util/mobile?)))
                         (assoc
                          :draggable true
                          :on-drag-start (fn [event]
@@ -3756,19 +3760,30 @@
       page-icon)
 
     [:div.flex.flex-col.w-full
-     (let [parsed-block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) title))
+     (let [comments-area? (comments-model/comments-area? block)
+           parsed-block (merge block (block/parse-title-and-body uuid (get block :block/format :markdown) title))
            hide-block-refs-count? (or (and (:embed? config)
                                         (= (:block/uuid parsed-block) (:embed-id config)))
                                     table?)]
-       (block-content-or-editor config
-         parsed-block
-         {:edit-input-id edit-input-id
-          :block-id block-id
-          :edit? editing?
-          :refs-count refs-count
-          :*hide-block-refs? *hide-block-refs?
-          :hide-block-refs-count? hide-block-refs-count?
-          :*show-query? *show-query?}))]]
+       (if comments-area?
+         (block-comments/comments-area-view
+          config
+          block
+          (ldb/get-children block)
+          collapsed?
+          *hide-block-refs?
+          *show-query?
+          {:block-content-or-editor block-content-or-editor
+           :block-reactions block-reactions})
+         (block-content-or-editor config
+           parsed-block
+           {:edit-input-id edit-input-id
+            :block-id block-id
+            :edit? editing?
+            :refs-count refs-count
+            :*hide-block-refs? *hide-block-refs?
+            :hide-block-refs-count? hide-block-refs-count?
+            :*show-query? *show-query?})))]]
 
    (when (and (not collapsed?) (not (or table? property?)))
      (block-positioned-properties config block :block-below))
@@ -3879,6 +3894,10 @@
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
+        comments-area? (comments-model/comments-area? block)
+        comment-thread (when-not comments-area?
+                         (first (comments-model/comment-threads-for-block block)))
+        protected-comment-block? (comments-model/protected-comment-block? block)
         page-icon (when (:page-title? config)
                     (let [icon' (get block :logseq.property/icon)]
                       (when-let [icon (and (ldb/page? block)
@@ -3960,11 +3979,14 @@
         :blockid (str uuid)
         :containerid container-id
         :data-is-property (ldb/property? block)
+        :data-comments-area comments-area?
         :ref #(when (nil? @*ref) (reset! *ref %))
         :data-collapsed (and collapsed? has-child?)
         :class (str (when selected? "selected")
                  (when (ldb/recycled? block) " line-through opacity-70")
                  (when order-list? " is-order-list")
+                 (when comments-area? " is-comments-area")
+                 (when comment-thread " has-comment-thread")
                  (when (string/blank? title) " is-blank")
                  (when original-block " embed-block"))
         :haschild (str (boolean has-child?))
@@ -3978,7 +4000,7 @@
         :on-touch-cancel (fn [e]
                            (block-handler/on-touch-cancel e))}
 
-       (and (util/capacitor?) (not (ldb/page? block)))
+       (and (util/capacitor?) (not (ldb/page? block)) (not protected-comment-block?))
        (assoc
          :draggable true
          :on-drag-start
@@ -4087,7 +4109,20 @@
               (str "block-renderer-" (:key matched-block-renderer) "-" uuid))]]
 
           ;; --- Original outline ---
-          outline-view-cp)])
+          outline-view-cp)
+
+        (when (and comment-thread (not table?) (not property?))
+          (shui/button
+           {:variant :ghost
+            :size :icon
+            :class "ls-block-comment-thread-button"
+            :title (t :block.comments/label)
+            :aria-label (t :block.comments/label)
+            :on-pointer-down util/stop
+            :on-click (fn [e]
+                        (util/stop e)
+                        (comments-handler/reveal-comments-area! comment-thread {:focus-editor? true}))}
+           (shui/tabler-icon "message-circle" {:size 15})))])
 
      (when (and (not (:library? config))
              (or (:tag-dialog? config)
@@ -4136,6 +4171,7 @@
      (when-not (or (:hide-children? config)
                  table?
                  property?
+                 comments-area?
                  (block-renderer-hides-outline-children?
                    renderer-display-mode
                    {:matched-block-renderer matched-block-renderer}))

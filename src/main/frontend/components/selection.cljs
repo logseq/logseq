@@ -1,7 +1,9 @@
 (ns frontend.components.selection
   "Block selection"
-  (:require [frontend.db :as db]
+  (:require [frontend.components.block.comments-model :as comments-model]
+            [frontend.db :as db]
             [frontend.context.i18n :refer [t]]
+            [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -9,12 +11,22 @@
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
+(defn show-comment-action?
+  [outliner? comment-targets]
+  (boolean
+   (and outliner?
+        (seq comment-targets))))
+
 (rum/defc action-bar < rum/reactive
-  [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent]
-      :or {on-cut #(editor-handler/cut-selection-blocks true)}}]
+  [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent outliner?]
+      :or {on-cut #(editor-handler/cut-selection-blocks true)
+           outliner? true}}]
   (when-not (or (state/sub :search/mode)
                 (state/sub :ui/show-property-dialog?))
-    (let [selected-blocks (map (fn [block] (if (number? block) (db/entity block) block)) selected-blocks)
+    (let [selected-blocks (or (seq selected-blocks)
+                              (seq (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
+          selected-blocks (map (fn [block] (if (number? block) (db/entity block) block)) selected-blocks)
+          comment-targets (comments-model/comment-target-blocks selected-blocks)
           on-copy (if (and selected-blocks (nil? on-copy))
                     #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks})
                     (or on-copy #(editor-handler/copy-selection-blocks true)))
@@ -36,6 +48,14 @@
                                                                             :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
          (ui/tooltip (ui/icon "hash" {:size 13}) (t :property/set-tags)
                      {:trigger-props {:class "flex"}}))
+        (when (show-comment-action? outliner? comment-targets)
+          (shui/button
+           (assoc button-opts
+                  :on-pointer-down (fn [e]
+                                     (util/stop e)
+                                     (comments-handler/add-comment-to-blocks! comment-targets)))
+           (ui/tooltip (ui/icon "message-circle" {:size 13}) (t :block.comments/add-comment)
+                       {:trigger-props {:class "flex"}})))
         (shui/button
          (assoc button-opts
                 :on-pointer-down (fn [e]

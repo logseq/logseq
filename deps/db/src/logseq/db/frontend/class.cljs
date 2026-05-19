@@ -41,6 +41,12 @@
      {:title "Task"
       :schema {:properties [:logseq.property/status :logseq.property/priority :logseq.property/deadline :logseq.property/scheduled]}}
 
+     :logseq.class/Comments
+     {:title "Comments"
+      :properties {:logseq.property.class/hide-from-node true
+                   :logseq.property/icon {:type :emoji, :id "speech_balloon"}}
+      :schema {:properties [:logseq.property.comments/blocks]}}
+
      :logseq.class/Query
      {:title "Query"
       :properties {:logseq.property/icon {:type :tabler-icon :id "search"}}
