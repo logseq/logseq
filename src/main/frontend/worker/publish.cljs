@@ -46,8 +46,7 @@
                 (when (and block-uuid-str
                            (or (not page?)
                                (not= block-uuid page-uuid)))
-                  (let [block-content (or (:block/content block)
-                                          (:block/title block)
+                  (let [block-content (or (:block/title block)
                                           (:block/name block)
                                           "")
                         block-format (name (or (:block/format block) :markdown))
@@ -90,8 +89,7 @@
 
 (defn- block-search-content
   [block]
-  (let [raw-content (or (:block/content block)
-                        (:block/title block)
+  (let [raw-content (or (:block/title block)
                         (:block/name block)
                         "")
         raw-content (string/trim raw-content)]
