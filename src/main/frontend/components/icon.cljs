@@ -6837,11 +6837,19 @@
                                   (when-not keep-popup?
                                     (reset! *view :icon-picker)))
                      :on-back #(reset! *view :icon-picker)
+                     ;; Inner-picker trash delegates to outer on-chosen with a
+                     ;; mode hint. Outer dropdown semantics aren't surfaced
+                     ;; here (asset/text picker stay single-button), so map
+                     ;; to :revert when inheritance is available, otherwise
+                     ;; :remove. Both retract the property; the caller decides
+                     ;; whether class default takes over.
                      :on-delete (fn []
                                   (reset-picker-transient-state!
                                    {:*asset-picker-initial-mode *asset-picker-initial-mode})
-                                  (on-chosen nil))
+                                  (on-chosen nil nil
+                                             (if (= delete-mode :two-option) :revert :remove)))
                      :del-btn? del-btn?
+                     :delete-mode delete-mode
                      :current-icon normalized-icon-value
                      :avatar-context (when (= :avatar (:type normalized-icon-value))
                                        normalized-icon-value)
@@ -6876,7 +6884,8 @@
                     :on-delete (fn []
                                  (reset-picker-transient-state!
                                   {:*asset-picker-initial-mode *asset-picker-initial-mode})
-                                 (on-chosen nil))
+                                 (on-chosen nil nil
+                                            (if (= delete-mode :two-option) :revert :remove)))
                     :del-btn? del-btn?
                     :current-icon normalized-icon-value
                     :selected-color @*color
@@ -7078,15 +7087,43 @@
                                            (fn []
                                              (dissoc-icon-preview-field! preview-base-target :color)))
                           :button-attrs {:data-topbar-stop "color"}))
-          ;; delete button
-          (when del-btn?
-            (shui/button {:variant :outline :size :sm :data-action "del"
-                          :data-topbar-stop "trash"
-                          :on-click (fn []
-                                      (reset-picker-transient-state!
-                                       {:*asset-picker-initial-mode *asset-picker-initial-mode})
-                                      (on-chosen nil))}
-                         (shui/tabler-icon "trash" {:size 17})))]]
+          ;; delete button — single-click in :remove mode, dropdown in :two-option mode
+          (let [trash-icon (shui/tabler-icon "trash" {:size 17})
+                reset-and-call (fn [action]
+                                 (reset-picker-transient-state!
+                                  {:*asset-picker-initial-mode *asset-picker-initial-mode})
+                                 (on-chosen nil nil action))]
+            (case delete-mode
+              :hidden nil
+
+              :remove
+              (shui/button {:variant :outline :size :sm :data-action "del"
+                            :data-topbar-stop "trash"
+                            :title (t :icon/remove-icon)
+                            :aria-label (t :icon/remove-icon)
+                            :on-click #(reset-and-call :remove)}
+                           trash-icon)
+
+              :two-option
+              (shui/dropdown-menu
+               (shui/dropdown-menu-trigger
+                {:as-child true}
+                (shui/button {:variant :outline :size :sm :data-action "del"
+                              :data-topbar-stop "trash"
+                              :title (t :icon/remove-icon-options)
+                              :aria-label (t :icon/remove-icon-options)
+                              :aria-haspopup "menu"}
+                             trash-icon))
+               (shui/dropdown-menu-content
+                {:side "bottom" :align "end"}
+                (shui/dropdown-menu-item
+                 {:on-select #(reset-and-call :revert)}
+                 (shui/tabler-icon "arrow-back-up" {:size 14 :class "mr-2 opacity-80"})
+                 (t :icon/revert-to-default))
+                (shui/dropdown-menu-item
+                 {:on-select #(reset-and-call :remove-entirely)}
+                 (shui/tabler-icon "trash" {:size 14 :class "mr-2 opacity-80"})
+                 (t :icon/remove-entirely))))))]]
 
         (shui/separator {:class "my-0 icon-picker-separator"})
 

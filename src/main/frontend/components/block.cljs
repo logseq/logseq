@@ -3940,7 +3940,7 @@
                                                     :id "letter-p"}))))]
                         [:div.ls-page-icon.flex.items-center
                          (icon-component/icon-picker icon
-                                                     {:on-chosen (fn [_e icon]
+                                                     {:on-chosen (fn [_e icon & [action]]
                                                                    (if icon
                                                                      (let [;; Handle text/avatar icons with :data nested structure
                                                                            icon-data (cond
@@ -3970,23 +3970,35 @@
                                                                           (:db/id block)
                                                                           :logseq.property.class/default-icon
                                                                           icon-data)))
-                                                                     ;; del — set :none to override inheritance (prevents auto-fetch re-trigger)
-                                                                     (do
+                                                                     ;; del — branch on action keyword from the dropdown
+                                                                     (case action
+                                                                       :remove-entirely
+                                                                       ;; Suppress inheritance: write the :none sentinel.
+                                                                       ;; Don't touch class default-icon — user wants
+                                                                       ;; "no icon" only on THIS entity.
                                                                        (db-property-handler/set-block-property!
                                                                         (:db/id block)
                                                                         :logseq.property/icon
                                                                         {:type :none})
-                                                                       ;; For classes, only clear default-icon if it
-                                                                       ;; matches the page-icon being removed — i.e. the
-                                                                       ;; two were synced. If default-icon was set
-                                                                       ;; independently, preserve it.
-                                                                       (let [default-icon (:logseq.property.class/default-icon block)]
-                                                                         (when (and (ldb/class? block)
-                                                                                    default-icon
-                                                                                    (= default-icon icon'))
-                                                                           (db-property-handler/remove-block-property!
-                                                                            (:db/id block)
-                                                                            :logseq.property.class/default-icon))))))
+
+                                                                       ;; :revert (from dropdown) or :remove / nil (from
+                                                                       ;; single-option immediate delete): retract the
+                                                                       ;; property so inheritance kicks in.
+                                                                       (do
+                                                                         (db-property-handler/remove-block-property!
+                                                                          (:db/id block)
+                                                                          :logseq.property/icon)
+                                                                         ;; For classes, only clear default-icon if it
+                                                                         ;; matches the page-icon being removed — i.e. the
+                                                                         ;; two were synced. Preserves independently-set
+                                                                         ;; default-icons.
+                                                                         (let [default-icon (:logseq.property.class/default-icon block)]
+                                                                           (when (and (ldb/class? block)
+                                                                                      default-icon
+                                                                                      (= default-icon icon'))
+                                                                             (db-property-handler/remove-block-property!
+                                                                              (:db/id block)
+                                                                              :logseq.property.class/default-icon)))))))
                                                       :del-btn? (boolean (and icon' (not= (:type icon') :none)))
                                                       :page-title (:block/title block)
                                                       :preview-target-db-id (:db/id block)
