@@ -7114,7 +7114,9 @@
                         (when (and e (pos? (.-detail e)))
                           (reset! *focus-region :search)
                           (some-> (rum/deref *input-ref) (.focus))))
-           :button-attrs {:data-topbar-stop "tab"}})
+           :button-attrs {:data-topbar-stop "tab"}
+           :tab-id-prefix "icon-picker"
+           :panel-id "icon-picker-panel"})
          [:div.tab-actions
           ;; Color picker — gated by `color-btn?` so sub-picker call
           ;; sites (e.g. avatar fallback) can suppress it. The parent
@@ -7338,6 +7340,9 @@
                              (when-not to-popover?
                                (clear-tile-hover!))))}
         [:div.content-pane
+         {:id "icon-picker-panel"
+          :role "tabpanel"
+          :aria-labelledby (str "icon-picker-tab-" (name @*tab))}
          ;; Custom tab always shows its own content (Text/Avatar/Image buttons)
          (if (= @*tab :custom)
            (custom-tab-cp *q page-title *color *view *asset-picker-initial-mode icon-value opts)

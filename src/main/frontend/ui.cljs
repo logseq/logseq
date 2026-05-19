@@ -584,8 +584,12 @@
    and supplies any siblings (observers, `.tab-actions`, etc.).
    opts: :tabs [[id label] ...], :active id, :on-change (fn [id event]),
          :button-attrs (optional map merged into every button's attrs;
-                        does not override keys this fn sets)"
-  [{:keys [tabs active on-change button-attrs]}]
+                        does not override keys this fn sets)
+         :tab-id-prefix (optional; if set, emit id=\"<prefix>-tab-<id>\"
+                         per button for WAI-ARIA tab/tabpanel linkage)
+         :panel-id (optional; if set, emit aria-controls=<panel-id> per
+                    button — pair with the corresponding role=\"tabpanel\")"
+  [{:keys [tabs active on-change button-attrs tab-id-prefix panel-id]}]
   (for [[id label] tabs
         :let [active? (= active id)]]
     [:button.tab-item
@@ -604,7 +608,9 @@
              :on-mouse-down (fn [^js e] (util/stop e))
              :on-click      (fn [^js e]
                               (util/stop e)
-                              (when on-change (on-change id e)))})
+                              (when on-change (on-change id e)))}
+            (when tab-id-prefix {:id (str tab-id-prefix "-tab-" (name id))})
+            (when panel-id     {:aria-controls panel-id}))
      label]))
 
 (defn keyboard-shortcut-from-config [shortcut-name & {:keys [pick-first?]}]
