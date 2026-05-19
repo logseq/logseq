@@ -6837,19 +6837,12 @@
                                   (when-not keep-popup?
                                     (reset! *view :icon-picker)))
                      :on-back #(reset! *view :icon-picker)
-                     ;; Inner-picker trash delegates to outer on-chosen with a
-                     ;; mode hint. Outer dropdown semantics aren't surfaced
-                     ;; here (asset/text picker stay single-button), so map
-                     ;; to :revert when inheritance is available, otherwise
-                     ;; :remove. Both retract the property; the caller decides
-                     ;; whether class default takes over.
                      :on-delete (fn []
                                   (reset-picker-transient-state!
                                    {:*asset-picker-initial-mode *asset-picker-initial-mode})
                                   (on-chosen nil nil
                                              (if (= delete-mode :two-option) :revert :remove)))
                      :del-btn? del-btn?
-                     :delete-mode delete-mode
                      :current-icon normalized-icon-value
                      :avatar-context (when (= :avatar (:type normalized-icon-value))
                                        normalized-icon-value)
@@ -7087,16 +7080,21 @@
                                            (fn []
                                              (dissoc-icon-preview-field! preview-base-target :color)))
                           :button-attrs {:data-topbar-stop "color"}))
-          ;; delete button — single-click in :remove mode, dropdown in :two-option mode
+          ;; delete button — single-click in :remove mode, dropdown in :two-option mode.
+          ;; NOTE: use `cond` (not `case`) — CLJS `case` with keyword tests + a
+          ;; nil branch + Radix dropdown-menu children somehow leaks a keyword
+          ;; into the React child tree. Reproduced specifically on icon-free
+          ;; pages (delete-mode = :hidden → case returns nil → still throws
+          ;; "Objects are not valid as a React child"). `cond` avoids the bug.
           (let [trash-icon (shui/tabler-icon "trash" {:size 17})
                 reset-and-call (fn [action]
                                  (reset-picker-transient-state!
                                   {:*asset-picker-initial-mode *asset-picker-initial-mode})
                                  (on-chosen nil nil action))]
-            (case delete-mode
-              :hidden nil
+            (cond
+              (= delete-mode :hidden) nil
 
-              :remove
+              (= delete-mode :remove)
               (shui/button {:variant :outline :size :sm :data-action "del"
                             :data-topbar-stop "trash"
                             :title (t :icon/remove-icon)
@@ -7104,7 +7102,7 @@
                             :on-click #(reset-and-call :remove)}
                            trash-icon)
 
-              :two-option
+              (= delete-mode :two-option)
               (shui/dropdown-menu
                (shui/dropdown-menu-trigger
                 {:as-child true}
