@@ -6393,6 +6393,49 @@
    [])
   nil)
 
+(defn- compute-delete-mode
+  "Classify the picker's delete affordance based on entity + property scope.
+
+   Returns one of:
+   - `:two-option` — entity has an own icon AND a class default-icon would
+     inherit if the override were retracted. Picker opens a dropdown:
+     `[↩ Revert to default]` retracts; `[🗑 Remove entirely]` writes
+     `{:type :none}`.
+   - `:remove` — entity has an own icon but no class inheritance source
+     (or scope is class default-icon itself, which has no inheritance above
+     it). Single-click retract.
+   - `:hidden` — nothing to delete: entity has no own icon, OR entity is
+     suppressed via `:type :none` (restoration lives in the page-title
+     affordance, not here).
+
+   Reads `:block/tags` + `:logseq.property.class/default-icon` so
+   `db-mixins/query` registers them as render deps — the trash UI updates
+   when a class's default-icon changes."
+  [entity property]
+  (let [own           (when entity (get entity property))
+        none?         (= :none (:type own))
+        has-real-own? (and own (not none?))
+        scope-page-icon? (= property :logseq.property/icon)
+        ;; Inheritance only applies to the page-icon scope. The class
+        ;; default-icon picker IS the source — nothing above it.
+        class-default (when (and scope-page-icon? entity)
+                        (some :logseq.property.class/default-icon
+                              (sort-by :db/id (:block/tags entity))))
+        tag-icon      (when (and scope-page-icon? entity)
+                        (some :logseq.property/icon
+                              (sort-by :db/id (:block/tags entity))))
+        ;; Class entity whose own icon equals its default-icon — block.cljs's
+        ;; sync-clear path at :3974-3980 already handles this as one action.
+        synced-class? (and entity
+                           (ldb/class? entity)
+                           (= own (:logseq.property.class/default-icon entity)))]
+    (cond
+      none?                       :hidden
+      (not has-real-own?)         :hidden
+      synced-class?               :remove
+      (or class-default tag-icon) :two-option
+      :else                       :remove)))
+
 (rum/defcs ^:large-vars/cleanup-todo icon-search < rum/reactive db-mixins/query
   (rum/local "" ::q)
   (rum/local nil ::result)
@@ -6676,10 +6719,15 @@
         ;; for page-icon pickers, `:logseq.property.class/default-icon` for the
         ;; class default-icon picker. Without this, a default-icon picker would
         ;; read the unrelated `:logseq.property/icon` and stay stale across commits.
-        del-btn? (if preview-target-db-id
-                   (let [icon (some-> (model/sub-block preview-target-db-id) (get property))]
-                     (and icon (not= (:type icon) :none)))
-                   del-btn?)
+        ;; Reactively derive both `del-btn?` (a boolean, kept for back-compat
+        ;; with downstream callers) and `delete-mode` (a keyword that drives
+        ;; the new dropdown UX — see `compute-delete-mode`). Both subscribe
+        ;; to the live entity via model/sub-block.
+        live-entity (when preview-target-db-id (model/sub-block preview-target-db-id))
+        delete-mode (if preview-target-db-id
+                      (compute-delete-mode live-entity property)
+                      (if del-btn? :remove :hidden))
+        del-btn? (not= delete-mode :hidden)
         ;; Same staleness problem applies to icon-value itself. shui's popup
         ;; stores the content-fn in a global atom and never replaces it after
         ;; popup-show! — so any data this component would have *received as a
