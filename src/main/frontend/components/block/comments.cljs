@@ -417,10 +417,50 @@
               (reference {} uuid)
               (string/trim (or (:block/title target) "")))]))])))
 
+(defn- comments-area-title-editing?
+  [config block]
+  (let [block-uuid (:block/uuid block)
+        container-id (:container-id config)
+        editing-in-container? (state/sub-editing? [container-id block-uuid])
+        editing-in-unknown-container? (state/sub-editing? [:unknown-container block-uuid])]
+    (boolean
+     (and block-uuid
+          (or editing-in-container?
+              editing-in-unknown-container?)))))
+
+(defn- comments-area-title-view
+  [config block editing? *hide-block-refs? *show-query? {:keys [block-content-or-editor]}]
+  (let [block-uuid (:block/uuid block)
+        edit-input-id (str "edit-block-" block-uuid)]
+    (if (and editing? block-content-or-editor)
+      [:div.ls-comments-title-editor
+       (block-content-or-editor
+        (assoc config :table-block-title? true)
+        (merge block (block/parse-title-and-body block-uuid
+                                                 (get block :block/format :markdown)
+                                                 (:block/title block)))
+        {:edit-input-id edit-input-id
+         :block-id block-uuid
+         :edit? true
+         :refs-count nil
+         :*hide-block-refs? *hide-block-refs?
+         :hide-block-refs-count? true
+         :*show-query? *show-query?})]
+      [:button.ls-comments-label
+       {:type "button"
+        :title (t :editor/click-to-edit)
+        :aria-label (t :editor/click-to-edit)
+        :on-pointer-down util/stop
+        :on-click (fn [e]
+                    (util/stop e)
+                    (comments-handler/edit-comments-area-title! block (:container-id config)))}
+       (comments-model/comments-area-title block)])))
+
 (rum/defc comments-area-view
   [config block children collapsed? *hide-block-refs? *show-query? renderers {:keys [focus-editor? inline?]}]
   (let [*comments-list-ref (hooks/use-ref nil)
         [targets-open? set-targets-open!] (hooks/use-state false)
+        title-editing? (comments-area-title-editing? config block)
         render-token (comments-model/comments-render-token children)
         summary (comments-model/comments-summary children)
         count (count children)]
@@ -451,7 +491,7 @@
         (comments-model/collapsed-comments-label summary)]
        [:<>
         [:div.ls-comments-header
-         [:span.ls-comments-label (t :block.comments/label)]
+         (comments-area-title-view config block title-editing? *hide-block-refs? *show-query? renderers)
          [:span.ls-comments-count count]
          (when (comments-model/comment-thread-targets-toggle-visible? block)
            [:button.ls-comments-targets-toggle
