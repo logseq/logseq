@@ -1217,6 +1217,18 @@
 
     :else nil))
 
+(defn icon-data-for-storage
+  "Strip a picker-emitted icon down to fields persisted on a block. Mirrors
+   `normalize-icon` (which targets rendering) but inverts intent — keep only
+   what the renderer will need to reconstruct the icon, drop ephemeral
+   picker state."
+  [icon]
+  (cond
+    (= :text (:type icon))   {:type :text   :data (:data icon)}
+    (= :avatar (:type icon)) {:type :avatar :data (:data icon)}
+    (= :image (:type icon))  {:type :image  :id (:id icon) :data (:data icon)}
+    :else                    (select-keys icon [:id :type :color])))
+
 (defn renderable-icon?
   "True when icon-value would produce a visible element via `icon`. For :icon type
    this includes verifying that the underlying Tabler component actually exists,

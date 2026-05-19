@@ -260,15 +260,10 @@
                           current-value))
         on-chosen (fn [_e icon]
                     (if icon
-                      (let [icon-data (cond
-                                        (= :text (:type icon)) {:type :text :data (:data icon)}
-                                        (= :avatar (:type icon)) {:type :avatar :data (:data icon)}
-                                        (= :image (:type icon)) {:type :image :data (:data icon)}
-                                        :else (select-keys icon [:type :id :color]))]
-                        (property-handler/set-block-property!
-                         (:db/id block)
-                         :logseq.property.class/default-icon
-                         icon-data))
+                      (property-handler/set-block-property!
+                       (:db/id block)
+                       :logseq.property.class/default-icon
+                       (icon-component/icon-data-for-storage icon))
                       (property-handler/remove-block-property!
                        (:db/id block)
                        :logseq.property.class/default-icon)))]

@@ -17,12 +17,12 @@
             [frontend.components.selection :as selection]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.dicts :as dicts]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.react :as react]
+            [frontend.dicts :as dicts]
             [frontend.handler.db-based.export :as db-export-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
@@ -351,20 +351,14 @@
                              (fn [{:keys [id]}]
                                (icon-component/icon-search
                                 {:on-chosen (fn [_e icon-value keep-popup?]
-                                              (let [icon-data (when icon-value
-                                                                (cond
-                                                                  (= :text (:type icon-value))   {:type :text   :data (:data icon-value)}
-                                                                  (= :avatar (:type icon-value)) {:type :avatar :data (:data icon-value)}
-                                                                  (= :image (:type icon-value))  {:type :image  :data (:data icon-value)}
-                                                                  :else (select-keys icon-value [:type :id :color])))]
-                                                (if icon-data
-                                                  (property-handler/set-block-property!
-                                                   (:db/id block*)
-                                                   :logseq.property/icon
-                                                   icon-data)
-                                                  (property-handler/remove-block-property!
-                                                   (:db/id block*)
-                                                   :logseq.property/icon)))
+                                              (if icon-value
+                                                (property-handler/set-block-property!
+                                                 (:db/id block*)
+                                                 :logseq.property/icon
+                                                 (icon-component/icon-data-for-storage icon-value))
+                                                (property-handler/remove-block-property!
+                                                 (:db/id block*)
+                                                 :logseq.property/icon))
                                               (when-not (true? keep-popup?)
                                                 (shui/popup-hide! id)))
                                  :icon-value resolved-icon

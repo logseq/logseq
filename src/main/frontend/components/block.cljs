@@ -3942,19 +3942,7 @@
                          (icon-component/icon-picker icon
                                                      {:on-chosen (fn [_e icon & [action]]
                                                                    (if icon
-                                                                     (let [;; Handle text/avatar icons with :data nested structure
-                                                                           icon-data (cond
-                                                                                       (= :text (:type icon))
-                                                                                       {:type :text :data (:data icon)}
-
-                                                                                       (= :avatar (:type icon))
-                                                                                       {:type :avatar :data (:data icon)}
-
-                                                                                       (= :image (:type icon))
-                                                                                       {:type :image :id (:id icon) :data (:data icon)}
-
-                                                                                       :else
-                                                                                       (select-keys icon [:id :type :color]))]
+                                                                     (let [icon-data (icon-component/icon-data-for-storage icon)]
                                                                        (db-property-handler/set-block-property!
                                                                         (:db/id block)
                                                                         :logseq.property/icon
