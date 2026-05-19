@@ -814,8 +814,7 @@
     :else (str value)))
 
 (defn block-content-nodes [block ctx depth]
-  (let [raw (or (:block/content block)
-                (:block/title block)
+  (let [raw (or (:block/title block)
                 (:block/name block)
                 "")
         heading (heading-level block depth)
@@ -838,8 +837,7 @@
     (into [container {:dir "auto"}] content)))
 
 (defn block-raw-content [block]
-  (or (:block/content block)
-      (:block/title block)
+  (or (:block/title block)
       (:block/name block)
       ""))
 
