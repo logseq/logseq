@@ -21,6 +21,12 @@
   (when-let [byte-length (utf8-byte-length value)]
     (> byte-length large-title-byte-limit)))
 
+(defn large-title-datom?
+  [datom]
+  (and (= :block/title (:a datom))
+       (string? (:v datom))
+       (large-title? (:v datom))))
+
 (defn assoc-datom-value
   [datom new-value]
   (let [[op e a _v & others] datom]
@@ -187,21 +193,34 @@
                  items)))))))
 
 (defn offload-large-titles-in-datoms-batch
-  [repo graph-id datoms aes-key upload-fn]
-  (p/loop [remaining datoms
-           acc []]
-    (if (empty? remaining)
-      acc
-      (let [datom (first remaining)]
-        (if (and (= :block/title (:a datom))
-                 (string? (:v datom))
-                 (large-title? (:v datom)))
-          (p/let [obj (upload-fn repo graph-id (:v datom) aes-key)]
-            (p/recur (rest remaining)
-                     (conj acc
-                           (assoc datom :v "")
-                           (assoc datom :a large-title-object-attr :v obj))))
-          (p/recur (rest remaining) (conj acc datom)))))))
+  ([repo graph-id datoms aes-key upload-fn]
+   (offload-large-titles-in-datoms-batch
+    repo graph-id datoms aes-key upload-fn
+    (into #{}
+          (keep (fn [datom]
+                  (when (large-title-datom? datom)
+                    (:e datom))))
+          datoms)))
+  ([repo graph-id datoms aes-key upload-fn offloaded-title-eids]
+   (p/loop [remaining datoms
+            acc []]
+     (if (empty? remaining)
+       acc
+       (let [datom (first remaining)]
+         (cond
+           (large-title-datom? datom)
+           (p/let [obj (upload-fn repo graph-id (:v datom) aes-key)]
+             (p/recur (rest remaining)
+                      (conj acc
+                            (assoc datom :v "")
+                            (assoc datom :a large-title-object-attr :v obj))))
+
+           (and (= large-title-object-attr (:a datom))
+                (contains? offloaded-title-eids (:e datom)))
+           (p/recur (rest remaining) acc)
+
+           :else
+           (p/recur (rest remaining) (conj acc datom))))))))
 
 (defn take-upload-datoms-batch
   [datoms batch-size]

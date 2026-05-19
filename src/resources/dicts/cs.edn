@@ -93,7 +93,6 @@
  :block/open-block-references "Otevřít reference bloku"
  :block/practice "Procvičovat"
  :block/practice-cards "Procvičovat kartičky"
- :block/ref-nesting-too-deep "Zanoření reference bloku je příliš hluboké"
  :block/remove-tag "Odebrat tag"
  :block/remove-this-tag "Odebrat tento tag"
  :block/render-error "Chyba vykreslení bloku:"

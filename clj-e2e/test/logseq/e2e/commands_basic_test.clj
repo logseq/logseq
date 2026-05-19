@@ -108,6 +108,29 @@
     (util/input-command "quote")
     (w/wait-for "div[data-node-type='quote']")))
 
+(deftest quote-heading-test
+  (testing "quote headings render consistently"
+    (b/new-block "Property quote heading")
+    (util/input-command "quote")
+    (util/input-command "h1")
+    (util/exit-edit)
+    (b/new-block "# Markdown quote heading")
+    (util/input-command "quote")
+    (util/exit-edit)
+    (assert/assert-is-visible
+     "div[data-node-type='quote']:has(h1.block-title-wrap.as-heading:has-text('Property quote heading'))")
+    (assert/assert-is-visible
+     "div[data-node-type='quote']:has(h1.block-title-wrap.as-heading:has-text('Markdown quote heading'))")
+    (b/jump-to-block "Markdown quote heading")
+    (assert/assert-editor-mode)
+    (is (= "Markdown quote heading" (util/get-edit-content)))
+    (util/exit-edit)
+    (b/new-block "Plain quote")
+    (util/input-command "quote")
+    (util/exit-edit)
+    (assert/assert-is-visible
+     "div[data-node-type='quote']:has(span.block-title-wrap:has-text('Plain quote'))")))
+
 (deftest headings-test
   (testing "/heading"
     (dotimes [i 6]
@@ -298,5 +321,5 @@
     (util/input-command "cloze")
     (util/press-seq "hidden answer")
     (util/exit-edit)
-    (w/click "a.cloze")
-    (w/wait-for "a.cloze-revealed")))
+    (w/click "span.cloze")
+    (w/wait-for "span.cloze-revealed")))

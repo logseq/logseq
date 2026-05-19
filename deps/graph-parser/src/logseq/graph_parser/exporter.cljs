@@ -359,6 +359,25 @@
     (sort > tags))
    (string/trim)))
 
+(defn- replace-namespaced-tags-with-id-refs
+  [content tags]
+  (->>
+   (reduce
+    (fn [content tag]
+      (if (ns-util/namespace-page? (:block/name tag))
+        (let [id-ref (page-ref/->page-ref (:block/uuid tag))]
+          (-> content
+              (common-util/replace-ignore-case
+               (str "#" (:block/name tag))
+               (str "#" id-ref))
+              (common-util/replace-ignore-case
+               (str "#" (page-ref/->page-ref (:block/name tag)))
+               (str "#" id-ref))))
+        content))
+    content
+    (sort-by (comp count :block/name) > tags))
+   (string/trim)))
+
 (defn- update-block-tags
   [block db {:keys [remove-inline-tags?] :as user-options} per-file-state all-idents]
   (let [block'
@@ -375,6 +394,10 @@
                       (->> original-tags
                            (filter convert-tag?')
                            (map :block/title)))
+              (not remove-inline-tags?)
+              (update :block/title
+                      replace-namespaced-tags-with-id-refs
+                      (filter convert-tag?' original-tags))
               true
               (update :block/title
                       db-content/replace-tags-with-id-refs
@@ -386,24 +409,59 @@
           block)]
     block'))
 
+(def ^:private built-in-status-markers
+  {"TODO" :logseq.property/status.todo
+   "LATER" :logseq.property/status.todo
+   "NOW" :logseq.property/status.doing
+   "DOING" :logseq.property/status.doing
+   "DONE" :logseq.property/status.done
+   "CANCELED" :logseq.property/status.canceled
+   "CANCELLED" :logseq.property/status.canceled})
+
+(def ^:private custom-status-marker?
+  #{"WAIT" "WAITING" "IN-PROGRESS"})
+
+(defn- find-status-choice-by-content
+  [db marker]
+  (some #(when (= marker (db-property/closed-value-content %)) %)
+        (db-property/get-closed-property-values db :logseq.property/status)))
+
+(defn- build-status-choice-tx
+  [marker block-uuid]
+  (assoc (db-property-build/build-closed-value-block
+          block-uuid
+          :default
+          marker
+          {:db/ident :logseq.property/status}
+          {})
+         :block/order (db-order/gen-key)))
+
+(defn- custom-marker-status-ref
+  [db marker {:keys [import-state custom-status-tx]}]
+  (or (get @(:custom-status-markers import-state) marker)
+      (let [status-ref (if-let [status (find-status-choice-by-content db marker)]
+                         (:db/id status)
+                         (let [block-uuid (common-uuid/gen-uuid)]
+                           (swap! custom-status-tx conj (build-status-choice-tx marker block-uuid))
+                           [:block/uuid block-uuid]))]
+        (swap! (:custom-status-markers import-state) assoc marker status-ref)
+        status-ref)))
+
 (defn- update-block-marker
   "If a block has a marker, convert it to a task object"
-  [block {:keys [log-fn]}]
+  [block db {:keys [log-fn] :as options}]
   (if-let [marker (:block/marker block)]
-    (let [old-to-new {"TODO" :logseq.property/status.todo
-                      "LATER" :logseq.property/status.todo
-                      "IN-PROGRESS" :logseq.property/status.doing
-                      "NOW" :logseq.property/status.doing
-                      "DOING" :logseq.property/status.doing
-                      "DONE" :logseq.property/status.done
-                      "WAIT" :logseq.property/status.backlog
-                      "WAITING" :logseq.property/status.backlog
-                      "CANCELED" :logseq.property/status.canceled
-                      "CANCELLED" :logseq.property/status.canceled}
-          status-ident (or (old-to-new marker)
-                           (do
-                             (log-fn :invalid-todo (str (pr-str marker) " is not a valid marker so setting it to TODO"))
-                             :logseq.property/status.todo))]
+    (let [status-ident (cond
+                         (contains? built-in-status-markers marker)
+                         (built-in-status-markers marker)
+
+                         (custom-status-marker? marker)
+                         (custom-marker-status-ref db marker options)
+
+                         :else
+                         (do
+                           (log-fn :invalid-todo (str (pr-str marker) " is not a valid marker so setting it to TODO"))
+                           :logseq.property/status.todo))]
       (-> block
           (assoc :logseq.property/status status-ident)
           (update :block/title string/replace-first (re-pattern (str marker "\\s*")) "")
@@ -445,11 +503,64 @@
   (or (entity-util/page? entity)
       (contains? #{"page" "journal"} (:block/type entity))))
 
+(declare ->property-value-tx-m)
+
+(defn- deadline-scheduled-date-int
+  [value]
+  (if (map? value) (:date-int value) value))
+
+(defn- deadline-scheduled-time-ms
+  [value]
+  (let [date-int (deadline-scheduled-date-int value)
+        date (date-time-util/int->local-date date-int)
+        {:keys [hour] timestamp-min :min} (when (map? value) (:time value))]
+    (when hour
+      (.setHours date hour (or timestamp-min 0) 0 0))
+    (tc/to-long date)))
+
+(def ^:private repeat-recur-units
+  {"Minute" :logseq.property.repeat/recur-unit.minute
+   "Hour" :logseq.property.repeat/recur-unit.hour
+   "Day" :logseq.property.repeat/recur-unit.day
+   "Week" :logseq.property.repeat/recur-unit.week
+   "Month" :logseq.property.repeat/recur-unit.month
+   "Year" :logseq.property.repeat/recur-unit.year})
+
+(def ^:private repeat-types
+  "Maps the mldoc repetition kind to the corresponding `:repeat-type`
+  closed-value db-ident. `:double-plus` matches the scheduler's fallback for
+  unknown values."
+  {"Dotted"     :logseq.property.repeat/repeat-type.dotted-plus
+   "Plus"       :logseq.property.repeat/repeat-type.plus
+   "DoublePlus" :logseq.property.repeat/repeat-type.double-plus})
+
+(defn- repeat-properties
+  [temporal-property value]
+  (when-let [[kind unit frequency] (and (map? value) (:repetition value))]
+    (let [unit-ident (get repeat-recur-units (first unit))
+          repeat-type-ident (get repeat-types (first kind)
+                                 :logseq.property.repeat/repeat-type.double-plus)]
+      (assert unit-ident (str "Unknown repeat unit: " (pr-str unit)))
+      {:logseq.property.repeat/repeated? true
+       :logseq.property.repeat/temporal-property temporal-property
+       :logseq.property.repeat/repeat-type repeat-type-ident
+       :logseq.property.repeat/recur-frequency frequency
+       :logseq.property.repeat/recur-unit unit-ident})))
+
+(defn- build-repeat-properties
+  [block properties]
+  (let [pvalue-tx-m (->property-value-tx-m (dissoc block :block/page) properties (constantly nil) {})
+        pvalues-tx (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))]
+    {:block-properties (merge properties
+                              (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+     :properties-tx pvalues-tx}))
+
 (defn- find-or-create-deadline-scheduled-value
   "Given a :block/scheduled or :block/deadline value, creates the datetime property value
    and any optional journal tx associated with that value"
-  [date-int page-names-to-uuids user-config]
-  (let [title (date-time-util/int->journal-title date-int (get-date-formatter user-config))
+  [value page-names-to-uuids user-config]
+  (let [date-int (deadline-scheduled-date-int value)
+        title (date-time-util/int->journal-title date-int (get-date-formatter user-config))
         existing-journal-page (some->> title
                                        common-util/page-name-sanity-lc
                                        (get @page-names-to-uuids)
@@ -460,26 +571,34 @@
                                       :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
                                       :block/journal-day date-int)))
                          (assoc :block/tags #{:logseq.class/Journal}))
-        time-long (tc/to-long (date-time-util/int->local-date date-int))]
+        time-long (deadline-scheduled-time-ms value)]
     {:property-value time-long
      :journal-tx (when-not existing-journal-page [journal-page])}))
 
 (defn- update-block-deadline-and-scheduled
   "Converts :block/deadline and :block/scheduled to their new logseq properties."
   [block page-names-to-uuids {:keys [user-config]}]
-  (let [{deadline-value :property-value deadline-tx :journal-tx}
-        (when (:block/deadline block)
-          (find-or-create-deadline-scheduled-value (:block/deadline block) page-names-to-uuids user-config))
+  (let [deadline (:block/deadline block)
+        scheduled (:block/scheduled block)
+        {deadline-value :property-value deadline-tx :journal-tx}
+        (when deadline
+          (find-or-create-deadline-scheduled-value deadline page-names-to-uuids user-config))
         {scheduled-value :property-value scheduled-tx :journal-tx}
-        (when (:block/scheduled block)
-          (find-or-create-deadline-scheduled-value (:block/scheduled block) page-names-to-uuids user-config))]
+        (when scheduled
+          (find-or-create-deadline-scheduled-value scheduled page-names-to-uuids user-config))
+        repeat-properties' (merge (repeat-properties :logseq.property/deadline deadline)
+                                  (repeat-properties :logseq.property/scheduled scheduled))
+        {repeat-block-properties :block-properties repeat-properties-tx :properties-tx}
+        (build-repeat-properties block repeat-properties')]
     {:block
      (cond-> (dissoc block :block/deadline :block/scheduled :block/repeated?)
        (some? deadline-value)
        (assoc :logseq.property/deadline deadline-value)
        (some? scheduled-value)
-       (assoc :logseq.property/scheduled scheduled-value))
-     :properties-tx (distinct (concat deadline-tx scheduled-tx))}))
+       (assoc :logseq.property/scheduled scheduled-value)
+       (seq repeat-block-properties)
+       (merge repeat-block-properties))
+     :properties-tx (distinct (concat deadline-tx scheduled-tx repeat-properties-tx))}))
 
 (defn- text-with-refs?
   "Detects if a property value has text with refs e.g. `#Logseq is #awesome`
@@ -1186,6 +1305,13 @@
        (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs))))
      :properties-tx (concat properties-tx (when pvalues-tx pvalues-tx))}))
 
+(defn- convert-block-refs-to-page-refs
+  "Converts ((uuid)) block-ref syntax to [[uuid]] page-ref syntax in a title string.
+  DB graphs use [[uuid]] for all node references."
+  [title]
+  (string/replace title block-ref/block-ref-re
+                  (fn [[_ id]] (page-ref/->page-ref id))))
+
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
    updates block content effected by refs"
@@ -1212,7 +1338,8 @@
                                           ;; ignore deadline related refs that don't affect content
                                           (and (keyword? %) (db-malli-schema/internal-ident? %))))
                              (map #(add-uuid-to-page-map % page-names-to-uuids)))]
-               (db-content/title-ref->id-ref (:block/title block) refs {:replace-tag? false}))))
+               (-> (db-content/title-ref->id-ref (:block/title block) refs {:replace-tag? false})
+                   convert-block-refs-to-page-refs))))
     block))
 
 (defn- fix-pre-block-references
@@ -1777,7 +1904,7 @@
                      (handle-embeds page-names-to-uuids walked-ast-blocks (select-keys options [:log-fn]))
                      (handle-quotes (select-keys options [:log-fn]))
                      (handle-math)
-                     (update-block-marker options)
+                     (update-block-marker db options)
                      (update-block-priority options)
                      add-missing-timestamps
                      (dissoc :block/format :block.temp/ast-blocks)
@@ -2032,6 +2159,8 @@
    :all-idents (atom {})
    ;; Set of children pages turned into classes by :property-parent-classes option
    :classes-from-property-parents (atom #{})
+   ;; Map of imported legacy task markers to their Status closed value lookup refs.
+   :custom-status-markers (atom {})
    ;; Map of block uuids to their :block/properties-text-values value.
    ;; Used if a property value changes to :default
    :block-properties-text-values (atom {})
@@ -2047,6 +2176,8 @@
     :upstream-properties (atom {})
     ;; Track per file class tx so that their tx isn't embedded in individual :block/tags and can be post processed
     :classes-tx (atom [])
+    ;; Track per file Status closed values required by imported legacy task markers.
+    :custom-status-tx (atom [])
     :user-options
     (merge user-options
            {:tag-classes (set (map string/lower-case (:tag-classes user-options)))
@@ -2238,7 +2369,9 @@
 (defn- <build-blocks-tx
   [conn blocks pre-blocks per-file-state tx-options]
   (p/loop [tx-data []
-           blocks (remove :block/pre-block? blocks)]
+           blocks (->> blocks
+                       (remove :block/pre-block?)
+                       (map #(dissoc % :block/pre-block?)))]
     (if-let [block (first blocks)]
       (p/let [block-tx-data (<build-block-tx @conn block pre-blocks per-file-state
                                              tx-options)]
@@ -2281,6 +2414,7 @@
           classes-tx @(:classes-tx tx-options)
           {:keys [retract-page-tags-tx] pages-tx'' :pages-tx} (clean-extra-invalid-tags @conn pages-tx' classes-tx existing-pages)
           classes-tx' (concat classes-tx retract-page-tags-tx)
+          custom-status-tx @(:custom-status-tx tx-options)
           ;; Build indices
           pages-index (->> (map #(select-keys % [:block/uuid]) pages-tx'')
                            (concat (map #(select-keys % [:block/uuid]) classes-tx))
@@ -2295,7 +2429,7 @@
           blocks-index (set/union (set block-ids) (set block-refs-ids))
           ;; Order matters. pages-index and blocks-index needs to come before their corresponding tx for
           ;; uuids to be valid. Also upstream-properties-tx comes after blocks-tx to possibly override blocks
-          tx (concat pages-index page-properties-tx property-page-properties-tx pages-tx'' classes-tx' blocks-index blocks-tx)
+          tx (concat pages-index page-properties-tx property-page-properties-tx pages-tx'' classes-tx' custom-status-tx blocks-index blocks-tx)
           tx' (common-util/fast-remove-nils tx)
           ;; _ (prn :tx-counts (map #(vector %1 (count %2))
           ;;                        [:pages-index :page-properties-tx :property-page-properties-tx :pages-tx' :classes-tx :blocks-index :blocks-tx]
@@ -2336,11 +2470,65 @@
                                :level :error
                                :ex-data {:path path :error error}})))))
 
+(defn- remove-block-ref-from-title
+  [title block-uuid]
+  (when (string? title)
+    (-> title
+        (string/replace (block-ref/->block-ref block-uuid) "")
+        (string/replace (page-ref/->page-ref block-uuid) "")
+        (string/replace #" {2,}" " ")
+        string/trim)))
+
+(defn- placeholder-block-ref?
+  [entity]
+  (and (:block/uuid entity)
+       (nil? (:block/title entity))))
+
+(defn- cleanup-missing-block-refs-tx
+  [db]
+  (let [missing-ref-datoms
+        (->> (d/datoms db :aevt :block/refs)
+             (keep (fn [datom]
+                     (let [ref-entity (d/entity db (:v datom))]
+                       (when (placeholder-block-ref? ref-entity)
+                         {:source-id (:e datom)
+                          :ref-id (:v datom)
+                          :ref-uuid (:block/uuid ref-entity)})))))
+        refs-by-source-id (group-by :source-id missing-ref-datoms)
+        retract-ref-tx
+        (mapcat (fn [[source-id refs]]
+                  (map (fn [{:keys [ref-id]}]
+                         [:db/retract source-id :block/refs ref-id])
+                       refs))
+                refs-by-source-id)
+        update-title-tx
+        (keep (fn [[source-id refs]]
+                (let [source (d/entity db source-id)
+                      title (:block/title source)
+                      title' (reduce remove-block-ref-from-title title (map :ref-uuid refs))]
+                  (when (and (string? title') (not= title title'))
+                    [:db/add source-id :block/title title'])))
+              refs-by-source-id)
+        retract-placeholder-tx
+        (->> missing-ref-datoms
+             (map (juxt :ref-id :ref-uuid))
+             distinct
+             (map (fn [[ref-id ref-uuid]]
+                    [:db/retract ref-id :block/uuid ref-uuid])))]
+    (concat retract-ref-tx update-title-tx retract-placeholder-tx)))
+
+(defn- cleanup-missing-block-refs!
+  [conn]
+  (let [tx (cleanup-missing-block-refs-tx @conn)]
+    (when (seq tx)
+      (d/transact! conn tx))))
+
 (defn export-doc-files
   "Exports all user created files i.e. under journals/ and pages/.
    Recommended to use build-doc-options and pass that as options"
-  [conn *doc-files <read-file {:keys [notify-user set-ui-state]
-                               :or {set-ui-state (constantly nil) notify-user prn}
+  [conn *doc-files <read-file {:keys [notify-user set-ui-state on-tx-report]
+                               :or {set-ui-state (constantly nil) notify-user prn
+                                    on-tx-report (constantly nil)}
                                :as options}]
   (set-ui-state [:graph/importing-state :total] (count *doc-files))
   (let [doc-files (mapv #(assoc %1 :idx %2)
@@ -2355,6 +2543,10 @@
           (when-not (>= i (dec (count doc-files)))
             (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
                      (inc i))))
+        (p/then (fn [_]
+                  (p/let [tx-report (cleanup-missing-block-refs! conn)
+                          _ (when tx-report (on-tx-report tx-report))]
+                    tx-report)))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
                                  :level :error
@@ -2540,7 +2732,7 @@
        :user-options (merge {:remove-inline-tags? true :convert-all-tags? true} (:user-options options))
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
-      (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat]))))
+      (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat :on-tx-report]))))
 
 (defn- move-top-parent-pages-to-library
   [conn repo-or-conn]

@@ -93,7 +93,6 @@
  :block/open-block-references "Maak blokverwysings oop"
  :block/practice "Oefen"
  :block/practice-cards "Oefen kaarte"
- :block/ref-nesting-too-deep "Blokverwysing-nesting is te diep"
  :block/remove-tag "Verwyder etiket"
  :block/remove-this-tag "Verwyder hierdie etiket"
  :block/render-error "Blokweergawe-fout:"

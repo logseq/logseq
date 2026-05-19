@@ -219,6 +219,7 @@
                                 {:content "b2"}]
                                {:schema {"z3" "page"
                                          "z4" "page"}})
+          _ (assert/assert-is-visible ".block-title-wrap:text('Page 3')")
           contents (util/get-page-blocks-contents)]
       (is (= contents
              ["b1" "test" "b1.1" "b1.1.1" "Page 1" "Page 2" "Page 3" "b1.1.2" "b1.2" "b2"]))
