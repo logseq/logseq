@@ -42,45 +42,54 @@
       lightbox.
 
    Callers without an open popup (block.cljs, pdf/assets.cljs,
-   handbooks/core.cljs) are unaffected — `roots` is empty, the swallow
-   has nothing to swallow because clicks naturally land on `.pswp`, and
-   the Escape handler is identical to PhotoSwipe's own."
+   handbooks/core.cljs) still benefit from the Escape swallow even
+   though `roots` is empty: it preempts other global Escape hooks
+   (notably `:editor/escape-editing`) so closing a preview doesn't
+   also exit block-edit mode or other ambient state. The pointer
+   swallow is a no-op in that case because clicks naturally land on
+   `.pswp`."
   [images]
-  (let [roots (vec (js/document.querySelectorAll "[data-radix-popper-content-wrapper]"))
-        _ (doseq [^js el roots] (set! (.-inert el) true))
-        options {:dataSource images
-                 :pswpModule js/window.PhotoSwipe
-                 :showHideAnimationType "fade"}
-        ^js lightbox (js/window.PhotoSwipeLightbox. (bean/->js options))
-        esc-handler (fn [^js e]
-                      (when (= "Escape" (.-key e))
-                        (.stopImmediatePropagation e)
-                        (.preventDefault e)
-                        (some-> (.-pswp lightbox) (.close))))
-        attach! (fn []
-                  (.addEventListener js/window "keydown" esc-handler true)
-                  (doseq [t swallow-events]
-                    (.addEventListener js/window t swallow-outside-pswp! true)))
-        detach! (fn []
-                  (.removeEventListener js/window "keydown" esc-handler true)
-                  (doseq [t swallow-events]
-                    (.removeEventListener js/window t swallow-outside-pswp! true))
-                  (doseq [^js el roots] (set! (.-inert el) false)))]
-    (attach!)
-    (set! (.-photoLightbox js/window) lightbox)
-    (.on lightbox "destroy" detach!)
-    ;; If PhotoSwipe `init`/`loadAndOpen` throws, the "destroy" event never
-    ;; fires, so `detach!` would never run — leaving the window listeners
-    ;; attached and every Radix popper permanently `inert=true` (soft-bricks
-    ;; the app). Synchronously roll back the attach! side effects, clear the
-    ;; window-global so mobile/navigation doesn't act on a broken instance,
-    ;; then rethrow so the failure surfaces.
-    (try
-      (doto lightbox
-        (.init)
-        (.loadAndOpen 0))
-      (catch :default e
-        (detach!)
-        (set! (.-photoLightbox js/window) nil)
-        (log/error :lightbox/init-failed {:error e})
-        (throw e)))))
+  ;; Guard against rapid double-click. Two synchronously-fired clicks
+  ;; would each create a lightbox + attach window listeners; the second
+  ;; assignment to `window.photoLightbox` orphans the first instance
+  ;; with its listeners still bound — leaking the swallow filter and
+  ;; soft-breaking outside clicks until reload.
+  (when-not (some-> (.-photoLightbox js/window) (.-pswp))
+    (let [roots (vec (js/document.querySelectorAll "[data-radix-popper-content-wrapper]"))
+          _ (doseq [^js el roots] (set! (.-inert el) true))
+          options {:dataSource images
+                   :pswpModule js/window.PhotoSwipe
+                   :showHideAnimationType "fade"}
+          ^js lightbox (js/window.PhotoSwipeLightbox. (bean/->js options))
+          esc-handler (fn [^js e]
+                        (when (= "Escape" (.-key e))
+                          (.stopImmediatePropagation e)
+                          (.preventDefault e)
+                          (some-> (.-pswp lightbox) (.close))))
+          attach! (fn []
+                    (.addEventListener js/window "keydown" esc-handler true)
+                    (doseq [t swallow-events]
+                      (.addEventListener js/window t swallow-outside-pswp! true)))
+          detach! (fn []
+                    (.removeEventListener js/window "keydown" esc-handler true)
+                    (doseq [t swallow-events]
+                      (.removeEventListener js/window t swallow-outside-pswp! true))
+                    (doseq [^js el roots] (set! (.-inert el) false)))]
+      (attach!)
+      (set! (.-photoLightbox js/window) lightbox)
+      (.on lightbox "destroy" detach!)
+      ;; If PhotoSwipe `init`/`loadAndOpen` throws, the "destroy" event never
+      ;; fires, so `detach!` would never run — leaving the window listeners
+      ;; attached and every Radix popper permanently `inert=true` (soft-bricks
+      ;; the app). Synchronously roll back the attach! side effects, clear the
+      ;; window-global so mobile/navigation doesn't act on a broken instance,
+      ;; then rethrow so the failure surfaces.
+      (try
+        (doto lightbox
+          (.init)
+          (.loadAndOpen 0))
+        (catch :default e
+          (detach!)
+          (set! (.-photoLightbox js/window) nil)
+          (log/error :lightbox/init-failed {:error e})
+          (throw e))))))
