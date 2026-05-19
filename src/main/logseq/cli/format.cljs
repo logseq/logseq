@@ -214,6 +214,9 @@
     :server-revision-mismatch "Logseq will restart revision-mismatched db-worker-node servers automatically; retry after stopping any lingering server manually"
     :server-revision-mismatch-restart-failed "Logseq tried to restart a revision-mismatched db-worker-node server and failed. Stop the server manually, then retry"
     :server-revision-mismatch-after-restart "Logseq restarted db-worker-node, but the replacement still reports a different revision. Check the installed Logseq build and retry"
+    :agent-name-invalid "Set :agent-name in cli.edn to a non-empty string or ensure hostname is available"
+    :codex-not-found "Install Codex CLI and ensure `codex` is on PATH"
+    :bridge-listener-failed "Retry with --dry-run or check db-worker-node event support"
     nil))
 
 (defn- format-candidates
@@ -720,6 +723,32 @@
       (str table "\n\n" warning)
       table)))
 
+(defn- format-agent-bridge-list
+  [sessions now-ms]
+  (let [session-field (fn [value]
+                        (cond
+                          (keyword? value) (name value)
+                          (nil? value) nil
+                          :else (str value)))]
+    (format-counted-table
+     ["SESSION" "STATUS" "BACKEND" "GRAPH" "BLOCK" "AGENT" "STARTED" "UPDATED"]
+     (mapv (fn [session]
+             [(session-field (:session session))
+              (session-field (:status session))
+              (session-field (:backend session))
+              (session-field (:graph session))
+              (session-field (:block session))
+              (session-field (:agent session))
+              (human-ago (:started-at session) now-ms)
+              (human-ago (:updated-at session) now-ms)])
+           (or sessions [])))))
+
+(defn- format-agent-bridge
+  [data]
+  (if (seq (:logs data))
+    (string/join "\n" (:logs data))
+    (pr-str data)))
+
 (defn- format-query-results
   [result]
   (let [edn-str (pr-str result)
@@ -1168,6 +1197,8 @@
         (format-graph-action command context data)
         :server-list (format-server-list (:servers data)
                                          (get-in human [:server-list :revision-mismatch]))
+        :agent-bridge (format-agent-bridge data)
+        :agent-bridge-list (format-agent-bridge-list (:sessions data) now-ms)
         :server-cleanup (format-server-cleanup data)
         (:server-start :server-stop :server-restart)
         (format-server-action command data)

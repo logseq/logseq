@@ -15,6 +15,7 @@
             [logseq.cli.style :as style]
             [logseq.cli.test-helper :as test-helper]
             [logseq.common.config :as common-config]
+            [logseq.common.version :as build-version]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -249,6 +250,29 @@
                  (is (= 500 status))
                  (is (fs/existsSync log-file))
                  (is (pos? (count contents))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-logs-version-on-startup
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-log-version")
+               repo (str "logseq_db_log_version_" (subs (str (random-uuid)) 0 8))
+               log-file (log-path data-dir repo)]
+           (-> (p/let [{:keys [stop!]}
+                       (start-daemon! {:root-dir data-dir
+                                       :repo repo
+                                       :log-level "info"})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (p/delay 50)
+                       contents (.toString (fs/readFileSync log-file) "utf8")]
+                 (is (string/includes? contents ":db-worker-node-version"))
+                 (is (string/includes? contents (str ":build-time " (pr-str (build-version/build-time)))))
+                 (is (string/includes? contents (str ":revision " (pr-str (build-version/revision))))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
