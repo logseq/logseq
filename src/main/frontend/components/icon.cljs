@@ -1571,13 +1571,13 @@
                 (assoc :logseq.property.asset/attribution attribution))]
     (when (seq pairs) pairs)))
 
-(defn save-image-asset!
+(defn <save-image-asset!
   "Save an image file as an asset using api-insert-new-block! approach.
    Creates the asset as a child of the Asset class page (like tag tables do),
    avoiding journal entries.
    Optional source-meta map: {:source-url, :source-name, :license, :attribution}
    is persisted as additional asset properties when provided."
-  ([repo file] (save-image-asset! repo file nil))
+  ([repo file] (<save-image-asset! repo file nil))
   ([repo ^js file source-meta]
    (p/let [file-name (node-path/basename (.-name file))
            file-name-without-ext* (db-asset/asset-name->title file-name)
@@ -1638,7 +1638,7 @@
            blob (js/Blob. #js [data] #js {:type content-type})
            file (js/File. #js [blob] filename #js {:type content-type})]
        ;; Delegate to existing save function
-       (save-image-asset! repo file source-meta)))))
+       (<save-image-asset! repo file source-meta)))))
 
 ;; ============================================================================
 ;; Web Image Search (Wikipedia Commons)
@@ -3584,7 +3584,7 @@
                                          (str "Uploading " (count new-files) " image"
                                               (when (not= 1 (count new-files)) "s"))))
 
-                               (p/let [new-entities (p/all (map #(save-image-asset! repo %) new-files))
+                               (p/let [new-entities (p/all (map #(<save-image-asset! repo %) new-files))
                                        entities (into (vec (remove nil? new-entities)) reused-entities)]
                                  (p/let [updated-assets (<get-image-assets)]
                                    (reset! *loaded-assets (or (seq updated-assets) [])))
@@ -6827,7 +6827,7 @@
                        (let [file-type (.-type file)
                              ext (some-> file-type (string/split "/") second keyword)]
                          (if (contains? config/image-formats ext)
-                           (p/let [entity (save-image-asset! repo file)]
+                           (p/let [entity (<save-image-asset! repo file)]
                              (when entity
                                (let [image-data {:asset-uuid (str (:block/uuid entity))
                                                  :asset-type (:logseq.property.asset/type entity)}
