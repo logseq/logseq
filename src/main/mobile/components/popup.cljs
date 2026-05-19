@@ -42,6 +42,17 @@
   (when-let [^js plugin mobile-util/native-bottom-sheet]
     (.dismiss plugin #js {})))
 
+(defn- notify-native-sheet-content-ready!
+  []
+  (when-let [^js plugin mobile-util/native-bottom-sheet]
+    (.requestAnimationFrame
+     js/window
+     (fn []
+       (.requestAnimationFrame
+        js/window
+        (fn []
+          (.contentReady plugin #js {})))))))
+
 (defn- handle-native-sheet-state!
   [^js data]
   (let [dismissing? (.-dismissing data)]
@@ -53,7 +64,8 @@
          (mobile-state/set-popup! nil)
          (reset! *last-popup-data nil)
          (when-let [plugin ^js mobile-util/native-editor-toolbar]
-           (.dismiss plugin))))
+           (.dismiss plugin))
+         (notify-native-sheet-content-ready!)))
 
       :else
       nil)))

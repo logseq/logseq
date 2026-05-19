@@ -1094,6 +1094,17 @@
             (let [value (gobj/get input "value")]
               (extract-nearest-link-from-text value pos))))))))
 
+(defn- <follow-page-link!
+  [page]
+  (state/clear-edit!)
+  (if (util/uuid-string? page)
+    (route-handler/redirect-to-page! page)
+    (p/let [page-entity (or (db/get-page page)
+                            (db-async/<get-block (state/get-current-repo) page {:children? false}))]
+      (if page-entity
+        (route-handler/redirect-to-page! page)
+        (state/pub-event! [:page/create page])))))
+
 (defn follow-link-under-cursor!
   []
   (when-let [page (get-nearest-page-or-url)]
@@ -1103,9 +1114,7 @@
        (save-current-block!)
        (if (re-find url-regex page)
          (js/window.open page)
-         (do
-           (state/clear-edit!)
-           (route-handler/redirect-to-page! page)))))))
+         (<follow-page-link! page))))))
 
 (defn open-link-in-sidebar!
   []
@@ -1455,7 +1464,7 @@
                                        :block/uuid (when (and (zero? idx) empty-target?)
                                                      (:block/uuid edit-block))})))
           blocks (remove nil? blocks*)
-          insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))
+          insert-to-current-block-page? (boolean (and (:block/uuid edit-block) (not pdf-area?)))
           target (cond
                    insert-to-current-block-page?
                    edit-block
@@ -1474,7 +1483,7 @@
         (outliner-op/insert-blocks! blocks target {:keep-uuid? true
                                                    :bottom? true
                                                    :sibling? (= edit-block target)
-                                                   :replace-empty-target? true}))
+                                                   :replace-empty-target? insert-to-current-block-page?}))
        (p/let [blocks (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)]
          (when-let [block (some (fn [block] (when (= (:block/uuid block) (:block/uuid edit-block)) block)) blocks)]
            (edit-block! block :max))

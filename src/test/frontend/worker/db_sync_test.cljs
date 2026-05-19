@@ -4690,6 +4690,48 @@
                             (is false (str e))))
                  (p/finally done))))))
 
+(deftest offload-large-title-datoms-drops-stale-object-for-same-entity-test
+  (testing "snapshot upload should not keep an old large-title object when offloading the same entity title"
+    (async done
+           (let [large-title (apply str (repeat 5000 "a"))
+                 old-obj {:asset-uuid "old-title" :asset-type "txt"}
+                 other-obj {:asset-uuid "other-title" :asset-type "txt"}
+                 new-obj {:asset-uuid "new-title" :asset-type "txt"}
+                 datoms [{:e 1 :a :block/title :v large-title}
+                         {:e 1 :a :logseq.property.sync/large-title-object :v old-obj}
+                         {:e 2 :a :logseq.property.sync/large-title-object :v other-obj}]
+                 upload-calls (atom [])
+                 upload-fn (fn [_repo _graph-id title _aes-key]
+                             (swap! upload-calls conj title)
+                             (p/resolved new-obj))]
+             (-> (p/let [result (sync-large-title/offload-large-titles-in-datoms-batch
+                                 test-repo "graph-1" datoms nil upload-fn)]
+                   (is (= [large-title] @upload-calls))
+                   (is (= [{:e 1 :a :block/title :v ""}
+                           {:e 1 :a :logseq.property.sync/large-title-object :v new-obj}
+                           {:e 2 :a :logseq.property.sync/large-title-object :v other-obj}]
+                          result)))
+                 (p/catch (fn [e]
+                            (is false (str e))))
+                 (p/finally done))))))
+
+(deftest offload-large-title-datoms-drops-stale-object-from-known-offload-set-test
+  (testing "snapshot upload drops stale large-title objects even when title and object are in different batches"
+    (async done
+           (let [old-obj {:asset-uuid "old-title" :asset-type "txt"}
+                 other-obj {:asset-uuid "other-title" :asset-type "txt"}
+                 datoms [{:e 1 :a :logseq.property.sync/large-title-object :v old-obj}
+                         {:e 2 :a :logseq.property.sync/large-title-object :v other-obj}]
+                 upload-fn (fn [_repo _graph-id _title _aes-key]
+                             (p/rejected (ex-info "unexpected upload" {})))]
+             (-> (p/let [result (sync-large-title/offload-large-titles-in-datoms-batch
+                                 test-repo "graph-1" datoms nil upload-fn #{1})]
+                   (is (= [{:e 2 :a :logseq.property.sync/large-title-object :v other-obj}]
+                          result)))
+                 (p/catch (fn [e]
+                            (is false (str e))))
+                 (p/finally done))))))
+
 (deftest upload-preparation-processes-datoms-in-batches-test
   (testing "upload preparation should stream work batch by batch instead of sending the full graph at once"
     (async done

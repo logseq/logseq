@@ -130,6 +130,12 @@
                  [])
          (join-fn))))
 
+(defn- preserve-file-url-win-drive
+  [scheme encoded-path]
+  (cond-> encoded-path
+    (= scheme "file:")
+    (string/replace #"^/([a-zA-Z])%3[Aa](?=/|$)" "/$1:")))
+
 (defn url-join
   "Segments are not URL-encoded"
   [base-url & segments]
@@ -138,7 +144,8 @@
         path (.-pathname url)
         domain (or (not-empty (.-host url))
                    (if (string/starts-with? path "/") "" "/"))
-        encoded-new-path (apply uri-path-join-internal path segments)]
+        encoded-new-path (->> (apply uri-path-join-internal path segments)
+                              (preserve-file-url-win-drive scheme))]
     (str scheme "//" domain encoded-new-path)))
 
 (defn path-join
@@ -180,7 +187,8 @@
         scheme (.-protocol url)
         domain (or (not-empty (.-host url)) "/")
         path (.-pathname url)
-        encoded-new-path (uri-path-join-internal path)]
+        encoded-new-path (->> (uri-path-join-internal path)
+                              (preserve-file-url-win-drive scheme))]
     (str scheme "//" domain encoded-new-path)))
 
 (defn path-normalize
@@ -218,6 +226,13 @@
         path
         (str "//" host path)))
     original-url))
+
+(defn file-url-or-path->path
+  "Converts a file URL to a local filesystem path."
+  [s]
+  (if (is-file-url? s)
+    (url-to-path s)
+    s))
 
 (defn trim-dir-prefix
   "Trim dir prefix from path"

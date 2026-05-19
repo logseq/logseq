@@ -93,7 +93,6 @@
  :block/open-block-references "Åpne blokkreferanser"
  :block/practice "Øv"
  :block/practice-cards "Øv på kort"
- :block/ref-nesting-too-deep "Blokkreferanse-nesting er for dyp"
  :block/remove-tag "Fjern tagg"
  :block/remove-this-tag "Fjern denne taggen"
  :block/render-error "Feil ved blokkgjengivelse:"

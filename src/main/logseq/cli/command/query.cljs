@@ -208,6 +208,52 @@
                  :message "recent-days must be a positive integer"}}))
     {:ok? true :value inputs}))
 
+(defn- where-clauses
+  [query]
+  (when (vector? query)
+    (when-let [where-index (first (keep-indexed (fn [index value]
+                                                  (when (= :where value) index))
+                                                query))]
+      (subvec query (inc where-index)))))
+
+(defn- db-id-datom-clause?
+  [form]
+  (and (vector? form)
+       (<= 2 (count form))
+       (= :db/id (second form))))
+
+(def ^:private logical-clause-ops
+  '#{and not not-join or or-join})
+
+(defn- logical-clause?
+  [form]
+  (and (seq? form)
+       (contains? logical-clause-ops (first form))))
+
+(defn- logical-subclauses
+  [form]
+  (let [op (first form)
+        clauses (rest form)]
+    (if (contains? '#{not-join or-join} op)
+      (rest clauses)
+      clauses)))
+
+(defn- contains-db-id-datom-clause?
+  [form]
+  (cond
+    (db-id-datom-clause? form) true
+    (logical-clause? form) (some contains-db-id-datom-clause? (logical-subclauses form))
+    :else false))
+
+(defn- validate-query
+  [query]
+  (if (some contains-db-id-datom-clause? (where-clauses query))
+    {:ok? false
+     :error {:code :invalid-query
+             :message (str "invalid query: :db/id cannot be used as a datom attribute "
+                           "in :where clauses. Bind entity ids through :in and --inputs.")}}
+    {:ok? true :value query}))
+
 (defn build-action
   [options repo config]
   (if-not (seq repo)
@@ -239,8 +285,12 @@
             query-result
             (let [inputs-text (some-> (:inputs options) string/trim)
                   inputs-result (when (seq inputs-text)
-                                  (parse-edn "inputs" inputs-text))]
+                                  (parse-edn "inputs" inputs-text))
+                  query-validation (validate-query (:value query-result))]
               (cond
+                (not (:ok? query-validation))
+                query-validation
+
                 (and inputs-result (not (:ok? inputs-result)))
                 inputs-result
 

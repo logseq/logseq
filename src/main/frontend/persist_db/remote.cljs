@@ -16,6 +16,12 @@
   [base-url]
   (str (normalize-base-url base-url) "/v1/invoke"))
 
+(defn- import-db-binary-url
+  [base-url repo]
+  (str (normalize-base-url base-url)
+       "/v1/import-db-binary?repo="
+       (js/encodeURIComponent repo)))
+
 (defn- events-url
   [base-url]
   (str (normalize-base-url base-url) "/v1/events"))
@@ -26,6 +32,10 @@
            "Accept" "application/json"}
     (seq auth-token)
     (assoc "Authorization" (str "Bearer " auth-token))))
+
+(defn- binary-headers
+  [auth-token]
+  (assoc (base-headers auth-token) "Content-Type" "application/octet-stream"))
 
 (defn- parse-response-body
   [body]
@@ -120,6 +130,32 @@
                   (on-invoke-failure method args error))
                 (throw error))))))
 
+(defn- import-db-binary!
+  [{:keys [base-url auth-token fetch-fn on-invoke-success on-invoke-failure]} repo data]
+  (let [method "thread-api/import-db-binary"
+        args [repo data]]
+    (->
+     (p/let [{:keys [status body]}
+             (fetch-fn {:method "POST"
+                        :url (import-db-binary-url base-url repo)
+                        :headers (binary-headers auth-token)
+                        :body data})
+             parsed (parse-response-body body)]
+       (if (<= 200 status 299)
+         (let [result (ldb/read-transit-str (:resultTransit parsed))]
+           (when on-invoke-success
+             (on-invoke-success method args result))
+           result)
+         (let [error (:error parsed)]
+           (throw (ex-info (or (:message error) "db-worker invoke failed")
+                           (cond-> {:status status
+                                    :code (normalize-code (:code error))}
+                             error (assoc :error error)))))))
+     (p/catch (fn [error]
+                (when on-invoke-failure
+                  (on-invoke-failure method args error))
+                (throw error))))))
+
 (defn connect-events!
   [{:keys [base-url auth-token event-handler open-sse-fn schedule-fn reconnect-delay-ms on-event-error]} wrapped-worker]
   (let [connected? (atom true)
@@ -191,7 +227,7 @@
 
   (<import-db [_this repo data]
     (->
-     (invoke! client "thread-api/import-db-binary" [repo data])
+     (import-db-binary! client repo data)
      (p/catch (fn [error]
                 (log/error :import-db-error repo error "SQLiteDB import error")
                 (notification/show! (t :storage/sqlitedb-import-error error) :error) {})))))

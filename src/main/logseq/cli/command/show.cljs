@@ -296,6 +296,13 @@
        (= :block/uuid (first value))
        (uuid? (second value))))
 
+(defn- db-id-ref?
+  [value]
+  (and (vector? value)
+       (= 2 (count value))
+       (= :db/id (first value))
+       (number? (second value))))
+
 (defn- epoch-ms->iso-string
   [ms]
   (when-not (number? ms)
@@ -475,6 +482,9 @@
   [{:keys [root linked-references]}]
   (letfn [(collect-value [acc value]
             (cond
+              (db-id-ref? value)
+              (update acc :ids conj (second value))
+
               (lookup-ref? value)
               (update acc :uuids conj (second value))
 
@@ -609,14 +619,22 @@
               built-in-pairs (transport/invoke config :thread-api/q
                                                [repo [built-in-query built-in-idents]])
               ident-type-pairs (into (vec user-pairs) built-in-pairs)
+              property-type-by-ident (into {} ident-type-pairs)
               datetime-idents (set (keep (fn [[a type]] (when (= :datetime type) a)) ident-type-pairs))
               property-idents (vec (map first ident-type-pairs))]
         (if (seq property-idents)
           (p/let [rows (transport/invoke config :thread-api/q
                                          [repo [props-query ids property-idents]])]
             (reduce (fn [acc [block-id attr value]]
-                      (let [value (if (and (number? value) (contains? datetime-idents attr))
+                      (let [property-type (get property-type-by-ident attr)
+                            value (cond
+                                    (and (number? value) (contains? datetime-idents attr))
                                     (epoch-ms->iso-string value)
+
+                                    (and (number? value) (not= :number property-type))
+                                    [:db/id value]
+
+                                    :else
                                     value)]
                         (update-in acc [block-id attr] merge-fetched-property-value value)))
                     {}

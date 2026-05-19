@@ -30,6 +30,7 @@ cljs-test-runner-out
 .DS_Store
 report.html
 strings.csv
+ssl/
 
 .calva
 resources/electron.js
@@ -45,7 +46,8 @@ resources/electron.js
 /libs/dist/
 charlie/
 .vscode
-/.claude
+/.claude/settings.local.json
+/.claude/plans/
 /.preprocessor-cljs
 docker
 android/app/src/main/assets/capacitor.plugin.json

@@ -12,6 +12,7 @@
             [electron.ipc :as ipc]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.block.drop :as block-drop]
+            [frontend.components.block.image :as block-image]
             [frontend.components.block.macros :as block-macros]
             [frontend.components.block.selection :as block-selection]
             [frontend.components.icon :as icon-component]
@@ -104,9 +105,6 @@
 (defonce *drag-to-block
   (atom nil))
 (def *move-to (atom nil))
-
-;; TODO: dynamic
-(defonce max-depth-of-links 5)
 
 ;; TODO:
 ;; add `key`
@@ -394,6 +392,7 @@
         positioned? (:property-position config)
         asset-block (:asset-block config)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
+        metadata (block-image/effective-image-metadata config asset-block metadata)
         width (:width metadata)
         *width (get state ::size)
         width (or @*width width)
@@ -496,10 +495,14 @@
   (rum/local nil ::src)
   [state config title href metadata full_text]
   (let [src (::src state)
-        ^js js-url (:link-js-url config)
         href (cond-> href
-               (nil? js-url)
-               (config/get-local-asset-absolute-path))]
+               (common-config/local-relative-asset? href)
+               (config/get-local-asset-absolute-path))
+        ^js js-url (or (:link-js-url config)
+                       (when (path/protocol-url? href)
+                         (try
+                           (js/URL. href)
+                           (catch :default _ nil))))]
     (when (nil? @src)
       (-> (assets-handler/<make-asset-url href js-url)
           (p/then (fn [url]
@@ -563,8 +566,19 @@
              {:on-click (fn [e]
                           (util/stop e)
                           (let [repo-dir (config/get-repo-dir repo)
-                                file-fpath (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) "." (name ext)))]
-                            (js/window.apis.openPath file-fpath)))}
+                                 ext-url (:logseq.property.asset/external-url asset-block)
+                                 remote-ext-url? (and (not (string/blank? ext-url))
+                                                      (path/protocol-url? ext-url)
+                                                      (not (common-config/local-protocol-asset? ext-url)))
+                                 local-ext-url? (and (not (string/blank? ext-url))
+                                                     (common-config/local-relative-asset? ext-url))
+                                 file-fpath (if local-ext-url?
+                                              ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
+                                              (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
+                                              (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) "." (name ext))))]
+                             (if remote-ext-url?
+                               (js/window.apis.openExternal ext-url)
+                               (js/window.apis.openPath file-fpath))))}
              file-name])
 
           :else
@@ -1117,13 +1131,19 @@
         img-placeholder (when image?
                           [:div.img-placeholder.asset-container
                            {:style img-metadata}])
+        ;; When external-url is set, use it as the render path so
+        ;; plugin-sandboxed assets (./assets/storages/<plugin-id>/...)
+        ;; resolve correctly; <make-asset-url handles both remote URLs
+        ;; and graph-root-relative paths.
+        href (or (:logseq.property.asset/external-url block)
+                 (path/path-join (str "../" common-config/local-assets-dir) file))
         content (cond
                   file-ready?
                   (asset-link (assoc config
                                      :asset-block block
                                      :image-placeholder img-placeholder)
                               (:block/title block)
-                              (path/path-join (str "../" common-config/local-assets-dir) file)
+                              href
                               img-metadata
                               nil)
                   image?
@@ -1315,6 +1335,19 @@
         (join (config/get-repo-dir (state/get-current-repo))
               (config/get-local-asset-absolute-path path)))))
 
+(defn- file-link-path->open-path
+  [file-path]
+  (let [file-path (path/file-url-or-path->path file-path)
+        file-path (if (and util/win32?
+                           (string? file-path)
+                           (re-find #"^/[A-Za-z]:(?:[/\\]|$)" file-path))
+                    (subs file-path 1)
+                    file-path)]
+    (if (or (path/absolute? file-path)
+            (path/protocol-url? file-path))
+      file-path
+      (relative-assets-path->absolute-path file-path))))
+
 (rum/defc audio-link
   [config url href _label metadata full_text]
   (if (common-config/local-relative-asset? href)
@@ -1352,11 +1385,23 @@
       :else
       (asset-reference config label s))))
 
+(defn- hashtag-search-tag-page-name
+  [s]
+  (when (and (not (string/blank? s))
+             (= \# (first s)))
+    (let [page-name (text/page-ref-un-brackets! (subs s 1))
+          page (db/get-page page-name)]
+      (when (some #(= :logseq.class/Tag (:db/ident %)) (:block/tags page))
+        page-name))))
+
 (defn- search-link-cp
   [config url s label title metadata full_text]
   (cond
     (string/blank? s)
     [:span.warning {:title (t :block/invalid-link)} full_text]
+
+    (hashtag-search-tag-page-name s)
+    (page-reference config (hashtag-search-tag-page-name s) label)
 
     (= \# (first s))
     (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
@@ -1385,13 +1430,14 @@
     (util/electron?)
     (let [path (cond
                  (string/starts-with? s "file://")
-                 (string/replace s "file://" "")
+                 s
 
                  (string/starts-with? s "/")
                  s
 
                  :else
-                 (relative-assets-path->absolute-path s))]
+                 (relative-assets-path->absolute-path s))
+          path (file-link-path->open-path path)]
       (->elem
        :a
        (cond->
@@ -1410,16 +1456,7 @@
   (let [{:keys [url label title metadata full_text]} link]
     (match url
       ["Block_ref" id]
-      (let [label* (if (seq (mldoc/plain->text label)) label nil)
-            {:keys [link-depth]} config
-            link-depth (or link-depth 0)]
-        (if (> link-depth max-depth-of-links)
-          [:p.warning.text-sm (t :block/ref-nesting-too-deep)]
-          (block-reference (assoc config
-                                  :reference? true
-                                  :link-depth (inc link-depth)
-                                  :block/uuid id)
-                           id label*)))
+      (str block-ref/left-parens id block-ref/right-parens)
 
       ["Page_ref" page]
       (let [label* (if (seq (mldoc/plain->text label)) label nil)]
@@ -1435,8 +1472,8 @@
 
       :else
       (let [href (string-of-url url)
-            [protocol path] (or (and (= "Complex" (first url)) [(:protocol (second url)) (:link (second url))])
-                                (and (= "File" (first url)) ["file" (second url)]))
+            [protocol _path] (or (and (= "Complex" (first url)) [(:protocol (second url)) (:link (second url))])
+                                 (and (= "File" (first url)) ["file" (second url)]))
             config (cond-> config
                      (not (string/blank? protocol))
                      (assoc :link-js-url (try (js/URL. href)
@@ -1445,8 +1482,9 @@
           (= protocol "file")
           (if (show-link? href full_text)
             (media-link config url href label metadata full_text)
-            (let [href* (if (util/electron?)
-                          (relative-assets-path->absolute-path href)
+            (let [file-path (file-link-path->open-path href)
+                  href* (if (util/electron?)
+                          file-path
                           href)]
               [:div.flex.flex-row.items-center
                (ui/icon "file" {:class "opacity-50"})
@@ -1455,7 +1493,7 @@
                 (cond-> (if (util/electron?)
                           {:on-click (fn [e]
                                        (util/stop e)
-                                       (js/window.apis.openPath path))
+                                       (js/window.apis.openPath file-path))
                            :data-href href*}
                           {:href (path/path-join "file://" href*)
                            :data-href href*
@@ -1701,13 +1739,23 @@
     (search-handler/highlight-exact-query content query)
     content))
 
+(defn- preserve-heading-whitespace
+  [config s]
+  (if (and (:parent-heading config)
+           (string? s)
+           (string/blank? s))
+    [:span.whitespace-pre-wrap s]
+    s))
+
 (defn ^:large-vars/cleanup-todo inline
   [{:keys [html-export?] :as config} item]
   (match item
     ["Plain" s]
-    (highlight-query-text s (:highlight-query config))
+    (preserve-heading-whitespace
+     config
+     (highlight-query-text s (:highlight-query config)))
     ["Spaces" s]
-    s
+    (preserve-heading-whitespace config s)
 
     ["Superscript" l]
     (->elem :sup (map-inline config l))
@@ -2052,9 +2100,7 @@
                                                         :ignore-children? page-title?
                                                         :page-title? page-title?})
         link? (boolean (:original-block config))
-        heading-level (when-not collapsed?
-                        (block-heading-level block (:level config)))
-        icon-size (if collapsed? 12 (heading-icon-size heading-level))
+        icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
         with-icon? (and (some? icon)
                         (or (and (db/page? block)
@@ -3226,6 +3272,21 @@
   (when (:db/id seg)
     (db/entity (:db/id seg))))
 
+(defn- missing-breadcrumb-ref-ids
+  [segments]
+  (->> segments
+       (mapcat :title-ref-ids)
+       distinct
+       (remove (fn [id]
+                 (some-> (db/entity [:block/uuid id]) :block/title string?)))
+       vec))
+
+(defn- <hydrate-breadcrumb-ref-titles!
+  [repo segments]
+  (let [ref-ids (missing-breadcrumb-ref-ids segments)]
+    (when (seq ref-ids)
+      (db-async/<get-blocks repo ref-ids {:children? false}))))
+
 (rum/defc breadcrumb-search-overflow-tooltip
   [title]
   (ui/tooltip
@@ -3246,8 +3307,14 @@
         target-db-id (:db/id target-entity)
         load-full-hidden! (fn []
                             (when (and target-db-id (nil? @full-hidden))
-                              (p/let [parents (db-async/<get-block-parents repo target-db-id 1000)]
-                                (let [parents (remove nil? (concat parents [from-property]))
+                              (p/let [parents (db-async/<get-block-parents repo target-db-id 1000)
+                                      _ (<hydrate-breadcrumb-ref-titles!
+                                         repo
+                                         (breadcrumb-segments target-entity parents))]
+                                (let [target-entity (or (db/entity target-db-id) target-entity)
+                                      from-property (or (some-> from-property :db/id db/entity) from-property)
+                                      parents (remove nil? (concat (db/get-block-parents repo (:block/uuid target-entity) {:depth 1000})
+                                                                   [from-property]))
                                       segments (breadcrumb-segments target-entity parents)
                                       view (breadcrumb-model/build-breadcrumb-view
                                             segments
@@ -3357,13 +3424,19 @@
         load-depth (:load-depth (breadcrumb-model/variant-options effective-variant))]
     (hooks/use-effect!
      (fn []
-       (p/let [block (db-async/<get-block (state/get-current-repo)
-                                          block-id
-                                          {:children? false
-                                           :skip-refresh? true})
-               _ (when-let [id (:db/id block)]
-                   (db-async/<get-block-parents (state/get-current-repo) id load-depth))]
-         (set-block! block)))
+       (let [repo (state/get-current-repo)]
+         (p/let [block (db-async/<get-block repo
+                                            block-id
+                                            {:children? false
+                                             :skip-refresh? true})
+                 parents (when-let [id (:db/id block)]
+                           (db-async/<get-block-parents repo id load-depth))
+                 ;; Parent blocks can arrive before the UI DB has loaded page refs
+                 ;; used in their titles. Hydrate only those refs before rendering.
+                 _ (<hydrate-breadcrumb-ref-titles! repo (breadcrumb-segments block parents))]
+           (set-block! (or (when-let [uuid (:block/uuid block)]
+                             (db/entity [:block/uuid uuid]))
+                           block)))))
      [])
     (when block
       (breadcrumb-aux config repo block-id opts))))

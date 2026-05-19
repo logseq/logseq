@@ -1,17 +1,24 @@
 (ns frontend.handler.editor-test
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.test :refer [async deftest is testing use-fixtures]]
             [frontend.commands :as commands]
+            [frontend.components.editor :as editor-component]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
-            [logseq.outliner.core :as outliner-core]))
+            [logseq.outliner.core :as outliner-core]
+            [promesa.core :as p]))
 
-(use-fixtures :each test-helper/start-and-destroy-db)
+(use-fixtures :each {:before test-helper/start-test-db!
+                     :after (fn []
+                              (state/set-current-repo! nil)
+                              (test-helper/destroy-test-db!))})
 
 (deftest extract-nearest-link-from-text-test
   (testing "Page, block and tag links"
@@ -52,6 +59,71 @@
          (editor/extract-nearest-link-from-text
           "[[https://github.com/logseq/logseq][logseq]] is #awesome :)" 0 editor/url-regex))
       "Finds url in org link correctly"))
+
+(defn- follow-page-link-result
+  [{:keys [page-title existing-page? worker-page?]}]
+  (let [events (atom [])
+        redirects (atom [])
+        worker-page-uuid (random-uuid)
+        input-id "edit-block-test"
+        input #js {:value (str "Open [[" page-title "]]")}]
+    (p/with-redefs [state/get-edit-block (constantly {:block/uuid (random-uuid)})
+                    state/get-edit-input-id (constantly input-id)
+                    gdom/getElement (fn [id]
+                                      (when (= input-id id)
+                                        input))
+                    cursor/pos (constantly 10)
+                    editor/save-current-block! (constantly nil)
+                    state/clear-editor-action! (constantly nil)
+                    state/clear-edit! (constantly nil)
+                    db/get-page (fn [title]
+                                  (when (and existing-page? (= page-title title))
+                                    {:block/title title
+                                     :block/uuid (random-uuid)}))
+                    db-async/<get-block (fn [_repo title _opts]
+                                          (p/resolved
+                                           (when (and worker-page? (= page-title title))
+                                             {:block/title title
+                                              :block/uuid worker-page-uuid})))
+                    state/pub-event! (fn [event]
+                                       (swap! events conj event)
+                                       (p/resolved nil))
+                    route-handler/redirect-to-page! (fn [& args]
+                                                      (swap! redirects conj args))]
+      (p/let [_ (editor/follow-link-under-cursor!)]
+        {:events @events
+         :redirects @redirects}))))
+
+(deftest follow-link-under-cursor-opens-existing-page-test
+  (async done
+    (-> (follow-page-link-result {:page-title "Project"
+                                  :existing-page? true})
+        (p/then
+         (fn [{:keys [events redirects]}]
+           (is (empty? events))
+           (is (= [["Project"]] redirects))
+           (done))))))
+
+(deftest follow-link-under-cursor-creates-missing-page-test
+  (async done
+    (-> (follow-page-link-result {:page-title "May 15th, 2026"
+                                  :existing-page? false})
+        (p/then
+         (fn [{:keys [events redirects]}]
+           (is (= [[:page/create "May 15th, 2026"]] events))
+           (is (empty? redirects))
+           (done))))))
+
+(deftest follow-link-under-cursor-uses-worker-page-before-creating-test
+  (async done
+    (-> (follow-page-link-result {:page-title "May 15th, 2026"
+                                  :existing-page? false
+                                  :worker-page? true})
+        (p/then
+         (fn [{:keys [events redirects]}]
+           (is (empty? events))
+           (is (= [["May 15th, 2026"]] redirects))
+           (done))))))
 
 (defn- keyup-handler
   "Spied version of editor/keyup-handler"
@@ -121,6 +193,39 @@
         "Completion stays open when typing tag before another tag"))
   ;; Reset state
   (state/set-editor-action! nil))
+
+(defn- create-tag-with-alias!
+  []
+  (test-helper/create-page! "Project Tag" :redirect? false :class? true)
+  (test-helper/create-page! "Alias Only" :redirect? false)
+  (let [class (db/get-case-page "Project Tag")
+        alias (db/get-case-page "Alias Only")]
+    (db/transact! test-helper/test-db [{:db/id (:db/id class)
+                                        :block/alias #{(:db/id alias)}}])))
+
+(deftest get-matched-classes-includes-class-aliases
+  (create-tag-with-alias!)
+  (is (= ["Project Tag"]
+         (map :block/title (editor/get-matched-classes "Project Tag")))
+      "Existing tag title matching still works")
+  (is (= ["Alias Only"]
+         (map :block/title (editor/get-matched-classes "Alias Only")))
+      "Tag aliases stay available as tag completion choices"))
+
+(deftest tag-search-does-not-convert-class-aliases
+  (async done
+    (create-tag-with-alias!)
+    (let [matched-pages (atom nil)]
+      (-> (p/with-redefs [db-async/<get-block (fn [_repo _title _opts]
+                                                (p/resolved (db/get-page "Alias Only")))]
+            (#'editor-component/search-pages "Alias Only" true #(reset! matched-pages %)))
+          (.then
+           (fn []
+             (is (some #(= "Alias Only" (:block/title %)) @matched-pages)
+                 "The alias is still selectable from tag completion")
+             (is (not-any? :convert-page-to-tag? @matched-pages)
+                 "A class alias must not show a redundant Convert action")
+             (done)))))))
 
 (defn- default-keyup-result
   [{:keys [value cursor-pos key code action is-processed?]

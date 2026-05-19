@@ -356,7 +356,6 @@
                 (let [token (state/get-auth-id-token)
                       graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
                   (p/let [blocks-versions (state/<invoke-db-worker :thread-api/rtc-get-block-content-versions token graph-uuid block-id)]
-                    (prn :dev/show-block-content-history)
                     (doseq [[block-uuid versions] blocks-versions]
                       (prn :block-uuid block-uuid)
                       (pp/print-table [:content :created-at]

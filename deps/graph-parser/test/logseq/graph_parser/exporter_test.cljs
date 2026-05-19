@@ -281,17 +281,20 @@
           "Repeated scheduled timestamp keeps its time")
       (is (= {:logseq.property.repeat/repeated? true
               :logseq.property.repeat/temporal-property :logseq.property/scheduled
+              :logseq.property.repeat/repeat-type :logseq.property.repeat/repeat-type.dotted-plus
               :logseq.property.repeat/recur-frequency 1
               :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.year}
              (select-keys birthday-properties
                           [:logseq.property.repeat/repeated?
                            :logseq.property.repeat/temporal-property
+                           :logseq.property.repeat/repeat-type
                            :logseq.property.repeat/recur-frequency
                            :logseq.property.repeat/recur-unit]))
-          "Repeated scheduled timestamp keeps its repeat properties")
+          "Repeated scheduled timestamp keeps its repeat properties including the `.+` cookie kind")
       (is (= {:logseq.property/deadline 20251107
               :logseq.property.repeat/repeated? true
               :logseq.property.repeat/temporal-property :logseq.property/deadline
+              :logseq.property.repeat/repeat-type :logseq.property.repeat/repeat-type.plus
               :logseq.property.repeat/recur-frequency 2
               :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}
              (-> report-properties
@@ -299,9 +302,10 @@
                  (select-keys [:logseq.property/deadline
                                :logseq.property.repeat/repeated?
                                :logseq.property.repeat/temporal-property
+                               :logseq.property.repeat/repeat-type
                                :logseq.property.repeat/recur-frequency
                                :logseq.property.repeat/recur-unit])))
-          "Repeated deadline timestamp keeps its repeat properties")
+          "Repeated deadline timestamp keeps its repeat properties including the `+` cookie kind")
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
 
@@ -693,6 +697,10 @@
       (is (= [(:db/id (db-test/find-block-by-content @conn "original block"))]
              (mapv :db/id (:block/refs (db-test/find-block-by-content @conn #"ref to"))))
           "block with a block-ref has correct :block/refs")
+
+      (is (= "ref to [[65cbb772-fb79-462d-87c8-6f0dad751dee]]"
+             (:block/title (db-test/find-block-by-content @conn #"ref to")))
+          "block-ref ((uuid)) is converted to page-ref [[uuid]] in block title on import")
 
       (is (= 20221126
              (-> (db-test/readable-properties (db-test/find-block-by-content @conn "only deadline"))

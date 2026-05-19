@@ -240,6 +240,72 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-execute-upsert-block-create-normalizes-content-block-tree
+  (async done
+    (let [page-uuid (random-uuid)
+          parent-uuid (random-uuid)
+          child-uuid (random-uuid)
+          inserted-blocks* (atom nil)
+          action {:type :upsert-block
+                  :mode :create
+                  :repo "demo-repo"
+                  :graph "demo-graph"
+                  :target-page-name "TestPage"
+                  :blocks [{:block/content "Parent"
+                            :block/uuid parent-uuid
+                            :block/children [{:block/content "Child"
+                                              :block/uuid child-uuid}]}]
+                  :pos "last-child"}]
+      (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                      (p/resolved (assoc config :base-url "http://example")))
+                          transport/invoke (fn [_ method args]
+                                             (case method
+                                               :thread-api/q
+                                               (p/resolved [{:db/id 10
+                                                            :block/uuid page-uuid
+                                                            :block/name "testpage"
+                                                            :block/title "TestPage"}])
+
+                                               :thread-api/apply-outliner-ops
+                                               (let [[_ ops _] args
+                                                     blocks (get-in ops [0 1 0])]
+                                                 (reset! inserted-blocks* blocks)
+                                                 (if (every? (fn [block]
+                                                               (and (:block/title block)
+                                                                    (not (contains? block :block/content))))
+                                                             blocks)
+                                                   (p/resolved {:tx-data blocks})
+                                                   (p/rejected (ex-info "DB write failed with invalid data"
+                                                                        {:code :exception}))))
+
+                                               :thread-api/pull
+                                               (let [[_ _ lookup] args]
+                                                 (p/resolved
+                                                  (cond
+                                                    (= lookup [:block/uuid parent-uuid])
+                                                    {:db/id 101 :block/uuid parent-uuid}
+
+                                                    (= lookup [:block/uuid child-uuid])
+                                                    {:db/id 102 :block/uuid child-uuid}
+
+                                                    :else {})))
+
+                                               (throw (ex-info "unexpected invoke"
+                                                               {:method method
+                                                                :args args}))))]
+            (p/let [result (upsert-command/execute-upsert-block action {})]
+              (is (= :ok (:status result)))
+              (is (= [101 102] (get-in result [:data :result])))
+              (is (= [{:block/title "Parent"
+                       :block/uuid parent-uuid}
+                      {:block/title "Child"
+                       :block/uuid child-uuid
+                       :block/parent [:block/uuid parent-uuid]}]
+                     @inserted-blocks*))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest test-build-task-action-validation
   (testing "upsert task requires target selector or content/page"
     (let [result (upsert-command/build-task-action {} "logseq_db_demo")]
@@ -707,5 +773,4 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
-
 

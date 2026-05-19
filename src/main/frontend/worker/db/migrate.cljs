@@ -130,7 +130,8 @@
                           :logseq.property.asset/license
                           :logseq.property.asset/attribution]}]
    ["65.30" {:fix fix-asset-source-url-property-type}]
-   ["65.31" {:fix fix-asset-source-url-schema-lock}]])
+   ["65.31" {:fix fix-asset-source-url-schema-lock}]
+   ["65.32" {:properties [:logseq.property.repeat/repeat-type]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

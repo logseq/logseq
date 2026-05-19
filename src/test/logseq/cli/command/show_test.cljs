@@ -165,6 +165,33 @@
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-fetch-user-properties-marks-default-numeric-values-as-db-id-refs
+  (let [fetch #'show-command/fetch-user-properties
+        call-count (atom 0)
+        mock-invoke (fn [_ _method _args]
+                      (let [call-idx (swap! call-count inc)]
+                        (p/resolved
+                         (case call-idx
+                           ;; First call: user idents-query returns property idents with types
+                           1 [[:user.property/reproducible-steps :default]
+                              [:user.property/count :number]]
+                           ;; Second call: built-in idents-query returns built-in property types
+                           2 []
+                           ;; Third call: props-query returns raw values
+                           3 [[10 :user.property/reproducible-steps 13941]
+                              [10 :user.property/count 42]]
+                           []))))]
+    (async done
+           (-> (p/with-redefs [transport/invoke mock-invoke]
+                 (p/let [result (fetch {} "demo" [10])]
+                   (testing "default property numeric values are treated as db/id refs"
+                     (is (= [:db/id 13941]
+                            (get-in result [10 :user.property/reproducible-steps]))))
+                   (testing "number property values are still rendered as scalar numbers"
+                     (is (= 42 (get-in result [10 :user.property/count]))))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (defn- call-private
   [sym & args]
   (when-let [v (get (ns-interns 'logseq.cli.command.show) sym)]
@@ -761,6 +788,17 @@
     (is (string/includes? output "Reproducible steps:"))
     (is (string/includes? output "- Step [[Resolved nested step]]"))
     (is (string/includes? output "- Verify output"))))
+
+(deftest test-tree->text-skips-unresolved-db-id-property-refs
+  (let [output (-> (show-command/tree->text
+                    {:root {:db/id 1
+                            :block/title "Root"
+                            :user.property/reproducible-steps [:db/id 13941]}
+                     :property-titles {:user.property/reproducible-steps "Reproducible steps"}
+                     :property-value-labels {}})
+                   style/strip-ansi)]
+    (is (not (string/includes? output "13941")))
+    (is (not (string/includes? output "Reproducible steps")))))
 
 (defn- contains-block-uuid?
   [value]
