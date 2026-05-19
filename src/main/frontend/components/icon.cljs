@@ -579,6 +579,11 @@
      ;; Image (shows when loaded, circular with cover fit)
      (when url
        (shui/avatar-image {:src url
+                           ;; Decorative: the avatar is always rendered next
+                           ;; to its label (page/block title), which the
+                           ;; screen reader already announces. Content-
+                           ;; bearing alt would double-announce.
+                           :alt ""
                            :style {:object-fit "cover"}
                            :data-shape (name shape)}))
      ;; Fallback (shows while loading, on error, OR when there's no image
