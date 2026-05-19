@@ -398,7 +398,15 @@
                                                :schema {:type :property
                                                         :hide? true}}
 
-     ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
+     :logseq.property/assignee {:title "Assignee"
+                                :schema {:type :node
+                                         :cardinality :many
+                                         :public? true
+                                         :ui-position :block-below}
+                                :properties {:logseq.property/hide-empty-value true}
+                                :queryable? true}
+
+     ;; TODO: Add more props :Estimate, :Cycle, :Project
 
      :logseq.property/icon {:title "Icon"
                             :schema {:type :map}}

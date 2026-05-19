@@ -1403,6 +1403,7 @@
  :property.built-in/asset-size "File Size"
  :property.built-in/asset-type "File Type"
  :property.built-in/asset-width "Image width"
+ :property.built-in/assignee "Assignee"
  :property.built-in/background-color "Background color"
  :property.built-in/built-in "Built in?"
  :property.built-in/checkbox-display-properties "Properties displayed as checkbox"
