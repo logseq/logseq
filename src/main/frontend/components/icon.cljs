@@ -5645,6 +5645,14 @@
 ;; for readability. Declaring silences the :undeclared-var warning.
 (declare recents-lane)
 
+(def ^:private placeholder-hex
+  "Neutral grey-blue used in two no-input surfaces: the hex input's
+   placeholder ghost text (\"example of expected format\") and the
+   react-colorful SV pad's starting position when no color is set yet.
+   The a1/b2/c3 alphabetical pattern is the self-documentation —
+   it's a memorable demo value, not a designed color."
+  "#a1b2c3")
+
 (rum/defc color-picker-pane
   "Custom-color picker pane shown below the swatch grid when the user
    clicks the rainbow tile. Hosts a hex input + react-colorful's
@@ -5663,7 +5671,7 @@
         ;; resolution succeeds (any kind of match). `picked` reflects only
         ;; exact-resolvable values for purposes of contrast indicator.
         resolved (colors/resolve-color hex-input)
-        active-color (or (:hex resolved) color "#a1b2c3")
+        active-color (or (:hex resolved) color placeholder-hex)
         ;; Compute the contrast-adjusted hex for BOTH light and dark themes
         ;; against canonical surfaces. This lets the indicator surface how
         ;; the pick will render in EACH mode, not just the current one — so
@@ -5726,7 +5734,7 @@
         {:ref *hex-ref
          :type "text"
          :value (or hex-input "")
-         :placeholder "#A1B2C3"
+         :placeholder placeholder-hex
          :spell-check false
          :auto-complete "off"
          :aria-label (t :icon.color/hex-aria-label)
