@@ -207,7 +207,8 @@
    content
    {:block-uuid (:block/uuid comments-block)
     :end? true
-    :edit-block? false}))
+    :edit-block? false
+    :other-attrs {:block/tags #{comments-model/comment-tag-ident}}}))
 
 (defn create-sibling-block-after-comments!
   [comments-block]

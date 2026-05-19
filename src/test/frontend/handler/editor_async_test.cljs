@@ -506,6 +506,25 @@
                          @inserted)
                       "Empty Enter in the reply box should create an editable sibling after #Comments"))))))
 
+(deftest-async insert-comment-tags-created-comment-block
+  (let [comments-area {:block/uuid (random-uuid)
+                       :block/title "Comments"
+                       :block/tags #{comments-model/comments-tag-ident}}
+        inserted (atom nil)]
+    (-> (p/with-redefs [editor/api-insert-new-block! (fn [content opts]
+                                                       (reset! inserted {:content content
+                                                                         :opts opts})
+                                                       (p/resolved {:block/uuid (random-uuid)}))]
+          (comments-handler/insert-comment! comments-area "review this"))
+        (p/then (fn [_]
+                  (is (= {:content "review this"
+                          :opts {:block-uuid (:block/uuid comments-area)
+                                 :end? true
+                                 :edit-block? false
+                                 :other-attrs {:block/tags #{:logseq.class/Comment}}}}
+                         @inserted)
+                      "Inserted comment blocks should be tagged as #Comment"))))))
+
 (deftest delete-comment-targets
   (let [delete-targets (resolve 'frontend.handler.comments/comment-delete-targets)
         first-comment {:block/uuid (random-uuid)
