@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing use-fixtures]]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
             [mobile.navigation :as mobile-nav]
             [mobile.state :as mobile-state]))
 
@@ -118,3 +119,14 @@
         (mobile-state/set-tab! "home")
         (is (= "Hello" @mobile-state/*search-input))
         (is (= [[:home {} {}]] @replace-calls))))))
+
+(deftest selecting-flashcards-does-not-open-cards-dialog
+  (testing "flashcards is a normal tab surface, not a modal shortcut"
+    (let [events (atom [])
+          stacks (atom [])]
+      (with-redefs [state/pub-event! (fn [event] (swap! events conj event))
+                    mobile-nav/switch-stack! (fn [stack] (swap! stacks conj stack))]
+        (mobile-state/set-tab! "flashcards")
+        (is (= "flashcards" @mobile-state/*tab))
+        (is (= ["flashcards"] @stacks))
+        (is (empty? @events))))))

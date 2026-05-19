@@ -10,6 +10,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.extensions.fsrs :as fsrs]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
             [frontend.state :as state]
@@ -247,6 +248,16 @@
   []
   (quick-add/quick-add))
 
+(rum/defc flashcards <
+  {:did-mount (fn [state]
+                (fsrs/update-due-cards-count)
+                state)}
+  []
+  [:div.ls-mobile-flashcards
+   (fsrs/cards-view nil {:mobile? true
+                         :on-header-change mobile-state/set-flashcards-header!
+                         :on-selector-change mobile-state/set-flashcards-selector!})])
+
 (rum/defc other-page < rum/static
   [route-view tab route-match]
   (let [page-view? (= (get-in route-match [:data :name]) :page)]
@@ -260,6 +271,7 @@
                             (graphs/page))
          (= tab "go to") (favorites/favorites)
          (= tab "search") nil
+         (= tab "flashcards") (component-with-restoring (flashcards))
          (= tab "capture") (component-with-restoring (capture))))]))
 
 (rum/defc main-content < rum/static
