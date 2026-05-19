@@ -21,15 +21,15 @@
     (let [block-title (:block/title block)]
       (cond
         (= :avatar (:type icon))
-        (let [colors (select-keys (:data icon) [:backgroundColor :color])]
+        (let [styling (select-keys (:data icon) [:backgroundColor :color :shape])]
           {:type :avatar
-           :data (cond-> colors
+           :data (cond-> styling
                    block-title (assoc :value (icon-component/derive-avatar-initials block-title)))})
 
         (= :text (:type icon))
-        (let [colors (select-keys (:data icon) [:color])]
+        (let [styling (select-keys (:data icon) [:color :alignment :mode])]
           {:type :text
-           :data (cond-> colors
+           :data (cond-> styling
                    block-title (assoc :value (icon-component/derive-initials block-title)))})
 
         (= :image (:type icon))
