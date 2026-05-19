@@ -96,13 +96,16 @@
     (or (> (count selected-blocks) 1)
         (seq view-selected-blocks))))
 
-(rum/defc icon-row < rum/reactive db-mixins/query
-  [block editing?]
-  (hooks/use-effect!
-   (fn []
-     (fn []
-       (when editing?
-         (editor-handler/restore-last-saved-cursor!)))))
+(rum/defcs icon-row < rum/reactive db-mixins/query
+  {:will-unmount (fn [state]
+                   ;; The class mixins (rum/reactive + db-mixins/query) make
+                   ;; this a class component, so hooks/use-effect! is invalid
+                   ;; here. Restore the cursor on unmount via lifecycle instead.
+                   (let [[_ editing?] (:rum/args state)]
+                     (when editing?
+                       (editor-handler/restore-last-saved-cursor!)))
+                   state)}
+  [_state block editing?]
   ;; Subscribe to a fresh entity reference. Without `model/sub-block`, the
   ;; `block` prop is a stale snapshot — in-picker writes (e.g. shape changes
   ;; from the customize band) update the entity but the snapshot held by this
