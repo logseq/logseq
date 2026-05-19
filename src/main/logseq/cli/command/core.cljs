@@ -122,9 +122,10 @@
                 {:title "Authentication"
                  :commands #{"login" "logout"}}
                 {:title "Utilities"
-                 :commands #{"completion" "debug" "example" "qmd" "skill"}
+                 :commands #{"agent" "completion" "debug" "example" "qmd" "skill"}
                  :top-level-only? true
-                 :desc-overrides {"debug" "Pull raw entity data for debugging"
+                 :desc-overrides {"agent" "Run task agent bridge"
+                                  "debug" "Pull raw entity data for debugging"
                                   "example" "Show command examples"
                                   "qmd" "Initialize and manage QMD search"
                                   "skill" "Show/install built-in logseq-cli skill"}}]

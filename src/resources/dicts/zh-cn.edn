@@ -1392,6 +1392,7 @@
  :property.built-in/asset-size "文件大小"
  :property.built-in/asset-type "文件类型"
  :property.built-in/asset-width "图片宽度"
+ :property.built-in/assignee "负责人"
  :property.built-in/background-color "背景颜色"
  :property.built-in/built-in "是否内置？"
  :property.built-in/checkbox-display-properties "显示为复选框的属性"
