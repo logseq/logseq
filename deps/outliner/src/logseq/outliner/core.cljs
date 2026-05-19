@@ -996,6 +996,28 @@
                           (concat retract-property-tx add-property-tx))]
         (common-util/concat-without-nil tx-data children-page-tx property-tx)))))
 
+(defn- transact-move-blocks!
+  [conn blocks target-block sibling? opts outliner-op top-level-blocks]
+  (ldb/batch-transact-with-temp-conn!
+   conn
+   {:outliner-op :move-blocks
+    :outliner-ops [[:move-blocks [(mapv :block/uuid top-level-blocks)
+                                  (:block/uuid target-block)
+                                  opts]]]}
+   (fn [conn]
+     (doseq [[idx block] (map vector (range (count blocks)) blocks)]
+       (let [first-block? (zero? idx)
+             sibling? (if first-block? sibling? true)
+             target-block (if first-block? target-block
+                              (d/entity @conn (:db/id (nth blocks (dec idx)))))
+             block (d/entity @conn (:db/id block))]
+         (when-not (move-to-original-position? [block] target-block sibling? false)
+           (let [tx-data (move-block @conn block target-block sibling?)]
+             ;; FIXME: move-blocks should be pure fn
+             ;; (prn "==>> move blocks tx:" tx-data)
+             (ldb/transact! conn tx-data {:sibling? sibling?
+                                          :outliner-op (or outliner-op :move-blocks)}))))))))
+
 (defn- move-blocks
   "Move `blocks` to `target-block` as siblings or children."
   [conn blocks target-block {:keys [_sibling? _top? _bottom? _up? outliner-op _indent?]
@@ -1030,28 +1052,9 @@
             (let [parents' (->> (ldb/get-block-parents db (:block/uuid target-block) {})
                                 (map :db/id)
                                 (set))
-                  move-parents-to-child? (some parents' (map :db/id blocks))
-                  op-entry [:move-blocks [(mapv :block/uuid top-level-blocks)
-                                          (:block/uuid target-block)
-                                          opts]]]
+                  move-parents-to-child? (some parents' (map :db/id blocks))]
               (when-not move-parents-to-child?
-                (ldb/batch-transact-with-temp-conn!
-                 conn
-                 {:outliner-op :move-blocks
-                  :outliner-ops [op-entry]}
-                 (fn [conn]
-                   (doseq [[idx block] (map vector (range (count blocks)) blocks)]
-                     (let [first-block? (zero? idx)
-                           sibling? (if first-block? sibling? true)
-                           target-block (if first-block? target-block
-                                            (d/entity @conn (:db/id (nth blocks (dec idx)))))
-                           block (d/entity @conn (:db/id block))]
-                       (when-not (move-to-original-position? [block] target-block sibling? false)
-                         (let [tx-data (move-block @conn block target-block sibling?)]
-                           ;; FIXME: move-blocks should be pure fn
-                           ;; (prn "==>> move blocks tx:" tx-data)
-                           (ldb/transact! conn tx-data {:sibling? sibling?
-                                                        :outliner-op (or outliner-op :move-blocks)})))))))
+                (transact-move-blocks! conn blocks target-block sibling? opts outliner-op top-level-blocks)
                 nil))))))))
 
 (defn- move-blocks-up-down
