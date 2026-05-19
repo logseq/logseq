@@ -1,5 +1,6 @@
 (ns frontend.extensions.lightbox
-  (:require [cljs-bean.core :as bean]))
+  (:require [cljs-bean.core :as bean]
+            [lambdaisland.glogi :as log]))
 
 (defn- swallow-outside-pswp!
   "Capture-phase listener that absorbs any pointer/mouse/click event whose
@@ -67,7 +68,19 @@
                   (doseq [^js el roots] (set! (.-inert el) false)))]
     (attach!)
     (set! (.-photoLightbox js/window) lightbox)
-    (doto lightbox
-      (.on "destroy" detach!)
-      (.init)
-      (.loadAndOpen 0))))
+    (.on lightbox "destroy" detach!)
+    ;; If PhotoSwipe `init`/`loadAndOpen` throws, the "destroy" event never
+    ;; fires, so `detach!` would never run — leaving the window listeners
+    ;; attached and every Radix popper permanently `inert=true` (soft-bricks
+    ;; the app). Synchronously roll back the attach! side effects, clear the
+    ;; window-global so mobile/navigation doesn't act on a broken instance,
+    ;; then rethrow so the failure surfaces.
+    (try
+      (doto lightbox
+        (.init)
+        (.loadAndOpen 0))
+      (catch :default e
+        (detach!)
+        (set! (.-photoLightbox js/window) nil)
+        (log/error :lightbox/init-failed {:error e})
+        (throw e)))))
