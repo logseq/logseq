@@ -45,12 +45,14 @@
 
 (defonce emojis (vals (bean/->clj (gobj/get emoji-data "emojis"))))
 
-;; Asset picker drag & drop state
-(defonce *drag-active? (atom false))
-(defonce *drag-depth (atom 0)) ;; Track drag enter/leave depth to prevent flicker
-(defonce *asset-picker-open? (atom false))
-(defonce *upload-status (atom ""))
-(defonce *uploading-files (atom {}))
+;; Drag/upload and section-collapse state was previously module-global —
+;; two picker instances open simultaneously (e.g. sidebar + main view) would
+;; cross-talk their drag highlights, upload progress, and asset-picker-open
+;; flag, plus the OUTER icon-search root and INNER asset-picker overlapped
+;; on the shared `*drag-active?` even within a single session. State now
+;; lives in `rum/local` on each owning component (asset-picker + icon-search),
+;; so each mount gets its own atoms and cleanup happens automatically when
+;; the component unmounts.
 
 ;; ============================================================
 ;; Icon hover-preview helpers
@@ -3221,6 +3223,12 @@
   ;; rum/use-state. Cleared in :will-remount when `current-icon` changes,
   ;; matching icon-picker's `(use-effect! ... [icon-value])` semantics.
   (rum/local nil    ::pending-icon)
+  ;; Drag-and-drop + upload-progress state, per picker instance. See the
+  ;; comment near the top of this ns for why this isn't module-global.
+  (rum/local false ::drag-active?)
+  (rum/local 0     ::drag-depth) ;; Track drag enter/leave depth to prevent flicker
+  (rum/local false ::asset-picker-open?)
+  (rum/local ""    ::upload-status)
   ;; Create a single stable debounced setter. Must live in state (not the
    ;; render `let`) so the debounce timer persists across renders — otherwise
    ;; every keystroke gets a fresh timer and no debouncing happens, causing
@@ -3246,25 +3254,26 @@
                           ::search-input-ref (rum/create-ref))))
    :did-mount (fn [state]
                 ;; Track picker open state
-                (reset! *asset-picker-open? true)
+                (let [*asset-picker-open? (::asset-picker-open? state)]
+                  (reset! *asset-picker-open? true)
 
-                ;; Fetch assets - use sync as placeholder, always fire async for completeness
-                (let [*loaded-assets (::loaded-assets state)
-                      *loading? (::loading? state)
-                      sync-assets (get-image-assets)]
-                  ;; Use sync data as immediate placeholder (avoids spinner if we have partial data)
-                  (when (seq sync-assets)
-                    (reset! *loaded-assets sync-assets)
-                    (reset! *loading? false))
-                  ;; Always fire async query to ensure complete asset list
-                  (-> (<get-image-assets)
-                      (p/then (fn [async-assets]
-                                (when @*asset-picker-open?
-                                  (reset! *loaded-assets (vec async-assets))
-                                  (reset! *loading? false))))
-                      (p/catch (fn [_err]
-                                 (when @*asset-picker-open?
-                                   (reset! *loading? false))))))
+                  ;; Fetch assets - use sync as placeholder, always fire async for completeness
+                  (let [*loaded-assets (::loaded-assets state)
+                        *loading? (::loading? state)
+                        sync-assets (get-image-assets)]
+                    ;; Use sync data as immediate placeholder (avoids spinner if we have partial data)
+                    (when (seq sync-assets)
+                      (reset! *loaded-assets sync-assets)
+                      (reset! *loading? false))
+                    ;; Always fire async query to ensure complete asset list
+                    (-> (<get-image-assets)
+                        (p/then (fn [async-assets]
+                                  (when @*asset-picker-open?
+                                    (reset! *loaded-assets (vec async-assets))
+                                    (reset! *loading? false))))
+                        (p/catch (fn [_err]
+                                   (when @*asset-picker-open?
+                                     (reset! *loading? false)))))))
 
                 ;; Pre-warm the customize-band's expanded layout. The
                 ;; first expand from compact dropped frames because the
@@ -3327,7 +3336,7 @@
                          (.removeEventListener node "paste" listener))
                        (catch :default _ nil)))
                    ;; Track picker closed state
-                   (reset! *asset-picker-open? false)
+                   (reset! (::asset-picker-open? state) false)
 
                    state)}
   [state {:keys [on-chosen on-back on-delete del-btn? current-icon avatar-context page-title
@@ -3337,6 +3346,11 @@
         *loading? (::loading? state)
         *loaded-assets (::loaded-assets state)
         *web-query-debounced (::web-query-debounced state)
+        ;; Per-instance drag/upload state — atoms previously module-global.
+        *drag-active?       (::drag-active? state)
+        *drag-depth         (::drag-depth state)
+        *asset-picker-open? (::asset-picker-open? state)
+        *upload-status      (::upload-status state)
         ;; Optimistic local mirror — see ::pending-icon comment in mixins.
         *pending-icon      (::pending-icon state)
         pending-icon       (rum/react *pending-icon)
@@ -6375,6 +6389,11 @@
   ;; full instance set (Logseq partial-replicates from worker) — so
   ;; sync `(:block/_tags class)` access returns empty.
   (rum/local nil ::fetched-inheritor-ids)
+  ;; Per-instance drag-and-drop state for the OUTER icon-search drop zone.
+  ;; Independent of the asset-picker's own drag state, even when nested —
+  ;; previously they collided on a shared module-global atom.
+  (rum/local false ::drag-active?)
+  (rum/local 0     ::drag-depth)
   {:will-mount (fn [s]
                  (let [opts (first (:rum/args s))
                        icon-value (:icon-value opts)
@@ -6485,6 +6504,9 @@
   (let [*q (::q state)
         *result (::result state)
         *tab (::tab state)
+        ;; Per-instance drag state for the outer drop zone (see mixin comment).
+        *drag-active? (::drag-active? state)
+        *drag-depth   (::drag-depth state)
         *color (::color state)
         *input-focused? (::input-focused? state)
         *view (::view state)
