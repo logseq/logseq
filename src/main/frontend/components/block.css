@@ -224,6 +224,18 @@
   --breadcrumb-segment-max-width: 18ch;
 }
 
+/* CMD-K breadcrumbs are 12px and tightly stacked. The avatar/page-icon
+   on each segment renders at 20px (uncapped from `get-node-icon-cp`),
+   which breaks the line box, competes with the row's main 20px icon
+   for attention, and causes a "double face" effect when the same
+   person appears as a row icon and a breadcrumb icon in nearby rows.
+   Text-only segments match peer command palettes (Linear, Raycast,
+   Notion, VS Code) and leave the row's own icon as the single focal
+   point per result. */
+.breadcrumb--search-result .breadcrumb__segment-icon {
+  display: none;
+}
+
 .breadcrumb--app-header {
   --breadcrumb-segment-max-width: 28ch;
 }
