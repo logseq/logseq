@@ -60,6 +60,7 @@
     :logseq.class/Property
     :logseq.class/Page
     :logseq.class/Whiteboard
+    :logseq.class/Comments
     :logseq.class/Asset})
 
 (defn- dark-theme?

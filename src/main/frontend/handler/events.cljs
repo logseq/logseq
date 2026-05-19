@@ -20,6 +20,7 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.code :as code-handler]
             [frontend.handler.common.page :as page-common-handler]
+            [frontend.handler.comments :as comments-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.db-based.sync :as rtc-handler]
@@ -290,6 +291,9 @@
 
 (defmethod handle :editor/save-current-block [_]
   (editor-handler/save-current-block!))
+
+(defmethod handle :editor/add-comment [_]
+  (comments-handler/add-comment-to-current-context!))
 
 (defmethod handle :editor/save-code-editor [_]
   (code-handler/save-code-editor!))
