@@ -9,7 +9,7 @@
             [electron.ipc :as ipc]
             [frontend.colors :as colors]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -2091,7 +2091,7 @@
        [:div.flex.gap-1.items-center.text-xs.opacity-50.transition-all.duration-200
         {:class (when-not show-hint? "!opacity-0")
          :style {:pointer-events (if show-hint? "auto" "none")}}
-        (if expanded? "Hide" "Show")
+        (if expanded? (t :icon.section-header/hide) (t :icon.section-header/show))
         (shui/shortcut keyboard-hint {:style :compact})]))])
 
 (rum/defc pane-section
@@ -2381,7 +2381,7 @@
       (pane-section "Text" [icon-item] (assoc opts :virtual-list? false))
       [:div.pane-section.px-2.py-4
        [:div.text-sm.text-gray-07.dark:opacity-80
-        "Enter text or use page initials"]])))
+        (t :icon.text-tab/empty-prompt)]])))
 
 (rum/defc avatar-tab-cp
   [*q page-title *color opts]
@@ -2410,7 +2410,7 @@
       (pane-section "Avatar" [icon-item] (assoc opts :virtual-list? false))
       [:div.pane-section.px-2.py-4
        [:div.text-sm.text-gray-07.dark:opacity-80
-        "Enter initials or use page initials"]])))
+        (t :icon.avatar-tab/empty-prompt)]])))
 
 (rum/defc custom-tab-cp < rum/reactive
   "Combined tab showing Text, Avatar, and Image options side by side"
@@ -2496,7 +2496,7 @@
          :on-mouse-over (fn [] (some-> on-tile-hover! (apply [text-item])))}
         [:div.custom-tab-item-preview {:aria-hidden "true"}
          (icon text-item {:size 32})]
-        [:span.custom-tab-item-label "Text"]])
+        [:span.custom-tab-item-label (t :icon.mode/text)]])
 
      ;; Avatar option. In page-icon context: commits the synthesized initials
      ;; avatar immediately and lands on the asset-picker's Avatar tab so the
@@ -2518,7 +2518,7 @@
          :on-mouse-over (fn [] (some-> on-tile-hover! (apply [avatar-item])))}
         [:div.custom-tab-item-preview {:aria-hidden "true"}
          (icon avatar-item {:size 32})]
-        [:span.custom-tab-item-label "Avatar"]])
+        [:span.custom-tab-item-label (t :icon.mode/avatar)]])
 
      ;; Image option — commits the placeholder icon immediately so the page
      ;; icon stays as the plus+dashed placeholder while the asset-picker
@@ -2548,7 +2548,7 @@
                  :justify-content "center"
                  :background "var(--rx-gray-03-alpha)"}}
         (shui/tabler-icon "photo" {:size 20 :style {:color "var(--lx-gray-11)"}})]]
-      [:span.custom-tab-item-label "Image"]]]))
+      [:span.custom-tab-item-label (t :icon.mode/image)]]]))
 
 ;; <load-asset-url! is defined near the top of the file (unified loader with retry + extension guessing)
 
@@ -2648,7 +2648,7 @@
          (cond
            error?
            [:div.ghost-asset-placeholder
-            {:title "Click to retry loading"}
+            {:title (t :icon.asset/retry-load-tooltip)}
             (ui/icon "refresh" {:size 16})]
            url
            [:img {:src url
@@ -2702,8 +2702,8 @@
   [{:keys [url thumb-url title license license-desc source source-name]}]
   (let [source-label (cond
                        source-name source-name
-                       (= source :wikipedia) "Wikipedia"
-                       (= source :wikipedia-commons) "Wikipedia Commons"
+                       (= source :wikipedia) (t :icon.web-images/wikipedia)
+                       (= source :wikipedia-commons) (t :icon.web-images/wikipedia-commons)
                        :else nil)
         source-text (when source-label
                       (str "From: " source-label
@@ -2716,10 +2716,12 @@
         [:img.blur-bg {:src display-url :alt ""}])
       [:img.preview-img {:src display-url
                          :alt (if source-label
-                                (str (or title "Image") " from " source-label)
-                                (or title "Image"))}]
+                                (t :icon.web-images/image-alt-from-source
+                                   (or title (t :icon.web-images/image-fallback-title))
+                                   source-label)
+                                (or title (t :icon.web-images/image-fallback-title)))}]
       [:button.maximize-btn
-       {:aria-label "View full size"
+       {:aria-label (t :icon.web-images/view-full-size)
         :on-pointer-down (fn [e]
                            ;; Stop the click bubbling to the underlying tile.
                            ;; Without this, opening the lightbox would also
@@ -2795,7 +2797,7 @@
        (shui/tabler-icon "arrows-maximize" {:size 16})]]
      [:div.content-wrapper
       [:div.image-info
-       [:div.image-title (or title "Untitled image")]
+       [:div.image-title (or title (t :icon.web-images/untitled))]
        (when source-text
          [:div.image-source {:style {:color "var(--lx-gray-11)"}} source-text])
        (when license-desc
@@ -2856,9 +2858,9 @@
         (when (or license license-desc)
           [:div.touch-byline
            (str (case source
-                  :wikipedia-commons "Commons"
-                  :wikipedia "Wikipedia"
-                  "Web")
+                  :wikipedia-commons (t :icon.web-images/commons-short)
+                  :wikipedia (t :icon.web-images/wikipedia)
+                  (t :icon.web-images/web))
                 (when license (str " · " license)))])])
       (shui/tooltip-content
        {:side "top" :align "center" :class "web-image-card-popup"
@@ -2990,8 +2992,8 @@
           (shui/tooltip-content
            {:side "top" :show-arrow true}
            [:div
-            [:div.text-sm.font-medium "Images from Wikipedia Commons"]
-            [:div.text-xs.opacity-70.mt-1 "Check licensing before commercial use."]])))]
+            [:div.text-sm.font-medium (t :icon.web-images/info-title)]
+            [:div.text-xs.opacity-70.mt-1 (t :icon.web-images/info-desc)]])))]
 
        ;; Image grid (or inline network-error message)
        (when web-expanded?
@@ -2999,7 +3001,7 @@
            (and search-error? (not show-loading?) (empty? images))
            [:div.web-images-error
             (shui/tabler-icon "wifi-off" {:size 14})
-            [:span "Couldn't reach Wikipedia. Check your connection."]]
+            [:span (t :icon.web-images/network-error)]]
 
            :else
            [:div.asset-picker-grid.web-images-row
@@ -3094,7 +3096,7 @@
                             files)]
     [:div.multi-file-preview.p-4.space-y-4
      [:h3.text-base.font-semibold
-      (str "Upload " (count image-files) " image" (when (not= 1 (count image-files)) "s") "?")]
+      (t :icon.upload/multi-file-confirm-title (count image-files))]
 
      ;; File list
      [:div.space-y-1.max-h-64.overflow-y-auto
@@ -3106,13 +3108,12 @@
      ;; Warning for skipped files
      (when (seq other-files)
        [:div.text-sm.text-yellow-09.bg-yellow-02.rounded.px-3.py-2
-        (str "Will skip " (count other-files) " non-image file"
-             (when (not= 1 (count other-files)) "s"))])
+        (t :icon.upload/skip-non-image-warning (count other-files))])
 
      ;; Action buttons
      [:div.flex.gap-2.justify-end
-      (shui/button {:variant :outline :on-click on-cancel} "Cancel")
-      (shui/button {:on-click on-confirm} "Upload")]]))
+      (shui/button {:variant :outline :on-click on-cancel} (t :ui/cancel))
+      (shui/button {:on-click on-confirm} (t :icon.upload/action))]]))
 
 ;; ============================================================================
 ;; Asset Picker
@@ -3593,25 +3594,19 @@
                                        reused-count (count reused-entities)]
                                    (cond
                                      (and (pos? new-count) (zero? reused-count) (empty? rejected-files))
-                                     (shui/toast! (str "Uploaded " new-count " image"
-                                                       (when (not= 1 new-count) "s"))
+                                     (shui/toast! (t :icon.upload/uploaded-success new-count)
                                                   :success)
 
                                      (and (pos? new-count) (pos? reused-count))
-                                     (shui/toast! (str "Uploaded " new-count " new, "
-                                                       reused-count " already existed")
+                                     (shui/toast! (t :icon.upload/uploaded-mixed-success new-count reused-count)
                                                   :success)
 
                                      (and (zero? new-count) (pos? reused-count))
-                                     (shui/toast! (str reused-count " image"
-                                                       (when (not= 1 reused-count) "s")
-                                                       " already existed")
+                                     (shui/toast! (t :icon.upload/all-existed-success reused-count)
                                                   :success)
 
                                      (seq rejected-files)
-                                     (shui/toast! (str "Skipped " (count rejected-files)
-                                                       " file" (when (not= 1 (count rejected-files)) "s")
-                                                       " (not images)")
+                                     (shui/toast! (t :icon.upload/skipped-non-images-error (count rejected-files))
                                                   :error)
 
                                      :else nil))
@@ -3708,10 +3703,10 @@
                                     (shui/toast! (url-save-error-copy err) :error)))))
 
                    :none
-                   (shui/toast! "No image or URL found in clipboard" :warning)
+                   (shui/toast! (t :icon.clipboard/no-image-or-url-warning) :warning)
 
                    :error
-                   (shui/toast! "Couldn't read clipboard. Try Upload or Paste URL." :warning)))
+                   (shui/toast! (t :icon.clipboard/read-error) :warning)))
                (p/catch (fn [err]
                           (js/console.error "clipboard paste failed" err)
                           (shui/toast! (url-save-error-copy err) :error))))))
@@ -3780,8 +3775,8 @@
         [:div.corner.bl] [:div.corner.br]
         (shui/tabler-icon "upload" {:size 26})
         [:div.text-group
-         [:span.title "Drop images to upload"]
-         [:span.subtitle "PNG, JPG, SVG, GIF, WebP"]]])
+         [:span.title (t :icon.upload/drop-overlay-title)]
+         [:span.subtitle (t :icon.upload/format-list)]]])
 
      ;; Topbar: back | Avatar/Image tabs | trash, then separator, then search.
      ;; Each focusable stop carries `data-topbar-stop` so the keyboard-nav
@@ -3793,7 +3788,7 @@
          {:on-click on-back
           :data-topbar-stop "back"}
          (shui/tabler-icon "chevron-left" {:size 16})
-         [:span "Back"]]]
+         [:span (t :icon/back)]]]
        [:div.asset-picker-tabs-slot
         ;; Avatar/Image is a value selector, not a content tab — both modes
         ;; show the same image grid; only the resulting icon's :type/shape
@@ -3801,7 +3796,7 @@
         ;; ARIA semantics. Manual activation (Enter) is intentional: a mode
         ;; flip writes to the DB when an asset is already selected.
         (ui/segmented-control
-         {:options [[:avatar "Avatar"] [:image "Image"]]
+         {:options [[:avatar (t :icon.asset-mode/avatar)] [:image (t :icon.asset-mode/image)]]
           :active mode
           :on-change (fn [m _e] (on-mode-change m))
           :aria-label "Icon rendering mode"
@@ -3860,8 +3855,8 @@
         (shui/tabler-icon "search" {:size 16 :class "ls-icon-search"})
         (shui/input
          {:type "search"
-          :aria-label "Search images"
-          :placeholder "Search images"
+          :aria-label (t :icon.asset-search/placeholder)
+          :placeholder (t :icon.asset-search/placeholder)
           :value search-q
           :auto-focus true
           :ref *search-input-ref
@@ -4254,22 +4249,22 @@
                 fallback-preview-icon (cond-> preview-icon
                                         has-image? (update :data dissoc :asset-uuid :asset-type))
                 scope-label (if (or has-image? style-dirty?)
-                              "Custom"
-                              "Default")
+                              (t :icon.avatar-scope/custom)
+                              (t :icon.avatar-scope/default))
                 descriptor-fb (cond
-                                has-image? "Image"
+                                has-image? (t :icon.mode/image)
                                 (and (= current-fb-type :icon) current-fb-icon)
                                 (or (not-empty (humanize-icon-name current-fb-icon))
-                                    "Icon")
+                                    (t :icon.fallback/icon))
                                 (and (= current-fb-type :emoji) current-fb-icon)
                                 (or (not-empty
                                      (humanize-icon-name
                                       (string/replace current-fb-icon "_" "-")))
-                                    "Emoji")
-                                :else "Letters")
+                                    (t :icon.fallback/emoji))
+                                :else (t :icon.fallback/letters))
                 descriptor-shape (case current-shape
-                                   :rounded-rect "rectangle"
-                                   "circle")
+                                   :rounded-rect (t :icon.shape/rectangle-descriptor)
+                                   (t :icon.shape/circle-descriptor))
                 descriptor (str descriptor-fb ", " descriptor-shape)
                 ;; Wrap-fn shared by the Icon… sub-menu's icon-search.
                 ;; Each hovered tile broadcasts as an avatar with the
@@ -4328,28 +4323,28 @@
                  [:span.banner-scope scope-label]
                  [:span.banner-sep "·"]
                  [:span.banner-descriptor descriptor]]
-                [:span.banner-edit "Edit"]]
+                [:span.banner-edit (t :icon.avatar-band/edit)]]
                [:div.cb-rows
                 {:id "asset-picker-cb-rows"
                  :role "region"
-                 :aria-label "Avatar customization options"}
+                 :aria-label (t :icon.avatar-band/region-aria-label)}
                 [:div.cb-row
-                 [:span.cb-label "Shape"]
+                 [:span.cb-label (t :icon.avatar-band/shape-label)]
                  (shui/dropdown-menu
                   (shui/dropdown-menu-trigger
                    {:as-child true}
                    [:button.cb-chip
                     {:type "button"
                      :data-topbar-stop "shape"
-                     :aria-label "Avatar shape"}
+                     :aria-label (t :icon.avatar-band/shape-aria-label)}
                     [:span.cb-chip-glyph
                      (case current-shape
                        :rounded-rect [:span.glyph.glyph-rect]
                        [:span.glyph.glyph-circle])]
                     [:span.cb-chip-label
                      (case current-shape
-                       :rounded-rect "Rectangle"
-                       "Circle")]
+                       :rounded-rect (t :icon.shape/rectangle)
+                       (t :icon.shape/circle))]
                     (shui/tabler-icon "chevron-down" {:size 11 :class "cb-chip-chevron"})])
                   (shui/dropdown-menu-content
                    {:align "end"
@@ -4376,14 +4371,14 @@
                     {:on-click #(set-shape! :circle)
                      :on-focus #(preview-shape-on-hover! :circle)}
                     (shui/tabler-icon "circle" {:class "scale-90 pr-1 opacity-80"})
-                    "Circle")
+                    (t :icon.shape/circle))
                    (shui/dropdown-menu-item
                     {:on-click #(set-shape! :rounded-rect)
                      :on-focus #(preview-shape-on-hover! :rounded-rect)}
                     (shui/tabler-icon "square-rounded" {:class "scale-90 pr-1 opacity-80"})
-                    "Rectangle")))]
+                    (t :icon.shape/rectangle))))]
                 [:div.cb-row
-                 [:span.cb-label "Fallback"]
+                 [:span.cb-label (t :icon.avatar-band/fallback-label)]
                  (shui/dropdown-menu
                   ;; Controlled open state — see `::fallback-menu-open?`
                   ;; comment above. The map of props goes as the first
@@ -4396,7 +4391,7 @@
                    [:button.cb-chip
                     {:type "button"
                      :data-topbar-stop "fallback"
-                     :aria-label "Avatar fallback"}
+                     :aria-label (t :icon.avatar-band/fallback-aria-label)}
                     ;; Glyph reflects current fallback. Letters → "Aa";
                     ;; Icon → the actual chosen tabler icon; Emoji →
                     ;; the chosen emoji glyph. All sized at 11px for
@@ -4412,12 +4407,12 @@
                                    :style {:line-height 1}}]
 
                        :else
-                       [:span.glyph-letters "Aa"])]
+                       [:span.glyph-letters (t :icon.avatar-fallback/letters-glyph)])]
                     [:span.cb-chip-label
                      (cond
                        (and (= current-fb-type :icon) current-fb-icon)
                        (or (not-empty (humanize-icon-name current-fb-icon))
-                           "Icon")
+                           (t :icon.fallback/icon))
 
                        (and (= current-fb-type :emoji) current-fb-icon)
                        ;; Emoji shortcodes are typically `snake_case`;
@@ -4428,10 +4423,10 @@
                        (or (not-empty
                             (humanize-icon-name
                              (string/replace current-fb-icon "_" "-")))
-                           "Emoji")
+                           (t :icon.fallback/emoji))
 
                        :else
-                       "Letters")]
+                       (t :icon.fallback/letters))]
                     (shui/tabler-icon "chevron-down" {:size 11 :class "cb-chip-chevron"})])
                   (shui/dropdown-menu-content
                    {:align "end"
@@ -4446,7 +4441,7 @@
                     {:on-click set-fallback-letters!
                      :on-focus #(preview-fallback-on-hover! :letters)}
                     (shui/tabler-icon "letter-case" {:class "scale-90 pr-1 opacity-80"})
-                    "Letters")
+                    (t :icon.fallback/letters))
                    ;; Sub-menu pattern (matches content.cljs's "Add reaction"
                    ;; → emoji picker): "Icon…" expands to the side instead
                    ;; of dismissing the parent menu and re-opening a popup
@@ -4457,7 +4452,7 @@
                     (shui/dropdown-menu-sub-trigger
                      {:on-focus #(preview-fallback-on-hover! :icon)}
                      (shui/tabler-icon "circle-dashed" {:class "scale-90 pr-1 opacity-80"})
-                     "Icon…")
+                     (t :icon.fallback/icon-submenu))
                     ;; `dropdown-menu-sub-content` ships with `p-1` baked
                     ;; into shui's popup-core defaults, AND content.cljs's
                     ;; "Add reaction" pattern wraps its picker in another
@@ -4556,17 +4551,17 @@
                  :on-click reset-style!
                  :data-topbar-stop "reset"
                  :disabled (not style-dirty?)
-                 :aria-label "Reset to default"
+                 :aria-label (t :icon.avatar-band/reset-aria-label)
                  :tab-index (if expanded? 0 -1)}
                 (shui/tabler-icon "rotate" {:size 12})
-                [:span "Reset"]]
+                [:span (t :ui/reset)]]
                [:button.lx-toolbar-action.cb-done
                 {:type "button"
                  :on-click #(reset! (::customize-expanded? state) false)
                  :data-topbar-stop "done"
-                 :aria-label "Close customize panel"
+                 :aria-label (t :icon.avatar-band/close-aria-label)
                  :tab-index (if expanded? 0 -1)}
-                [:span "Done"]]]]]))
+                [:span (t :icon.avatar-band/done-button)]]]]]))
 
         ;; "Recently used" section - shows current + recently used in one row (only when not searching)
         (when (and (seq recently-used-row) (string/blank? search-q))
@@ -4643,7 +4638,7 @@
                 ;; Search returned no results
                 [:div.asset-picker-empty
                  (shui/tabler-icon "search-off" {:size 32})
-                 [:span.text-sm "No matching images"]]
+                 [:span.text-sm (t :icon.asset-search/empty)]]
                 ;; No assets uploaded yet — show action rows instead of a placeholder
                 [:div.asset-picker-empty-actions
                  (when clipboard-supported?
@@ -4656,8 +4651,8 @@
                      :on-click (fn [_] (handle-clipboard-paste))}
                     [:div.row-icon (shui/tabler-icon "clipboard" {:size 22})]
                     [:div.row-body
-                     [:div.row-title "Paste from clipboard"]
-                     [:div.row-subtitle "An image, or a link to one"]]
+                     [:div.row-title (t :icon.asset/paste-from-clipboard-title)]
+                     [:div.row-subtitle (t :icon.asset/paste-from-clipboard-desc)]]
                     [:div.row-shortcut
                      (shui/shortcut "mod+v" {:style :combo})]])
 
@@ -4673,8 +4668,8 @@
                              :is-ghost-highlighted (= ghost-highlighted-id "upload-row")}])}
                   [:div.row-icon (shui/tabler-icon "folder" {:size 22})]
                   [:div.row-body
-                   [:div.row-title "Add from your computer"]
-                   [:div.row-subtitle "Browse or drop a file in"]]
+                   [:div.row-title (t :icon.asset/add-from-computer-title)]
+                   [:div.row-subtitle (t :icon.asset/add-from-computer-desc)]]
                   [:div.row-chevron (shui/tabler-icon "chevron-right" {:size 16})]]]))])]])
 
      ;; Hidden file input lives at the top level so both the empty-state
@@ -4692,35 +4687,37 @@
      ;; replaces this bar with the empty-state rows above.
      (when (or loading? (seq @*loaded-assets))
        [:div.asset-picker-footer-hint
-        [:span.tip-label "Tip:"]
+        [:span.tip-label (t :icon.asset/tip-label)]
         [:span.tip-body
          (if (util/mobile?)
            ;; Phone: every verb is a real control. iOS Safari won't deliver
            ;; paste events to the popover root reliably, so paste-a-link is
            ;; a button that calls handle-clipboard-paste directly (mirrors
            ;; the empty-state clipboard-row).
-           [:<>
-            [:button.tip-link
-             {:type "button"
-              :on-click (fn [_] (handle-clipboard-paste))}
-             "Paste a link"]
-            ", "
-            [:label.tip-link {:for "asset-upload-input" :tab-index 0} "browse"]
-            ", or "
-            [:label.tip-link {:tab-index 0}
-             [:input.hidden
-              {:type "file"
-               :accept "image/*"
-               :capture "environment"
-               :on-change (fn [e]
-                            (let [files (array-seq (.. e -target -files))]
-                              (handle-upload files)))}]
-             "take a picture"]]
+           (i18n/interpolate-rich-text-node
+            (t :icon.asset/tip-mobile)
+            [[:button.tip-link
+              {:type "button"
+               :on-click (fn [_] (handle-clipboard-paste))}
+              (t :icon.asset/tip-link-paste)]
+             [:label.tip-link {:for "asset-upload-input" :tab-index 0}
+              (t :icon.asset/tip-link-browse)]
+             [:label.tip-link {:tab-index 0}
+              [:input.hidden
+               {:type "file"
+                :accept "image/*"
+                :capture "environment"
+                :on-change (fn [e]
+                             (let [files (array-seq (.. e -target -files))]
+                               (handle-upload files)))}]
+              (t :icon.asset/tip-link-take-picture)]])
            ;; Desktop / iPad: passive hint. Drop + paste rely on the
            ;; existing global handlers attached to the picker root.
            [:<>
-            "Drop an image, paste a link, or "
-            [:label.tip-link {:for "asset-upload-input" :tab-index 0} "browse"]
+            (i18n/interpolate-rich-text-node
+             (t :icon.asset/tip-desktop)
+             [[:label.tip-link {:for "asset-upload-input" :tab-index 0}
+               (t :icon.asset/tip-link-browse)]])
             " "
             [:span.tip-sep "·"]
             " "
@@ -5354,7 +5351,7 @@
 
     [:div.color-picker-presets
      {:role "radiogroup"
-      :aria-label "Icon color"
+      :aria-label (t :icon.color/picker-aria-label)
       :ref *parent
       :on-mouse-leave (fn []
                         (set-hover! nil)
@@ -5516,7 +5513,7 @@
          [:button.color-swatch.color-swatch--custom
           {:role "radio"
            :aria-checked (str (boolean custom-active?))
-           :aria-label "Custom color"
+           :aria-label (t :icon.color/custom)
            :aria-expanded (str (boolean picker-open?))
            :tab-index (if custom-active? "0" "-1")
            :class (when custom-active? "is-selected")
@@ -5530,10 +5527,10 @@
         (shui/tooltip-content
          {:side "top" :align "center" :show-arrow true}
          [:div.text-center
-          [:div.font-medium "Custom color"]
+          [:div.font-medium (t :icon.color/custom)]
           [:div.text-xs.mt-0.5
            {:style {:color "var(--lx-gray-11)"}}
-           "Pick any hex"]])))]
+           (t :icon.color/custom-hint)]])))]
 
      ;; Vertical 1px rule between control col and preset grid
      [:div.divider-rule]
@@ -5634,7 +5631,7 @@
          :placeholder "#A1B2C3"
          :spell-check false
          :auto-complete "off"
-         :aria-label "Hex color"
+         :aria-label (t :icon.color/hex-aria-label)
          :aria-invalid (str (boolean hex-invalid?))
          :class (when hex-invalid? "is-invalid")
          :on-change (fn [^js e]
@@ -5758,9 +5755,8 @@
              (shui/tooltip-trigger
               {:as-child true}
               [:span.color-picker-contrast-indicator
-               {:aria-label (str (or picked-name picked)
-                                 " — contrast adjusted: dark "
-                                 dark ", light " light)}
+               {:aria-label (t :icon.color/contrast-aria-label
+                               (or picked-name picked) dark light)}
                [:span.contrast-split-swatch
                 {:style {"--dark-color" dark
                          "--light-color" light}}]])
@@ -5769,14 +5765,14 @@
               [:div
                ;; Title: picked color name if reverse-lookup hits, else
                ;; the generic "Contrast adjusted".
-               [:div.text-sm.font-medium (or picked-name "Contrast adjusted")]
+               [:div.text-sm.font-medium (or picked-name (t :icon.color/contrast-title))]
                [:div.text-xs.opacity-70.mt-1
                 [:div.flex.items-center.gap-1.5
                  [:span.contrast-tooltip-dot {:style {:background-color dark}}]
-                 [:span "Dark "] [:span.font-mono dark]]
+                 [:span (str (t :icon.color/contrast-dark-label) " ")] [:span.font-mono dark]]
                 [:div.flex.items-center.gap-1.5.mt-0.5
                  [:span.contrast-tooltip-dot {:style {:background-color light}}]
-                 [:span "Light "] [:span.font-mono light]]]])))))]
+                 [:span (str (t :icon.color/contrast-light-label) " ")] [:span.font-mono light]]]])))))]
 
       ;; SV pad + Hue slider via react-colorful's HexColorPicker
       [:div.color-picker-pad-row
@@ -5836,11 +5832,11 @@
           ;; first Tab into the row lands on the leftmost swatch.
           [active-idx set-active-idx!] (rum/use-state 0)]
       [:div.color-picker-recents
-       [:div.color-picker-recents__header "Recently used"]
+       [:div.color-picker-recents__header (t :icon.color/recents-title)]
        [:div.color-picker-recents__row
         {:ref *parent
          :role "radiogroup"
-         :aria-label "Recently used colors"
+         :aria-label (t :icon.color/recents-aria-label)
          :on-key-down
          (fn [^js e]
            (when-let [^js parent (rum/deref *parent)]
@@ -6246,7 +6242,7 @@
                      (persist!)
                      (on-back))}
         (shui/tabler-icon "chevron-left" {:size 16})
-        [:span "Back"]]
+        [:span (t :icon/back)]]
        [:div.text-picker-actions
         (color-picker *color (fn [c]
                                (reset! *color c)
@@ -6299,7 +6295,7 @@
       [:div.text-picker-controls-row
        ;; Text input
        [:div.text-picker-section.flex-1
-        [:label "Text"]
+        [:label (t :icon.text-picker/text-input-label)]
         (shui/input
          {:size "sm"
           :auto-focus true
@@ -6320,7 +6316,7 @@
 
        ;; Alignment
        [:div.text-picker-section
-        [:label "Alignment"]
+        [:label (t :icon.text-picker/alignment-label)]
         [:div.text-picker-alignment
          (shui/button-group
           (for [align ["left" "center" "right"]
@@ -6847,7 +6843,7 @@
                                                :id (str "image-" (:block/uuid entity))
                                                :label (or (:block/title entity) "")
                                                :data image-data})))))
-                           (shui/toast! "Only image files are supported (PNG, JPG, SVG, GIF, WebP)"
+                           (shui/toast! (t :icon.upload/non-image-warning)
                                         :warning))))))}
 
        ;; Drag overlay hint
@@ -6857,8 +6853,8 @@
           [:div.corner.bl] [:div.corner.br]
           (shui/tabler-icon "upload" {:size 26})
           [:div.text-group
-           [:span.title "Drop to set as icon"]
-           [:span.subtitle "PNG, JPG, SVG, GIF, WebP"]]])
+           [:span.title (t :icon.upload/drop-icon-overlay-title)]
+           [:span.subtitle (t :icon.upload/format-list)]]])
 
        ;; Phantom component hosting hover-preview lifecycle hooks.
        ;; Renders nothing; lives here because icon-search itself can't
@@ -6885,8 +6881,8 @@
            :*virtuoso-ref      *virtuoso-ref
            :topbar-selector    ".cp__emoji-icon-picker .tabs-section [data-topbar-stop]"})
          (ui/tab-items
-          {:tabs (let [all-tabs [[:all "All"] [:emoji "Emojis"]
-                                 [:icon "Icons"] [:custom "Custom"]]]
+          {:tabs (let [all-tabs [[:all (t :icon/tab-all)] [:emoji (t :icon/tab-emojis)]
+                                 [:icon (t :icon/tab-icons)] [:custom (t :icon/tab-custom)]]]
                    (if-let [allowed (some-> allowed-tabs set)]
                      (filterv (fn [[id _]] (allowed id)) all-tabs)
                      all-tabs))
@@ -6997,8 +6993,8 @@
              :class "icon-search-input"
              :ref *input-ref
              :type "search"
-             :aria-label "Search emojis, icons, and assets"
-             :placeholder "Search emojis, icons, assets..."
+             :aria-label (t :icon/search-all-aria-label)
+             :placeholder (t :icon/search-all-placeholder)
              :default-value ""
              :on-focus #(do (reset! *focus-region :search)
                             (reset! *input-focused? true))
@@ -7129,8 +7125,8 @@
                  ;; Search returned no results
                  [:div.search-empty-state
                   (shui/tabler-icon "search-off" {:size 36})
-                  [:span.title "No results found"]
-                  [:span.subtitle "Try a different search term"]]))
+                  [:span.title (t :icon/search-empty-title)]
+                  [:span.subtitle (t :icon/search-empty-desc)]]))
              [:div.flex.flex-1.flex-col.gap-1
               (case @*tab
                 :emoji (emojis-cp emojis opts)
@@ -7261,4 +7257,4 @@
          (if (vector? effective-icon-value) ; hiccup
            effective-icon-value
            (icon-picker-trigger-icon effective-icon-value preview-target-db-id icon-props property))
-         (or empty-label "Empty"))))))
+         (or empty-label (t :ui/empty)))))))

@@ -211,17 +211,12 @@
                {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
                         [:span.top-1.relative
                          (shui/tabler-icon "alert-triangle")]
-                        (str "Clear " diverged-count " customized icon"
-                             (when (not= 1 diverged-count) "s") "?")]
+                        (t :class.default-icon/clear-confirm-title diverged-count)]
                 :content [:div.flex.flex-col.gap-3
                           [:p.opacity-70.text-sm.leading-relaxed
-                           (str "These "
-                                (if (= 1 diverged-count) "row" "rows")
-                                " will use the default icon instead of "
-                                (if (= 1 diverged-count) "its" "their")
-                                " custom one"
-                                (when (not= 1 diverged-count) "s")
-                                (if (> diverged-count 1) ":" "."))]
+                           (t :class.default-icon/clear-confirm-desc
+                              diverged-count
+                              (if (> diverged-count 1) ":" "."))]
                           (when (> diverged-count 1)
                             [:ul.flex.flex-col.gap-2.text-sm.m-0.p-0.list-none
                              (for [inst preview-rows]
@@ -232,10 +227,10 @@
                                  (icon-component/icon
                                   (:logseq.property/icon inst)
                                   {:size 16 :color? true})]
-                                [:span.truncate (or (:block/title inst) "(untitled)")]])
+                                [:span.truncate (or (:block/title inst) (t :class.default-icon/untitled))]])
                              (when (pos? remaining)
                                [:li.opacity-60.text-xs.pl-7
-                                (str "and " remaining " more")])])]
+                                (t :class.default-icon/more-count remaining)])])]
                 :outside-cancel? true})
               (p/then
                (fn [_]
@@ -345,15 +340,13 @@
                         (.stopPropagation e)
                         (reset-instances!))}
            (shui/tabler-icon "rotate-clockwise" {:size 13})
-           [:span (str "Clear " diverged-count " customized icon"
-                       (when (not= 1 diverged-count) "s"))]))
+           [:span (t :class.default-icon/clear-button-label diverged-count)]))
          (shui/tooltip-content
           {:side "top" :align "center" :show-arrow true}
           [:div.text-center
-           [:div.font-medium "Reset to this default"]
+           [:div.font-medium (t :class.default-icon/reset-tooltip-title)]
            [:div.text-xs.opacity-70.mt-0.5
-            (str "Replaces " diverged-count " custom icon"
-                 (when (not= 1 diverged-count) "s"))]]))))]))
+            (t :class.default-icon/reset-tooltip-desc diverged-count)]]))))]))
 
 (defn select-type?
   [block property]
@@ -629,8 +622,8 @@
          :del-btn? del-btn?
          :on-delete on-delete
          :on-day-click select-handler!}
-        initial-month
-        (assoc :default-month initial-month)))]
+         initial-month
+         (assoc :default-month initial-month)))]
      [:div.hidden.sm:initial
       (shui/separator {:orientation "vertical"})]
      (repeat-setting block property)]))

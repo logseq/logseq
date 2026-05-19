@@ -119,7 +119,7 @@
                                        :id :ls-icon-picker
                                        :content-props {:class "ls-icon-picker"
                                                        :onEscapeKeyDown #(.preventDefault %)}}))))
-         (ui/tooltip (ui/icon "mood-smile" {:size 13}) "Set icon"
+         (ui/tooltip (ui/icon "mood-smile" {:size 13}) (t :context-menu/set-icon)
                      {:trigger-props {:class "flex"}}))
         (shui/button
          (assoc button-opts
