@@ -2,6 +2,9 @@
   (:require [cljs.test :refer [are async deftest is testing use-fixtures]]
             [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.config :as config]
+            [frontend.fs :as fs]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.export :as export]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
@@ -171,6 +174,71 @@
              (set! util/electron? original-electron?)
              (set! persist-db/<export-db original-export-db)
              (set! (.-showSaveFilePicker js/window) original-picker)
+             (done)))))))
+
+(deftest export-zip-on-electron-writes-export-file-and-notifies-path
+  (async done
+    (let [mkdir-calls (atom [])
+          writes (atom [])
+          notification-calls (atom [])
+          original-electron? util/electron?
+          original-time-ms util/time-ms
+          original-get-repo-dir config/get-repo-dir
+          original-mkdir-if-not-exists fs/mkdir-if-not-exists
+          original-apis (.-apis js/window)
+          original-export-db persist-db/<export-db
+          original-invoke-db-worker state/<invoke-db-worker
+          original-get-all-assets assets-handler/<get-all-assets
+          original-notification-show! notification/show!]
+      (set! util/electron? (constantly true))
+      (set! util/time-ms (constantly 123000))
+      (set! config/get-repo-dir (fn [repo]
+                                  (is (= "logseq_db_big_graph" repo))
+                                  "/tmp/logseq/graphs/logseq_db_big_graph"))
+      (set! fs/mkdir-if-not-exists (fn [path]
+                                     (swap! mkdir-calls conj path)
+                                     (p/resolved nil)))
+      (set! (.-apis js/window)
+            #js {:writeFileBytes (fn [path content]
+                                   (swap! writes conj [path content])
+                                   (p/resolved nil))})
+      (set! persist-db/<export-db
+            (fn [& _args]
+              (p/rejected (ex-info "desktop zip export should read binary from db worker" {}))))
+      (set! state/<invoke-db-worker
+            (fn [qkw repo]
+              (is (= :thread-api/export-db-binary qkw))
+              (is (= "logseq_db_big_graph" repo))
+              (p/resolved {:type "Buffer"
+                           :data [1 2 3]})))
+      (set! assets-handler/<get-all-assets
+            (fn []
+              (p/resolved [["assets/a.bin" {:type "Buffer"
+                                            :data [4 5 6]}]])))
+      (set! notification/show! (fn [& args]
+                                 (swap! notification-calls conj args)))
+      (-> (export/db-based-export-repo-as-zip! "logseq_db_big_graph")
+          (p/then (fn [_]
+                    (let [expected-path "/tmp/logseq/graphs/logseq_db_big_graph/export/big_graph_123.zip"]
+                      (is (= ["/tmp/logseq/graphs/logseq_db_big_graph/export"]
+                             @mkdir-calls))
+                      (is (= expected-path (ffirst @writes)))
+                      (is (instance? js/ArrayBuffer (second (first @writes))))
+                      (is (= [[(str "ZIP exported to " expected-path ".") :success false]]
+                             @notification-calls)))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally
+           (fn []
+             (set! util/electron? original-electron?)
+             (set! util/time-ms original-time-ms)
+             (set! config/get-repo-dir original-get-repo-dir)
+             (set! fs/mkdir-if-not-exists original-mkdir-if-not-exists)
+             (set! (.-apis js/window) original-apis)
+             (set! persist-db/<export-db original-export-db)
+             (set! state/<invoke-db-worker original-invoke-db-worker)
+             (set! assets-handler/<get-all-assets original-get-all-assets)
+             (set! notification/show! original-notification-show!)
              (done)))))))
 
 (deftest export-blocks-as-markdown-without-properties

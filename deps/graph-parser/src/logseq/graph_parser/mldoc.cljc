@@ -10,6 +10,7 @@
                :default [lambdaisland.glogi :as log])
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [clojure.walk :as walk]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -120,6 +121,204 @@
                [block pos-meta])
              [block pos-meta])) ast)))
 
+(def ^:private inline-ast-types
+  #{"Plain" "Spaces" "Link" "Nested_link" "Target" "Subscript" "Superscript"
+    "Footnote_Reference" "Cookie" "Latex_Fragment" "Macro" "Entity" "Timestamp"
+    "Radio_Target" "Export_Snippet" "Inline_Source_Block" "Email" "Inline_Hiccup"
+    "Inline_Html" "Emphasis" "Verbatim" "Code" "Break_Line" "Hard_Break_Line"})
+
+(defn- inline-coll?
+  [x]
+  (and (vector? x)
+       (seq x)
+       (every? #(and (vector? %)
+                     (string? (first %))
+                     (contains? inline-ast-types (first %)))
+               x)))
+
+(defn- inline-ast->source
+  ;; Only reconstructs the source text for the node types that appear when
+  ;; mldoc splits a macro containing ^{}/{_{}. Nested rich-inline types
+  ;; (Emphasis, Code, etc.) inside a Superscript/Subscript will produce nil,
+  ;; which (apply str ...) silently drops. This is intentional: the function
+  ;; is only called during macro-recovery, not for general rendering.
+  [[typ content]]
+  (case typ
+    "Plain" content
+    "Spaces" content
+    "Link" (:full_text content)
+    ;; Nested_link is the AST node for [[page name]]; :content is the page name
+    ;; string. Without this case, collect-macro-source aborts via when-let
+    ;; whenever a page ref appears inside a fragmented macro.
+    "Nested_link" (str "[[" (:content content) "]]")
+    "Superscript" (str "^{" (apply str (map inline-ast->source content)) "}")
+    "Subscript" (str "_{" (apply str (map inline-ast->source content)) "}")
+    nil))
+
+(defn- starts-with-at?
+  [s prefix idx]
+  (let [end (+ idx (count prefix))]
+    (and (<= end (count s))
+         (= prefix (subs s idx end)))))
+
+(defn- unclosed-script-markup?
+  [s]
+  (loop [idx 0
+         depth 0]
+    (if (< idx (count s))
+      (cond
+        (or (starts-with-at? s "^{" idx)
+            (starts-with-at? s "_{" idx))
+        (recur (+ idx 2) (inc depth))
+
+        (and (pos? depth) (= \} (nth s idx)))
+        (recur (inc idx) (dec depth))
+
+        :else
+        (recur (inc idx) depth))
+      (pos? depth))))
+
+(defn- split-macro-arguments
+  [s]
+  (if (string/blank? s)
+    []
+    (loop [idx 0
+           start 0
+           page-ref-depth 0
+           script-depth 0
+           quoted? false
+           escaped? false
+           result []]
+      (if (< idx (count s))
+        (let [c (nth s idx)]
+          (cond
+            escaped?
+            (recur (inc idx) start page-ref-depth script-depth quoted? false result)
+
+            (= \\ c)
+            (recur (inc idx) start page-ref-depth script-depth quoted? true result)
+
+            (= \" c)
+            (recur (inc idx) start page-ref-depth script-depth (not quoted?) false result)
+
+            quoted?
+            (recur (inc idx) start page-ref-depth script-depth quoted? false result)
+
+            (starts-with-at? s "[[" idx)
+            (recur (+ idx 2) start (inc page-ref-depth) script-depth quoted? false result)
+
+            (and (pos? page-ref-depth) (starts-with-at? s "]]" idx))
+            (recur (+ idx 2) start (dec page-ref-depth) script-depth quoted? false result)
+
+            (or (starts-with-at? s "^{" idx)
+                (starts-with-at? s "_{" idx))
+            (recur (+ idx 2) start page-ref-depth (inc script-depth) quoted? false result)
+
+            (and (pos? script-depth) (= \} c))
+            (recur (inc idx) start page-ref-depth (dec script-depth) quoted? false result)
+
+            (and (zero? page-ref-depth) (zero? script-depth) (= \, c))
+            (recur (inc idx) (inc idx) page-ref-depth script-depth quoted? false
+                   (conj result (string/trim (subs s start idx))))
+
+            :else
+            (recur (inc idx) start page-ref-depth script-depth quoted? false result)))
+        (conj result (string/trim (subs s start)))))))
+
+(defn- macro-source->ast
+  [s]
+  (when (and (string/starts-with? s "{{")
+             (string/ends-with? s "}}"))
+    (let [content (-> s
+                      (subs 2 (- (count s) 2))
+                      string/triml)
+          [_ name arguments] (re-matches #"([^\s]+)(?:\s+([\s\S]*))?" content)]
+      (when name
+        ["Macro" {:name name
+                  :arguments (split-macro-arguments arguments)}]))))
+
+(defn- collect-macro-source
+  [items]
+  (loop [remaining items
+         source ""]
+    (when-let [[item & more] (seq remaining)]
+      (let [[typ content] item]
+        (cond
+          (= "Plain" typ)
+          (if-let [idx (string/index-of content "}}")]
+            (let [macro-source (str source (subs content 0 (+ idx 2)))]
+              (when-let [macro (macro-source->ast macro-source)]
+                (let [suffix (subs content (+ idx 2))]
+                  {:macro macro
+                   :suffix (when-not (string/blank? suffix) ["Plain" suffix])
+                   :remaining more})))
+            (recur more (str source content)))
+
+          :else
+          (when-let [item-source (inline-ast->source item)]
+            (recur more (str source item-source))))))))
+
+(defn- close-script-markup-in-macro
+  ;; Appends a single "}" to the last argument to close the outermost
+  ;; unmatched ^{/{_ bracket. Handles only depth-1 cases; deeper nesting
+  ;; (e.g. Ca^{^{2}}) is not supported and is not expected in practice.
+  [macro]
+  (update-in macro [1 :arguments]
+             (fn [arguments]
+               (update arguments (dec (count arguments)) str "}"))))
+
+(defn- recover-inline-macros
+  [inline-list]
+  (loop [remaining inline-list
+         result []]
+    (if-let [[item & more] (seq remaining)]
+      (let [[typ content] item]
+        (cond
+          (and (= "Plain" typ)
+               (string/includes? content "{{"))
+          (let [idx (string/index-of content "{{")
+                prefix (subs content 0 idx)
+                start-item ["Plain" (subs content idx)]]
+            (if-let [{:keys [macro suffix remaining]} (collect-macro-source (cons start-item more))]
+              (recur (if suffix
+                       (cons suffix remaining)
+                       remaining)
+                     (cond-> result
+                       (not (string/blank? prefix)) (conj ["Plain" prefix])
+                       true (conj macro)))
+              (recur more (conj result item))))
+
+          (and (= "Macro" typ)
+               (seq (:arguments content))
+               (unclosed-script-markup? (last (:arguments content)))
+               (= "Plain" (ffirst more))
+               (string/starts-with? (second (first more)) "}"))
+          (let [[_ plain] (first more)
+                suffix (subs plain 1)]
+            (recur (if (string/blank? suffix)
+                     (rest more)
+                     (cons ["Plain" suffix] (rest more)))
+                   (conj result (close-script-markup-in-macro item))))
+
+          :else
+          (recur more (conj result item))))
+      result)))
+
+(defn- normalize-macro-asts
+  [ast]
+  (walk/postwalk
+   (fn [x]
+     (if (inline-coll? x)
+       (recover-inline-macros x)
+       x))
+   ast))
+
+(defn- macro-with-script-markup?
+  [content]
+  (and (string/includes? content "{{")
+       (or (string/includes? content "^{")
+           (string/includes? content "_{"))))
+
 (defn collect-page-properties
   [ast config]
   (when (seq ast)
@@ -160,6 +359,8 @@
          (-> content
              (parse-json config)
              (common-util/json->clj)
+             (cond-> (macro-with-script-markup? content)
+               (normalize-macro-asts))
              (update-src-full-content content)
              (collect-page-properties config)))
        (catch :default e
@@ -181,7 +382,9 @@
       {}
       (-> text
           (inline-parse-json config)
-          (common-util/json->clj)))
+          (common-util/json->clj)
+          (cond-> (macro-with-script-markup? text)
+            (normalize-macro-asts))))
     (catch :default _e
       [])))
 

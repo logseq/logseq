@@ -225,7 +225,12 @@
               (wrapper tag result))
 
             (string? x)
-            x
+            (if @*inside-pre?
+              x
+              ;; Normalize whitespace for non-pre content (fixes Firefox soft line breaks)
+              (-> x
+                  (string/replace #"\n" " ")
+                  (string/replace #"\s+" " ")))
 
             :else
             (println "hiccup->doc error: " x)))

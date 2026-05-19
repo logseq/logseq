@@ -122,7 +122,7 @@
 
 (defn- schema-type-check!
   [type]
-  (let [valid-types #{:default :number :date :datetime :checkbox :url :node :json :string}]
+  (let [valid-types #{:default :number :date :datetime :checkbox :url :node :asset :json :string}]
     (when-not (contains? valid-types type)
       (throw (ex-info (str "Invalid type, type should be one of: " valid-types) {:type type})))))
 
@@ -151,7 +151,7 @@
 
 (defn upsert-property
   "schema:
-    {:type :default | :number | :date | :datetime | :checkbox | :url | :node | :json | :string
+    {:type :default | :number | :date | :datetime | :checkbox | :url | :node | :asset | :json | :string
      :cardinality :many | :one
      :hide? true
      :view-context :page

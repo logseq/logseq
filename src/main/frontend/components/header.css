@@ -336,7 +336,7 @@ html.is-zoomed-native-ios {
 
     .breadcrumb a {
         @apply !opacity-75 hover:!opacity-100;
-        span {
+        .breadcrumb__label {
             @apply whitespace-nowrap text-ellipsis inline-block overflow-x-hidden align-middle;
             max-width: 34ch;
         }

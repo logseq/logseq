@@ -551,6 +551,105 @@
                           (is (not= ":public-key is not ISeqable" (ex-message e))))))
              (p/finally done))))
 
+(deftest ensure-user-rsa-keys-saves-new-ui-password-test
+  (async done
+         (let [upload-calls (atom [])
+               save-calls (atom [])]
+           (-> (p/with-redefs [sync-crypt/e2ee-base (fn [] "http://base")
+                               sync-crypt/<resolve-user-uuid (fn []
+                                                               (p/resolved "user-1"))
+                               sync-crypt/<fetch-user-rsa-key-pair-raw (fn [_base]
+                                                                         (p/resolved nil))
+                               sync-crypt/<upload-user-rsa-key-pair! (fn [base public-key encrypted-private-key]
+                                                                       (swap! upload-calls conj [base public-key encrypted-private-key])
+                                                                       (p/resolved {:public-key public-key
+                                                                                    :encrypted-private-key encrypted-private-key}))
+                               sync-crypt/<save-e2ee-password (fn [password]
+                                                                (swap! save-calls conj password)
+                                                                (p/resolved nil))
+                               platform/current (fn [] {:env {:runtime :browser}})
+                               platform/kv-get (fn [_platform' _k]
+                                                 (p/resolved nil))
+                               platform/kv-set! (fn [_platform' _k _value]
+                                                  (p/resolved nil))
+                               ui-request/<request (fn [action payload & _opts]
+                                                     (is (= :request-e2ee-password action))
+                                                     (is (= {:reason :generate-user-rsa-key-pair} payload))
+                                                     (p/resolved {:password "new-password"}))
+                               crypt/<generate-rsa-key-pair (fn []
+                                                              (p/resolved {:publicKey :public-key
+                                                                           :privateKey :private-key}))
+                               crypt/<encrypt-private-key (fn [password private-key]
+                                                            (is (= "new-password" password))
+                                                            (is (= :private-key private-key))
+                                                            (p/resolved :encrypted-private-key))
+                               crypt/<export-public-key (fn [public-key]
+                                                          (is (= :public-key public-key))
+                                                          (p/resolved :exported-public-key))
+                               ldb/write-transit-str pr-str]
+                 (sync-crypt/ensure-user-rsa-keys!))
+               (p/then (fn [result]
+                         (is (= "new-password" (:password result)))
+                         (is (= [["http://base"
+                                  (pr-str :exported-public-key)
+                                  (pr-str :encrypted-private-key)]]
+                                @upload-calls))
+                         (is (= ["new-password"] @save-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
+(deftest ensure-user-rsa-keys-deduplicates-concurrent-new-user-password-request-test
+  (async done
+         (let [ui-calls (atom 0)
+               upload-calls (atom [])
+               save-calls (atom [])]
+           (-> (p/with-redefs [sync-crypt/e2ee-base (fn [] "http://base")
+                               sync-crypt/<resolve-user-uuid (fn []
+                                                               (p/resolved "user-1"))
+                               sync-crypt/<fetch-user-rsa-key-pair-raw (fn [_base]
+                                                                         (p/let [_ (p/delay 10)]
+                                                                           nil))
+                               sync-crypt/<upload-user-rsa-key-pair! (fn [base public-key encrypted-private-key]
+                                                                       (swap! upload-calls conj [base public-key encrypted-private-key])
+                                                                       (p/resolved {:public-key public-key
+                                                                                    :encrypted-private-key encrypted-private-key}))
+                               sync-crypt/<save-e2ee-password (fn [password]
+                                                                (swap! save-calls conj password)
+                                                                (p/resolved nil))
+                               platform/current (fn [] {:env {:runtime :browser}})
+                               platform/kv-get (fn [_platform' _k]
+                                                 (p/resolved nil))
+                               platform/kv-set! (fn [_platform' _k _value]
+                                                  (p/resolved nil))
+                               ui-request/<request (fn [action payload & _opts]
+                                                     (is (= :request-e2ee-password action))
+                                                     (is (= {:reason :generate-user-rsa-key-pair} payload))
+                                                     (swap! ui-calls inc)
+                                                     (p/resolved {:password "new-password"}))
+                               crypt/<generate-rsa-key-pair (fn []
+                                                              (p/resolved {:publicKey :public-key
+                                                                           :privateKey :private-key}))
+                               crypt/<encrypt-private-key (fn [password private-key]
+                                                            (is (= "new-password" password))
+                                                            (is (= :private-key private-key))
+                                                            (p/resolved :encrypted-private-key))
+                               crypt/<export-public-key (fn [public-key]
+                                                          (is (= :public-key public-key))
+                                                          (p/resolved :exported-public-key))
+                               ldb/write-transit-str pr-str]
+                 (let [task-1 (sync-crypt/ensure-user-rsa-keys!)
+                       task-2 (sync-crypt/ensure-user-rsa-keys!)]
+                   (p/all [task-1 task-2])))
+               (p/then (fn [results]
+                         (is (= 2 (count results)))
+                         (is (= 1 @ui-calls))
+                         (is (= 1 (count @upload-calls)))
+                         (is (= ["new-password"] @save-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
 (deftest decrypt-private-key-headless-ignores-config-e2ee-password-test
   (async done
          (let [old-sync-config @worker-state/*db-sync-config

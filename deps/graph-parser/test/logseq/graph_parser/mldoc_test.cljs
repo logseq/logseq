@@ -59,6 +59,58 @@
          (first (gp-mldoc/->edn "term
 : definition" md-config)))))
 
+(deftest macro-with-script-markup-test
+  (testing "inline macros can contain superscript and subscript markup"
+    (are [content ast] (= ast (gp-mldoc/inline->edn content md-config))
+      "{{cloze Ca^{ +2} ions}}"
+      [["Macro" {:name "cloze" :arguments ["Ca^{ +2} ions"]}]]
+
+      "{{cloze H_{2}O}}"
+      [["Macro" {:name "cloze" :arguments ["H_{2}O"]}]]
+
+      "{{cloze Ca^{+2}}}"
+      [["Macro" {:name "cloze" :arguments ["Ca^{+2}"]}]]
+
+      "{{foo Ca^{ +2} ions, [[a, b]], \"c, d\"}}"
+      [["Macro" {:name "foo" :arguments ["Ca^{ +2} ions" "[[a, b]]" "\"c, d\""]}]]
+
+      ;; page ref inside a macro that also has script markup — exercises
+      ;; the Nested_link case in inline-ast->source
+      "{{cloze Ca^{ +2} [[water]]}}"
+      [["Macro" {:name "cloze" :arguments ["Ca^{ +2} [[water]]"]}]]))
+
+  (testing "normal macros without script markup are not modified"
+    (are [content ast] (= ast (gp-mldoc/inline->edn content md-config))
+      "{{cloze simple text}}"
+      [["Macro" {:name "cloze" :arguments ["simple text"]}]]
+
+      "{{foo a, b, c}}"
+      [["Macro" {:name "foo" :arguments ["a" "b" "c"]}]]
+
+      "{{cloze [[page name]]}}"
+      [["Macro" {:name "cloze" :arguments ["[[page name]]"]}]]))
+
+  (testing "block parsing keeps the issue reproduction as macro nodes"
+    (is (= [["Plain" "This is usually highlighted by the accumulation of the "]
+            ["Macro" {:name "cloze" :arguments ["Ca^{ +2} ions"]}]
+            ["Plain" " . This will be seen as "]
+            ["Macro" {:name "cloze" :arguments ["<ins>large flocculent amorphous densities in TEM</ins>"]}]]
+           (-> (gp-mldoc/->edn
+                "- This is usually highlighted by the accumulation of the {{cloze Ca^{ +2} ions}} . This will be seen as {{cloze <ins>large flocculent amorphous densities in TEM</ins>}}"
+                md-config)
+               ffirst
+               second
+               :title)))
+
+    (is (= [["Plain" "Water formula is "]
+            ["Macro" {:name "cloze" :arguments ["H_{2}O"]}]]
+           (-> (gp-mldoc/->edn
+                "- Water formula is {{cloze H_{2}O}}"
+                md-config)
+               ffirst
+               second
+               :title)))))
+
 (defn- parse-properties
   [text]
   (->> (gp-mldoc/->edn text (gp-mldoc/default-config :org))

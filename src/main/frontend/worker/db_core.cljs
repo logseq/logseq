@@ -1099,7 +1099,8 @@
             :notification
             (do
               (log/error ::apply-outliner-ops-failed e)
-              (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload) (:clear? payload) (:uid payload) (:timeout payload)])
+              (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload) (:clear? payload) (:uid payload) (:timeout payload)
+                                                                   (select-keys payload [:i18n-key :i18n-args])])
               ;; re-throw as CLI needs to see notification
               (throw e))
             (throw e)))))))

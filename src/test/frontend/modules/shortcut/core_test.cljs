@@ -143,5 +143,15 @@
     (is (some #{:editor/add-reaction}
               (shortcut-config/get-category-shortcuts :shortcut.category/block-selection)))))
 
+(deftest test-add-comment-shortcut
+  (testing "add comment shortcut uses Ctrl+Space on every platform"
+    (is (= ["ctrl+space"] (dh/shortcut-binding :editor/add-comment))))
+  (testing "add comment shortcut belongs to the non-editing handler"
+    (is (= :shortcut.handler/global-non-editing-only
+           (dh/get-group :editor/add-comment))))
+  (testing "add comment shortcut appears in block-selection category"
+    (is (some #{:editor/add-comment}
+              (shortcut-config/get-category-shortcuts :shortcut.category/block-selection)))))
+
 (comment
   (cljs.test/run-tests))

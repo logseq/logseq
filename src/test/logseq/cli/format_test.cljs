@@ -996,18 +996,28 @@
   (testing "graph backup list renders metadata table"
     (let [result (format/format-result {:status :ok
                                         :command :graph-backup-list
-                                        :data {:backups [{:name "demo-nightly"
+                                        :data {:backups [{:name "demo-auto"
                                                           :created-at 90000
-                                                          :size-bytes 2048}]}}
+                                                          :size-bytes 2048
+                                                          :source :electron-auto}
+                                                         {:name "demo-cli"
+                                                          :created-at 90000
+                                                          :size-bytes 4096
+                                                          :source :cli}
+                                                         {:name "demo-legacy"
+                                                          :created-at 90000
+                                                          :size-bytes 8192}]}}
                                        {:output-format nil
                                         :now-ms 100000})]
       (is (string/includes? result "NAME"))
       (is (string/includes? result "CREATED-AT"))
       (is (string/includes? result "SIZE-BYTES"))
-      (is (string/includes? result "demo-nightly"))
+      (is (string/includes? result "AUTO-SAVE"))
+      (is (some? (re-find #"demo-auto\s+10 seconds ago\s+2048\s+yes" result)))
+      (is (some? (re-find #"demo-cli\s+10 seconds ago\s+4096\s+no" result)))
+      (is (some? (re-find #"demo-legacy\s+10 seconds ago\s+8192\s+-" result)))
       (is (string/includes? result "10 seconds ago"))
-      (is (string/includes? result "2048"))
-      (is (string/includes? result "Count: 1"))))
+      (is (string/includes? result "Count: 3"))))
 
   (testing "graph backup create renders a succinct success line"
     (let [result (format/format-result {:status :ok

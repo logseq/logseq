@@ -6,6 +6,7 @@
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.fs :as fs]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.command-palette :as palette-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -88,6 +89,18 @@
   [plugin-id]
   (util/node-path.join "storages" (util/node-path.basename plugin-id)))
 
+(defn- binary-content?
+  "Detect payload shapes that can't be transit-serialized through ipc/ipc.
+   Mirrors assets-handler/->uint8 — anything it accepts as binary, we route
+   through writeFileBytes instead of write-plain-text-file!."
+  [content]
+  (or (instance? js/ArrayBuffer content)
+      (instance? js/Uint8Array content)
+      (and (exists? js/ArrayBuffer) (.isView js/ArrayBuffer content))
+      (and (object? content)
+           (= "Buffer" (aget content "type"))
+           (array? (aget content "data")))))
+
 (defn- write_rootdir_file
   [file content sub-root root-dir]
   (p/let [repo           ""
@@ -98,7 +111,13 @@
           user-path-root (util/node-path.dirname user-path)
           exist?         (fs/file-exists? user-path-root "")
           _              (when-not exist? (fs/mkdir-recur! user-path-root))
-          _              (fs/write-plain-text-file! repo nil user-path content {:skip-compare? true})]
+          ;; Binary content (ArrayBuffer/Uint8Array/...) can't survive
+          ;; transit serialization through ipc/ipc inside write-plain-text-file!,
+          ;; so on Electron we bypass to window.apis.writeFileBytes — same path
+          ;; the native fs/write-asset-file! uses for the same reason.
+          _              (if (and (binary-content? content) (util/electron?))
+                           (js/window.apis.writeFileBytes user-path (assets-handler/->uint8 content))
+                           (fs/write-plain-text-file! repo nil user-path content {:skip-compare? true}))]
     user-path))
 
 (defn write_dotdir_file

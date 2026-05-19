@@ -317,6 +317,56 @@
      (outliner-core/indent-outdent-blocks! (db/get-db test-db false) [(get-block 4) (get-block 5)] false))
     (is (= [3 4 5 6 9] (get-children 2)))))
 
+(deftest test-outdent-skips-comments-right-siblings
+  (testing "
+  [22 [[2 [[3]                  ; outdent 3
+           [4 [[6]]]            ; comments block stays under 2
+           [5]]]]]
+  "
+    (transact-tree! [[22 [[2 [[3]
+                            [4 [[6]]]
+                            [5]]]]]])
+    (d/transact! (db/get-db test-db false)
+                 [{:db/ident :logseq.class/Comments}
+                  [:db/add (:db/id (get-block 4)) :block/tags :logseq.class/Comments]])
+    (outliner-tx/transact!
+     (transact-opts)
+     (outliner-core/indent-outdent-blocks! (db/get-db test-db false) [(get-block 3)] false))
+    (is (= [4] (get-children 2)))
+    (is (= [6] (get-children 4)))
+    (is (= [5] (get-children 3)))))
+
+(deftest test-move-blocks-protects-comments
+  (testing "
+  [22 [[2 [[3]
+           [4 [[6]]]
+           [5]]]]]
+  "
+    (transact-tree! [[22 [[2 [[3]
+                            [4 [[6]]]
+                            [5]]]]]])
+    (d/transact! (db/get-db test-db false)
+                 [{:db/ident :logseq.class/Comments}
+                  [:db/add (:db/id (get-block 4)) :block/tags :logseq.class/Comments]])
+    (testing "comments area cannot be moved"
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 4)] (get-block 3) {:sibling? false}))
+      (is (= [3 4 5] (get-children 2)))
+      (is (empty? (get-children 3))))
+    (testing "comment item cannot be moved"
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 6)] (get-block 5) {:sibling? false}))
+      (is (= [6] (get-children 4)))
+      (is (empty? (get-children 5))))
+    (testing "ordinary blocks cannot be moved into comments"
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/move-blocks! (db/get-db test-db false) [(get-block 5)] (get-block 4) {:sibling? false}))
+      (is (= [3 4 5] (get-children 2)))
+      (is (= [6] (get-children 4))))))
+
 (deftest test-delete-blocks
   (testing "
   [1 [[2 [[3 [[4]
