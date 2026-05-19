@@ -1,16 +1,24 @@
 (ns frontend.handler.editor-test
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.test :refer [async deftest is testing use-fixtures]]
             [frontend.commands :as commands]
+            [frontend.components.editor :as editor-component]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [logseq.outliner.core :as outliner-core]))
+            [goog.dom :as gdom]
+            [logseq.outliner.core :as outliner-core]
+            [promesa.core :as p]))
 
-(use-fixtures :each test-helper/start-and-destroy-db)
+(use-fixtures :each {:before test-helper/start-test-db!
+                     :after (fn []
+                              (state/set-current-repo! nil)
+                              (test-helper/destroy-test-db!))})
 
 (deftest extract-nearest-link-from-text-test
   (testing "Page, block and tag links"
@@ -51,6 +59,71 @@
          (editor/extract-nearest-link-from-text
           "[[https://github.com/logseq/logseq][logseq]] is #awesome :)" 0 editor/url-regex))
       "Finds url in org link correctly"))
+
+(defn- follow-page-link-result
+  [{:keys [page-title existing-page? worker-page?]}]
+  (let [events (atom [])
+        redirects (atom [])
+        worker-page-uuid (random-uuid)
+        input-id "edit-block-test"
+        input #js {:value (str "Open [[" page-title "]]")}]
+    (p/with-redefs [state/get-edit-block (constantly {:block/uuid (random-uuid)})
+                    state/get-edit-input-id (constantly input-id)
+                    gdom/getElement (fn [id]
+                                      (when (= input-id id)
+                                        input))
+                    cursor/pos (constantly 10)
+                    editor/save-current-block! (constantly nil)
+                    state/clear-editor-action! (constantly nil)
+                    state/clear-edit! (constantly nil)
+                    db/get-page (fn [title]
+                                  (when (and existing-page? (= page-title title))
+                                    {:block/title title
+                                     :block/uuid (random-uuid)}))
+                    db-async/<get-block (fn [_repo title _opts]
+                                          (p/resolved
+                                           (when (and worker-page? (= page-title title))
+                                             {:block/title title
+                                              :block/uuid worker-page-uuid})))
+                    state/pub-event! (fn [event]
+                                       (swap! events conj event)
+                                       (p/resolved nil))
+                    route-handler/redirect-to-page! (fn [& args]
+                                                      (swap! redirects conj args))]
+      (p/let [_ (editor/follow-link-under-cursor!)]
+        {:events @events
+         :redirects @redirects}))))
+
+(deftest follow-link-under-cursor-opens-existing-page-test
+  (async done
+    (-> (follow-page-link-result {:page-title "Project"
+                                  :existing-page? true})
+        (p/then
+         (fn [{:keys [events redirects]}]
+           (is (empty? events))
+           (is (= [["Project"]] redirects))
+           (done))))))
+
+(deftest follow-link-under-cursor-creates-missing-page-test
+  (async done
+    (-> (follow-page-link-result {:page-title "May 15th, 2026"
+                                  :existing-page? false})
+        (p/then
+         (fn [{:keys [events redirects]}]
+           (is (= [[:page/create "May 15th, 2026"]] events))
+           (is (empty? redirects))
+           (done))))))
+
+(deftest follow-link-under-cursor-uses-worker-page-before-creating-test
+  (async done
+    (-> (follow-page-link-result {:page-title "May 15th, 2026"
+                                  :existing-page? false
+                                  :worker-page? true})
+        (p/then
+         (fn [{:keys [events redirects]}]
+           (is (empty? events))
+           (is (= [["May 15th, 2026"]] redirects))
+           (done))))))
 
 (defn- keyup-handler
   "Spied version of editor/keyup-handler"
@@ -121,6 +194,39 @@
   ;; Reset state
   (state/set-editor-action! nil))
 
+(defn- create-tag-with-alias!
+  []
+  (test-helper/create-page! "Project Tag" :redirect? false :class? true)
+  (test-helper/create-page! "Alias Only" :redirect? false)
+  (let [class (db/get-case-page "Project Tag")
+        alias (db/get-case-page "Alias Only")]
+    (db/transact! test-helper/test-db [{:db/id (:db/id class)
+                                        :block/alias #{(:db/id alias)}}])))
+
+(deftest get-matched-classes-includes-class-aliases
+  (create-tag-with-alias!)
+  (is (= ["Project Tag"]
+         (map :block/title (editor/get-matched-classes "Project Tag")))
+      "Existing tag title matching still works")
+  (is (= ["Alias Only"]
+         (map :block/title (editor/get-matched-classes "Alias Only")))
+      "Tag aliases stay available as tag completion choices"))
+
+(deftest tag-search-does-not-convert-class-aliases
+  (async done
+    (create-tag-with-alias!)
+    (let [matched-pages (atom nil)]
+      (-> (p/with-redefs [db-async/<get-block (fn [_repo _title _opts]
+                                                (p/resolved (db/get-page "Alias Only")))]
+            (#'editor-component/search-pages "Alias Only" true #(reset! matched-pages %)))
+          (.then
+           (fn []
+             (is (some #(= "Alias Only" (:block/title %)) @matched-pages)
+                 "The alias is still selectable from tag completion")
+             (is (not-any? :convert-page-to-tag? @matched-pages)
+                 "A class alias must not show a redundant Convert action")
+             (done)))))))
+
 (defn- default-keyup-result
   [{:keys [value cursor-pos key code action is-processed?]
     :or {code "KeyA"
@@ -188,14 +294,81 @@
                                 :cursor-pos 2
                                 :key "a"}))))
 
+(deftest keydown-not-matched-handler-wraps-selected-text-with-single-dollar
+  (let [content (atom nil)
+        cursor-pos (atom nil)
+        selection-range (atom nil)
+        input #js {:id "edit-block-test"
+                   :value "inline math"
+                   :setSelectionRange (fn [start end]
+                                        (reset! selection-range [start end]))}
+        event #js {:key "$"
+                   :ctrlKey false
+                   :metaKey false}
+        selected "math"]
+    (with-redefs [state/get-edit-input-id (constantly "edit-block-test")
+                  state/get-input (constantly input)
+                  state/get-editor-action (constantly nil)
+                  state/set-state! (constantly nil)
+                  state/set-block-content-and-last-pos! (fn [_input-id value' pos']
+                                                          (reset! content value')
+                                                          (reset! cursor-pos pos'))
+                  gdom/getElement (constantly input)
+                  util/get-selected-text (constantly selected)
+                  util/stop (constantly nil)
+                  cursor/pos (constantly 7)
+                  cursor/move-cursor-to (fn [_ pos' & _]
+                                          (reset! cursor-pos pos'))]
+      ((editor/keydown-not-matched-handler :markdown) event nil)
+      (is (= "inline $math$" @content))
+      (is (= 8 @cursor-pos))
+      (is (= [8 12] @selection-range)))))
+
+(defn- keydown-dollar-without-selection-result
+  [{:keys [value cursor-pos]}]
+  (let [content (atom nil)
+        cursor-pos' (atom nil)
+        input #js {:id "edit-block-test"
+                   :value value}
+        event #js {:key "$"
+                   :ctrlKey false
+                   :metaKey false}]
+    (with-redefs [state/get-edit-input-id (constantly "edit-block-test")
+                  state/get-input (constantly input)
+                  state/get-editor-action (constantly nil)
+                  state/set-state! (constantly nil)
+                  state/set-block-content-and-last-pos! (fn [_input-id value' pos']
+                                                          (reset! content value')
+                                                          (reset! cursor-pos' pos'))
+                  gdom/getElement (constantly input)
+                  util/get-selected-text (constantly "")
+                  util/stop (constantly nil)
+                  cursor/pos (constantly cursor-pos)
+                  cursor/move-cursor-to (fn [_ pos' & _]
+                                          (reset! cursor-pos' pos'))]
+      ((editor/keydown-not-matched-handler :markdown) event nil)
+      {:content @content
+       :cursor-pos @cursor-pos'})))
+
+(deftest keydown-not-matched-handler-expands-dollar-delimiters-without-selection
+  (is (= {:content "inline $$"
+          :cursor-pos 8}
+         (keydown-dollar-without-selection-result {:value "inline "
+                                                   :cursor-pos 7})))
+  (is (= {:content "inline $$$$"
+          :cursor-pos 9}
+         (keydown-dollar-without-selection-result {:value "inline $$"
+                                                   :cursor-pos 8}))))
+
 (defn- handle-last-input-handler
   "Spied version of editor/handle-last-input"
-  [{:keys [value cursor-pos]}]
+  [{:keys [value cursor-pos editor-config]}]
   ;; Reset editor action in order to test result
   (state/set-editor-action! nil)
   ;; Default cursor pos to end of line
   (let [pos (or cursor-pos (count value))]
     (with-redefs [state/get-input (constantly #js {:value value})
+                  state/get-editor-args (constantly [nil nil editor-config])
                   cursor/pos (constantly pos)
                   cursor/move-cursor-backward (constantly nil) ;; ignore if called
                   cursor/get-caret-pos (constantly {})]
@@ -214,6 +387,11 @@
     (handle-last-input-handler {:value "a line\n/"})
     (is (= :commands (state/get-editor-action))
         "Command search on start of a new line")
+
+    (handle-last-input-handler {:value "/"
+                                :editor-config {:comment-editor? true}})
+    (is (= nil (state/get-editor-action))
+        "No command search in comment editors")
 
     (handle-last-input-handler {:value "https://"})
     (is (= nil (state/get-editor-action))
@@ -263,6 +441,23 @@
         "No page search within backticks"))
   ;; Reset state
   (state/set-editor-action! nil))
+
+(deftest comment-editor-collapse-expand-shortcuts-do-not-touch-draft-blocks
+  (let [draft-uuid #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
+        expanded (atom [])
+        collapsed (atom [])]
+    (with-redefs [state/editing? (constantly true)
+                  state/get-editor-args (constantly [nil nil {:comment-editor? true}])
+                  state/get-edit-block (constantly {:block/uuid draft-uuid})
+                  editor/expand-block! (fn [block-id] (swap! expanded conj block-id))
+                  editor/collapse-block! (fn [block-id] (swap! collapsed conj block-id))
+                  util/stop (constantly nil)]
+      (editor/expand! nil)
+      (editor/collapse! nil)
+      (is (empty? @expanded)
+          "Comment editor expand shortcut should not expand synthetic draft blocks")
+      (is (empty? @collapsed)
+          "Comment editor collapse shortcut should not collapse synthetic draft blocks"))))
 
 (deftest save-block!
   (testing "Saving blocks with and without properties"
@@ -344,7 +539,11 @@
         root-child-block {:db/id 2
                           :block/parent {:db/id 1}}
         non-root-block {:db/id 3
-                        :block/parent {:db/id 9}}]
+                        :block/parent {:db/id 9}}
+        comments-area {:db/id 4
+                       :block/tags [{:db/ident :logseq.class/Comments}]}
+        comment-block {:db/id 5
+                       :block/parent comments-area}]
     (testing "Root block cannot be indented or outdented when focused"
       (is (false? (#'editor/block-eligible-for-indent-outdent? root-block true focused-root-block)))
       (is (false? (#'editor/block-eligible-for-indent-outdent? root-block false focused-root-block))))
@@ -356,4 +555,141 @@
       (is (true? (#'editor/block-eligible-for-indent-outdent? non-root-block false focused-root-block))))
     (testing "Root block cannot move up/down when focused"
       (is (false? (#'editor/block-eligible-for-move-up-down? root-block focused-root-block)))
-      (is (true? (#'editor/block-eligible-for-move-up-down? non-root-block focused-root-block))))))
+      (is (true? (#'editor/block-eligible-for-move-up-down? non-root-block focused-root-block))))
+    (testing "Comment area and comment blocks cannot be indented, outdented, or moved up/down"
+      (is (false? (#'editor/block-eligible-for-indent-outdent? comments-area true focused-root-block)))
+      (is (false? (#'editor/block-eligible-for-indent-outdent? comment-block true focused-root-block)))
+      (is (false? (#'editor/block-eligible-for-indent-outdent? comments-area false focused-root-block)))
+      (is (false? (#'editor/block-eligible-for-indent-outdent? comment-block false focused-root-block)))
+      (is (false? (#'editor/block-eligible-for-move-up-down? comments-area focused-root-block)))
+      (is (false? (#'editor/block-eligible-for-move-up-down? comment-block focused-root-block))))))
+
+(deftest navigable-sibling-block-skips-comment-items-test
+  (let [current-node (js-obj "id" "current")
+        comment-node (js-obj "id" "comment"
+                             "blockid" "6a073572-fefe-44c5-8b43-267ccc715077")
+        target-node (js-obj "id" "target"
+                            "blockid" "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154")
+        comments-area {:block/tags [{:db/ident :logseq.class/Comments}]}
+        comment-uuid #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
+        target-uuid #uuid "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154"
+        sibling-f (fn [node _opts]
+                    (cond
+                      (= node current-node) comment-node
+                      (= node comment-node) target-node))]
+    (with-redefs [db/entity (fn [& args]
+                              (case (second (first args))
+                                #uuid "6a073572-fefe-44c5-8b43-267ccc715077" {:block/uuid comment-uuid
+                                                                              :block/parent comments-area}
+                                #uuid "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154" {:block/uuid target-uuid}
+                                nil))]
+      (is (true? (#'editor/comment-item-node? comment-node)))
+      (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {}))))))
+
+(deftest navigable-sibling-block-skips-comments-area-test
+  (let [current-node (js-obj "id" "current")
+        comments-node (js-obj "id" "comments"
+                              "data-comments-area" "true")
+        target-node (js-obj "id" "target")
+        sibling-f (fn [node _opts]
+                    (cond
+                      (= node current-node) comments-node
+                      (= node comments-node) target-node))]
+    (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {}))
+        "Cursor boundary navigation should skip comments area")))
+
+(deftest navigable-sibling-block-enters-comments-area-for-up-down-test
+  (let [current-node (js-obj "id" "current")
+        comments-node (js-obj "id" "comments"
+                              "data-comments-area" "true")
+        target-node (js-obj "id" "target")
+        sibling-f (fn [node _opts]
+                    (cond
+                      (= node current-node) comments-node
+                      (= node comments-node) target-node))]
+    (is (= comments-node (#'editor/navigable-sibling-block current-node sibling-f {:up-down? true}))
+        "Up/down navigation should enter comments instead of skipping the comments area")))
+
+(deftest navigable-sibling-block-skips-open-comments-subtree-for-left-right-test
+  (let [current-node (js-obj "id" "current")
+        comment-node (js-obj "id" "comment" "nodeType" 1)
+        comments-node (js-obj "id" "comments"
+                              "data-comments-area" "true"
+                              "nodeType" 1
+                              "contains" (fn [node] (= node comment-node)))
+        target-node (js-obj "id" "target")
+        sibling-f (fn [node _opts]
+                    (cond
+                      (= node current-node) comments-node
+                      (= node comments-node) comment-node))]
+    (with-redefs [util/get-blocks-noncollapse (fn [] [current-node comments-node comment-node target-node])]
+      (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {:direction :right}))
+          "Left/right navigation should skip the whole open comments subtree"))))
+
+(deftest navigable-sibling-block-skips-comment-item-before-block-below-comments-test
+  (let [target-node (js-obj "id" "target")
+        comments-node (js-obj "id" "comments"
+                              "data-comments-area" "true")
+        comment-uuid #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
+        comment-node (js-obj "id" "comment"
+                             "blockid" (str comment-uuid))
+        current-node (js-obj "id" "current")
+        comments-area {:block/tags [{:db/ident :logseq.class/Comments}]}
+        sibling-f (fn [node _opts]
+                    (when (= node current-node)
+                      comment-node))]
+    (with-redefs [db/entity (fn [& args]
+                              (case (second (first args))
+                                #uuid "6a073572-fefe-44c5-8b43-267ccc715077" {:block/uuid comment-uuid
+                                                                              :block/parent comments-area}
+                                nil))
+                  util/get-blocks-noncollapse (fn [] [target-node comments-node comment-node current-node])]
+      (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {:direction :left}))
+          "Left/right navigation from a block below open comments should skip comment items and the comments area"))))
+
+(deftest enter-comments-area-node-focuses-reply-input-test
+  (let [comments-id #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
+        focused? (atom false)
+        selected (atom nil)
+        input (js-obj "focus" #(reset! focused? true))
+        comments-node (js-obj "id" "comments"
+                              "blockid" (str comments-id)
+                              "data-collapsed" "false"
+                              "querySelector" (fn [_selector] input))]
+    (with-redefs [state/clear-edit! (fn [])
+                  state/get-current-page (fn [] (str comments-id))
+                  state/exit-editing-and-set-selected-blocks! (fn [blocks] (reset! selected blocks))]
+      (#'editor/enter-comments-area-node! comments-node)
+      (is (true? @focused?)
+          "Open comments should focus the reply input when the comments block is the current page")
+      (is (nil? @selected)
+          "Open comments should not select the comments area when the reply input exists"))))
+
+(deftest enter-comments-area-node-activates-inline-reply-placeholder-test
+  (let [selected (atom nil)
+        clicked? (atom false)
+        comments-id #uuid "6a073572-fefe-44c5-8b43-267ccc715077"
+        placeholder (js-obj "click" #(reset! clicked? true))
+        comments-node (js-obj "id" "comments"
+                              "blockid" (str comments-id)
+                              "data-collapsed" "false"
+                              "querySelector" (fn [selector]
+                                                (when (= selector ".ls-comment-reply-placeholder")
+                                                  placeholder)))]
+    (with-redefs [state/clear-edit! (fn [])
+                  state/get-current-page (fn [] "fd94c4c7-bfb8-49d5-bbb1-46617e4f2154")
+                  state/exit-editing-and-set-selected-blocks! (fn [blocks] (reset! selected blocks))]
+      (#'editor/enter-comments-area-node! comments-node)
+      (is (true? @clicked?)
+          "Open inline comments should activate the reply placeholder when entered by arrow navigation")
+      (is (nil? @selected)))))
+
+(deftest enter-comments-area-node-selects-collapsed-comments-test
+  (let [selected (atom nil)
+        comments-node (js-obj "id" "comments"
+                              "data-collapsed" "true")]
+    (with-redefs [state/clear-edit! (fn [])
+                  state/exit-editing-and-set-selected-blocks! (fn [blocks] (reset! selected blocks))]
+      (#'editor/enter-comments-area-node! comments-node)
+      (is (= [comments-node] @selected)
+          "Collapsed comments should be selected for keyboard shortcuts"))))

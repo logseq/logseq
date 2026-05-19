@@ -157,9 +157,37 @@
   (-> (if (string? file) file (.arrayBuffer file))
       (p/then db-asset/<get-file-array-buffer-checksum)))
 
+(defn- field-value
+  [payload field-name]
+  (or (get payload field-name)
+      (get payload (keyword field-name))
+      (when (object? payload)
+        (aget payload field-name))))
+
+(defn- indexed-object->array
+  [payload]
+  (let [keys (->> (js/Object.keys payload)
+                  (js->clj)
+                  (filter #(re-matches #"\d+" %))
+                  (sort-by #(js/parseInt % 10)))]
+    (when (seq keys)
+      (clj->js (map #(aget payload %) keys)))))
+
+(defn- indexed-map->array
+  [payload]
+  (let [keys (->> (keys payload)
+                  (filter #(re-matches #"\d+" (str %)))
+                  (sort-by #(js/parseInt (str %) 10)))]
+    (when (seq keys)
+      (clj->js (map #(get payload %) keys)))))
+
 (defn ->uint8
   [payload]
   (cond
+    (and (exists? js/Blob)
+         (instance? js/Blob payload))
+    payload
+
     (instance? js/Uint8Array payload)
     payload
 
@@ -176,10 +204,32 @@
     (sequential? payload)
     (js/Uint8Array. (clj->js payload))
 
+    (and (= "Buffer" (field-value payload "type"))
+         (some? (field-value payload "data")))
+    (->uint8 (field-value payload "data"))
+
+    (map? payload)
+    (if-let [data (indexed-map->array payload)]
+      (js/Uint8Array. data)
+      (throw (ex-info "unsupported binary payload"
+                      {:payload-type (str (type payload))
+                       :keys (mapv str (keys payload))})))
+
     (and (object? payload)
-         (= "Buffer" (aget payload "type"))
-         (array? (aget payload "data")))
-    (js/Uint8Array. (aget payload "data"))
+         (number? (aget payload "length")))
+    (js/Uint8Array. payload)
+
+    (object? payload)
+    (if-let [data (indexed-object->array payload)]
+      (js/Uint8Array. data)
+      (throw (ex-info "unsupported binary payload"
+                      {:payload-type (str (type payload))
+                       :object-tag (try
+                                     (.call (.-toString (.-prototype js/Object)) payload)
+                                     (catch :default _ nil))
+                       :keys (try
+                               (js->clj (js/Object.keys payload))
+                               (catch :default _ nil))})))
 
     :else
     (throw (ex-info "unsupported binary payload"
@@ -187,13 +237,17 @@
 
 (defn <get-all-assets
   []
-  (when-let [path (config/get-current-repo-assets-root)]
-    (p/let [result (p/catch (fs/readdir path {:path-only? true})
-                            (constantly nil))]
-      (p/all (map (fn [path]
-                    (p/let [data (fs/read-file-raw path "" {})]
-                      (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
-                        [path' data]))) result)))))
+  (if-let [path (config/get-current-repo-assets-root)]
+    (p/let [exists? (p/catch (fs/stat path)
+                             (constantly nil))]
+      (if exists?
+        (p/let [result (fs/readdir path {:path-only? true})]
+          (p/all (map (fn [path]
+                        (p/let [data (fs/read-file-raw path "" {})]
+                          (let [path' (util/node-path.join "assets" (util/node-path.basename path))]
+                            [path' data]))) result)))
+        (p/resolved [])))
+    (p/resolved [])))
 
 (defn ensure-assets-dir!
   [repo]

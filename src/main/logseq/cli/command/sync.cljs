@@ -56,9 +56,10 @@
                                    "logseq sync start --graph my-graph --e2ee-password \"my-secret\""]})
    (core/command-entry ["sync" "stop"] :sync-stop "Stop db-sync client" {}
                        {:examples ["logseq sync stop --graph my-graph"]})
-   (core/command-entry ["sync" "upload"] :sync-upload "Upload current graph snapshot" sync-upload-spec
+   (core/command-entry ["sync" "upload"] :sync-upload "Initialize upload of the entire graph" sync-upload-spec
                        {:examples ["logseq sync upload --graph my-graph"
-                                   "logseq sync upload --graph my-graph --e2ee-password \"my-secret\""]})
+                                   "logseq sync upload --graph my-graph --e2ee-password \"my-secret\""]
+                        :long-desc "This command initializes upload of the entire graph. It is not for incremental graph data syncing."})
    (core/command-entry ["sync" "download"] :sync-download "Download remote graph snapshot" sync-download-spec
                        {:examples ["logseq sync download --graph my-graph"
                                    "logseq sync download --graph my-graph --progress"

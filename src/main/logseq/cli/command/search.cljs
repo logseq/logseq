@@ -10,7 +10,8 @@
 
 (def ^:private search-spec
   {:content {:alias :c
-             :desc "Search content text"}})
+             :desc "Search content text"
+             :coerce :string}})
 
 (def entries
   [(core/command-entry ["search" "block"] :search-block "Search blocks by title" search-spec

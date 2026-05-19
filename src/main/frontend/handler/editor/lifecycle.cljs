@@ -8,14 +8,16 @@
 
 (defn did-mount!
   [state]
-  (let [[_ id] (:rum/args state)
+  (let [[_ id config] (:rum/args state)
         content (state/get-edit-content)
         input (state/get-input)
         node (util/rec-get-node input "ls-block")
         container-id (when node
                        (when-let [container-id-str (dom/attr node "containerid")]
                          (util/safe-parse-int container-id-str)))]
-    (.focus input)
+    (when input
+      (when-not (:skip-focus? config)
+        (.focus input)))
     (when container-id
       (state/set-state! :editor/container-id container-id))
 
@@ -27,14 +29,16 @@
       (js/setTimeout #(util/scroll-editor-cursor element) 50))
 
     ;; skip recording editor info when undo or redo is still running
-    (when-not (contains? #{:undo :redo} @(:editor/op @state/state))
-      (let [page-id (:block/uuid (:block/page (db/entity (:db/id (state/get-edit-block)))))
-            repo (state/get-current-repo)
-            editor-info (state/get-editor-info)]
-        (when page-id
-          (state/<invoke-db-worker :thread-api/undo-redo-record-editor-info
-                                   repo
-                                   editor-info))))
+    (when-not (or (:skip-focus? config)
+                  (contains? #{:undo :redo} @(:editor/op @state/state)))
+      (when-let [edit-block-db-id (:db/id (state/get-edit-block))]
+        (let [page-id (:block/uuid (:block/page (db/entity edit-block-db-id)))
+              repo (state/get-current-repo)
+              editor-info (state/get-editor-info)]
+          (when page-id
+            (state/<invoke-db-worker :thread-api/undo-redo-record-editor-info
+                                     repo
+                                     editor-info)))))
     (state/set-state! :editor/op nil))
   state)
 

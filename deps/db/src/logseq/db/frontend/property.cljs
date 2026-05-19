@@ -259,6 +259,11 @@
                                                   :schema {:type :node
                                                            :cardinality :many
                                                            :hide? true}}
+     :logseq.property.comments/blocks {:title "Commented blocks"
+                                        :schema {:type :node
+                                                 :cardinality :many
+                                                 :public? false
+                                                 :hide? true}}
 
      ;; Journal props
      :logseq.property.journal/title-format {:title "Title Format"
@@ -373,6 +378,19 @@
                                         :schema {:type :checkbox
                                                  :hide? true}
                                         :queryable? true}
+     :logseq.property.repeat/repeat-type {:title "Repeating type"
+                                          :schema {:type :default
+                                                   :public? false}
+                                          :closed-values (mapv (fn [[db-ident value]]
+                                                                 {:db-ident db-ident
+                                                                  :value value
+                                                                  :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
+                                                               [[:logseq.property.repeat/repeat-type.dotted-plus "Advance from completion"]
+                                                                [:logseq.property.repeat/repeat-type.plus "Advance from scheduled"]
+                                                                [:logseq.property.repeat/repeat-type.double-plus "Advance from scheduled, skip to future"]])
+                                          :properties {:logseq.property/hide-empty-value true
+                                                       :logseq.property/default-value :logseq.property.repeat/repeat-type.double-plus}
+                                          :queryable? true}
      :logseq.property.repeat/temporal-property {:title "Repeating Temporal Property"
                                                 :schema {:type :property
                                                          :hide? true}}
@@ -692,7 +710,7 @@
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
     "logseq.property.user" "logseq.property.history"
     "logseq.property.reaction" "logseq.property.sync" "logseq.property.publish"
-    "logseq.property.recycle"})
+    "logseq.property.recycle" "logseq.property.comments"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"

@@ -42,6 +42,41 @@
       (is (= :invalid-options (get-in result [:error :code])))
       (is (string/includes? (get-in result [:error :message]) "inputs")))))
 
+(deftest test-build-action-rejects-db-id-datom-clause
+  (testing ":db/id is rejected as a datom attribute in query where clauses"
+    (let [result (query-command/build-action
+                  {:query "[:find (pull ?v [*]) :where [?b :db/id 400] [?b :user.property/owner ?v]]"}
+                  "logseq_db_demo"
+                  {})
+          message (or (get-in result [:error :message]) "")]
+      (is (false? (:ok? result)))
+      (is (= :invalid-query (get-in result [:error :code])))
+      (is (string/includes? message ":db/id"))
+      (is (string/includes? message "--inputs"))
+      (is (not (string/includes? message "identity")))))
+
+  (testing "two-element :db/id datom clauses are rejected"
+    (let [result (query-command/build-action
+                  {:query "[:find ?b :where [?b :db/id]]"}
+                  "logseq_db_demo"
+                  {})]
+      (is (false? (:ok? result)))
+      (is (= :invalid-query (get-in result [:error :code])))))
+
+  (testing ":db/id can still be used in pull selectors"
+    (let [result (query-command/build-action
+                  {:query "[:find [(pull ?b [:db/id :block/title]) ...] :where [?b :block/title]]"}
+                  "logseq_db_demo"
+                  {})]
+      (is (true? (:ok? result)))))
+
+  (testing ":db/id inside expression data is not treated as a datom attribute"
+    (let [result (query-command/build-action
+                  {:query "[:find ?value :in $ :where [(identity [:literal :db/id 400]) ?value]]"}
+                  "logseq_db_demo"
+                  {})]
+      (is (true? (:ok? result))))))
+
 (deftest test-build-action-named-query
   (testing "named query resolves from config"
     (let [config {:custom-queries {"my-query"
