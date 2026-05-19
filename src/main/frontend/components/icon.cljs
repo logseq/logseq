@@ -120,6 +120,23 @@
          (when (or (:icon next) (:color next))
            next))))))
 
+(defn- reset-picker-transient-state!
+  "Clear every transient/optimistic atom that should not survive a
+   trash-button click. Picker-instance atoms are passed explicitly
+   because rum/local atoms aren't reachable from outside the
+   component; global state is cleared unconditionally.
+
+   Fixes the race where an in-flight `<save-image-asset!` resolves
+   AFTER a delete click and writes back to `::pending-icon`, leaving
+   a phantom placeholder. Also kills any active hover-preview overlay
+   so the deleted icon doesn't briefly ghost back via the preview
+   pipeline."
+  [{:keys [*pending-icon *asset-picker-initial-mode *upload-status]}]
+  (state/set-state! :ui/icon-hover-preview nil)
+  (some-> *pending-icon (reset! nil))
+  (some-> *asset-picker-initial-mode (reset! nil))
+  (some-> *upload-status (reset! "")))
+
 (defn- icon-preview-matches?
   "True when `preview` applies to entity at `entity-id` rendering
   `viewer-property`. Two independent scopes:
@@ -3866,7 +3883,11 @@
           (shui/button {:variant :outline :size :sm
                         :data-action "del"
                         :data-topbar-stop "trash"
-                        :on-click on-delete}
+                        :on-click (fn []
+                                    (reset-picker-transient-state!
+                                     {:*pending-icon *pending-icon
+                                      :*upload-status *upload-status})
+                                    (on-delete))}
                        (shui/tabler-icon "trash" {:size 17})))]]
       (shui/separator {:class "my-0 opacity-50"})
       [:div.asset-picker-search
@@ -6768,7 +6789,10 @@
                                   (when-not keep-popup?
                                     (reset! *view :icon-picker)))
                      :on-back #(reset! *view :icon-picker)
-                     :on-delete #(on-chosen nil)
+                     :on-delete (fn []
+                                  (reset-picker-transient-state!
+                                   {:*asset-picker-initial-mode *asset-picker-initial-mode})
+                                  (on-chosen nil))
                      :del-btn? del-btn?
                      :current-icon normalized-icon-value
                      :avatar-context (when (= :avatar (:type normalized-icon-value))
@@ -6801,7 +6825,10 @@
       ;; Level 2: Text Picker view
       (text-picker {:on-chosen (:on-chosen opts)
                     :on-back #(reset! *view :icon-picker)
-                    :on-delete #(on-chosen nil)
+                    :on-delete (fn []
+                                 (reset-picker-transient-state!
+                                  {:*asset-picker-initial-mode *asset-picker-initial-mode})
+                                 (on-chosen nil))
                     :del-btn? del-btn?
                     :current-icon normalized-icon-value
                     :selected-color @*color
@@ -7007,7 +7034,10 @@
           (when del-btn?
             (shui/button {:variant :outline :size :sm :data-action "del"
                           :data-topbar-stop "trash"
-                          :on-click #(on-chosen nil)}
+                          :on-click (fn []
+                                      (reset-picker-transient-state!
+                                       {:*asset-picker-initial-mode *asset-picker-initial-mode})
+                                      (on-chosen nil))}
                          (shui/tabler-icon "trash" {:size 17})))]]
 
         (shui/separator {:class "my-0 icon-picker-separator"})
