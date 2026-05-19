@@ -19,20 +19,25 @@
   (let [comments-area {:block/tags [{:db/ident :logseq.class/Comments}]}
         comment-block {:block/title "comment"
                        :block/parent comments-area}
+        tagged-comment-block {:block/title "tagged comment"
+                              :block/tags [{:db/ident :logseq.class/Comment}]}
         ordinary-block {:block/title "ordinary"}
         ordinary-target {:block/title "target"}]
     (testing "comment area and its children are protected comment blocks"
       (is (true? (comments-model/protected-comment-block? comments-area)))
       (is (true? (comments-model/protected-comment-block? comment-block)))
+      (is (true? (comments-model/protected-comment-block? tagged-comment-block)))
       (is (false? (comments-model/protected-comment-block? ordinary-block))))
     (testing "comment blocks cannot be moved"
       (is (false? (comments-model/move-allowed? [comments-area] ordinary-target)))
-      (is (false? (comments-model/move-allowed? [comment-block] ordinary-target))))
-    (testing "ordinary blocks cannot be moved into comments"
+      (is (false? (comments-model/move-allowed? [comment-block] ordinary-target)))
+      (is (false? (comments-model/move-allowed? [tagged-comment-block] ordinary-target))))
+    (testing "ordinary blocks cannot be moved to comment blocks"
       (is (false? (comments-model/move-allowed? [ordinary-block] comments-area)))
-      (is (false? (comments-model/move-allowed? [ordinary-block] comment-block))))
-    (testing "ordinary blocks can still move next to the comments area"
-      (is (true? (comments-model/move-allowed? [ordinary-block] comments-area {:sibling? true}))))
+      (is (false? (comments-model/move-allowed? [ordinary-block] comment-block)))
+      (is (false? (comments-model/move-allowed? [ordinary-block] tagged-comment-block)))
+      (is (false? (comments-model/move-allowed? [ordinary-block] comments-area {:sibling? true})))
+      (is (false? (comments-model/move-allowed? [ordinary-block] tagged-comment-block {:sibling? true}))))
     (testing "ordinary moves outside comments stay allowed"
       (is (true? (comments-model/move-allowed? [ordinary-block] ordinary-target))))))
 

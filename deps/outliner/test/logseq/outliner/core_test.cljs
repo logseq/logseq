@@ -170,3 +170,52 @@
     (is (thrown-with-msg? js/Error #"Built-in.*can't be modified"
           (db-test/silence-stderr
             (outliner-core/move-blocks! conn [placeholder] target {:sibling? true}))))))
+
+(deftest move-blocks-protects-comment-blocks
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "target"}
+                         {:block/title "tagged comment"}
+                         {:block/title "normal parent"
+                          :build/children [{:block/title "ordinary"}]}
+                         {:block/title "Comments"}]}])
+        page (ldb/get-page @conn "page1")
+        target (db-test/find-block-by-content @conn "target")
+        tagged-comment (db-test/find-block-by-content @conn "tagged comment")
+        ordinary (db-test/find-block-by-content @conn "ordinary")
+        comments-area (db-test/find-block-by-content @conn "Comments")
+        original-comment-parent-id (:db/id (:block/parent tagged-comment))
+        original-ordinary-parent-id (:db/id (:block/parent ordinary))]
+    (d/transact! conn [{:db/id -1
+                        :db/ident :logseq.class/Tag
+                        :block/uuid (random-uuid)
+                        :block/title "Tag"
+                        :block/tags #{-1}}
+                       {:db/ident :logseq.class/Comments
+                        :block/uuid (random-uuid)
+                        :block/title "Comments"
+                        :block/tags #{-1}}
+                       {:db/ident :logseq.class/Comment
+                        :block/uuid (random-uuid)
+                        :block/title "Comment"
+                        :block/tags #{-1}}
+                       [:db/add (:db/id comments-area) :block/tags :logseq.class/Comments]
+                       [:db/add (:db/id tagged-comment) :block/tags :logseq.class/Comment]])
+
+    (testing "#Comment blocks cannot be moved after creation"
+      (outliner-core/move-blocks! conn [tagged-comment] target {:sibling? false})
+      (is (= original-comment-parent-id
+             (:db/id (:block/parent (d/entity @conn (:db/id tagged-comment)))))))
+
+    (testing "ordinary blocks cannot be moved to #Comments blocks"
+      (outliner-core/move-blocks! conn [ordinary] comments-area {:sibling? true})
+      (let [ordinary' (d/entity @conn (:db/id ordinary))]
+        (is (= original-ordinary-parent-id
+               (:db/id (:block/parent ordinary'))))
+        (is (not= (:db/id page)
+                  (:db/id (:block/parent ordinary'))))))
+
+    (testing "ordinary blocks cannot be moved to #Comment blocks"
+      (outliner-core/move-blocks! conn [ordinary] tagged-comment {:sibling? false})
+      (is (= original-ordinary-parent-id
+             (:db/id (:block/parent (d/entity @conn (:db/id ordinary)))))))))
