@@ -1261,17 +1261,18 @@ Similar to re-frame subscriptions"
     (set-edit-content! edit-input-id content)
     (set-editor-last-pos! new-pos)))
 
-(defn- apply-theme-to-dom!
-  "Synchronously stamp `data-theme` + body classes onto the document
-   so CSS variables re-resolve to the new theme *before* the state
-   mutation below triggers React subscribers. Without this, subscribers
-   that compute hex values from CSS vars at render time (e.g. avatar
-   fallback colors via `colors/read-bg-var` → `getComputedStyle`)
-   would re-render with the OLD theme's resolved vars because
-   `theme.cljs`'s `use-effect!` only sets these attributes *after*
-   the render commit. That effect remains as a safety net (it's
-   idempotent — same setAttribute) and continues to handle the
-   plugin-hook + custom-theme side effects."
+(defn apply-theme-to-dom!
+  "Single source of truth for stamping the theme onto the DOM:
+   sets `data-theme` on <html>, adds/removes the `dark` class on <html>,
+   and the legacy `dark-theme`/`light-theme`/`white-theme` classes on
+   <body>. Idempotent.
+
+   Called synchronously from `set-theme-mode!` *before* `set-state!` so
+   subscribers that read CSS-var values at render time (avatar fallback
+   muted-tint, contrast-adjusted icon colors via `colors/read-bg-var`)
+   see the new theme on their next render. Also called from
+   `components.theme/container`'s mount effect so the initial DOM is
+   stamped before any subscriber renders."
   [mode]
   (when (exists? js/document)
     (let [^js doc js/document.documentElement
