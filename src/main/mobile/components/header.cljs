@@ -34,7 +34,7 @@
 (defonce native-top-bar-listener? (atom false))
 (defonce native-top-bar-listener-version (atom nil))
 (defonce *journal-calendar-open? (atom false))
-(def ^:private native-top-bar-listener-current-version :sync-upload-v2)
+(def ^:private native-top-bar-listener-current-version :flashcards-title-selector-v1)
 
 (defn- open-journal-calendar! []
   (when (compare-and-set! *journal-calendar-open? false true)
@@ -132,8 +132,39 @@
        {:on-click #(p/do!
                     (shui/popup-hide!)
                     (open-new-db-graph!))}
-       (t :mobile.header/create-graph))])
+     (t :mobile.header/create-graph))])
    {:default-height false}))
+
+(defn- global-cards-id?
+  [cards-id]
+  (contains? #{:global "global"} cards-id))
+
+(defn- same-cards-id?
+  [a b]
+  (or (= a b)
+      (and (global-cards-id? a)
+           (global-cards-id? b))))
+
+(defn- open-flashcards-selector!
+  []
+  (when-let [{:keys [cards cards-id select-card!]} @mobile-state/*flashcards-selector]
+    (ui-component/open-popup!
+     (fn []
+       [:div.-mx-2
+        (for [card cards
+              :let [card-id (:db/id card)]]
+          (ui/menu-link
+           {:key (str card-id)
+            :on-click (fn []
+                        (p/do!
+                         (select-card! card-id)
+                         (shui/popup-hide!)))}
+           [:span.text-lg.flex.items-center.justify-between.gap-3.w-full
+            [:span.min-w-0.truncate (:block/title card)]
+            (when (same-cards-id? cards-id card-id)
+              (shui/tabler-icon "check" {:class "text-primary flex-none" :size 20}))]))])
+     {:title (t :flashcard/select-cards)
+      :default-height false})))
 
 (defn current-local-uploadable-graph
   []
@@ -152,7 +183,9 @@
                   (fn [^js e]
                     (case (.-id e)
                       "back" (js/history.back)
-                      "title" (open-graph-switch!)
+                      "title" (if (= @mobile-state/*tab "flashcards")
+                                (open-flashcards-selector!)
+                                (open-graph-switch!))
                       "calendar" (open-journal-calendar!)
                       "capture" (do
                                   (state/clear-edit!)
@@ -234,12 +267,42 @@
           header (cond-> base
                    left-buttons (assoc :leftButtons left-buttons)
                    right-buttons (assoc :rightButtons right-buttons)
-                   (and (= tab "home") (not route-view)) (assoc :titleClickable true))]
+                   (and (contains? #{"home" "flashcards"} tab) (not route-view))
+                   (assoc :titleClickable true))]
       (.configure ^js mobile-util/native-top-bar
                   (clj->js header)))))
 
+(defn- flashcards-native-title
+  [{:keys [title progress]}]
+  (let [title (if (string/blank? title)
+                (t :nav/flashcards)
+                title)]
+    (string/trim (str title " ▾"
+                      (when-not (string/blank? progress)
+                        (str "  " progress))))))
+
+(defn- build-fallback-title
+  [current-repo tab flashcards-header]
+  (cond
+    (= tab "home")
+    (if current-repo
+      (db-conn/get-short-repo-name current-repo)
+      (t :graph.switch/select-prompt))
+
+    (= tab "search")
+    (t :nav/search)
+
+    (= tab "graphs")
+    (t :mobile.tab/graphs)
+
+    (= tab "flashcards")
+    (flashcards-native-title flashcards-header)
+
+    :else
+    (string/capitalize tab)))
+
 (rum/defc header-inner
-  [current-repo tab route-match]
+  [current-repo tab route-match flashcards-header]
   (let [route-name (get-in route-match [:data :name])
         route-view (get-in route-match [:data :view])
         route-id (get-in route-match [:parameters :path :name])
@@ -257,20 +320,7 @@
         show-local-upload? (some? local-uploadable-graph)
         unpushed-block-update-count (:pending-local-ops detail-info)
         pending-asset-ops           (:pending-asset-ops detail-info)
-        fallback-title (cond
-                         (= tab "home")
-                         (if current-repo
-                           (db-conn/get-short-repo-name current-repo)
-                           (t :graph.switch/select-prompt))
-
-                         (= tab "search")
-                         (t :nav/search)
-
-                         (= tab "graphs")
-                         (t :mobile.tab/graphs)
-
-                         :else
-                         (string/capitalize tab))
+        fallback-title (build-fallback-title current-repo tab flashcards-header)
         sync-color (if (and online?
                             (= :open rtc-state)
                             (zero? unpushed-block-update-count)
@@ -341,6 +391,8 @@
 
 (rum/defc header < rum/reactive
   [current-repo tab]
-  (let [route-match (state/sub :route-match)]
+  (let [route-match (state/sub :route-match)
+        flashcards-header (rum/react mobile-state/*flashcards-header)]
     (header-inner current-repo tab
-                  route-match)))
+                  route-match
+                  flashcards-header)))

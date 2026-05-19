@@ -992,6 +992,7 @@
  :mobile.settings/github "GitHub"
  :mobile.settings/report-bug "Report bug"
  :mobile.settings/revision "Revision"
+ :mobile.settings/tabs "Tabs"
  :mobile.settings/theme "Theme"
  :mobile.settings/version "Version"
 
