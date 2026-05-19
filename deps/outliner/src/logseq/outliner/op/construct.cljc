@@ -39,6 +39,9 @@
     :block.temp/has-children?
     :logseq.property/created-by-ref})
 
+(def ^:private delete-restore-transient-block-keys
+  (disj transient-block-keys :logseq.property/created-by-ref))
+
 (def ^:api rebase-refs-key :block.temp/sync-rebase-refs)
 (def ^:api rebase-created-refs-key :block.temp/sync-created-refs)
 
@@ -584,11 +587,13 @@
     [op args]))
 
 (defn- save-block-keys
-  [block]
+  ([block]
+   (save-block-keys block transient-block-keys))
+  ([block transient-keys]
   (->> (keys block)
-       (remove transient-block-keys)
+       (remove transient-keys)
        (remove #(= :db/other-tx %))
-       (remove nil?)))
+       (remove nil?))))
 
 (defn- worker-ref-attr?
   [db a]
@@ -637,7 +642,7 @@
 (defn- build-insert-block-payload
   [db-before ent]
   (when-let [block-uuid (:block/uuid ent)]
-    (->> (save-block-keys ent)
+    (->> (save-block-keys ent delete-restore-transient-block-keys)
          (remove #(string/starts-with? (name %) "_"))
          (reduce (fn [m k]
                    (let [v (get ent k)]
