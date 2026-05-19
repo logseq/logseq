@@ -2260,10 +2260,13 @@
                          (not= (:type item) new-type)
                          ;; Remove exact duplicates for other types
                          (not= normalized item)))
+        ;; Filter dupes across the WHOLE existing list, not just the first 24
+        ;; — otherwise an existing duplicate beyond position 24 stays in storage
+        ;; on the next call. Then cons the new pick and cap at 24.
         s (some->> (or (get-used-items) [])
-                   (take 24)
                    (filter should-keep?)
-                   (cons normalized))]
+                   (cons normalized)
+                   (take 24))]
     (storage/set :ui/ls-icons-used-v2 s)))
 
 (defn derive-initials
