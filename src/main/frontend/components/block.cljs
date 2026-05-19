@@ -566,19 +566,19 @@
              {:on-click (fn [e]
                           (util/stop e)
                           (let [repo-dir (config/get-repo-dir repo)
-                                 ext-url (:logseq.property.asset/external-url asset-block)
-                                 remote-ext-url? (and (not (string/blank? ext-url))
-                                                      (path/protocol-url? ext-url)
-                                                      (not (common-config/local-protocol-asset? ext-url)))
-                                 local-ext-url? (and (not (string/blank? ext-url))
-                                                     (common-config/local-relative-asset? ext-url))
-                                 file-fpath (if local-ext-url?
+                                ext-url (:logseq.property.asset/external-url asset-block)
+                                remote-ext-url? (and (not (string/blank? ext-url))
+                                                     (path/protocol-url? ext-url)
+                                                     (not (common-config/local-protocol-asset? ext-url)))
+                                local-ext-url? (and (not (string/blank? ext-url))
+                                                    (common-config/local-relative-asset? ext-url))
+                                file-fpath (if local-ext-url?
                                               ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
-                                              (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
-                                              (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) "." (name ext))))]
-                             (if remote-ext-url?
-                               (js/window.apis.openExternal ext-url)
-                               (js/window.apis.openPath file-fpath))))}
+                                             (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
+                                             (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) "." (name ext))))]
+                            (if remote-ext-url?
+                              (js/window.apis.openExternal ext-url)
+                              (js/window.apis.openPath file-fpath))))}
              file-name])
 
           :else
@@ -3920,15 +3920,24 @@
 
                                 :else d)))]
                       (when-let [icon (and (ldb/page? block)
-                                           (or icon'
-                                               inherited-default-icon
-                                               (some :logseq.property/icon (:block/tags block))
-                                               (when (ldb/class? block)
-                                                 {:type :tabler-icon
-                                                  :id "hash"})
-                                               (when (ldb/property? block)
-                                                 {:type :tabler-icon
-                                                  :id "letter-p"})))]
+                                           ;; Guard the user-data branches with `renderable-icon?` so
+                                           ;; `{:type :none}` (and any other unrenderable value) does
+                                           ;; NOT reserve a 38×38 slot — otherwise the picker renders an
+                                           ;; empty shui ghost button (the "gray box" bug). Hardcoded
+                                           ;; class/property fallbacks bypass the predicate since they
+                                           ;; are guaranteed renderable once `js/tablerIcons` loads.
+                                           (let [user-candidate (or icon'
+                                                                    inherited-default-icon
+                                                                    (some :logseq.property/icon (:block/tags block)))
+                                                 user-icon (when (icon-component/renderable-icon? user-candidate)
+                                                             user-candidate)]
+                                             (or user-icon
+                                                 (when (ldb/class? block)
+                                                   {:type :tabler-icon
+                                                    :id "hash"})
+                                                 (when (ldb/property? block)
+                                                   {:type :tabler-icon
+                                                    :id "letter-p"}))))]
                         [:div.ls-page-icon.flex.items-center
                          (icon-component/icon-picker icon
                                                      {:on-chosen (fn [_e icon]
