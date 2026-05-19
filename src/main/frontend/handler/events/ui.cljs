@@ -118,7 +118,7 @@
 
 (defmethod events/handle :modal/show-cards [[_ cards-id]]
   (shui/dialog-open!
-   (fn [] (fsrs/cards-view cards-id))
+   (fn [] (fsrs/cards-view cards-id nil))
    {:id :srs
     :label :flashcards__cp}))
 
