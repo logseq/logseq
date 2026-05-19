@@ -263,6 +263,8 @@
   min-height: 30px;
   padding: 5px 10px;
   font-size: 12px;
+  --ls-comments-title-font-size: 12px;
+  --ls-comments-title-font-weight: 600;
   color: var(--ls-secondary-text-color);
 }
 
@@ -279,8 +281,50 @@
 }
 
 .ls-comments-label {
-  font-weight: 600;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-weight: var(--ls-comments-title-font-weight);
   color: var(--ls-primary-text-color);
+  cursor: text;
+  font-size: var(--ls-comments-title-font-size);
+  line-height: inherit;
+}
+
+.ls-comments-label:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ls-comments-title-editor {
+  flex: 1;
+  min-width: 0;
+  color: var(--ls-primary-text-color);
+  font-size: var(--ls-comments-title-font-size);
+  font-weight: var(--ls-comments-title-font-weight);
+  line-height: inherit;
+}
+
+.ls-comments-title-editor .block-content-or-editor-wrap,
+.ls-comments-title-editor .block-content-or-editor-inner {
+  min-height: 0;
+  padding: 0;
+}
+
+.ls-comments-title-editor .block-row {
+  min-height: 0;
+}
+
+.ls-comments-title-editor .editor-wrapper,
+.ls-comments-title-editor .editor-inner,
+.ls-comments-title-editor .block-editor,
+.ls-comments-title-editor textarea,
+.ls-comments-title-editor .editor-inner .uniline-block {
+  min-height: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
 }
 
 .ls-comments-count,

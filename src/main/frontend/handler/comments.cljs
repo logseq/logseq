@@ -239,6 +239,11 @@
   (when-let [uuid (:block/uuid (comments-area-entity comments-area))]
     (editor-handler/expand-block! uuid)))
 
+(defn edit-comments-area-title!
+  [comments-area container-id]
+  (when-let [block (comments-area-entity comments-area)]
+    (editor-handler/edit-block! block :max {:container-id (or container-id :unknown-container)})))
+
 (defn- selected-block-entities
   []
   (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids)))
