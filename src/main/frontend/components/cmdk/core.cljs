@@ -211,7 +211,7 @@
    (state->action state nil))
   ([state fallback-item]
    (let [highlighted-item (state->highlighted-item state fallback-item)
-        action (get-action)]
+         action (get-action)]
      (cond (and (:source-block highlighted-item) (= action :move-blocks)) :trigger
            (:source-block highlighted-item) :open
            (:file-path highlighted-item) :open
@@ -230,7 +230,7 @@
     (let [!results (::results state)
           recent-pages (map (fn [block]
                               (let [text (block-handler/block-unique-title block :truncate? false)
-                                    icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
+                                    icon (icon-component/get-node-icon-cp block {})]
                                 {:icon icon
                                  :icon-theme :gray
                                  :text text
@@ -308,7 +308,7 @@
       (->> search-results
            (map (fn [block]
                   (let [text (block-handler/block-unique-title block :truncate? false)
-                        icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
+                        icon (icon-component/get-node-icon-cp block {})]
                     {:icon icon
                      :icon-theme :gray
                      :text text
@@ -346,7 +346,7 @@
                            (:block/uuid page))
         current-page? (and current-page-uuid
                            (= current-page-uuid result-page-id))
-        icon (icon-component/get-node-icon-cp entity {:ignore-current-icon? true})
+        icon (icon-component/get-node-icon-cp entity {})
         title (block-handler/block-unique-title entity
                                                 :alias (:block/title source-page)
                                                 :truncate? false)]
@@ -369,7 +369,7 @@
   [repo block current-page-uuid input]
   (let [id (:block/uuid block)
         text (block-handler/block-unique-title block :truncate? false)
-        icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
+        icon (icon-component/get-node-icon-cp block {})]
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text input)
@@ -856,9 +856,9 @@
               nil)]
     [:div {:data-item-index item-idx}
      (if (= group :nodes)
-      (ui/lazy-visible (fn [] item) {:root scroll-root
-                                     :root-margin "500px 0px"})
-      item)]))
+       (ui/lazy-visible (fn [] item) {:root scroll-root
+                                      :root-margin "500px 0px"})
+       item)]))
 
 (defn- show-more-results!
   [state group]
