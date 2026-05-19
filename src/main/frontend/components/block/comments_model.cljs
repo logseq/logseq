@@ -4,21 +4,31 @@
             [goog.object :as gobj]))
 
 (def comments-tag-ident :logseq.class/Comments)
+(def comment-tag-ident :logseq.class/Comment)
 (def comments-blocks-property :logseq.property.comments/blocks)
 
-(defn comments-area?
-  [block]
+(defn- tagged-with?
+  [block tag-ident]
   (boolean
    (some (fn [tag]
-           (= comments-tag-ident
+           (= tag-ident
               (if (keyword? tag)
                 tag
                 (:db/ident tag))))
          (:block/tags block))))
 
+(defn comments-area?
+  [block]
+  (tagged-with? block comments-tag-ident))
+
+(defn tagged-comment-block?
+  [block]
+  (tagged-with? block comment-tag-ident))
+
 (defn comment-block?
   [block]
-  (comments-area? (:block/parent block)))
+  (or (tagged-comment-block? block)
+      (comments-area? (:block/parent block))))
 
 (defn protected-comment-block?
   [block]
@@ -28,14 +38,13 @@
 (defn move-allowed?
   ([blocks target-block]
    (move-allowed? blocks target-block {}))
-  ([blocks target-block opts]
+  ([blocks target-block _opts]
    (boolean
     (and (seq blocks)
          target-block
          (not-any? protected-comment-block? blocks)
          (not (comment-block? target-block))
-         (or (:sibling? opts)
-             (not (comments-area? target-block)))))))
+         (not (comments-area? target-block))))))
 
 (defn comment-target-blocks
   [blocks]

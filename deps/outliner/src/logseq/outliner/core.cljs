@@ -838,26 +838,35 @@
     (if reversed? (reverse top-level-blocks) top-level-blocks)))
 
 (def ^:private comments-tag-ident :logseq.class/Comments)
+(def ^:private comment-tag-ident :logseq.class/Comment)
 (def ^:private comments-blocks-property :logseq.property.comments/blocks)
+
+(defn- tagged-with?
+  [block tag-ident]
+  (boolean
+   (some (fn [tag]
+           (= tag-ident
+              (if (keyword? tag) tag (:db/ident tag))))
+         (:block/tags block))))
 
 (defn- comments-area?
   [block]
-  (boolean
-   (some (fn [tag]
-           (= comments-tag-ident
-              (if (keyword? tag) tag (:db/ident tag))))
-         (:block/tags block))))
+  (tagged-with? block comments-tag-ident))
+
+(defn- comment-block?
+  [block]
+  (or (tagged-with? block comment-tag-ident)
+      (comments-area? (:block/parent block))))
 
 (defn- protected-comment-block?
   [block]
   (or (comments-area? block)
-      (comments-area? (:block/parent block))))
+      (comment-block? block)))
 
 (defn- move-target-allowed-for-comments?
-  [target-block sibling?]
-  (and (not (comments-area? (:block/parent target-block)))
-       (or sibling?
-           (not (comments-area? target-block)))))
+  [target-block]
+  (and (not (comments-area? target-block))
+       (not (comment-block? target-block))))
 
 (defn- block-subtree-ids
   [db block]
@@ -1032,8 +1041,11 @@
                            :payload {:message "Built-in nodes can't be modified"
                                      :type :error}})))))
     (let [db @conn
+          current-blocks (map (fn [block]
+                                (d/entity db (:db/id block)))
+                              blocks)
           top-level-blocks (remove protected-comment-block?
-                                   (filter-top-level-blocks db blocks))]
+                                   (filter-top-level-blocks db current-blocks))]
       (when (seq top-level-blocks)
         (let [[target-block sibling?] (get-target-block db top-level-blocks target-block opts)
               non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
@@ -1046,7 +1058,7 @@
                                    block
                                    (d/entity db (:db/id block))))))
               original-position? (move-to-original-position? blocks target-block sibling? non-consecutive?)]
-          (when (and (move-target-allowed-for-comments? target-block sibling?)
+          (when (and (move-target-allowed-for-comments? target-block)
                      (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                      (not original-position?))
             (let [parents' (->> (ldb/get-block-parents db (:block/uuid target-block) {})

@@ -70,6 +70,16 @@
 (defn- deprecated-ensure-graph-uuid
   [_db])
 
+(defn- tag-comment-blocks
+  [db]
+  (->> (d/q '[:find [?comment ...]
+              :where
+              [?comments-area :block/tags :logseq.class/Comments]
+              [?comment :block/parent ?comments-area]]
+            db)
+       (map (fn [comment-id]
+              [:db/add comment-id :block/tags :logseq.class/Comment]))))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -101,7 +111,9 @@
                                  :logseq.property.embedding/hnsw-label-updated-at]}]
    ["65.26" {:properties [:logseq.property.repeat/repeat-type]}]
    ["65.27" {:classes [:logseq.class/Comments]
-             :properties [:logseq.property.comments/blocks]}]])
+             :properties [:logseq.property.comments/blocks]}]
+   ["65.28" {:classes [:logseq.class/Comment]
+             :fix tag-comment-blocks}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
