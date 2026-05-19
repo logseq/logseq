@@ -594,6 +594,50 @@
         (is (nil? (:logseq.property.recycle/original-page restored-page)))
         (is (nil? (:logseq.property.recycle/original-order restored-page)))))))
 
+(deftest undo-delete-comment-restores-created-by-ref-test
+  (testing "undoing delete-comment should restore the comment author reference"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [page-uuid]} (seed-page-parent-child!)
+          user-uuid (random-uuid)
+          comments-uuid (random-uuid)
+          comment-uuid (random-uuid)
+          now (.getTime (js/Date.))]
+      (d/transact! conn
+                   [{:block/uuid user-uuid
+                     :block/title "Alice"
+                     :block/name "alice"
+                     :block/tags :logseq.class/Page
+                     :block/created-at now
+                     :block/updated-at now}
+                    {:block/uuid comments-uuid
+                     :block/title "Comments"
+                     :block/page [:block/uuid page-uuid]
+                     :block/parent [:block/uuid page-uuid]
+                     :block/tags :logseq.class/Comments
+                     :block/created-at now
+                     :block/updated-at now}
+                    {:block/uuid comment-uuid
+                     :block/title "hello"
+                     :block/page [:block/uuid page-uuid]
+                     :block/parent [:block/uuid comments-uuid]
+                     :block/tags :logseq.class/Comment
+                     :logseq.property/created-by-ref [:block/uuid user-uuid]
+                     :block/created-at now
+                     :block/updated-at now}])
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:delete-blocks [[comment-uuid] {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn [:block/uuid comment-uuid])))
+      (let [undo-result (worker-undo-redo/undo test-repo)
+            restored-comment (d/entity @conn [:block/uuid comment-uuid])]
+        (is (map? undo-result))
+        (is (= "Alice"
+               (some-> restored-comment
+                       :logseq.property/created-by-ref
+                       :block/title)))))))
+
 (deftest undo-delete-page-restores-class-property-and-today-page-test
   (testing "undoing delete-page restores hard-retracted class/property pages and today page blocks"
     (let [conn (worker-state/get-datascript-conn test-repo)
