@@ -595,6 +595,7 @@
     [:button.tab-item
      (merge button-attrs
             {:key (name id)
+             :type "button"
              :role "tab"
              :aria-selected (str active?)
              :tab-index (if active? "0" "-1")

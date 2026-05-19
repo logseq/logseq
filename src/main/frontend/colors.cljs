@@ -301,26 +301,25 @@
                     (recur lo mid best-L best-hex (inc i))))))))))))
 
 (defn- bounded-memoize
-  "Wrap f with an LRU cache capped at `max-entries`."
+  "Wrap f with a memo cache capped at `max-entries`. When the cap is
+   exceeded, drops half the entries in arbitrary order. The hot set
+   for our callers (adjust-for-contrast, muted-tint) stays well under
+   the cap so eviction is rare; LRU bookkeeping on every hit would
+   cost more than the occasional recompute it'd save."
   [f max-entries]
-  (let [cache (atom {:order [] :vals {}})]
+  (let [cache (atom {})]
     (fn [& args]
       (let [k args
-            {:keys [vals]} @cache]
-        (if (contains? vals k)
-          (do
-            (swap! cache update :order #(conj (vec (remove (partial = k) %)) k))
-            (get vals k))
+            c @cache]
+        (if-let [hit (find c k)]
+          (val hit)
           (let [v (apply f args)]
             (swap! cache
-                   (fn [{:keys [order vals]}]
-                     (let [order' (conj order k)
-                           vals' (assoc vals k v)]
-                       (if (> (count order') max-entries)
-                         (let [evict (first order')]
-                           {:order (subvec order' 1)
-                            :vals (dissoc vals' evict)})
-                         {:order order' :vals vals'}))))
+                   (fn [c']
+                     (let [c'' (assoc c' k v)]
+                       (if (> (count c'') max-entries)
+                         (into {} (take (quot max-entries 2) c''))
+                         c''))))
             v))))))
 
 (def ^{:doc "Adjust `picked-hex` toward sufficient WCAG contrast against `surface-hex`.

@@ -33,23 +33,30 @@
 
 (defn add-recent!
   "Push hex to head of recents, dedupe, cap at max-recents.
-   No-op if hex is invalid."
+   No-op if hex is invalid. Storage errors (quota, Safari private
+   mode, spec drift) are swallowed — recents are a nice-to-have."
   ([hex] (add-recent! hex nil))
   ([hex repo]
    (when (and (string? hex)
               (re-matches hex-pattern hex))
      (when-let [k (storage-key repo)]
-       (let [current (get-recents repo)
-             updated (->> current
-                          (remove #(= % hex))
-                          (cons hex)
-                          (take max-recents)
-                          vec)]
-         (storage/set k updated))))))
+       (try
+         (let [current (get-recents repo)
+               updated (->> current
+                            (remove #(= % hex))
+                            (cons hex)
+                            (take max-recents)
+                            vec)]
+           (storage/set k updated))
+         (catch :default e
+           (log/error :icon-color/add-recent-failed e)))))))
 
 (defn clear!
   "Clear recents for given graph (or current). Used in tests / dev."
   ([] (clear! nil))
   ([repo]
    (when-let [k (storage-key repo)]
-     (storage/remove k))))
+     (try
+       (storage/remove k)
+       (catch :default e
+         (log/error :icon-color/clear-failed e))))))
