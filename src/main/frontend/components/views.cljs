@@ -641,6 +641,7 @@
      :selected-blocks selected-rows
      :hide-dots? true
      :button-border? true
+     :outliner? false
      :view-parent (:logseq.property/view-for (:view-entity table))})))
 
 (rum/defc column-resizer

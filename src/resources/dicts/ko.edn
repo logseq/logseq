@@ -93,7 +93,6 @@
  :block/open-block-references "블록 참조 열기"
  :block/practice "연습"
  :block/practice-cards "카드 연습"
- :block/ref-nesting-too-deep "블록 참조 중첩이 너무 깊습니다"
  :block/remove-tag "태그 제거"
  :block/remove-this-tag "이 태그 제거"
  :block/render-error "블록 렌더링 오류:"

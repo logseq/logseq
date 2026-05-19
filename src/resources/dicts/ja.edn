@@ -93,7 +93,6 @@
  :block/open-block-references "ブロック参照を開く"
  :block/practice "練習"
  :block/practice-cards "カードを練習"
- :block/ref-nesting-too-deep "ブロック参照のネストが深すぎます"
  :block/remove-tag "タグを削除"
  :block/remove-this-tag "このタグを削除"
  :block/render-error "ブロック描画エラー："

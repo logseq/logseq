@@ -4,6 +4,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]))
 
 (deftest upsert-property!
@@ -337,6 +338,32 @@
         _ (outliner-property/add-existing-values-to-closed-values! conn :user.property/num values)]
     (is (= [1 2]
            (map db-property/closed-value-content (:block/_closed-value-property (d/entity @conn :user.property/num)))))))
+
+(deftest add-existing-generated-value-to-closed-values-reparents-to-property
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/reproducible-steps {:logseq.property/type :default
+                                                               :db/cardinality :db.cardinality/many
+                                                               :logseq.property/public? true}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "target"}]}]})
+        property (d/entity @conn :user.property/reproducible-steps)
+        block (db-test/find-block-by-content @conn "target")
+        block-uuid (:block/uuid block)]
+    (outliner-property/batch-set-property! conn [block-uuid] :user.property/reproducible-steps ["Step 1"])
+    (let [generated-value (first (:user.property/reproducible-steps (d/entity @conn [:block/uuid block-uuid])))
+          value-uuid (:block/uuid generated-value)]
+      (is (= (:db/id block) (:db/id (:block/parent generated-value))))
+
+      (outliner-property/add-existing-values-to-closed-values! conn :user.property/reproducible-steps [value-uuid])
+      (let [closed-value (d/entity @conn [:block/uuid value-uuid])]
+        (is (= #{(:db/id property)}
+               (set (map :db/id (:block/closed-value-property closed-value)))))
+        (is (= (:db/id property) (:db/id (:block/parent closed-value))))
+        (is (= (:db/id property) (:db/id (:block/page closed-value))))
+        (is (= "Step 1" (db-property/closed-value-content closed-value)))
+
+        (outliner-core/delete-blocks! conn [(d/entity @conn [:block/uuid block-uuid])] {})
+        (is (some? (d/entity @conn [:block/uuid value-uuid])))))))
 
 (deftest upsert-closed-value!
   (let [conn (db-test/create-conn-with-blocks

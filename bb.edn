@@ -41,6 +41,10 @@
   dev:app-watch
   logseq.tasks.dev.mobile/app-watch
 
+  dev:mobile-https-cert
+  {:doc "Generate local HTTPS certificate for mobile Shadow CLJS development"
+   :task logseq.tasks.dev.mobile/ensure-dev-ssl-cert-task}
+
   -dev:build-publishing-frontend
   logseq.tasks.dev/build-publishing-frontend
 
@@ -160,6 +164,9 @@
 
   dev:test
   logseq.tasks.dev/test
+
+  dev:run-test-namespaces
+  logseq.tasks.dev/run-test-namespaces
 
   dev:test-no-worker
   logseq.tasks.dev/test-no-worker

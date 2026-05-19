@@ -172,6 +172,10 @@
                                                  :other-attrs {:block/link (:db/id page')}}))))
     (page-handler/on-chosen-handler input id pos format)))
 
+(defn- class-alias?
+  [page]
+  (some ldb/class? (:block/_alias page)))
+
 (defn- matched-pages-with-new-page [partial-matched-pages db-tag? q]
   (let [ids (db/page-exists? q (if db-tag?
                                  #{:logseq.class/Tag}
@@ -180,7 +184,7 @@
                                  db-class/page-classes))
         page-exists? (some (fn [id] (nil? (:block/parent (db/entity id)))) ids)]
     (if (or page-exists?
-            (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
+            (and db-tag? (class-alias? (db/get-page q))))
       partial-matched-pages
       (if db-tag?
         (concat
@@ -200,7 +204,8 @@
                      (let [classes (editor-handler/get-matched-classes q)]
                        (if (and (ldb/internal-page? block)
                                 (= (:block/title block) q)
-                                (not (ldb/built-in? block)))
+                                (not (ldb/built-in? block))
+                                (not (class-alias? block)))
                          (cons {:block/title q
                                 :db/id (:db/id block)
                                 :block/uuid (:block/uuid block)

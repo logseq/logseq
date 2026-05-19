@@ -16,6 +16,22 @@
     (some->> (first (ldb/page-exists? db title [:logseq.class/Property]))
              (d/entity db))))
 
+(defn- block-missing-uuid?
+  [entity]
+  (and (nil? (:block/uuid entity))
+       (string? (:block/title entity))
+       (:block/page entity)
+       (:block/parent entity)
+       (string? (:block/order entity))
+       (int? (:block/created-at entity))
+       (int? (:block/updated-at entity))))
+
+(defn- normal-page-missing-updated-at?
+  [entity dispatch-key]
+  (and (= dispatch-key :normal-page)
+       (nil? (:block/updated-at entity))
+       (int? (:block/created-at entity))))
+
 (defn- ^:large-vars/cleanup-todo fix-invalid-blocks!
   [conn errors]
   (let [db @conn
@@ -35,17 +51,27 @@
                            [[:db/retract (:db/id entity) :logseq.property.embedding/hnsw-label]]
                            (some? (:logseq.property.embedding/hnsw-label-updated-at entity))
                            [[:db/retract (:db/id entity) :logseq.property.embedding/hnsw-label-updated-at]]
+                           (normal-page-missing-updated-at? entity dispatch-key)
+                           [[:db/add (:db/id entity) :block/updated-at (:block/created-at entity)]]
                            (and (= "External URL" (:block/title entity))
                                 (nil? (:block/tags entity)))
                            [[:db/retractEntity (:db/id entity)]]
+                           (and (ldb/property? entity)
+                                (some #(= (:db/ident %) :logseq.class/Tag) (:block/tags entity)))
+                           [[:db/retract (:db/id entity) :block/tags :logseq.class/Tag]]
                            (and (:db/ident entity)
                                 (db-class/user-class-namespace? (str (:db/ident entity)))
+                                (not (:logseq.property/built-in? entity))
                                 (not (ldb/class? entity)))
                            [[:db/add (:db/id entity) :block/tags :logseq.class/Tag]
                             [:db/retract (:db/id entity) :block/tags :logseq.class/Page]]
+                           (and (ldb/class? entity) (:kv/value entity))
+                           [[:db/retract (:db/id entity) :kv/value]]
                            (and (ldb/property? entity)
                                 (:logseq.property.class/extends entity))
-                           [[:db/retract (:db/id entity) :logseq.property.class/extends]]
+                           (mapv (fn [class]
+                                   [:db/retract (:db/id entity) :logseq.property.class/extends (:db/id class)])
+                                 (:logseq.property.class/extends entity))
                            (:block/level entity)
                            [[:db/retract (:db/id entity) :block/level]]
                            ;; missing :db/ident
@@ -70,6 +96,8 @@
                            (and (:logseq.property/created-by-ref entity)
                                 (not (de/entity? (:logseq.property/created-by-ref entity))))
                            [[:db/retractEntity (:db/id entity)]]
+                           (block-missing-uuid? entity)
+                           [[:db/add (:db/id entity) :block/uuid (random-uuid)]]
                            (vector? (:logseq.property/value entity))
                            [[:db/retractEntity (:db/id entity)]]
                            (and (:block/tx-id entity) (nil? (:block/title entity)))
@@ -155,7 +183,8 @@
         tx-data (concat fix-tx-data
                         class-as-properties)]
     (when (seq tx-data)
-      (d/transact! conn tx-data {:fix-db? true}))))
+      (let [tx-report (d/transact! conn tx-data {:fix-db? true})]
+        (seq (:tx-data tx-report))))))
 
 (defn- fix-num-prefix-db-idents!
   "Fix invalid db/ident keywords for both classes and properties"
@@ -232,6 +261,30 @@
                    :db/index true}]
                  {:fix-db? true})))
 
+(defn- validate-db-result
+  [db]
+  (let [{:keys [errors datom-count entities]} (db-validate/validate-db db)
+        invalid-entity-ids (distinct (map (fn [e] (:db/id (:entity e))) errors))]
+    {:errors errors
+     :datom-count datom-count
+     :entities entities
+     :invalid-entity-ids invalid-entity-ids}))
+
+(defn- log-validation-errors!
+  [errors]
+  (doseq [error errors]
+    (prn :debug
+         :entity (:entity error)
+         :error (dissoc error :entity))))
+
+(defn- validate-and-fix-invalid-blocks!
+  [conn]
+  (loop [{:keys [errors] :as result} (validate-db-result @conn)]
+    (log-validation-errors! errors)
+    (if (and (seq errors) (fix-invalid-blocks! conn errors))
+      (recur (validate-db-result @conn))
+      result)))
+
 (defn validate-db
   [conn & {:keys [fix] :or {fix true}}]
   (when fix
@@ -241,19 +294,16 @@
     (fix-non-closed-values! conn)
     (fix-num-prefix-db-idents! conn))
 
-  (let [db @conn
-        {:keys [errors datom-count entities]} (db-validate/validate-db db)
-        invalid-entity-ids (distinct (map (fn [e] (:db/id (:entity e))) errors))]
-
-    (doseq [error errors]
-      (prn :debug
-           :entity (:entity error)
-           :error (dissoc error :entity)))
+  (let [{:keys [errors datom-count entities invalid-entity-ids]}
+        (if fix
+          (validate-and-fix-invalid-blocks! conn)
+          (let [{:keys [errors] :as result} (validate-db-result @conn)]
+            (log-validation-errors! errors)
+            result))
+        db @conn]
 
     (if errors
       (do
-        (when fix
-          (fix-invalid-blocks! conn errors))
         (shared-service/broadcast-to-clients! :log [:db-invalid :error
                                                     {:msg "Validation errors"
                                                      :errors errors}])

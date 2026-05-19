@@ -93,7 +93,6 @@
  :block/open-block-references "Buka referensi blok"
  :block/practice "Latihan"
  :block/practice-cards "Latihan kartu"
- :block/ref-nesting-too-deep "Referensi blok terlalu dalam"
  :block/remove-tag "Hapus tag"
  :block/remove-this-tag "Hapus tag ini"
  :block/render-error "Kesalahan Render Blok:"

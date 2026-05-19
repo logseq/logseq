@@ -93,7 +93,6 @@
  :block/open-block-references "Открыть ссылки на блок"
  :block/practice "Практика"
  :block/practice-cards "Практика карточек"
- :block/ref-nesting-too-deep "Слишком глубокая вложенность ссылок на блок"
  :block/remove-tag "Удалить тег"
  :block/remove-this-tag "Удалить этот тег"
  :block/render-error "Ошибка отрисовки блока:"

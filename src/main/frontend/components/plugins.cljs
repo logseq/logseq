@@ -1093,10 +1093,22 @@
                              (if-let [author (and (string/starts-with? @*search-key "@")
                                                   (subs @*search-key 1))]
                                (filter #(= author (:author %)) filtered-pkgs)
-                               (search/fuzzy-search
-                                filtered-pkgs @*search-key
-                                :limit 30
-                                :extract-fn :title))
+                               (let [low-case-search (string/lower-case @*search-key)
+                                     min-description-search-length 3
+                                     max-description-matches 30
+                                     fuzzy-title-matches (search/fuzzy-search
+                                                    filtered-pkgs @*search-key
+                                                    :limit 30
+                                                    :extract-fn :title)
+                                     precise-description-matches (if (>= (count low-case-search) min-description-search-length)
+                                                                   (->> filtered-pkgs
+                                                                        (filter #(some-> (:description %)
+                                                                                         string/lower-case
+                                                                                         (string/includes? low-case-search)))
+                                                                        (take max-description-matches))
+                                                                   [])]
+                                 (-> (concat fuzzy-title-matches precise-description-matches)
+                                     (distinct))))
                              filtered-pkgs)
         filtered-pkgs      (map #(if-let [stat (get stats (keyword (:id %)))]
                                    (let [downloads (:total_downloads stat)

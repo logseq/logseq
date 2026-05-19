@@ -2,6 +2,7 @@
   (:require ["pixi.js" :as PIXI]
             [clojure.set :as set]
             [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.extensions.graph.pixi.logic :as logic]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -91,10 +92,16 @@
              dy (- world-y (:y node))
              dist (js/Math.sqrt (+ (* dx dx) (* dy dy)))
              threshold (+ (:radius node) max-dist)
+             rank (case (:type node)
+                    "collapsed" 0
+                    1)
+             best-rank (or (:rank best) js/Number.POSITIVE_INFINITY)
              best-dist (or (:dist best) js/Number.POSITIVE_INFINITY)]
          (if (and (<= dist threshold)
-                  (< dist best-dist))
-           {:node node :dist dist}
+                  (or (< rank best-rank)
+                      (and (= rank best-rank)
+                           (< dist best-dist))))
+           {:node node :dist dist :rank rank}
            best)))
      nil
      candidates)))
@@ -152,6 +159,13 @@
          (<= (- x radius) max-x)
          (<= min-y (+ y radius))
          (<= (- y radius) max-y))))
+
+(defn- render-viewport
+  [^js world width height]
+  (let [scale (.. world -scale -x)]
+    (expand-viewport
+     (world-viewport-rect world width height)
+     (/ 220 (max scale 0.5)))))
 
 (defn- screen-point
   [^js world x y]
@@ -451,37 +465,43 @@
                                     hovered-node
                                     (conj hovered-node)))
                       candidate-id-set (set (map :id candidates))
-                      active-visible-ids (->> active-nodes
-                                              (map :id)
-                                              (filter #(contains? candidate-id-set %)))
-                      selected-visible-ids (->> selected-nodes
-                                                (map :id)
-                                                (filter #(contains? candidate-id-set %)))
+                      label-selection-opts {:viewport viewport
+                                            :transform transform
+                                            :screen-cell-width 140
+                                            :screen-cell-height 26
+                                            :max-labels (if (> scale 2.1) 240 170)}
                       base-label-ids (logic/select-label-node-ids
                                       candidates
-                                      {:viewport viewport
-                                       :transform transform
-                                       :screen-cell-width 140
-                                       :screen-cell-height 26
-                                       :max-labels (if (> scale 2.1) 240 170)})
+                                      label-selection-opts)
                       focused-label-ids (when (and focused-node-id
                                                    (contains? candidate-id-set focused-node-id))
-                                          (distinct
-                                           (concat [focused-node-id]
-                                                   base-label-ids)))
+                                          (logic/select-scoped-label-node-ids
+                                           focused-nodes
+                                           (assoc label-selection-opts
+                                                  :pinned-node-ids #{focused-node-id})))
+                      selected-label-ids (logic/select-scoped-label-node-ids
+                                          selected-nodes
+                                          label-selection-opts)
+                      active-label-ids (logic/select-scoped-label-node-ids
+                                        active-nodes
+                                        (assoc label-selection-opts
+                                               :pinned-node-ids
+                                               (cond-> (set selected-node-ids)
+                                                 hovered-node-id
+                                                 (conj hovered-node-id))))
                       label-ids (cond
                                   selected-only?
-                                  (cond-> (vec selected-visible-ids)
+                                  (cond-> (vec selected-label-ids)
                                     (and hovered-node-id
                                          (contains? candidate-id-set hovered-node-id)
-                                         (not (some #(= hovered-node-id %) selected-visible-ids)))
+                                         (not (some #(= hovered-node-id %) selected-label-ids)))
                                     (conj hovered-node-id))
 
                                   active-only?
-                                  (cond-> (vec active-visible-ids)
+                                  (cond-> (vec active-label-ids)
                                     (and hovered-node-id
                                          (contains? candidate-id-set hovered-node-id)
-                                         (not (some #(= hovered-node-id %) active-visible-ids)))
+                                         (not (some #(= hovered-node-id %) active-label-ids)))
                                     (conj hovered-node-id))
 
                                   (and hovered-only?
@@ -566,7 +586,7 @@
                  (reset! visible-ids* #{}))}))
 
 (defn- edge-alpha
-  [{:keys [selected-ids active-ids select-mode?]} source target]
+  [{:keys [selected-ids active-ids select-mode?]} {:keys [source target]}]
   (cond
     (not select-mode?) 0.54
     (or (and (contains? selected-ids source)
@@ -576,6 +596,14 @@
     (and (contains? active-ids source)
          (contains? active-ids target)) 0.46
     :else 0.18))
+
+(defn- edge-stroke-width
+  [_type select-mode?]
+  (if select-mode? 1.25 1))
+
+(defn- edge-curve-offset
+  [_type]
+  0)
 
 (defn- edge-label-display-scale
   [world-scale]
@@ -682,7 +710,7 @@
          stroke-color (color->int (edge-color dark?))
          runs (logic/edge-render-runs links* show-arrows?)]
      (.clear graphics)
-     (doseq [{:keys [source target label show-arrow? parallel-offset]} runs]
+     (doseq [{:keys [source target label show-arrow? parallel-offset edge/type] :as run} runs]
        (when-let [from-node (get layout-by-id source)]
          (when-let [to-node (get layout-by-id target)]
            (let [{:keys [ux uy start-x start-y end-x end-y mid-x mid-y segment-distance]}
@@ -699,8 +727,13 @@
                              (+ mid-x (* ux half-gap)))
                  gap-end-y (when half-gap
                              (+ mid-y (* uy half-gap)))
-                 stroke-width (if (:select-mode? highlight-state) 1.25 1)
-                 alpha (edge-alpha highlight-state source target)
+                 stroke-width (edge-stroke-width type (:select-mode? highlight-state))
+                 curve-offset (edge-curve-offset type)
+                 curved? (pos? curve-offset)
+                 curve-sign (if (neg? (js/Math.sin (+ (* start-x 0.017) (* end-y 0.013)))) -1 1)
+                 control-x (+ mid-x (* (- uy) curve-offset curve-sign))
+                 control-y (+ mid-y (* ux curve-offset curve-sign))
+                 alpha (edge-alpha highlight-state run)
                  arrow! (fn [tip-x tip-y dir-x dir-y]
                           (let [length 6.8
                                 width 3.3
@@ -735,9 +768,13 @@
                  (.lineTo graphics gap-start-x gap-start-y)
                  (.moveTo graphics gap-end-x gap-end-y)
                  (.lineTo graphics end-x end-y))
-               (do
-                 (.moveTo graphics start-x start-y)
-                 (.lineTo graphics end-x end-y)))
+               (if curved?
+                 (do
+                   (.moveTo graphics start-x start-y)
+                   (.quadraticCurveTo graphics control-x control-y end-x end-y))
+                 (do
+                   (.moveTo graphics start-x start-y)
+                   (.lineTo graphics end-x end-y))))
              (.stroke graphics)
              (when show-arrow?
                (arrow! end-x end-y ux uy))))))
@@ -756,102 +793,66 @@
   (doseq [^js child (array-seq (.removeChildren container))]
     (.destroy child #js {:children true})))
 
-(def ^:private edge-label-limit 420)
+(defn- draw-fps-overlay-background!
+  [^js background ^js text dark?]
+  (.clear background)
+  (.roundRect background
+              -8
+              -4
+              (+ (.-width text) 16)
+              (+ (.-height text) 8)
+              7)
+  (.fill background #js {:color (color->int (if dark? "#020617" "#F8FAFC"))
+                         :alpha (if dark? 0.54 0.70)})
+  (.setStrokeStyle background
+                   #js {:width 1
+                        :color (color->int (if dark? "#38BDF8" "#0F766E"))
+                        :alpha (if dark? 0.26 0.22)})
+  (.stroke background))
 
-(defn- position-edge-label-entry!
-  [^js entry ^js world width height layout-by-id]
-  (let [source (gobj/get entry "logseqGraphEdgeSource")
-        target (gobj/get entry "logseqGraphEdgeTarget")
-        parallel-offset (gobj/get entry "logseqGraphEdgeParallelOffset")]
-    (if-let [from-node (get layout-by-id source)]
-      (if-let [to-node (get layout-by-id target)]
-        (let [{:keys [start-x start-y end-x end-y mid-x mid-y]}
-              (edge-segment from-node to-node parallel-offset)
-              {from-x :x from-y :y} (screen-point world start-x start-y)
-              {to-x :x to-y :y} (screen-point world end-x end-y)
-              {label-x :x label-y :y} (screen-point world mid-x mid-y)
-              dx (- to-x from-x)
-              dy (- to-y from-y)
-              distance (js/Math.sqrt (+ (* dx dx) (* dy dy)))
-              visible? (and (> distance 68)
-                            (<= -80 label-x (+ width 80))
-                            (<= -40 label-y (+ height 40)))]
-          (set! (.-x entry) label-x)
-          (set! (.-y entry) label-y)
-          (let [label-scale (edge-label-display-scale (.. world -scale -x))]
-            (set! (.. entry -scale -x) label-scale)
-            (set! (.. entry -scale -y) label-scale))
-          (set! (.-rotation entry)
-                (logic/readable-edge-label-angle from-x from-y to-x to-y))
-          (set! (.-visible entry) visible?))
-        (set! (.-visible entry) false))
-      (set! (.-visible entry) false))))
+(defn- create-fps-overlay!
+  [dark?]
+  (let [^js container (new (.-Container PIXI))
+        ^js background (new (.-Graphics PIXI))
+        ^js text (new (.-Text PIXI)
+                      #js {:text "FPS --"
+                           :style (new (.-TextStyle PIXI)
+                                       #js {:fontFamily "Inter, Avenir Next, system-ui, sans-serif"
+                                            :fontSize 11
+                                            :fontWeight "650"
+                                            :letterSpacing 0
+                                            :fill (edge-label-color dark?)})})]
+    (set! (.-eventMode container) "none")
+    (set! (.-alpha container) 0.82)
+    (.addChild container background)
+    (.addChild container text)
+    (draw-fps-overlay-background! background text dark?)
+    {:container container
+     :sync-position! (fn [width height]
+                       (let [{:keys [x y]} (logic/fps-overlay-position
+                                            width
+                                            height
+                                            (.-width text)
+                                            (.-height text))]
+                         (set! (.-x container) x)
+                         (set! (.-y container) y)))
+     :update! (fn [fps]
+                (let [next-text (str "FPS " (js/Math.round fps))]
+                  (when-not (= next-text (.-text text))
+                    (set! (.-text text) next-text)
+                    (draw-fps-overlay-background! background text dark?))))}))
 
-(defn- sync-edge-label-transform!
-  [^js label-layer ^js world width height layout-by-id]
-  (doseq [^js entry (array-seq (.-children label-layer))]
-    (position-edge-label-entry! entry world width height layout-by-id)))
-
-(defn- sync-edge-labels!
-  [^js label-layer ^js world width height layout-by-id links dark? view-mode show-edge-labels?]
-  (destroy-children! label-layer)
-  (when show-edge-labels?
-    (let [max-edges (logic/draw-edge-limit (count layout-by-id)
-                                           (count links)
-                                           view-mode)
-          style (new (.-TextStyle PIXI)
-                     #js {:fontFamily "Inter, Avenir Next, system-ui, sans-serif"
-                          :fontSize 10
-                          :fontStyle "italic"
-                          :fill (edge-label-color dark?)
-                          :alpha 0.76})
-          labeled-links (->> links
-                             (take max-edges)
-                             (filter #(seq (:label %)))
-                             (take edge-label-limit))
-          labeled-runs (logic/edge-render-runs labeled-links false)]
-      (doseq [{:keys [source target label parallel-offset]} labeled-runs]
-        (when (and (contains? layout-by-id source)
-                   (contains? layout-by-id target))
-          (let [^js entry (new (.-Container PIXI))
-                ^js text (new (.-Text PIXI)
-                              #js {:text (logic/label-display-text label false)
-                                   :style style})]
-            (gobj/set entry "logseqGraphEdgeSource" source)
-            (gobj/set entry "logseqGraphEdgeTarget" target)
-            (gobj/set entry "logseqGraphEdgeParallelOffset" parallel-offset)
-            (when-let [^js anchor (.-anchor text)]
-              (set! (.-x anchor) 0.5)
-              (set! (.-y anchor) 0.5))
-            (set! (.-x text) 0)
-            (set! (.-y text) 0)
-            (.addChild entry text)
-            (set! (.-alpha entry) 0.78)
-            (position-edge-label-entry! entry world width height layout-by-id)
-            (.addChild label-layer entry)))))
-  nil))
-
-(defn- render-edge-labels!
-  [^js container ^js world width height layout-by-id links dark? view-mode show-edge-labels?]
-  (let [^js label-layer (new (.-Container PIXI))]
-    (.addChild container label-layer)
-    (sync-edge-labels! label-layer world width height layout-by-id links dark? view-mode show-edge-labels?)
-    {:container label-layer
-     :sync! (fn
-              ([world width height layout-by-id visible-links]
-               (sync-edge-labels! label-layer world width height layout-by-id visible-links dark? view-mode show-edge-labels?))
-              ([world width height layout-by-id visible-links next-show-edge-labels?]
-               (sync-edge-labels! label-layer world width height layout-by-id visible-links dark? view-mode next-show-edge-labels?)))
-     :sync-transform! (fn [world width height layout-by-id]
-                        (sync-edge-label-transform! label-layer world width height layout-by-id))
-     :destroy! #(destroy-children! label-layer)}))
-
-(defn- create-icon-text-style
-  [font-family]
-  (new (.-TextStyle PIXI)
-       #js {:fontFamily font-family
-            :fontSize icon-texture-font-size
-            :align "center"}))
+(defn- tick-fps-overlay!
+  [fps-overlay last-ms* frame-count* width height]
+  (let [now (.now js/performance)]
+    (swap! frame-count* inc)
+    ((:sync-position! fps-overlay) width height)
+    (when (>= (- now @last-ms*) 250)
+      (let [elapsed (max 1 (- now @last-ms*))
+            fps (/ (* @frame-count* 1000) elapsed)]
+        (reset! last-ms* now)
+        (reset! frame-count* 0)
+        ((:update! fps-overlay) fps)))))
 
 (defn- icon-value
   [icon k]
@@ -938,15 +939,6 @@
          :style (:font-family icon-spec)
          :text text}))))
 
-(defn- create-icon-text-styles
-  []
-  {:emoji (create-icon-text-style
-           "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, system-ui, sans-serif")
-   "tabler-icons, system-ui, sans-serif" (create-icon-text-style
-                                          "tabler-icons, system-ui, sans-serif")
-   "tabler-icons-extension, system-ui, sans-serif" (create-icon-text-style
-                                                    "tabler-icons-extension, system-ui, sans-serif")})
-
 (defn- node-sprite-kind
   [_node]
   "circle")
@@ -963,6 +955,22 @@
           ^js sprite (new (.-Sprite PIXI) circle)]
       (gobj/set sprite "logseqGraphNodeDisplay" kind)
       sprite)))
+
+(defn- create-icon-text-style
+  [font-family]
+  (new (.-TextStyle PIXI)
+       #js {:fontFamily font-family
+            :fontSize icon-texture-font-size
+            :align "center"}))
+
+(defn- create-icon-text-styles
+  []
+  {:emoji (create-icon-text-style
+           "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, system-ui, sans-serif")
+   "tabler-icons, system-ui, sans-serif" (create-icon-text-style
+                                                  "tabler-icons, system-ui, sans-serif")
+           "tabler-icons-extension, system-ui, sans-serif" (create-icon-text-style
+                                                            "tabler-icons-extension, system-ui, sans-serif")})
 
 (defn- display-kind
   [^js display]
@@ -1005,12 +1013,14 @@
                           :hovered 1.42
                           :connected 1.22
                           :preview 1.16
+                          :background 0.88
                           1.0)
          alpha (case emphasis
                  :selected 1.0
                  :hovered 1.0
                  :connected 0.95
                  :preview 0.92
+                 :background 0.16
                  :dimmed 0.16
                  1.0)
          alpha (* alpha (node-density-alpha node emphasis world-scale))]
@@ -1021,7 +1031,9 @@
      (set! (.-y display) (:y node))
      (set! (.-tint display) (cond
                               emoji? 0xFFFFFF
+                              (= emphasis :background) 0x64748B
                               :else (:color-int node)))
+     (set! (.-filters display) nil)
      (gobj/set display "logseqGraphBaseAlpha" alpha)
      (set! (.. display -scale -x) (* scale base-scale emphasis-scale))
      (set! (.. display -scale -y) (* scale base-scale emphasis-scale))
@@ -1037,6 +1049,12 @@
   (gobj/set display "logseqGraphTransitionTarget" target)
   (when (pos? target)
     (set! (.-visible display) true)))
+
+(defn- hide-display-now!
+  [^js display]
+  (gobj/set display "logseqGraphTransitionTarget" 0.0)
+  (set! (.-alpha display) 0)
+  (set! (.-visible display) false))
 
 (defn- display-transition-target
   [^js display]
@@ -1082,9 +1100,8 @@
 
 (defn- visible-links
   [links visible-node-ids]
-  (filter (fn [{:keys [source target]}]
-            (and (contains? visible-node-ids source)
-                 (contains? visible-node-ids target)))
+  (filter #(and (contains? visible-node-ids (:source %))
+                (contains? visible-node-ids (:target %)))
           links))
 
 (defn- draw-closed-points!
@@ -1210,19 +1227,23 @@
          :drawn-node-count (count displays)
          :sync! (fn [^js world _width _height _hovered-node-id]
                   (reset! world-scale* (.. world -scale -x))
-                  (let [node-by-id (into {} (map (fn [node] [(:id node) node]) (current-layout-nodes)))]
+                  (let [seen-ids (js/Set.)]
+                    (doseq [node (current-layout-nodes)]
+                      (let [id (:id node)]
+                        (.add seen-ids id)
+                        (when-let [^js display (get displays id)]
+                          (if (visible-node? visible-node-ids* node)
+                            (do
+                              (configure-node-display! display
+                                                       node
+                                                       (logic/node-emphasis @highlight-state* id)
+                                                       @world-scale*
+                                                       view-mode)
+                              (set-display-transition-target! display 1.0))
+                            (hide-display-now! display)))))
                     (doseq [[id ^js display] displays]
-                      (if-let [node (get node-by-id id)]
-                        (if (visible-node? visible-node-ids* node)
-                          (do
-                            (configure-node-display! display
-                                                     node
-                                                     (logic/node-emphasis @highlight-state* id)
-                                                     @world-scale*
-                                                     view-mode)
-                            (set-display-transition-target! display 1.0))
-                          (set-display-transition-target! display 0.0))
-                        (set-display-transition-target! display 0.0)))))
+                      (when-not (.has seen-ids id)
+                        (hide-display-now! display)))))
          :sync-styles! (fn []
                          (let [node-by-id (into {} (map (fn [node] [(:id node) node]) (current-layout-nodes)))]
                            (doseq [[id ^js display] displays]
@@ -1315,9 +1336,7 @@
          :sync! (fn [^js world width height hovered-node-id]
                   (let [scale (.. world -scale -x)
                         _ (reset! world-scale* scale)
-                        viewport (expand-viewport
-                                  (world-viewport-rect world width height)
-                                  (/ 220 (max scale 0.5)))
+                        viewport (render-viewport world width height)
                         layouted-nodes (current-layout-nodes)
                         visible-nodes (->> layouted-nodes
                                            (filter #(visible-node? visible-node-ids* %))
@@ -1399,7 +1418,9 @@
                                 on-hover-node-change
                                 on-gesture-point
                                 on-node-drag
-                                on-node-drag-end]}]
+                                on-node-drag-end
+                                on-gesture-start
+                                gesture-locked?]}]
   (let [dragging-world? (atom false)
         drag-node* (atom nil)
         moved? (atom false)
@@ -1423,6 +1444,9 @@
               (when (fn? on-gesture-point)
                 (let [[world-x world-y] (screen->world sx sy)]
                   (on-gesture-point world-x world-y (.. world -scale -x)))))
+            (gesture-locked-now? []
+              (and (fn? gesture-locked?)
+                   (gesture-locked?)))
             (handle-node-click! [node ^js e]
               (if (util/meta-key? e)
                 (do
@@ -1457,21 +1481,39 @@
               (let [[sx sy] (canvas-point e)
                     [world-x world-y] (screen->world sx sy)
                     scale (.. world -scale -x)
-                    hit (hit-test-node (get-node-index) world-x world-y scale)]
-                (emit-gesture-point! sx sy)
-                (set-hover-node! nil)
-                (reset! moved? false)
-                (if-let [node (:node hit)]
-                  (reset! drag-node* {:node node
-                                      :offset-x (- world-x (:x node))
-                                      :offset-y (- world-y (:y node))
-                                      :current-x (:x node)
-                                      :current-y (:y node)})
+                    hit (hit-test-node (get-node-index) world-x world-y scale)
+                    locked? (gesture-locked-now?)
+                    locked? (if (and locked?
+                                      (:node hit))
+                              (do
+                                (when (fn? on-gesture-start)
+                                  (on-gesture-start))
+                                false)
+                              locked?)]
+                (if locked?
                   (do
-                    (reset! dragging-world? true)
-                    (reset! drag-start [sx sy (.-x world) (.-y world)])))))
+                    (.preventDefault e)
+                    (reset! drag-node* nil)
+                    (reset! dragging-world? false)
+                    (reset! moved? false))
+                  (do
+                    (emit-gesture-point! sx sy)
+                    (set-hover-node! nil)
+                    (reset! moved? false)
+                    (if-let [node (:node hit)]
+                      (reset! drag-node* {:node node
+                                          :offset-x (- world-x (:x node))
+                                          :offset-y (- world-y (:y node))
+                                          :current-x (:x node)
+                                          :current-y (:y node)})
+                      (do
+                        (reset! dragging-world? true)
+                        (reset! drag-start [sx sy (.-x world) (.-y world)])))))))
             (on-pointer-move [^js e]
               (cond
+                (gesture-locked-now?)
+                nil
+
                 @drag-node*
                 (let [[sx sy] (canvas-point e)
                       [world-x world-y] (screen->world sx sy)
@@ -1515,6 +1557,12 @@
                   (set-hover-node! (some-> hit :node :id)))))
             (on-pointer-up [^js e]
               (cond
+                (gesture-locked-now?)
+                (do
+                  (reset! drag-node* nil)
+                  (reset! dragging-world? false)
+                  (reset! moved? false))
+
                 @drag-node*
                 (let [{:keys [node current-x current-y]} @drag-node*]
                   (reset! drag-node* nil)
@@ -1544,21 +1592,32 @@
                             (on-selection-clear)))))))))
             (on-wheel [^js e]
               (.preventDefault e)
+              (when (fn? on-gesture-start)
+                (on-gesture-start))
               (let [[sx sy] (canvas-point e)
                     [before-x before-y] (screen->world sx sy)
-                    current-scale (.. world -scale -x)
-                    factor (if (pos? (.-deltaY e)) 0.9 1.1)
-                    next-scale (logic/clamp-zoom-scale (* current-scale factor))]
-                (set! (.. world -scale -x) next-scale)
-                (set! (.. world -scale -y) next-scale)
-                (set! (.-x world) (- sx (* before-x next-scale)))
-                (set! (.-y world) (- sy (* before-y next-scale)))
-                (when (fn? on-gesture-point)
-                  (on-gesture-point before-x before-y next-scale))
-                (when (fn? on-scale-change)
-                  (on-scale-change next-scale))
-                (when (fn? on-transform)
-                  (on-transform))))
+                    transform (logic/wheel-zoom-transform
+                               {:world-x before-x
+                                :world-y before-y
+                                :scale (.. world -scale -x)}
+                               {:screen-x sx
+                                :screen-y sy
+                                :delta-y (.-deltaY e)
+                                :locked? (gesture-locked-now?)})]
+                (when transform
+                  (let [{:keys [x y scale]} transform]
+                    (set! (.. world -scale -x) scale)
+                    (set! (.. world -scale -y) scale)
+                    (set! (.-x world) x)
+                    (set! (.-y world) y)
+                    (when (fn? on-gesture-point)
+                      (on-gesture-point before-x before-y scale))
+                    (when (fn? on-scale-change)
+                      (on-scale-change scale (.-deltaY e)))
+                    (when (fn? on-transform)
+                      (on-transform))))))
+            (on-key-down [_e]
+              nil)
             (on-pointer-leave [^js e]
               (on-pointer-up e)
               (set-hover-node! nil))]
@@ -1567,15 +1626,107 @@
       (.addEventListener canvas "pointerup" on-pointer-up)
       (.addEventListener canvas "pointerleave" on-pointer-leave)
       (.addEventListener canvas "wheel" on-wheel #js {:passive false})
+      (.addEventListener js/window "keydown" on-key-down)
       (fn []
         (.removeEventListener canvas "pointerdown" on-pointer-down)
         (.removeEventListener canvas "pointermove" on-pointer-move)
         (.removeEventListener canvas "pointerup" on-pointer-up)
         (.removeEventListener canvas "pointerleave" on-pointer-leave)
-        (.removeEventListener canvas "wheel" on-wheel)))))
+        (.removeEventListener canvas "wheel" on-wheel)
+        (.removeEventListener js/window "keydown" on-key-down)))))
+
+(def ^:private edge-label-limit 420)
+
+(defn- position-edge-label-entry!
+  [^js entry ^js world width height layout-by-id]
+  (let [source (gobj/get entry "logseqGraphEdgeSource")
+        target (gobj/get entry "logseqGraphEdgeTarget")
+        parallel-offset (gobj/get entry "logseqGraphEdgeParallelOffset")]
+    (if-let [from-node (get layout-by-id source)]
+      (if-let [to-node (get layout-by-id target)]
+        (let [{:keys [start-x start-y end-x end-y mid-x mid-y]}
+              (edge-segment from-node to-node parallel-offset)
+              {from-x :x from-y :y} (screen-point world start-x start-y)
+              {to-x :x to-y :y} (screen-point world end-x end-y)
+              {label-x :x label-y :y} (screen-point world mid-x mid-y)
+              dx (- to-x from-x)
+              dy (- to-y from-y)
+              distance (js/Math.sqrt (+ (* dx dx) (* dy dy)))
+              visible? (and (> distance 68)
+                            (<= -80 label-x (+ width 80))
+                            (<= -40 label-y (+ height 40)))]
+          (set! (.-x entry) label-x)
+          (set! (.-y entry) label-y)
+          (let [label-scale (edge-label-display-scale (.. world -scale -x))]
+            (set! (.. entry -scale -x) label-scale)
+            (set! (.. entry -scale -y) label-scale))
+          (set! (.-rotation entry)
+                (logic/readable-edge-label-angle from-x from-y to-x to-y))
+          (set! (.-visible entry) visible?))
+        (set! (.-visible entry) false))
+      (set! (.-visible entry) false))))
+
+(defn- sync-edge-label-transform!
+  [^js label-layer ^js world width height layout-by-id]
+  (doseq [^js entry (array-seq (.-children label-layer))]
+    (position-edge-label-entry! entry world width height layout-by-id)))
+
+(defn- sync-edge-labels!
+  [^js label-layer ^js world width height layout-by-id links dark? view-mode show-edge-labels?]
+  (destroy-children! label-layer)
+  (when show-edge-labels?
+    (let [max-edges (logic/draw-edge-limit (count layout-by-id)
+                                           (count links)
+                                           view-mode)
+          style (new (.-TextStyle PIXI)
+                     #js {:fontFamily "Inter, Avenir Next, system-ui, sans-serif"
+                          :fontSize 10
+                          :fontStyle "italic"
+                          :fill (edge-label-color dark?)
+                          :alpha 0.76})
+          labeled-links (->> links
+                             (take max-edges)
+                             (filter #(seq (:label %)))
+                             (take edge-label-limit))
+          labeled-runs (logic/edge-render-runs labeled-links false)]
+      (doseq [{:keys [source target label parallel-offset]} labeled-runs]
+        (when (and (contains? layout-by-id source)
+                   (contains? layout-by-id target))
+          (let [^js entry (new (.-Container PIXI))
+                ^js text (new (.-Text PIXI)
+                              #js {:text (logic/label-display-text label false)
+                                   :style style})]
+            (gobj/set entry "logseqGraphEdgeSource" source)
+            (gobj/set entry "logseqGraphEdgeTarget" target)
+            (gobj/set entry "logseqGraphEdgeParallelOffset" parallel-offset)
+            (when-let [^js anchor (.-anchor text)]
+              (set! (.-x anchor) 0.5)
+              (set! (.-y anchor) 0.5))
+            (set! (.-x text) 0)
+            (set! (.-y text) 0)
+            (.addChild entry text)
+            (set! (.-alpha entry) 0.78)
+            (position-edge-label-entry! entry world width height layout-by-id)
+            (.addChild label-layer entry)))))
+  nil))
+
+(defn- render-edge-labels!
+  [^js container ^js world width height layout-by-id edge-links dark? view-mode show-edge-labels?]
+  (let [^js label-layer (new (.-Container PIXI))]
+    (.addChild container label-layer)
+    (sync-edge-labels! label-layer world width height layout-by-id edge-links dark? view-mode show-edge-labels?)
+    {:container label-layer
+     :sync! (fn
+              ([world width height layout-by-id visible-edge-links]
+               (sync-edge-labels! label-layer world width height layout-by-id visible-edge-links dark? view-mode show-edge-labels?))
+              ([world width height layout-by-id visible-edge-links next-show-edge-labels?]
+               (sync-edge-labels! label-layer world width height layout-by-id visible-edge-links dark? view-mode next-show-edge-labels?)))
+     :sync-transform! (fn [world width height layout-by-id]
+                        (sync-edge-label-transform! label-layer world width height layout-by-id))
+     :destroy! #(destroy-children! label-layer)}))
 
 (defn- ^:large-vars/cleanup-todo setup-scene!
-  [^js app ^js container {:keys [nodes links dark? on-node-activate on-node-preview on-selection-change on-rendered view-mode visible-node-ids background-visible-node-ids depth show-arrows? link-distance show-edge-labels? grid-layout?]} render-start]
+  [^js app ^js container {:keys [nodes links dark? on-node-activate on-node-preview on-selection-change on-focus-change on-rendered view-mode visible-node-ids background-visible-node-ids depth show-arrows? link-distance show-edge-labels? grid-layout?]} render-start]
   (set! (.-innerHTML container) "")
   (let [^js canvas (or (.-canvas app) (.-view app))
         ^js stage (.-stage app)
@@ -1585,15 +1736,21 @@
         ^js edge-label-layer-wrapper (new (.-Container PIXI))
         ^js node-label-layer (new (.-Container PIXI))
         ^js cluster-background-layer (new (.-Graphics PIXI))
+        fps-overlay (when (logic/fps-overlay-enabled? config/dev?)
+                      (create-fps-overlay! dark?))
         _ (.appendChild container canvas)
         _ (.addChild stage world)
         _ (.addChild world detail-layer)
         _ (.addChild world tag-layer)
         _ (.addChild world node-label-layer)
         _ (.addChild stage edge-label-layer-wrapper)
+        _ (when fps-overlay
+            (.addChild stage (:container fps-overlay)))
         width (.-clientWidth container)
         height (.-clientHeight container)
         size* (atom {:width width :height height})
+        fps-last-ms* (atom (.now js/performance))
+        fps-frame-count* (atom 0)
         normalized-view-mode (normalize-view-mode view-mode)
         depth* (atom (-> (or depth 1) (max 1) (min 5)))
         grid-layout? (true? grid-layout?)
@@ -1606,13 +1763,7 @@
                                             dark?
                                             {:link-distance link-distance
                                              :grid-layout? grid-layout?}))
-        scene-link-limit (logic/draw-edge-limit (count @layouted-nodes*)
-                                                (count links)
-                                                view-mode)
-        scene-links (if (> (count links) scene-link-limit)
-                      (take scene-link-limit links)
-                      links)
-        display-links* (atom (logic/display-links scene-links @layouted-nodes*))
+        display-links* (atom (logic/display-links links @layouted-nodes*))
         all-node-id-set (set (map :id @layouted-nodes*))
         visible-node-ids* (atom (visible-node-id-set
                                  @layouted-nodes*
@@ -1647,6 +1798,8 @@
         highlighted-node-ids* (atom #{})
         hovered-node-id* (atom nil)
         tag-focus-node-id* (atom nil)
+        tag-focus-active-node-ids* (atom #{})
+        world-transform-target* (atom nil)
         node-kind (fn [node-id]
                     (:kind (get @layout-by-id* node-id)))
         overlapping-tag-ids (fn [node-ids]
@@ -1668,10 +1821,13 @@
                                       active-ids (set/union (:active-ids base) overlapping-tags)
                                       connected-ids (set/difference active-ids
                                                                     @highlighted-node-ids*)]
-                                  (assoc base
-                                         :active-ids active-ids
-                                         :connected-ids connected-ids
-                                         :hovered-id @hovered-node-id*)))
+                                  (cond-> (assoc base
+                                                 :active-ids active-ids
+                                                 :connected-ids connected-ids
+                                                 :hovered-id @hovered-node-id*)
+                                    (seq @tag-focus-active-node-ids*)
+                                    (assoc :tag-focus-mode? true
+                                           :tag-focus-ids @tag-focus-active-node-ids*))))
         highlight-state* (atom (highlight-state-value))
         display-visible-node-ids* (atom (if (= normalized-view-mode :tags-and-objects)
                                           (if grid-layout?
@@ -1765,6 +1921,10 @@
                                   (keep #(get @layout-by-id* %))
                                   (filter #(visible-node? visible-node-ids* %))
                                   vec))))
+        emit-focus! (fn []
+                      (when (fn? on-focus-change)
+                        (on-focus-change (some-> @tag-focus-node-id*
+                                                 (get @layout-by-id*)))))
         resize-to-container! (fn []
                                (let [width (.-clientWidth container)
                                      height (.-clientHeight container)
@@ -1791,18 +1951,27 @@
                                     layout-by-id
                                     (visible-link-list)
                                     (effective-show-edge-labels?))))
-        update-edge-display! (fn [next-show-arrows? next-show-edge-labels?]
-                               (let [next-show-arrows? (true? next-show-arrows?)
-                                     next-show-edge-labels? (true? next-show-edge-labels?)]
-                                 (when (or (not= next-show-arrows? @show-arrows?*)
-                                           (not= next-show-edge-labels? @show-edge-labels?*))
-                                   (reset! show-arrows?* next-show-arrows?)
-                                   (reset! show-edge-labels?* next-show-edge-labels?)
-                                   (sync-edges-and-labels!
-                                    (logic/current-layout-by-id
-                                     @layout-by-id*
-                                     @preview-layout-by-id*))
-                                   (mark-transform!))))
+        update-edge-display-fn (fn [next-show-arrows? next-show-edge-labels?]
+                                 (let [next-show-arrows? (true? next-show-arrows?)
+                                       next-show-edge-labels? (true? next-show-edge-labels?)]
+                                   (when (or (not= next-show-arrows? @show-arrows?*)
+                                             (not= next-show-edge-labels? @show-edge-labels?*))
+                                     (reset! show-arrows?* next-show-arrows?)
+                                     (reset! show-edge-labels?* next-show-edge-labels?)
+                                     (sync-edges-and-labels!
+                                      (logic/current-layout-by-id
+                                       @layout-by-id*
+                                       @preview-layout-by-id*))
+                                     (mark-transform!))))
+        current-world-transform (fn []
+                                  {:x (.-x world)
+                                   :y (.-y world)
+                                   :scale (.. world -scale -x)})
+        set-world-transform! (fn [{:keys [x y scale]}]
+                               (set! (.-x world) x)
+                               (set! (.-y world) y)
+                               (set! (.. world -scale -x) scale)
+                               (set! (.. world -scale -y) scale))
         sync-highlight! (fn []
                           (reset! highlight-state* (highlight-state-value))
                           (sync-cluster-backgrounds! (current-layout-nodes))
@@ -1830,7 +1999,7 @@
                                     (reset! display-visible-key* nil)
                                     (reset! layout-by-id*
                                             (into {} (map (fn [node] [(:id node) node]) next-layouted-nodes)))
-                                    (reset! display-links* (logic/display-links scene-links next-layouted-nodes))
+                                    (reset! display-links* (logic/display-links links next-layouted-nodes))
                                     (reset! tag-node-index*
                                             (index-layouted-nodes
                                              (filter #(and (visible-node? visible-node-ids* %)
@@ -1846,12 +2015,15 @@
                                                      next-layouted-nodes)))
                                     (sync-highlight!))))
         tag-focus-enabled? (fn [scale]
-                             (and (= normalized-view-mode :tags-and-objects)
-                                  (empty? @highlighted-node-ids*)
-                                  (some? (tag-focus-level scale))))
+                             (let [focus-level (tag-focus-level scale)]
+                               (and (= normalized-view-mode :tags-and-objects)
+                                    (empty? @highlighted-node-ids*)
+                                    (logic/tag-focus-active-level? focus-level))))
         clear-tag-focus! (fn []
                            (when @tag-focus-node-id*
                              (reset! tag-focus-node-id* nil)
+                             (reset! tag-focus-active-node-ids* #{})
+                             (emit-focus!)
                              (mark-transform!)))
         visible-tag-ids (fn []
                           (->> @layouted-nodes*
@@ -1860,9 +2032,10 @@
                                (map :id)
                                set))
         focused-tag-id-for-scale (fn [scale]
-                                   (let [focus-level (tag-focus-level scale)
+                                     (let [focus-level (tag-focus-level scale)
                                          visible-tag-id-set (visible-tag-ids)]
                                      (when (and focus-level
+                                                (logic/tag-focus-active-level? focus-level)
                                                 (contains? visible-tag-id-set @tag-focus-node-id*))
                                        @tag-focus-node-id*)))
         tag-context-node-ids (fn [tag-id]
@@ -1875,58 +2048,126 @@
                                     (filter #(and (contains? @visible-node-ids* %)
                                                   (= "tag" (node-kind %))))
                                     set))
+        selected-tag-ids (fn []
+                           (->> @highlighted-node-ids*
+                                (filter #(= "tag" (node-kind %)))
+                                set))
+        tag-related-visible-node-ids (fn [tag-ids]
+                                       (->> (logic/tag-related-node-ids
+                                             tag-ids
+                                             neighbor-map
+                                             (visible-tag-ids))
+                                            (filter #(contains? @visible-node-ids* %))
+                                            set))
         tag-drill-visible-node-ids (fn [scale]
                                      (if (or (not= normalized-view-mode :tags-and-objects)
-                                             (seq @highlighted-node-ids*))
-                                       @visible-node-ids*
-                                       (if grid-layout?
-                                         (grid-layout-display-node-ids @layouted-nodes* visible-node-ids*)
-                                         (let [visible-tag-id-set (visible-tag-ids)
-                                             focus-level (tag-focus-level scale)
-                                             focused-tag-id (focused-tag-id-for-scale scale)]
-                                           (case focus-level
-                                             :isolate
-                                             (if focused-tag-id #{focused-tag-id} visible-tag-id-set)
+                                               (seq @highlighted-node-ids*))
+                                         (do
+                                           (reset! tag-focus-active-node-ids* #{})
+                                           (if grid-layout?
+                                             (grid-layout-display-node-ids @layouted-nodes* visible-node-ids*)
+                                             (if-let [tag-ids (seq (selected-tag-ids))]
+                                             (tag-related-visible-node-ids tag-ids)
+                                               @visible-node-ids*)))
+                                         (if grid-layout?
+                                           (do
+                                             (reset! tag-focus-active-node-ids* #{})
+                                             (grid-layout-display-node-ids @layouted-nodes* visible-node-ids*))
+                                           (let [visible-tag-id-set (visible-tag-ids)
+                                                 focus-level (tag-focus-level scale)
+                                                 focused-tag-id (focused-tag-id-for-scale scale)]
+                                             (case focus-level
+                                               :isolate
+                                               (do
+                                                 (reset! tag-focus-active-node-ids* #{})
+                                                 visible-tag-id-set)
 
-                                             :objects
-                                             (if focused-tag-id
-                                               (let [context-node-ids (tag-context-node-ids focused-tag-id)
-                                                     object-ids (->> context-node-ids
-                                                                     (filter #(not= "tag" (node-kind %)))
-                                                                     set)
-                                                     {:keys [width height]} @size*
-                                                     object-budget (tag-object-display-budget
-                                                                    @layout-by-id*
-                                                                    focused-tag-id
-                                                                    context-node-ids
-                                                                    (count object-ids)
-                                                                    scale
-                                                                    width
-                                                                    height)
-                                                     visible-object-ids (balanced-object-node-ids
-                                                                         @layout-by-id*
-                                                                         focused-tag-id
-                                                                         object-ids
-                                                                         object-budget)]
-                                                 (->> (set/union #{focused-tag-id}
-                                                                 visible-object-ids
-                                                                 (crossed-tag-node-ids visible-object-ids))
-                                                      (filter #(contains? @visible-node-ids* %))
-                                                      set))
-                                               visible-tag-id-set)
+                                               :objects
+                                               (if focused-tag-id
+                                                 (let [context-node-ids (tag-context-node-ids focused-tag-id)
+                                                       object-ids (->> context-node-ids
+                                                                       (filter #(not= "tag" (node-kind %)))
+                                                                       set)
+                                                       {:keys [width height]} @size*
+                                                       object-budget (tag-object-display-budget
+                                                                      @layout-by-id*
+                                                                      focused-tag-id
+                                                                      context-node-ids
+                                                                      (count object-ids)
+                                                                      scale
+                                                                      width
+                                                                      height)
+                                                       visible-object-ids (balanced-object-node-ids
+                                                                           @layout-by-id*
+                                                                           focused-tag-id
+                                                                           object-ids
+                                                                           object-budget)
+                                                       active-node-ids (logic/tag-focus-active-node-ids
+                                                                        visible-tag-id-set
+                                                                        focus-level
+                                                                        focused-tag-id
+                                                                        visible-object-ids
+                                                                        (crossed-tag-node-ids visible-object-ids))]
+                                                   (reset! tag-focus-active-node-ids* active-node-ids)
+                                                   (->> (logic/tag-focus-display-node-ids
+                                                         visible-tag-id-set
+                                                         focus-level
+                                                         focused-tag-id
+                                                         visible-object-ids
+                                                         (crossed-tag-node-ids visible-object-ids)
+                                                         #{})
+                                                        (filter #(contains? @visible-node-ids* %))
+                                                        set))
+                                                 (do
+                                                   (reset! tag-focus-active-node-ids* #{})
+                                                   visible-tag-id-set))
 
-                                             visible-tag-id-set)))))
+                                               (do
+                                                 (reset! tag-focus-active-node-ids* #{})
+                                                 visible-tag-id-set))))))
         tag-drill-context-node-ids (fn [scale]
                                      (if (or (not= normalized-view-mode :tags-and-objects)
                                              (seq @highlighted-node-ids*))
-                                       @background-visible-node-ids*
                                        (if grid-layout?
                                          (grid-layout-display-node-ids @layouted-nodes* visible-node-ids*)
-                                         (if-let [tag-id (and (contains? #{:isolate :objects}
-                                                                       (tag-focus-level scale))
-                                                           (focused-tag-id-for-scale scale))]
-                                           (tag-context-node-ids tag-id)
-                                           @background-visible-node-ids*))))
+                                         (if-let [tag-ids (seq (selected-tag-ids))]
+                                         (tag-related-visible-node-ids tag-ids)
+                                           @background-visible-node-ids*))
+                                       (if grid-layout?
+                                         (grid-layout-display-node-ids @layouted-nodes* visible-node-ids*)
+                                         (let [focus-level (tag-focus-level scale)
+                                               focused-tag-id (focused-tag-id-for-scale scale)]
+                                           (if (and focused-tag-id
+                                                    (logic/tag-focus-active-level? focus-level))
+                                             (let [context-node-ids (tag-context-node-ids focused-tag-id)
+                                                   object-ids (->> context-node-ids
+                                                                   (filter #(not= "tag" (node-kind %)))
+                                                                   set)
+                                                   {:keys [width height]} @size*
+                                                   object-budget (tag-object-display-budget
+                                                                  @layout-by-id*
+                                                                  focused-tag-id
+                                                                  context-node-ids
+                                                                  (count object-ids)
+                                                                  scale
+                                                                  width
+                                                                  height)
+                                                   visible-object-ids (balanced-object-node-ids
+                                                                       @layout-by-id*
+                                                                       focused-tag-id
+                                                                       object-ids
+                                                                       object-budget)
+                                                   crossed-tag-ids (crossed-tag-node-ids visible-object-ids)]
+                                               (->> (logic/tag-focus-context-node-ids
+                                                     (visible-tag-ids)
+                                                     focus-level
+                                                     focused-tag-id
+                                                     visible-object-ids
+                                                     crossed-tag-ids
+                                                     @background-visible-node-ids*)
+                                                    (filter #(contains? @visible-node-ids* %))
+                                                    set))
+                                             @background-visible-node-ids*)))))
         display-visible-key (fn [scale]
                               (let [focus-level (when (= normalized-view-mode :tags-and-objects)
                                                   (tag-focus-level scale))]
@@ -1948,10 +2189,11 @@
                                           (do
                                             (reset! display-visible-node-ids* next-visible-node-ids)
                                             (reset! context-visible-node-ids* next-context-node-ids)
+                                            (reset! highlight-state* (highlight-state-value))
                                             (reset! display-node-index*
                                                     (index-layouted-nodes
-                                                     (filter #(visible-node? display-visible-node-ids* %)
-                                                             @layouted-nodes*)))
+                                                     (filter #(contains? next-visible-node-ids (:id %))
+                                                             (current-layout-nodes))))
                                             (reset! full-node-index*
                                                     (index-layouted-nodes
                                                      (filter #(visible-node? visible-node-ids* %)
@@ -1987,7 +2229,10 @@
                                       next-id (or next-id focused-tag-id)]
                                   (when (not= next-id @tag-focus-node-id*)
                                     (reset! tag-focus-node-id* next-id)
-                                    (mark-transform!))))))
+                                    (reset! tag-focus-active-node-ids* #{})
+                                    (emit-focus!)
+                                    (mark-transform!))
+                                  nil))))
         update-highlight! (fn [node remove?]
                             (clear-tag-focus!)
                             (swap! highlighted-node-ids*
@@ -2002,6 +2247,18 @@
                              (emit-selection!)
                              (clear-tag-focus!)
                              (sync-highlight!)))
+        reset-interaction! (fn []
+                             (reset! world-transform-target* initial-transform)
+                             (reset! hovered-node-id* nil)
+                             (when (seq @highlighted-node-ids*)
+                               (reset! highlighted-node-ids* #{})
+                               (emit-selection!))
+                             (clear-tag-focus!)
+                             (reset! preview-layout-by-id* nil)
+                             (reset! drag-session* nil)
+                             (reset! display-visible-key* nil)
+                             (update-display-visible! (.. world -scale -x))
+                             (sync-highlight!))
         update-edge-highlight! (fn [{:keys [source target]}]
                                  (clear-tag-focus!)
                                  (reset! highlighted-node-ids* #{source target})
@@ -2082,7 +2339,7 @@
                               (reset! display-node-index*
                                       (index-layouted-nodes
                                        (filter #(visible-node? display-visible-node-ids* %)
-                                               @layouted-nodes*)))
+                                               (current-layout-nodes))))
                               (reset! full-node-index*
                                       (index-layouted-nodes
                                        (filter #(visible-node? visible-node-ids* %)
@@ -2094,13 +2351,33 @@
                             next (+ alpha (* (- target alpha) 0.2))]
                         (set! (.-alpha layer) next)
                         (set! (.-visible layer) (> next 0.01))))
+        tick-world-transform! (fn []
+                                (when-let [{target-x :x target-y :y target-scale :scale} @world-transform-target*]
+                                  (let [current (current-world-transform)
+                                        next {:x (+ (:x current) (* (- target-x (:x current)) 0.18))
+                                              :y (+ (:y current) (* (- target-y (:y current)) 0.18))
+                                              :scale (+ (:scale current) (* (- target-scale (:scale current)) 0.18))}
+                                        done? (and (< (js/Math.abs (- target-x (:x next))) 0.6)
+                                                   (< (js/Math.abs (- target-y (:y next))) 0.6)
+                                                   (< (js/Math.abs (- target-scale (:scale next))) 0.006))]
+                                    (set-world-transform! (if done?
+                                                            {:x target-x :y target-y :scale target-scale}
+                                                            next))
+                                    (when done?
+                                      (reset! world-transform-target* nil))
+                                    true)))
         animate-layer (fn []
                         (let [now (.now js/performance)]
+                          (let [{:keys [width height]} @size*]
+                            (when fps-overlay
+                              (tick-fps-overlay! fps-overlay fps-last-ms* fps-frame-count* width height)))
                           (when (and @navigation-active?
                                      (> (- now @last-navigation-ms*) navigation-idle-ms))
                             (reset! navigation-active? false)
                             (mark-scene!)))
                         (ticker-step detail-layer detail-target-alpha)
+                        (when (tick-world-transform!)
+                          (reset! transform-dirty? true))
                         (let [dirty? @transform-dirty?
                               navigation? @navigation-active?
                               scale (.. world -scale -x)
@@ -2119,7 +2396,7 @@
                                   (sync-edges-and-labels!
                                    (logic/current-layout-by-id
                                     @layout-by-id*
-                                    @preview-layout-by-id*))))))
+                                    @preview-layout-by-id*)))))
                             (when-let [sync-edge-label-transform-fn (:sync-transform! edge-label-render-info)]
                               (let [{:keys [width height]} @size*]
                                 (sync-edge-label-transform-fn
@@ -2128,22 +2405,25 @@
                                  height
                                  (logic/current-layout-by-id
                                   @layout-by-id*
-                                  @preview-layout-by-id*))))
+                                  @preview-layout-by-id*)))))
                           (when-let [label-layer (:container label-manager)]
                             (let [focus-level (when (and (= normalized-view-mode :tags-and-objects)
                                                          (empty? @highlighted-node-ids*))
                                                 (tag-focus-level scale))
                                   focused-tag-id (focused-tag-id-for-scale scale)
-                                  focused-node-ids (if focused-tag-id
-                                                     #{focused-tag-id}
-                                                     #{})
+                                  focused-node-ids (if (seq @tag-focus-active-node-ids*)
+                                                     @tag-focus-active-node-ids*
+                                                     (if focused-tag-id
+                                                       #{focused-tag-id}
+                                                       #{}))
                                   label-hovered-node-id (when-not (and (= normalized-view-mode :tags-and-objects)
                                                                        (empty? @highlighted-node-ids*)
                                                                        (nil? focus-level))
                                                           @hovered-node-id*)
-                                  focus-labels-only? (and (seq focused-node-ids)
-                                                          (not (:label-visible? @visibility-state*)))
                                   label-visibility-state (cond-> @visibility-state*
+                                                           (logic/labels-visible-by-default?
+                                                            normalized-view-mode)
+                                                           (assoc :label-visible? true)
                                                            (seq focused-node-ids)
                                                            (assoc :label-visible? true)
                                                            true
@@ -2156,13 +2436,15 @@
                                    (:active-ids @highlight-state*)
                                    label-visibility-state
                                    (.-alpha label-layer))
+                                  focus-labels-only? (logic/focus-labels-only?
+                                                      focused-node-ids
+                                                      label-visibility-state)
                                   force-label-update? (and (pos? target-alpha)
                                                            (not ((:has-visible-labels? label-manager))))]
                               (ticker-step label-layer target-alpha)
                               (when (and dirty? update?)
                                 (if (or (not navigation?)
                                         focus-labels-only?
-                                        display-changed?
                                         force-label-update?)
                                   (let [{:keys [width height]} @size*]
                                     ((:update! label-manager)
@@ -2173,8 +2455,7 @@
                                      {:node-visible? (cond
                                                        focus-labels-only?
                                                        #(and (visible-node? visible-node-ids* %)
-                                                             (or (= "tag" (:kind %))
-                                                                 (contains? focused-node-ids (:id %))))
+                                                             (logic/focused-label-node? focused-node-ids %))
 
                                                        (:detail-expanded? @visibility-state*)
                                                        #(visible-node? display-visible-node-ids* %)
@@ -2187,7 +2468,7 @@
                                       :active-node-ids (:active-ids @highlight-state*)
                                       :focused-node-id focused-tag-id
                                       :focused-node-ids focused-node-ids
-                                      :focused-only? (boolean focus-labels-only?)
+                                      :focused-only? focus-labels-only?
                                       :selected-only? selected-only?
                                       :active-only? active-only?}))
                                   (when-let [sync-transform! (:sync-transform! label-manager)]
@@ -2238,9 +2519,12 @@
                               (reset! preview-layout-by-id* nil)
                               (reset! drag-session* nil)
                               (sync-highlight!)))))
-        update-detail-visibility! (fn [scale]
-                                    (when-not (tag-focus-enabled? scale)
-                                      (clear-tag-focus!))
+        update-detail-visibility! (fn update-detail-visibility!
+                                    ([scale]
+                                     (update-detail-visibility! scale nil))
+                                    ([scale _delta-y]
+                                     (when (not (tag-focus-enabled? scale))
+                                       (clear-tag-focus!))
                                     (let [prev @visibility-state*
                                           next (logic/next-visibility-state prev scale thresholds)]
                                       (when (not= prev next)
@@ -2249,11 +2533,9 @@
                                                 (if (:detail-expanded? next) 1.0 0.0))
                                         (reset! label-target-alpha
                                                 (if (:label-visible? next) 1.0 0.0))
-                                        (mark-transform!))))
+                                        (mark-transform!)))))
         get-node-index (fn []
-                         (if (seq @highlighted-node-ids*)
-                           @full-node-index*
-                           @display-node-index*))
+                         @display-node-index*)
         get-edge-hit (fn [world-x world-y scale]
                        (hit-test-edge
                         (logic/current-layout-by-id
@@ -2279,7 +2561,9 @@
                         :on-hover-node-change sync-hover-preview!
                         :on-gesture-point update-tag-focus!
                         :on-node-drag apply-node-drag!
-                        :on-node-drag-end commit-node-drag!})
+                        :on-node-drag-end commit-node-drag!
+                        :on-gesture-start #(reset! world-transform-target* nil)
+                        :gesture-locked? #(some? @world-transform-target*)})
         resize-observer (when (exists? js/ResizeObserver)
                           (let [observer (js/ResizeObserver. resize-to-container!)]
                             (.observe observer container)
@@ -2302,7 +2586,8 @@
      :update-visibility! update-visibility!
      :update-depth! update-depth!
      :update-link-distance! update-link-distance!
-     :update-edge-display! update-edge-display!
+     :update-edge-display! update-edge-display-fn
+     :reset-interaction! reset-interaction!
      :cleanup (fn []
                 (event-cleanup)
                 (when-let [^js observer resize-observer]
@@ -2344,8 +2629,15 @@
     (update-edge-display-fn show-arrows? show-edge-labels?))
   nil)
 
+(defn reset-interaction!
+  [^js container]
+  (when-let [reset-interaction-fn (some-> (get @*graph-instances container)
+                                          :reset-interaction!)]
+    (reset-interaction-fn))
+  nil)
+
 (defn render-container!
-  [^js container {:keys [nodes links dark? on-node-activate on-node-preview on-selection-change on-rendered view-mode visible-node-ids background-visible-node-ids depth show-arrows? link-distance show-edge-labels? grid-layout?]}]
+  [^js container {:keys [nodes links dark? on-node-activate on-node-preview on-selection-change on-focus-change on-rendered view-mode visible-node-ids background-visible-node-ids depth show-arrows? link-distance show-edge-labels? grid-layout?]}]
   (when container
     (let [token (get (swap! *render-tokens update container (fnil inc 0)) container)
           render-start (.now js/performance)
@@ -2367,6 +2659,7 @@
                                                      :on-node-activate on-node-activate
                                                      :on-node-preview on-node-preview
                                                      :on-selection-change on-selection-change
+                                                     :on-focus-change on-focus-change
                                                      :on-rendered on-rendered
                                                      :view-mode view-mode
                                                      :visible-node-ids visible-node-ids

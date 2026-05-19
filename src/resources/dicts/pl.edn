@@ -93,7 +93,6 @@
  :block/open-block-references "Otwórz odniesienia bloków"
  :block/practice "Ćwicz"
  :block/practice-cards "Ćwicz karty"
- :block/ref-nesting-too-deep "Zagnieżdżenie odniesień bloku jest zbyt głębokie"
  :block/remove-tag "Usuń tag"
  :block/remove-this-tag "Usuń ten tag"
  :block/render-error "Błąd renderowania bloku:"

@@ -37,7 +37,7 @@
      [:td.text-right [:code (t :help/context-menu-action)]]]]])
 
 (defn markdown-syntax []
-  (let [list [:bold :italics :del :mark :latex :code :link :pre :img]
+  (let [list [:bold :italics :del :mark :math :latex :code :link :pre :img]
         title (t :help/markdown-syntax)
         learn-more "https://www.markdownguide.org/basic-syntax"
         raw {:bold (str "**" (t :format/bold) "**")
@@ -45,6 +45,7 @@
              :link "[Link](https://www.example.com)"
              :del (str "~~" (t :format/strikethrough) "~~")
              :mark (str "^^" (t :format/highlight) "^^")
+             :math (str (t :help/inline-math-example-prefix) " $E = mc^2$")
              :latex "$$E = mc^2$$"
              :code (str "`" (t :format/code) "`")
              :pre "```clojure\n  (println \"Hello world!\")\n```"
@@ -55,6 +56,7 @@
                   :link [:a {:href "https://www.example.com"} (t :ui/link)]
                   :del [:del (t :format/strikethrough)]
                   :mark [:mark (t :format/highlight)]
+                  :math [:span (t :help/inline-math-example-prefix) " " (latex/latex "E = mc^2" false false)]
                   :latex (latex/latex "E = mc^2" true false)
                   :code [:code (t :format/code)]
                   :pre (highlight/highlight "help-highlight" {:data-lang "clojure"} "(println \"Hello world!\")")

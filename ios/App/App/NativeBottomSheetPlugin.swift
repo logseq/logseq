@@ -7,12 +7,15 @@ public class NativeBottomSheetPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "NativeBottomSheetPlugin"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "present", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "dismiss", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "dismiss", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "contentReady", returnType: CAPPluginReturnPromise)
     ]
 
     private weak var backgroundSnapshotView: UIView?
     private weak var previousParent: UIViewController?
     private var sheetController: NativeBottomSheetViewController?
+    private var awaitingContentReady = false
+    private var dismissalFallbackWorkItem: DispatchWorkItem?
 
     /// Single source of truth: when true, the bottom sheet owns the shared webview.
     public static var isPresentingSheet: Bool = false
@@ -81,13 +84,22 @@ public class NativeBottomSheetPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    @objc func contentReady(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard self.awaitingContentReady else {
+                call.resolve()
+                return
+            }
+
+            self.finishDismissal()
+            call.resolve()
+        }
+    }
+
     // MARK: - Internal helpers
 
     private func handleSheetDismissed() {
         guard sheetController != nil else { return }
-
-        // JS listens to this to start updating the background route
-        notifyListeners("state", data: ["dismissing": true])
 
         let shared = SharedWebViewController.instance
         let previous = self.previousParent
@@ -108,21 +120,44 @@ public class NativeBottomSheetPlugin: CAPPlugin, CAPBridgedPlugin {
                 self.sheetController = nil
                 self.previousParent = nil
 
-                // After a short delay, JS should have navigated away from the sheet route.
-                // Now we fade the webview in and remove snapshot/placeholder.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    webView.alpha = 1
-                    // Remove the frozen background
-                    self.clearSnapshot()
-                    shared.clearPlaceholder()
+                self.awaitingContentReady = true
 
-                    self.notifyListeners("state", data: [
-                                                    "presented": false,
-                                                    "dismissing": false
-                                                  ])
-                }
+                // JS listens to this to clear the popup. The snapshot stays up
+                // until JS confirms the non-popup UI has rendered.
+                self.notifyListeners("state", data: ["dismissing": true])
+                self.scheduleDismissalFallback()
             }
         }
+    }
+
+    private func finishDismissal() {
+        dismissalFallbackWorkItem?.cancel()
+        dismissalFallbackWorkItem = nil
+        awaitingContentReady = false
+
+        if let webView = SharedWebViewController.instance.bridgeController.bridge?.webView {
+            webView.alpha = 1
+        }
+
+        clearSnapshot()
+        SharedWebViewController.instance.clearPlaceholder()
+
+        notifyListeners("state", data: [
+            "presented": false,
+            "dismissing": false
+        ])
+    }
+
+    private func scheduleDismissalFallback() {
+        dismissalFallbackWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.awaitingContentReady else { return }
+            self.finishDismissal()
+        }
+
+        dismissalFallbackWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: workItem)
     }
 
     private func showSnapshot(in host: UIViewController) -> Bool {

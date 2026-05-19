@@ -1,5 +1,6 @@
 (ns electron.db-test
   (:require ["node:sqlite" :as node-sqlite]
+            [cljs.reader :as reader]
             [cljs.test :refer [async deftest is]]
             [electron.backup-file :as backup-file]
             [electron.db :as electron-db]
@@ -10,6 +11,7 @@
             [logseq.cli.transport :as cli-transport]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.backup :as sqlite-backup]
+            [logseq.db-worker.graph-backup :as graph-backup]
             [promesa.core :as p]
             ["fs-extra" :as fs]
             ["path" :as node-path]))
@@ -42,6 +44,26 @@
       (is (= "db-data"
              (.toString (electron-db/get-db db-name)))))))
 
+(defn- read-edn-file
+  [file-path]
+  (reader/read-string (fs/readFileSync file-path "utf8")))
+
+(defn- write-backup!
+  [graphs-dir repo backup-name source created-at-ms]
+  (let [db-path (graph-backup/backup-db-path graphs-dir repo backup-name)
+        metadata-path (graph-backup/backup-metadata-path graphs-dir repo backup-name)]
+    (fs/ensureDirSync (node-path/dirname db-path))
+    (fs/writeFileSync db-path (str "sqlite-" backup-name) "utf8")
+    (fs/writeFileSync metadata-path
+                      (pr-str {:schema-version 1
+                               :name backup-name
+                               :repo repo
+                               :source source
+                               :created-at-ms created-at-ms
+                               :db-path db-path})
+                      "utf8")
+    db-path))
+
 (deftest backup-db-creates-sqlite-copy-from-existing-disk-db
   (async done
     (let [graphs-dir (node-helper/create-tmp-dir "electron-db-backup")
@@ -49,38 +71,33 @@
           DatabaseSync (resolve-database-sync-ctor)
           original-get-db-graphs-dir cli-common-graph/get-db-graphs-dir]
       (set! cli-common-graph/get-db-graphs-dir (fn [] graphs-dir))
-      (let [[_ db-path] (common-sqlite/get-db-full-path graphs-dir db-name)
-            backups-path (common-sqlite/get-db-backups-path graphs-dir db-name)]
+      (let [[_ db-path] (common-sqlite/get-db-full-path graphs-dir db-name)]
         (fs/ensureDirSync (node-path/dirname db-path))
         (let [source-db (new DatabaseSync db-path)]
           (.exec source-db "create table kvs (addr text primary key, content text);")
           (.exec source-db "insert into kvs (addr, content) values ('a', 'alpha')")
           (.close source-db))
-        (-> (p/with-redefs [backup-file/backup-file (fn [_repo _dir _relative-path _ext content & {:keys [backups-dir]}]
-                                                      (fs/ensureDirSync backups-dir)
-                                                      (fs/writeFileSync (node-path/join backups-dir "copy.sqlite") content))]
-              (p/let [_ (electron-db/backup-db! db-name nil)
-                    backup-files (vec (fs/readdirSync backups-path))
-                    backup-path (node-path/join backups-path (first backup-files))
+        (-> (p/let [_ (electron-db/backup-db! db-name nil)
+                    backups (graph-backup/list-backups graphs-dir db-name)
+                    backup-path (graph-backup/backup-db-path graphs-dir db-name (:name (first backups)))
                     backup-db (new DatabaseSync backup-path)
                     stmt (.prepare ^js backup-db "select addr, content from kvs order by addr")
                     rows (.all stmt)
                     _ (.close backup-db)]
-                (is (= 1 (count backup-files)))
+                (is (= 1 (count backups)))
                 (is (= "a" (gobj/get (first rows) "addr")))
-                (is (= "alpha" (gobj/get (first rows) "content")))))
+                (is (= "alpha" (gobj/get (first rows) "content"))))
             (p/catch (fn [e]
                        (is false (str "unexpected error: " e))))
             (p/finally (fn []
                          (set! cli-common-graph/get-db-graphs-dir original-get-db-graphs-dir)
                          (done))))))))
 
-(deftest backup-db-uses-backup-file-rules
+(deftest backup-db-uses-shared-backup-layout-and-metadata
   (async done
     (let [graphs-dir (node-helper/create-tmp-dir "electron-db-backup-rules")
           db-name "logseq_db_demo"
           [_ db-path] (common-sqlite/get-db-full-path graphs-dir db-name)
-          backups-path (common-sqlite/get-db-backups-path graphs-dir db-name)
           sqlite-calls (atom [])
           backup-calls (atom [])]
       (fs/ensureDirSync (node-path/dirname db-path))
@@ -101,17 +118,16 @@
             (p/let [_ (electron-db/backup-db! db-name nil)]
               (is (= 1 (count @sqlite-calls)))
               (is (= db-path (first (first @sqlite-calls))))
-              (is (= 1 (count @backup-calls)))
-              (let [{:keys [repo dir relative-path ext content opts]} (first @backup-calls)]
-                (is (= db-name repo))
-                (is (= nil dir))
-                (is (= nil relative-path))
-                (is (= ".sqlite" ext))
-                (is (= "copied" content))
-                (is (= backups-path (:backups-dir opts)))
-                (is (= 12 (:keep-versions opts)))
-                (is (contains? opts :force-backup?))
-                (is (nil? (:force-backup? opts))))))
+              (is (empty? @backup-calls))
+              (let [backups (graph-backup/list-backups graphs-dir db-name)
+                    backup-name (:name (first backups))
+                    backup-db-path (graph-backup/backup-db-path graphs-dir db-name backup-name)
+                    metadata (read-edn-file (graph-backup/backup-metadata-path graphs-dir db-name backup-name))]
+                (is (= 1 (count backups)))
+                (is (= "copied" (fs/readFileSync backup-db-path "utf8")))
+                (is (= db-name (:repo metadata)))
+                (is (= :electron-auto (:source metadata)))
+                (is (= backup-name (:name metadata))))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
@@ -121,7 +137,6 @@
     (let [graphs-dir (node-helper/create-tmp-dir "electron-db-backup-custom-snapshot")
           db-name "logseq_db_demo"
           [_ db-path] (common-sqlite/get-db-full-path graphs-dir db-name)
-          backups-path (common-sqlite/get-db-backups-path graphs-dir db-name)
           custom-calls (atom [])
           fallback-calls (atom [])
           backup-calls (atom [])]
@@ -147,13 +162,111 @@
               (is (= [[db-path (second (first @custom-calls))]]
                      @custom-calls))
               (is (empty? @fallback-calls))
-              (is (= 1 (count @backup-calls)))
-              (let [{:keys [repo ext content opts]} (first @backup-calls)]
-                (is (= db-name repo))
-                (is (= ".sqlite" ext))
-                (is (= "worker-copy" content))
-                (is (= backups-path (:backups-dir opts)))
-                (is (= true (:force-backup? opts))))))
+              (is (empty? @backup-calls))
+              (let [backups (graph-backup/list-backups graphs-dir db-name)
+                    backup-name (:name (first backups))
+                    backup-db-path (graph-backup/backup-db-path graphs-dir db-name backup-name)
+                    metadata (read-edn-file (graph-backup/backup-metadata-path graphs-dir db-name backup-name))]
+                (is (= 1 (count backups)))
+                (is (= "worker-copy" (fs/readFileSync backup-db-path "utf8")))
+                (is (= :electron-manual (:source metadata))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest backup-db-via-worker-uses-shared-layout-and-worker-snapshot
+  (async done
+    (let [graphs-dir (node-helper/create-tmp-dir "electron-db-worker-backup")
+          db-name "logseq_db_demo"
+          runtime {:runtime true}
+          worker-calls (atom [])
+          backup-calls (atom [])]
+      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+                          db-worker/ensure-runtime! (fn [repo window-id]
+                                                      (swap! worker-calls conj [:ensure-runtime repo window-id])
+                                                      (p/resolved runtime))
+                          cli-transport/invoke (fn [runtime' method args]
+                                                 (swap! worker-calls conj [:invoke runtime' method args])
+                                                 (fs/writeFileSync (second args) "worker-copy" "utf8")
+                                                 (p/resolved {:path (second args)}))
+                          backup-file/backup-file (fn [& args]
+                                                    (swap! backup-calls conj args)
+                                                    (p/resolved nil))]
+            (p/let [result (electron-db/backup-db-via-worker! db-name 7 {:force-backup? true})
+                    backups (graph-backup/list-backups graphs-dir db-name)
+                    backup-name (:name (first backups))
+                    final-db-path (graph-backup/backup-db-path graphs-dir db-name backup-name)
+                    metadata (read-edn-file (graph-backup/backup-metadata-path graphs-dir db-name backup-name))
+                    [_ runtime' method args] (second @worker-calls)
+                    [repo snapshot-path] args]
+              (is (= true (:created? result)))
+              (is (= final-db-path (:path result)))
+              (is (= [[:ensure-runtime db-name 7]
+                      [:invoke runtime :thread-api/backup-db-sqlite [db-name snapshot-path]]]
+                     @worker-calls))
+              (is (= runtime runtime'))
+              (is (= :thread-api/backup-db-sqlite method))
+              (is (= db-name repo))
+              (is (not= final-db-path snapshot-path))
+              (is (= "worker-copy" (fs/readFileSync final-db-path "utf8")))
+              (is (= :electron-manual (:source metadata)))
+              (is (empty? @backup-calls))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest automatic-worker-backup-throttles-recent-auto-backups
+  (async done
+    (let [graphs-dir (node-helper/create-tmp-dir "electron-db-worker-throttle")
+          db-name "logseq_db_demo"
+          runtime {:runtime true}
+          worker-calls (atom [])]
+      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+                          db-worker/ensure-runtime! (fn [repo window-id]
+                                                      (swap! worker-calls conj [:ensure-runtime repo window-id])
+                                                      (p/resolved runtime))
+                          cli-transport/invoke (fn [runtime' method args]
+                                                 (swap! worker-calls conj [:invoke runtime' method args])
+                                                 (fs/writeFileSync (second args) "worker-copy" "utf8")
+                                                 (p/resolved {:path (second args)}))]
+            (p/let [first-result (electron-db/backup-db-via-worker! db-name 7 {})
+                    second-result (electron-db/backup-db-via-worker! db-name 7 {})]
+              (is (= true (:created? first-result)))
+              (is (= {:backup-name nil
+                      :path nil
+                      :created? false
+                      :reason :too-soon}
+                     second-result))
+              (is (= 1 (count (filter #(= :invoke (first %)) @worker-calls))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest automatic-worker-backup-retains-only-twelve-auto-backups
+  (async done
+    (let [graphs-dir (node-helper/create-tmp-dir "electron-db-worker-retention")
+          db-name "logseq_db_demo"
+          runtime {:runtime true}
+          worker-calls (atom [])]
+      (doseq [idx (range 12)]
+        (write-backup! graphs-dir db-name (str "auto-" idx) :electron-auto idx))
+      (write-backup! graphs-dir db-name "manual-old" :electron-manual 0)
+      (write-backup! graphs-dir db-name "cli-old" :cli 0)
+      (-> (p/with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)
+                          db-worker/ensure-runtime! (fn [repo window-id]
+                                                      (swap! worker-calls conj [:ensure-runtime repo window-id])
+                                                      (p/resolved runtime))
+                          cli-transport/invoke (fn [runtime' method args]
+                                                 (swap! worker-calls conj [:invoke runtime' method args])
+                                                 (fs/writeFileSync (second args) "worker-copy" "utf8")
+                                                 (p/resolved {:path (second args)}))]
+            (p/let [result (electron-db/backup-db-via-worker! db-name 7 {})
+                    backup-names (set (map :name (graph-backup/list-backups graphs-dir db-name)))]
+              (is (= true (:created? result)))
+              (is (not (contains? backup-names "auto-0")))
+              (is (contains? backup-names "manual-old"))
+              (is (contains? backup-names "cli-old"))
+              (is (= 14 (count backup-names)))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))

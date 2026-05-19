@@ -37,16 +37,21 @@
   (.writeHead res status #js {"Content-Type" "text/plain"})
   (.end res text))
 
-(defn- <read-body
+(defn- <read-body-buffer
   [^js req]
   (p/create
    (fn [resolve reject]
      (let [chunks (array)]
        (.on req "data" (fn [chunk] (.push chunks chunk)))
        (.on req "end" (fn []
-                        (let [buf (js/Buffer.concat chunks)]
-                          (resolve (.toString buf "utf8")))))
+                        (resolve (js/Buffer.concat chunks))))
        (.on req "error" reject)))))
+
+(defn- <read-body
+  [^js req]
+  (p/then (<read-body-buffer req)
+          (fn [buf]
+            (.toString buf "utf8"))))
 
 (defn- parse-args
   [argv]
@@ -133,6 +138,19 @@
                                  :elapsed-ms (- (js/Date.now) started-at)}))
                     10000)]
     (-> (p/do! (.remoteInvoke proxy method-str args-transit))
+        (p/finally (fn []
+                     (js/clearTimeout timeout-id))))))
+
+(defn- <invoke-binary!
+  [^js proxy method-str method-kw repo payload]
+  (let [started-at (js/Date.now)
+        timeout-id (js/setTimeout
+                    (fn []
+                      (log/warn :db-worker-node-invoke-timeout
+                                {:method (or method-kw method-str)
+                                 :elapsed-ms (- (js/Date.now) started-at)}))
+                    10000)]
+    (-> (p/do! (.remoteInvokeBinary proxy method-str repo payload))
         (p/finally (fn []
                      (js/clearTimeout timeout-id))))))
 
@@ -286,9 +304,11 @@
   (http/createServer
    (fn [^js req ^js res]
      (let [url (.-url req)
+           parsed-url (js/URL. url "http://127.0.0.1")
+           request-path (.-pathname parsed-url)
            method (.-method req)]
        (cond
-         (= url "/healthz")
+         (= request-path "/healthz")
          (send-json! res (if @*ready? 200 503)
                      (health-payload {:bound-repo bound-repo
                                       :host host
@@ -296,10 +316,40 @@
                                       :owner-source owner-source
                                       :root-dir root-dir}))
 
-         (= url "/v1/events")
+         (= request-path "/v1/events")
          (sse-handler req res)
 
-         (= url "/v1/invoke")
+         (= request-path "/v1/import-db-binary")
+         (if (= method "POST")
+           (let [repo (.get (.-searchParams parsed-url) "repo")
+                 method-kw :thread-api/import-db-binary
+                 method-str (normalize-method-str method-kw)]
+             (-> (p/let [binary (<read-body-buffer req)
+                         args-for-validation [repo binary]]
+                   (if-let [{:keys [status error]} (repo-error method-kw args-for-validation bound-repo)]
+                     (send-json! res status {:ok false :error error})
+                     (p/let [_ (when (contains? write-methods method-kw)
+                                 (let [{:keys [path lock]} @*lock-info]
+                                   (db-lock/assert-lock-owner! path lock)))
+                             result (<invoke-binary! proxy method-str method-kw repo binary)]
+                       (send-json! res 200 {:ok true :resultTransit (ldb/write-transit-str result)}))))
+                 (p/catch (fn [error]
+                            (let [data (ex-data error)
+                                  status (invoke-error-status data)
+                                  code (invoke-error-code data)
+                                  message (invoke-error-message error data)
+                                  payload {:ok false
+                                           :error {:code code
+                                                   :message message}}]
+                              (log/error :db-worker-node-invoke-failed
+                                         {:status status
+                                          :code code
+                                          :method method-str
+                                          :error error})
+                              (send-json! res status payload))))))
+           (send-text! res 405 "method-not-allowed"))
+
+         (= request-path "/v1/invoke")
          (if (= method "POST")
            (-> (p/let [body (<read-body req)
                        payload (js/JSON.parse body)

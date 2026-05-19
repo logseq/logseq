@@ -27,8 +27,9 @@
   (str "tag-group:" tag-id ":node:" node-id))
 
 (defn- node-priority
-  [node]
-  [(if (= "tag" (:kind node)) 0 1)
+  [pinned-node-ids node]
+  [(if (contains? pinned-node-ids (:id node)) 0 1)
+   (if (= "tag" (:kind node)) 0 1)
    (- (or (:degree node) 0))
    (str (or (node-source-id node) ""))])
 
@@ -48,11 +49,13 @@
     (str cx ":" cy)))
 
 (defn select-label-node-ids
-  [nodes {:keys [viewport transform screen-cell-width screen-cell-height max-labels]
+  [nodes {:keys [viewport transform screen-cell-width screen-cell-height max-labels pinned-node-ids]
           :or {screen-cell-width 132
                screen-cell-height 24
                max-labels 180}}]
-  (loop [remaining (sort-by node-priority (filter #(visible-node? % viewport) nodes))
+  (let [pinned-node-ids (set pinned-node-ids)]
+    (loop [remaining (sort-by (partial node-priority pinned-node-ids)
+                              (filter #(visible-node? % viewport) nodes))
          occupied #{}
          selected []]
     (if (or (empty? remaining)
@@ -64,7 +67,11 @@
           (recur (rest remaining) occupied selected)
           (recur (rest remaining)
                  (conj occupied k)
-                 (conj selected (:id node))))))))
+                 (conj selected (:id node)))))))))
+
+(defn select-scoped-label-node-ids
+  [nodes opts]
+  (select-label-node-ids nodes opts))
 
 (defn label-display-text
   [label hovered?]
@@ -92,6 +99,20 @@
   [^js ticker]
   (set! (.-maxFPS ticker) graph-target-fps)
   ticker)
+
+(defn fps-overlay-position
+  ([width height text-width text-height]
+   (fps-overlay-position width height text-width text-height nil))
+  ([width height text-width text-height {:keys [margin padding-x padding-y]
+                                         :or {margin 12
+                                              padding-x 8
+                                              padding-y 4}}]
+   {:x (max margin (- (or width 0) margin padding-x (or text-width 0)))
+    :y (max margin (- (or height 0) margin padding-y (or text-height 0)))}))
+
+(defn fps-overlay-enabled?
+  [dev?]
+  (true? dev?))
 
 (defn readable-edge-label-angle
   [from-x from-y to-x to-y]
@@ -244,12 +265,15 @@
     []))
 
 (defn node-emphasis
-  [{:keys [selected-ids connected-ids preview-ids hovered-id select-mode?]} node-id]
+  [{:keys [selected-ids connected-ids preview-ids hovered-id select-mode?
+           tag-focus-mode? tag-focus-ids]} node-id]
   (cond
     (contains? selected-ids node-id) :selected
     (= hovered-id node-id) :hovered
     (contains? connected-ids node-id) :connected
     (contains? preview-ids node-id) :preview
+    (and tag-focus-mode? (contains? tag-focus-ids node-id)) :preview
+    tag-focus-mode? :background
     select-mode? :dimmed
     :else :normal))
 
@@ -261,11 +285,24 @@
 
 (def linked-label-visible-scale 2.1)
 
+(declare normalize-view-mode)
+
 (defn clamp-zoom-scale
   [scale]
   (-> scale
       (max min-zoom-scale)
       (min max-zoom-scale)))
+
+(defn wheel-zoom-transform
+  [{:keys [world-x world-y scale]} {:keys [screen-x screen-y delta-y locked?]}]
+  (when-not locked?
+    (let [current-scale (or scale 1)
+          factor (if (pos? delta-y) 0.9 1.1)
+          next-scale (clamp-zoom-scale (* current-scale factor))]
+      {:x (- screen-x (* world-x next-scale))
+       :y (- screen-y (* world-y next-scale))
+       :scale next-scale})))
+
 
 (defn node-click-action
   [previous-click node-id {:keys [selected? open?]} now]
@@ -289,6 +326,15 @@
      :next-click {:node-id node-id
                   :time now}}))
 
+(defn- label-state
+  [target-alpha update? hovered-only? include-select-scope? selected-only? active-only?]
+  (cond-> {:target-alpha target-alpha
+           :update? update?
+           :hovered-only? hovered-only?}
+    include-select-scope?
+    (assoc :selected-only? selected-only?
+           :active-only? active-only?)))
+
 (defn label-render-state
   ([hovered-node-id visibility-state label-alpha]
    (label-render-state hovered-node-id #{} #{} visibility-state label-alpha false))
@@ -296,45 +342,106 @@
    (label-render-state hovered-node-id active-node-ids active-node-ids {:label-visible? label-visible?} label-alpha true))
   ([hovered-node-id selected-node-ids active-node-ids visibility-state label-alpha]
    (label-render-state hovered-node-id selected-node-ids active-node-ids visibility-state label-alpha true))
-  ([hovered-node-id selected-node-ids active-node-ids {:keys [label-visible? linked-label-visible?]} _ include-select-scope?]
+  ([hovered-node-id selected-node-ids active-node-ids
+    {:keys [label-visible? linked-label-visible?]} _ include-select-scope?]
    (let [linked-label-visible? (if (some? linked-label-visible?)
                                  linked-label-visible?
                                  label-visible?)
-         select-mode? (seq selected-node-ids)
-         active-mode? (seq active-node-ids)
-         selected-labels-only? (and select-mode? (not linked-label-visible?))]
-     (cond
-       hovered-node-id
-       (cond-> {:target-alpha 1.0
-                :update? true
-                :hovered-only? (not (or label-visible? active-mode?))}
-         include-select-scope?
-         (assoc :selected-only? selected-labels-only?
-                :active-only? (and active-mode? linked-label-visible?)))
+           select-mode? (seq selected-node-ids)
+           active-mode? (seq active-node-ids)
+           active-labels-only? (boolean select-mode?)]
+       (cond
+         hovered-node-id
+         (label-state 1.0
+                      true
+                      (not (or label-visible? active-mode?))
+                      include-select-scope?
+                      false
+                      (or active-labels-only?
+                          (and active-mode? linked-label-visible?)))
 
-       label-visible?
-       (cond-> {:target-alpha 1.0
-                :update? true
-                :hovered-only? false}
-         include-select-scope?
-         (assoc :selected-only? selected-labels-only?
-                :active-only? (and active-mode? linked-label-visible?)))
+         label-visible?
+         (label-state 1.0
+                      true
+                      false
+                      include-select-scope?
+                      false
+                      (or active-labels-only?
+                          (and active-mode? linked-label-visible?)))
 
-       select-mode?
-       (cond-> {:target-alpha 1.0
-                :update? true
-                :hovered-only? false}
-         include-select-scope?
-         (assoc :selected-only? selected-labels-only?
-                :active-only? false))
+         select-mode?
+         (label-state 1.0 true false include-select-scope? false true)
 
-       :else
-       (cond-> {:target-alpha 0.0
-                :update? false
-                :hovered-only? true}
-         include-select-scope?
-         (assoc :selected-only? false
-                :active-only? false))))))
+         :else
+         (label-state 0.0 false true include-select-scope? false false)))))
+
+(defn focus-labels-only?
+  [focused-node-ids _visibility-state]
+  (boolean (seq (set focused-node-ids))))
+
+(defn focused-label-node?
+  [focused-node-ids node]
+  (contains? (set focused-node-ids) (:id node)))
+
+(defn tag-related-node-ids
+  [tag-ids neighbor-map tag-id?]
+  (let [tag-ids (set tag-ids)
+        tag-id? (set tag-id?)
+        object-ids (->> tag-ids
+                        (mapcat #(get neighbor-map %))
+                        (remove tag-id?)
+                        set)
+        crossed-tag-ids (->> object-ids
+                             (mapcat #(get neighbor-map %))
+                             (filter tag-id?)
+                             set)]
+    (set/union tag-ids object-ids crossed-tag-ids)))
+
+(defn tag-focus-active-level?
+  [focus-level]
+  (= :objects focus-level))
+
+(defn tag-focus-active-node-ids
+  [_visible-tag-ids focus-level focused-tag-id visible-object-ids crossed-tag-ids]
+  (case focus-level
+    :objects
+    (if focused-tag-id
+      (set/union #{focused-tag-id}
+                 (set visible-object-ids)
+                 (set crossed-tag-ids))
+      #{})
+
+    (if focused-tag-id #{focused-tag-id} #{})))
+
+(defn tag-focus-display-node-ids
+  ([visible-tag-ids focus-level focused-tag-id visible-object-ids crossed-tag-ids]
+   (let [visible-tag-ids (set visible-tag-ids)]
+     (case focus-level
+       :objects
+       (if focused-tag-id
+         (set/union visible-tag-ids
+                    (set visible-object-ids)
+                    (set crossed-tag-ids))
+         visible-tag-ids)
+
+       visible-tag-ids)))
+  ([visible-tag-ids focus-level focused-tag-id visible-object-ids crossed-tag-ids _background-object-ids]
+   (tag-focus-active-node-ids visible-tag-ids
+                              focus-level
+                              focused-tag-id
+                              visible-object-ids
+                              crossed-tag-ids)))
+
+(defn tag-focus-context-node-ids
+  [_visible-tag-ids focus-level focused-tag-id visible-object-ids crossed-tag-ids background-node-ids]
+  (if (and (= :objects focus-level)
+           focused-tag-id)
+    (tag-focus-active-node-ids nil
+                               focus-level
+                               focused-tag-id
+                               visible-object-ids
+                               crossed-tag-ids)
+    (set background-node-ids)))
 
 (defn layout-bounds
   [nodes]
@@ -382,6 +489,10 @@
     :page :page
     :tags-and-objects))
 
+(defn labels-visible-by-default?
+  [view-mode]
+  (= :page (normalize-view-mode view-mode)))
+
 (defn- color->int
   [hex-color]
   (js/parseInt (subs hex-color 1) 16))
@@ -426,17 +537,24 @@
 
 (defn- build-fast-degree-map
   [nodes links]
-  (let [node-id-set (js/Set.)
+  (let [node-count (count nodes)
+        link-count (count links)
+        node-id-set (js/Set.)
         degree (js/Map.)]
-    (doseq [{:keys [id]} nodes]
-      (.add node-id-set id))
-    (doseq [{:keys [source target]} links]
-      (when (and source
-                 target
-                 (.has node-id-set source)
-                 (.has node-id-set target))
-        (.set degree source (inc (or (.get degree source) 0)))
-        (.set degree target (inc (or (.get degree target) 0)))))
+    (loop [idx 0]
+      (when (< idx node-count)
+        (.add node-id-set (:id (nth nodes idx)))
+        (recur (inc idx))))
+    (loop [idx 0]
+      (when (< idx link-count)
+        (let [{:keys [source target]} (nth links idx)]
+          (when (and source
+                     target
+                     (.has node-id-set source)
+                     (.has node-id-set target))
+            (.set degree source (inc (or (.get degree source) 0)))
+            (.set degree target (inc (or (.get degree target) 0)))))
+        (recur (inc idx))))
     degree))
 
 (defn display-links
@@ -474,10 +592,14 @@
           link)))
      links)))
 
+(def tag-view-non-tag-radius 4.2)
+
 (defn- node-radius
   ([kind degree]
-   (node-radius kind degree false))
+   (node-radius kind degree false false))
   ([kind degree grid-object?]
+   (node-radius kind degree grid-object? false))
+  ([kind degree grid-object? tags-view?]
    (let [base (case kind
                 "tag" 7.4
                 "object" 4.4
@@ -486,25 +608,30 @@
          radius (+ base (min (if (= kind "tag") 15.0 12.0)
                              (* (if (= kind "tag") 4.1 3.4)
                                 (js/Math.sqrt (double degree)))))]
-     (if grid-object?
-       (-> radius
-           (min 5.8)
-           (max 3.2))
-       radius))))
+     (if (and tags-view?
+              (not= "tag" kind))
+       tag-view-non-tag-radius
+       (if grid-object?
+         (-> radius
+             (min 5.8)
+             (max 3.2))
+         radius)))))
 
 (defn- decorate-node
-  [node degree dark? x y]
-  (let [kind (:kind node)
-        d (get degree (node-source-id node) 0)
-        color (or (:color node)
-                  (node-color kind dark?))]
-    (assoc node
-           :x x
-           :y y
-           :radius (node-radius kind d (:grid-object? node))
-           :degree d
-           :color color
-           :color-int (color->int color))))
+  ([node degree dark? x y]
+   (decorate-node node degree dark? x y nil))
+  ([node degree dark? x y {:keys [tags-view?]}]
+   (let [kind (:kind node)
+         d (get degree (node-source-id node) 0)
+         color (or (:color node)
+                   (node-color kind dark?))]
+     (assoc node
+            :x x
+            :y y
+            :radius (node-radius kind d (:grid-object? node) tags-view?)
+            :degree d
+            :color color
+            :color-int (color->int color)))))
 
 (defn- decorate-large-page-node
   [node x y d radius color-int]
@@ -522,7 +649,8 @@
                     :idx idx
                     :kind (:kind node)
                     :degree d
-                    :radius (node-radius (:kind node) d)}]
+                    :radius (or (:radius node)
+                                (node-radius (:kind node) d))}]
     (when (number? (:x node))
       (set! (.-x ^js result) (:x node)))
     (when (number? (:y node))
@@ -884,24 +1012,31 @@
         origin-x (/ (* (dec columns) spacing) 2)
         color-int (color->int (node-color "page" dark?))
         radius-by-degree (js/Map.)]
-    (mapv
-     (fn [idx node]
-       (let [col (mod idx columns)
-             row (js/Math.floor (/ idx columns))
-             x (- (* col spacing) origin-x)
-             y (* row spacing)]
-         (if degree
-           (let [d (or (.get ^js degree (node-source-id node)) 0)
-                 cached-radius (.get radius-by-degree d)
-                 radius (if (some? cached-radius)
-                          cached-radius
-                          (let [radius (node-radius (:kind node) d)]
-                            (.set radius-by-degree d radius)
-                            radius))]
-             (decorate-large-page-node node x y d radius color-int))
-           (decorate-large-page-node node x y 0 3.8 color-int))))
-     (range)
-     nodes)))
+    (loop [idx 0
+           col 0
+           row 0
+           result (transient [])]
+      (if (= idx node-count)
+        (persistent! result)
+        (let [node (nth nodes idx)
+              x (- (* col spacing) origin-x)
+              y (* row spacing)
+              layouted-node (if degree
+                              (let [d (or (.get ^js degree (:id node)) 0)
+                                    cached-radius (.get radius-by-degree d)
+                                    radius (if (some? cached-radius)
+                                             cached-radius
+                                             (let [radius (node-radius (:kind node) d)]
+                                               (.set radius-by-degree d radius)
+                                              radius))]
+                                (decorate-large-page-node node x y d radius color-int))
+                              (decorate-large-page-node node x y 0 3.8 color-int))
+              next-idx (inc idx)
+              next-col (inc col)]
+          (recur next-idx
+                 (if (= next-col columns) 0 next-col)
+                 (if (= next-col columns) (inc row) row)
+                 (conj! result layouted-node)))))))
 
 (defn- stabilize-all-pages-layout
   [nodes degree dark?]
@@ -1022,8 +1157,8 @@
                      (filter #(= "tag" (:kind %)))
                      (map :id)
                      set)
-        tags (filter #(contains? tag-ids (:id %)) nodes)
-        objects (remove #(contains? tag-ids (:id %)) nodes)
+        tags (vec (filter #(contains? tag-ids (:id %)) nodes))
+        objects (vec (remove #(contains? tag-ids (:id %)) nodes))
         object-links (tag-links-by-node-id links tag-ids)
         tag-count (max 1 (count tags))
         cluster-radius (max 360 (* 72 (js/Math.sqrt tag-count)))
@@ -1035,45 +1170,54 @@
                                           x (* cluster-radius (js/Math.cos angle))
                                           y (* cluster-radius (js/Math.sin angle))]
                                       [(:id tag) [x y]])))
-                                 tags)
-        counters* (atom {})]
+                                  tags)
+        tag-nodes (mapv (fn [tag]
+                          (let [[x y] (get tag-position-by-id (:id tag) [0 0])]
+                            (decorate-node (assoc tag
+                                                  :cluster-id (:id tag)
+                                                  :cluster-root? true
+                                                  :cluster-x x
+                                                  :cluster-y y)
+                                           degree
+                                           dark?
+                                           x
+                                           y
+                                           {:tags-view? true})))
+                        tags)]
     (vec
      (concat
-      (map (fn [tag]
-             (let [[x y] (get tag-position-by-id (:id tag) [0 0])]
-               (decorate-node (assoc tag
-                                     :cluster-id (:id tag)
-                                     :cluster-root? true
-                                     :cluster-x x
-                                     :cluster-y y)
-                              degree
-                              dark?
-                              x
-                              y)))
-           tags)
-      (map-indexed
-       (fn [idx object]
-         (let [linked-tag-id (some tag-ids (get object-links (:id object)))
-               cluster-idx (get @counters* linked-tag-id 0)
-               _ (when linked-tag-id
-                   (swap! counters* update linked-tag-id (fnil inc 0)))
-               [cx cy] (get tag-position-by-id linked-tag-id [0 0])
-               angle (+ (* idx 0.11) (* cluster-idx golden-angle))
-               radius (if linked-tag-id
-                        (+ 58 (* 10 (js/Math.sqrt (inc cluster-idx))))
-                        (+ 160 (* 20 (js/Math.sqrt (inc idx)))))
-               x (+ cx (* radius (js/Math.cos angle)))
-               y (+ cy (* radius (js/Math.sin angle)))]
-           (decorate-node (cond-> object
-                            linked-tag-id
-                            (assoc :cluster-id linked-tag-id
-                                   :cluster-x cx
-                                   :cluster-y cy))
-                          degree
-                          dark?
-                          x
-                          y)))
-       objects)))))
+      tag-nodes
+      (loop [idx 0
+             counters {}
+             result (transient [])]
+        (if (= idx (count objects))
+          (persistent! result)
+          (let [object (nth objects idx)
+                linked-tag-id (some tag-ids (get object-links (:id object)))
+                cluster-idx (get counters linked-tag-id 0)
+                counters (if linked-tag-id
+                           (update counters linked-tag-id (fnil inc 0))
+                           counters)
+                [cx cy] (get tag-position-by-id linked-tag-id [0 0])
+                angle (+ (* idx 0.11) (* cluster-idx golden-angle))
+                radius (if linked-tag-id
+                         (+ 58 (* 10 (js/Math.sqrt (inc cluster-idx))))
+                         (+ 160 (* 20 (js/Math.sqrt (inc idx)))))
+                x (+ cx (* radius (js/Math.cos angle)))
+                y (+ cy (* radius (js/Math.sin angle)))
+                node (decorate-node (cond-> object
+                                      linked-tag-id
+                                      (assoc :cluster-id linked-tag-id
+                                             :cluster-x cx
+                                             :cluster-y cy))
+                                    degree
+                                    dark?
+                                    x
+                                    y
+                                    {:tags-view? true})]
+            (recur (inc idx)
+                   counters
+                   (conj! result node)))))))))
 
 (defn- clustered-tags-grid-layout-nodes
   [nodes links degree dark?]
@@ -1116,7 +1260,8 @@
                               degree
                               dark?
                               x
-                              y)))
+                              y
+                              {:tags-view? true})))
            tags)
       (mapcat
        (fn [idx object]
@@ -1145,7 +1290,8 @@
                                degree
                                dark?
                                x
-                               y)))
+                               y
+                               {:tags-view? true})))
             group-ids)))
        (range)
        objects)))))
@@ -1175,13 +1321,13 @@
 
 (defn- merge-bounded-tag-force-layout
   [nodes force-layouted-nodes]
-  (let [node-by-id (into {} (map (juxt :id identity) nodes))
+  (let [node-map (into {} (map (juxt :id identity) nodes))
         force-by-id (into {} (map (juxt :id identity) force-layouted-nodes))
         cluster-delta-by-id (reduce
                              (fn [m {:keys [id x y kind]}]
                                (if (and (= "tag" kind)
-                                        (contains? node-by-id id))
-                                 (let [original (get node-by-id id)]
+                                        (contains? node-map id))
+                                 (let [original (get node-map id)]
                                    (assoc m id {:dx (- x (:x original))
                                                 :dy (- y (:y original))
                                                 :x x
@@ -1316,7 +1462,12 @@
                  (let [layouted-nodes (->> simulation-nodes
                                            (map (fn [^js sim-node]
                                                   (let [node (nth force-nodes (.-idx sim-node))]
-                                                    (decorate-node node degree dark? (.-x sim-node) (.-y sim-node)))))
+                                                    (decorate-node node
+                                                                   degree
+                                                                   dark?
+                                                                   (.-x sim-node)
+                                                                   (.-y sim-node)
+                                                                   {:tags-view? tags-mode?}))))
                                            vec)
                        layouted-nodes (if bounded-tag-force?
                                         (merge-bounded-tag-force-layout nodes layouted-nodes)

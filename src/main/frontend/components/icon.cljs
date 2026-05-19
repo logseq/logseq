@@ -149,7 +149,8 @@
       {:on-mouse-over #(reset! hover emoji)
        :on-mouse-out #()})})
    [:em-emoji {:id id
-               :style {:line-height 1}}]])
+               :style {:line-height 1
+                       :pointer-events "none"}}]])
 
 (defn item-render
   [item opts]

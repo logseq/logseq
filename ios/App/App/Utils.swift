@@ -8,6 +8,7 @@
 import Foundation
 import Capacitor
 import UIKit
+import WebKit
 
 @objc(Utils)
 public class Utils: CAPPlugin {
@@ -121,5 +122,25 @@ public class Utils: CAPPlugin {
       nav.overrideUserInterfaceStyle = style
       nav.viewControllers.forEach { $0.overrideUserInterfaceStyle = style }
     }
+  }
+
+  public override func handleWKWebViewURLAuthenticationChallenge(
+    _ challenge: URLAuthenticationChallenge,
+    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+  ) -> Bool {
+#if DEBUG
+    guard let serverURL = bridge?.config.serverURL,
+          serverURL.scheme == "https",
+          challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+          challenge.protectionSpace.host == serverURL.host,
+          let trust = challenge.protectionSpace.serverTrust else {
+      return false
+    }
+
+    completionHandler(.useCredential, URLCredential(trust: trust))
+    return true
+#else
+    return false
+#endif
   }
 }
