@@ -1943,7 +1943,14 @@
                       (map (fn [k]
                              (-> (string/replace (csk/->Camel_Snake_Case (name k)) "_" " ")
                                  (string/replace-first "Icon " ""))))
-                   ;; FIXME: somehow those icons don't work
+                      ;; csk/->Camel_Snake_Case treats "AB" in IconAB / IconAB2 / IconABOff
+                      ;; as an acronym and lowercases the B, producing labels "Ab" / "Ab 2"
+                      ;; / "Ab Off". The renderer's reverse lookup (label → tabler key)
+                      ;; then expects "IconAb" and misses the real "IconAB" export — so
+                      ;; the icon renders empty. Filter them out so they don't surface
+                      ;; as broken entries in search. Other consecutive-cap exports
+                      ;; (IconEPassport, IconSTurnDown) survive because the second cap
+                      ;; is followed by lowercase letters, which preserves the boundary.
                       (remove #{"Ab" "Ab 2" "Ab Off"}))]
       (reset! *tabler-icons result)
       result)))
