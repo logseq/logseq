@@ -117,6 +117,8 @@
                                      [?block :block/uuid ?block-uuid]
                                      [?comments-area :logseq.property.comments/blocks ?block]
                                      [?comments-area :block/tags :logseq.class/Comments]
+                                     [?comments-area :block/parent ?comments-area-parent]
+                                     [(not= ?comments-area-parent ?block)]
                                      [(missing? $ ?comments-area :logseq.property/deleted-at)]]
                                    block-uuids)]
          (mapv str result))))))

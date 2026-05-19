@@ -222,7 +222,7 @@
 
 .ls-block-comment-thread-button {
   flex: none;
-  align-self: center;
+  align-self: flex-start;
   width: 24px !important;
   min-width: 24px;
   height: 24px !important;
