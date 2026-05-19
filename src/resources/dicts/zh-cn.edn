@@ -988,6 +988,7 @@
  :mobile.settings/github "GitHub 仓库"
  :mobile.settings/report-bug "报告问题"
  :mobile.settings/revision "修订"
+ :mobile.settings/tabs "标签页"
  :mobile.settings/theme "主题"
  :mobile.settings/version "版本"
 

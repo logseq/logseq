@@ -1,5 +1,5 @@
 (ns frontend.components.dnd
-  (:require ["@dnd-kit/core" :refer [DndContext closestCenter MouseSensor useSensor useSensors]]
+  (:require ["@dnd-kit/core" :refer [DndContext closestCenter MouseSensor TouchSensor useSensor useSensors]]
             ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext verticalListSortingStrategy horizontalListSortingStrategy] :as sortable]
             ["@dnd-kit/utilities" :refer [CSS]]
             [cljs-bean.core :as bean]
@@ -41,14 +41,17 @@
   (when (some #(nil? (:id %)) col*)
     (js/console.error "dnd-kit items without id")
     (prn :col col*))
-  (let [col (filter :id col*)
+  (let [col (filterv :id col*)
         ids (mapv :id col)
+        ids-key (pr-str ids)
         items' (bean/->js ids)
         id->item (zipmap ids col)
         [items-state set-items] (rum/use-state items')
-        _ (hooks/use-effect! (fn [] (set-items items')) [col])
+        _ (hooks/use-effect! (fn [] (set-items items')) [ids-key])
         [_active-id set-active-id] (rum/use-state nil)
-        sensors (useSensors (useSensor MouseSensor (bean/->js {:activationConstraint {:distance 8}})))
+        sensors (useSensors (useSensor MouseSensor (bean/->js {:activationConstraint {:distance 8}}))
+                            (useSensor TouchSensor (bean/->js {:activationConstraint {:delay 120
+                                                                                      :tolerance 8}})))
         dnd-opts {:sensors sensors
                   :collisionDetection closestCenter
                   :onDragStart (fn [^js event]
@@ -56,7 +59,7 @@
                                    (set-active-id (.-id ^js (.-active event)))))
                   :onDragEnd (fn [^js event]
                                (let [active-id (.-id ^js (.-active event))
-                                     over-id (.-id ^js (.-over event))]
+                                     over-id (some-> ^js (.-over event) .-id)]
                                  (when active-id
                                    (when-not (= active-id over-id)
                                      (let [old-index (.indexOf ids active-id)

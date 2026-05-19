@@ -10,11 +10,13 @@
             [frontend.handler.route :as route-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [mobile.navigation :as mobile-nav]
             [mobile.search :as mobile-search]
             [mobile.state :as mobile-state]
+            [mobile.tabs :as mobile-tabs]
             [promesa.core :as p]))
 
 ;; Capacitor plugin instance (nil if native side hasn't shipped it yet).
@@ -260,28 +262,30 @@
     (add-graph-action-listener!)
     (add-keyboard-hack-listener!)))
 
+(defn- translated-tab
+  [tab]
+  (-> tab
+      (assoc :title (t (:title-key tab)))
+      (dissoc :title-key)))
+
+(defn selected-tab-ids
+  []
+  (mobile-tabs/selected-tab-ids
+   (storage/get :ls-mobile-tabs)
+   {:flashcards? (state/enable-flashcards?)}
+   (mobile-tabs/max-main-tabs (mobile-util/native-iphone?))))
+
 (defn configure
   []
-  (configure-tabs
-   (cond->
-    [{:id "home"
-      :title (t :nav/home)
-      :systemImage "house"
-      :role "normal"}
-     {:id "graphs"
-      :title (t :mobile.tab/graphs)
-      :systemImage "app.background.dotted"
-      :role "normal"}
-     {:id "capture"
-      :title (t :mobile.tab/capture)
-      :systemImage "tray"
-      :role "normal"}
-     {:id "go to"
-      :title (t :mobile.tab/go-to)
-      :systemImage "square.stack.3d.down.right"
-      :role "normal"}]
-     (mobile-util/native-android?)
-     (conj {:id "search"
-        :title (t :nav/search)
-            :systemImage "search"
-            :role "search"}))))
+  (let [tabs (->> (mobile-tabs/tab-configs
+                   (storage/get :ls-mobile-tabs)
+                   {:flashcards? (state/enable-flashcards?)}
+                   (mobile-tabs/max-main-tabs (mobile-util/native-iphone?)))
+                  (mapv translated-tab))]
+    (configure-tabs
+     (cond-> tabs
+       (mobile-util/native-android?)
+       (conj {:id "search"
+              :title (t :nav/search)
+              :systemImage "search"
+              :role "search"})))))
