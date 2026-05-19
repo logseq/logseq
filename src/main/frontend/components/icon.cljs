@@ -3901,6 +3901,14 @@
                           :on-click #(reset-and-call :remove)}
                          trash-icon)
 
+            (= delete-mode :suppress)
+            (shui/button {:variant :outline :size :sm :data-action "del"
+                          :data-topbar-stop "trash"
+                          :title (t :icon/hide-inherited-icon)
+                          :aria-label (t :icon/hide-inherited-icon)
+                          :on-click #(reset-and-call :remove-entirely)}
+                         trash-icon)
+
             (= delete-mode :two-option)
             (shui/dropdown-menu
              (shui/dropdown-menu-trigger
@@ -6345,6 +6353,13 @@
                           :on-click #(flag-delete-and-call :remove)}
                          trash-icon)
 
+            (= delete-mode :suppress)
+            (shui/button {:variant :outline :size :sm :data-action "del"
+                          :title (t :icon/hide-inherited-icon)
+                          :aria-label (t :icon/hide-inherited-icon)
+                          :on-click #(flag-delete-and-call :remove-entirely)}
+                         trash-icon)
+
             (= delete-mode :two-option)
             (shui/dropdown-menu
              (shui/dropdown-menu-trigger
@@ -6467,9 +6482,13 @@
    - `:remove` — entity has an own icon but no class inheritance source
      (or scope is class default-icon itself, which has no inheritance above
      it). Single-click retract.
-   - `:hidden` — nothing to delete: entity has no own icon, OR entity is
-     suppressed via `:type :none` (restoration lives in the page-title
-     affordance, not here).
+   - `:suppress` — entity has NO own icon but IS inheriting a class
+     default-icon. Single-click writes `{:type :none}` to hide the
+     inherited icon on this entity only. Recovery is via the page-title
+     'Restore icon' affordance.
+   - `:hidden` — nothing to act on: no own icon and no class default
+     to suppress, OR entity is already suppressed via `:type :none`
+     (restoration lives in the page-title affordance, not here).
 
    Reads `:block/tags` + `:logseq.property.class/default-icon` so
    `db-mixins/query` registers them as render deps — the trash UI updates
@@ -6491,13 +6510,20 @@
         ;; sync-clear path at :3974-3980 already handles this as one action.
         synced-class? (and entity
                            (ldb/class? entity)
+                           (= own (:logseq.property/icon entity))
                            (= own (:logseq.property.class/default-icon entity)))]
     (cond
-      none?                       :hidden
-      (not has-real-own?)         :hidden
-      synced-class?               :remove
-      (or class-default tag-icon) :two-option
-      :else                       :remove)))
+      none?                                      :hidden
+      ;; No own override but a class default-icon inherits in.
+      ;; Single-click "Hide inherited" writes :none sentinel.
+      ;; Tag-icon inheritance (a tag's OWN icon, not its class default)
+      ;; is intentionally excluded — that's not a "user opted into a
+      ;; default" relationship, so suppression has no clear UX story there.
+      (and (not has-real-own?) class-default)    :suppress
+      (not has-real-own?)                        :hidden
+      synced-class?                              :remove
+      (or class-default tag-icon)                :two-option
+      :else                                      :remove)))
 
 (rum/defcs ^:large-vars/cleanup-todo icon-search < rum/reactive db-mixins/query
   (rum/local "" ::q)
@@ -7168,6 +7194,17 @@
                             :on-click #(reset-and-call :remove)}
                            trash-icon)
 
+              (= delete-mode :suppress)
+              ;; Same trash glyph + single click as :remove, but the action
+              ;; is :remove-entirely (writes :none) to hide the inherited
+              ;; class default-icon on this entity. Tooltip differentiates.
+              (shui/button {:variant :outline :size :sm :data-action "del"
+                            :data-topbar-stop "trash"
+                            :title (t :icon/hide-inherited-icon)
+                            :aria-label (t :icon/hide-inherited-icon)
+                            :on-click #(reset-and-call :remove-entirely)}
+                           trash-icon)
+
               (= delete-mode :two-option)
               (shui/dropdown-menu
                (shui/dropdown-menu-trigger
@@ -7404,7 +7441,7 @@
           (constantly [])
           (fn [{:keys [id]}]
             (icon-search
-             {:on-chosen (fn [e icon-value keep-popup?]
+             {:on-chosen (fn [e icon-value & [keep-popup?]]
                            ;; Set the optimistic local mirror BEFORE the
                            ;; async DB write fires. Lives at this
                            ;; outermost wrapper so every commit path
@@ -7413,7 +7450,13 @@
                            ;; picker close commits) — they all funnel
                            ;; through this on-chosen.
                            (set-pending-icon! icon-value)
-                           (on-chosen e icon-value)
+                           ;; Forward the third arg as-is — it carries either
+                           ;; `keep-popup?` (a bool, for in-picker partial
+                           ;; commits) or an `action` keyword (for delete
+                           ;; flows like :revert / :remove-entirely). The
+                           ;; downstream on-chosen handles both shapes; we
+                           ;; just need to NOT drop it.
+                           (on-chosen e icon-value keep-popup?)
                            (when-not (true? keep-popup?) (shui/popup-hide! id)))
               :icon-value normalized-icon-value
               :page-title page-title

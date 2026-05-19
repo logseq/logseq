@@ -860,6 +860,7 @@
 
  :icon/back "返回"
  :icon/emojis-count "表情符号（{1}）"
+ :icon/hide-inherited-icon "隐藏继承的图标"
  :icon/icons-count "图标（{1}）"
  :icon/matched-count "匹配结果（{1}）"
  :icon/remove-entirely "完全移除"

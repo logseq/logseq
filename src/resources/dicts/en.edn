@@ -864,6 +864,7 @@
 
  :icon/back "Back"
  :icon/emojis-count "Emojis ({1})"
+ :icon/hide-inherited-icon "Hide inherited icon"
  :icon/icons-count "Icons ({1})"
  :icon/matched-count "Matched ({1})"
  :icon/remove-entirely "Remove entirely"

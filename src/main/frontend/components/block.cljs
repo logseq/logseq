@@ -3970,9 +3970,12 @@
                                                                           (:db/id block)
                                                                           :logseq.property.class/default-icon
                                                                           icon-data)))
-                                                                     ;; del — branch on action keyword from the dropdown
-                                                                     (case action
-                                                                       :remove-entirely
+                                                                     ;; del — branch on action keyword from the dropdown.
+                                                                     ;; Use `cond` not `case` — CLJS `case` with keyword
+                                                                     ;; tests has shown subtle interaction bugs elsewhere
+                                                                     ;; in this file.
+                                                                     (cond
+                                                                       (= action :remove-entirely)
                                                                        ;; Suppress inheritance: write the :none sentinel.
                                                                        ;; Don't touch class default-icon — user wants
                                                                        ;; "no icon" only on THIS entity.
@@ -3981,6 +3984,7 @@
                                                                         :logseq.property/icon
                                                                         {:type :none})
 
+                                                                       :else
                                                                        ;; :revert (from dropdown) or :remove / nil (from
                                                                        ;; single-option immediate delete): retract the
                                                                        ;; property so inheritance kicks in.
