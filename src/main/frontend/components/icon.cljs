@@ -3207,7 +3207,7 @@
 (declare keyboard-nav-controller)
 (declare color-picker)
 
-(rum/defcs asset-picker < rum/reactive db-mixins/query
+(rum/defcs ^:large-vars/cleanup-todo asset-picker < rum/reactive db-mixins/query
   (rum/local "" ::search-q)
   (rum/local true ::loading?) ;; Start with loading state
   (rum/local nil ::loaded-assets) ;; Cached assets loaded async
@@ -3358,9 +3358,9 @@
                    state)}
   [state {:keys [on-chosen on-back on-delete del-btn? delete-mode current-icon avatar-context page-title
                  *color preview-target-db-id preview-target-db-ids preview-inheritor-db-ids property]
-          :or {property :logseq.property/icon
-               delete-mode (if del-btn? :remove :hidden)}}]
-  (let [*search-q (::search-q state)
+          :or {property :logseq.property/icon}}]
+  (let [delete-mode (or delete-mode (if del-btn? :remove :hidden))
+        *search-q (::search-q state)
         *loading? (::loading? state)
         *loaded-assets (::loaded-assets state)
         *web-query-debounced (::web-query-debounced state)
@@ -5290,8 +5290,9 @@
          (fn [^js e]
            (let [region @*focus-region
                  code (.-keyCode e)]
-             (if (and *tab (.-metaKey e) (.-altKey e))
-               ;; ⌥⌘1/2/3 toggle section collapse on the All tab (icon-picker only)
+             (if (and *tab (util/meta-key? e) (.-altKey e))
+               ;; Alt+meta + 1/2/3 toggles section collapse on the All tab
+               ;; (icon-picker only). Mac: ⌥⌘1/2/3 — Win/Linux: Ctrl+Alt+1/2/3.
                (when (= @*tab :all)
                  (let [section-name (case (.-keyCode e)
                                       49 "Recently used"
@@ -6272,9 +6273,9 @@
                        (on-chosen nil icon-item true)
                        (add-used-item! icon-item)))
                    s)}
-  [state {:keys [on-chosen on-back on-delete del-btn? delete-mode page-title]
-          :or {delete-mode (if del-btn? :remove :hidden)}}]
-  (let [*text-value (::text-value state)
+  [state {:keys [on-chosen on-back on-delete del-btn? delete-mode page-title]}]
+  (let [delete-mode (or delete-mode (if del-btn? :remove :hidden))
+        *text-value (::text-value state)
         *alignment (::alignment state)
         *color (::color state)
         *mode (::mode state)
