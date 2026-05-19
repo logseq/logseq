@@ -6,6 +6,7 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -40,14 +41,21 @@
 (defn- batch-write-icon!
   [blocks icon]
   (if (or (nil? icon) (contains? #{:avatar :text} (:type icon)))
-    ;; Per-block writes (avatar/text need per-row initials; clear/nil applies uniformly)
-    (doseq [block blocks]
-      (if (nil? icon)
-        (property-handler/remove-block-property! (:db/id block) :logseq.property/icon)
-        (db-property-handler/set-block-property!
-         (:db/id block)
-         :logseq.property/icon
-         (icon-data-for-block icon block))))
+    ;; Per-block writes (avatar/text need per-row initials; clear/nil applies
+    ;; uniformly). Wrap the doseq in one outliner transact! so all N writes
+    ;; commit atomically — partial-failure used to leave the selection in a
+    ;; mixed state. The inner handler calls each open their own transact!,
+    ;; but the macro short-circuits when an outer binding is active, so this
+    ;; produces a single DB tx, undo step, and reactive re-render.
+    (ui-outliner-tx/transact!
+     {:outliner-op :set-block-properties}
+     (doseq [block blocks]
+       (if (nil? icon)
+         (property-handler/remove-block-property! (:db/id block) :logseq.property/icon)
+         (db-property-handler/set-block-property!
+          (:db/id block)
+          :logseq.property/icon
+          (icon-data-for-block icon block)))))
     ;; Uniform value across blocks (icon, emoji, image): single batch transaction
     (property-handler/batch-set-block-property!
      (map :db/id blocks)
