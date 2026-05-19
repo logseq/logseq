@@ -144,3 +144,45 @@
     (is (= #{:logseq.class/Comments}
            (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid comments-area-uuid]))))))
     (is (empty? (:block/tags (d/entity @conn [:block/uuid ordinary-child-uuid]))))))
+
+(deftest migrate-65-29-adds-single-block-comment-targets
+  (let [conn (d/create-conn db-schema/schema)
+        target-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        comments-area-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        range-comments-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        range-target-uuid #uuid "44444444-4444-4444-4444-444444444444"]
+    (d/transact! conn
+                 [{:db/ident :logseq.kv/schema-version
+                   :kv/value {:major 65 :minor 28}}
+                  {:db/ident :logseq.class/Comments
+                   :block/title "Comments"}
+                  {:block/uuid target-uuid
+                   :block/title "target"}
+                  {:block/uuid comments-area-uuid
+                   :block/title "Comments"
+                   :block/parent [:block/uuid target-uuid]
+                   :block/tags #{:logseq.class/Comments}}
+                  {:block/uuid range-target-uuid
+                   :block/title "range target"}
+                  {:block/uuid range-comments-uuid
+                   :block/title "Comments"
+                   :block/tags #{:logseq.class/Comments}}])
+    (d/transact! conn
+                 [[:db/add
+                   (:db/id (d/entity @conn [:block/uuid range-comments-uuid]))
+                   :logseq.property.comments/blocks
+                   (:db/id (d/entity @conn [:block/uuid range-target-uuid]))]])
+
+    (db-migrate/migrate conn :target-version {:major 65 :minor 29})
+
+    (is (= {:major 65 :minor 29}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (= #{(:db/id (d/entity @conn [:block/uuid target-uuid]))}
+           (set (map :db/id
+                     (:logseq.property.comments/blocks
+                      (d/entity @conn [:block/uuid comments-area-uuid]))))))
+    (is (= #{(:db/id (d/entity @conn [:block/uuid range-target-uuid]))}
+           (set (map :db/id
+                     (:logseq.property.comments/blocks
+                      (d/entity @conn [:block/uuid range-comments-uuid])))))
+        "Existing range comment targets should be preserved")))

@@ -1,7 +1,7 @@
 (ns frontend.components.recycle
   "Recycle page UI"
-  (:require [clojure.string :as string]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
+            [frontend.components.avatar :as avatar]
             [frontend.components.block :as component-block]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
@@ -22,14 +22,6 @@
     (integer? value) (d/entity db value)
     (vector? value) (d/entity db value)
     :else nil))
-
-(defn- user-initials
-  [user]
-  (let [name (or (:logseq.property.user/name user)
-                 (:block/title user)
-                 "U")
-        name (string/trim name)]
-    (subs name 0 (min 2 (count name)))))
 
 (defn- deleted-roots
   [db]
@@ -67,12 +59,12 @@
 
 (defn- deleted-by-avatar
   [user]
-  (let [avatar-src (:logseq.property.user/avatar user)]
-    (shui/avatar
-     {:class "w-4 h-4"}
-     (when (seq avatar-src)
-       (shui/avatar-image {:src avatar-src}))
-     (shui/avatar-fallback (user-initials user)))))
+  (avatar/user-avatar
+   {:class "w-4 h-4"
+    :name (or (:logseq.property.user/name user)
+              (:block/title user)
+              "U")
+    :avatar-src (:logseq.property.user/avatar user)}))
 
 (defn- deleted-root-header
   [db root]
