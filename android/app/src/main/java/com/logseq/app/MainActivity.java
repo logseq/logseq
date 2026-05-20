@@ -121,11 +121,15 @@ public class MainActivity extends BridgeActivity {
                         + " path=" + path
                         + " before=" + navigationCoordinator.debugState()
                 );
-                navigationCoordinator.onRouteChange(stack, navigationType, path);
+                NavigationRenderState renderState = navigationCoordinator.onRouteChange(stack, navigationType, path);
+                ComposeHost.applyNavigation(renderState);
                 Log.d(
                     "NavStack",
                     NAV_STACK_DEBUG_PREFIX + " activity.routeChange.applied after="
                         + navigationCoordinator.debugState()
+                        + " renderStack=" + renderState.getActiveStackId()
+                        + " renderPaths=" + renderState.getPaths()
+                        + " stackSwitched=" + renderState.getStackSwitched()
                 );
             }
         };

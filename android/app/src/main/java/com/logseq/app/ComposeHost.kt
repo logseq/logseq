@@ -42,24 +42,26 @@ import kotlinx.coroutines.launch
 private const val ROOT_ROUTE = "web/{encodedPath}"
 private const val DEBUG_NAV_STACK_PREFIX = "[DEBUG-navstack]"
 
-data class NavigationEvent(
-    val navigationType: String,
-    val path: String
-)
-
 /**
  * Hosts the existing WebView inside Compose and drives Compose Navigation
  * so we get back gestures/animations while delegating actual routing to the JS layer.
  */
 object ComposeHost {
-    private val navEvents = MutableSharedFlow<NavigationEvent>(extraBufferCapacity = 64)
+    private val navEvents = MutableSharedFlow<NavigationRenderState>(extraBufferCapacity = 64)
+    val navigationEvents: SharedFlow<NavigationRenderState> = navEvents
 
-    fun applyNavigation(navigationType: String?, path: String?) {
-        val type = (navigationType ?: "push").lowercase()
-        val safePath = path?.takeIf { it.isNotBlank() } ?: "/"
-        Log.d("NavStack", "$DEBUG_NAV_STACK_PREFIX compose.applyNavigation type=$type path=$safePath")
-        if (!navEvents.tryEmit(NavigationEvent(type, safePath))) {
-            Log.w("ComposeHost", "Dropped navigation event: type=$type path=$safePath")
+    @JvmStatic
+    fun applyNavigation(state: NavigationRenderState) {
+        Log.d(
+            "NavStack",
+            "$DEBUG_NAV_STACK_PREFIX compose.applyNavigation stack=${state.activeStackId} previous=${state.previousStackId} " +
+                "type=${state.navigationType} path=${state.path} paths=${state.paths} switched=${state.stackSwitched}"
+        )
+        if (!navEvents.tryEmit(state)) {
+            Log.w(
+                "ComposeHost",
+                "Dropped navigation state: stack=${state.activeStackId} type=${state.navigationType} path=${state.path}"
+            )
         }
     }
 
@@ -78,7 +80,6 @@ object ComposeHost {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 ComposeNavigationHost(
-                    navEvents = navEvents,
                     webView = webView
                 )
             }
@@ -102,6 +103,28 @@ private fun encodePath(path: String): String =
 private fun routeFor(path: String): String =
     "web/${encodePath(path)}"
 
+private fun decodePath(encodedPath: String?): String =
+    Uri.decode(encodedPath?.takeIf { it.isNotBlank() } ?: encodePath("/"))
+
+private fun NavHostController.currentPath(): String? =
+    currentBackStackEntry?.arguments?.getString("encodedPath")?.let(::decodePath)
+
+private fun NavHostController.rebuildBackStack(paths: List<String>) {
+    val normalizedPaths = paths.ifEmpty { listOf("/") }
+    val rootRoute = routeFor(normalizedPaths.first())
+    navigate(rootRoute) {
+        popUpTo(ROOT_ROUTE) {
+            inclusive = true
+        }
+        launchSingleTop = true
+    }
+    normalizedPaths.drop(1).forEach { path ->
+        navigate(routeFor(path)) {
+            launchSingleTop = true
+        }
+    }
+}
+
 @Suppress("UNUSED_PARAMETER")
 private fun shouldAnimateNavigation(navigationType: String): Boolean =
     false
@@ -109,7 +132,6 @@ private fun shouldAnimateNavigation(navigationType: String): Boolean =
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 private fun ComposeNavigationHost(
-    navEvents: SharedFlow<NavigationEvent>,
     webView: WebView
 ) {
     val navController = rememberNavController()
@@ -127,7 +149,6 @@ private fun ComposeNavigationHost(
 
     HandleNavigationEvents(
         navController = navController,
-        navEvents = navEvents,
         webView = webView
     ) { type ->
         lastNavTypeState.value = type
@@ -275,20 +296,22 @@ private fun ComposeNavigationHost(
 @Composable
 private fun HandleNavigationEvents(
     navController: NavHostController,
-    navEvents: SharedFlow<NavigationEvent>,
     webView: WebView,
     onNavType: (String) -> Unit
 ) {
     LaunchedEffect(navController) {
         var snapshotVersion = 0
-        navEvents.collect { event ->
+        ComposeHost.navigationEvents.collect { state ->
             snapshotVersion += 1
             val currentSnapshotVersion = snapshotVersion
-            val animateNavigation = shouldAnimateNavigation(event.navigationType)
-            val route = routeFor(event.path)
+            val paths = state.paths.ifEmpty { listOf(state.path) }
+            val targetPath = paths.lastOrNull() ?: state.path
+            val route = routeFor(targetPath)
+            val animateNavigation = shouldAnimateNavigation(state.navigationType) && !state.stackSwitched
             Log.d(
                 "NavStack",
-                "$DEBUG_NAV_STACK_PREFIX compose.event.before type=${event.navigationType} path=${event.path} targetRoute=$route " +
+                "$DEBUG_NAV_STACK_PREFIX compose.event.before stack=${state.activeStackId} previous=${state.previousStackId} " +
+                    "type=${state.navigationType} path=$targetPath paths=$paths switched=${state.stackSwitched} targetRoute=$route " +
                     "currentRoute=${navController.currentBackStackEntry?.destination?.route} " +
                     "currentArgs=${navController.currentBackStackEntry?.arguments} " +
                     "previousRoute=${navController.previousBackStackEntry?.destination?.route}"
@@ -298,35 +321,28 @@ private fun HandleNavigationEvents(
             } else {
                 WebViewSnapshotManager.clearSnapshot("navigation")
             }
-            onNavType(event.navigationType)
-            when (event.navigationType) {
-                "push" -> navController.navigate(route)
+            onNavType(state.navigationType)
+            when {
+                state.stackSwitched || state.navigationType == "reset" -> {
+                    navController.rebuildBackStack(paths)
+                }
 
-                "replace" -> {
+                state.navigationType == "push" -> {
+                    if (navController.currentPath() != targetPath) {
+                        navController.navigate(route)
+                    }
+                }
+
+                state.navigationType == "replace" -> {
                     navController.popBackStack()
                     navController.navigate(route) {
                         launchSingleTop = true
                     }
                 }
 
-                "pop" -> {
+                state.navigationType == "pop" -> {
                     if (!navController.popBackStack(route, inclusive = false)) {
-                        navController.navigate(route) {
-                            popUpTo(ROOT_ROUTE) {
-                                inclusive = true
-                            }
-                            launchSingleTop = true
-                        }
-                    }
-                }
-
-                "reset" -> {
-                    navController.popBackStack(route = ROOT_ROUTE, inclusive = false)
-                    navController.navigate(route) {
-                        popUpTo(ROOT_ROUTE) {
-                            inclusive = true
-                        }
-                        launchSingleTop = true
+                        navController.rebuildBackStack(paths)
                     }
                 }
 
@@ -334,7 +350,7 @@ private fun HandleNavigationEvents(
             }
             Log.d(
                 "NavStack",
-                "$DEBUG_NAV_STACK_PREFIX compose.event.after type=${event.navigationType} path=${event.path} targetRoute=$route " +
+                "$DEBUG_NAV_STACK_PREFIX compose.event.after stack=${state.activeStackId} type=${state.navigationType} path=$targetPath targetRoute=$route " +
                     "currentRoute=${navController.currentBackStackEntry?.destination?.route} " +
                     "currentArgs=${navController.currentBackStackEntry?.arguments} " +
                     "previousRoute=${navController.previousBackStackEntry?.destination?.route}"
