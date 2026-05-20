@@ -137,11 +137,11 @@ ul {
   @apply h-full flex flex-col px-1 py-2;
 
   #cards-modal {
-    @apply h-full gap-2;
+    @apply h-full min-h-0 gap-2;
   }
 
   #cards-modal .ls-card {
-    @apply flex-1 border-0 bg-transparent px-0 py-2 shadow-none;
+    @apply flex-1 min-h-0 border-0 bg-transparent px-0 py-2 shadow-none;
   }
 
   #cards-modal .ls-card > .blocks-container {
@@ -160,12 +160,12 @@ ul {
     @apply min-h-0;
   }
 
-  .ls-mobile-card > .mb-4 {
+  .ls-mobile-card .ls-card-scroll > .mb-4 {
     @apply ml-0 mb-3;
   }
 
   .ls-mobile-card-actions {
-    @apply mt-4 pb-0;
+    @apply mt-4 pb-6;
   }
 
   .ls-mobile-card-rating-buttons {
