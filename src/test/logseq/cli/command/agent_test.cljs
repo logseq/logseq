@@ -211,6 +211,268 @@
       (is (string/starts-with? preview "codex exec --json '"))
       (is (string/includes? preview "Ship the CLI bridge")))))
 
+(deftest test-prompt-templates
+  (testing "prompt builders render supplied graph templates"
+    (let [prompt (agent-command/build-codex-prompt
+                  {:graph "demo"
+                   :agent-name "build-host"
+                   :block (task-block {})
+                   :tree-text "- Ship the CLI bridge"
+                   :prompt-template "Task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}"})
+          comment-prompt (#'agent-command/build-comment-codex-prompt
+                          {:graph "demo"
+                           :agent-name "build-host"
+                           :comment (comment-block {})
+                           :target-tree-texts ["- Target block"]
+                           :comments-area-tree-text "- Comments"
+                           :comment-tree-text "- [[build-host]] summarize"
+                           :prompt-template "Comment {{graph}} {{comment-uuid}} {{agent-name}}\n{{comment-target-context}}\n{{comment-thread-context}}\n{{requesting-comment}}"})]
+      (is (= "Task demo 11111111-1111-1111-1111-111111111111 build-host\n- Ship the CLI bridge"
+             prompt))
+      (is (string/includes? comment-prompt
+                            "Comment demo 55555555-5555-5555-5555-555555555555 build-host"))
+      (is (string/includes? comment-prompt "- Target block"))
+      (is (string/includes? comment-prompt "- [[build-host]] summarize"))))
+
+  (testing "template lint fails on missing and unknown vars"
+    (let [missing-result (#'agent-command/validate-prompt-template
+                          :task
+                          "Task {{graph}} {{block-uuid}} {{agent-name}}")
+          unknown-result (#'agent-command/validate-prompt-template
+                          :task
+                          "Task {{graph}} {{block-uuid}} {{agent-name}} {{task-block-tree}} {{extra}}")]
+      (is (false? (:ok? missing-result)))
+      (is (= :missing-template-vars (get-in missing-result [:error :code])))
+      (is (= #{"task-block-tree"} (get-in missing-result [:error :vars])))
+      (is (false? (:ok? unknown-result)))
+      (is (= :unknown-template-vars (get-in unknown-result [:error :code])))
+      (is (= #{"extra"} (get-in unknown-result [:error :vars]))))))
+
+(deftest test-prompt-template-reader-ignores-documentation-code-fences
+  (testing "template reader ignores variable documentation code fences"
+    (let [template (#'agent-command/prompt-template-from-block
+                    :task
+                    {:block/title agent-command/task-prompt-template-title
+                     :block/children [{:block/title "```text\n'{{graph}}': Graph name\n'{{block-uuid}}': Block UUID\n'{{agent-name}}': AgentBridge name\n'{{task-block-tree}}': Task tree\n```"}
+                                      {:block/title "```text\nTask {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}\n```"}]})]
+      (is (= "Task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}\n"
+             template)))))
+
+(deftest test-agent-bridge-initializes-default-prompt-templates
+  (async done
+         (let [calls* (atom [])
+               page-uuid (uuid "33333333-3333-3333-3333-333333333333")]
+           (-> (p/with-redefs [transport/invoke
+                                (fn [_cfg method args]
+                                  (swap! calls* conj [method args])
+                                  (case method
+                                    :thread-api/q
+                                    (let [[_ [query & _query-args]] args]
+                                      (cond
+                                        (= query agent-command/agent-bridge-registry-page-query)
+                                        (p/resolved [])
+
+                                        (= query agent-command/agent-bridge-prompt-template-blocks-query)
+                                        (p/resolved [])
+
+                                        :else
+                                        (p/rejected (ex-info "unexpected query"
+                                                             {:query query}))))
+
+                                    :thread-api/apply-outliner-ops
+                                    (let [[_ ops _] args]
+                                      (if (= [[:create-page [agent-command/agent-bridge-registry-page {}]]] ops)
+                                        (p/resolved [agent-command/agent-bridge-registry-page page-uuid])
+                                        (p/resolved {:ok true})))
+
+                                    :thread-api/pull
+                                    (p/resolved {:db/id 300
+                                                 :block/uuid page-uuid
+                                                 :block/title agent-command/agent-bridge-registry-page})
+
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method
+                                                          :args args}))))]
+                 (p/let [templates (agent-command/ensure-agent-bridge-prompt-templates!
+                                    {:root-dir "/tmp/logseq"}
+                                    "logseq_db_demo")]
+                   (is (string/includes? (:task templates) "{{task-block-tree}}"))
+                   (is (string/includes? (:comment templates) "{{requesting-comment}}"))
+                   (let [insert-ops (->> @calls*
+                                         (filter #(= :thread-api/apply-outliner-ops (first %)))
+                                         (mapv (comp second second)))]
+                     (is (= [[:create-page [agent-command/agent-bridge-registry-page {}]]]
+                            (first insert-ops)))
+                     (let [inserted-blocks (-> (second insert-ops) first second first)
+                           root-blocks (filter #(nil? (:block/parent %)) inserted-blocks)
+                           root-uuids (set (map :block/uuid root-blocks))
+                           child-blocks (remove #(nil? (:block/parent %)) inserted-blocks)]
+                       (is (= #{agent-command/task-prompt-template-title
+                                agent-command/comment-prompt-template-title}
+                              (set (map :block/title root-blocks))))
+                       (is (= 8 (count inserted-blocks)))
+                       (is (some #(string/includes? (:block/title %) "```text\n'{{graph}}'")
+                                 child-blocks))
+                       (is (not-any? #(re-find #"- \{\{[A-Za-z0-9-]+\}\}:"
+                                               (:block/title %))
+                                     child-blocks))
+                       (is (every? #(contains? root-uuids (second (:block/parent %))) child-blocks))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-agent-bridge-ignores-recycled-registry-page
+  (async done
+         (let [calls* (atom [])
+               recycled-page {:db/id 188
+                              :block/uuid (uuid "22222222-2222-2222-2222-222222222222")
+                              :block/name "agentbridge"
+                              :block/title agent-command/agent-bridge-registry-page
+                              :block/parent {:db/id 183
+                                             :logseq.property/deleted-at 1}}
+               live-page-uuid (uuid "33333333-3333-3333-3333-333333333333")
+               live-page {:db/id 300
+                          :block/uuid live-page-uuid
+                          :block/name "agentbridge"
+                          :block/title agent-command/agent-bridge-registry-page}]
+           (-> (p/with-redefs [transport/invoke
+                                (fn [_cfg method args]
+                                  (swap! calls* conj [method args])
+                                  (case method
+                                    :thread-api/q
+                                    (let [[_ [query & _query-args]] args]
+                                      (cond
+                                        (= query agent-command/agent-bridge-registry-page-query)
+                                        (p/resolved [recycled-page])
+
+                                        (= query agent-command/agent-bridge-prompt-template-blocks-query)
+                                        (p/resolved [])
+
+                                        :else
+                                        (p/rejected (ex-info "unexpected query"
+                                                             {:query query}))))
+
+                                    :thread-api/apply-outliner-ops
+                                    (let [[_ ops _] args]
+                                      (if (= [[:create-page [agent-command/agent-bridge-registry-page {}]]] ops)
+                                        (p/resolved [agent-command/agent-bridge-registry-page live-page-uuid])
+                                        (p/resolved {:ok true})))
+
+                                    :thread-api/pull
+                                    (p/resolved live-page)
+
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method
+                                                          :args args}))))]
+                 (p/let [templates (agent-command/ensure-agent-bridge-prompt-templates!
+                                    {:root-dir "/tmp/logseq"}
+                                    "logseq_db_demo")]
+                   (is (string/includes? (:task templates) "{{task-block-tree}}"))
+                   (is (some #(= [:thread-api/apply-outliner-ops
+                                  ["logseq_db_demo"
+                                   [[:create-page [agent-command/agent-bridge-registry-page {}]]]
+                                   {}]]
+                                %)
+                             @calls*))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-agent-bridge-repairs-template-root-without-code-block
+  (async done
+         (let [calls* (atom [])
+               page-uuid (uuid "33333333-3333-3333-3333-333333333333")
+               comment-template-uuid (uuid "44444444-4444-4444-4444-444444444444")
+               page {:db/id 300
+                     :block/uuid page-uuid
+                     :block/title agent-command/agent-bridge-registry-page}
+               broken-comment-template {:db/id 401
+                                        :block/uuid comment-template-uuid
+                                        :block/title agent-command/comment-prompt-template-title}]
+           (-> (p/with-redefs [transport/invoke
+                                (fn [_cfg method args]
+                                  (swap! calls* conj [method args])
+                                  (case method
+                                    :thread-api/q
+                                    (let [[_ [query & _query-args]] args]
+                                      (cond
+                                        (= query agent-command/agent-bridge-registry-page-query)
+                                        (p/resolved [page])
+
+                                        (= query agent-command/agent-bridge-prompt-template-blocks-query)
+                                        (p/resolved [broken-comment-template])
+
+                                        :else
+                                        (p/rejected (ex-info "unexpected query"
+                                                             {:query query}))))
+
+                                    :thread-api/apply-outliner-ops
+                                    (p/resolved {:ok true})
+
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method
+                                                          :args args}))))]
+                 (p/let [templates (agent-command/ensure-agent-bridge-prompt-templates!
+                                    {:root-dir "/tmp/logseq"}
+                                    "logseq_db_demo")]
+                   (is (string/includes? (:task templates) "{{task-block-tree}}"))
+                   (is (string/includes? (:comment templates) "{{requesting-comment}}"))
+                   (let [insert-ops (->> @calls*
+                                         (filter #(= :thread-api/apply-outliner-ops (first %)))
+                                         (mapv (comp second second)))
+                         child-repair-op (first (filter #(= comment-template-uuid
+                                                             (-> % first second second))
+                                                        insert-ops))]
+                     (is (some? child-repair-op))
+                     (is (some #(string/includes? (:block/title %) "{{requesting-comment}}")
+                               (-> child-repair-op first second first))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-agent-bridge-template-initialization-lints-existing-page
+  (async done
+         (let [bad-template-block {:db/id 401
+                                   :block/title agent-command/task-prompt-template-title
+                                   :block/children [{:db/id 402
+                                                     :block/title "```text\nTask {{graph}} {{block-uuid}} {{agent-name}} {{unknown}}\n```"}]}
+               page {:db/id 300
+                     :block/uuid (uuid "33333333-3333-3333-3333-333333333333")
+                     :block/title agent-command/agent-bridge-registry-page}]
+           (-> (p/with-redefs [transport/invoke
+                                (fn [_cfg method args]
+                                  (case method
+                                    :thread-api/q
+                                    (let [[_ [query & _query-args]] args]
+                                      (cond
+                                        (= query agent-command/agent-bridge-registry-page-query)
+                                        (p/resolved [page])
+
+                                        (= query agent-command/agent-bridge-prompt-template-blocks-query)
+                                        (p/resolved [bad-template-block])
+
+                                        :else
+                                        (p/rejected (ex-info "unexpected query"
+                                                             {:query query}))))
+
+                                    :thread-api/apply-outliner-ops
+                                    (p/resolved {:ok true})
+
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method
+                                                          :args args}))))]
+                 (agent-command/ensure-agent-bridge-prompt-templates!
+                  {:root-dir "/tmp/logseq"}
+                  "logseq_db_demo"))
+               (p/then (fn [_]
+                         (is false "expected template lint to fail")))
+               (p/catch (fn [e]
+                          (is (= :agent-prompt-template-invalid
+                                 (:code (ex-data e))))
+                          (is (= :task
+                                 (:template (ex-data e))))))
+               (p/finally done)))))
+
 (deftest test-agent-bridge-listener-routes-comment-mention-with-context-and-reactions
   (async done
          (let [root (temp-root)
@@ -886,6 +1148,11 @@
                                agent-command/register-agent-bridge! (fn [cfg repo agent-name]
                                                                       (swap! calls conj [:register (:root-dir cfg) repo agent-name])
                                                                       (p/resolved true))
+                               agent-command/ensure-agent-bridge-prompt-templates!
+                               (fn [cfg repo]
+                                 (swap! calls conj [:prompt-templates (:root-dir cfg) repo])
+                                 (p/resolved {:task "Custom task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}"
+                                              :comment "Custom comment {{graph}} {{comment-uuid}} {{agent-name}}\n{{comment-target-context}}\n{{comment-thread-context}}\n{{requesting-comment}}"}))
                                agent-command/list-routable-tasks (fn [_cfg repo agent-name]
                                                                    (swap! calls conj [:list repo agent-name])
                                                                    (p/resolved [{:block (task-block {})
@@ -899,10 +1166,15 @@
                    (is (= :ok (:status result)))
                    (is (= :dry-run (get-in result [:data :mode])))
                    (is (= [[:ensure-server "/tmp/logseq" "logseq_db_demo"]
+                           [:prompt-templates "/tmp/logseq" "logseq_db_demo"]
                            [:register "/tmp/logseq" "logseq_db_demo" "build-host"]
                            [:list "logseq_db_demo" "build-host"]]
                           @calls))
                    (is (= 1 (count (get-in result [:data :commands]))))
+                   (is (string/includes? (get-in result [:data :commands 0 :command 3])
+                                         "Custom task demo"))
+                   (is (not (string/includes? (get-in result [:data :commands 0 :command 3])
+                                               "You are handling a Logseq AgentBridge task.")))
                    (is (string/includes? (first (get-in result [:data :logs]))
                                          "checking the environment"))
                    (is (string/includes? (last (get-in result [:data :logs]))
@@ -926,6 +1198,11 @@
                                 agent-command/register-agent-bridge! (fn [_cfg repo agent-name]
                                                                        (swap! calls conj [:register repo agent-name])
                                                                        (p/resolved true))
+                                agent-command/ensure-agent-bridge-prompt-templates!
+                                (fn [_cfg repo]
+                                  (swap! calls conj [:prompt-templates repo])
+                                  (p/resolved {:task "Task {{graph}} {{block-uuid}} {{agent-name}}\n{{task-block-tree}}"
+                                               :comment "Comment {{graph}} {{comment-uuid}} {{agent-name}}\n{{comment-target-context}}\n{{comment-thread-context}}\n{{requesting-comment}}"}))
                                 agent-command/list-routable-tasks (fn [_cfg repo agent-name]
                                                                     (swap! calls conj [:list repo agent-name])
                                                                     (p/resolved [{:block block
@@ -948,13 +1225,10 @@
                     (is (= :ok (:status result)))
                     (is (= :processed-once (get-in result [:data :mode])))
                     (is (= [[:ensure-server root "logseq_db_demo"]
+                            [:prompt-templates "logseq_db_demo"]
                             [:register "logseq_db_demo" "build-host"]
                             [:list "logseq_db_demo" "build-host"]
-                            [:codex ["codex" "exec" "--json" (agent-command/build-codex-prompt
-                                                              {:graph "demo"
-                                                               :agent-name "build-host"
-                                                               :block block
-                                                               :tree-text "- Ship the CLI bridge"})]]
+                            [:codex ["codex" "exec" "--json" "Task demo 11111111-1111-1111-1111-111111111111 build-host\n- Ship the CLI bridge"]]
                             [:ensure-server root "logseq_db_demo"]
                             [:write-session "logseq_db_demo" (:block/uuid block) "session-123"]]
                            @calls))
