@@ -4914,9 +4914,13 @@
 (rum/defc all-cp < rum/reactive
   [opts]
   (let [used-items (->> (get-used-items)
-                        ;; Filter out text and avatar icons - they're page-contextual
-                        ;; and don't make sense to reuse on different pages
-                        (remove #(#{:text :avatar} (:type %))))
+                        ;; Drop context-dependent types: :text and :avatar derive
+                        ;; per-block values (initials etc.) so cross-page recall
+                        ;; is meaningless. :image is dropped because the asset
+                        ;; may have been deleted/moved (photo-off tiles), and
+                        ;; the asset-picker already has its own "Recently used
+                        ;; assets" row that's the natural home for image recall.
+                        (remove #(#{:text :avatar :image} (:type %))))
         emoji-items (->> (take 32 emojis)
                          (map (fn [emoji]
                                 {:type :emoji
@@ -5043,7 +5047,13 @@
        {:label "Recently used"
         :items (when (get section-states "Recently used" true)
                  (->> (get-used-items)
-                      (remove #(#{:text :avatar} (:type %)))))
+                      ;; Drop context-dependent types: :text and :avatar derive
+                      ;; per-block values (initials etc.) so cross-page recall
+                      ;; is meaningless. :image is dropped because the asset
+                      ;; may have been deleted/moved (photo-off tiles), and
+                      ;; the asset-picker already has its own "Recently used
+                      ;; assets" row that's the natural home for image recall.
+                      (remove #(#{:text :avatar :image} (:type %)))))
         :cols icon-grid-cols}
        {:label "Emojis"
         :items (when (get section-states "Emojis" true)
@@ -7508,12 +7518,19 @@
                             :virtual-list? false
                             :expanded? (get section-states "Icons" true))))
 
-                  ;; Assets section — bypasses pane-section because the 64px
-                  ;; tiles render in a dedicated 5-col grid (.asset-picker-grid)
-                  ;; rather than the 36px flex-wrap row that pane-section's
-                  ;; `.its` layout produces.
+                  ;; Assets section — bypasses pane-section for two reasons:
+                  ;; (1) the 64px tiles render in a dedicated 5-col grid
+                  ;; (.asset-picker-grid) rather than the 36px flex-wrap row
+                  ;; that pane-section's `.its` layout produces; (2) the
+                  ;; `.pane-section` class sets `color: var(--ls-color-icon-
+                  ;; preset)` to tint Tabler SVGs via currentColor — useful
+                  ;; for icons/emojis but a bug for image tiles, whose hover
+                  ;; border-color rule falls back to currentColor when the
+                  ;; undefined `--rx-accent-09` variable is dereferenced. By
+                  ;; avoiding `.pane-section` here we match the asset-picker's
+                  ;; cascade (neutral hover border, blue selected border).
                   (when has-assets?
-                    [:div.pane-section.assets-search-section.searching-result
+                    [:div.assets-search-section
                      (section-header {:title "Assets"
                                       :count (count (:assets result))
                                       :total-count (count (:assets result))

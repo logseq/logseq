@@ -967,16 +967,29 @@
   position: relative;
   width: 100%;
   padding-bottom: 100%; /* Square aspect ratio */
-  border: 2px solid transparent;
   background-color: var(--rx-gray-04);
 
+  /* Use `outline` (not `border`) for hover/focus/selected. `outline`
+     draws OUTSIDE the element without compressing inner content — a
+     `border` here would push the clipped image to a smaller inner
+     radius than the visible outer curve, making rounded corners look
+     mismatched between the tile and its image. Outline follows
+     `border-radius` automatically in modern browsers, so the curves
+     stay consistent across all shapes (rounded, circle, rounded-rect).
+     Important: `--rx-accent-09` may be undefined in some themes. Inside
+     an `outline` shorthand, an unresolved var() invalidates the WHOLE
+     shorthand and reverts `outline-style` to `none` — so the ring
+     wouldn't draw at all. Pass an explicit `currentColor` fallback so
+     the shorthand stays valid; the visible color then matches the
+     neutral foreground (asset-picker's behavior). */
   &:hover {
-    border-color: var(--rx-accent-09);
+    outline: 2px solid var(--rx-accent-09, currentColor);
+    outline-offset: 0;
   }
 
   &:focus {
-    @apply outline-none;
-    border-color: var(--rx-accent-09);
+    outline: 2px solid var(--rx-accent-09, currentColor);
+    outline-offset: 0;
   }
 
   img {
@@ -1012,16 +1025,19 @@
 
   /* Selected state - blue outline */
   &.selected {
-    border-color: var(--rx-blue-09);
+    outline: 2px solid var(--rx-blue-09);
+    outline-offset: 0;
     box-shadow: 0 0 0 1px var(--rx-blue-09);
   }
 
-  /* Ghost asset - file missing from disk, click to retry */
+  /* Ghost asset - file missing from disk, click to retry. The dashed
+     visual is the broken-state cue, so we use a real border here (not
+     outline) — the dashing is a deliberate visual difference from the
+     hover/focus outline rings. */
   &.ghost-asset {
     @apply cursor-pointer;
     opacity: 0.4;
-    border-style: dashed;
-    border-color: var(--rx-gray-07);
+    border: 2px dashed var(--rx-gray-07);
     transition: opacity 150ms;
 
     &:hover {
@@ -1324,16 +1340,22 @@
   position: relative;
   width: 100%;
   padding-bottom: 100%; /* Square aspect ratio */
-  border: 2px solid transparent;
   background-color: var(--rx-gray-04);
 
+  /* Outline (not border) for hover/focus — same rationale as
+     `.image-asset-item`: avoids the inner-vs-outer radius mismatch
+     a border-with-clipped-content causes. `currentColor` fallback
+     keeps the outline shorthand valid when `--rx-accent-09` is
+     undefined; see `.image-asset-item` for the longhand-vs-shorthand
+     var() reasoning. */
   &:hover {
-    border-color: var(--rx-accent-09);
+    outline: 2px solid var(--rx-accent-09, currentColor);
+    outline-offset: 0;
   }
 
   &:focus {
-    @apply outline-none;
-    border-color: var(--rx-accent-09);
+    outline: 2px solid var(--rx-accent-09, currentColor);
+    outline-offset: 0;
   }
 
   img {
