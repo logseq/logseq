@@ -4690,6 +4690,27 @@
                             (is false (str e))))
                  (p/finally done))))))
 
+(deftest offload-large-title-preserves-map-form-tx-items-test
+  (testing "map-form tx items from built-in repair should not crash upload preparation"
+    (async done
+           (let [tx-data [{:db/ident :logseq.class/Comments
+                           :block/uuid #uuid "00000002-2556-9161-5000-000000000000"
+                           :block/title "Comments"}
+                          [:db/add [:block/uuid #uuid "00000002-2556-9161-5000-000000000000"]
+                           :block/title "Comments"]]
+                 upload-fn (fn [_repo _graph-id _title _aes-key]
+                             (p/rejected (ex-info "unexpected upload" {})))]
+             (-> (p/let [result (sync-large-title/offload-large-titles
+                                 tx-data
+                                 {:repo test-repo
+                                  :graph-id "graph-1"
+                                  :upload-fn upload-fn
+                                  :aes-key nil})]
+                   (is (= tx-data result)))
+                 (p/catch (fn [e]
+                            (is false (str e))))
+                 (p/finally done))))))
+
 (deftest offload-large-title-datoms-drops-stale-object-for-same-entity-test
   (testing "snapshot upload should not keep an old large-title object when offloading the same entity title"
     (async done
