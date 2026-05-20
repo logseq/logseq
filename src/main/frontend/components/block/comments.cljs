@@ -171,9 +171,9 @@
          focus-on-mount? false}}]
   (let [[draft-uuid] (hooks/use-state (random-uuid))
         [draft set-draft!] (hooks/use-state
-                             (or initial-value
-                                 (comments-model/saved-comment-draft comments-block)
-                                 ""))
+                            (or initial-value
+                                (comments-model/saved-comment-draft comments-block)
+                                ""))
         draft' (when-not (string/blank? draft) draft)
         editor-block (or comment-block
                          (comments-model/comment-draft-block comments-block draft-uuid draft))
@@ -274,8 +274,11 @@
         {:on-chosen (fn [_emoji-event emoji _keep-popup?]
                       (reaction-handler/toggle-reaction! (:block/uuid comment-block) (:id emoji))
                       (shui/popup-hide! id))
-         :tabs [[:emoji (t :icon/tab-emojis)]]
+         ;; Reaction picker is emoji-only and minimal — no tabs/color/trash
+         ;; chrome, just search + emoji grid.
+         :allowed-tabs [:emoji]
          :default-tab :emoji
+         :hide-topbar? true
          :show-used? true
          :icon-value nil}))
      {:align :end

@@ -13,8 +13,8 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.comments :as comments-handler]
+            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
@@ -126,8 +126,8 @@
 
      (when (seq comment-targets)
        (shui/dropdown-menu-item
-         {:key "Add comment"
-          :on-click (fn [_e]
+        {:key "Add comment"
+         :on-click (fn [_e]
                      (p/let [comments-area (comments-handler/ensure-comments-area-for-selected-blocks!
                                             comment-targets)]
                        (when comments-area
@@ -226,8 +226,11 @@
                                (state/hide-custom-context-menu!)
                                (shui/popup-hide!))
                              (notification/show! (t :block.reaction/emoji-required-warning) :warning))))
-            :tabs [[:emoji (t :icon/tab-emojis)]]
+            ;; Reaction picker is emoji-only and minimal — no tabs/color/trash
+            ;; chrome, just search + emoji grid.
+            :allowed-tabs [:emoji]
             :default-tab :emoji
+            :hide-topbar? true
             :show-used? true
             :icon-value nil})]))
 

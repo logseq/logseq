@@ -6778,7 +6778,7 @@
                 s)}
   [state {:keys [on-chosen del-btn? icon-value page-title preview-target-db-id preview-target-db-ids
                  preview-inheritor-db-ids
-                 allowed-tabs hover-wrap-fn color-btn? property]
+                 allowed-tabs hover-wrap-fn color-btn? property hide-topbar?]
           :or {color-btn? true
                ;; `property` scopes hover-preview broadcasts so two pickers
                ;; on the same entity but different properties (e.g.
@@ -7203,31 +7203,39 @@
          :broadcast!   broadcast-tile-hover!
          :clear!       clear-tile-hover!})
 
-       ;; Topbar: tabs + separator + search
+       ;; Always-mount invisible controllers. Lifted out of `.tabs-section`
+       ;; so they keep working when the topbar is hidden via `:hide-topbar?`
+       ;; (reaction pickers). They render nil; mounting them anywhere in
+       ;; the picker tree gives keyboard-nav + tab-change side-effects.
+       (tab-observer @*tab {:q @*q :*result *result
+                            :assets (rum/react *loaded-assets)
+                            :no-assets? (:no-assets? opts)})
+       (keyboard-nav-controller
+        {:*focus-region      *focus-region
+         :*highlighted-index *highlighted-index
+         :*tab               *tab
+         :*input-ref         *input-ref
+         :flat-items         flat-items
+         :sections           sections
+         :*virtuoso-ref      *virtuoso-ref
+         :topbar-selector    ".cp__emoji-icon-picker .tabs-section [data-topbar-stop]"})
+
+       ;; Topbar: tabs + separator + search. Whole topbar collapses to
+       ;; just the search input when `:hide-topbar?` is true (reactions:
+       ;; emoji-only, no tabs, no color picker).
        [:div.icon-picker-topbar
-        [:div.tabs-section {:role "tablist"}
-         (tab-observer @*tab {:q @*q :*result *result
-                              :assets (rum/react *loaded-assets)
-                              :no-assets? (:no-assets? opts)})
-         (keyboard-nav-controller
-          {:*focus-region      *focus-region
-           :*highlighted-index *highlighted-index
-           :*tab               *tab
-           :*input-ref         *input-ref
-           :flat-items         flat-items
-           :sections           sections
-           :*virtuoso-ref      *virtuoso-ref
-           :topbar-selector    ".cp__emoji-icon-picker .tabs-section [data-topbar-stop]"})
-         (ui/tab-items
-          {:tabs (let [all-tabs [[:all (t :icon/tab-all)] [:emoji (t :icon/tab-emojis)]
-                                 [:icon (t :icon/tab-icons)] [:custom (t :icon/tab-custom)]]]
-                   (if-let [allowed (some-> allowed-tabs set)]
-                     (filterv (fn [[id _]] (allowed id)) all-tabs)
-                     all-tabs))
-           :active @*tab
-           :on-change (fn [id ^js e]
-                        (reset! *tab id)
-                        (reset! *highlighted-index nil)
+        (when-not hide-topbar?
+          [:div.tabs-section {:role "tablist"}
+           (ui/tab-items
+            {:tabs (let [all-tabs [[:all (t :icon/tab-all)] [:emoji (t :icon/tab-emojis)]
+                                   [:icon (t :icon/tab-icons)] [:custom (t :icon/tab-custom)]]]
+                     (if-let [allowed (some-> allowed-tabs set)]
+                       (filterv (fn [[id _]] (allowed id)) all-tabs)
+                       all-tabs))
+             :active @*tab
+             :on-change (fn [id ^js e]
+                          (reset! *tab id)
+                          (reset! *highlighted-index nil)
                         ;; Only return focus to search for genuine mouse
                         ;; clicks. Programmatic .click() from keyboard
                         ;; arrow-rove (handle-topbar-keys auto-activate)
@@ -7240,19 +7248,19 @@
                         ;; :search branch (which is no-op) while the
                         ;; input itself can't fire its own on-key-down
                         ;; because it isn't focused.
-                        (when (and e (pos? (.-detail e)))
-                          (reset! *focus-region :search)
-                          (some-> (rum/deref *input-ref) (.focus))))
-           :button-attrs {:data-topbar-stop "tab"}
-           :tab-id-prefix "icon-picker"
-           :panel-id "icon-picker-panel"})
-         [:div.tab-actions
+                          (when (and e (pos? (.-detail e)))
+                            (reset! *focus-region :search)
+                            (some-> (rum/deref *input-ref) (.focus))))
+             :button-attrs {:data-topbar-stop "tab"}
+             :tab-id-prefix "icon-picker"
+             :panel-id "icon-picker-panel"})
+           [:div.tab-actions
           ;; Color picker — gated by `color-btn?` so sub-picker call
           ;; sites (e.g. avatar fallback) can suppress it. The parent
           ;; picker already owns the avatar's color, and a duplicate
           ;; here can drift from the parent's value.
-          (when color-btn?
-            (color-picker *color (fn [c]
+            (when color-btn?
+              (color-picker *color (fn [c]
                                  ;; Synchronously update *color before calling
                                  ;; on-chosen. The on-chosen wrapper above re-applies
                                  ;; @*color over `m`, so without this it would over-
@@ -7260,37 +7268,37 @@
                                  ;; one (color-picker's React state hasn't propagated
                                  ;; to the *color atom yet — its useEffect runs after
                                  ;; this synchronous callback).
-                                   (reset! *color c)
-                                   (cond
-                                     (or (= :icon (:type normalized-icon-value))
-                                         (= :text (:type normalized-icon-value)))
-                                     (on-chosen nil (-> normalized-icon-value
-                                                        (assoc :color c)
-                                                        (assoc-in [:data :color] c)) true)
+                                     (reset! *color c)
+                                     (cond
+                                       (or (= :icon (:type normalized-icon-value))
+                                           (= :text (:type normalized-icon-value)))
+                                       (on-chosen nil (-> normalized-icon-value
+                                                          (assoc :color c)
+                                                          (assoc-in [:data :color] c)) true)
 
-                                     (= :avatar (:type normalized-icon-value))
-                                     (on-chosen nil (-> normalized-icon-value
-                                                        (assoc :color c)
-                                                        (assoc-in [:data :color] c)
-                                                        (assoc-in [:data :backgroundColor] c)) true)))
+                                       (= :avatar (:type normalized-icon-value))
+                                       (on-chosen nil (-> normalized-icon-value
+                                                          (assoc :color c)
+                                                          (assoc-in [:data :color] c)
+                                                          (assoc-in [:data :backgroundColor] c)) true)))
                         ;; After Radix's FocusScope unmounts (the popover
                         ;; close), restore focus to the highlighted tile so
                         ;; activeElement matches `.is-highlighted`. Running
                         ;; in :after-close! (not on-select!) bypasses
                         ;; Radix's FocusScope trap which would otherwise
                         ;; undo the focus while the popover is mounted.
-                          :after-close! (fn []
-                                          (let [^js cnt (some-> (rum/deref *input-ref) (.closest ".cp__emoji-icon-picker"))
-                                                idx @*highlighted-index
-                                                btn (when (and idx cnt)
-                                                      (.querySelector cnt "button.is-highlighted"))]
-                                            (cond
+                            :after-close! (fn []
+                                            (let [^js cnt (some-> (rum/deref *input-ref) (.closest ".cp__emoji-icon-picker"))
+                                                  idx @*highlighted-index
+                                                  btn (when (and idx cnt)
+                                                        (.querySelector cnt "button.is-highlighted"))]
+                                              (cond
                                             ;; Highlighted icon present — restore focus to
                                             ;; the tile so the user resumes where they left
                                             ;; off in the grid.
-                                              btn
-                                              (do (reset! *focus-region :grid)
-                                                  (.focus btn))
+                                                btn
+                                                (do (reset! *focus-region :grid)
+                                                    (.focus btn))
 
                                             ;; No highlight to return to (e.g. user opened
                                             ;; the color picker without first navigating to
@@ -7300,77 +7308,78 @@
                                             ;; for keys whose target is in the subtree, so
                                             ;; without this fallback the picker would appear
                                             ;; visually open but reject all keys.
-                                              cnt
-                                              (do (reset! *focus-region :search)
-                                                  (some-> (rum/deref *input-ref) (.focus))))))
-                          :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
-                                       (fn [c]
+                                                cnt
+                                                (do (reset! *focus-region :search)
+                                                    (some-> (rum/deref *input-ref) (.focus))))))
+                            :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
+                                         (fn [c]
                                          ;; Additive — preserves any
                                          ;; `:icon` from a tile hover
                                          ;; so the previewed tile shows
                                          ;; with the previewed color
                                          ;; overlaid.
-                                         (merge-into-icon-preview!
-                                          (assoc preview-base-target :color c))))
-                          :on-hover-end! (when (or preview-target-db-id (seq preview-target-db-ids))
-                                           (fn []
-                                             (dissoc-icon-preview-field! preview-base-target :color)))
-                          :button-attrs {:data-topbar-stop "color"}))
+                                           (merge-into-icon-preview!
+                                            (assoc preview-base-target :color c))))
+                            :on-hover-end! (when (or preview-target-db-id (seq preview-target-db-ids))
+                                             (fn []
+                                               (dissoc-icon-preview-field! preview-base-target :color)))
+                            :button-attrs {:data-topbar-stop "color"}))
           ;; delete button — single-click in :remove mode, dropdown in :two-option mode.
           ;; NOTE: use `cond` (not `case`) — CLJS `case` with keyword tests + a
           ;; nil branch + Radix dropdown-menu children somehow leaks a keyword
           ;; into the React child tree. Reproduced specifically on icon-free
           ;; pages (delete-mode = :hidden → case returns nil → still throws
           ;; "Objects are not valid as a React child"). `cond` avoids the bug.
-          (let [trash-icon (shui/tabler-icon "trash" {:size 17})
-                reset-and-call (fn [action]
-                                 (reset-picker-transient-state!
-                                  {:*asset-picker-initial-mode *asset-picker-initial-mode})
-                                 (on-chosen nil nil action))]
-            (cond
-              (= delete-mode :hidden) nil
+            (let [trash-icon (shui/tabler-icon "trash" {:size 17})
+                  reset-and-call (fn [action]
+                                   (reset-picker-transient-state!
+                                    {:*asset-picker-initial-mode *asset-picker-initial-mode})
+                                   (on-chosen nil nil action))]
+              (cond
+                (= delete-mode :hidden) nil
 
-              (= delete-mode :remove)
-              (shui/button {:variant :outline :size :sm :data-action "del"
-                            :data-topbar-stop "trash"
-                            :title (t :icon/remove-icon)
-                            :aria-label (t :icon/remove-icon)
-                            :on-click #(reset-and-call :remove)}
-                           trash-icon)
+                (= delete-mode :remove)
+                (shui/button {:variant :outline :size :sm :data-action "del"
+                              :data-topbar-stop "trash"
+                              :title (t :icon/remove-icon)
+                              :aria-label (t :icon/remove-icon)
+                              :on-click #(reset-and-call :remove)}
+                             trash-icon)
 
-              (= delete-mode :suppress)
+                (= delete-mode :suppress)
               ;; Same trash glyph + single click as :remove, but the action
               ;; is :remove-entirely (writes :none) to hide the inherited
               ;; class default-icon on this entity. Tooltip differentiates.
-              (shui/button {:variant :outline :size :sm :data-action "del"
-                            :data-topbar-stop "trash"
-                            :title (t :icon/hide-inherited-icon)
-                            :aria-label (t :icon/hide-inherited-icon)
-                            :on-click #(reset-and-call :remove-entirely)}
-                           trash-icon)
-
-              (= delete-mode :two-option)
-              (shui/dropdown-menu
-               (shui/dropdown-menu-trigger
-                {:as-child true}
                 (shui/button {:variant :outline :size :sm :data-action "del"
                               :data-topbar-stop "trash"
-                              :title (t :icon/remove-icon-options)
-                              :aria-label (t :icon/remove-icon-options)
-                              :aria-haspopup "menu"}
-                             trash-icon))
-               (shui/dropdown-menu-content
-                {:side "bottom" :align "end"}
-                (shui/dropdown-menu-item
-                 {:on-select #(reset-and-call :revert)}
-                 (shui/tabler-icon "arrow-back-up" {:size 14 :class "mr-2 opacity-80"})
-                 (t :icon/revert-to-default))
-                (shui/dropdown-menu-item
-                 {:on-select #(reset-and-call :remove-entirely)}
-                 (shui/tabler-icon "trash" {:size 14 :class "mr-2 opacity-80"})
-                 (t :icon/remove-entirely))))))]]
+                              :title (t :icon/hide-inherited-icon)
+                              :aria-label (t :icon/hide-inherited-icon)
+                              :on-click #(reset-and-call :remove-entirely)}
+                             trash-icon)
 
-        (shui/separator {:class "my-0 icon-picker-separator"})
+                (= delete-mode :two-option)
+                (shui/dropdown-menu
+                 (shui/dropdown-menu-trigger
+                  {:as-child true}
+                  (shui/button {:variant :outline :size :sm :data-action "del"
+                                :data-topbar-stop "trash"
+                                :title (t :icon/remove-icon-options)
+                                :aria-label (t :icon/remove-icon-options)
+                                :aria-haspopup "menu"}
+                               trash-icon))
+                 (shui/dropdown-menu-content
+                  {:side "bottom" :align "end"}
+                  (shui/dropdown-menu-item
+                   {:on-select #(reset-and-call :revert)}
+                   (shui/tabler-icon "arrow-back-up" {:size 14 :class "mr-2 opacity-80"})
+                   (t :icon/revert-to-default))
+                  (shui/dropdown-menu-item
+                   {:on-select #(reset-and-call :remove-entirely)}
+                   (shui/tabler-icon "trash" {:size 14 :class "mr-2 opacity-80"})
+                   (t :icon/remove-entirely))))))]])
+
+        (when-not hide-topbar?
+          (shui/separator {:class "my-0 icon-picker-separator"}))
 
         [:div.search-section
          [:div.search-input
@@ -7380,8 +7389,12 @@
              :class "icon-search-input"
              :ref *input-ref
              :type "search"
-             :aria-label (t :icon/search-all-aria-label)
-             :placeholder (t :icon/search-all-placeholder)
+             :aria-label (if hide-topbar?
+                           (t :icon/search-emojis)
+                           (t :icon/search-all-aria-label))
+             :placeholder (if hide-topbar?
+                            (t :icon/search-emojis)
+                            (t :icon/search-all-placeholder))
              :default-value ""
              :on-focus #(do (reset! *focus-region :search)
                             (reset! *input-focused? true))
@@ -7471,9 +7484,14 @@
                              (when-not to-popover?
                                (clear-tile-hover!))))}
         [:div.content-pane
-         {:id "icon-picker-panel"
-          :role "tabpanel"
-          :aria-labelledby (str "icon-picker-tab-" (name @*tab))}
+         (cond-> {:id "icon-picker-panel"}
+           ;; Pane semantics depend on whether a tablist is rendered.
+           ;; When the topbar is hidden (reactions), there's no tab to
+           ;; label this panel, so we drop the tabpanel role + linkage —
+           ;; the content is just an emoji grid inside the popover.
+           (not hide-topbar?)
+           (assoc :role "tabpanel"
+                  :aria-labelledby (str "icon-picker-tab-" (name @*tab))))
          ;; Custom tab always shows its own content (Text/Avatar/Image buttons)
          (if (= @*tab :custom)
            (custom-tab-cp *q page-title *color *view *asset-picker-initial-mode icon-value opts)

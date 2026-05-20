@@ -279,8 +279,11 @@
        (fn [{:keys [id]}]
          (icon-component/icon-search
           {:on-chosen (fn [_e icon _keep-popup?] (on-pick id icon))
-           :tabs [[:emoji (t :icon/tab-emojis)]]
+           ;; Reaction picker is emoji-only and minimal — no tabs/color/trash
+           ;; chrome, just search + emoji grid.
+           :allowed-tabs [:emoji]
            :default-tab :emoji
+           :hide-topbar? true
            :show-used? true
            :icon-value nil}))
        {:align :start
