@@ -11,7 +11,7 @@
             [logseq.publish.model :as publish-model]))
 
 ;; Timestamp in milliseconds used for cache busting static assets.
-(defonce version 1779270413742)
+(defonce version 1779272152856)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
