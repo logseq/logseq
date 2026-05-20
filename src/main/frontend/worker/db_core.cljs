@@ -407,6 +407,11 @@
                      {:persist-op? false
                       :skip-validate-db? true}))))
 
+(defn- handle-migrate-result-local-txs!
+  [repo migrate-result]
+  (doseq [tx-report (:upgrade-result-coll migrate-result)]
+    (db-sync/handle-local-tx! repo tx-report)))
+
 (defn- <create-or-open-db!
   [repo {:keys [config datoms sync-download-graph? creating-remote-graph?] :as opts}]
   (when creating-remote-graph?
@@ -469,7 +474,8 @@
                                     (ldb/transact! conn initial-data
                                                    {:initial-db? true})))]
           (when-not sync-download-graph?
-            (db-migrate/migrate conn)
+            (when-let [migrate-result (db-migrate/migrate conn)]
+              (handle-migrate-result-local-txs! repo migrate-result))
             (gc-sqlite-dbs! db conn {})
             (maybe-run-recycle-gc! conn))
 

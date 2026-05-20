@@ -285,6 +285,24 @@
                               (reset! *service old-service)
                               (done))))))))
 
+(deftest handle-migrate-result-local-txs-enqueues-upgrade-reports-test
+  (let [conn (d/create-conn db-schema/schema)
+        migration-tx-report {:tx-data [[:db/add 1 :block/title "Migrated"]]
+                             :db-before @conn
+                             :db-after @conn
+                             :tx-meta {:db-migrate? true}}
+        handled-reports (atom [])]
+    (with-redefs [db-sync/handle-local-tx! (fn [repo tx-report]
+                                             (swap! handled-reports conj
+                                                    {:repo repo
+                                                     :tx-report tx-report}))]
+      (#'db-core/handle-migrate-result-local-txs!
+       test-repo
+       {:upgrade-result-coll [migration-tx-report]})
+      (is (= [{:repo test-repo
+               :tx-report migration-tx-report}]
+             @handled-reports)))))
+
 (deftest search-build-blocks-indice-in-worker-reports-progress-to-main-thread-test
   (async done
     (->
