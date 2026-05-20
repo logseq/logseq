@@ -1322,6 +1322,19 @@ PY"
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"],
    :tags [:agent],
    :extends :non-sync/graph-json-env}
+  {:id "agent-bridge-routes-assigned-tasks-concurrently",
+   :cmds
+   ["python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{root-dir}}' --config '{{config-path}}' --graph '{{graph}}' --tmp-dir '{{tmp-dir}}' --repo-root '{{repo-root}}' --parallel-assignment-check"],
+   :expect {:exit 0, :stdout-contains ["agent bridge routed tasks concurrently:"]},
+   :covers
+   {:commands ["agent bridge"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :agent []}},
+   :cleanup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"],
+   :tags [:agent],
+   :extends :non-sync/graph-json-env}
   {:id "agent-bridge-demo-script",
    :cmds
    ["bash '{{repo-root}}/cli-e2e/scripts/agent_bridge_demo.sh' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/demo-root' --graph cli-e2e-agent-bridge-demo --repo-root '{{repo-root}}'"],
