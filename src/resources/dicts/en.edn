@@ -1013,6 +1013,7 @@
  :mobile.share/unsupported-import-type "Import {1} file is not supported. You can report it on {2}. We will look into it soon."
 
  :mobile.tab/capture "Capture"
+ :mobile.tab/flashcards "Cards"
  :mobile.tab/go-to "Go To"
  :mobile.tab/graphs "Graphs"
 
