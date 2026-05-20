@@ -17,6 +17,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.version :as build-version]
             [logseq.db :as ldb]
+            [logseq.db-worker.log :as db-worker-log]
             [promesa.core :as p]))
 
 (defn- http-request
@@ -102,23 +103,9 @@
   [root-dir repo]
   (db-lock/lock-path root-dir repo))
 
-(defn- pad2
-  [value]
-  (if (< value 10)
-    (str "0" value)
-    (str value)))
-
-(defn- yyyymmdd
-  [^js date]
-  (str (.getFullYear date)
-       (pad2 (inc (.getMonth date)))
-       (pad2 (.getDate date))))
-
 (defn- log-path
   [root-dir repo]
-  (let [repo-dir (db-lock/repo-dir (db-lock/graphs-dir root-dir) repo)
-        date-str (yyyymmdd (js/Date.))]
-    (node-path/join repo-dir (str "db-worker-node-" date-str ".log"))))
+  (db-worker-log/log-path root-dir repo))
 
 (defn- start-daemon!
   "Start daemon with quiet logging by default"
@@ -152,7 +139,7 @@
   (reset! @#'db-worker-node/*ready? false)
   (reset! @#'db-worker-node/*sse-clients #{})
   (reset! @#'db-worker-node/*lock-info nil)
-  (reset! @#'db-worker-node/*file-handler nil))
+  (db-worker-log/uninstall!))
 
 (defn- normalize-db-worker-state-before
   []
@@ -280,9 +267,74 @@
                               (-> (stop!) (p/finally (fn [] (done))))
                               (done))))))))
 
+(deftest db-worker-node-logs-println-output
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-log-println")
+               repo (str "logseq_db_log_println_" (subs (str (random-uuid)) 0 8))
+               log-file (log-path data-dir repo)
+               message (str "println output " (random-uuid))]
+           (-> (p/let [{:keys [stop!]}
+                       (start-daemon! {:root-dir data-dir
+                                       :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (println message)
+                       _ (p/delay 50)
+                       contents (.toString (fs/readFileSync log-file) "utf8")]
+                 (is (string/includes? contents message)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-logs-console-error-output
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-log-console-error")
+               repo (str "logseq_db_log_console_error_" (subs (str (random-uuid)) 0 8))
+               log-file (log-path data-dir repo)
+               message (str "console error output " (random-uuid))]
+           (-> (p/let [{:keys [stop!]}
+                       (start-daemon! {:root-dir data-dir
+                                       :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (.error js/console message)
+                       _ (p/delay 50)
+                       contents (.toString (fs/readFileSync log-file) "utf8")]
+                 (is (string/includes? contents message)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-logs-process-stdout-output
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-log-stdout")
+               repo (str "logseq_db_log_stdout_" (subs (str (random-uuid)) 0 8))
+               log-file (log-path data-dir repo)
+               message (str "stdout output " (random-uuid))]
+           (-> (p/let [{:keys [stop!]}
+                       (start-daemon! {:root-dir data-dir
+                                       :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (.write (.-stdout js/process) (str message "\n"))
+                       _ (p/delay 50)
+                       contents (.toString (fs/readFileSync log-file) "utf8")]
+                 (is (string/includes? contents message)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
 (deftest db-worker-node-log-retention
-  (let [enforce-log-retention! #'db-worker-node/enforce-log-retention!
-        data-dir (node-helper/create-tmp-dir "db-worker-log-retention")
+  (let [data-dir (node-helper/create-tmp-dir "db-worker-log-retention")
         repo (str "logseq_db_log_retention_" (subs (str (random-uuid)) 0 8))
         repo-dir (db-lock/repo-dir data-dir repo)
         days ["20240101" "20240102" "20240103" "20240104" "20240105"
@@ -292,7 +344,7 @@
     (fs/mkdirSync repo-dir #js {:recursive true})
     (doseq [day days]
       (fs/writeFileSync (make-log day) "log\n"))
-    (enforce-log-retention! repo-dir)
+    (db-worker-log/enforce-retention! repo-dir)
     (let [remaining (->> (fs/readdirSync repo-dir)
                          (filter (fn [^js name]
                                    (re-matches #"db-worker-node-\d{8}\.log" name)))
