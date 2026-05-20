@@ -53,18 +53,6 @@
    (str (get-logseq-graph-url host repo protocol?)
         "?block-id=" uuid)))
 
-(defn get-logseq-graph-page-url
-  "The URL represents an page in graph with pagename, for example:
-   logseq://graph/abc?page=<page-name>
-   Ensure repo and page-name are valid before hand.
-   host: set to `nil` for local graph
-   protocol?: if true, returns URL with protocol prefix"
-  ([host repo page-name]
-   (get-logseq-graph-page-url host repo page-name true))
-  ([host repo page-name protocol?]
-   (str (get-logseq-graph-url host repo protocol?)
-        "?page=" (encode-param page-name))))
-
 (defn- strip-trailing-slash
   [s]
   (string/replace s #"/+$" ""))

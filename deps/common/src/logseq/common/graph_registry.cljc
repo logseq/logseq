@@ -1,6 +1,9 @@
 (ns logseq.common.graph-registry
-  (:require [clojure.string :as string]
-            [logseq.common.config :as common-config]))
+  "Graph registry normalization and lookup helpers."
+  (:require [clojure.string :as string]))
+
+(def ^:private db-version-prefix
+  "logseq_db_")
 
 (defn- present-string?
   [s]
@@ -18,7 +21,7 @@
                       {:entry entry})))
     (assoc entry :graph-id graph-id)))
 
-(defn upsert-entry
+(defn ^:api upsert-entry
   [registry entry]
   (let [entry' (normalize-entry entry)]
     (->> (or registry [])
@@ -36,20 +39,29 @@
   [s]
   (some-> s str string/lower-case))
 
+(defn- canonical-repo
+  [s]
+  (when (seq s)
+    (let [s (str s)
+          stripped (loop [name' s]
+                     (if (string/starts-with? name' db-version-prefix)
+                       (recur (subs name' (count db-version-prefix)))
+                       name'))]
+      (str db-version-prefix stripped))))
+
 (defn- identifier-match?
   [entry graph-identifier]
   (let [identifier (normalize-comparable graph-identifier)
         repo (normalize-comparable (:repo entry))
         graph-name (normalize-comparable (:graph-name entry))
         graph-id (normalize-comparable (:graph-id entry))
-        canonical-repo (normalize-comparable
-                        (common-config/canonicalize-db-version-repo graph-identifier))]
+        canonical-repo-name (normalize-comparable (canonical-repo graph-identifier))]
     (or (= identifier repo)
         (= identifier graph-name)
         (= identifier graph-id)
-        (= canonical-repo repo))))
+        (= canonical-repo-name repo))))
 
-(defn resolve-target
+(defn ^:api resolve-target
   [registry {:keys [graph-id graph-identifier]}]
   (cond
     (present-string? graph-id)
