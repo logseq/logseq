@@ -5,6 +5,7 @@
             ["os" :as os]
             ["path" :as node-path]
             [cljs.reader :as reader]
+            [clojure.set :as set]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.cli.command.core :as core]
@@ -12,6 +13,7 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (def ^:private bridge-spec
@@ -175,51 +177,156 @@
   [block]
   (some-> (:block/uuid block) str))
 
-(defn build-codex-prompt
-  [{:keys [graph agent-name block tree-text]}]
+(def task-prompt-template-title "Task prompt template")
+
+(def comment-prompt-template-title "Comment prompt template")
+
+(def ^:private default-task-prompt-template
   (string/join
    "\n"
    ["You are handling a Logseq AgentBridge task."
     ""
-    (str "Graph: " graph)
-    (str "Block UUID: " (block-uuid-str block))
-    (str "AgentBridge name: " agent-name)
+    "Graph: {{graph}}"
+    "Block UUID: {{block-uuid}}"
+    "AgentBridge name: {{agent-name}}"
     ""
     "Do not operate outside the target graph."
     "Write task results back into the graph."
     "Report the final status, files changed, commands run, verification, and any blockers."
     ""
     "Task block tree:"
-    (or tree-text (:block/title block) "")]))
+    "{{task-block-tree}}"]))
 
-(defn- build-comment-codex-prompt
-  [{:keys [graph agent-name comment-tree-text comments-area-tree-text target-tree-texts]
-    comment-block :comment}]
+(def ^:private default-comment-prompt-template
   (string/join
    "\n"
    ["You are handling a Logseq AgentBridge comment request."
     ""
-    (str "Graph: " graph)
-    (str "Comment UUID: " (block-uuid-str comment-block))
-    (str "AgentBridge name: " agent-name)
+    "Graph: {{graph}}"
+    "Comment UUID: {{comment-uuid}}"
+    "AgentBridge name: {{agent-name}}"
     ""
     "Do not operate outside the target graph."
     "Complete the request from the mentioned comment."
     "Report the final status, files changed, commands run, verification, and any blockers."
     ""
     "Comment target context:"
-    (string/join "\n" (remove string/blank? target-tree-texts))
+    "{{comment-target-context}}"
     ""
     "Comment thread context:"
-    (or comments-area-tree-text (:block/title (:block/parent comment-block)) "")
+    "{{comment-thread-context}}"
     ""
     "Requesting comment:"
-    (or comment-tree-text (:block/title comment-block) "")
+    "{{requesting-comment}}"
     ""
     "Reply instructions:"
     "For a short reply, append a comment after the requesting comment."
     "For a long reply, write a normal block tree after the comments area and append a comment that references that tree."
     "If the request is blocked or fails, make that clear in the reply."]))
+
+(def ^:private prompt-template-vars
+  {:task #{"graph"
+           "block-uuid"
+           "agent-name"
+           "task-block-tree"}
+   :comment #{"graph"
+              "comment-uuid"
+              "agent-name"
+              "comment-target-context"
+              "comment-thread-context"
+              "requesting-comment"}})
+
+(def ^:private required-prompt-template-vars prompt-template-vars)
+
+(defn- renderable-prompt-template-var-names
+  [template]
+  (->> (re-seq #"('?)(\{\{([A-Za-z0-9-]+)\}\})('?)" (or template ""))
+       (keep (fn [[_ open-quote _ var-name close-quote]]
+               (when-not (and (= "'" open-quote)
+                              (= "'" close-quote))
+                 var-name)))
+       set))
+
+(defn validate-prompt-template
+  [template-kind template]
+  (let [vars (renderable-prompt-template-var-names template)
+        allowed-vars (get prompt-template-vars template-kind)
+        required-vars (get required-prompt-template-vars template-kind)]
+    (if (nil? allowed-vars)
+      {:ok? false
+       :error {:code :unknown-template-kind
+               :template template-kind}}
+      (let [unknown-vars (set/difference vars allowed-vars)
+            missing-vars (set/difference required-vars vars)]
+        (cond
+          (string/blank? (or template ""))
+          {:ok? false
+           :error {:code :missing-template-code-block
+                   :template template-kind}}
+
+          (seq unknown-vars)
+          {:ok? false
+           :error {:code :unknown-template-vars
+                   :template template-kind
+                   :vars unknown-vars}}
+
+          (seq missing-vars)
+          {:ok? false
+           :error {:code :missing-template-vars
+                   :template template-kind
+                   :vars missing-vars}}
+
+          :else
+          {:ok? true})))))
+
+(defn- validate-prompt-templates!
+  [templates]
+  (doseq [[template-kind template] templates]
+    (let [result (validate-prompt-template template-kind template)]
+      (when-not (:ok? result)
+        (throw (ex-info "agent bridge prompt template is invalid"
+                        (assoc (:error result)
+                               :code :agent-prompt-template-invalid
+                               :reason (get-in result [:error :code])))))))
+  templates)
+
+(defn- render-prompt-template
+  [template-kind template vars]
+  (validate-prompt-templates! {template-kind template})
+  (string/replace
+   template
+   #"\{\{([A-Za-z0-9-]+)\}\}"
+   (fn [[_ var-name]]
+     (if (contains? vars var-name)
+       (str (get vars var-name))
+       (throw (ex-info "agent bridge prompt template var has no value"
+                       {:code :agent-prompt-template-var-missing
+                        :template template-kind
+                        :var var-name}))))))
+
+(defn build-codex-prompt
+  [{:keys [graph agent-name block tree-text prompt-template]}]
+  (render-prompt-template
+   :task
+   (or prompt-template default-task-prompt-template)
+   {"graph" graph
+    "block-uuid" (block-uuid-str block)
+    "agent-name" agent-name
+    "task-block-tree" (or tree-text (:block/title block) "")}))
+
+(defn- build-comment-codex-prompt
+  [{:keys [graph agent-name comment-tree-text comments-area-tree-text target-tree-texts]
+    comment-block :comment
+    prompt-template :prompt-template}]
+  (render-prompt-template
+   :comment
+   (or prompt-template default-comment-prompt-template)
+   {"graph" graph
+    "comment-uuid" (block-uuid-str comment-block)
+    "agent-name" agent-name
+    "comment-target-context" (string/join "\n" (remove string/blank? target-tree-texts))
+    "comment-thread-context" (or comments-area-tree-text (:block/title (:block/parent comment-block)) "")
+    "requesting-comment" (or comment-tree-text (:block/title comment-block) "")}))
 
 (defn build-codex-command
   [prompt {:keys [codex-bin]}]
@@ -423,7 +530,15 @@
 (def agent-bridge-registry-page "AgentBridge")
 
 (def agent-bridge-registry-page-query
-  '[:find [(pull ?p [:db/id :block/uuid :block/name :block/title]) ...]
+  '[:find [(pull ?p [:db/id
+                     :block/uuid
+                     :block/name
+                     :block/title
+                     :logseq.property/deleted-at
+                     {:block/parent [:db/id
+                                     :logseq.property/deleted-at
+                                     {:block/parent [:db/id
+                                                     :logseq.property/deleted-at]}]}]) ...]
     :in $ ?page-name
     :where
     [?p :block/name ?page-name]])
@@ -435,6 +550,238 @@
     [?b :block/parent ?page-id]
     [?b :block/title ?agent-name]])
 
+(declare ensure-registry-page!)
+
+(def agent-bridge-prompt-template-blocks-query
+  '[:find [(pull ?b [:db/id
+                     :block/uuid
+                     :block/title
+                     :block/order
+                     {:block/_parent [:db/id
+                                      :block/uuid
+                                      :block/title
+                                      :block/order
+                                      {:block/_parent [:db/id
+                                                       :block/uuid
+                                                       :block/title
+                                                       :block/order]}]}]) ...]
+    :in $ ?page-id
+    :where
+    [?b :block/parent ?page-id]])
+
+(defn- prompt-template-default
+  [template-kind]
+  (case template-kind
+    :task default-task-prompt-template
+    :comment default-comment-prompt-template))
+
+(defn- prompt-template-title
+  [template-kind]
+  (case template-kind
+    :task task-prompt-template-title
+    :comment comment-prompt-template-title))
+
+(defn- prompt-template-var-description
+  [template-kind]
+  (case template-kind
+    :task
+    (string/join
+     "\n"
+     ["Template variables:"
+      "```text"
+      "'{{graph}}': The graph name passed to `logseq agent bridge`."
+      "'{{block-uuid}}': The UUID of the routed task block."
+      "'{{agent-name}}': The current AgentBridge name."
+      "'{{task-block-tree}}': The routed task block tree rendered as outline text."
+      "```"])
+
+    :comment
+    (string/join
+     "\n"
+     ["Template variables:"
+      "```text"
+      "'{{graph}}': The graph name passed to `logseq agent bridge`."
+      "'{{comment-uuid}}': The UUID of the requesting comment block."
+      "'{{agent-name}}': The current AgentBridge name."
+      "'{{comment-target-context}}': The block trees targeted by the comments area."
+      "'{{comment-thread-context}}': The complete comments area block tree."
+      "'{{requesting-comment}}': The requesting comment block tree."
+      "```"])))
+
+(defn- prompt-template-description
+  [template-kind]
+  (case template-kind
+    :task
+    "Description: Used when AgentBridge routes an assigned TODO Task block to Codex."
+    :comment
+    "Description: Used when AgentBridge routes an AgentBridge mention in a Comment block to Codex."))
+
+(defn- default-prompt-template-block
+  [template-kind]
+  {:block/title (prompt-template-title template-kind)
+   :block/children [{:block/title (prompt-template-description template-kind)}
+                    {:block/title (prompt-template-var-description template-kind)}
+                    {:block/title (str "```text\n"
+                                       (prompt-template-default template-kind)
+                                       "\n```")}]})
+
+(defn- ensure-prompt-template-block-uuids
+  [blocks]
+  (mapv (fn ensure-block-uuid [block]
+          (let [block (cond-> block
+                        (nil? (:block/uuid block))
+                        (assoc :block/uuid (random-uuid)))]
+            (if (seq (:block/children block))
+              (update block :block/children ensure-prompt-template-block-uuids)
+              block)))
+        blocks))
+
+(defn- flatten-prompt-template-blocks
+  [blocks]
+  (letfn [(walk [parent-uuid block]
+            (let [children (:block/children block)
+                  block-uuid (:block/uuid block)
+                  block (cond-> (dissoc block :block/children)
+                          parent-uuid
+                          (assoc :block/parent [:block/uuid parent-uuid]))]
+              (into [block]
+                    (mapcat #(walk block-uuid %) children))))]
+    (->> blocks
+         ensure-prompt-template-block-uuids
+         (mapcat #(walk nil %))
+         vec)))
+
+(defn- child-blocks
+  [block]
+  (->> (or (:block/children block)
+           (:block/_parent block)
+           [])
+       (sort-by #(or (:block/order %) 0))))
+
+(defn- block-title-tree
+  [block]
+  (cons (:block/title block)
+        (mapcat block-title-tree (child-blocks block))))
+
+(defn- code-blocks-in-text
+  [text]
+  (when (string? text)
+    (map second (re-seq #"(?s)```[^\n`]*\n(.*?)```" text))))
+
+(defn- prompt-template-from-block
+  [template-kind block]
+  (let [templates (vec (mapcat code-blocks-in-text (block-title-tree block)))
+        renderable-templates (filterv #(-> (validate-prompt-template template-kind %) :ok?)
+                                      templates)]
+    (cond
+      (empty? templates)
+      (throw (ex-info "agent bridge prompt template code block is missing"
+                      {:code :agent-prompt-template-invalid
+                       :reason :missing-template-code-block
+                       :template template-kind}))
+
+      (= 1 (count renderable-templates))
+      (first renderable-templates)
+
+      (> (count renderable-templates) 1)
+      (throw (ex-info "agent bridge prompt template must contain one code block"
+                      {:code :agent-prompt-template-invalid
+                       :reason :multiple-template-code-blocks
+                       :template template-kind}))
+
+      (= 1 (count templates))
+      (do
+        (validate-prompt-templates! {template-kind (first templates)})
+        (first templates))
+
+      :else
+      (throw (ex-info "agent bridge prompt template code block is missing"
+                      {:code :agent-prompt-template-invalid
+                       :reason :missing-template-code-block
+                       :template template-kind})))))
+
+(defn- missing-template-code-block-error?
+  [error]
+  (let [data (ex-data error)]
+    (and (= :agent-prompt-template-invalid (:code data))
+         (= :missing-template-code-block (:reason data)))))
+
+(defn- prompt-template-blocks-by-title
+  [blocks]
+  (reduce (fn [acc block]
+            (let [title (:block/title block)]
+              (if (contains? #{task-prompt-template-title
+                               comment-prompt-template-title}
+                             title)
+                (assoc acc title block)
+                acc)))
+          {}
+          blocks))
+
+(defn ensure-agent-bridge-prompt-templates!
+  [cfg repo]
+  (p/let [page (ensure-registry-page! cfg repo)
+          page-id (:db/id page)
+          page-uuid (:block/uuid page)
+          _ (when-not page-id
+              (throw (ex-info "agent bridge registry page not found"
+                              {:code :agent-prompt-template-initialization-failed})))
+          _ (when-not page-uuid
+              (throw (ex-info "agent bridge registry page uuid not found"
+                              {:code :agent-prompt-template-initialization-failed})))
+          blocks (transport/invoke cfg :thread-api/q
+                                   [repo [agent-bridge-prompt-template-blocks-query page-id]])]
+    (let [blocks-by-title (prompt-template-blocks-by-title blocks)
+          template-state (reduce (fn [state template-kind]
+                                   (if-let [block (get blocks-by-title (prompt-template-title template-kind))]
+                                     (try
+                                       (assoc-in state [:templates template-kind]
+                                                 (prompt-template-from-block template-kind block))
+                                       (catch :default e
+                                         (if (missing-template-code-block-error? e)
+                                           (assoc-in state [:repair-blocks template-kind] block)
+                                           (throw e))))
+                                     (update state :missing-kinds conj template-kind)))
+                                 {:templates {}
+                                  :missing-kinds []
+                                  :repair-blocks {}}
+                                 [:task :comment])
+          existing-templates (:templates template-state)
+          _ (validate-prompt-templates! existing-templates)
+          missing-kinds (:missing-kinds template-state)
+          repair-blocks (:repair-blocks template-state)]
+      (p/let [_ (when (seq missing-kinds)
+                  (transport/invoke cfg :thread-api/apply-outliner-ops
+                                    [repo [[:insert-blocks [(flatten-prompt-template-blocks
+                                                             (mapv default-prompt-template-block missing-kinds))
+                                                            page-uuid
+                                                            {:outliner-op :insert-blocks
+                                                             :sibling? false
+                                                             :bottom? true
+                                                             :keep-uuid? true}]]]
+                                     {}]))
+              _ (when (seq repair-blocks)
+                  (p/all
+                   (mapv (fn [[template-kind block]]
+                           (transport/invoke cfg :thread-api/apply-outliner-ops
+                                             [repo [[:insert-blocks [(flatten-prompt-template-blocks
+                                                                      (:block/children (default-prompt-template-block template-kind)))
+                                                                     (:block/uuid block)
+                                                                     {:outliner-op :insert-blocks
+                                                                      :sibling? false
+                                                                      :bottom? true
+                                                                      :keep-uuid? true}]]]
+                                              {}]))
+                         repair-blocks)))]
+        (validate-prompt-templates!
+         (reduce (fn [templates template-kind]
+                   (assoc templates
+                          template-kind
+                          (or (get existing-templates template-kind)
+                              (prompt-template-default template-kind))))
+                 {}
+                 [:task :comment]))))))
+
 (defn random-bridge-block-uuid
   []
   (random-uuid))
@@ -442,6 +789,10 @@
 (defn- first-entity
   [entities]
   (first (filter :db/id entities)))
+
+(defn- first-live-entity
+  [entities]
+  (first (remove ldb/recycled? (filter :db/id entities))))
 
 (defn- registry-page-name
   []
@@ -452,7 +803,7 @@
   (p/let [pages (transport/invoke cfg :thread-api/q
                                   [repo [agent-bridge-registry-page-query
                                          (registry-page-name)]])]
-    (first-entity pages)))
+    (first-live-entity pages)))
 
 (defn- ensure-registry-page!
   [cfg repo]
@@ -576,12 +927,13 @@
                    (map #(assoc % "Assignee" agent-name) blocks))))))
 
 (defn- dry-run-commands
-  [graph agent-name tasks]
+  [graph agent-name prompt-templates tasks]
   (mapv (fn [{:keys [block tree-text]}]
           (let [prompt (build-codex-prompt {:graph graph
                                             :agent-name agent-name
                                             :block block
-                                            :tree-text tree-text})
+                                            :tree-text tree-text
+                                            :prompt-template (:task prompt-templates)})
                 command (build-codex-command prompt {})]
             {:block (block-uuid-str block)
              :backend :codex
@@ -607,11 +959,12 @@
    :updated-at (js/Date.now)})
 
 (defn- route-task!
-  [cfg {:keys [repo graph agent-name]} {:keys [block tree-text]}]
+  [cfg {:keys [repo graph agent-name prompt-templates]} {:keys [block tree-text]}]
   (let [prompt (build-codex-prompt {:graph graph
                                     :agent-name agent-name
                                     :block block
-                                    :tree-text tree-text})
+                                    :tree-text tree-text
+                                    :prompt-template (:task prompt-templates)})
         command (build-codex-command prompt {})
         preview (command-preview command)]
     (emit-log! cfg (log-line (str "Codex command prepared for " (block-uuid-str block) ": " preview)))
@@ -660,11 +1013,12 @@
       (route-task! cfg opts task))))
 
 (defn- process-tasks!
-  [cfg {:keys [repo graph agent-name]}]
+  [cfg {:keys [repo graph agent-name prompt-templates]}]
   (p/let [tasks (list-routable-tasks cfg repo agent-name)]
     (p/all (mapv #(route-task-once! cfg {:repo repo
                                          :graph graph
-                                         :agent-name agent-name}
+                                         :agent-name agent-name
+                                         :prompt-templates prompt-templates}
                                     %)
                  tasks))))
 
@@ -897,7 +1251,7 @@
                 trim-non-empty))))
 
 (defn- route-comment!
-  [cfg {:keys [repo graph agent-name]} comment-block]
+  [cfg {:keys [repo graph agent-name prompt-templates]} comment-block]
   (p/catch
    (p/let [comment-uuid (:block/uuid comment-block)
            _ (when-not comment-uuid
@@ -920,7 +1274,8 @@
                                                :comment comment-block
                                                :target-tree-texts target-tree-texts
                                                :comments-area-tree-text comments-area-tree-text
-                                               :comment-tree-text comment-tree-text})
+                                               :comment-tree-text comment-tree-text
+                                               :prompt-template (:comment prompt-templates)})
            resume-session-id (some #(comment-target-session-id agent-name session-property-ident %) target-blocks)
            command (if resume-session-id
                      (build-codex-resume-command resume-session-id prompt {})
@@ -997,7 +1352,7 @@
         (p/all routing)))))
 
 (defn- listen-forever!
-  [cfg {:keys [repo graph agent-name]}]
+  [cfg {:keys [repo graph agent-name prompt-templates]}]
   (let [routing-blocks* (atom #{})
         handle-error! (fn [e]
                         (emit-log! cfg (log-line (str "Codex invocation failed: "
@@ -1015,6 +1370,7 @@
                                                          {:repo repo
                                                           :graph graph
                                                           :agent-name agent-name
+                                                          :prompt-templates prompt-templates
                                                           :routing-blocks* routing-blocks*}
                                                          payload)
                          (p/catch handle-error!))
@@ -1044,11 +1400,13 @@
           (if-not (codex-available? nil)
             (bridge-error :codex-not-found "codex executable is not available")
             (p/let [cfg (cli-server/ensure-server! config repo)
+                    logs (conj logs (log-line "checking prompt templates ..."))
+                    prompt-templates (ensure-agent-bridge-prompt-templates! cfg repo)
                     logs (conj logs (log-line "registering agent bridge ..."))
                     _ (register-agent-bridge! cfg repo agent-name)]
               (if (:dry-run? action)
                 (p/let [tasks (list-routable-tasks cfg repo agent-name)
-                        commands (dry-run-commands graph agent-name tasks)
+                        commands (dry-run-commands graph agent-name prompt-templates tasks)
                         logs (into (conj logs (log-line "listening graph changes ..."))
                                    (map (fn [{:keys [block preview]}]
                                           (log-line (str "would run Codex command for " block ": " preview)))
@@ -1066,7 +1424,8 @@
                   (if (:process-once? action)
                     (p/let [routed (process-tasks! cfg {:repo repo
                                                         :graph graph
-                                                        :agent-name agent-name})]
+                                                        :agent-name agent-name
+                                                        :prompt-templates prompt-templates})]
                       {:status :ok
                        :command :agent-bridge
                        :data {:mode :processed-once
@@ -1075,7 +1434,9 @@
                               :routed routed}})
                     (p/let [_ (process-tasks! cfg {:repo repo
                                                    :graph graph
-                                                   :agent-name agent-name})]
+                                                   :agent-name agent-name
+                                                   :prompt-templates prompt-templates})]
                       (listen-forever! cfg {:repo repo
                                             :graph graph
-                                            :agent-name agent-name}))))))))))))
+                                            :agent-name agent-name
+                                            :prompt-templates prompt-templates}))))))))))))

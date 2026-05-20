@@ -131,6 +131,27 @@ def run_cli(cli, repo_root, root_dir, config, graph, extra_args):
     return json.loads(result.stdout) if result.stdout.strip() else None
 
 
+def run_cli_with_env(cli, repo_root, root_dir, config, extra_args, env):
+    result = subprocess.run(
+        cli
+        + [
+            "--root-dir",
+            root_dir,
+            "--config",
+            config,
+            "--output",
+            "json",
+        ]
+        + extra_args,
+        cwd=repo_root,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return result
+
+
 def deref_session_value(cli, repo_root, root_dir, config, graph, value):
     if not isinstance(value, int):
         return value
@@ -471,6 +492,200 @@ def run_parallel_assignment_check(cli, repo_root, root_dir, config, graph, tmp_d
                 bridge.wait(timeout=5)
 
 
+def edn_string(value):
+    return json.dumps(value, ensure_ascii=False)
+
+
+def write_task_template_file(path, marker):
+    template = "\n".join(
+        [
+            marker,
+            "Graph: {{graph}}",
+            "Block UUID: {{block-uuid}}",
+            "AgentBridge name: {{agent-name}}",
+            "{{task-block-tree}}",
+        ]
+    )
+    path.write_text(
+        """[{:block/title "Task prompt template"
+   :block/children [{:block/title "Description: Custom task template for this graph."}
+                    {:block/title "Template variables: {{graph}}, {{block-uuid}}, {{agent-name}}, and {{task-block-tree}}."}
+                    {:block/title %s}]}]"""
+        % edn_string("```text\n" + template + "\n```"),
+        encoding="utf8",
+    )
+
+
+def write_invalid_task_template_file(path):
+    path.write_text(
+        """[{:block/title "Task prompt template"
+   :block/children [{:block/title "Description: Invalid task template for lint coverage."}
+                    {:block/title %s}]}]"""
+        % edn_string("```text\nBroken {{graph}} {{unknown-var}}\n```"),
+        encoding="utf8",
+    )
+
+
+def install_task_template(cli, repo_root, root_dir, config, graph, tmp_dir, marker):
+    run_cli(
+        cli,
+        repo_root,
+        root_dir,
+        config,
+        graph,
+        ["upsert", "page", "--graph", graph, "--page", "AgentBridge"],
+    )
+    blocks_file = tmp_dir / ("task-template-" + graph + ".edn")
+    write_task_template_file(blocks_file, marker)
+    run_cli(
+        cli,
+        repo_root,
+        root_dir,
+        config,
+        graph,
+        [
+            "upsert",
+            "block",
+            "--graph",
+            graph,
+            "--target-page",
+            "AgentBridge",
+            "--blocks-file",
+            str(blocks_file),
+        ],
+    )
+
+
+def install_invalid_task_template(cli, repo_root, root_dir, config, graph, tmp_dir):
+    run_cli(
+        cli,
+        repo_root,
+        root_dir,
+        config,
+        graph,
+        ["upsert", "page", "--graph", graph, "--page", "AgentBridge"],
+    )
+    blocks_file = tmp_dir / ("invalid-task-template-" + graph + ".edn")
+    write_invalid_task_template_file(blocks_file)
+    run_cli(
+        cli,
+        repo_root,
+        root_dir,
+        config,
+        graph,
+        [
+            "upsert",
+            "block",
+            "--graph",
+            graph,
+            "--target-page",
+            "AgentBridge",
+            "--blocks-file",
+            str(blocks_file),
+        ],
+    )
+
+
+def dry_run_prompt(cli, repo_root, root_dir, config, graph, env):
+    result = run_cli_with_env(
+        cli,
+        repo_root,
+        root_dir,
+        config,
+        ["agent", "bridge", "--graph", graph, "--dry-run"],
+        env,
+    )
+    if result.returncode != 0:
+        raise SystemExit(
+            "agent bridge dry-run failed for {}\nstdout:\n{}\nstderr:\n{}".format(
+                graph, result.stdout, result.stderr
+            )
+        )
+    payload = json.loads(result.stdout)
+    commands = payload.get("data", {}).get("commands", [])
+    if len(commands) != 1:
+        raise SystemExit("expected one dry-run command for {}, got {!r}".format(graph, commands))
+    command = commands[0].get("command", [])
+    if len(command) < 4:
+        raise SystemExit("dry-run command did not contain a prompt: {!r}".format(command))
+    return command[3]
+
+
+def assert_contains(text, expected):
+    if expected not in text:
+        raise SystemExit("expected {!r} in:\n{}".format(expected, text))
+
+
+def assert_not_contains(text, unexpected):
+    if unexpected in text:
+        raise SystemExit("did not expect {!r} in:\n{}".format(unexpected, text))
+
+
+def run_prompt_template_graph_check(cli, repo_root, root_dir, config, graph, tmp_dir):
+    graph_a = graph
+    graph_b = graph + "-other"
+    graph_bad = graph + "-invalid"
+    marker_a = "CUSTOM GRAPH A TEMPLATE"
+    marker_b = "CUSTOM GRAPH B TEMPLATE"
+
+    fake_bin = tmp_dir / "fake-bin"
+    env = os.environ.copy()
+    env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
+    env["CODEX_FAKE_LOG"] = str(tmp_dir / "codex-dry-run.jsonl")
+
+    for graph_name in [graph_b, graph_bad]:
+        run_cli(
+            cli,
+            repo_root,
+            root_dir,
+            config,
+            graph_name,
+            ["graph", "create", "--graph", graph_name],
+        )
+
+    for graph_name in [graph_a, graph_b, graph_bad]:
+        create_task(cli, repo_root, root_dir, config, graph_name, TASK_TITLE)
+        assign_task(cli, repo_root, root_dir, config, graph_name)
+
+    install_task_template(cli, repo_root, root_dir, config, graph_a, tmp_dir, marker_a)
+    prompt_a = dry_run_prompt(cli, repo_root, root_dir, config, graph_a, env)
+    assert_contains(prompt_a, marker_a)
+    assert_contains(prompt_a, "Graph: " + graph_a)
+    assert_not_contains(prompt_a, marker_b)
+    assert_not_contains(prompt_a, "You are handling a Logseq AgentBridge task.")
+
+    prompt_b_default = dry_run_prompt(cli, repo_root, root_dir, config, graph_b, env)
+    assert_contains(prompt_b_default, "You are handling a Logseq AgentBridge task.")
+    assert_contains(prompt_b_default, "Graph: " + graph_b)
+    assert_not_contains(prompt_b_default, marker_a)
+
+    install_task_template(cli, repo_root, root_dir, config, graph_b, tmp_dir, marker_b)
+    prompt_b = dry_run_prompt(cli, repo_root, root_dir, config, graph_b, env)
+    assert_contains(prompt_b, marker_b)
+    assert_contains(prompt_b, "Graph: " + graph_b)
+    assert_not_contains(prompt_b, marker_a)
+    assert_not_contains(prompt_b, "You are handling a Logseq AgentBridge task.")
+
+    prompt_a_again = dry_run_prompt(cli, repo_root, root_dir, config, graph_a, env)
+    assert_contains(prompt_a_again, marker_a)
+    assert_not_contains(prompt_a_again, marker_b)
+
+    install_invalid_task_template(cli, repo_root, root_dir, config, graph_bad, tmp_dir)
+    bad_result = run_cli_with_env(
+        cli,
+        repo_root,
+        root_dir,
+        config,
+        ["agent", "bridge", "--graph", graph_bad, "--dry-run"],
+        env,
+    )
+    if bad_result.returncode == 0:
+        raise SystemExit("invalid graph prompt template unexpectedly passed:\n" + bad_result.stdout)
+    assert_contains(bad_result.stdout + bad_result.stderr, "agent-prompt-template-invalid")
+
+    print("agent bridge graph prompt templates are isolated and linted")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True)
@@ -483,6 +698,7 @@ def main():
     parser.add_argument("--assign-after-start", action="store_true")
     parser.add_argument("--parallel-assignment-check", action="store_true")
     parser.add_argument("--comment-mention-check", action="store_true")
+    parser.add_argument("--prompt-template-graph-check", action="store_true")
     args = parser.parse_args()
 
     repo_root = pathlib.Path(args.repo_root)
@@ -503,6 +719,10 @@ def main():
 
     if args.comment_mention_check:
         run_comment_mention_check(cli, repo_root, args.root_dir, args.config, args.graph, tmp_dir)
+        return
+
+    if args.prompt_template_graph_check:
+        run_prompt_template_graph_check(cli, repo_root, args.root_dir, args.config, args.graph, tmp_dir)
         return
 
     env = os.environ.copy()
