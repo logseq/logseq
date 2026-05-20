@@ -58,7 +58,7 @@
       (str error)))
 
 (defn install-cli-launcher!
-  [{:keys [windows? cli-path cli-dir cli-dir! exe-path path-join exists? show-message-box!
+  [{:keys [windows? cli-path cli-dir cli-dir! path-join exists? show-message-box!
            show-error-box! t log-info! log-warn!]
     :as deps}]
   (try

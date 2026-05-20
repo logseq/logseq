@@ -1,11 +1,12 @@
 (ns electron.cli-install-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require ["path" :as node-path]
+            [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
             [electron.cli-install :as cli-install]))
 
 (defn- path-join
   [& parts]
-  (string/join "/" parts))
+  (apply node-path/join parts))
 
 (defn- t
   [k & args]
