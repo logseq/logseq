@@ -44,6 +44,7 @@
    [logseq.db.common.view :as db-view]
    [logseq.db.frontend.class :as db-class]
    [logseq.db.frontend.entity-util :as entity-util]
+   [logseq.db.frontend.property :as db-property]
    [logseq.db.frontend.schema :as db-schema]
    [logseq.db.sqlite.create-graph :as sqlite-create-graph]
    [logseq.db.sqlite.export :as sqlite-export]
@@ -412,6 +413,82 @@
   (doseq [tx-report (:upgrade-result-coll migrate-result)]
     (db-sync/handle-local-tx! repo tx-report)))
 
+(def ^:private built-in-sync-repair-tx-id
+  #uuid "00000000-0000-4000-8000-652665286528")
+
+(def ^:private built-in-sync-repair-properties
+  [:logseq.property.repeat/repeat-type
+   :logseq.property.comments/blocks])
+
+(def ^:private built-in-sync-repair-classes
+  [:logseq.class/Comments
+   :logseq.class/Comment])
+
+;; Fixed so duplicate repair txs from multiple clients converge on the same datoms.
+(def ^:private built-in-sync-repair-timestamp 0)
+
+(defn- stable-built-in-sync-repair-item
+  [order item]
+  (if (and (map? item) (:block/uuid item))
+    (assoc item
+           :block/created-at built-in-sync-repair-timestamp
+           :block/updated-at built-in-sync-repair-timestamp
+           :block/order order)
+    item))
+
+(defn- built-in-sync-repair-tx-data
+  []
+  (let [properties built-in-sync-repair-properties
+        new-properties (->> (select-keys db-property/built-in-properties properties)
+                            sqlite-create-graph/build-properties
+                            (map (fn [b] (assoc b :logseq.property/built-in? true))))
+        new-classes (->> (select-keys db-class/built-in-classes built-in-sync-repair-classes)
+                         (#(sqlite-create-graph/build-initial-classes* % (zipmap properties properties)))
+                         (map (fn [b] (assoc b :logseq.property/built-in? true))))
+        new-class-idents (keep (fn [class]
+                                 (when-let [db-ident (:db/ident class)]
+                                   {:db/ident db-ident}))
+                               new-classes)
+        tx-data (vec (concat new-class-idents new-properties new-classes))
+        block-item-count (count (filter #(and (map? %) (:block/uuid %)) tx-data))
+        orders (db-order/gen-n-keys block-item-count nil nil :max-key-atom (atom nil))
+        *orders (atom orders)]
+    (mapv (fn [item]
+            (stable-built-in-sync-repair-item
+             (when (and (map? item) (:block/uuid item))
+               (let [order (first @*orders)]
+                 (swap! *orders rest)
+                 order))
+             item))
+          tx-data)))
+
+(defn- enqueue-built-in-sync-repair!
+  [repo]
+  (when-not (client-op/get-local-tx-entry repo built-in-sync-repair-tx-id)
+    (let [{:keys [should-inc-pending?]}
+          (client-op/upsert-local-tx-entry!
+           repo
+           {:tx-id built-in-sync-repair-tx-id
+            :created-at 0
+            :pending? true
+            :failed? false
+            :outliner-op :fix
+            :undo-redo :none
+            :forward-outliner-ops []
+            :inverse-outliner-ops []
+            :inferred-outliner-ops? false
+            :normalized-tx-data (built-in-sync-repair-tx-data)
+            :reversed-tx-data []})]
+      (when should-inc-pending?
+        (client-op/adjust-pending-local-tx-count! repo 1)))))
+
+(defn- maybe-enqueue-built-in-sync-repair!
+  [repo conn migrate-result initial-data-exists?]
+  (when (and (nil? migrate-result)
+             initial-data-exists?
+             (true? (:kv/value (d/entity @conn :logseq.kv/graph-remote?))))
+    (enqueue-built-in-sync-repair! repo)))
+
 (defn- <create-or-open-db!
   [repo {:keys [config datoms sync-download-graph? creating-remote-graph?] :as opts}]
   (when creating-remote-graph?
@@ -474,8 +551,10 @@
                                     (ldb/transact! conn initial-data
                                                    {:initial-db? true})))]
           (when-not sync-download-graph?
-            (when-let [migrate-result (db-migrate/migrate conn)]
-              (handle-migrate-result-local-txs! repo migrate-result))
+            (let [migrate-result (db-migrate/migrate conn)]
+              (if migrate-result
+                (handle-migrate-result-local-txs! repo migrate-result)
+                (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?)))
             (gc-sqlite-dbs! db conn {})
             (maybe-run-recycle-gc! conn))
 
