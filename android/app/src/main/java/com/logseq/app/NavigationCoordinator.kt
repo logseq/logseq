@@ -8,7 +8,13 @@ data class NavigationRenderState(
     val paths: List<String>,
     val navigationType: String,
     val path: String,
-    val stackSwitched: Boolean
+    val stackSwitched: Boolean,
+    val applyToCompose: Boolean = true
+)
+
+private data class PendingNativePop(
+    val stackId: String,
+    val targetPath: String
 )
 
 class NavigationCoordinator {
@@ -21,6 +27,7 @@ class NavigationCoordinator {
     private val stackPaths: MutableMap<String, MutableList<String>> = mutableMapOf(
         primaryStack to mutableListOf("/")
     )
+    private val pendingNativePops: ArrayDeque<PendingNativePop> = ArrayDeque()
     var activeStackId: String = primaryStack
         private set
 
@@ -48,7 +55,8 @@ class NavigationCoordinator {
         previousStackId: String,
         navigationType: String,
         path: String,
-        stackSwitched: Boolean
+        stackSwitched: Boolean,
+        applyToCompose: Boolean = true
     ): NavigationRenderState {
         val paths = stackPaths[activeStackId]?.toList() ?: listOf(rootPath(activeStackId))
         return NavigationRenderState(
@@ -57,8 +65,21 @@ class NavigationCoordinator {
             paths = paths,
             navigationType = navigationType,
             path = path,
-            stackSwitched = stackSwitched
+            stackSwitched = stackSwitched,
+            applyToCompose = applyToCompose
         )
+    }
+
+    private fun consumePendingNativePop(stackId: String, path: String): Boolean {
+        val pending = pendingNativePops.firstOrNull() ?: return false
+        if (pending.stackId != stackId || pending.targetPath != path) {
+            return false
+        }
+        pendingNativePops.removeFirst()
+        logDebug(
+            "$DEBUG_PREFIX coordinator.consumePendingNativePop stack=$stackId path=$path remaining=${pendingNativePops.size} ${debugState()}"
+        )
+        return true
     }
 
     fun onRouteChange(stack: String?, navigationType: String?, path: String?): NavigationRenderState {
@@ -70,6 +91,11 @@ class NavigationCoordinator {
         logDebug(
             "$DEBUG_PREFIX coordinator.onRouteChange.before stack=$stackId type=$navType path=$resolvedPath ${debugState()}"
         )
+
+        if (navType == "pop" && consumePendingNativePop(stackId, resolvedPath)) {
+            activeStackId = stackId
+            return snapshot(previousStackId, navType, resolvedPath, stackSwitched = false, applyToCompose = false)
+        }
 
         val paths = stackPaths.getOrPut(stackId) { mutableListOf(rootPath(stackId)) }
 
@@ -157,12 +183,21 @@ class NavigationCoordinator {
         return paths.size > 1
     }
 
-    fun pop(): String? {
+    fun prepareNativePop(): NavigationRenderState? {
         val paths = stackPaths[activeStackId] ?: return null
         if (paths.size <= 1) return null
         paths.removeAt(paths.lastIndex)
-        return paths.lastOrNull().also { target ->
-            logDebug("$DEBUG_PREFIX coordinator.pop target=$target ${debugState()} canPop=${canPop()}")
-        }
+        val target = paths.lastOrNull() ?: return null
+        pendingNativePops.addLast(PendingNativePop(activeStackId, target))
+        logDebug(
+            "$DEBUG_PREFIX coordinator.prepareNativePop stack=$activeStackId target=$target pending=${pendingNativePops.size} ${debugState()} canPop=${canPop()}"
+        )
+        return snapshot(
+            previousStackId = activeStackId,
+            navigationType = "pop",
+            path = target,
+            stackSwitched = false,
+            applyToCompose = true
+        )
     }
 }

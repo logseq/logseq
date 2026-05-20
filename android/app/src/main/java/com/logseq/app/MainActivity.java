@@ -122,7 +122,17 @@ public class MainActivity extends BridgeActivity {
                         + " before=" + navigationCoordinator.debugState()
                 );
                 NavigationRenderState renderState = navigationCoordinator.onRouteChange(stack, navigationType, path);
-                ComposeHost.applyNavigation(renderState);
+                if (renderState.getApplyToCompose()) {
+                    ComposeHost.applyNavigation(renderState);
+                } else {
+                    Log.d(
+                        "NavStack",
+                        NAV_STACK_DEBUG_PREFIX + " activity.routeChange.skippedCompose stack="
+                            + renderState.getActiveStackId()
+                            + " type=" + renderState.getNavigationType()
+                            + " path=" + renderState.getPath()
+                    );
+                }
                 Log.d(
                     "NavStack",
                     NAV_STACK_DEBUG_PREFIX + " activity.routeChange.applied after="
@@ -130,6 +140,7 @@ public class MainActivity extends BridgeActivity {
                         + " renderStack=" + renderState.getActiveStackId()
                         + " renderPaths=" + renderState.getPaths()
                         + " stackSwitched=" + renderState.getStackSwitched()
+                        + " applyToCompose=" + renderState.getApplyToCompose()
                 );
             }
         };
@@ -216,6 +227,16 @@ public class MainActivity extends BridgeActivity {
 
         WebView webView = getBridge().getWebView();
         if (webView != null) {
+            NavigationRenderState nativePopState = navigationCoordinator.prepareNativePop();
+            if (nativePopState != null) {
+                Log.d(
+                    "NavStack",
+                    NAV_STACK_DEBUG_PREFIX + " activity.nativeBack consumed=native-stack-pop target="
+                        + nativePopState.getPath()
+                        + " paths=" + nativePopState.getPaths()
+                );
+                ComposeHost.applyNavigation(nativePopState);
+            }
             // Send "native back" into JS. JS will call your UILocal/route-change,
             // which flows into ComposeHost.applyNavigation(...) and animates.
             sendJsBack(webView);
