@@ -68,6 +68,30 @@
                :message "Logseq CLI was installed to ~/.local/bin"}]
              (:messages result))))))
 
+(deftest install-cli-launcher-uses-stable-appimage-path
+  (testing "Linux AppImage launchers use APPIMAGE instead of the temporary mounted executable path"
+    (let [result (run-install! {:existing-files #{"/app/logseq-cli.js"}
+                                :exe-path "/tmp/.mount_LogseqA1B2C3/logseq"
+                                :appimage-path "/home/me/Logseq.AppImage"})
+          content (second (first (:writes result)))]
+      (is (string/includes? content "\"/home/me/Logseq.AppImage\""))
+      (is (not (string/includes? content "/tmp/.mount_LogseqA1B2C3/logseq"))))))
+
+(deftest install-cli-launcher-skips-dialog-when-appimage-mount-path-changes
+  (testing "Linux AppImage restarts do not rewrite the launcher when only the temporary mount path changes"
+    (let [stable-content (str "#!/usr/bin/env sh\n"
+                              "# " cli-install/CLI_LAUNCHER_MARKER "\n"
+                              "set -eu\n"
+                              "ELECTRON_RUN_AS_NODE=1 exec \"/home/me/Logseq.AppImage\" \"/app/logseq-cli.js\" \"$@\"\n")
+          result (run-install! {:existing-files #{"/app/logseq-cli.js" "/home/me/.local/bin/logseq"}
+                                :existing-contents {"/home/me/.local/bin/logseq" stable-content}
+                                :exe-path "/tmp/.mount_LogseqD4E5F6/logseq"
+                                :appimage-path "/home/me/Logseq.AppImage"})]
+      (is (= [] (:writes result)))
+      (is (= [] (:chmods result)))
+      (is (= [] (:messages result)))
+      (is (= [] (:errors result))))))
+
 (deftest install-cli-launcher-keeps-windows-path
   (testing "Windows keeps the existing Windows install path behavior and reports that directory"
     (let [windows-dir "C:/Users/me/AppData/Local/Microsoft/WindowsApps"
