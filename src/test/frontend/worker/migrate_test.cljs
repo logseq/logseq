@@ -89,3 +89,100 @@
                :logseq.property.repeat/repeat-type.plus
                :logseq.property.repeat/repeat-type.double-plus}
              (set (map :db/ident (:property/closed-values property))))))))
+
+(deftest migrate-65-26-adds-comments-blocks-property
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 26}}])
+
+    (db-migrate/migrate conn :target-version {:major 65 :minor 27})
+
+    (is (= {:major 65 :minor 27}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (let [property (d/entity @conn :logseq.property.comments/blocks)]
+      (is (some? property))
+      (is (= "Commented blocks" (:block/title property)))
+      (is (= :node (:logseq.property/type property)))
+      (is (true? (:logseq.property/hide? property)))
+      (is (false? (:logseq.property/public? property))))))
+
+(deftest migrate-65-28-tags-existing-comment-blocks
+  (let [conn (d/create-conn db-schema/schema)
+        comments-area-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        first-comment-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        second-comment-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        ordinary-child-uuid #uuid "44444444-4444-4444-4444-444444444444"]
+    (d/transact! conn
+                 [{:db/ident :logseq.kv/schema-version
+                   :kv/value {:major 65 :minor 27}}
+                  {:db/ident :logseq.class/Comments
+                   :block/title "Comments"}
+                  {:db/ident :logseq.class/Task
+                   :block/title "Task"}
+                  {:block/uuid comments-area-uuid
+                   :block/title "Comments"
+                   :block/tags #{:logseq.class/Comments}}
+                  {:block/uuid first-comment-uuid
+                   :block/title "first comment"
+                   :block/parent [:block/uuid comments-area-uuid]}
+                  {:block/uuid second-comment-uuid
+                   :block/title "second comment"
+                   :block/parent [:block/uuid comments-area-uuid]
+                   :block/tags #{:logseq.class/Task}}
+                  {:block/uuid ordinary-child-uuid
+                   :block/title "ordinary child"}])
+
+    (db-migrate/migrate conn :target-version {:major 65 :minor 28})
+
+    (is (= {:major 65 :minor 28}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? (d/entity @conn :logseq.class/Comment)))
+    (is (= #{:logseq.class/Comment}
+           (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid first-comment-uuid]))))))
+    (is (= #{:logseq.class/Task :logseq.class/Comment}
+           (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid second-comment-uuid]))))))
+    (is (= #{:logseq.class/Comments}
+           (set (map :db/ident (:block/tags (d/entity @conn [:block/uuid comments-area-uuid]))))))
+    (is (empty? (:block/tags (d/entity @conn [:block/uuid ordinary-child-uuid]))))))
+
+(deftest migrate-65-29-adds-single-block-comment-targets
+  (let [conn (d/create-conn db-schema/schema)
+        target-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        comments-area-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        range-comments-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        range-target-uuid #uuid "44444444-4444-4444-4444-444444444444"]
+    (d/transact! conn
+                 [{:db/ident :logseq.kv/schema-version
+                   :kv/value {:major 65 :minor 28}}
+                  {:db/ident :logseq.class/Comments
+                   :block/title "Comments"}
+                  {:block/uuid target-uuid
+                   :block/title "target"}
+                  {:block/uuid comments-area-uuid
+                   :block/title "Comments"
+                   :block/parent [:block/uuid target-uuid]
+                   :block/tags #{:logseq.class/Comments}}
+                  {:block/uuid range-target-uuid
+                   :block/title "range target"}
+                  {:block/uuid range-comments-uuid
+                   :block/title "Comments"
+                   :block/tags #{:logseq.class/Comments}}])
+    (d/transact! conn
+                 [[:db/add
+                   (:db/id (d/entity @conn [:block/uuid range-comments-uuid]))
+                   :logseq.property.comments/blocks
+                   (:db/id (d/entity @conn [:block/uuid range-target-uuid]))]])
+
+    (db-migrate/migrate conn :target-version {:major 65 :minor 29})
+
+    (is (= {:major 65 :minor 29}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (= #{(:db/id (d/entity @conn [:block/uuid target-uuid]))}
+           (set (map :db/id
+                     (:logseq.property.comments/blocks
+                      (d/entity @conn [:block/uuid comments-area-uuid]))))))
+    (is (= #{(:db/id (d/entity @conn [:block/uuid range-target-uuid]))}
+           (set (map :db/id
+                     (:logseq.property.comments/blocks
+                      (d/entity @conn [:block/uuid range-comments-uuid])))))
+        "Existing range comment targets should be preserved")))

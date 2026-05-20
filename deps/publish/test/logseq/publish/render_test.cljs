@@ -28,7 +28,7 @@
 
 (deftest block-content-nodes-use-auto-dir
   (let [node (render/block-content-nodes
-              {:block/content "english then عربي"}
+              {:block/title "english then عربي"}
               {:uuid->title {} :graph-uuid "g"}
               1)]
     (is (= "auto" (get-in node [1 :dir])))))

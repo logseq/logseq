@@ -70,8 +70,30 @@
 (defn- deprecated-ensure-graph-uuid
   [_db])
 
+(defn- tag-comment-blocks
+  [db]
+  (->> (d/q '[:find [?comment ...]
+              :where
+              [?comments-area :block/tags :logseq.class/Comments]
+              [?comment :block/parent ?comments-area]]
+            db)
+       (map (fn [comment-id]
+              [:db/add comment-id :block/tags :logseq.class/Comment]))))
+
+(defn- add-single-block-comment-targets
+  [db]
+  (->> (d/q '[:find ?comments-area-id ?parent-id
+              :where
+              [?comments-area-id :block/tags :logseq.class/Comments]
+              [?comments-area-id :block/parent ?parent-id]]
+            db)
+       (keep (fn [[comments-area-id parent-id]]
+               (let [comments-area (d/entity db comments-area-id)]
+                 (when-not (seq (:logseq.property.comments/blocks comments-area))
+                   [:db/add comments-area-id :logseq.property.comments/blocks parent-id]))))))
+
 (defn- fix-asset-source-url-property-type
-  "65.29 mistakenly registered :logseq.property.asset/source-url with type :url
+  "65.34 mistakenly registered :logseq.property.asset/source-url with type :url
    (a ref-typed schema), which made datascript treat string URLs as tempid
    lookups during transact and block all asset saves. Coerce the existing
    property's type to :string in any DB that ran the bad migration."
@@ -81,7 +103,7 @@
       [[:db/add (:db/id e) :logseq.property/type :string]])))
 
 (defn- fix-asset-source-url-schema-lock
-  "65.30 changed :logseq.property/type to :string but left :db/valueType
+  "65.35 changed :logseq.property/type to :string but left :db/valueType
    :db.type/ref on the entity. In Logseq's datascript fork, :db/valueType
    on a :db/ident-keyed entity IS the live schema entry — so the attribute
    stayed ref-typed and string URLs continued to fail with 'Tempids used
@@ -122,16 +144,21 @@
    ["65.25" {:delete-properties [:block/pre-block?
                                  :logseq.property.embedding/hnsw-label
                                  :logseq.property.embedding/hnsw-label-updated-at]}]
-   ["65.26" {:properties [:logseq.property.class/default-icon]}]
-   ["65.27" {:properties [:logseq.property/wikidata-id]}]
-   ["65.28" {:properties [:logseq.property/property-key-width]}]
-   ["65.29" {:properties [:logseq.property.asset/source-url
+   ["65.26" {:properties [:logseq.property.repeat/repeat-type]}]
+   ["65.27" {:classes [:logseq.class/Comments]
+             :properties [:logseq.property.comments/blocks]}]
+   ["65.28" {:classes [:logseq.class/Comment]
+             :fix tag-comment-blocks}]
+   ["65.29" {:fix add-single-block-comment-targets}]
+   ["65.30" {:properties [:logseq.property.class/default-icon]}]
+   ["65.31" {:properties [:logseq.property/wikidata-id]}]
+   ["65.32" {:properties [:logseq.property/property-key-width]}]
+   ["65.33" {:properties [:logseq.property.asset/source-url
                           :logseq.property.asset/source-name
                           :logseq.property.asset/license
                           :logseq.property.asset/attribution]}]
-   ["65.30" {:fix fix-asset-source-url-property-type}]
-   ["65.31" {:fix fix-asset-source-url-schema-lock}]
-   ["65.32" {:properties [:logseq.property.repeat/repeat-type]}]])
+   ["65.34" {:fix fix-asset-source-url-property-type}]
+   ["65.35" {:fix fix-asset-source-url-schema-lock}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

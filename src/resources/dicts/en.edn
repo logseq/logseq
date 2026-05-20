@@ -110,6 +110,15 @@
  :block/switch-to-plugin-renderer "Switch to plugin renderer"
  :block/untitled-query "Untitled query"
 
+ :block.comments/add-comment "Add comment"
+ :block.comments/add-comment-command-desc "Add a comment to this block."
+ :block.comments/collapsed-summary (fn [n author] (str n (if (= 1 n) " comment" " comments") " · latest from " author))
+ :block.comments/date-at-time "{1} at {2}"
+ :block.comments/label "Comments"
+ :block.comments/on-those-blocks "On those blocks"
+ :block.comments/placeholder "Reply..."
+ :block.comments/yesterday-at "Yesterday at {1}"
+
  :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
  :block.macro/namespace-deprecated "{{namespace}} is deprecated. Use the {1} feature instead."
  :block.macro/query-deprecated "{{query}} is deprecated. Use '/Query' command instead."
@@ -154,6 +163,7 @@
  :class.built-in/card "Card"
  :class.built-in/cards "Cards"
  :class.built-in/code-block "Code"
+ :class.built-in/comments "Comments"
  :class.built-in/journal "Journal"
  :class.built-in/math-block "Math"
  :class.built-in/page "Page"
@@ -267,6 +277,7 @@
 
  :command.command-palette/toggle "Search commands"
 
+ :command.editor/add-comment "Add comment"
  :command.editor/add-property "Add property"
  :command.editor/add-property-deadline "Add task deadline to selected block"
  :command.editor/add-property-icon "Add icon"
