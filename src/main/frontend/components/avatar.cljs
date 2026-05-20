@@ -7,11 +7,14 @@
 (defonce ^:private latin-or-number-re
   (js/RegExp. "^[\\p{Script=Latin}\\p{Number}]" "u"))
 
+(defonce ^:private grapheme-segmenter
+  (when (exists? js/Intl.Segmenter)
+    (js/Intl.Segmenter. js/undefined #js {:granularity "grapheme"})))
+
 (defn- graphemes
   [s]
-  (if (exists? js/Intl.Segmenter)
-    (let [segmenter (js/Intl.Segmenter. js/undefined #js {:granularity "grapheme"})]
-      (map #(.-segment %) (array-seq (js/Array.from (.segment segmenter s)))))
+  (if grapheme-segmenter
+    (map #(.-segment %) (array-seq (js/Array.from (.segment grapheme-segmenter s))))
     (array-seq (js/Array.from s))))
 
 (defn- latin-or-number?
