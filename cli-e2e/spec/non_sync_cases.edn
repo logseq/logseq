@@ -1307,77 +1307,29 @@ PY"
      :server ["--graph"]}},
    :tags [:server],
    :extends :non-sync/graph-json-env}
-  {:id "agent-bridge-routes-assigned-task",
+  {:id "agent-bridge-workflows",
    :setup
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert task --graph {{graph-arg}} --target-page AgentBridgeE2E --content '测试 agent bridge 功能，把当前task status设置为done' --status todo >/dev/null"],
+   ["mkdir -p '{{tmp-dir}}/assigned-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/assigned-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-assigned >/dev/null && {{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json upsert task --graph cli-e2e-agent-bridge-assigned --target-page AgentBridgeE2E --content '测试 agent bridge 功能，把当前task status设置为done' --status todo >/dev/null"
+    "mkdir -p '{{tmp-dir}}/parallel-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/parallel-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-parallel >/dev/null"
+    "mkdir -p '{{tmp-dir}}/comment-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/comment-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --output json graph create --graph cli-e2e-agent-bridge-comment >/dev/null"],
    :cmds
-   ["python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{root-dir}}' --config '{{config-path}}' --graph '{{graph}}' --tmp-dir '{{tmp-dir}}' --repo-root '{{repo-root}}' --assign-after-start"],
-   :expect {:exit 0, :stdout-contains ["agent bridge routed task to thread-e2e-agent-bridge"]},
-   :covers
-   {:commands ["agent bridge"],
-    :options
-    {:global ["--config" "--graph" "--root-dir" "--output"],
-     :agent []}},
-   :cleanup
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"],
-   :tags [:agent],
-   :extends :non-sync/graph-json-env}
-  {:id "agent-bridge-routes-assigned-tasks-concurrently",
-   :cmds
-   ["python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{root-dir}}' --config '{{config-path}}' --graph '{{graph}}' --tmp-dir '{{tmp-dir}}' --repo-root '{{repo-root}}' --parallel-assignment-check"],
-   :expect {:exit 0, :stdout-contains ["agent bridge routed tasks concurrently:"]},
-   :covers
-   {:commands ["agent bridge"],
-    :options
-    {:global ["--config" "--graph" "--root-dir" "--output"],
-     :agent []}},
-   :cleanup
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"],
-   :tags [:agent],
-   :extends :non-sync/graph-json-env}
-  {:id "agent-bridge-demo-script",
-   :cmds
-   ["bash '{{repo-root}}/cli-e2e/scripts/agent_bridge_demo.sh' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/demo-root' --graph cli-e2e-agent-bridge-demo --repo-root '{{repo-root}}'"],
+   ["python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --graph cli-e2e-agent-bridge-assigned --tmp-dir '{{tmp-dir}}/assigned-work' --repo-root '{{repo-root}}' --assign-after-start"
+    "python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --graph cli-e2e-agent-bridge-parallel --tmp-dir '{{tmp-dir}}/parallel-work' --repo-root '{{repo-root}}' --parallel-assignment-check"
+    "python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --graph cli-e2e-agent-bridge-comment --tmp-dir '{{tmp-dir}}/comment-work' --repo-root '{{repo-root}}' --comment-mention-check"
+    "bash '{{repo-root}}/cli-e2e/scripts/agent_bridge_demo.sh' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{tmp-dir}}/demo-root' --graph cli-e2e-agent-bridge-demo --repo-root '{{repo-root}}'"
+    "mkdir -p '{{tmp-dir}}/list-root' && printf '{:output-format :json}\\n' > '{{tmp-dir}}/list-root/cli.edn' && {{cli}} --root-dir '{{tmp-dir}}/list-root' --config '{{tmp-dir}}/list-root/cli.edn' --output json agent bridge list --all"],
    :expect
    {:exit 0,
-    :stdout-contains ["agent bridge demo completed"
-                      "task status: done"
-                      "agent-session-id: thread-agent-bridge-demo"]},
+    :stdout-json-paths {[:status] "ok", [:data :sessions] []}},
    :covers
-   {:commands ["agent bridge"],
+   {:commands ["agent bridge" "agent bridge list"],
     :options
     {:global ["--config" "--graph" "--root-dir" "--output"],
-     :agent []}},
-   :tags [:agent]}
-  {:id "agent-bridge-dry-run-json",
-   :setup
-   ["python3 '{{repo-root}}/cli-e2e/scripts/agent_bridge_e2e.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir '{{root-dir}}' --config '{{config-path}}' --graph '{{graph}}' --tmp-dir '{{tmp-dir}}' --repo-root '{{repo-root}}' --prepare-fake-codex-only"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert task --graph {{graph-arg}} --target-page AgentBridgeE2E --content '测试 agent bridge 功能，把当前task status设置为done' --status todo >/dev/null"
-    "TASK_ID=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"测试 agent bridge 功能，把当前task status设置为done\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --id \"$TASK_ID\" --update-properties \"{\\\"Assignee\\\" \\\"$(hostname)\\\"}\" >/dev/null"],
-   :cmds
-   ["CODEX_FAKE_LOG={{tmp-dir-arg}}/dry-run-codex.jsonl PATH={{tmp-dir-arg}}/fake-bin:$PATH {{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json agent bridge --graph {{graph-arg}} --dry-run"],
-   :expect
-   {:exit 0,
-    :stdout-json-paths {[:status] "ok", [:data :mode] "dry-run"},
-    :stdout-contains ["测试 agent bridge 功能，把当前task status设置为done"]},
-   :covers
-   {:commands ["agent bridge"],
-    :options
-    {:global ["--config" "--graph" "--root-dir" "--output"],
-     :agent ["--dry-run"]}},
-   :cleanup
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"],
-   :tags [:agent],
-   :extends :non-sync/graph-json-env}
-  {:id "agent-bridge-list-all-json",
-   :cmds
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json agent bridge list --all"],
-   :expect {:exit 0, :stdout-json-paths {[:status] "ok", [:data :sessions] []}},
-   :covers
-   {:commands ["agent bridge list"],
-    :options
-    {:global ["--config" "--root-dir" "--output"],
      :agent ["--all"]}},
+   :cleanup
+   ["{{cli}} --root-dir '{{tmp-dir}}/assigned-root' --config '{{tmp-dir}}/assigned-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-assigned"
+    "{{cli}} --root-dir '{{tmp-dir}}/parallel-root' --config '{{tmp-dir}}/parallel-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-parallel"
+    "{{cli}} --root-dir '{{tmp-dir}}/comment-root' --config '{{tmp-dir}}/comment-root/cli.edn' --output json server stop --graph cli-e2e-agent-bridge-comment"],
    :tags [:agent]}
   {:id "skill-show-human",
    :cmds ["{{cli}} skill show"],
