@@ -218,6 +218,9 @@
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
 
+(defmethod handle :upsertGraphRegistryEntry [_window [_ entry]]
+  (cfgs/upsert-graph-registry-entry! entry))
+
 (defmethod handle :deleteGraph [_window [_ graph]]
   (when-let [repo (canonical-repo graph)]
     (p/let [_ (db-worker/release-repo! repo)]

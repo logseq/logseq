@@ -105,6 +105,7 @@
   (p/do!
    (repo-handler/restore-and-setup-repo! graph)
    (graph-switch graph)
+   (graph-handler/<upsert-current-graph-registry!)
    (state/set-state! :sync-graph/init? false)
    (when (:rtc-download? opts)
      (repo-handler/refresh-repos!)
