@@ -334,6 +334,7 @@
       :cli-path cli-path
       :cli-dir! cli-dir!
       :exe-path (.getPath app "exe")
+      :appimage-path (.-APPIMAGE js/process.env)
       :path-join path-join
       :exists? #(fs/existsSync %)
       :read-file! #(.readFileSync fs % "utf8")
