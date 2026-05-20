@@ -285,6 +285,115 @@
                               (reset! *service old-service)
                               (done))))))))
 
+(deftest handle-migrate-result-local-txs-enqueues-upgrade-reports-test
+  (let [conn (d/create-conn db-schema/schema)
+        migration-tx-report {:tx-data [[:db/add 1 :block/title "Migrated"]]
+                             :db-before @conn
+                             :db-after @conn
+                             :tx-meta {:db-migrate? true}}
+        handled-reports (atom [])]
+    (with-redefs [db-sync/handle-local-tx! (fn [repo tx-report]
+                                             (swap! handled-reports conj
+                                                    {:repo repo
+                                                     :tx-report tx-report}))]
+      (#'db-core/handle-migrate-result-local-txs!
+       test-repo
+       {:upgrade-result-coll [migration-tx-report]})
+      (is (= [{:repo test-repo
+               :tx-report migration-tx-report}]
+             @handled-reports)))))
+
+(deftest built-in-sync-repair-tx-data-covers-65-26-through-65-28-test
+  (let [tx-data (#'db-core/built-in-sync-repair-tx-data)
+        tx-data-again (#'db-core/built-in-sync-repair-tx-data)
+        idents (set (keep :db/ident tx-data))]
+    (is (= tx-data tx-data-again)
+        "The repair is stable when multiple clients send it")
+    (is (every? idents
+                [:logseq.property.repeat/repeat-type
+                 :logseq.property.comments/blocks
+                 :logseq.class/Comments
+                 :logseq.class/Comment]))
+    (is (every?
+         (fn [item]
+           (or (not (and (map? item) (:block/uuid item)))
+               (and (number? (:block/created-at item))
+                    (number? (:block/updated-at item))
+                    (string? (:block/order item))
+                    (db-order/validate-order-key? (:block/order item)))))
+         tx-data)
+        "Block-shaped repair items keep valid timestamps and order")
+    (is (not-any?
+         (fn [item]
+           (or (and (map? item)
+                    (contains? item :logseq.property.comments/blocks))
+               (and (vector? item)
+                    (= :logseq.property.comments/blocks (nth item 2 nil)))))
+         tx-data)
+        "65.29 comment target data is intentionally not included")))
+
+(deftest enqueue-built-in-sync-repair-queues-pending-fix-once-test
+  (let [upserts (atom [])
+        count-adjustments (atom [])]
+    (with-redefs [client-op/get-local-tx-entry (fn [_repo _tx-id] nil)
+                  client-op/upsert-local-tx-entry! (fn [repo entry]
+                                                     (swap! upserts conj {:repo repo
+                                                                          :entry entry})
+                                                     {:should-inc-pending? true})
+                  client-op/adjust-pending-local-tx-count! (fn [repo delta]
+                                                             (swap! count-adjustments conj [repo delta]))]
+      (#'db-core/enqueue-built-in-sync-repair! test-repo)
+      (let [{:keys [repo entry]} (first @upserts)]
+        (is (= test-repo repo))
+        (is (uuid? (:tx-id entry)))
+        (is (= 0 (:created-at entry)))
+        (is (true? (:pending? entry)))
+        (is (false? (:failed? entry)))
+        (is (= :fix (:outliner-op entry)))
+        (is (seq (:normalized-tx-data entry)))))
+      (is (= [[test-repo 1]] @count-adjustments))
+
+    (reset! upserts [])
+    (reset! count-adjustments [])
+    (with-redefs [client-op/get-local-tx-entry (fn [_repo _tx-id] {:tx-id (random-uuid)})
+                  client-op/upsert-local-tx-entry! (fn [_repo _entry]
+                                                     (swap! upserts conj :unexpected))
+                  client-op/adjust-pending-local-tx-count! (fn [_repo _delta]
+                                                             (swap! count-adjustments conj :unexpected))]
+      (#'db-core/enqueue-built-in-sync-repair! test-repo)
+      (is (empty? @upserts))
+      (is (empty? @count-adjustments)))))
+
+(deftest maybe-enqueue-built-in-sync-repair-only-for-migrated-remote-graphs-test
+  (let [remote-conn (d/create-conn db-schema/schema)
+        local-conn (d/create-conn db-schema/schema)
+        upserts (atom [])]
+    (d/transact! remote-conn [{:db/ident :logseq.kv/graph-remote?
+                               :kv/value true}])
+    (d/transact! local-conn [{:db/ident :logseq.kv/graph-remote?
+                              :kv/value false}])
+    (with-redefs [client-op/get-local-tx-entry (fn [_repo _tx-id] nil)
+                  client-op/upsert-local-tx-entry! (fn [repo entry]
+                                                     (swap! upserts conj {:repo repo
+                                                                          :entry entry})
+                                                     {:should-inc-pending? false})
+                  client-op/adjust-pending-local-tx-count! (fn [_repo _delta] nil)]
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo remote-conn nil true)
+      (is (= 1 (count @upserts)))
+
+      (reset! upserts [])
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo remote-conn {:upgrade-result-coll []} true)
+      (is (empty? @upserts)
+          "Real migration tx reports are uploaded instead of repair txs")
+
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo local-conn nil true)
+      (is (empty? @upserts)
+          "Local-only graphs do not need server repair")
+
+      (#'db-core/maybe-enqueue-built-in-sync-repair! test-repo remote-conn nil false)
+      (is (empty? @upserts)
+          "New graphs rely on initial upload data"))))
+
 (deftest search-build-blocks-indice-in-worker-reports-progress-to-main-thread-test
   (async done
     (->
