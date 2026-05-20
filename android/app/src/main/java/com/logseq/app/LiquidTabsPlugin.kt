@@ -1,5 +1,7 @@
 package com.logseq.app
 
+import android.content.Context
+import android.os.Build
 import android.graphics.Color
 import android.text.Editable
 import android.text.TextWatcher
@@ -7,7 +9,9 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -145,6 +149,25 @@ class LiquidTabsPlugin : Plugin() {
         } ?: call.resolve()
     }
 
+    fun handleNativeBackPressed(): Boolean {
+        val container = searchContainer ?: return false
+        if (container.visibility != View.VISIBLE) return false
+
+        val input = searchInput ?: return false
+        val imeVisible = ViewCompat.getRootWindowInsets(input)
+            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        val hasFocus = input.hasFocus()
+
+        if (imeVisible || hasFocus) {
+            moveFocusAwayFromSearchInput(input)
+            hideIme(input)
+            return true
+        }
+
+        dismissSearchUiFromBack()
+        return true
+    }
+
 
     private fun ensureNav(): ComposeView {
         val activity = activity ?: throw IllegalStateException("No activity")
@@ -190,6 +213,8 @@ class LiquidTabsPlugin : Plugin() {
         if (notify) {
             notifyListeners("tabSelected", JSObject().put("id", tab.id).put("reselected", reselected))
         }
+
+        adjustWebViewPadding()
     }
 
     private fun adjustWebViewPadding() {
@@ -419,6 +444,7 @@ class LiquidTabsPlugin : Plugin() {
         }
 
         container.visibility = View.VISIBLE
+        adjustWebViewPadding()
     }
 
     private fun clearSearchUi() {
@@ -427,7 +453,51 @@ class LiquidTabsPlugin : Plugin() {
     }
 
     private fun hideSearchUi() {
+        dismissActiveSearchInput()
         searchContainer?.visibility = View.GONE
+        adjustWebViewPadding()
+    }
+
+    private fun dismissSearchUiFromBack() {
+        hideSearchUi()
+    }
+
+    private fun dismissActiveSearchInput() {
+        searchInput?.let { input ->
+            moveFocusAwayFromSearchInput(input)
+            hideIme(input)
+        }
+    }
+
+    private fun moveFocusAwayFromSearchInput(input: EditText) {
+        val container = searchContainer
+        if (container != null) {
+            container.isFocusableInTouchMode = true
+            container.isFocusable = true
+            container.requestFocus()
+        }
+        input.clearFocus()
+        activity?.currentFocus?.clearFocus()
+    }
+
+    private fun hideIme(target: View) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            target.windowInsetsController?.hide(WindowInsets.Type.ime())
+        }
+        val imm = activity?.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        val windowToken = target.windowToken
+            ?: activity?.currentFocus?.windowToken
+            ?: activity?.window?.decorView?.windowToken
+            ?: searchContainer?.windowToken
+        if (windowToken != null) {
+            imm?.hideSoftInputFromWindow(windowToken, 0)
+        }
+        target.post {
+            val postedToken = activity?.window?.decorView?.windowToken ?: target.windowToken
+            if (postedToken != null) {
+                imm?.hideSoftInputFromWindow(postedToken, 0)
+            }
+        }
     }
 
     private fun makeResultRow(result: SearchResult): View {

@@ -205,6 +205,11 @@ public class MainActivity extends BridgeActivity {
                 + navigationCoordinator.debugState()
         );
 
+        if (consumeNativeOverlayBack()) {
+            Log.d("NavStack", NAV_STACK_DEBUG_PREFIX + " activity.nativeBack consumed=native-overlay");
+            return;
+        }
+
         WebView webView = getBridge().getWebView();
         if (webView != null) {
             // Send "native back" into JS. JS will call your UILocal/route-change,
@@ -250,6 +255,33 @@ public class MainActivity extends BridgeActivity {
             "window.LogseqNative && window.LogseqNative.onNativePop && window.LogseqNative.onNativePop();",
             null
         ));
+    }
+
+    private boolean consumeNativeOverlayBack() {
+        try {
+            if (getBridge() == null) {
+                return false;
+            }
+
+            PluginHandle handle = getBridge().getPlugin("LiquidTabsPlugin");
+            if (handle == null) {
+                return false;
+            }
+
+            Plugin instance = handle.getInstance();
+            if (!(instance instanceof LiquidTabsPlugin)) {
+                return false;
+            }
+
+            return ((LiquidTabsPlugin) instance).handleNativeBackPressed();
+        } catch (Exception e) {
+            Log.d(
+                "NavStack",
+                NAV_STACK_DEBUG_PREFIX + " activity.nativeOverlayBack error="
+                    + e.getClass().getSimpleName() + ":" + e.getMessage()
+            );
+            return false;
+        }
     }
 
     private void disableCapacitorAppBackHandler() {
