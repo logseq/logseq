@@ -6,6 +6,7 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property.util :as pu]
             [frontend.handler.recent :as recent-handler]
@@ -69,6 +70,16 @@
     {:to :page
      :path-params {:name (str page-name)}}))
 
+(defn- current-graph-query-params
+  []
+  (if-let [graph-id (graph-handler/current-graph-id)]
+    {:graph-id graph-id}
+    (throw (js/Error. "Missing current graph id"))))
+
+(defn- merge-query-params
+  [route params]
+  (update route :query-params merge params))
+
 (defn redirect-to-page!
   "`page-name` can be a block uuid or name, prefer to use uuid than name when possible"
   ([page-name]
@@ -90,17 +101,19 @@
              (when-let [db-id (:db/id page)]
                (recent-handler/add-page-to-recent! db-id click-from-recent?))
              (let [m (cond->
-                      (default-page-route (str page-name))
+                      (merge-query-params
+                       (default-page-route (str page-name))
+                       (current-graph-query-params))
 
                        block-id
-                       (assoc :query-params {:anchor (str "ls-block-" block-id)})
+                       (merge-query-params {:anchor (str "ls-block-" block-id)})
 
                        anchor
-                       (assoc :query-params {:anchor anchor})
+                       (merge-query-params {:anchor anchor})
 
                        (boolean? push)
                        (assoc :push push))]
-               (redirect! m)))))))))
+              (redirect! m)))))))))
 
 (defn built-in-page-title
   [page-name]

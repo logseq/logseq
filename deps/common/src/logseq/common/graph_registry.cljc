@@ -20,10 +20,15 @@
 
 (defn upsert-entry
   [registry entry]
-  (let [entry' (normalize-entry entry)
-        graph-id (:graph-id entry')]
+  (let [entry' (normalize-entry entry)]
     (->> (or registry [])
-         (remove #(= graph-id (:graph-id %)))
+         (remove #(or (= (:graph-id entry') (:graph-id %))
+                      (and (present-string? (:repo entry'))
+                           (= (:repo entry') (:repo %)))
+                      (and (present-string? (:local-graph-id entry'))
+                           (= (:local-graph-id entry') (:local-graph-id %)))
+                      (and (present-string? (:rtc-graph-id entry'))
+                           (= (:rtc-graph-id entry') (:rtc-graph-id %)))))
          (cons entry')
          vec)))
 
@@ -36,10 +41,12 @@
   (let [identifier (normalize-comparable graph-identifier)
         repo (normalize-comparable (:repo entry))
         graph-name (normalize-comparable (:graph-name entry))
+        graph-id (normalize-comparable (:graph-id entry))
         canonical-repo (normalize-comparable
                         (common-config/canonicalize-db-version-repo graph-identifier))]
     (or (= identifier repo)
         (= identifier graph-name)
+        (= identifier graph-id)
         (= canonical-repo repo))))
 
 (defn resolve-target

@@ -1,6 +1,7 @@
 (ns frontend.handler.graph-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.handler.graph]))
+            [frontend.handler.graph]
+            [logseq.common.graph-registry :as graph-registry]))
 
 (deftest normalize-registry-entry-prefers-remote-graph-id-test
   (let [normalize-f (some-> (resolve 'frontend.handler.graph/normalize-registry-entry) deref)]
@@ -42,4 +43,24 @@
                (:repo (resolve-f registry {:graph-id "remote-uuid"}))))
         (is (= "logseq_db_other"
                (:repo (resolve-f registry {:graph-identifier "logseq_db_other"}))))
+        (is (= "logseq_db_work"
+               (:repo (resolve-f registry {:graph-identifier "remote-uuid"})))
+            "Protocol URL graph identifiers can be canonical graph ids")
         (is (nil? (resolve-f registry {:graph-id "missing-uuid"})))))))
+
+(deftest upsert-registry-entry-replaces-local-id-after-remote-id-exists-test
+  (let [registry [{:repo "logseq_db_work"
+                   :graph-name "work"
+                   :local-graph-id "local-uuid"
+                   :graph-id "local-uuid"}]
+        registry' (graph-registry/upsert-entry
+                   registry
+                   {:repo "logseq_db_work"
+                    :graph-name "work"
+                    :local-graph-id "local-uuid"
+                    :rtc-graph-id "remote-uuid"})]
+    (is (= 1 (count registry')))
+    (is (= "remote-uuid" (:graph-id (first registry'))))
+    (is (nil? (graph-registry/resolve-target registry' {:graph-id "local-uuid"})))
+    (is (= "logseq_db_work"
+           (:repo (graph-registry/resolve-target registry' {:graph-id "remote-uuid"}))))))
