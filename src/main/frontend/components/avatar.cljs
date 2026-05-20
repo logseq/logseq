@@ -4,6 +4,29 @@
             [logseq.shui.util :as shui-util]
             [rum.core :as rum]))
 
+(defonce ^:private latin-or-number-re
+  (js/RegExp. "^[\\p{Script=Latin}\\p{Number}]" "u"))
+
+(defonce ^:private grapheme-segmenter
+  (when (exists? js/Intl.Segmenter)
+    (js/Intl.Segmenter. js/undefined #js {:granularity "grapheme"})))
+
+(defn- graphemes
+  [s]
+  (if grapheme-segmenter
+    (map #(.-segment %) (array-seq (js/Array.from (.segment grapheme-segmenter s))))
+    (array-seq (js/Array.from s))))
+
+(defn- latin-or-number?
+  [s]
+  (.test latin-or-number-re s))
+
+(defn- fallback-grapheme-count
+  [letters n]
+  (if (some-> letters first latin-or-number?)
+    n
+    1))
+
 (defn initials
   ([name]
    (initials name 2))
@@ -11,8 +34,10 @@
    (when (some? name)
      (let [name (string/trim (str name))]
        (when-not (string/blank? name)
-         (-> (subs name 0 (min n (count name)))
-             string/upper-case))))))
+         (let [letters (graphemes name)]
+           (-> (string/join (take (fallback-grapheme-count letters n)
+                                  letters))
+               string/upper-case)))))))
 
 (rum/defc user-avatar
   [{:keys [name title uuid avatar-src class style fallback fallback-length fallback-props image-props]
