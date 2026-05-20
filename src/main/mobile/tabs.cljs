@@ -15,7 +15,7 @@
     :systemImage "tray"
     :role "normal"}
    {:id "flashcards"
-    :title-key :nav/flashcards
+    :title-key :mobile.tab/flashcards
     :systemImage "infinity"
     :role "normal"}
    {:id "go to"
