@@ -57,6 +57,20 @@ if args[:2] == ["exec", "--json"]:
     print(json.dumps({"type": "thread.started", "thread_id": session_id}), flush=True)
     sys.exit(0)
 
+if args[:3] == ["exec", "resume", "--json"]:
+    session_id = args[3] if len(args) > 3 else ""
+    prompt = args[4] if len(args) > 4 else ""
+    comment_uuid_match = re.search(r"^Comment UUID: (.+)$", prompt, re.MULTILINE)
+    comment_uuid = comment_uuid_match.group(1) if comment_uuid_match else None
+    log_path = pathlib.Path(os.environ["CODEX_FAKE_LOG"])
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf8") as f:
+        f.write(json.dumps(
+            {"event": "resume", "time": time.time(), "args": args, "prompt": prompt, "comment_uuid": comment_uuid, "session": session_id},
+            ensure_ascii=False) + "\\n")
+    print(json.dumps({"type": "thread.started", "thread_id": session_id}), flush=True)
+    sys.exit(0)
+
 print("unexpected codex args: " + repr(args), file=sys.stderr)
 sys.exit(2)
 """,
@@ -163,6 +177,20 @@ def find_task_id(cli, repo_root, root_dir, config, graph, title):
     return task_id
 
 
+def find_task_uuid(cli, repo_root, root_dir, config, graph, title):
+    task_uuid = run_json(
+        cli,
+        repo_root,
+        root_dir,
+        config,
+        graph,
+        '[:find ?uuid . :where [?e :block/title "{}"] [?e :block/uuid ?uuid]]'.format(title),
+    )
+    if task_uuid is None:
+        raise SystemExit("task block uuid was not found: {}".format(title))
+    return task_uuid
+
+
 def create_task(cli, repo_root, root_dir, config, graph, title):
     run_cli(
         cli,
@@ -255,6 +283,120 @@ def wait_for_task_sessions(cli, repo_root, root_dir, config, graph, titles, brid
     )
 
 
+def wait_for_codex_event(codex_log, event_name, bridge, bridge_log, bridge_err):
+    deadline = time.time() + 30
+    events = []
+    while time.time() < deadline:
+        events = read_codex_events(codex_log)
+        matches = [event for event in events if event.get("event") == event_name]
+        if matches:
+            return matches
+        if bridge.poll() is not None:
+            raise SystemExit(
+                "agent bridge exited early with {}\nstdout:\n{}\nstderr:\n{}".format(
+                    bridge.returncode, read_text(bridge_log), read_text(bridge_err)
+                )
+            )
+        time.sleep(0.5)
+    raise SystemExit("codex event {!r} was not observed; events={!r}".format(event_name, events))
+
+
+def write_comment_blocks_file(path, task_uuid, hostname):
+    path.write_text(
+        """[{{:block/title "Comments"
+   :block/tags [:logseq.class/Comments]
+   :logseq.property.comments/blocks [[:block/uuid #uuid "{task_uuid}"]]
+   :block/children [{{:block/title "[[{hostname}]] please continue from the comment"
+                     :block/tags [:logseq.class/Comment]}}]}}]""".format(
+            task_uuid=task_uuid,
+            hostname=hostname,
+        ),
+        encoding="utf8",
+    )
+
+
+def run_comment_mention_check(cli, repo_root, root_dir, config, graph, tmp_dir):
+    create_task(cli, repo_root, root_dir, config, graph, TASK_TITLE)
+
+    fake_bin = tmp_dir / "fake-bin"
+    bridge_log = tmp_dir / "agent-bridge.log"
+    bridge_err = tmp_dir / "agent-bridge.err"
+    codex_log = tmp_dir / "codex-invocations.jsonl"
+
+    env = os.environ.copy()
+    env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
+    env["CODEX_FAKE_LOG"] = str(codex_log)
+
+    with bridge_log.open("wb") as out, bridge_err.open("wb") as err:
+        bridge = subprocess.Popen(
+            cli
+            + [
+                "--root-dir",
+                root_dir,
+                "--config",
+                config,
+                "--output",
+                "human",
+                "agent",
+                "bridge",
+                "--graph",
+                graph,
+            ],
+            cwd=repo_root,
+            env=env,
+            stdout=out,
+            stderr=err,
+        )
+
+    try:
+        wait_for_log(bridge_log, "listening graph changes", bridge)
+        assign_task(cli, repo_root, root_dir, config, graph)
+        session = wait_for_task_sessions(
+            cli, repo_root, root_dir, config, graph, [TASK_TITLE], bridge, bridge_log, bridge_err
+        )[TASK_TITLE]
+
+        task_id = find_task_id(cli, repo_root, root_dir, config, graph, TASK_TITLE)
+        task_uuid = find_task_uuid(cli, repo_root, root_dir, config, graph, TASK_TITLE)
+        blocks_file = tmp_dir / "comment-blocks.edn"
+        write_comment_blocks_file(blocks_file, task_uuid, os.uname().nodename)
+        run_cli(
+            cli,
+            repo_root,
+            root_dir,
+            config,
+            graph,
+            [
+                "upsert",
+                "block",
+                "--graph",
+                graph,
+                "--target-id",
+                str(task_id),
+                "--pos",
+                "last-child",
+                "--blocks-file",
+                str(blocks_file),
+            ],
+        )
+
+        resume_events = wait_for_codex_event(codex_log, "resume", bridge, bridge_log, bridge_err)
+        if resume_events[0].get("session") != session:
+            raise SystemExit("comment resumed the wrong session: {!r}".format(resume_events[0]))
+        prompt = resume_events[0].get("prompt", "")
+        assert "You are handling a Logseq AgentBridge comment request." in prompt, prompt
+        assert "Comment target context:" in prompt, prompt
+        assert "Requesting comment:" in prompt, prompt
+        print("agent bridge resumed comment request in " + session)
+    finally:
+        if bridge.poll() is None:
+            bridge.terminate()
+            try:
+                bridge.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                bridge.kill()
+                bridge.wait(timeout=5)
+
+
 def run_parallel_assignment_check(cli, repo_root, root_dir, config, graph, tmp_dir):
     for title in PARALLEL_TASK_TITLES:
         create_task(cli, repo_root, root_dir, config, graph, title)
@@ -340,6 +482,7 @@ def main():
     parser.add_argument("--prepare-fake-codex-only", action="store_true")
     parser.add_argument("--assign-after-start", action="store_true")
     parser.add_argument("--parallel-assignment-check", action="store_true")
+    parser.add_argument("--comment-mention-check", action="store_true")
     args = parser.parse_args()
 
     repo_root = pathlib.Path(args.repo_root)
@@ -356,6 +499,10 @@ def main():
 
     if args.parallel_assignment_check:
         run_parallel_assignment_check(cli, repo_root, args.root_dir, args.config, args.graph, tmp_dir)
+        return
+
+    if args.comment_mention_check:
+        run_comment_mention_check(cli, repo_root, args.root_dir, args.config, args.graph, tmp_dir)
         return
 
     env = os.environ.copy()

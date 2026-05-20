@@ -157,8 +157,7 @@
   :agent
   {:commands ["agent bridge"
               "agent bridge list"]
-   :options ["--dry-run"
-             "--all"]}
+   :options ["--all"]}
 
   :completion
   {:commands ["completion"]

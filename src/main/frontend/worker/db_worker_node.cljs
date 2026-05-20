@@ -1,8 +1,6 @@
 (ns frontend.worker.db-worker-node
   "Node.js daemon entrypoint for db-worker."
-  (:require ["fs" :as fs]
-            ["http" :as http]
-            ["path" :as node-path]
+  (:require ["http" :as http]
             [clojure.string :as string]
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db-worker-node-lock :as db-lock]
@@ -14,13 +12,13 @@
             [logseq.cli.root-dir :as root-dir]
             [logseq.cli.style :as style]
             [logseq.db :as ldb]
+            [logseq.db-worker.log :as db-worker-log]
             [logseq.db-worker.server-list :as server-list]
             [promesa.core :as p]))
 
 (defonce ^:private *ready? (atom false))
 (defonce ^:private *sse-clients (atom #{}))
 (defonce ^:private *lock-info (atom nil))
-(defonce ^:private *file-handler (atom nil))
 (defonce ^:private *server-list-file (atom nil))
 
 (defn- server-list-file-path
@@ -412,69 +410,6 @@
      :sync-download-graph? true}
     {}))
 
-(defn- pad2
-  [value]
-  (if (< value 10)
-    (str "0" value)
-    (str value)))
-
-(defn- yyyymmdd
-  [^js date]
-  (str (.getFullYear date)
-       (pad2 (inc (.getMonth date)))
-       (pad2 (.getDate date))))
-
-(defn- log-path
-  [root-dir repo]
-  (let [root-dir (db-lock/resolve-root-dir root-dir)
-        repo-dir (db-lock/repo-dir (db-lock/graphs-dir root-dir) repo)
-        date-str (yyyymmdd (js/Date.))]
-    (node-path/join repo-dir (str "db-worker-node-" date-str ".log"))))
-
-(defn- log-files
-  [repo-dir]
-  (->> (when (fs/existsSync repo-dir)
-         (fs/readdirSync repo-dir))
-       (filter (fn [^js name]
-                 (re-matches #"db-worker-node-\d{8}\.log" name)))
-       (sort)))
-
-(defn- enforce-log-retention!
-  [repo-dir]
-  (let [files (log-files repo-dir)
-        excess (max 0 (- (count files) 7))]
-    (doseq [name (take excess files)]
-      (fs/unlinkSync (node-path/join repo-dir name)))))
-
-(defn- format-log-line
-  [{:keys [time level message logger-name exception]}]
-  (let [ts (.toISOString (js/Date. time))
-        base (str ts
-                  " ["
-                  (name level)
-                  "] ["
-                  logger-name
-                  "] "
-                  (pr-str message))]
-    (str base (when exception (str " " (pr-str exception))) "\n")))
-
-(defn- install-file-logger!
-  [{:keys [root-dir repo log-level]}]
-  (let [root-dir (db-lock/resolve-root-dir root-dir)
-        repo-dir (db-lock/repo-dir (db-lock/graphs-dir root-dir) repo)
-        file-path (log-path root-dir repo)]
-    (fs/mkdirSync repo-dir #js {:recursive true})
-    (fs/writeFileSync file-path "" #js {:flag "a"})
-    (enforce-log-retention! repo-dir)
-    (when-let [handler @*file-handler]
-      (log/remove-handler handler))
-    (let [handler (fn [record]
-                    (fs/appendFileSync file-path (format-log-line record)))]
-      (reset! *file-handler handler)
-      (log/add-handler handler))
-    (log/set-levels {:glogi/root log-level})
-    file-path))
-
 (defn- assert-lock-owner!
   []
   (let [{:keys [path lock]} @*lock-info]
@@ -534,7 +469,8 @@
             (p/finally
              (fn []
                (when (fn? on-stopped!)
-                 (on-stopped!)))))))))
+                 (on-stopped!))
+               (db-worker-log/uninstall!))))))))
 
 (defn- resolve-listening-daemon!
   [{:keys [server proxy repo host port* stop!* stopped? on-stopped!]} resolve]
@@ -606,9 +542,9 @@
       (try
         (let [root-dir (root-dir/ensure-root-dir! root-dir)
               server-list-file (server-list-file-path root-dir)]
-          (install-file-logger! {:root-dir root-dir
-                                 :repo repo
-                                 :log-level (keyword (or log-level "info"))})
+          (db-worker-log/install! {:root-dir root-dir
+                                   :repo repo
+                                   :log-level (keyword (or log-level "info"))})
           (log/info :db-worker-node-version {:build-time (build-version/build-time)
                                              :revision (build-version/revision)})
           (reset! *ready? false)

@@ -192,9 +192,42 @@
     "Task block tree:"
     (or tree-text (:block/title block) "")]))
 
+(defn- build-comment-codex-prompt
+  [{:keys [graph agent-name comment-tree-text comments-area-tree-text target-tree-texts]
+    comment-block :comment}]
+  (string/join
+   "\n"
+   ["You are handling a Logseq AgentBridge comment request."
+    ""
+    (str "Graph: " graph)
+    (str "Comment UUID: " (block-uuid-str comment-block))
+    (str "AgentBridge name: " agent-name)
+    ""
+    "Do not operate outside the target graph."
+    "Complete the request from the mentioned comment."
+    "Report the final status, files changed, commands run, verification, and any blockers."
+    ""
+    "Comment target context:"
+    (string/join "\n" (remove string/blank? target-tree-texts))
+    ""
+    "Comment thread context:"
+    (or comments-area-tree-text (:block/title (:block/parent comment-block)) "")
+    ""
+    "Requesting comment:"
+    (or comment-tree-text (:block/title comment-block) "")
+    ""
+    "Reply instructions:"
+    "For a short reply, append a comment after the requesting comment."
+    "For a long reply, write a normal block tree after the comments area and append a comment that references that tree."
+    "If the request is blocked or fails, make that clear in the reply."]))
+
 (defn build-codex-command
   [prompt {:keys [codex-bin]}]
   [(or (trim-non-empty codex-bin) "codex") "exec" "--json" prompt])
+
+(defn- build-codex-resume-command
+  [session-id prompt {:keys [codex-bin]}]
+  [(or (trim-non-empty codex-bin) "codex") "exec" "resume" "--json" session-id prompt])
 
 (defn- shell-quote
   [value]
@@ -652,6 +685,46 @@
    {:logseq.property/assignee [:db/id :block/title :block/name :db/ident]}
    '*])
 
+(def ^:private comment-block-selector
+  [:db/id
+   :block/uuid
+   :block/title
+   {:block/tags [:db/ident :block/title]}
+   {:block/refs [:db/id :block/title :block/name]}
+   {:block/parent [:db/id :block/uuid :block/title {:block/tags [:db/ident :block/title]}]}
+   '*])
+
+(defn- comment-target-block-selector
+  [session-property-ident]
+  (cond-> [:db/id
+           :block/uuid
+           :block/title
+           {:logseq.property/assignee [:db/id :block/title :block/name :db/ident]}
+           '*]
+    session-property-ident
+    (conj {session-property-ident [:db/id :block/title :block/name]})))
+
+(defn- comments-area-selector
+  [session-property-ident]
+  [:db/id
+   :block/uuid
+   :block/title
+   {:block/tags [:db/ident :block/title]}
+   {:logseq.property.comments/blocks (comment-target-block-selector session-property-ident)}])
+
+(def ^:private comment-start-reaction "eyes")
+(def ^:private comment-complete-reaction "white_check_mark")
+(def ^:private comment-failed-reaction "x")
+
+(def ^:private comment-reaction-query
+  '[:find ?r .
+    :in $ ?target-uuid ?emoji-id
+    :where
+    [?target :block/uuid ?target-uuid]
+    [?r :logseq.property.reaction/target ?target]
+    [?r :logseq.property.reaction/emoji-id ?emoji-id]
+    [(missing? $ ?r :logseq.property/created-by-ref)]])
+
 (defn- datom-added?
   [datom]
   (cond
@@ -701,6 +774,15 @@
   (and (datom-added? datom)
        (= assignee-property-ident (datom-attr datom))))
 
+(defn- comment-title-datom?
+  [datom agent-name]
+  (and (datom-added? datom)
+       (seq agent-name)
+       (= :block/title (datom-attr datom))
+       (string? (datom-value datom))
+       (or (string/includes? (datom-value datom) (str "[[" agent-name "]]"))
+           (string/includes? (datom-value datom) "[["))))
+
 (defn- pull-assignee-property
   [cfg repo]
   (transport/invoke cfg :thread-api/pull [repo assignee-property-selector assignee-property-ident]))
@@ -746,6 +828,145 @@
     (or (get-in show-result [:data :message])
         (:block/title block))))
 
+(defn- show-block-tree
+  [cfg repo block]
+  (p/let [show-result (show-command/execute-show {:type :show
+                                                  :repo repo
+                                                  :uuid (block-uuid-str block)
+                                                  :level 100
+                                                  :linked-references? false
+                                                  :ref-id-footer? false}
+                                                 cfg)]
+    (or (get-in show-result [:data :message])
+        (:block/title block))))
+
+(defn- comment-tag?
+  [tag]
+  (or (= :logseq.class/Comment (value-ident tag))
+      (= "Comment" (value-title tag))))
+
+(defn- comments-area-tag?
+  [tag]
+  (or (= :logseq.class/Comments (value-ident tag))
+      (= "Comments" (value-title tag))))
+
+(defn- comment-block?
+  [block agent-name]
+  (and (:block/uuid block)
+       (some comment-tag? (:block/tags block))
+       (or (string/includes? (or (:block/title block) "") (str "[[" agent-name "]]"))
+           (contains? (set (keep value-title (:block/refs block))) agent-name))))
+
+(defn- comments-area?
+  [block]
+  (some comments-area-tag? (:block/tags block)))
+
+(defn- pull-comment-block
+  [cfg repo block-id]
+  (transport/invoke cfg :thread-api/pull [repo comment-block-selector block-id]))
+
+(defn- pull-comments-area
+  [cfg repo comment-block session-property-ident]
+  (let [parent-id (get-in comment-block [:block/parent :db/id])]
+    (when-not parent-id
+      (throw (ex-info "comment block parent is missing"
+                      {:code :agent-comment-parent-missing
+                       :block (block-uuid-str comment-block)})))
+    (transport/invoke cfg :thread-api/pull [repo (comments-area-selector session-property-ident) parent-id])))
+
+(defn- ensure-comment-reaction!
+  [cfg repo target-uuid emoji-id]
+  (p/let [existing (transport/invoke cfg :thread-api/q [repo [comment-reaction-query target-uuid emoji-id]])]
+    (when-not (if (sequential? existing)
+                (seq existing)
+                (some? existing))
+      (transport/invoke cfg :thread-api/apply-outliner-ops
+                        [repo [[:toggle-reaction [target-uuid emoji-id nil]]] {}]))))
+
+(defn- comment-session-record
+  [graph agent-name comment-block session-id status]
+  (assoc (session-record graph agent-name comment-block session-id status)
+         :request :comment))
+
+(defn- comment-target-session-id
+  [agent-name session-property-ident block]
+  (when (contains? (assignee-values block) agent-name)
+    (or (agent-session-id block)
+        (some-> (get block session-property-ident)
+                value-title
+                trim-non-empty))))
+
+(defn- route-comment!
+  [cfg {:keys [repo graph agent-name]} comment-block]
+  (p/catch
+   (p/let [comment-uuid (:block/uuid comment-block)
+           _ (when-not comment-uuid
+               (throw (ex-info "comment block uuid is missing"
+                               {:code :agent-comment-uuid-missing})))
+           session-property (pull-agent-session-id-property cfg repo)
+           session-property-ident (:db/ident session-property)
+           comments-area (pull-comments-area cfg repo comment-block session-property-ident)
+           _ (when-not (comments-area? comments-area)
+               (throw (ex-info "comment parent is not a comments area"
+                               {:code :agent-comment-parent-invalid
+                                :block (block-uuid-str comment-block)})))
+           target-blocks (vec (:logseq.property.comments/blocks comments-area))
+           _ (ensure-comment-reaction! cfg repo comment-uuid comment-start-reaction)
+           target-tree-texts (p/all (mapv #(show-block-tree cfg repo %) target-blocks))
+           comments-area-tree-text (show-block-tree cfg repo comments-area)
+           comment-tree-text (show-block-tree cfg repo comment-block)
+           prompt (build-comment-codex-prompt {:graph graph
+                                               :agent-name agent-name
+                                               :comment comment-block
+                                               :target-tree-texts target-tree-texts
+                                               :comments-area-tree-text comments-area-tree-text
+                                               :comment-tree-text comment-tree-text})
+           resume-session-id (some #(comment-target-session-id agent-name session-property-ident %) target-blocks)
+           command (if resume-session-id
+                     (build-codex-resume-command resume-session-id prompt {})
+                     (build-codex-command prompt {}))
+           preview (command-preview command)
+           _ (emit-log! cfg (log-line (str "Codex command prepared for comment " (block-uuid-str comment-block) ": " preview)))
+           {:keys [session]} (start-codex! command
+                                           {:on-exit (fn [code session-id]
+                                                       (when session-id
+                                                         (update-session-status! cfg session-id
+                                                                                 (if (zero? (or code 1))
+                                                                                   :completed
+                                                                                   :failed)))
+                                                       (-> (ensure-comment-reaction! cfg repo comment-uuid
+                                                                                     (if (zero? (or code 1))
+                                                                                       comment-complete-reaction
+                                                                                       comment-failed-reaction))
+                                                           (p/catch (fn [e]
+                                                                      (log/error :agent-bridge-comment-reaction-failed e)))))})
+           _ (when-not (seq session)
+               (throw (ex-info "codex session id missing"
+                               {:code :codex-session-id-missing})))
+           cfg* (cli-server/ensure-server! cfg repo)
+           _ (record-session! cfg* (comment-session-record graph agent-name comment-block session :running))]
+     {:block (block-uuid-str comment-block)
+      :session session
+      :backend :codex
+      :preview preview
+      :request :comment})
+   (fn [e]
+     (if-let [comment-uuid (:block/uuid comment-block)]
+       (p/let [_ (ensure-comment-reaction! cfg repo comment-uuid comment-failed-reaction)]
+         (throw e))
+       (p/rejected e)))))
+
+(defn- route-comment-once!
+  [cfg {:keys [routing-blocks*] :as opts} comment-block]
+  (let [block-id (block-uuid-str comment-block)]
+    (if (and routing-blocks* block-id)
+      (if (claim-routing-block! routing-blocks* block-id)
+        (-> (route-comment! cfg opts comment-block)
+            (p/finally (fn []
+                         (swap! routing-blocks* disj block-id))))
+        (p/resolved nil))
+      (route-comment! cfg opts comment-block))))
+
 (defn- route-assignee-datom!
   [cfg {:keys [repo agent-name] :as opts} datom]
   (let [block-id (datom-e datom)
@@ -759,11 +980,21 @@
                 (route-task-once! cfg opts {:block block
                                             :tree-text tree-text})))))))))
 
+(defn- route-comment-datom!
+  [cfg {:keys [repo agent-name] :as opts} datom]
+  (when-let [block-id (datom-e datom)]
+    (p/let [comment-block (pull-comment-block cfg repo block-id)]
+      (when (comment-block? comment-block agent-name)
+        (route-comment-once! cfg opts comment-block)))))
+
 (defn- process-sync-db-changes-event!
   [cfg {:keys [repo] :as opts} {:keys [tx-data]}]
   (p/let [assignee-datoms (resolve-assignee-datoms cfg repo tx-data)]
-    (when (seq assignee-datoms)
-      (p/all (mapv #(route-assignee-datom! cfg opts %) assignee-datoms)))))
+    (let [comment-datoms (filter #(comment-title-datom? % (:agent-name opts)) tx-data)
+          routing (vec (concat (map #(route-assignee-datom! cfg opts %) assignee-datoms)
+                               (map #(route-comment-datom! cfg opts %) comment-datoms)))]
+      (when (seq routing)
+        (p/all routing)))))
 
 (defn- listen-forever!
   [cfg {:keys [repo graph agent-name]}]

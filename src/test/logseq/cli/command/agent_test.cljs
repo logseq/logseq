@@ -31,6 +31,60 @@
           "Assignee" "build-host"}
          overrides))
 
+(defn- comment-block
+  [overrides]
+  (merge {:db/id 50
+          :block/uuid #uuid "55555555-5555-5555-5555-555555555555"
+          :block/title "[[build-host]] please summarize the selected blocks"
+          :block/tags [{:db/ident :logseq.class/Comment
+                        :block/title "Comment"}]
+          :block/parent {:db/id 60
+                         :block/uuid #uuid "66666666-6666-6666-6666-666666666666"}}
+         overrides))
+
+(defn- comments-area-block
+  [overrides]
+  (merge {:db/id 60
+          :block/uuid #uuid "66666666-6666-6666-6666-666666666666"
+          :block/title "Comments"
+          :block/tags [{:db/ident :logseq.class/Comments
+                        :block/title "Comments"}]
+          :logseq.property.comments/blocks [{:db/id 70
+                                              :block/uuid #uuid "77777777-7777-7777-7777-777777777777"
+                                              :block/title "Target block A"}
+                                             {:db/id 80
+                                              :block/uuid #uuid "88888888-8888-8888-8888-888888888888"
+                                              :block/title "Target block B"}]}
+         overrides))
+
+(defn- assert-comment-request-prompt
+  [prompt]
+  (doseq [expected ["You are handling a Logseq AgentBridge comment request."
+                    "Graph: demo"
+                    "Comment UUID: 55555555-5555-5555-5555-555555555555"
+                    "AgentBridge name: build-host"
+                    "Comment target context:"
+                    "- Target block A\n  - Target A child"
+                    "- Target block B\n  - Target B child"
+                    "Comment thread context:"
+                    "- Comments\n  - [[build-host]] please summarize the selected blocks"
+                    "Requesting comment:"
+                    "For a short reply, append a comment after the requesting comment."
+                    "For a long reply, write a normal block tree after the comments area and append a comment that references that tree."]]
+    (is (string/includes? prompt expected))))
+
+(defn- assert-basic-comment-request-prompt
+  [prompt]
+  (doseq [expected ["You are handling a Logseq AgentBridge comment request."
+                    "Graph: demo"
+                    "Comment UUID: 55555555-5555-5555-5555-555555555555"
+                    "AgentBridge name: build-host"
+                    "Comment target context:"
+                    "Comment thread context:"
+                    "Requesting comment:"
+                    "Reply instructions:"]]
+    (is (string/includes? prompt expected))))
+
 (deftest test-assignee-built-in-property
   (let [property (get db-property/built-in-properties :logseq.property/assignee)]
     (is (= "Assignee" (:title property)))
@@ -157,6 +211,389 @@
       (is (string/starts-with? preview "codex exec --json '"))
       (is (string/includes? preview "Ship the CLI bridge")))))
 
+(deftest test-agent-bridge-listener-routes-comment-mention-with-context-and-reactions
+  (async done
+         (let [root (temp-root)
+               calls (atom [])
+               start-on-exit* (atom nil)
+               request-comment (comment-block {})
+               comments-area (comments-area-block {})
+               comment-uuid (:block/uuid request-comment)
+               tree-by-uuid {"55555555-5555-5555-5555-555555555555"
+                             "- [[build-host]] please summarize the selected blocks"
+                             "66666666-6666-6666-6666-666666666666"
+                             "- Comments\n  - [[build-host]] please summarize the selected blocks\n  - Earlier comment"
+                             "77777777-7777-7777-7777-777777777777"
+                             "- Target block A\n  - Target A child"
+                             "88888888-8888-8888-8888-888888888888"
+                             "- Target block B\n  - Target B child"}]
+           (-> (p/with-redefs [agent-command/list-routable-tasks
+                                (fn [_cfg repo agent-name]
+                                  (swap! calls conj [:broad-scan repo agent-name])
+                                  (p/resolved []))
+                                transport/invoke
+                                (fn [_cfg method args]
+                                  (swap! calls conj [method args])
+                                  (case method
+                                    :thread-api/pull
+                                    (let [[_repo _selector lookup] args]
+                                      (case lookup
+                                        50 (p/resolved request-comment)
+                                        60 (p/resolved comments-area)
+                                        (p/rejected (ex-info "unexpected pull"
+                                                             {:lookup lookup}))))
+
+                                    :thread-api/q
+                                    (p/resolved [])
+
+                                    :thread-api/apply-outliner-ops
+                                    (p/resolved {:ok true})
+
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method
+                                                          :args args}))))
+                                show-command/execute-show
+                                (fn [action _cfg]
+                                  (swap! calls conj [:show action])
+                                  (p/resolved {:status :ok
+                                               :data {:message (get tree-by-uuid (:uuid action))}}))
+                                cli-server/ensure-server!
+                                (fn [cfg repo]
+                                  (swap! calls conj [:ensure-server (:root-dir cfg) repo])
+                                  (assoc cfg :base-url "http://127.0.0.1:1234"))
+                                agent-command/start-codex!
+                                (fn [command opts]
+                                  (swap! calls conj [:codex command])
+                                  (reset! start-on-exit* (:on-exit opts))
+                                  ((:on-exit opts) 0 "comment-session-123")
+                                  (p/resolved {:session "comment-session-123"
+                                               :status :running}))]
+                 (#'agent-command/process-sync-db-changes-event!
+                  {:root-dir root
+                   :base-url "http://127.0.0.1:1234"
+                   :log-fn (fn [_] nil)}
+                  {:repo "logseq_db_demo"
+                   :graph "demo"
+                   :agent-name "build-host"
+                   :routing-blocks* (atom #{})}
+                  {:tx-data [{:e 50
+                              :a :block/title
+                              :v (:block/title request-comment)}]}))
+               (p/then (fn [_]
+                         (is (not-any? #(= :broad-scan (first %)) @calls))
+                         (is (some #(= [:thread-api/apply-outliner-ops
+                                        ["logseq_db_demo"
+                                         [[:toggle-reaction [comment-uuid "eyes" nil]]]
+                                         {}]]
+                                       %)
+                                   @calls))
+                         (let [[_ command] (some #(when (= :codex (first %)) %) @calls)]
+                           (is (some? command))
+                           (when command
+                             (assert-comment-request-prompt (nth command 3))))
+                         (is (fn? @start-on-exit*))
+                         (p/let [_ (p/delay 10)]
+                           (is (some #(= [:thread-api/apply-outliner-ops
+                                          ["logseq_db_demo"
+                                           [[:toggle-reaction [comment-uuid "white_check_mark" nil]]]
+                                           {}]]
+                                         %)
+                                     @calls)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (fs/rmSync root #js {:recursive true :force true})
+                            (done)))))))
+
+(deftest test-agent-bridge-listener-routes-normalized-comment-mention-ref
+  (async done
+         (let [root (temp-root)
+               calls (atom [])
+               request-comment (comment-block {:block/title "[[aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa]] please summarize"
+                                               :block/refs [{:db/id 101
+                                                             :block/title "build-host"}]})
+               comments-area (comments-area-block {})
+               comment-uuid (:block/uuid request-comment)]
+           (-> (p/with-redefs [transport/invoke
+                                (fn [_cfg method args]
+                                  (swap! calls conj [method args])
+                                  (case method
+                                    :thread-api/pull
+                                    (let [[_repo _selector lookup] args]
+                                      (case lookup
+                                        50 (p/resolved request-comment)
+                                        60 (p/resolved comments-area)
+                                        (p/rejected (ex-info "unexpected pull"
+                                                             {:lookup lookup}))))
+                                    :thread-api/q
+                                    (p/resolved [])
+                                    :thread-api/apply-outliner-ops
+                                    (p/resolved {:ok true})
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method
+                                                          :args args}))))
+                                show-command/execute-show
+                                (fn [_action _cfg]
+                                  (p/resolved {:status :ok
+                                               :data {:message "- context"}}))
+                                cli-server/ensure-server!
+                                (fn [cfg _repo] cfg)
+                                agent-command/start-codex!
+                                (fn [command _opts]
+                                  (swap! calls conj [:codex command])
+                                  (p/resolved {:session "comment-session-ref"
+                                               :status :running}))]
+                 (#'agent-command/process-sync-db-changes-event!
+                  {:root-dir root
+                   :base-url "http://127.0.0.1:1234"
+                   :log-fn (fn [_] nil)}
+                  {:repo "logseq_db_demo"
+                   :graph "demo"
+                   :agent-name "build-host"
+                   :routing-blocks* (atom #{})}
+                  {:tx-data [{:e 50
+                              :a :block/title
+                              :v (:block/title request-comment)}]}))
+               (p/then (fn [_]
+                         (is (some #(= :codex (first %)) @calls))
+                         (is (some #(= [:thread-api/apply-outliner-ops
+                                        ["logseq_db_demo"
+                                         [[:toggle-reaction [comment-uuid "eyes" nil]]]
+                                         {}]]
+                                       %)
+                                   @calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (fs/rmSync root #js {:recursive true :force true})
+                            (done)))))))
+
+(deftest test-agent-bridge-listener-resumes-commented-block-session-when-assignee-matches
+  (async done
+         (let [root (temp-root)
+               calls (atom [])
+               request-comment (comment-block {})
+               commented-block (assoc (first (:logseq.property.comments/blocks (comments-area-block {})))
+                                      "agent-session-id" "existing-session-123"
+                                      :logseq.property/assignee [{:db/id 101
+                                                                  :block/title "build-host"}])
+               comments-area (comments-area-block {:logseq.property.comments/blocks [commented-block]})]
+           (-> (p/with-redefs [transport/invoke
+                                (fn [_cfg method args]
+                                  (swap! calls conj [method args])
+                                  (case method
+                                    :thread-api/pull
+                                    (let [[_repo _selector lookup] args]
+                                      (case lookup
+                                        50 (p/resolved request-comment)
+                                        60 (p/resolved comments-area)
+                                        (p/rejected (ex-info "unexpected pull"
+                                                             {:lookup lookup}))))
+                                    :thread-api/q
+                                    (p/resolved [])
+                                    :thread-api/apply-outliner-ops
+                                    (p/resolved {:ok true})
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method
+                                                          :args args}))))
+                                show-command/execute-show
+                                (fn [_action _cfg]
+                                  (p/resolved {:status :ok
+                                               :data {:message "- context"}}))
+                                cli-server/ensure-server!
+                                (fn [cfg _repo] cfg)
+                                agent-command/start-codex!
+                                (fn [command _opts]
+                                  (swap! calls conj [:codex command])
+                                  (p/resolved {:session "existing-session-123"
+                                               :status :running}))]
+                 (#'agent-command/process-sync-db-changes-event!
+                  {:root-dir root
+                   :base-url "http://127.0.0.1:1234"
+                   :log-fn (fn [_] nil)}
+                  {:repo "logseq_db_demo"
+                   :graph "demo"
+                   :agent-name "build-host"
+                   :routing-blocks* (atom #{})}
+                  {:tx-data [{:e 50
+                              :a :block/title
+                              :v (:block/title request-comment)}]}))
+               (p/then (fn [_]
+                         (let [[_ command] (some #(when (= :codex (first %)) %) @calls)]
+                           (is (some? command))
+                           (is (= ["codex" "exec" "resume" "--json" "existing-session-123"]
+                                  (vec (take 5 command))))
+                           (when command
+                             (assert-basic-comment-request-prompt (last command))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (fs/rmSync root #js {:recursive true :force true})
+                            (done)))))))
+
+(deftest test-agent-bridge-listener-starts-temporary-comment-session-when-assignee-mismatches
+  (async done
+         (let [root (temp-root)
+               calls (atom [])
+               request-comment (comment-block {})
+               commented-block (assoc (first (:logseq.property.comments/blocks (comments-area-block {})))
+                                      "agent-session-id" "existing-session-123"
+                                      :logseq.property/assignee [{:db/id 101
+                                                                  :block/title "other-host"}])
+               comments-area (comments-area-block {:logseq.property.comments/blocks [commented-block]})]
+           (-> (p/with-redefs [transport/invoke
+                                (fn [_cfg method args]
+                                  (swap! calls conj [method args])
+                                  (case method
+                                    :thread-api/pull
+                                    (let [[_repo _selector lookup] args]
+                                      (case lookup
+                                        50 (p/resolved request-comment)
+                                        60 (p/resolved comments-area)
+                                        (p/rejected (ex-info "unexpected pull"
+                                                             {:lookup lookup}))))
+                                    :thread-api/q
+                                    (p/resolved [])
+                                    :thread-api/apply-outliner-ops
+                                    (p/resolved {:ok true})
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method
+                                                          :args args}))))
+                                show-command/execute-show
+                                (fn [_action _cfg]
+                                  (p/resolved {:status :ok
+                                               :data {:message "- context"}}))
+                                cli-server/ensure-server!
+                                (fn [cfg _repo] cfg)
+                                agent-command/start-codex!
+                                (fn [command _opts]
+                                  (swap! calls conj [:codex command])
+                                  (p/resolved {:session "comment-session-789"
+                                               :status :running}))]
+                 (#'agent-command/process-sync-db-changes-event!
+                  {:root-dir root
+                   :base-url "http://127.0.0.1:1234"
+                   :log-fn (fn [_] nil)}
+                  {:repo "logseq_db_demo"
+                   :graph "demo"
+                   :agent-name "build-host"
+                   :routing-blocks* (atom #{})}
+                  {:tx-data [{:e 50
+                              :a :block/title
+                              :v (:block/title request-comment)}]}))
+               (p/then (fn [_]
+                         (let [[_ command] (some #(when (= :codex (first %)) %) @calls)]
+                           (is (some? command))
+                           (is (= ["codex" "exec" "--json"]
+                                  (vec (take 3 command))))
+                           (when command
+                             (assert-basic-comment-request-prompt (last command))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (fs/rmSync root #js {:recursive true :force true})
+                            (done)))))))
+
+(deftest test-agent-bridge-listener-adds-failure-reaction-when-comment-codex-exits-nonzero
+  (async done
+         (let [root (temp-root)
+               calls (atom [])
+               start-on-exit* (atom nil)
+               request-comment (comment-block {})
+               comments-area (comments-area-block {})
+               comment-uuid (:block/uuid request-comment)]
+           (-> (p/with-redefs [transport/invoke
+                                (fn [_cfg method args]
+                                  (swap! calls conj [method args])
+                                  (case method
+                                    :thread-api/pull
+                                    (let [[_repo _selector lookup] args]
+                                      (case lookup
+                                        50 (p/resolved request-comment)
+                                        60 (p/resolved comments-area)
+                                        (p/rejected (ex-info "unexpected pull"
+                                                             {:lookup lookup}))))
+                                    :thread-api/q
+                                    (p/resolved [])
+                                    :thread-api/apply-outliner-ops
+                                    (p/resolved {:ok true})
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method
+                                                          :args args}))))
+                                show-command/execute-show
+                                (fn [_action _cfg]
+                                  (p/resolved {:status :ok
+                                               :data {:message "- context"}}))
+                                cli-server/ensure-server!
+                                (fn [cfg _repo] cfg)
+                                agent-command/start-codex!
+                                (fn [_command opts]
+                                  (reset! start-on-exit* (:on-exit opts))
+                                  ((:on-exit opts) 1 "comment-session-456")
+                                  (p/resolved {:session "comment-session-456"
+                                               :status :running}))]
+                 (#'agent-command/process-sync-db-changes-event!
+                  {:root-dir root
+                   :base-url "http://127.0.0.1:1234"
+                   :log-fn (fn [_] nil)}
+                  {:repo "logseq_db_demo"
+                   :graph "demo"
+                   :agent-name "build-host"
+                   :routing-blocks* (atom #{})}
+                  {:tx-data [{:e 50
+                              :a :block/title
+                              :v (:block/title request-comment)}]}))
+               (p/then (fn [_]
+                         (is (fn? @start-on-exit*))
+                         (p/let [_ (p/delay 10)]
+                           (is (some #(= [:thread-api/apply-outliner-ops
+                                          ["logseq_db_demo"
+                                           [[:toggle-reaction [comment-uuid "x" nil]]]
+                                           {}]]
+                                         %)
+                                     @calls)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (fs/rmSync root #js {:recursive true :force true})
+                            (done)))))))
+
+(deftest test-agent-bridge-listener-ignores-comment-like-title-without-comment-tag
+  (async done
+         (let [handler* (atom nil)
+               calls (atom [])
+               non-comment (comment-block {:block/tags []})]
+           (-> (p/with-redefs [transport/connect-events! (fn [_cfg handler]
+                                                           (reset! handler* handler)
+                                                           {:close! (fn [] nil)})
+                               transport/invoke (fn [_cfg method args]
+                                                  (swap! calls conj [method args])
+                                                  (case method
+                                                    :thread-api/pull
+                                                    (p/resolved non-comment)
+                                                    (p/rejected (ex-info "unexpected invoke"
+                                                                         {:method method
+                                                                          :args args}))))
+                               agent-command/start-codex! (fn [command _opts]
+                                                            (swap! calls conj [:codex command])
+                                                            (p/resolved {:session "should-not-run"
+                                                                         :status :running}))]
+                 (do
+                   (#'agent-command/listen-forever! {:root-dir "/tmp/logseq"
+                                                     :base-url "http://127.0.0.1:1234"
+                                                     :log-fn (fn [_] nil)}
+                                                    {:repo "logseq_db_demo"
+                                                     :graph "demo"
+                                                     :agent-name "build-host"})
+                   (@handler* :sync-db-changes {:tx-data [{:e 50
+                                                           :a :block/title
+                                                           :v (:block/title non-comment)}]})
+                   (p/let [_ (p/delay 10)]
+                     (is (not-any? #(= :codex (first %)) @calls)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest test-codex-session-id-capture
   (testing "captures the first Codex JSONL session id"
     (is (= "session-123"
@@ -192,7 +629,7 @@
            (-> (agent-command/start-codex! ["codex" "exec" "--json" "prompt"] {})
                (p/then (fn [result]
                          (is (= {:session "thread-late"
-                                  :status :running}
+                                 :status :running}
                                 (select-keys result [:session :status])))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -638,16 +1075,16 @@
                                  transport/invoke (fn [_cfg method args]
                                                     (swap! calls conj [method args])
                                                     (case method
-                                                 :thread-api/pull
-                                                 (let [[_repo selector lookup] args]
-                                                   (cond
-                                                     (= lookup :logseq.property/assignee)
-                                                     (p/resolved {:db/id 900
-                                                                  :db/ident :logseq.property/assignee})
+                                                      :thread-api/pull
+                                                      (let [[_repo selector lookup] args]
+                                                        (cond
+                                                          (= lookup :logseq.property/assignee)
+                                                          (p/resolved {:db/id 900
+                                                                       :db/ident :logseq.property/assignee})
 
-                                                     (= lookup 101)
-                                                     (p/resolved {:db/id 101
-                                                                  :block/title "build-host"})
+                                                          (= lookup 101)
+                                                          (p/resolved {:db/id 101
+                                                                       :block/title "build-host"})
 
                                                           (= lookup 42)
                                                           (p/resolved block)
