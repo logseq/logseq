@@ -489,19 +489,23 @@
   @apply -m-4;
 }
 
-.ui__dropdown-menu-content:has(> .cp__emoji-icon-picker) {
+/* icon-search switches its outermost class based on @*view: emoji/icon mode
+   renders `.cp__emoji-icon-picker`, while avatar/image mode renders
+   `.asset-picker` and text mode renders `.text-picker` as a complete
+   replacement. All three render as a direct child of the top-level
+   `ui__dropdown-menu-content` (via shui/popup-show!), so each needs the
+   same `-m-1` to cancel the surface's baked-in p-1 — otherwise switching
+   between modes via "< Back" produces a 4px visual jump. The sub-menu
+   case (block-context-menu) uses a different mechanism: `{:class "!p-0"}`
+   on the sub-content + an inner `[:div.p-1]` wrapper. */
+.ui__dropdown-menu-content:has(> .cp__emoji-icon-picker),
+.ui__dropdown-menu-content:has(> .asset-picker),
+.ui__dropdown-menu-content:has(> .text-picker) {
   @apply flex;
 }
 
-.ui__dropdown-menu-content .cp__emoji-icon-picker {
-  @apply -m-1;
-}
-
-/* Same negative margin to counteract dropdown p-1 padding */
-.ui__dropdown-menu-content .asset-picker {
-  @apply -m-1;
-}
-
+.ui__dropdown-menu-content .cp__emoji-icon-picker,
+.ui__dropdown-menu-content .asset-picker,
 .ui__dropdown-menu-content .text-picker {
   @apply -m-1;
 }
@@ -1192,14 +1196,6 @@
 /* ============================================================================
    Text Picker (Level 2 view) - matches asset-picker structure
    ============================================================================ */
-
-.ui__dropdown-menu-content:has(> .text-picker) {
-  @apply flex;
-}
-
-.ui__dropdown-menu-content .text-picker {
-  @apply -m-1;
-}
 
 .text-picker {
   @apply flex flex-col overflow-hidden;
@@ -2607,8 +2603,3 @@
 }
 
 
-.ui__dropdown-menu-sub-content {
-  .cp__emoji-icon-picker {
-    @apply -m-2;
-  }
-}
