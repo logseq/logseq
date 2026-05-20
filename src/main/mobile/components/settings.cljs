@@ -6,6 +6,8 @@
             [frontend.components.user.login :as login]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.dicts :as dicts]
+            [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -60,6 +62,24 @@
    [:option {:value "system"} (t :settings.general/theme-system)]
    [:option {:value "light"}  (t :settings.general/theme-light)]
    [:option {:value "dark"}   (t :settings.general/theme-dark)]])
+
+(defn language-select
+  [{:keys [value on-change]}]
+  [:select
+   {:value     value
+    :class     "text-sm bg-transparent rounded border-none focus:outline-none"
+    :on-change (fn [e]
+                 (let [new-value (util/evalue e)]
+                   (on-change new-value)))}
+   (for [language dicts/languages
+         :let [lang-code (name (:value language))]]
+     [:option {:key lang-code :value lang-code} (:label language)])])
+
+(defn- set-language!
+  [lang-code]
+  (state/set-preferred-language! lang-code)
+  (state/pub-event! [:init/commands])
+  (ui-handler/re-render-root!))
 
 (rum/defc log
   []
@@ -210,6 +230,7 @@
                     (user-handler/logged-in?))
         theme (state/sub :ui/theme)
         system-theme? (state/sub :ui/system-theme?)
+        preferred-language (state/sub :preferred-language)
         theme-value (if system-theme?
                       "system"
                       (or theme "system"))]
@@ -221,6 +242,12 @@
        [:div.flex.items-center
         (theme-select {:value theme-value
                        :on-change state/use-theme-mode!})]]
+
+      [:div.mobile-setting-item
+       [:span.text-base (t :settings.general/language)]
+       [:div.flex.items-center
+        (language-select {:value preferred-language
+                          :on-change set-language!})]]
 
       [:div.mobile-setting-item
        [:span.text-base (t :mobile.settings/version)]
