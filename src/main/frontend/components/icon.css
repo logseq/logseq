@@ -54,7 +54,7 @@
   }
 
   > .bd {
-    @apply flex-1 overflow-y-auto;
+    @apply flex-1 pt-1 overflow-y-auto;
     @apply bg-gray-02;
     min-height: 0;
 
@@ -2047,6 +2047,14 @@
 
 .avatar-customize-zone[data-expanded="true"] {
   --avatar-size: 56px;
+}
+
+/* Customize banner sits flush against the search topbar by design (see
+   `margin-top: -4px` above). The first content section that follows it,
+   however, should get a tiny gap so the grid doesn't read crammed against
+   the banner's bottom border. */
+.avatar-customize-zone + .pane-section {
+  margin-top: 4px;
 }
 
 /* Whole-row click target. Invisible overlay sitting above the resting
