@@ -601,13 +601,38 @@
        :backend :codex
        :preview preview})))
 
+(defn- claim-routing-block!
+  [routing-blocks* block-id]
+  (loop []
+    (let [routing-blocks @routing-blocks*]
+      (cond
+        (contains? routing-blocks block-id)
+        false
+
+        (compare-and-set! routing-blocks* routing-blocks (conj routing-blocks block-id))
+        true
+
+        :else
+        (recur)))))
+
+(defn- route-task-once!
+  [cfg {:keys [routing-blocks*] :as opts} {:keys [block] :as task}]
+  (let [block-id (block-uuid-str block)]
+    (if (and routing-blocks* block-id)
+      (if (claim-routing-block! routing-blocks* block-id)
+        (-> (route-task! cfg opts task)
+            (p/finally (fn []
+                         (swap! routing-blocks* disj block-id))))
+        (p/resolved nil))
+      (route-task! cfg opts task))))
+
 (defn- process-tasks!
   [cfg {:keys [repo graph agent-name]}]
   (p/let [tasks (list-routable-tasks cfg repo agent-name)]
-    (p/all (mapv #(route-task! cfg {:repo repo
-                                    :graph graph
-                                    :agent-name agent-name}
-                               %)
+    (p/all (mapv #(route-task-once! cfg {:repo repo
+                                         :graph graph
+                                         :agent-name agent-name}
+                                    %)
                  tasks))))
 
 (def ^:private assignee-property-ident :logseq.property/assignee)
@@ -731,8 +756,8 @@
           (p/let [block (pull-task-block cfg repo block-id)]
             (when (routable-task? block agent-name)
               (p/let [tree-text (show-task-tree cfg repo block)]
-                (route-task! cfg opts {:block block
-                                       :tree-text tree-text})))))))))
+                (route-task-once! cfg opts {:block block
+                                            :tree-text tree-text})))))))))
 
 (defn- process-sync-db-changes-event!
   [cfg {:keys [repo] :as opts} {:keys [tx-data]}]
@@ -742,28 +767,28 @@
 
 (defn- listen-forever!
   [cfg {:keys [repo graph agent-name]}]
-  (let [processing* (atom (p/resolved nil))
+  (let [routing-blocks* (atom #{})
+        handle-error! (fn [e]
+                        (emit-log! cfg (log-line (str "Codex invocation failed: "
+                                                      (or (ex-message e) (str e)))))
+                        (log-bridge-exit! {:repo repo
+                                           :graph graph
+                                           :agent-name agent-name
+                                           :reason :task-processing-failed
+                                           :exit-code 1
+                                           :error e})
+                        (.exit js/process 1))
         process! (fn [payload]
-                   (swap! processing*
-                          (fn [previous]
-                            (-> previous
-                                (p/catch (fn [_] nil))
-                                (p/then (fn [_]
-                                          (process-sync-db-changes-event! cfg
-                                                                          {:repo repo
-                                                                           :graph graph
-                                                                           :agent-name agent-name}
-                                                                          payload)))
-                                (p/catch (fn [e]
-                                           (emit-log! cfg (log-line (str "Codex invocation failed: "
-                                                                         (or (ex-message e) (str e)))))
-                                           (log-bridge-exit! {:repo repo
-                                                              :graph graph
-                                                              :agent-name agent-name
-                                                              :reason :task-processing-failed
-                                                              :exit-code 1
-                                                              :error e})
-                                           (.exit js/process 1)))))))]
+                   (try
+                     (-> (process-sync-db-changes-event! cfg
+                                                         {:repo repo
+                                                          :graph graph
+                                                          :agent-name agent-name
+                                                          :routing-blocks* routing-blocks*}
+                                                         payload)
+                         (p/catch handle-error!))
+                     (catch :default e
+                       (handle-error! e))))]
     (transport/connect-events! cfg
                                (fn [event-type payload]
                                  (when (= :sync-db-changes event-type)
