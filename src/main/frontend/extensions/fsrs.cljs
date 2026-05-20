@@ -257,20 +257,21 @@
       (let [phase (rum/react *phase)
             _card-index (rum/react *card-index)
             next-phase (phase->next-phase block-entity phase)]
-        [:div.ls-card.content.flex.flex-col.overflow-y-auto.overflow-x-hidden
+        [:div.ls-card.content.flex.flex-col.overflow-hidden
          {:class (when (:mobile? opts) "ls-mobile-card")}
-         [:div.mb-4.ml-2.opacity-70.text-sm
-          (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
-         (let [option (case phase
-                        :init
-                        {:hide-children? true}
-                        :show-cloze
-                        {:show-cloze? true
-                         :hide-children? true}
-                        {:show-cloze? true
-                         :ignore-block-collapsed? true})]
-           (component-block/blocks-container option [block-entity]))
-         [:div.mt-8.pb-2
+         [:div.ls-card-scroll.flex-1.min-h-0.overflow-y-auto.overflow-x-hidden
+          [:div.mb-4.ml-2.opacity-70.text-sm
+           (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
+          (let [option (case phase
+                         :init
+                         {:hide-children? true}
+                         :show-cloze
+                         {:show-cloze? true
+                          :hide-children? true}
+                         {:show-cloze? true
+                          :ignore-block-collapsed? true})]
+            (component-block/blocks-container option [block-entity]))]
+         [:div.mt-8.pb-2.shrink-0
           {:class (when (:mobile? opts) "ls-mobile-card-actions")}
           (if (contains? #{:show-cloze :show-answer} next-phase)
             (btn-with-shortcut {:btn-text (case next-phase
@@ -366,7 +367,7 @@
           (on-selector-change {:cards all-cards
                                :cards-id cards-id
                                :select-card! select-card!})))
-      [:div#cards-modal.flex.flex-col.gap-8.flex-1
+      [:div#cards-modal.flex.flex-col.gap-8.flex-1.min-h-0
        (when-not mobile?
          [:div.flex.flex-row.items-center.gap-2
           (shui/select
@@ -398,7 +399,7 @@
        (let [block-id (nth block-ids card-index nil)]
          (cond
            block-id
-           [:div.flex.flex-col
+           [:div.flex.flex-col.flex-1.min-h-0
             (rum/with-key
               (card-view repo block-id *card-index *phase opts)
               (str "card-" block-id))]

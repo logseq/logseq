@@ -1009,6 +1009,7 @@
  :mobile.share/unsupported-import-type "不支持导入 {1} 文件。您可以在 {2} 上反馈，我们会尽快处理。"
 
  :mobile.tab/capture "速记"
+ :mobile.tab/flashcards "闪卡"
  :mobile.tab/go-to "跳转"
  :mobile.tab/graphs "图谱"
 
