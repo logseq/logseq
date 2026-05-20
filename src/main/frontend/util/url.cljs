@@ -77,21 +77,37 @@
        "/block/" (encode-param (required-url-part! :block-id block-id))
        "?graph-id=" (encode-param (required-url-part! :graph-id graph-id))))
 
+(defn- route-from-path-parts
+  [path-parts]
+  (case (first path-parts)
+    "page" (when-let [page-id (second path-parts)]
+             {:to :page
+              :page-id (js/decodeURIComponent page-id)})
+    "block" (when-let [block-id (second path-parts)]
+              {:to :block
+               :block-id (js/decodeURIComponent block-id)})
+    nil))
+
+(defn- path-parts
+  [path]
+  (->> (string/split path #"/")
+       (remove string/blank?)
+       vec))
+
+(defn- hash-route-url
+  [parsed-url]
+  (let [hash (.-hash parsed-url)]
+    (when (string/starts-with? hash "#/")
+      (js/URL. (subs hash 1) "https://logseq.com"))))
+
 (defn parse-web-url-target
   [url]
   (let [parsed-url (js/URL. url "https://logseq.com")
-        graph-id (.get (.-searchParams parsed-url) "graph-id")
-        path-parts (->> (string/split (.-pathname parsed-url) #"/")
-                        (remove string/blank?)
-                        vec)
-        route (case (first path-parts)
-                "page" (when-let [page-id (second path-parts)]
-                         {:to :page
-                          :page-id (js/decodeURIComponent page-id)})
-                "block" (when-let [block-id (second path-parts)]
-                          {:to :block
-                           :block-id (js/decodeURIComponent block-id)})
-                nil)]
+        hash-url (hash-route-url parsed-url)
+        graph-id (or (some-> hash-url .-searchParams (.get "graph-id"))
+                     (.get (.-searchParams parsed-url) "graph-id"))
+        route (or (some-> hash-url .-pathname path-parts route-from-path-parts)
+                  (route-from-path-parts (path-parts (.-pathname parsed-url))))]
     (cond-> {}
       (not (string/blank? graph-id))
       (assoc :graph-id graph-id)

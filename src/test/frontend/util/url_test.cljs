@@ -31,4 +31,8 @@
       (is (= {:graph-id "remote-graph-uuid"
               :route {:to :block
                       :block-id "block-uuid"}}
-             (parse-f "https://logseq.com/block/block-uuid?graph-id=remote-graph-uuid"))))))
+             (parse-f "https://logseq.com/block/block-uuid?graph-id=remote-graph-uuid")))
+      (is (= {:graph-id "dc4b7cbd-65f7-4e76-9591-dcb3d14f11cf"
+              :route {:to :page
+                      :page-id "00000001-2026-0520-0000-000000000000"}}
+             (parse-f "http://localhost:3001/#/page/00000001-2026-0520-0000-000000000000?graph-id=dc4b7cbd-65f7-4e76-9591-dcb3d14f11cf"))))))

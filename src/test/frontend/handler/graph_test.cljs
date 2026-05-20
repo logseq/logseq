@@ -1,7 +1,36 @@
 (ns frontend.handler.graph-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [async deftest is testing]]
+            [frontend.common.idb :as idb]
             [frontend.handler.graph]
-            [logseq.common.graph-registry :as graph-registry]))
+            [logseq.common.graph-registry :as graph-registry]
+            [promesa.core :as p]))
+
+(deftest graph-registry-key-is-indexeddb-compatible-test
+  (let [registry-key (some-> (resolve 'frontend.handler.graph/graph-registry-key) deref)]
+    (is (= "ls-graph-registry" registry-key))))
+
+(deftest get-graph-registry-normalizes-indexeddb-js-values-test
+  (async done
+    (let [get-registry-f (some-> (resolve 'frontend.handler.graph/<get-graph-registry) deref)]
+      (p/with-redefs [idb/get-item (fn [_]
+                                     (p/resolved
+                                      #js [#js {"repo" "logseq_db_work"
+                                                "graph-name" "work"
+                                                "graph-id" "remote-uuid"}]))]
+        (-> (get-registry-f)
+            (.then (fn [registry]
+                     (is (= [{:repo "logseq_db_work"
+                              :graph-name "work"
+                              :graph-id "remote-uuid"}]
+                            registry))
+                     (is (= "logseq_db_work"
+                            (:repo (graph-registry/resolve-target
+                                    registry
+                                    {:graph-id "remote-uuid"}))))
+                     (done)))
+            (.catch (fn [e]
+                      (is false (str e))
+                      (done))))))))
 
 (deftest normalize-registry-entry-prefers-remote-graph-id-test
   (let [normalize-f (some-> (resolve 'frontend.handler.graph/normalize-registry-entry) deref)]

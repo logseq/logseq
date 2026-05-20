@@ -1,6 +1,7 @@
 (ns frontend.handler.graph
   "Provides util handler fns for graph view"
-  (:require [electron.ipc :as ipc]
+  (:require [cljs-bean.core :as bean]
+            [electron.ipc :as ipc]
             [frontend.common.idb :as idb]
             [frontend.db :as db]
             [frontend.state :as state]
@@ -12,16 +13,23 @@
             [promesa.core :as p]))
 
 (def graph-registry-key
-  :ls-graph-registry)
+  "ls-graph-registry")
 
 (def normalize-registry-entry graph-registry/normalize-entry)
 
 (def resolve-registry-target graph-registry/resolve-target)
 
+(defn- storage-registry->clj
+  [registry]
+  (let [registry' (bean/->clj registry)]
+    (if (sequential? registry')
+      (vec registry')
+      [])))
+
 (defn <get-graph-registry
   []
   (p/let [registry (idb/get-item graph-registry-key)]
-    (or registry [])))
+    (storage-registry->clj registry)))
 
 (defn <upsert-graph-registry-entry!
   [entry]
@@ -32,7 +40,7 @@
       (ipc/ipc "upsertGraphRegistryEntry" entry')
       (p/let [registry (<get-graph-registry)
               registry' (graph-registry/upsert-entry registry entry')]
-        (idb/set-item! graph-registry-key registry')))))
+        (idb/set-item! graph-registry-key (bean/->js registry'))))))
 
 (defn repo-summary->registry-entry
   [{:keys [url GraphName GraphUUID metadata sync-meta] :as repo}]
