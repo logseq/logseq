@@ -27,7 +27,7 @@
           _ (d/transact! conn [{:db/id embed-eid :block/link target-eid}])
           db @conn
           page-a (db-test/find-page-by-title db "Page A")
-          payload (#'worker-publish/build-publish-page-payload db page-a nil)
+          payload (#'worker-publish/build-publish-page-payload db page-a)
           datom-eids (->> (:datoms payload) (map first) set)
           child-eid (:db/id (d/entity db [:block/uuid child-uuid]))]
       (is (contains? datom-eids target-eid))
@@ -62,7 +62,7 @@
                                {:db/id (:db/id first-child) :block/link second-eid}])
           db @conn
           root-page (db-test/find-page-by-title db "Root Page")
-          payload (#'worker-publish/build-publish-page-payload db root-page nil)
+          payload (#'worker-publish/build-publish-page-payload db root-page)
           datom-eids (->> (:datoms payload) (map first) set)
           first-eid (:db/id (d/entity db [:block/uuid first-uuid]))
           second-eid (:db/id (d/entity db [:block/uuid second-uuid]))]
@@ -92,7 +92,7 @@
           page-a (db-test/find-page-by-title db "Page A")
           comments-area-eid (:db/id (d/entity db [:block/uuid comments-area-uuid]))
           comment-eid (:db/id (d/entity db [:block/uuid comment-uuid]))
-          payload (#'worker-publish/build-publish-page-payload db page-a nil)
+          payload (#'worker-publish/build-publish-page-payload db page-a)
           datom-eids (->> (:datoms payload) (map first) set)
           search-contents (set (map :block_content (:blocks payload)))]
       (is (not (contains? datom-eids comments-area-eid)))
