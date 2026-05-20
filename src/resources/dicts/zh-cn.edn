@@ -107,6 +107,15 @@
  :block/status-history "状态历史"
  :block/untitled-query "未命名查询"
 
+ :block.comments/add-comment "添加评论"
+ :block.comments/add-comment-command-desc "为此块添加评论。"
+ :block.comments/collapsed-summary "{1} 条评论 · 最新来自 {2}"
+ :block.comments/date-at-time "{1} {2}"
+ :block.comments/label "评论"
+ :block.comments/on-those-blocks "在这些块上"
+ :block.comments/placeholder "回复..."
+ :block.comments/yesterday-at "昨天 {1}"
+
  :block.macro/embed-deprecated "{{embed}} 已弃用。请改用“/节点嵌入”命令。"
  :block.macro/namespace-deprecated "{{namespace}} 已弃用。请改用 {1} 功能。"
  :block.macro/query-deprecated "{{query}} 已弃用。请改用“/查询”命令。"
@@ -151,6 +160,7 @@
  :class.built-in/card "卡片"
  :class.built-in/cards "卡片集"
  :class.built-in/code-block "代码"
+ :class.built-in/comments "评论"
  :class.built-in/journal "日记"
  :class.built-in/math-block "数学"
  :class.built-in/page "页面"
@@ -256,6 +266,7 @@
 
  :command.command-palette/toggle "切换命令面板"
 
+ :command.editor/add-comment "添加评论"
  :command.editor/add-property "添加属性"
  :command.editor/add-property-deadline "添加截止日期属性"
  :command.editor/add-property-icon "添加图标属性"

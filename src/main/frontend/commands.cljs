@@ -310,7 +310,13 @@
          :icon/numberedChildren]]
 
        ;; advanced
-       [[(t-fn :property.built-in/query) (query-steps) (query-doc) :icon/query (t-fn :editor.slash/group-advanced)]
+       [[(t-fn :block.comments/add-comment)
+         [[:editor/clear-current-slash]
+          [:editor/add-comment]]
+         (t-fn :block.comments/add-comment-command-desc)
+         :icon/messageCircle
+         (t-fn :editor.slash/group-advanced)]
+        [(t-fn :property.built-in/query) (query-steps) (query-doc) :icon/query (t-fn :editor.slash/group-advanced)]
         [(t-fn :editor.slash/advanced-query) (advanced-query-steps) (t-fn :editor.slash/advanced-query-desc) :icon/query]
         [(t-fn :editor.slash/query-function)
          [[:editor/input "{{function }}" {:backward-pos 2}]]
@@ -727,6 +733,9 @@
 
 (defmethod handle-step :editor/new-property [[_]]
   (state/pub-event! [:editor/new-property]))
+
+(defmethod handle-step :editor/add-comment [[_]]
+  (state/pub-event! [:editor/add-comment]))
 
 (defmethod handle-step :default [[type & _args]]
   (prn "No handler for step: " type))

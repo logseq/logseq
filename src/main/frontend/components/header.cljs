@@ -6,6 +6,7 @@
             [dommy.core :as d]
             [electron.ipc :as ipc]
             [frontend.common.missionary :as c.m]
+            [frontend.components.avatar :as avatar]
             [frontend.components.block :as component-block]
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
@@ -36,7 +37,6 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [logseq.shui.util :as shui-util]
             [missionary.core :as m]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -103,17 +103,15 @@
        (when (seq online-users)
          (for [{user-email :user/email
                 user-name :user/name
-                user-uuid :user/uuid} online-users
-               :let [color (shui-util/uuid-color user-uuid)]]
+                user-uuid :user/uuid} online-users]
            (when user-name
-             (shui/avatar
+             (avatar/user-avatar
               {:class "w-5 h-5"
                :style {:app-region "no-drag"}
-               :title user-email}
-              (shui/avatar-fallback
-               {:style {:background-color (str color "50")
-                        :font-size 11}}
-               (some-> (subs user-name 0 2) (string/upper-case)))))))])))
+               :title user-email
+               :name user-name
+               :uuid user-uuid
+               :fallback-props {:style {:font-size 11}}}))))])))
 
 (rum/defc left-menu-button < rum/reactive
   < {:key-fn #(identity "left-menu-toggle-button")}
