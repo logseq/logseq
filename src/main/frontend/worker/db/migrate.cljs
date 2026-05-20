@@ -70,6 +70,28 @@
 (defn- deprecated-ensure-graph-uuid
   [_db])
 
+(defn- tag-comment-blocks
+  [db]
+  (->> (d/q '[:find [?comment ...]
+              :where
+              [?comments-area :block/tags :logseq.class/Comments]
+              [?comment :block/parent ?comments-area]]
+            db)
+       (map (fn [comment-id]
+              [:db/add comment-id :block/tags :logseq.class/Comment]))))
+
+(defn- add-single-block-comment-targets
+  [db]
+  (->> (d/q '[:find ?comments-area-id ?parent-id
+              :where
+              [?comments-area-id :block/tags :logseq.class/Comments]
+              [?comments-area-id :block/parent ?parent-id]]
+            db)
+       (keep (fn [[comments-area-id parent-id]]
+               (let [comments-area (d/entity db comments-area-id)]
+                 (when-not (seq (:logseq.property.comments/blocks comments-area))
+                   [:db/add comments-area-id :logseq.property.comments/blocks parent-id]))))))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -99,7 +121,12 @@
    ["65.25" {:delete-properties [:block/pre-block?
                                  :logseq.property.embedding/hnsw-label
                                  :logseq.property.embedding/hnsw-label-updated-at]}]
-   ["65.26" {:properties [:logseq.property.repeat/repeat-type]}]])
+   ["65.26" {:properties [:logseq.property.repeat/repeat-type]}]
+   ["65.27" {:classes [:logseq.class/Comments]
+             :properties [:logseq.property.comments/blocks]}]
+   ["65.28" {:classes [:logseq.class/Comment]
+             :fix tag-comment-blocks}]
+   ["65.29" {:fix add-single-block-comment-targets}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
