@@ -256,7 +256,14 @@
 
 .cp__emoji-icon-picker button.is-ghost-highlighted,
 .asset-picker button.is-ghost-highlighted {
-  background-color: var(--lx-gray-04, var(--rx-gray-04)) !important;
+  /* Tailwind utility resolves through the full chain
+     `var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)))`,
+     so in OG (where `--lx-gray-04` is unset) the tile picks up the
+     themed `--ls-quaternary-background-color` instead of falling all
+     the way to neutral `--rx-gray-04`. The `!` prefix preserves the
+     `!important` semantics that beat the hover-bg rule on .icons-row
+     buttons. */
+  @apply !bg-gray-04;
   outline: 1.5px solid var(--lx-gray-08, var(--rx-gray-08));
   outline-offset: -1.5px;
 }
