@@ -665,6 +665,19 @@
   align-items: center !important;
   gap: 8px !important;
 
+  /* Suppress the browser's default focus outline on the button. During
+     arrow-key navigation, focus briefly lands on the button before the
+     `.is-highlighted` class applies, which paints a chrome-default
+     rectangle around both the preview AND the label — visually choppy.
+     The `.is-highlighted .custom-tab-item-preview` ring (defined
+     below) is the canonical keyboard-nav indicator and remains
+     accessible. */
+  &:focus,
+  &:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
   &:active {
     @apply opacity-60;
   }
