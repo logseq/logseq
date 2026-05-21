@@ -23,6 +23,29 @@
                 user-handler/rtc-group? (constantly true)]
     (is (true? (repo/local-uploadable-graph? {:url "logseq_db_mobile"})))))
 
+(deftest open-in-another-tab-action-is-web-only-for-existing-graphs-test
+  (let [actionable-f (some-> (resolve 'frontend.components.repo/open-in-another-tab-action?) deref)]
+    (is (fn? actionable-f) "All graphs should expose a web open-in-another-tab action predicate")
+    (when actionable-f
+      (with-redefs [util/web-platform? true]
+        (is (true? (actionable-f {:url "logseq_db_demo"
+                                  :root "/graphs/demo"})))
+        (is (false? (actionable-f {:url "logseq_db_remote"}))))
+      (with-redefs [util/web-platform? false]
+        (is (false? (actionable-f {:url "logseq_db_demo"
+                                   :root "/graphs/demo"})))))))
+
+(deftest open-graph-in-another-tab-publishes-graph-open-window-event-test
+  (let [open-f (some-> (resolve 'frontend.components.repo/open-graph-in-another-tab!) deref)
+        events (atom [])]
+    (is (fn? open-f) "All graphs should expose a web open-in-another-tab action")
+    (when open-f
+      (with-redefs [state/pub-event! (fn [event]
+                                       (swap! events conj event))]
+        (open-f {:url "logseq_db_demo"})
+        (is (= [[:graph/open-new-window "logseq_db_demo"]]
+               @events))))))
+
 (deftest upload-local-graph-with-confirm-asks-before-upload-test
   (async done
          (let [upload-fn (some-> (resolve 'frontend.components.repo/upload-local-graph-with-confirm!) deref)

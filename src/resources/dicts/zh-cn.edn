@@ -724,6 +724,7 @@
  :graph/name-placeholder "你的知识库名称"
  :graph/no-selected-node "未选中图谱节点。"
  :graph/open-folder-action "打开图谱所在文件夹"
+ :graph/open-in-another-tab-action "在另一个标签页中打开"
  :graph/open-selected-node "打开 {1}"
  :graph/preparing "加载中"
  :graph/refresh-remote-graphs "刷新远程知识库"

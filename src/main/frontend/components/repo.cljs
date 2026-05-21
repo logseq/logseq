@@ -125,6 +125,14 @@
         (p/then (fn []
                   (repo-handler/remove-repo! repo))))))
 
+(defn open-in-another-tab-action?
+  [{:keys [root]}]
+  (boolean (and util/web-platform? root)))
+
+(defn open-graph-in-another-tab!
+  [{:keys [url]}]
+  (state/pub-event! [:graph/open-new-window url]))
+
 (rum/defc ^:large-vars/cleanup-todo repos-inner
   "Graph list in `All graphs` page"
   [repos]
@@ -171,6 +179,13 @@
             (ui/icon "dots" {:size 15})))
           (shui/dropdown-menu-content
            {:align "end"}
+           (when (open-in-another-tab-action? repo)
+             (shui/dropdown-menu-item
+              {:key "open-in-another-tab"
+               :class "open-in-another-tab-menu-item"
+               :on-click #(open-graph-in-another-tab! repo)}
+              (t :graph/open-in-another-tab-action)))
+
            (when root
              (shui/dropdown-menu-item
               {:key "delete-locally"
