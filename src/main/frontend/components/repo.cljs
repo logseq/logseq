@@ -113,17 +113,22 @@
   [{:keys [root]}]
   (util/open-url (str "file://" root)))
 
+(defn- can-delete-local-graph?
+  [repo]
+  (repo-handler/removable-repo? repo (state/get-repos)))
+
 (defn- delete-local-graph!
   [{:keys [url] :as repo}]
-  (let [graph-name (config/db-graph-name url)
-        dialog-config {:cancel-label (t :ui/cancel)
-                       :ok-label (t :ui/confirm)}]
-    (-> (shui/dialog-confirm!
-         (assoc dialog-config
-                :title (t :graph/delete-local-confirm-desc graph-name)
-                :description (t :graph/delete-warning)))
-        (p/then (fn []
-                  (repo-handler/remove-repo! repo))))))
+  (when (can-delete-local-graph? repo)
+    (let [graph-name (config/db-graph-name url)
+          dialog-config {:cancel-label (t :ui/cancel)
+                         :ok-label (t :ui/confirm)}]
+      (-> (shui/dialog-confirm!
+           (assoc dialog-config
+                  :title (t :graph/delete-local-confirm-desc graph-name)
+                  :description (t :graph/delete-warning)))
+          (p/then (fn []
+                    (repo-handler/remove-repo! repo)))))))
 
 (defn graph-open-new-window-target
   [{:keys [url] :as repo}]
@@ -207,11 +212,14 @@
               (t :graph/open-in-another-tab-action)))
 
            (when root
-             (shui/dropdown-menu-item
-              {:key "delete-locally"
-               :class "delete-local-graph-menu-item"
-               :on-click #(delete-local-graph! repo)}
-              (t :graph/delete-local-action)))
+             (let [disabled? (not (can-delete-local-graph? repo))]
+               (shui/dropdown-menu-item
+                {:key "delete-locally"
+                 :class "delete-local-graph-menu-item"
+                 :disabled disabled?
+                 :on-click #(when-not disabled?
+                              (delete-local-graph! repo))}
+                (t :graph/delete-local-action))))
 
            (when (and root
                       (user-handler/logged-in?)
@@ -480,23 +488,26 @@
 
 (defn- current-repo-context-menu-content
   [repo]
-  [:<>
-   (shui/dropdown-menu-item
-    {:key "open-repo-folder"
-     :on-click #(open-repo-folder! repo)}
-    [:span.flex.items-center.gap-1
-     (ui/icon "folder-pin")
-     (t :graph/open-folder-action)])
+  (let [disabled? (not (can-delete-local-graph? repo))]
+    [:<>
+     (shui/dropdown-menu-item
+      {:key "open-repo-folder"
+       :on-click #(open-repo-folder! repo)}
+      [:span.flex.items-center.gap-1
+       (ui/icon "folder-pin")
+       (t :graph/open-folder-action)])
 
-   (shui/dropdown-menu-separator)
+     (shui/dropdown-menu-separator)
 
-   (shui/dropdown-menu-item
-    {:key "delete-locally"
-     :class "delete-local-graph-menu-item"
-     :on-click #(delete-local-graph! repo)}
-    [:span.flex.items-center.gap-1.text-red-700
-     (ui/icon "trash")
-     (t :graph/delete-local-action)])])
+     (shui/dropdown-menu-item
+      {:key "delete-locally"
+       :class "delete-local-graph-menu-item"
+       :disabled disabled?
+       :on-click #(when-not disabled?
+                    (delete-local-graph! repo))}
+      [:span.flex.items-center.gap-1.text-red-700
+       (ui/icon "trash")
+       (t :graph/delete-local-action)])]))
 
 (rum/defcs graphs-selector < rum/reactive
   [_state]
