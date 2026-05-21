@@ -1,7 +1,7 @@
 # ADR 0017: URL Target Graph Resolution
 
 Date: 2026-05-20
-Status: Proposed
+Status: Accepted
 
 ## Context
 Logseq URLs can point at a graph, page, block, or file. Today the graph target is
@@ -33,7 +33,8 @@ renames, browser sessions, and device handoffs need to identify the graph by id.
 
 ## Decision
 Make URL graph selection an explicit target object and process it before route
-navigation.
+navigation in the renderer, with a small persisted graph registry used to turn
+stable graph ids into local repos.
 
 1. Introduce a shared URL target model for Electron protocol URLs, web URLs, and
    mobile URLs:
@@ -53,26 +54,34 @@ navigation.
    - full DB repo names, such as `logseq_db_work`;
    - short local graph names, such as `work`;
    - existing canonicalized DB repo names.
-4. Treat an unresolved graph as an error. Do not fall back to
-   `:git/current-repo`.
-5. For Electron custom protocol URLs, the main process owns URL intake and graph
-   resolution. It must create or focus the target graph window directly instead
-   of sending `openNewWindowOfGraph` to an arbitrary renderer.
+4. Treat an unresolved graph id as an unresolved URL target, not as a successful
+   match for the current graph. Mobile reports this to the user. Web startup
+   currently logs the unresolved target and continues with the tab-local or
+   stored graph so the app can still boot.
+5. For Electron custom protocol URLs, the main process owns URL intake and
+   graph-name/graph-id resolution. This branch keeps the existing
+   renderer-mediated window creation path for custom protocol URLs and teaches
+   it to resolve graph ids through the registry.
 6. For web and mobile URLs, the renderer owns URL intake and graph resolution.
    It must switch to the target graph before applying the route target.
 7. Once the target graph is loaded, apply the route target exactly once.
 8. Do not store URL graph targets in `:git/current-repo` until the graph switch
    succeeds.
+9. Use `sessionStorage` for tab-local graph identity on web reloads that do not
+   carry a URL graph target. This preserves each browser tab's graph without
+   appending `graph-id` to every internal route.
 
 ## Supported URL Shapes
-Canonical generated URLs use graph ids:
+Canonical generated web URLs use graph ids:
 - `https://logseq.com/?graph-id=<graph-uuid>`
 - `https://logseq.com/page/<page-uuid>?graph-id=<graph-uuid>`
 - `https://logseq.com/block/<block-uuid>?graph-id=<graph-uuid>`
+
+Electron protocol URLs accept graph ids through the same graph identifier slot:
 - `logseq://graph/<graph-uuid>`
-- `logseq://graph/<graph-uuid>?page-id=<page-uuid>`
+- `logseq://graph/<graph-uuid>?page=<page-name-or-uuid>`
 - `logseq://graph/<graph-uuid>?block-id=<block-uuid>`
-- `logseq://new-window/<graph-uuid>?page-id=<page-uuid>`
+- `logseq://new-window/<graph-uuid>?page=<page-name-or-uuid>`
 
 Compatibility URLs remain accepted:
 - `logseq://graph/<graph-name>`
@@ -98,10 +107,10 @@ small graph registry outside each graph DB.
    - `:repo`
    - `:graph-name`
    - `:local-graph-id`
-   - `:rtc-graph-id`
    - `:updated-at`
-4. For remote graphs, `:graph-id` must equal `:rtc-graph-id`. For local-only
-   graphs, `:graph-id` must equal `:local-graph-id`.
+4. Do not persist a separate `:rtc-graph-id` in the registry. For remote graphs,
+   `:graph-id` is the remote graph UUID. For local-only graphs, `:graph-id` is
+   the local graph UUID.
 5. Update the registry whenever a graph is created, opened, imported,
    downloaded, uploaded to RTC, renamed, unlinked, or deleted.
 6. If a registry lookup fails for a graph id, the app may run an explicit repair
@@ -109,26 +118,22 @@ small graph registry outside each graph DB.
    registry. This repair path must not be the normal URL-open path.
 
 ## Electron Runtime Design
-1. Replace the renderer-mediated `openNewWindowOfGraph` path for deeplinks with
-   a main-process function similar to:
-   - resolve URL target;
-   - find existing windows for `:repo` using `electron.window/get-graph-all-windows`;
-   - focus the existing graph window when `:open-mode` is current-window and a
-     matching window exists;
-   - otherwise create a new window with the target encoded into its initial URL.
-2. Extend `electron.window/create-main-window!` so it can receive a full URL
-   target, not only a `:graph` option. The initial load URL should include both
-   graph and route information, for example:
-   - `/?graph-id=<graph-uuid>`
-   - `/page/<page-uuid>?graph-id=<graph-uuid>`
-3. Keep a per-window pending target in Electron state only for work that cannot
+1. Store the registry at `(.getPath app "home")/.logseq/graphs.edn`.
+2. Resolve Electron protocol graph identifiers through that registry before
+   falling back to existing repo/name lookup.
+3. For shift-click in the graph list, open a new Electron window through the
+   existing `openNewWindow` IPC using the resolved repo. Electron windows still
+   use repo identity for window creation.
+4. Keep a per-window pending target in Electron state only for work that cannot
    be represented safely in the URL, such as a file redirect that requires graph
    readiness. Avoid a single global `:window/once-graph-ready` callback because
    concurrent windows can overwrite each other.
-4. When the renderer reports `graphReady`, Electron should look up and consume
+5. When the renderer reports `graphReady`, Electron should look up and consume
    the pending target for that specific window id.
-5. Existing error notifications for missing or unknown graphs remain, but they
+6. Existing error notifications for missing or unknown graphs remain, but they
    should be sent to the selected/fallback window after graph resolution fails.
+7. Direct main-process creation of route-aware graph windows remains follow-up
+   work; it should replace the renderer-mediated `openNewWindowOfGraph` path.
 
 ## Web Runtime Design
 1. Add a parser that can read graph targets from path URLs and compatibility
@@ -138,17 +143,20 @@ small graph registry outside each graph DB.
    - resolve `:graph-id` through the IndexedDB graph registry;
    - resolve compatibility `:graph-identifier` against the known graph list when
      no `:graph-id` is present;
-   - initialize `:git/current-repo` from the URL target only when it resolves;
-   - otherwise keep the stored graph and show an explicit error.
-3. During route changes:
-   - if the URL carries a graph target different from the current graph,
-     dispatch `[:graph/switch repo {:url-target? true}]`;
-   - defer page/block navigation until the switch finishes and the target graph
-     is ready;
-   - then remove or preserve `graph-id` according to routing policy, but never
-     navigate the target route inside the old current graph.
-4. Generated web links from `frontend.util.url` should include `graph-id` on the
+   - initialize from the resolved URL target when it resolves;
+   - otherwise use the tab-local `sessionStorage` graph target, then the stored
+     `:git/current-repo`, then the first linked repo.
+3. During startup, apply resolved page/block URL targets after the target graph
+   is restored. Later in-app route changes with graph targets are follow-up
+   work.
+4. During route generation:
+   - generated page routes include `graph-id` when the current graph id is
+     available, but startup/render-phase redirects tolerate a temporarily
+     unavailable graph id instead of crashing.
+5. Generated web links from `frontend.util.url` should include `graph-id` on the
    actual route.
+6. Web "open in another tab" and shift-click from All graphs open `#/?graph-id=`
+   URLs for existing local graphs.
 
 ## Mobile Runtime Design
 1. Use the same URL target parser and resolver as the web runtime.
@@ -157,33 +165,31 @@ small graph registry outside each graph DB.
    same target model.
 
 ## Consequences
-- Opening a URL either opens the requested graph or fails loudly. It no longer
-  silently opens the last current graph.
-- Electron main becomes responsible for graph-window selection for deeplinks,
-  which removes the startup race caused by sending `openNewWindowOfGraph` before
-  the renderer listener is ready.
+- Resolvable graph-id URLs open the requested graph instead of silently using the
+  last current graph.
+- Electron protocol URLs can resolve graph ids via the registry, but route-aware
+  direct window creation remains follow-up work.
 - Web graph URLs become route-aware, so page and block links can switch graph
-  before navigating.
+  before navigating during startup and mobile deeplink handling.
 - Web and mobile graph-id resolution is fast because it reads the graph registry
   instead of scanning OPFS graph directories and opening graph databases.
 - Electron graph-id resolution is fast because it reads
   `(.getPath app "home")/.logseq/graphs.edn` instead of opening each graph
   database.
+- Bare web reloads preserve the tab's graph through `sessionStorage`, so two
+  tabs can remain on different graphs even when one tab changes the global
+  current graph.
 - The implementation needs focused tests around URL parsing, graph resolution,
   first-launch Electron deeplinks, second-instance deeplinks, and web/mobile
   route changes.
 
 ## Follow-up Work
-1. Add pure tests for shared URL target parsing:
-   - protocol graph home, page, block, and file URLs with graph ids;
-   - web graph home, page, and block path URLs with graph ids;
-   - compatibility name/hash URLs;
-   - invalid or missing graph targets.
-2. Add Electron main tests for first-launch and second-instance deeplinks.
-3. Add renderer tests proving that web URLs switch graph before page/block
-   navigation.
-4. Add graph registry read/write tests for IndexedDB and the Electron
+1. Add Electron main tests for first-launch and second-instance deeplinks.
+2. Add renderer tests proving that web URLs switch graph before page/block
+   navigation after graph switches triggered by later route changes, not only
+   startup URLs.
+3. Add graph registry read/write tests for IndexedDB and the Electron
    `(.getPath app "home")/.logseq/graphs.edn` registry.
-5. Replace `:window/once-graph-ready` with per-window pending targets.
-6. Update link generation helpers in `frontend.util.url` to emit route-aware
-   graph-id URLs.
+4. Replace `:window/once-graph-ready` with per-window pending targets.
+5. Replace Electron custom protocol's renderer-mediated `openNewWindowOfGraph`
+   path with direct main-process route-aware window creation.

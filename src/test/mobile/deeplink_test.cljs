@@ -9,7 +9,8 @@
 (deftest web-page-url-switches-to-graph-id-target
   (async done
     (testing "mobile universal web links resolve graph-id before routing"
-      (let [events (atom [])]
+      (let [events (atom [])
+            redirects (atom [])]
         (p/with-redefs [graph-handler/<get-graph-registry
                         (fn []
                           (p/resolved [{:repo "logseq_db_target"
@@ -20,11 +21,15 @@
                                     (case query
                                       [:me :repos] [{:url "logseq_db_target"}]
                                       nil))
-                        state/pub-event! (fn [event] (swap! events conj event))]
+                        state/pub-event! (fn [event] (swap! events conj event))
+                        route-handler/redirect-to-page! (fn [page-id]
+                                                          (swap! redirects conj page-id))]
           (-> (deeplink/deeplink "https://logseq.com/page/page-uuid?graph-id=remote-uuid")
+              (p/then (fn [] (p/delay 1010)))
               (p/then (fn []
                         (is (= [[:graph/switch "logseq_db_target"]]
                                @events))
+                        (is (= ["page-uuid"] @redirects))
                         (done)))
               (p/catch (fn [e]
                          (is false (str e))

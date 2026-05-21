@@ -72,9 +72,8 @@
 
 (defn- current-graph-query-params
   []
-  (if-let [graph-id (graph-handler/current-graph-id)]
-    {:graph-id graph-id}
-    (throw (js/Error. "Missing current graph id"))))
+  (when-let [graph-id (graph-handler/current-graph-id)]
+    {:graph-id graph-id}))
 
 (defn- merge-query-params
   [route params]

@@ -89,3 +89,14 @@
                  {:anchor "ls-block-block-uuid"
                   :graph-id "graph-uuid"}]]
                @calls))))))
+
+(deftest redirect-to-page-tolerates-missing-current-graph-id
+  (testing "startup redirects do not crash before graph restoration finishes"
+    (let [calls (atom [])]
+      (with-redefs [db/get-page (constantly nil)
+                    db/get-alias-source-page (constantly nil)
+                    graph-handler/current-graph-id (constantly nil)
+                    rfe/push-state (fn [& args] (swap! calls conj args))]
+        (route-handler/redirect-to-page! "Page name")
+        (is (= [[:page {:name "page name"} nil]]
+               @calls))))))
