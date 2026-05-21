@@ -471,14 +471,14 @@ a:hover {
 
 .block-children .block {
   position: relative;
-  padding-left: 24px;
+  padding-left: 16px;
 }
 
 .block-children .block::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 13px;
+  top: 11px;
   width: 5px;
   height: 5px;
   border-radius: 999px;
