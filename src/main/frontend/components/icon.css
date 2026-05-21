@@ -116,12 +116,19 @@
       @apply absolute right-2 top-1/2 -translate-y-1/2;
       @apply w-5 h-5 rounded-full cursor-pointer;
       @apply transition-colors duration-150;
-      background-color: var(--lx-gray-07, var(--rx-gray-07));
-      color: var(--lx-gray-12, var(--rx-gray-12));
+      /* `bg-gray-07` Tailwind chain includes `--ls-quaternary-background-color`
+         so OG gets a themed teal pill (#094b5a) instead of neutral gray. */
+      @apply bg-gray-07;
+      /* gray-12 chain has no `--ls-*` middle — inject `--ls-secondary-text-color`
+         manually so OG's glyph is a themed light (#dfdfdf). */
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
     }
 
     > .x:hover {
-      background-color: var(--lx-gray-08, var(--rx-gray-08));
+      /* gray-08 chain has no `--ls-*` middle — `--ls-border-color`
+         (#0e5263, one shade lighter than the quaternary teal) is a
+         natural hover step. */
+      background-color: var(--lx-gray-08, var(--ls-border-color, var(--rx-gray-08)));
     }
 
     .ui__input {
@@ -134,12 +141,13 @@
       @apply focus:bg-transparent !h-8;
       box-shadow: none !important;
 
-      /* Placeholder takes the same themed middle step as the section
-         header — muted teal-gray in OG, themed Radix gray elsewhere.
-         Override shadcn's `text-muted-foreground` default (which would
-         render as a desaturated neutral in OG). */
+      /* Placeholder shares the themed label color with section headers
+         (muted teal-gray in OG) but at 60% opacity, so it recedes
+         visibly against the full-strength typed text. Avoids shadcn's
+         `text-muted-foreground` default (neutral). */
       &::placeholder {
         color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+        opacity: 0.6;
       }
     }
 
@@ -968,9 +976,10 @@
       @apply focus:bg-transparent !h-8;
       box-shadow: none !important;
 
-      /* Themed placeholder (matches icon picker). */
+      /* Themed placeholder, muted via opacity (matches icon picker). */
       &::placeholder {
         color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+        opacity: 0.6;
       }
     }
 
@@ -983,12 +992,13 @@
       @apply absolute right-2 top-1/2 -translate-y-1/2;
       @apply w-5 h-5 rounded-full cursor-pointer;
       @apply transition-colors duration-150;
-      background-color: var(--lx-gray-07, var(--rx-gray-07));
-      color: var(--lx-gray-12, var(--rx-gray-12));
+      /* Themed via the same chains as the icon-picker .x button. */
+      @apply bg-gray-07;
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
     }
 
     > .x:hover {
-      background-color: var(--lx-gray-08, var(--rx-gray-08));
+      background-color: var(--lx-gray-08, var(--ls-border-color, var(--rx-gray-08)));
     }
   }
 }
