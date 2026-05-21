@@ -728,6 +728,7 @@
  :graph/no-selected-node "No graph node selected."
  :graph/node-count (fn [n] (str n " " (if (= 1 n) "node" "nodes")))
  :graph/open-folder-action "Open graph folder"
+ :graph/open-in-another-tab-action "Open in another tab"
  :graph/open-selected-node "Open {1}"
  :graph/preparing "Preparing"
  :graph/refresh-remote-graphs "Refresh remote graphs"
@@ -1018,6 +1019,7 @@
  :mobile.tab/graphs "Graphs"
 
  :mobile.toolbar/audio "Audio"
+ :mobile.toolbar/comment "Comment"
  :mobile.toolbar/copy-ref "Copy ref"
  :mobile.toolbar/copy-url "Copy url"
  :mobile.toolbar/hide "Hide"
