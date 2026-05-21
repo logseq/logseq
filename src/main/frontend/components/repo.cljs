@@ -131,16 +131,27 @@
     {:repo url
      :graph-id graph-id}))
 
+(defn- <graph-open-new-window-target
+  [{:keys [url] :as repo}]
+  (if-let [target (graph-open-new-window-target repo)]
+    (p/resolved target)
+    (p/let [registry (graph/<get-graph-registry)
+            entry (graph/resolve-registry-target registry {:graph-identifier url})]
+      (when entry
+        {:repo (:repo entry)
+         :graph-id (:graph-id entry)}))))
+
 (defn open-in-another-tab-action?
-  [{:keys [root] :as repo}]
-  (boolean (and util/web-platform?
-                root
-                (graph-open-new-window-target repo))))
+  [{:keys [root]}]
+  (boolean (and util/web-platform? root)))
 
 (defn open-graph-in-another-tab!
   [repo]
-  (when-let [target (graph-open-new-window-target repo)]
-    (state/pub-event! [:graph/open-new-window target])))
+  (if-let [target (graph-open-new-window-target repo)]
+    (state/pub-event! [:graph/open-new-window target])
+    (p/let [target (<graph-open-new-window-target repo)]
+      (when target
+        (state/pub-event! [:graph/open-new-window target])))))
 
 (rum/defc ^:large-vars/cleanup-todo repos-inner
   "Graph list in `All graphs` page"
@@ -354,12 +365,12 @@
                                        (when (and ready-for-use? (not downloading?))
                                          (when-let [on-click (:on-click opts)]
                                            (on-click e))
-                                         (if (and (gobj/get e "shiftKey")
-                                                  (:root graph)
-                                                  (graph-open-new-window-target graph))
-                                           (state/pub-event!
-                                            [:graph/open-new-window
-                                             (graph-open-new-window-target graph)])
+                                         (if (and (gobj/get e "shiftKey") (:root graph))
+                                           (if-let [target (graph-open-new-window-target graph)]
+                                             (state/pub-event! [:graph/open-new-window target])
+                                             (p/let [target (<graph-open-new-window-target graph)]
+                                               (when target
+                                                 (state/pub-event! [:graph/open-new-window target]))))
                                            (cond
                                                   ;; exists locally?
                                              (or (:root graph) (not rtc-graph?))
