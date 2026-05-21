@@ -272,7 +272,7 @@
               (sidebar-item
                {:class "flashcards-nav"
                 :title (t :nav/flashcards)
-                :icon "infinity"
+                :icon "cards"
                 :shortcut :go/flashcards
                 :active srs-open?
                 :on-click-handler #(do (fsrs/update-due-cards-count)
