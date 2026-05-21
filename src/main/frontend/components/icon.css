@@ -2658,16 +2658,21 @@ html.dark .avatar-customize-zone .cb-rail {
   min-width: 0;
 
   &:hover {
-    background: var(--lx-gray-02, var(--rx-gray-02));
-    border-color: var(--lx-gray-05, var(--rx-gray-05));
+    /* Tailwind utility gives the full chain through
+       `--ls-tertiary-background-color`, so OG hover lifts the chip to
+       themed tertiary teal (#08404f) against the recessed banner —
+       a clear "interactive" signal in the picker's hue family rather
+       than neutral gray. */
+    @apply bg-gray-03;
+    border-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
   }
 
   /* Radix sets data-state="open" on the trigger while the dropdown menu
      is visible; pin the chip to its hover-style fill so the user has a
      clear "this is the open one" anchor while picking. */
   &[data-state="open"] {
-    background: var(--lx-gray-02, var(--rx-gray-02));
-    border-color: var(--lx-gray-05, var(--rx-gray-05));
+    @apply bg-gray-03;
+    border-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
   }
 
   &:focus-visible {
