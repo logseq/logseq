@@ -578,6 +578,16 @@
                                :i18n-key :page.validation/alias-source-is-alias
                                :message "A page that is an alias of another page can't have its own aliases."}}))))
 
+(defn- throw-error-if-batch-alias-targets
+  [block-eids property-id]
+  (when (and (= property-id :block/alias)
+             (> (count block-eids) 1))
+    (throw (ex-info "Aliases can't be batch-set on multiple pages"
+                    {:type :notification
+                     :payload {:type :error
+                               :i18n-key :page.validation/alias-batch-multiple-owners
+                               :message "Aliases can't be batch-set on multiple pages."}}))))
+
 (defn batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
    Does no validation of property values. For :many properties, passing a collection
@@ -590,6 +600,7 @@
    (if (nil? v)
      (batch-remove-property! conn block-ids property-id)
      (let [block-eids (map ->eid block-ids)
+           _ (throw-error-if-batch-alias-targets block-eids property-id)
            _ (validate-batch-set-property conn block-eids property-id v)
            property (d/entity @conn property-id)
            _ (when (nil? property)

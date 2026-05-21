@@ -105,7 +105,23 @@
       (is (thrown? js/Error
                    (outliner-property/batch-set-property!
                     conn [(:block/uuid b-owner2)] :block/alias (:db/id b-shared) {:entity-id? true}))
-          "batch-set path must enforce duplicate-owner invariant"))))
+          "batch-set path must enforce duplicate-owner invariant")))
+  (testing "batch path: one alias cannot be assigned to multiple pages in one transaction"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "batch-owner1"}}
+                                    {:page {:block/title "batch-owner2"}}
+                                    {:page {:block/title "batch-shared"}}]})
+          owner1 (db-test/find-page-by-title @conn "batch-owner1")
+          owner2 (db-test/find-page-by-title @conn "batch-owner2")
+          shared (db-test/find-page-by-title @conn "batch-shared")]
+      (is (thrown? js/Error
+                   (outliner-property/batch-set-property!
+                    conn
+                    [(:block/uuid owner1) (:block/uuid owner2)]
+                    :block/alias
+                    (:db/id shared)
+                    {:entity-id? true}))
+          "batch-set path must not create multiple owners for the same alias"))))
 
 (defn- page-mention-check?
   [page-name include-journals?]

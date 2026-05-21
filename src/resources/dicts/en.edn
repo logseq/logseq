@@ -1138,6 +1138,7 @@
  :page.delete/total "Total: {1}"
  :page.delete/warning "These pages had their content deleted but were unable to be deleted: {1}. See javascript console for more details."
 
+ :page.validation/alias-batch-multiple-owners "Aliases can't be batch-set on multiple pages."
  :page.validation/alias-duplicate-owner "This page is already an alias of another page."
  :page.validation/alias-owns-aliases "A page that has aliases can't be used as an alias."
  :page.validation/alias-self "Alias can't be the page itself."
