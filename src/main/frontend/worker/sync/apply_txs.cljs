@@ -432,10 +432,13 @@
                    (normalize-tx-data-for-rebase tx-data)
                    {:outliner-op (:outliner-op local-tx)
                     :reverse? true})
-    (invalid-rebase-op! :reverse-history-action
-                        {:reason :missing-reversed-tx-data
-                         :tx-id (:tx-id local-tx)
-                         :outliner-op (:outliner-op local-tx)})))
+    ;; Built-in sync repair :fix rows are idempotent and can be queued without
+    ;; reverse data; normal user edits must still carry reverse tx-data.
+    (when-not (= :fix (:outliner-op local-tx))
+      (invalid-rebase-op! :reverse-history-action
+                          {:reason :missing-reversed-tx-data
+                           :tx-id (:tx-id local-tx)
+                           :outliner-op (:outliner-op local-tx)}))))
 
 (defn- replace-uuid-str-with-eid
   [db v]
