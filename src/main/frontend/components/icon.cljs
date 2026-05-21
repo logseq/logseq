@@ -6482,7 +6482,13 @@
                           (conj {:mode "abbreviated" :text derived-abbreviated :label "Abbreviated"})
                           true
                           (conj {:mode "custom" :text nil :label "Custom"}))
-        current-mode @*mode]
+        ;; Radio behavior: always show ONE tile as selected. If `@*mode`
+        ;; is somehow nil or doesn't match any gallery option (e.g.,
+        ;; stored icon predates current mode set, or some intermediate
+        ;; state cleared it), fall back to "initials" so the picker
+        ;; never renders with zero selected tiles.
+        valid-modes (set (map :mode gallery-options))
+        current-mode (let [m @*mode] (if (valid-modes m) m "initials"))]
     [:div.text-picker
      ;; Topbar
      [:div.text-picker-topbar
@@ -6569,14 +6575,48 @@
                               text)]
            [:button.text-picker-gallery-item
             {:key mode
-             :class (when selected? "selected")
+             ;; Use `is-selected`, not `selected` — Logseq's global
+             ;; pointerdown handler `frontend.state/dom-clear-selection!`
+             ;; strips the bare `selected` class from any DOM node on
+             ;; every interaction, treating it as block-selection state.
+             :class (when selected? "is-selected")
+             :type "button"
+             :on-mouse-down (fn [e]
+                              ;; Prevent the button from stealing focus from
+                              ;; the text input when clicked. Clicking the
+                              ;; selected Initials/Abbreviated tile was
+                              ;; firing the input's `:on-blur`, which
+                              ;; (when the displayed text matched the
+                              ;; derived value) sometimes triggered a
+                              ;; persist round-trip that re-rendered with
+                              ;; a momentarily-inconsistent mode. With
+                              ;; preventDefault on mousedown, the focus
+                              ;; stays where it was.
+                              (.preventDefault e))
              :on-click (fn []
-                         (reset! *mode mode)
-                         (case mode
-                           "initials" (reset! *text-value derived-initials)
-                           "abbreviated" (reset! *text-value derived-abbreviated)
-                           "custom" nil)
-                         (persist!))}
+                         ;; Radio semantic: clicking the already-selected
+                         ;; tile is a no-op — skip the same-value
+                         ;; `persist!` round-trip to avoid a needless
+                         ;; parent re-render.
+                         (when (not= mode @*mode)
+                           (reset! *mode mode)
+                           (case mode
+                             "initials" (reset! *text-value derived-initials)
+                             "abbreviated" (reset! *text-value derived-abbreviated)
+                             "custom" nil)
+                           (persist!)
+                           (when (= mode "custom")
+                             ;; Autofocus the text input when Custom is
+                             ;; selected. `setTimeout` waits for the
+                             ;; re-render so the input element exists.
+                             (js/setTimeout
+                              (fn []
+                                (when-let [el (some-> js/document
+                                                      (.querySelector ".text-picker-section input.ui__input"))]
+                                  (.focus el)
+                                  (when-let [v @*text-value]
+                                    (.setSelectionRange el (count v) (count v)))))
+                              30))))}
             [:div.text-picker-gallery-preview
              (if display-text
                ;; `:color? true` wraps the SVG in `.ls-icon-color-wrap`

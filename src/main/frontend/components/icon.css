@@ -1420,37 +1420,68 @@
 
 .text-picker-gallery-item {
   @apply cursor-pointer border-none bg-transparent p-0;
-  @apply flex flex-col items-center gap-1.5;
-  @apply transition-all duration-150;
+  /* `gap-3` (12px) pushes the label below the preview tile clear of
+     the selected-state outline that grows 2px OUTSIDE the tile. With
+     the old `gap-1.5` (6px) the outline ring sat almost touching the
+     label baseline. */
+  @apply flex flex-col items-center gap-3;
 
-  &:hover { @apply opacity-80; }
-  &:active { @apply opacity-60; }
+  /* No `opacity-80` on hover — that muted the label below the tile.
+     Hover/active feedback now lives on the preview tile itself
+     (bg-lift + outline) rather than dimming the whole column. */
+  &:active .text-picker-gallery-preview {
+    opacity: 0.85;
+  }
 }
 
 .text-picker-gallery-preview {
   @apply w-14 h-14 rounded-lg;
   @apply flex items-center justify-center;
-  @apply transition-all duration-150;
-  border: 2px solid var(--lx-gray-06, var(--ls-border-color, var(--rx-gray-06)));
+  border: 1px solid var(--lx-gray-06, var(--ls-border-color, var(--rx-gray-06)));
   /* Tailwind chain → themed tertiary teal in OG (background for the
      preview tile is meant to sit one step lighter than the picker bg). */
   @apply bg-gray-03;
+  /* Baseline 0-width transparent outline so the selected state can
+     animate outline-width 0 → 2px and outline-offset 0 → 2px in
+     parallel — same scale-up effect the custom-tab tiles use on
+     keyboard nav. */
+  outline: 0 solid transparent;
+  outline-offset: 0;
+  transition: background-color 150ms, outline-width 150ms,
+              outline-offset 150ms, outline-color 150ms,
+              border-color 150ms;
 
-  &:hover { border-color: var(--rx-accent-09); }
+  &:hover {
+    /* Themed lift on hover (matches the custom-tab pattern — bg goes
+       up one step, no accent border). */
+    @apply bg-gray-04;
+  }
 }
 
-.text-picker-gallery-item.selected .text-picker-gallery-preview {
-  border-color: var(--lx-accent-09);
-  box-shadow: 0 0 0 1px var(--lx-accent-09);
+.text-picker-gallery-item.is-selected .text-picker-gallery-preview {
+  /* Subtle bg + accent outline OUTSIDE the tile (matches custom-tab
+     `.is-highlighted` — positive offset grows outward for the
+     "scale-up" feel). The default themed border stays, but the outline
+     carries the "I am selected" signal. */
+  @apply bg-gray-04;
+  outline: 2px solid var(--lx-accent-09);
+  outline-offset: 2px;
 }
 
 .text-picker-gallery-label {
   @apply text-xs;
   color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+  transition: color 150ms;
 }
 
-.text-picker-gallery-item.selected .text-picker-gallery-label {
-  color: var(--lx-accent-09);
+.text-picker-gallery-item:hover .text-picker-gallery-label {
+  /* Brighten the label on hover instead of muting the whole column. */
+  color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
+}
+
+.text-picker-gallery-item.is-selected .text-picker-gallery-label {
+  /* Accent-text tier (matches custom-tab's `.is-highlighted` label). */
+  color: var(--lx-accent-11);
   @apply font-medium;
 }
 
