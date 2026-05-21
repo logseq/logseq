@@ -1,6 +1,7 @@
 (ns frontend.components.block.comments-model
   (:require [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
+            [frontend.util :as util]
             [goog.object :as gobj]))
 
 (def comments-tag-ident :logseq.class/Comments)
@@ -333,4 +334,5 @@
    (boolean
     (and (nil? editor-action)
          (= "Enter" (gobj/get event "key"))
+         (not (util/native-event-is-composing? event))
          (not (true? (gobj/get event "shiftKey")))))))
