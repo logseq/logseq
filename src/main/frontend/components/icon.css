@@ -686,12 +686,15 @@
 .custom-tab-item-preview {
   @apply w-12 h-12 rounded-lg;
   @apply flex items-center justify-center;
-  /* Baseline transparent outline so outline-color can transition
-     transparent → accent without the browser's currentColor flashing
-     through during the discrete style/width jump. */
-  outline: 2px solid transparent;
-  outline-offset: -2px;
-  transition: background-color 150ms, outline-color 150ms;
+  /* Baseline: zero-width transparent outline at offset 0. When
+     `.is-highlighted` applies, outline-width animates 0 → 2px and
+     outline-offset animates 0 → 2px in parallel, producing the same
+     scale-up feel the regular icon/emoji grid uses on arrow-key
+     navigation (icon.css :hover/transition block above). */
+  outline: 0 solid transparent;
+  outline-offset: 0;
+  transition: background-color 150ms, outline-color 150ms,
+              outline-width 150ms, outline-offset 150ms;
 
   &:hover {
     /* Themed hover bg via `--ls-border-color` middle step (matches the
@@ -719,8 +722,10 @@
     var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04))) 50%,
     transparent
   );
+  /* Positive offset so the ring grows OUTSIDE the tile during the
+     transition (scale-up feel matches the regular icon/emoji grid). */
   outline: 2px solid var(--lx-accent-09);
-  outline-offset: -2px;
+  outline-offset: 2px;
 }
 
 .cp__emoji-icon-picker button.custom-tab-item.is-highlighted .custom-tab-item-label {
