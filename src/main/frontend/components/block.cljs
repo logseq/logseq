@@ -2564,6 +2564,10 @@
    (dom/closest target ".cloze-revealed")
    (dom/closest target ".query-table")))
 
+(defn- comments-area-target?
+  [target]
+  (boolean (util/rec-get-node target "ls-comments-area")))
+
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
   (when-not @(:ui/scrolling? @state/state)
@@ -2573,7 +2577,7 @@
           mobile? (util/mobile?)
           mobile-selection? (and mobile? (seq selection-blocks))
           block-dom-element (util/rec-get-node target "ls-block")]
-      (if mobile-selection?
+      (if (and mobile-selection? (not (comments-area-target? target)))
         (let [ids (set (state/get-selection-block-ids))]
           (if (contains? ids (:block/uuid block))
             (do
@@ -2582,6 +2586,7 @@
                 (state/set-state! :mobile/show-action-bar? false)))
             (state/conj-selection-block! block-dom-element)))
         (when-not (or
+                   (comments-area-target? target)
                    (:closed-values? config)
                    (> (count content) (state/block-content-max-length (state/get-current-repo))))
           (let [target (gobj/get e "target")
@@ -3697,16 +3702,18 @@
   [^js e block *control-show? block-id doc-mode? selection-block-ids]
   (let [last-client-y (:client-y @*block-last-mouse-event)
         client-y (.-clientY e)
-        block-dom-node (util/rec-get-node (.-target e) "ls-block")]
+        target (.-target e)
+        block-dom-node (util/rec-get-node target "ls-block")]
     (remember-block-pointer! e)
     (reset! *control-show? true)
-    (when (block-selection/select-on-hover?
-           {:last-client-y last-client-y
-            :client-y client-y
-            :dragging? @*dragging?
-            :editing-same-block? (= (:block/uuid block)
-                                    (:block/uuid (state/get-edit-block)))
-            :active-selection? (boolean (seq (state/get-selection-blocks)))})
+    (when (and (not (comments-area-target? target))
+               (block-selection/select-on-hover?
+                {:last-client-y last-client-y
+                 :client-y client-y
+                 :dragging? @*dragging?
+                 :editing-same-block? (= (:block/uuid block)
+                                         (:block/uuid (state/get-edit-block)))
+                 :active-selection? (boolean (seq (state/get-selection-blocks)))}))
       (.preventDefault e)
       (when-let [parent (gdom/getElement block-id)]
         (let [node (.querySelector parent ".bullet-container")]
