@@ -26,9 +26,11 @@
   (merge {:db/id 42
           :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
           :block/title "Ship the CLI bridge"
-          :block/tags [{:block/title "Task"}]
+          :block/tags [{:db/ident :logseq.class/Task
+                        :block/title "Task"}]
           :logseq.property/status {:db/ident :logseq.property/status.todo}
-          "Assignee" "build-host"}
+          :logseq.property/assignee [{:db/id 101
+                                      :block/title "build-host"}]}
          overrides))
 
 (defn- comment-block
@@ -85,14 +87,24 @@
                     "Reply instructions:"]]
     (is (string/includes? prompt expected))))
 
-(deftest test-assignee-built-in-property
-  (let [property (get db-property/built-in-properties :logseq.property/assignee)]
-    (is (= "Assignee" (:title property)))
-    (is (= :node (get-in property [:schema :type])))
-    (is (= :many (get-in property [:schema :cardinality])))
-    (is (= true (get-in property [:schema :public?])))
-    (is (= true (:queryable? property)))
-    (is (contains? db-property/public-built-in-properties :logseq.property/assignee))))
+(deftest test-agent-bridge-built-in-properties
+  (testing "Assignee is public and queryable"
+    (let [property (get db-property/built-in-properties :logseq.property/assignee)]
+      (is (= "Assignee" (:title property)))
+      (is (= :node (get-in property [:schema :type])))
+      (is (= :many (get-in property [:schema :cardinality])))
+      (is (= true (get-in property [:schema :public?])))
+      (is (= true (:queryable? property)))
+      (is (contains? db-property/public-built-in-properties :logseq.property/assignee))))
+
+  (testing "agent session id is an internal built-in property"
+    (let [property (get db-property/built-in-properties :logseq.property.agent/session-id)]
+      (is (= "agent session id" (:title property)))
+      (is (= :string (get-in property [:schema :type])))
+      (is (= :db.cardinality/one (get-in property [:schema :db/cardinality])))
+      (is (= false (get-in property [:schema :public?])))
+      (is (= true (get-in property [:schema :hide?])))
+      (is (not (contains? db-property/public-built-in-properties :logseq.property.agent/session-id))))))
 
 (deftest test-agent-command-entries
   (testing "parse agent bridge command surface"
@@ -170,8 +182,7 @@
 
   (testing "routes built-in Assignee node values with many cardinality"
     (is (true? (agent-command/routable-task?
-                (task-block {"Assignee" nil
-                             :logseq.property/assignee [{:db/id 101
+                (task-block {:logseq.property/assignee [{:db/id 101
                                                          :block/title "build-host"}]})
                 "build-host"))))
 
@@ -184,10 +195,11 @@
            (:reason (agent-command/routable-task-decision (task-block {:logseq.property/status {:db/ident :logseq.property/status.done}})
                                                           "build-host"))))
     (is (= :assignee-mismatch
-           (:reason (agent-command/routable-task-decision (task-block {"Assignee" "other-host"})
+           (:reason (agent-command/routable-task-decision (task-block {:logseq.property/assignee [{:db/id 102
+                                                                                                    :block/title "other-host"}]})
                                                           "build-host"))))
     (is (= :already-routed
-           (:reason (agent-command/routable-task-decision (task-block {"agent-session-id" "codex-1"})
+           (:reason (agent-command/routable-task-decision (task-block {:logseq.property.agent/session-id "codex-1"})
                                                           "build-host"))))))
 
 (deftest test-prompt-and-command
@@ -506,7 +518,7 @@
                                                              {:lookup lookup}))))
 
                                     :thread-api/q
-                                    (p/resolved [])
+                                    (p/resolved nil)
 
                                     :thread-api/apply-outliner-ops
                                     (p/resolved {:ok true})
@@ -540,7 +552,8 @@
                    :routing-blocks* (atom #{})}
                   {:tx-data [{:e 50
                               :a :block/title
-                              :v (:block/title request-comment)}]}))
+                              :v (:block/title request-comment)
+                              :added true}]}))
                (p/then (fn [_]
                          (is (not-any? #(= :broad-scan (first %)) @calls))
                          (is (some #(= [:thread-api/apply-outliner-ops
@@ -588,7 +601,7 @@
                                         (p/rejected (ex-info "unexpected pull"
                                                              {:lookup lookup}))))
                                     :thread-api/q
-                                    (p/resolved [])
+                                    (p/resolved nil)
                                     :thread-api/apply-outliner-ops
                                     (p/resolved {:ok true})
                                     (p/rejected (ex-info "unexpected invoke"
@@ -615,7 +628,8 @@
                    :routing-blocks* (atom #{})}
                   {:tx-data [{:e 50
                               :a :block/title
-                              :v (:block/title request-comment)}]}))
+                              :v (:block/title request-comment)
+                              :added true}]}))
                (p/then (fn [_]
                          (is (some #(= :codex (first %)) @calls))
                          (is (some #(= [:thread-api/apply-outliner-ops
@@ -636,7 +650,7 @@
                calls (atom [])
                request-comment (comment-block {})
                commented-block (assoc (first (:logseq.property.comments/blocks (comments-area-block {})))
-                                      "agent-session-id" "existing-session-123"
+                                      :logseq.property.agent/session-id "existing-session-123"
                                       :logseq.property/assignee [{:db/id 101
                                                                   :block/title "build-host"}])
                comments-area (comments-area-block {:logseq.property.comments/blocks [commented-block]})]
@@ -652,7 +666,7 @@
                                         (p/rejected (ex-info "unexpected pull"
                                                              {:lookup lookup}))))
                                     :thread-api/q
-                                    (p/resolved [])
+                                    (p/resolved nil)
                                     :thread-api/apply-outliner-ops
                                     (p/resolved {:ok true})
                                     (p/rejected (ex-info "unexpected invoke"
@@ -679,7 +693,8 @@
                    :routing-blocks* (atom #{})}
                   {:tx-data [{:e 50
                               :a :block/title
-                              :v (:block/title request-comment)}]}))
+                              :v (:block/title request-comment)
+                              :added true}]}))
                (p/then (fn [_]
                          (let [[_ command] (some #(when (= :codex (first %)) %) @calls)]
                            (is (some? command))
@@ -699,7 +714,7 @@
                calls (atom [])
                request-comment (comment-block {})
                commented-block (assoc (first (:logseq.property.comments/blocks (comments-area-block {})))
-                                      "agent-session-id" "existing-session-123"
+                                      :logseq.property.agent/session-id "existing-session-123"
                                       :logseq.property/assignee [{:db/id 101
                                                                   :block/title "other-host"}])
                comments-area (comments-area-block {:logseq.property.comments/blocks [commented-block]})]
@@ -715,7 +730,7 @@
                                         (p/rejected (ex-info "unexpected pull"
                                                              {:lookup lookup}))))
                                     :thread-api/q
-                                    (p/resolved [])
+                                    (p/resolved nil)
                                     :thread-api/apply-outliner-ops
                                     (p/resolved {:ok true})
                                     (p/rejected (ex-info "unexpected invoke"
@@ -742,7 +757,8 @@
                    :routing-blocks* (atom #{})}
                   {:tx-data [{:e 50
                               :a :block/title
-                              :v (:block/title request-comment)}]}))
+                              :v (:block/title request-comment)
+                              :added true}]}))
                (p/then (fn [_]
                          (let [[_ command] (some #(when (= :codex (first %)) %) @calls)]
                            (is (some? command))
@@ -776,7 +792,7 @@
                                         (p/rejected (ex-info "unexpected pull"
                                                              {:lookup lookup}))))
                                     :thread-api/q
-                                    (p/resolved [])
+                                    (p/resolved nil)
                                     :thread-api/apply-outliner-ops
                                     (p/resolved {:ok true})
                                     (p/rejected (ex-info "unexpected invoke"
@@ -804,7 +820,8 @@
                    :routing-blocks* (atom #{})}
                   {:tx-data [{:e 50
                               :a :block/title
-                              :v (:block/title request-comment)}]}))
+                              :v (:block/title request-comment)
+                              :added true}]}))
                (p/then (fn [_]
                          (is (fn? @start-on-exit*))
                          (p/let [_ (p/delay 10)]
@@ -849,7 +866,8 @@
                                                      :agent-name "build-host"})
                    (@handler* :sync-db-changes {:tx-data [{:e 50
                                                            :a :block/title
-                                                           :v (:block/title non-comment)}]})
+                                                           :v (:block/title non-comment)
+                                                           :added true}]})
                    (p/let [_ (p/delay 10)]
                      (is (not-any? #(= :codex (first %)) @calls)))))
                (p/catch (fn [e]
@@ -1055,21 +1073,12 @@
 (deftest test-write-agent-session-id
   (async done
          (let [ops* (atom [])
-               property-query-count* (atom 0)
-               property-ident :user.property/agent-session-id
                block-uuid (uuid "11111111-1111-1111-1111-111111111111")]
            (-> (p/with-redefs [transport/invoke (fn [_ method args]
                                                   (case method
                                                     :thread-api/q
-                                                    (let [[_ [query & _query-args]] args]
-                                                      (if (= query agent-command/agent-session-id-property-query)
-                                                        (p/resolved (if (= 1 (swap! property-query-count* inc))
-                                                                      []
-                                                                      [{:db/id 700
-                                                                        :db/ident property-ident
-                                                                        :block/title "agent-session-id"}]))
-                                                        (p/rejected (ex-info "unexpected query"
-                                                                             {:query query}))))
+                                                    (p/rejected (ex-info "agent session id is built-in and should not be queried"
+                                                                         {:args args}))
 
                                                     :thread-api/apply-outliner-ops
                                                     (let [[_ ops _] args]
@@ -1083,11 +1092,10 @@
                                                                   "logseq_db_demo"
                                                                   block-uuid
                                                                   "session-123")]
-                   (is (= [[:upsert-property [nil
-                                              {:logseq.property/type :default
-                                               :db/cardinality :db.cardinality/one}
-                                              {:property-name "agent-session-id"}]]
-                           [:batch-set-property [[block-uuid] property-ident "session-123" {}]]]
+                   (is (= [[:batch-set-property [[block-uuid]
+                                                  :logseq.property.agent/session-id
+                                                  "session-123"
+                                                  {}]]]
                           @ops*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -1305,7 +1313,21 @@
                                                            {:close! (fn [] nil)})
                                agent-command/list-routable-tasks (fn [_cfg _repo _agent-name]
                                                                    (swap! broad-scans* inc)
-                                                                   (p/resolved []))]
+                                                                   (p/resolved []))
+                               transport/invoke (fn [_cfg method args]
+                                                  (case method
+                                                    :thread-api/pull
+                                                    (let [[_repo selector lookup] args]
+                                                      (if (and (= selector [:db/id :block/title :block/name])
+                                                               (= lookup 102))
+                                                        (p/resolved {:db/id 102
+                                                                     :block/title "other-host"})
+                                                        (p/rejected (ex-info "unexpected pull"
+                                                                             {:selector selector
+                                                                              :lookup lookup}))))
+                                                    (p/rejected (ex-info "unexpected invoke"
+                                                                         {:method method
+                                                                          :args args}))))]
                  (do
                    (#'agent-command/listen-forever! {:root-dir "/tmp/logseq"
                                                      :base-url "http://127.0.0.1:1234"
@@ -1316,14 +1338,16 @@
                    (@handler* :rtc-log {:tx-data [{:e 42
                                                    :a :logseq.property/assignee
                                                    :v {:db/id 101
-                                                       :block/title "build-host"}}]})
+                                                       :block/title "build-host"}
+                                                   :added true}]})
                    (@handler* :sync-db-changes {:tx-data [{:e 42
                                                            :a :block/title
-                                                           :v "renamed"}]})
+                                                           :v "renamed"
+                                                           :added true}]})
                    (@handler* :sync-db-changes {:tx-data [{:e 42
                                                            :a :logseq.property/assignee
-                                                           :v {:db/id 102
-                                                               :block/title "other-host"}}]})
+                                                           :v 102
+                                                           :added true}]})
                    (p/let [_ (p/delay 5)]
                      (is (= 0 @broad-scans*)))))
                (p/catch (fn [e]
@@ -1359,7 +1383,8 @@
                    (@handler* :sync-db-changes {:tx-data [{:e 42
                                                            :a :logseq.property/assignee
                                                            :v {:db/id 101
-                                                               :block/title "build-host"}}]})
+                                                               :block/title "build-host"}
+                                                           :added true}]})
                    (p/let [_ (p/delay 5)]
                      (is (= [1] @exit-calls*))
                      (is (= [{:reason :task-processing-failed
@@ -1382,8 +1407,7 @@
          (let [root (temp-root)
                handler* (atom nil)
                calls (atom [])
-               block (task-block {"Assignee" nil
-                                  :logseq.property/assignee [{:db/id 101
+               block (task-block {:logseq.property/assignee [{:db/id 101
                                                               :block/title "build-host"}]})]
            (try
              (-> (p/with-redefs [transport/connect-events! (fn [_cfg handler]
@@ -1440,7 +1464,8 @@
                                                        :agent-name "build-host"})
                      (@handler* :sync-db-changes {:tx-data [{:e 42
                                                              :a 900
-                                                             :v 101}]})
+                                                             :v 101
+                                                             :added true}]})
                      (p/let [_ (p/delay 5)]
                        (is (not-any? #(= :broad-scan (first %)) @calls))
                        (is (some #(= [:thread-api/pull ["logseq_db_demo" [:db/id :db/ident] :logseq.property/assignee]] %)

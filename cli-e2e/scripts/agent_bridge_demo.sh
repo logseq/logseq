@@ -134,7 +134,7 @@ query_task_status() {
 
 query_agent_session() {
   local payload
-  payload="$(run_cli_json query --graph "$graph" --query "[:find ?session . :where [$1 ?attr ?session] [?p :block/name \"agent-session-id\"] [?p :db/ident ?attr]]")"
+  payload="$(run_cli_json query --graph "$graph" --query "[:find ?session . :where [$1 :logseq.property.agent/session-id ?session]]")"
   python3 - "$root_dir" "$config_path" "$graph" "$cli_path" "$payload" <<'PY'
 import json
 import subprocess

@@ -84,71 +84,26 @@
      :error {:code :unknown-command
              :message (str "unknown agent command: " command)}}))
 
-(defn- value-ident
-  [value]
-  (cond
-    (keyword? value) value
-    (map? value) (:db/ident value)
-    :else nil))
-
-(defn- value-title
-  [value]
-  (cond
-    (nil? value) nil
-    (string? value) value
-    (keyword? value) (name value)
-    (map? value) (or (:block/title value)
-                     (:name value)
-                     (some-> (:db/ident value) name))
-    :else (str value)))
-
-(defn- value-titles
-  [value]
-  (if (and (sequential? value)
-           (not (string? value)))
-    (keep value-title value)
-    (keep value-title [value])))
+(def ^:private agent-session-id-property-ident :logseq.property.agent/session-id)
 
 (defn- task-tag?
   [tag]
-  (or (= :logseq.class/Task (value-ident tag))
-      (= "Task" (value-title tag))))
-
-(defn- property-key-name
-  [k]
-  (cond
-    (keyword? k) (name k)
-    (string? k) k
-    :else nil))
-
-(defn- property-value-by-name
-  [block property-name]
-  (some (fn [[k v]]
-          (when (= property-name (property-key-name k))
-            v))
-        block))
+  (= :logseq.class/Task (:db/ident tag)))
 
 (defn- assignee-values
   [block]
-  (->> (concat (mapcat (fn [k]
-                         (value-titles (get block k)))
-                       ["Assignee" :Assignee :assignee :logseq.property/assignee])
-               (value-titles (property-value-by-name block "assignee"))
-               (value-titles (property-value-by-name block "Assignee")))
-       (keep trim-non-empty)
+  (->> (:logseq.property/assignee block)
+       (keep (comp trim-non-empty :block/title))
        set))
 
-(defn- agent-session-id
+(defn- agent-session-id-present?
   [block]
-  (or (some (fn [k]
-              (trim-non-empty (get block k)))
-            ["agent-session-id" :agent-session-id :logseq.property/agent-session-id])
-      (some-> (property-value-by-name block "agent-session-id") trim-non-empty)))
+  (some? (get block agent-session-id-property-ident)))
 
 (defn routable-task-decision
   [block agent-name]
   (let [uuid (:block/uuid block)
-        status-ident (value-ident (:logseq.property/status block))
+        status-ident (get-in block [:logseq.property/status :db/ident])
         assignees (assignee-values block)]
     (cond
       (nil? uuid)
@@ -163,7 +118,7 @@
       (not (contains? assignees agent-name))
       {:routable? false :reason :assignee-mismatch}
 
-      (seq (agent-session-id block))
+      (agent-session-id-present? block)
       {:routable? false :reason :already-routed}
 
       :else
@@ -789,10 +744,6 @@
                  {}
                  [:task :comment]))))))
 
-(defn- first-entity
-  [entities]
-  (first (filter :db/id entities)))
-
 (defn- first-live-entity
   [entities]
   (first (remove ldb/recycled? (filter :db/id entities))))
@@ -853,51 +804,14 @@
               (throw (ex-info "agent bridge agent page not found after create"
                               {:code :agent-registration-failed})))))))))
 
-(def agent-session-id-property-name "agent-session-id")
-
-(def agent-session-id-property-schema
-  {:logseq.property/type :default
-   :db/cardinality :db.cardinality/one})
-
-(def agent-session-id-property-query
-  '[:find [(pull ?p [:db/id :db/ident :block/name :block/title]) ...]
-    :in $ ?property-name
-    :where
-    [?p :block/name ?property-name]
-    [?p :db/ident]])
-
-(defn- pull-agent-session-id-property
-  [cfg repo]
-  (p/let [properties (transport/invoke cfg :thread-api/q
-                                       [repo [agent-session-id-property-query
-                                              (common-util/page-name-sanity-lc agent-session-id-property-name)]])]
-    (first-entity properties)))
-
-(defn- ensure-agent-session-id-property!
-  [cfg repo]
-  (p/let [existing (pull-agent-session-id-property cfg repo)]
-    (if (:db/ident existing)
-      existing
-      (p/let [_ (transport/invoke cfg :thread-api/apply-outliner-ops
-                                  [repo [[:upsert-property [nil
-                                                            agent-session-id-property-schema
-                                                            {:property-name agent-session-id-property-name}]]]
-                                   {}])
-              created (pull-agent-session-id-property cfg repo)]
-        (if (:db/ident created)
-          created
-          (throw (ex-info "agent-session-id property not found after upsert"
-                          {:code :agent-session-id-write-failed})))))))
-
 (defn write-agent-session-id!
   [cfg repo block-uuid session-id]
-  (p/let [property (ensure-agent-session-id-property! cfg repo)
-          property-ident (:db/ident property)
-          _ (when-not property-ident
-              (throw (ex-info "agent-session-id property ident missing"
-                              {:code :agent-session-id-write-failed})))
-          _ (transport/invoke cfg :thread-api/apply-outliner-ops
-                              [repo [[:batch-set-property [[block-uuid] property-ident session-id {}]]] {}])]
+  (p/let [_ (transport/invoke cfg :thread-api/apply-outliner-ops
+                              [repo [[:batch-set-property [[block-uuid]
+                                                            agent-session-id-property-ident
+                                                            session-id
+                                                            {}]]]
+                               {}])]
     true))
 
 (def ^:private routable-task-query
@@ -906,6 +820,8 @@
                      :block/title
                      {:block/tags [:db/ident :block/title]}
                      {:logseq.property/status [:db/ident :block/title]}
+                     {:logseq.property/assignee [:db/id :block/title :block/name :db/ident]}
+                     :logseq.property.agent/session-id
                      *]) ...]
     :in $ ?agent-name
     :where
@@ -932,8 +848,7 @@
                {:block block
                 :tree-text (or (get-in show-result [:data :message])
                                (:block/title block))}))
-           (filter #(routable-task? % agent-name)
-                   (map #(assoc % "Assignee" agent-name) blocks))))))
+           (filter #(routable-task? % agent-name) blocks)))))
 
 (defn- dry-run-commands
   [graph agent-name prompt-templates tasks]
@@ -1046,6 +961,7 @@
    {:block/tags [:db/ident :block/title]}
    {:logseq.property/status [:db/ident :block/title]}
    {:logseq.property/assignee [:db/id :block/title :block/name :db/ident]}
+   :logseq.property.agent/session-id
    '*])
 
 (def ^:private comment-block-selector
@@ -1062,10 +978,9 @@
   (cond-> [:db/id
            :block/uuid
            :block/title
-           {:logseq.property/assignee [:db/id :block/title :block/name :db/ident]}
-           '*]
-    session-property-ident
-    (conj {session-property-ident [:db/id :block/title :block/name]})))
+           {:logseq.property/assignee [:db/id :block/title :block/name :db/ident]}]
+    session-property-ident (conj session-property-ident)
+    true (conj '*)))
 
 (defn- comments-area-selector
   [session-property-ident]
@@ -1088,63 +1003,26 @@
     [?r :logseq.property.reaction/emoji-id ?emoji-id]
     [(missing? $ ?r :logseq.property/created-by-ref)]])
 
-(defn- datom-added?
-  [datom]
-  (cond
-    (map? datom)
-    (not (false? (if (contains? datom :added)
-                   (:added datom)
-                   (:added? datom))))
-
-    (and (sequential? datom) (<= 5 (count datom)))
-    (not (false? (nth datom 4)))
-
-    :else
-    (not (false? (or (unchecked-get datom "added")
-                     (unchecked-get datom "added?")
-                     true)))))
-
-(defn- datom-e
-  [datom]
-  (cond
-    (map? datom) (:e datom)
-    (sequential? datom) (first datom)
-    :else (unchecked-get datom "e")))
-
-(defn- datom-attr
-  [datom]
-  (cond
-    (map? datom) (:a datom)
-    (sequential? datom) (second datom)
-    :else (unchecked-get datom "a")))
-
-(defn- datom-value
-  [datom]
-  (cond
-    (map? datom) (:v datom)
-    (sequential? datom) (nth datom 2 nil)
-    :else (unchecked-get datom "v")))
-
 (defn- unknown-attr-datom?
   [datom]
-  (let [attr (datom-attr datom)]
-    (and (datom-added? datom)
+  (let [attr (:a datom)]
+    (and (true? (:added datom))
          (some? attr)
          (not (keyword? attr)))))
 
 (defn- direct-assignee-datom?
   [datom]
-  (and (datom-added? datom)
-       (= assignee-property-ident (datom-attr datom))))
+  (and (true? (:added datom))
+       (= assignee-property-ident (:a datom))))
 
 (defn- comment-title-datom?
   [datom agent-name]
-  (and (datom-added? datom)
+  (and (true? (:added datom))
        (seq agent-name)
-       (= :block/title (datom-attr datom))
-       (string? (datom-value datom))
-       (or (string/includes? (datom-value datom) (str "[[" agent-name "]]"))
-           (string/includes? (datom-value datom) "[["))))
+       (= :block/title (:a datom))
+       (string? (:v datom))
+       (or (string/includes? (:v datom) (str "[[" agent-name "]]"))
+           (string/includes? (:v datom) "[["))))
 
 (defn- pull-assignee-property
   [cfg repo]
@@ -1158,22 +1036,17 @@
       (p/let [property (pull-assignee-property cfg repo)
               property-id (:db/id property)]
         (concat direct-datoms
-                (filter #(= property-id (datom-attr %)) unknown-attr-datoms)))
+                (filter #(= property-id (:a %)) unknown-attr-datoms)))
       (p/resolved direct-datoms))))
 
 (defn- direct-assignee-title
   [value]
-  (when (or (string? value)
-            (keyword? value)
-            (map? value))
-    (trim-non-empty (value-title value))))
+  (trim-non-empty (:block/title value)))
 
 (defn- assignee-value-matches?
   [cfg repo value agent-name]
-  (if-let [title (direct-assignee-title value)]
-    (p/resolved (= agent-name title))
-    (p/let [entity (transport/invoke cfg :thread-api/pull [repo assignee-value-selector value])]
-      (= agent-name (trim-non-empty (value-title entity))))))
+  (p/let [entity (transport/invoke cfg :thread-api/pull [repo assignee-value-selector value])]
+    (= agent-name (direct-assignee-title entity))))
 
 (defn- pull-task-block
   [cfg repo block-id]
@@ -1205,20 +1078,18 @@
 
 (defn- comment-tag?
   [tag]
-  (or (= :logseq.class/Comment (value-ident tag))
-      (= "Comment" (value-title tag))))
+  (= :logseq.class/Comment (:db/ident tag)))
 
 (defn- comments-area-tag?
   [tag]
-  (or (= :logseq.class/Comments (value-ident tag))
-      (= "Comments" (value-title tag))))
+  (= :logseq.class/Comments (:db/ident tag)))
 
 (defn- comment-block?
   [block agent-name]
   (and (:block/uuid block)
        (some comment-tag? (:block/tags block))
-       (or (string/includes? (or (:block/title block) "") (str "[[" agent-name "]]"))
-           (contains? (set (keep value-title (:block/refs block))) agent-name))))
+       (or (string/includes? (:block/title block) (str "[[" agent-name "]]"))
+           (contains? (set (keep :block/title (:block/refs block))) agent-name))))
 
 (defn- comments-area?
   [block]
@@ -1240,9 +1111,7 @@
 (defn- ensure-comment-reaction!
   [cfg repo target-uuid emoji-id]
   (p/let [existing (transport/invoke cfg :thread-api/q [repo [comment-reaction-query target-uuid emoji-id]])]
-    (when-not (if (sequential? existing)
-                (seq existing)
-                (some? existing))
+    (when-not (some? existing)
       (transport/invoke cfg :thread-api/apply-outliner-ops
                         [repo [[:toggle-reaction [target-uuid emoji-id nil]]] {}]))))
 
@@ -1252,12 +1121,10 @@
          :request :comment))
 
 (defn- comment-target-session-id
-  [agent-name session-property-ident block]
-  (when (contains? (assignee-values block) agent-name)
-    (or (agent-session-id block)
-        (some-> (get block session-property-ident)
-                value-title
-                trim-non-empty))))
+  [agent-name block]
+  (if (contains? (assignee-values block) agent-name)
+    (p/resolved (trim-non-empty (get block agent-session-id-property-ident)))
+    (p/resolved nil)))
 
 (defn- route-comment!
   [cfg {:keys [repo graph agent-name prompt-templates]} comment-block]
@@ -1266,8 +1133,7 @@
            _ (when-not comment-uuid
                (throw (ex-info "comment block uuid is missing"
                                {:code :agent-comment-uuid-missing})))
-           session-property (pull-agent-session-id-property cfg repo)
-           session-property-ident (:db/ident session-property)
+           session-property-ident agent-session-id-property-ident
            comments-area (pull-comments-area cfg repo comment-block session-property-ident)
            _ (when-not (comments-area? comments-area)
                (throw (ex-info "comment parent is not a comments area"
@@ -1285,7 +1151,9 @@
                                                :comments-area-tree-text comments-area-tree-text
                                                :comment-tree-text comment-tree-text
                                                :prompt-template (:comment prompt-templates)})
-           resume-session-id (some #(comment-target-session-id agent-name session-property-ident %) target-blocks)
+           target-session-ids (p/all (mapv #(comment-target-session-id agent-name %)
+                                           target-blocks))
+           resume-session-id (first (keep identity target-session-ids))
            command (if resume-session-id
                      (build-codex-resume-command resume-session-id prompt {})
                      (build-codex-command prompt {}))
@@ -1333,8 +1201,8 @@
 
 (defn- route-assignee-datom!
   [cfg {:keys [repo agent-name] :as opts} datom]
-  (let [block-id (datom-e datom)
-        assignee-value (datom-value datom)]
+  (let [block-id (:e datom)
+        assignee-value (:v datom)]
     (when block-id
       (p/let [matches? (assignee-value-matches? cfg repo assignee-value agent-name)]
         (when matches?
@@ -1346,7 +1214,7 @@
 
 (defn- route-comment-datom!
   [cfg {:keys [repo agent-name] :as opts} datom]
-  (when-let [block-id (datom-e datom)]
+  (when-let [block-id (:e datom)]
     (p/let [comment-block (pull-comment-block cfg repo block-id)]
       (when (comment-block? comment-block agent-name)
         (route-comment-once! cfg opts comment-block)))))
