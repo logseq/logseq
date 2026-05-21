@@ -6544,7 +6544,11 @@
                          (persist!))}
             [:div.text-picker-gallery-preview
              (if display-text
-               (icon (build-icon display-text) {:size 36})
+               ;; `:color? true` wraps the SVG in `.ls-icon-color-wrap`
+               ;; so the gallery preview's text picks up the user's
+               ;; chosen color via `currentColor` (same fix as the
+               ;; Custom-tab Text tile in custom-tab-cp).
+               (icon (build-icon display-text) {:size 36 :color? true})
                (shui/tabler-icon "pencil" {:size 20}))]
             [:span.text-picker-gallery-label label]]))]
 
