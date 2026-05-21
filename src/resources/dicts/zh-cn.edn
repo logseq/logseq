@@ -1015,6 +1015,7 @@
  :mobile.tab/graphs "图谱"
 
  :mobile.toolbar/audio "音频"
+ :mobile.toolbar/comment "评论"
  :mobile.toolbar/copy-ref "复制引用"
  :mobile.toolbar/copy-url "复制链接"
  :mobile.toolbar/hide "隐藏"
