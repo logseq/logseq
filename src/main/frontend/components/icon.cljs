@@ -464,7 +464,7 @@
                           :border "1px solid var(--rx-gray-07)"
                           :border-radius "5px"
                           :background "var(--rx-gray-03-alpha)"
-                          :color "var(--lx-gray-11)"}
+                          :color "var(--lx-gray-11, var(--rx-gray-11))"}
                   :title "Image not found - click to replace"}
            on-click-error (assoc :on-click on-click-error
                                  :class "cursor-pointer"))
@@ -700,7 +700,7 @@
                            :border "1px dashed var(--rx-gray-08)"
                            :border-radius "5px"
                            :background "var(--rx-gray-03-alpha)"
-                           :color "var(--lx-gray-11)"}}
+                           :color "var(--lx-gray-11, var(--rx-gray-11))"}}
                   (ui/icon "plus" {:size inner
                                    :style {:width inner-px
                                            :height inner-px}})])
@@ -2160,7 +2160,7 @@
 (rum/defc section-header
   [{:keys [title count total-count expanded? keyboard-hint on-toggle focus-region simple?]}]
   [:div.section-header.text-xs.py-1.5.px-3.flex.justify-between.items-center.gap-2.bg-gray-02.h-8
-   {:style {:color "var(--lx-gray-11)"}}
+   {:style {:color "var(--lx-gray-11, var(--rx-gray-11))"}}
    ;; Left: Title · total-count · Chevron (chevron and count hidden in simple mode)
    [:div.flex.items-center.gap-1.select-none
     (when-not simple? {:class "cursor-pointer"
@@ -2647,7 +2647,7 @@
                  :align-items "center"
                  :justify-content "center"
                  :background "var(--rx-gray-03-alpha)"}}
-        (shui/tabler-icon "photo" {:size 20 :style {:color "var(--lx-gray-11)"}})]]
+        (shui/tabler-icon "photo" {:size 20 :style {:color "var(--lx-gray-11, var(--rx-gray-11))"}})]]
       [:span.custom-tab-item-label (t :icon.mode/image)]]]))
 
 ;; <load-asset-url! is defined near the top of the file (unified loader with retry + extension guessing)
@@ -2907,7 +2907,7 @@
       [:div.image-info
        [:div.image-title (or title (t :icon.web-images/untitled))]
        (when source-text
-         [:div.image-source {:style {:color "var(--lx-gray-11)"}} source-text])
+         [:div.image-source {:style {:color "var(--lx-gray-11, var(--rx-gray-11))"}} source-text])
        (when license-desc
          [:div.license-badge license-desc])]]]))
 
@@ -5531,7 +5531,7 @@
                 [:div.font-medium label]
                 (when hint
                   [:div.text-xs.mt-0.5
-                   {:style {:color "var(--lx-gray-11)"}}
+                   {:style {:color "var(--lx-gray-11, var(--rx-gray-11))"}}
                    hint])])))))]
 
     ;; On mount: land focus on (1) selected preset, (2) custom-rainbow
@@ -5702,7 +5702,7 @@
             [:div.font-medium label]
             (when hint
               [:div.text-xs.mt-0.5
-               {:style {:color "var(--lx-gray-11)"}}
+               {:style {:color "var(--lx-gray-11, var(--rx-gray-11))"}}
                hint])]))))
 
       ;; Custom — opens the picker pane. aria-expanded reflects pane state.
@@ -5730,7 +5730,7 @@
          [:div.text-center
           [:div.font-medium (t :icon.color/custom)]
           [:div.text-xs.mt-0.5
-           {:style {:color "var(--lx-gray-11)"}}
+           {:style {:color "var(--lx-gray-11, var(--rx-gray-11))"}}
            (t :icon.color/custom-hint)]])))]
 
      ;; Vertical 1px rule between control col and preset grid

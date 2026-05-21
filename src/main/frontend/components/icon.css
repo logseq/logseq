@@ -30,7 +30,7 @@
 
   /* More visible separator like combobox */
   .icon-picker-separator {
-    background-color: var(--rx-gray-05) !important;
+    background-color: var(--lx-gray-05, var(--rx-gray-05)) !important;
   }
 
   /* Topbar wrapper for easier inspection */
@@ -41,15 +41,28 @@
   .search-section {
     @apply flex items-center gap-2 py-1 pr-3;
     @apply flex-shrink-0;
-    background-color: var(--lx-gray-03);
-    border-bottom: 1px solid var(--rx-gray-06);
+    /* `bg-gray-03` (Tailwind utility) resolves through the full chain
+       `var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)))`
+       so the section is themed in OG (where `--lx-gray-03` is unset) by
+       falling back to `--ls-tertiary-background-color`. Raw
+       `var(--lx-gray-03)` would be invalid in OG → transparent. */
+    @apply bg-gray-03;
+    border-bottom: 1px solid var(--lx-gray-06, var(--rx-gray-06));
+
+    /* Focus-within tell: the borderless input has no focus ring of its
+       own, so the section's existing bottom-border lights up the
+       theme accent when the input is focused. Themed, accessible,
+       and preserves the edge-to-edge feel. */
+    &:focus-within {
+      border-bottom-color: var(--lx-accent-09);
+    }
   }
 
   /* Icon-picker-specific tab bar look (gray backdrop, right-side actions slot).
      Base .tabs-section + .tab-item rules are defined unscoped below so the
      asset picker can reuse them. */
   .tabs-section {
-    background-color: var(--lx-gray-03) !important;
+    @apply bg-gray-03;
     padding: 0 12px 0 0 !important;
   }
 
@@ -57,6 +70,13 @@
     @apply flex-1 pt-1 overflow-y-auto;
     @apply bg-gray-02;
     min-height: 0;
+
+    /* Opt out of the themed scrollbar-color set at :root (theme.css).
+       Themed scrollbar colors force WebKit into classic-scrollbar
+       mode at 15px width on macOS, which steals 9px and collapses
+       the 9-column grid to 8 in themes like OG turquoise. With
+       `auto`, macOS returns to overlay scrollbars (6px reserved). */
+    scrollbar-color: auto;
 
     &.all {
       @apply overflow-y-auto;
@@ -71,16 +91,16 @@
   .search-empty-state {
     @apply flex-1 flex flex-col items-center justify-center gap-1.5 select-none;
     min-height: 160px;
-    color: var(--rx-gray-08);
+    color: var(--lx-gray-08, var(--rx-gray-08));
 
     .title {
       @apply text-sm font-medium;
-      color: var(--rx-gray-10);
+      color: var(--lx-gray-10, var(--rx-gray-10));
     }
 
     .subtitle {
       @apply text-xs;
-      color: var(--rx-gray-08);
+      color: var(--lx-gray-08, var(--rx-gray-08));
     }
   }
 
@@ -96,17 +116,22 @@
       @apply absolute right-2 top-1/2 -translate-y-1/2;
       @apply w-5 h-5 rounded-full cursor-pointer;
       @apply transition-colors duration-150;
-      background-color: var(--rx-gray-07);
-      color: var(--rx-gray-12);
+      background-color: var(--lx-gray-07, var(--rx-gray-07));
+      color: var(--lx-gray-12, var(--rx-gray-12));
     }
 
     > .x:hover {
-      background-color: var(--rx-gray-08);
+      background-color: var(--lx-gray-08, var(--rx-gray-08));
     }
 
     .ui__input {
-      @apply leading-none pl-8 outline-none border-none bg-gray-03;
-      @apply focus:bg-gray-03 !h-8;
+      /* Structurally borderless: no background, no rounded corners, no
+         focus shadow. The visible "search bar" is the parent
+         `.search-section`; the input is just text + cursor sitting on
+         the section's themed background. Theme-agnostic by construction
+         — no color-matching trick to break in OG. */
+      @apply leading-none pl-8 outline-none border-none bg-transparent rounded-none;
+      @apply focus:bg-transparent !h-8;
       box-shadow: none !important;
     }
 
@@ -152,7 +177,7 @@
                           calc(var(--c, 0) * 22ms + var(--r, 0) * 36ms);
 
         &:hover {
-          background-color: var(--rx-gray-05);
+          background-color: var(--lx-gray-05, var(--rx-gray-05));
         }
       }
     }
@@ -231,8 +256,8 @@
 
 .cp__emoji-icon-picker button.is-ghost-highlighted,
 .asset-picker button.is-ghost-highlighted {
-  background-color: var(--rx-gray-04) !important;
-  outline: 1.5px solid var(--rx-gray-08);
+  background-color: var(--lx-gray-04, var(--rx-gray-04)) !important;
+  outline: 1.5px solid var(--lx-gray-08, var(--rx-gray-08));
   outline-offset: -1.5px;
 }
 
@@ -265,7 +290,7 @@
     box-shadow: none !important;
     border: none !important;
     height: auto !important;
-    color: var(--rx-gray-11);
+    color: var(--lx-gray-11, var(--rx-gray-11));
 
     /* Reserve bold width to prevent layout shift on active */
     &::before {
@@ -280,13 +305,13 @@
     /* Underline for active state */
     &[data-active="true"] {
       @apply opacity-100 font-bold;
-      color: var(--rx-gray-12);
+      color: var(--lx-gray-12, var(--rx-gray-12));
 
       &::after {
         content: "";
         @apply absolute bottom-0 left-0 right-0;
         @apply h-[2px];
-        background-color: var(--rx-gray-12);
+        background-color: var(--lx-gray-12, var(--rx-gray-12));
       }
     }
 
@@ -314,7 +339,7 @@
   transition: box-shadow 150ms, opacity 150ms;
 
   &:hover {
-    box-shadow: 0 0 0 2px var(--rx-gray-07);
+    box-shadow: 0 0 0 2px var(--lx-gray-07, var(--rx-gray-07));
   }
 
   .color-picker-fill {
@@ -333,8 +358,8 @@
 
   .color-picker-empty {
     @apply w-5 h-5 rounded-full relative overflow-hidden;
-    background-color: var(--rx-gray-05);
-    box-shadow: inset 0 0 0 1px var(--rx-gray-07);
+    background-color: var(--lx-gray-05, var(--rx-gray-05));
+    box-shadow: inset 0 0 0 1px var(--lx-gray-07, var(--rx-gray-07));
 
     /* CSS-only diagonal slash — matches .swatch-empty treatment */
     &::before {
@@ -344,7 +369,7 @@
       left: 50%;
       width: 1.5px;
       height: 141%;
-      background-color: var(--rx-gray-09);
+      background-color: var(--lx-gray-09, var(--rx-gray-09));
       border-radius: 1px;
       transform: translate(-50%, -50%) rotate(45deg);
     }
@@ -442,8 +467,8 @@
 
     .swatch-empty {
       @apply w-6 h-6 rounded-full relative overflow-hidden;
-      background-color: var(--rx-gray-05);
-      box-shadow: inset 0 0 0 1px var(--rx-gray-07);
+      background-color: var(--lx-gray-05, var(--rx-gray-05));
+      box-shadow: inset 0 0 0 1px var(--lx-gray-07, var(--rx-gray-07));
       transition: box-shadow 120ms;
 
       /* CSS-only diagonal slash — centered reliably without SVG viewBox quirks */
@@ -454,7 +479,7 @@
         left: 50%;
         width: 1.5px;
         height: 141%;
-        background-color: var(--rx-gray-09);
+        background-color: var(--lx-gray-09, var(--rx-gray-09));
         border-radius: 1px;
         transform: translate(-50%, -50%) rotate(45deg);
       }
@@ -467,7 +492,7 @@
 
     &.is-selected .swatch-empty {
       box-shadow:
-        inset 0 0 0 1px var(--rx-gray-07),
+        inset 0 0 0 1px var(--lx-gray-07, var(--rx-gray-07)),
         0 0 0 1px var(--lx-gray-02),
         0 0 0 3.5px var(--lx-accent-09);
     }
@@ -476,7 +501,7 @@
        so the focus halo is still visible on the slash tile. */
     &:focus-visible:not(.is-selected) .swatch-empty {
       box-shadow:
-        inset 0 0 0 1px var(--rx-gray-07),
+        inset 0 0 0 1px var(--lx-gray-07, var(--rx-gray-07)),
         0 0 0 1px var(--lx-gray-02),
         0 0 0 2.5px var(--lx-accent-09);
     }
@@ -598,7 +623,7 @@
   transition: background-color 150ms, outline-color 150ms;
 
   &:hover {
-    background-color: var(--rx-gray-05);
+    background-color: var(--lx-gray-05, var(--rx-gray-05));
   }
 }
 
@@ -623,12 +648,12 @@
 
 .custom-tab-item-label {
   @apply text-xs;
-  color: var(--rx-gray-11);
+  color: var(--lx-gray-11, var(--rx-gray-11));
   transition: color 150ms;
 }
 
 .custom-tab-item:hover .custom-tab-item-label {
-  color: var(--rx-gray-12);
+  color: var(--lx-gray-12, var(--rx-gray-12));
 }
 
 /* Shared drag overlay hint — used by both icon picker and asset picker */
@@ -672,7 +697,7 @@
   }
 
   .tabler-icon {
-    color: var(--rx-gray-12);
+    color: var(--lx-gray-12, var(--rx-gray-12));
   }
 
   .text-group {
@@ -684,7 +709,7 @@
 
   .title {
     font-size: 14px;
-    color: var(--rx-gray-12);
+    color: var(--lx-gray-12, var(--rx-gray-12));
     font-weight: 500;
     text-align: center;
     white-space: nowrap;
@@ -692,7 +717,7 @@
 
   .subtitle {
     font-size: 11px;
-    color: var(--rx-gray-11);
+    color: var(--lx-gray-11, var(--rx-gray-11));
     text-align: center;
     white-space: nowrap;
   }
@@ -742,6 +767,9 @@
   > .bd {
     @apply flex-1 py-1 overflow-y-auto;
     min-height: 0;
+
+    /* Opt out of themed scrollbar-color (see icon-picker .bd above). */
+    scrollbar-color: auto;
   }
 
 }
@@ -761,7 +789,7 @@
   padding: 0 14px;
   height: 40px;
   background-color: var(--lx-gray-03);
-  border-bottom: 1px solid var(--rx-gray-05);
+  border-bottom: 1px solid var(--lx-gray-05, var(--rx-gray-05));
 }
 
 .asset-picker-back {
@@ -772,10 +800,10 @@
     @apply text-sm font-medium cursor-pointer;
     @apply border-none bg-transparent p-0;
     @apply transition-colors duration-150;
-    color: var(--rx-gray-10);
+    color: var(--lx-gray-10, var(--rx-gray-10));
 
     &:hover {
-      color: var(--rx-gray-12);
+      color: var(--lx-gray-12, var(--rx-gray-12));
     }
   }
 }
@@ -798,7 +826,7 @@
      stepping up to --rx-gray-06 gives enough contrast in both themes
      so the control reads as a bounded group instead of bleeding into
      the topbar. */
-  background-color: var(--rx-gray-06);
+  background-color: var(--lx-gray-06, var(--rx-gray-06));
   border-radius: 6px;
   padding: 2px;
   gap: 2px;
@@ -809,19 +837,19 @@
     @apply transition-colors duration-100;
     border: none;
     background: transparent;
-    color: var(--rx-gray-11);
+    color: var(--lx-gray-11, var(--rx-gray-11));
     padding: 2px 10px;
     border-radius: 4px;
     min-width: 56px;
     line-height: 1.4;
 
     &:hover {
-      color: var(--rx-gray-12);
+      color: var(--lx-gray-12, var(--rx-gray-12));
     }
 
     &[data-active="true"] {
       background-color: var(--lx-gray-01);
-      color: var(--rx-gray-12);
+      color: var(--lx-gray-12, var(--rx-gray-12));
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     }
 
@@ -890,9 +918,16 @@
 .asset-picker-search {
   @apply py-1 pr-3;
   @apply flex-shrink-0;
-  background-color: var(--lx-gray-03);
+  /* Tailwind utility for the proper themed fallback chain (see icon
+     picker .search-section comment). */
+  @apply bg-gray-03;
   /* Grey line at bottom of header section, matching icon picker */
-  border-bottom: 1px solid var(--rx-gray-06);
+  border-bottom: 1px solid var(--lx-gray-06, var(--rx-gray-06));
+
+  /* Focus-within accent (see icon picker .search-section). */
+  &:focus-within {
+    border-bottom-color: var(--lx-accent-09);
+  }
 
   .search-input {
     @apply relative flex-1 px-2;
@@ -902,8 +937,9 @@
     }
 
     .ui__input {
-      @apply leading-none pl-8 outline-none border-none bg-gray-03;
-      @apply focus:bg-gray-03 !h-8;
+      /* Borderless, transparent — see icon picker .ui__input comment. */
+      @apply leading-none pl-8 outline-none border-none bg-transparent rounded-none;
+      @apply focus:bg-transparent !h-8;
       box-shadow: none !important;
     }
 
@@ -916,12 +952,12 @@
       @apply absolute right-2 top-1/2 -translate-y-1/2;
       @apply w-5 h-5 rounded-full cursor-pointer;
       @apply transition-colors duration-150;
-      background-color: var(--rx-gray-07);
-      color: var(--rx-gray-12);
+      background-color: var(--lx-gray-07, var(--rx-gray-07));
+      color: var(--lx-gray-12, var(--rx-gray-12));
     }
 
     > .x:hover {
-      background-color: var(--rx-gray-08);
+      background-color: var(--lx-gray-08, var(--rx-gray-08));
     }
   }
 }
@@ -979,7 +1015,7 @@
   position: relative;
   width: 100%;
   padding-bottom: 100%; /* Square aspect ratio */
-  background-color: var(--rx-gray-04);
+  background-color: var(--lx-gray-04, var(--rx-gray-04));
 
   /* Use `outline` (not `border`) for hover/focus/selected. `outline`
      draws OUTSIDE the element without compressing inner content — a
@@ -1037,9 +1073,9 @@
 
   /* Selected state - blue outline */
   &.selected {
-    outline: 2px solid var(--rx-blue-09);
+    outline: 2px solid var(--lx-accent-09);
     outline-offset: 0;
-    box-shadow: 0 0 0 1px var(--rx-blue-09);
+    box-shadow: 0 0 0 1px var(--lx-accent-09);
   }
 
   /* Ghost asset - file missing from disk, click to retry. The dashed
@@ -1049,7 +1085,7 @@
   &.ghost-asset {
     @apply cursor-pointer;
     opacity: 0.4;
-    border: 2px dashed var(--rx-gray-07);
+    border: 2px dashed var(--lx-gray-07, var(--rx-gray-07));
     transition: opacity 150ms;
 
     &:hover {
@@ -1058,7 +1094,7 @@
 
     .ghost-asset-placeholder {
       @apply absolute inset-0 flex items-center justify-center;
-      color: var(--rx-gray-09);
+      color: var(--lx-gray-09, var(--rx-gray-09));
     }
   }
 }
@@ -1141,7 +1177,7 @@
     right: 18px;
     bottom: 0;
     height: 1px;
-    background-color: var(--rx-gray-06);
+    background-color: var(--lx-gray-06, var(--rx-gray-06));
   }
 
   /* Hide the separator while the row is highlighted so it doesn't
@@ -1155,7 +1191,7 @@
   }
 
   &:focus-visible {
-    outline: 2px solid var(--rx-blue-09);
+    outline: 2px solid var(--lx-accent-09);
     outline-offset: -2px;
     border-radius: 4px;
   }
@@ -1163,7 +1199,7 @@
   .row-icon {
     @apply flex items-center justify-center;
     flex-shrink: 0;
-    color: var(--rx-gray-11);
+    color: var(--lx-gray-11, var(--rx-gray-11));
   }
 
   .row-body {
@@ -1175,19 +1211,19 @@
 
   .row-title {
     @apply text-sm font-medium;
-    color: var(--rx-gray-12);
+    color: var(--lx-gray-12, var(--rx-gray-12));
     line-height: 1.25;
   }
 
   .row-subtitle {
     @apply text-sm;
-    color: var(--rx-gray-10);
+    color: var(--lx-gray-10, var(--rx-gray-10));
     line-height: 1.3;
   }
 
   .row-chevron {
     flex-shrink: 0;
-    color: var(--rx-gray-10);
+    color: var(--lx-gray-10, var(--rx-gray-10));
   }
 
   .row-shortcut {
@@ -1220,17 +1256,17 @@
   @apply flex-shrink-0 flex items-center justify-between;
   padding: 8px 14px 7px 14px;
   background-color: var(--lx-gray-03);
-  border-bottom: 1px solid var(--rx-gray-05);
+  border-bottom: 1px solid var(--lx-gray-05, var(--rx-gray-05));
 
   .back-button {
     @apply flex items-center gap-0.5;
     @apply text-sm font-medium cursor-pointer;
     @apply border-none bg-transparent p-0;
     @apply transition-colors duration-150;
-    color: var(--rx-gray-10);
+    color: var(--lx-gray-10, var(--rx-gray-10));
 
     &:hover {
-      color: var(--rx-gray-12);
+      color: var(--lx-gray-12, var(--rx-gray-12));
     }
   }
 
@@ -1249,7 +1285,7 @@
 
   .format-note {
     @apply text-xs leading-relaxed;
-    color: var(--rx-gray-09);
+    color: var(--lx-gray-09, var(--rx-gray-09));
   }
 }
 
@@ -1258,7 +1294,7 @@
 
   > label {
     @apply text-xs font-medium;
-    color: var(--rx-gray-11);
+    color: var(--lx-gray-11, var(--rx-gray-11));
   }
 }
 
@@ -1279,24 +1315,24 @@
   @apply w-14 h-14 rounded-lg;
   @apply flex items-center justify-center;
   @apply transition-all duration-150;
-  border: 2px solid var(--rx-gray-06);
-  background-color: var(--rx-gray-03);
+  border: 2px solid var(--lx-gray-06, var(--rx-gray-06));
+  background-color: var(--lx-gray-03, var(--rx-gray-03));
 
   &:hover { border-color: var(--rx-accent-09); }
 }
 
 .text-picker-gallery-item.selected .text-picker-gallery-preview {
-  border-color: var(--rx-blue-09);
-  box-shadow: 0 0 0 1px var(--rx-blue-09);
+  border-color: var(--lx-accent-09);
+  box-shadow: 0 0 0 1px var(--lx-accent-09);
 }
 
 .text-picker-gallery-label {
   @apply text-xs;
-  color: var(--rx-gray-11);
+  color: var(--lx-gray-11, var(--rx-gray-11));
 }
 
 .text-picker-gallery-item.selected .text-picker-gallery-label {
-  color: var(--rx-blue-09);
+  color: var(--lx-accent-09);
   @apply font-medium;
 }
 
@@ -1324,12 +1360,12 @@
 
   .info-icon {
     @apply p-0.5 rounded border-none bg-transparent cursor-help transition-colors;
-    color: var(--rx-gray-10);
+    color: var(--lx-gray-10, var(--rx-gray-10));
     margin-left: auto;
     margin-right: 12px;
 
     &:hover {
-      color: var(--rx-gray-12);
+      color: var(--lx-gray-12, var(--rx-gray-12));
     }
   }
 }
@@ -1344,7 +1380,7 @@
   position: relative;
   width: 100%;
   padding-bottom: 100%; /* Square aspect ratio */
-  background-color: var(--rx-gray-04);
+  background-color: var(--lx-gray-04, var(--rx-gray-04));
 
   /* Outline (not border) for hover/focus — same rationale as
      `.image-asset-item`: avoids the inner-vs-outer radius mismatch
@@ -1551,7 +1587,7 @@
 
     .image-title {
       @apply font-medium text-sm;
-      color: var(--rx-gray-12);
+      color: var(--lx-gray-12, var(--rx-gray-12));
     }
 
     .image-source {
