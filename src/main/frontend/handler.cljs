@@ -60,7 +60,9 @@
 (defn restore-and-setup!
   [repo]
   (when repo
-    (-> (p/let [_ (db-restore/restore-graph! repo)]
+    (-> (p/let [_ (db-restore/restore-graph! repo)
+                _ (graph-handler/<upsert-current-graph-registry!)]
+          (graph-handler/remember-current-graph-id-in-tab!)
           (repo-config-handler/start {:repo repo}))
         (p/then
          (fn []
@@ -131,14 +133,6 @@
       (log/warn :url-target/parse-failed e)
       nil)))
 
-(defn- <resolve-url-target-repo
-  [url-target repos]
-  (when (seq url-target)
-    (p/let [registry (graph-handler/<get-graph-registry)]
-      (:repo (graph-handler/resolve-registry-target
-              (concat registry (graph-handler/registry-from-repo-summaries repos))
-              url-target)))))
-
 (defn- apply-url-target-route!
   [url-target]
   (let [{:keys [to page-id block-id]} (:route url-target)]
@@ -186,10 +180,20 @@
                  _ (state/set-repos! repos)
                  _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
                  url-target (current-url-target)
-                 target-repo (<resolve-url-target-repo url-target repos)
+                 registry (graph-handler/<get-graph-registry)
+                 target-repo (when (seq url-target)
+                               (:repo (graph-handler/resolve-registry-target
+                                       (concat registry
+                                               (graph-handler/registry-from-repo-summaries repos))
+                                       url-target)))
                  _ (when (and (seq (:graph-id url-target)) (nil? target-repo))
                      (log/warn :url-target/unresolved-graph-id url-target))
-                 repo (or target-repo (state/get-current-repo) (:url (first repos)))
+                 repo (graph-handler/resolve-startup-repo
+                       registry
+                       repos
+                       url-target
+                       (graph-handler/get-tab-graph-id)
+                       (state/get-current-repo))
                  _ (if (empty? repos)
                      (repo-handler/new-db! config/demo-repo)
                      (restore-and-setup! repo))

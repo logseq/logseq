@@ -32,6 +32,54 @@
                       (is false (str e))
                       (done))))))))
 
+(deftest remember-current-graph-id-in-tab-test
+  (let [remember-f (some-> (resolve 'frontend.handler.graph/remember-current-graph-id-in-tab!) deref)
+        stored-graph-id (atom nil)]
+    (is (fn? remember-f) "Current graph id should be remembered for same-tab reloads")
+    (when remember-f
+      (p/with-redefs [frontend.handler.graph/current-graph-id (constantly "remote-uuid")
+                      frontend.handler.graph/set-tab-graph-id! (fn [graph-id]
+                                                                 (reset! stored-graph-id graph-id))]
+        (remember-f)
+        (is (= "remote-uuid" @stored-graph-id))))))
+
+(deftest resolve-startup-repo-prefers-url-graph-id-test
+  (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
+    (is (fn? resolve-f) "Startup repo resolver should exist")
+    (when resolve-f
+      (is (= "logseq_db_url"
+             (resolve-f [{:repo "logseq_db_url"
+                          :graph-name "url"
+                          :graph-id "url-uuid"}
+                         {:repo "logseq_db_tab"
+                          :graph-name "tab"
+                          :graph-id "tab-uuid"}]
+                        [{:url "logseq_db_current"}]
+                        {:graph-id "url-uuid"}
+                        "tab-uuid"
+                        "logseq_db_current"))))))
+
+(deftest resolve-startup-repo-uses-tab-graph-id-before-global-current-test
+  (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
+    (is (fn? resolve-f) "Startup repo resolver should exist")
+    (when resolve-f
+      (testing "refreshing a bare root URL keeps the tab's graph context"
+        (is (= "logseq_db_tab"
+               (resolve-f [{:repo "logseq_db_tab"
+                            :graph-name "tab"
+                            :graph-id "tab-uuid"}]
+                          [{:url "logseq_db_current"}]
+                          {}
+                          "tab-uuid"
+                          "logseq_db_current"))))
+      (testing "global current graph remains the last fallback"
+        (is (= "logseq_db_current"
+               (resolve-f []
+                          [{:url "logseq_db_first"}]
+                          {}
+                          nil
+                          "logseq_db_current")))))))
+
 (deftest normalize-registry-entry-prefers-remote-graph-id-test
   (let [normalize-f (some-> (resolve 'frontend.handler.graph/normalize-registry-entry) deref)]
     (is (fn? normalize-f) "Graph registry entry normalizer should exist")
