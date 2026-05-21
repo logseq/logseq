@@ -2785,7 +2785,9 @@ html.dark .avatar-customize-zone {
      minus 2 × 18px wrapper padding) instead of bleeding to the band
      edges, matching the Paper design. */
   padding: 10px 0 12px;
-  border-top: 1px solid var(--lx-gray-05, var(--rx-gray-05));
+  /* Themed via --ls-border-color middle step (matches the topbar
+     separator and the customize-zone bottom border). */
+  border-top: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
 }
 
 
