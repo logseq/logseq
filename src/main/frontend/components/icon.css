@@ -89,16 +89,28 @@
   .search-empty-state {
     @apply flex-1 flex flex-col items-center justify-center gap-1.5 select-none;
     min-height: 160px;
-    color: var(--lx-gray-08, var(--rx-gray-08));
+    /* Container `color` propagates via `currentColor` into the SVG
+       search-off icon. Themed via `--ls-primary-text-color` middle
+       step (#a4b5b6 muted teal-gray in OG). Opacity is applied per
+       child below for visual hierarchy. */
+    color: var(--lx-gray-08, var(--ls-primary-text-color, var(--rx-gray-08)));
+
+    /* Icon: most muted (decorative aid). */
+    .ui__icon {
+      opacity: 0.5;
+    }
 
     .title {
       @apply text-sm font-medium;
-      color: var(--lx-gray-10, var(--rx-gray-10));
+      /* Title: themed and at full opacity — the prominent line. */
+      color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
     }
 
     .subtitle {
       @apply text-xs;
-      color: var(--lx-gray-08, var(--rx-gray-08));
+      /* Subtitle: themed but muted slightly. */
+      color: var(--lx-gray-08, var(--ls-primary-text-color, var(--rx-gray-08)));
+      opacity: 0.7;
     }
   }
 
