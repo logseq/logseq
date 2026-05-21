@@ -251,9 +251,9 @@
         (do
           (when-not (seq graph-id)
             (throw (js/Error. "Missing graph id")))
-          (js/window.open (str config/app-website
-                               "#/?graph-id="
-                               (js/encodeURIComponent graph-id))
+          (js/window.open (str (let [location (.-location js/window)]
+                                 (str (.-origin location) (.-pathname location)))
+                               "#/?graph-id=" (js/encodeURIComponent graph-id))
                           "_blank"))))))
 
 (defn toggle-show-empty-hidden-properties!
