@@ -80,9 +80,9 @@
 
   `title` may be supplied when a caller has already prepared a display title,
   such as a search snippet with highlight markers."
-  [db block & {:keys [with-tags? alias truncate? title]
-               :or {with-tags? true
-                    truncate? true}}]
+  [db block {:keys [with-tags? alias truncate? title]
+             :or {with-tags? true
+                  truncate? true}}]
   (let [block-e (resolve-block db block)]
     (if (entity-util/built-in? block-e)
       (:block/title block-e)

@@ -97,8 +97,8 @@
 (defn block-unique-title
   "Multiple pages/objects may have the same `:block/title`.
    Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
-  [block & opts]
-  (apply db-block-title/block-unique-title (db/get-db) block opts))
+  [block & {:as opts}]
+  (db-block-title/block-unique-title (db/get-db) block opts))
 
 (defn block-title-with-icon
   "Used for select item"

@@ -663,9 +663,9 @@ DROP TRIGGER IF EXISTS blocks_au;
               unique-title (db-block-title/block-unique-title
                             @conn
                             block
-                            :title display-title
-                            :alias (:block/title alias)
-                            :truncate? false)]
+                            {:title display-title
+                             :alias (:block/title alias)
+                             :truncate? false})]
           (cond-> {:db/id (:db/id block)
                    :block/uuid (:block/uuid block)
                    :block/title display-title
