@@ -203,7 +203,13 @@
                           calc(var(--c, 0) * 22ms + var(--r, 0) * 36ms);
 
         &:hover {
-          background-color: var(--lx-gray-05, var(--rx-gray-05));
+          /* Hover should pop one shade above the ghost-highlight bg.
+             Tailwind's gray-04 and gray-05 chains both collapse to
+             `--ls-quaternary-background-color` in OG, so we'd get the
+             same color as ghost. Inject `--ls-border-color` (#0e5263,
+             a shade lighter than quaternary #094b5a) as the themed
+             middle step to give hover a real visual lift. */
+          background-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
         }
       }
     }
@@ -275,7 +281,12 @@
    a circular ring without a per-shape override. */
 .cp__emoji-icon-picker button.is-highlighted,
 .asset-picker button.is-highlighted {
-  background-color: var(--lx-accent-04) !important;
+  /* Subtle themed bg (same quaternary teal as ghost in OG) so line
+     icons remain readable regardless of the user's icon-color preset
+     (e.g., green line icons against a bright accent-04 bg had poor
+     contrast). The bright accent-09 outline below carries the "I am
+     selected" signal — bg doesn't need to compete. */
+  @apply !bg-gray-04;
   outline: 2px solid var(--lx-accent-09);
   outline-offset: 2px;
 }
