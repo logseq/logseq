@@ -16,7 +16,7 @@
     :role "normal"}
    {:id "flashcards"
     :title-key :mobile.tab/flashcards
-    :systemImage "infinity"
+    :systemImage "rectangle.stack"
     :role "normal"}
    {:id "go to"
     :title-key :mobile.tab/go-to
