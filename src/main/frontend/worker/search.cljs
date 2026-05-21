@@ -684,7 +684,7 @@ DROP TRIGGER IF EXISTS blocks_au;
               parent-id (:db/id (:block/parent block))
               tag-ids (seq (map :db/id (:block/tags block)))
               icon (:logseq.property/icon block)
-              alias (or alias-source alias-match)]
+              alias (or alias-source alias-match)
               unique-title (db-block-title/block-unique-title
                             @conn
                             block
