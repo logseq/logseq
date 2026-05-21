@@ -11,6 +11,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -188,7 +189,8 @@
 (defn- build-pages-aux
   [db page-map ref-pages date-formatter format]
   (let [namespace-pages (let [page (:block/title page-map)]
-                          (when (text/namespace-page? page)
+                          (when (and (not (:block/journal-day page-map))
+                                     (text/namespace-page? page))
                             (->> (common-util/split-namespace-pages page)
                                  (map (fn [page]
                                         (-> (gp-block/page-name->map page db true date-formatter)
@@ -204,9 +206,11 @@
         pages (common-util/distinct-by :block/name pages)
         pages (remove nil? pages)]
     (map (fn [page]
-           (let [page-id (or (when db
-                               (:block/uuid (ldb/get-page db (:block/name page))))
-                             (d/squuid))]
+           (let [page-id (if-let [journal-day (:block/journal-day page)]
+                           (common-uuid/gen-uuid :journal-page-uuid journal-day)
+                           (or (when db
+                                 (:block/uuid (ldb/get-page db (:block/name page))))
+                               (d/squuid)))]
              (assoc page :block/uuid page-id)))
          pages)))
 
@@ -299,9 +303,11 @@
   [pages]
   (->> (common-util/distinct-by :block/name pages)
        (map (fn [page]
-              (if (:block/uuid page)
-                page
-                (assoc page :block/uuid (d/squuid)))))))
+              (if-let [journal-day (:block/journal-day page)]
+                (assoc page :block/uuid (common-uuid/gen-uuid :journal-page-uuid journal-day))
+                (cond-> page
+                  (nil? (:block/uuid page))
+                  (assoc :block/uuid (d/squuid))))))))
 
 (defn with-ref-pages
   [pages blocks]

@@ -177,7 +177,8 @@
                                        :page-names (sort (keys @page-names-to-uuids))})))))
 
 (defn- replace-namespace-with-parent [block page-names-to-uuids parent-k]
-  (if (:block/namespace block)
+  (if (and (:block/namespace block)
+           (not (:block/journal-day block)))
     (-> (dissoc block :block/namespace)
         (assoc parent-k
                {:block/uuid (get-page-uuid page-names-to-uuids
@@ -1571,14 +1572,15 @@
              (not (get @assets asset-link-or-name))
              (string/ends-with? path ".pdf")
              (fn? <get-file-stat))
-    (-> (p/let [^js stat (<get-file-stat path)]
+    (-> (p/let [stat (<get-file-stat path)]
           (swap! assets assoc asset-link-or-name
                  {:asset-id (d/squuid)
                   :type "pdf"
                   ;; avoid using the real checksum since it could be the same with in-graph asset
                   :checksum "0000000000000000000000000000000000000000000000000000000000000000"
                   ;; gracefully create stat-less assets so that references to them are still valid
-                  :size (if stat (.-size stat) 0)
+                  ;; Electron IPC returns a CLJS map, while Node import scripts return fs.Stats.
+                  :size (or (:size stat) (some-> stat .-size) 0)
                   :external-url (or asset-link-or-name path)
                   :external-file-name asset-path}))
         (p/catch (fn [error]
@@ -2017,7 +2019,7 @@
     (cond-> page'
       true
       (dissoc :block/format)
-      (:block/namespace page)
+      (and (:block/namespace page) (not (:block/journal-day page)))
       ((fn [block']
          (merge (build-new-namespace-page block')
                 {;; save original name b/c it's still used for a few name lookups
@@ -2523,6 +2525,68 @@
     (when (seq tx)
       (d/transact! conn tx))))
 
+(defn- journal-uuid-normalizations
+  [db]
+  (keep (fn [datom]
+          (let [entity (d/entity db (:e datom))
+                old-uuid (:block/uuid entity)
+                journal-day (:block/journal-day entity)
+                standard-uuid (common-uuid/gen-uuid :journal-page-uuid journal-day)]
+            (when (and old-uuid (not= old-uuid standard-uuid))
+              (when-let [target (d/entity db [:block/uuid standard-uuid])]
+                (when (not= (:db/id target) (:db/id entity))
+                  (throw (ex-info "Cannot normalize journal uuid because the standard uuid is already used"
+                                  {:journal-day journal-day
+                                   :old-uuid old-uuid
+                                   :standard-uuid standard-uuid
+                                   :target-id (:db/id target)}))))
+              {:eid (:db/id entity)
+               :old-uuid old-uuid
+               :standard-uuid standard-uuid})))
+        (d/datoms db :avet :block/journal-day)))
+
+(defn- replace-journal-uuid-refs
+  [value uuid-replacements]
+  (if (seq uuid-replacements)
+    (walk/postwalk
+     (fn [x]
+       (if (string? x)
+         (reduce (fn [s [old-uuid standard-uuid]]
+                   (-> s
+                       (string/replace (page-ref/->page-ref old-uuid)
+                                       (page-ref/->page-ref standard-uuid))
+                       (string/replace (block-ref/->block-ref old-uuid)
+                                       (block-ref/->block-ref standard-uuid))))
+                 x
+                 uuid-replacements)
+         x))
+     value)
+    value))
+
+(defn- normalize-journal-uuids-tx
+  [db]
+  (let [normalizations (vec (journal-uuid-normalizations db))
+        uuid-replacements (map (juxt :old-uuid :standard-uuid) normalizations)
+        uuid-tx (mapcat (fn [{:keys [eid old-uuid standard-uuid]}]
+                          [[:db/retract eid :block/uuid old-uuid]
+                           [:db/add eid :block/uuid standard-uuid]])
+                        normalizations)
+        text-tx (when (seq uuid-replacements)
+                  (keep (fn [datom]
+                          (let [value (:v datom)
+                                value' (when (or (string? value) (coll? value))
+                                         (replace-journal-uuid-refs value uuid-replacements))]
+                            (when (and (some? value') (not= value value'))
+                              [:db/add (:e datom) (:a datom) value'])))
+                        (d/datoms db :eavt)))]
+    (vec (concat uuid-tx text-tx))))
+
+(defn- normalize-journal-uuids!
+  [conn]
+  (let [tx (normalize-journal-uuids-tx @conn)]
+    (when (seq tx)
+      (d/transact! conn tx))))
+
 (defn export-doc-files
   "Exports all user created files i.e. under journals/ and pages/.
    Recommended to use build-doc-options and pass that as options"
@@ -2544,9 +2608,11 @@
             (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
                      (inc i))))
         (p/then (fn [_]
-                  (p/let [tx-report (cleanup-missing-block-refs! conn)
-                          _ (when tx-report (on-tx-report tx-report))]
-                    tx-report)))
+                  (p/let [normalize-tx-report (normalize-journal-uuids! conn)
+                          _ (when normalize-tx-report (on-tx-report normalize-tx-report))
+                          cleanup-tx-report (cleanup-missing-block-refs! conn)
+                          _ (when cleanup-tx-report (on-tx-report cleanup-tx-report))]
+                    cleanup-tx-report)))
         (p/catch (fn [e]
                    (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
                                  :level :error

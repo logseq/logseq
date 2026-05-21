@@ -1,6 +1,7 @@
 (ns logseq.graph-parser.block-test
   (:require [cljs.test :refer [deftest are testing is]]
             [datascript.core :as d]
+            [logseq.common.uuid :as common-uuid]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]))
 
@@ -105,6 +106,17 @@
              [["tags" "[[foo]], [[bar]]"] ["background-color" "#008000"]]
              {:property-pages/enabled? true})))
         "Only editable linkable built-in properties have page-refs in property values")))
+
+(deftest test-page-name-map-namespace-for-slash-journals
+  (testing "slash-formatted journals do not keep namespace metadata"
+    (let [journal (gp-block/page-name->map "2026/05/18" nil false "yyyy/MM/dd")]
+      (is (= 20260518 (:block/journal-day journal)))
+      (is (= (common-uuid/gen-uuid :journal-page-uuid 20260518)
+             (:block/uuid journal)))
+      (is (nil? (:block/namespace journal)))))
+  (testing "non-journal slash pages keep namespace metadata"
+    (is (= {:block/name "project"}
+           (:block/namespace (gp-block/page-name->map "project/child" nil false "yyyy/MM/dd"))))))
 
 (defn find-block-for-content
   [db content]

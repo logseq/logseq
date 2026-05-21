@@ -189,7 +189,7 @@
 (deftest create-journal-page-name-uses-default-formatter-test
   (let [conn (db-test/create-conn)]
     (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
-    (let [[_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {})
+    (let [[_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {:journal? true})
           page (d/entity @conn [:block/uuid page-uuid])
           journal-day (:block/journal-day page)
           expected-title (date-time-util/int->journal-title journal-day "yyyy-MM-dd EEEE")

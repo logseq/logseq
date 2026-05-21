@@ -5,6 +5,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.db :as db-db]
@@ -186,3 +187,20 @@
         "Journal title follows configured formatter")
     (is (= default-name (:block/name page))
         "Journal block/name remains the default formatter, independent of title format")))
+
+(deftest create-slash-formatted-journal-does-not-create-namespace-pages
+  (let [conn (db-test/create-conn)
+        _ (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]])
+        [_ page-uuid] (outliner-page/create! conn "May 18th, 2026" {:split-namespace? true
+                                                                    :journal? true})
+        page (d/entity @conn [:block/uuid page-uuid])]
+    (is (= "2026/05/18" (:block/title page))
+        "Journal title follows slash title format")
+    (is (= (common-uuid/gen-uuid :journal-page-uuid 20260518) (:block/uuid page))
+        "Journal page has the standard journal uuid")
+    (is (nil? (ldb/get-page @conn "2026"))
+        "Journal title is not split into a year namespace page")
+    (is (nil? (ldb/get-page @conn "05"))
+        "Journal title is not split into a month namespace page")
+    (is (nil? (ldb/get-page @conn "18"))
+        "Journal title is not split into a day namespace page")))
