@@ -268,8 +268,7 @@ def read_codex_events(codex_log):
 def session_query_for_title(title):
     return (
         '[:find ?session . :where [?e :block/title "{}"] '
-        '[?p :block/name "agent-session-id"] '
-        "[?p :db/ident ?attr] [?e ?attr ?session]]"
+        "[?e :logseq.property.agent/session-id ?session]]"
     ).format(title)
 
 
@@ -759,8 +758,7 @@ def main():
         session = None
         query = (
             '[:find ?session . :where [?e :block/title "{}"] '
-            '[?p :block/name "agent-session-id"] '
-            "[?p :db/ident ?attr] [?e ?attr ?session]]"
+            "[?e :logseq.property.agent/session-id ?session]]"
         ).format(TASK_TITLE)
 
         while time.time() < deadline:
