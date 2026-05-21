@@ -2175,16 +2175,18 @@
      The expanded-state gradient (`::before`) layers on top — its peak
      opacity is capped at 0.55 so this veil still reads through under
      the gradient. */
-  /* Resting state: a clearly recessed band, ~35% darker than the
-     picker bg. We can't use `--lx-gray-01` directly because in OG it
-     chains to `--ls-primary-bg` — the same color the page itself uses
-     — making the banner look like a hole punched through the picker.
-     color-mix darkens the picker's secondary-bg by 35% with black,
-     giving a noticeably recessed band that's still distinct from page
-     bg in every theme. Hover lifts via `:has()` below. */
+  /* Resting state: recessed band relative to the picker bg. We can't
+     use `--lx-gray-01` directly because in OG it chains to
+     `--ls-primary-bg` — the same color the page itself uses — making
+     the banner look like a hole punched through the picker. color-mix
+     darkens the picker bg with black; the mix amount differs by mode
+     because the same percentage reads very differently in light vs
+     dark themes (35% black on a near-white bg becomes a mid-gray that
+     kills text contrast, while 5% black on a near-black bg is invisible).
+     Default (light mode) gets a subtle darkening; `html.dark` ramps up. */
   background-color: color-mix(
     in srgb,
-    var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02))) 65%,
+    var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02))) 95%,
     black
   );
   transition: background-color 120ms cubic-bezier(0.32, 0.72, 0, 1);
@@ -2204,6 +2206,18 @@
      places). Expanded = 56px tile. Animated by transitions on the
      consuming elements. */
   --avatar-size: 20px;
+}
+
+/* Dark-mode override: same color-mix recipe but with much more black
+   so the recessed effect is actually visible on a dark picker bg.
+   In light mode this would render as muddy mid-gray and kill text
+   contrast (see the parent rule's comment), hence the per-mode split. */
+html.dark .avatar-customize-zone {
+  background-color: color-mix(
+    in srgb,
+    var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02))) 65%,
+    black
+  );
 }
 
 .avatar-customize-zone[data-expanded="true"] {
