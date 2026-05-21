@@ -6413,7 +6413,8 @@
                        (on-chosen nil icon-item true)
                        (add-used-item! icon-item)))
                    s)}
-  [state {:keys [on-chosen on-back on-delete del-btn? delete-mode page-title]}]
+  [state {:keys [on-chosen on-back on-delete del-btn? delete-mode page-title
+                 preview-target-db-id preview-target-db-ids preview-inheritor-db-ids property]}]
   (let [delete-mode (or delete-mode (if del-btn? :remove :hidden))
         *text-value (::text-value state)
         *alignment (::alignment state)
@@ -6426,15 +6427,26 @@
                           (:block/title)))
         derived-initials (or (derive-initials title) "?")
         derived-abbreviated (derive-abbreviated title)
+        ;; Scope shape for `:ui/icon-hover-preview` writes — same
+        ;; structure as the icon-picker's (see icon.cljs:3545) so the
+        ;; existing `icon-preview-matches?` filter on the page-icon
+        ;; subscriber in `get-node-icon-cp` correctly routes a
+        ;; text-picker swatch hover to the right entity.
+        scope-property (or property :logseq.property/icon)
+        preview-base-target (cond-> {:property scope-property}
+                              preview-target-db-id (assoc :db-id preview-target-db-id)
+                              (seq preview-target-db-ids) (assoc :db-ids (set preview-target-db-ids))
+                              (seq preview-inheritor-db-ids)
+                              (assoc :inheritor-property :logseq.property/icon
+                                     :inheritor-db-ids (set preview-inheritor-db-ids)))
         ;; Live color preview during hover/keyboard nav over color
-        ;; swatches in the color popover. Without this, hovering a
-        ;; swatch updates the page-icon (which subscribes to
-        ;; :ui/icon-hover-preview via get-node-icon-cp) while the
-        ;; gallery previews stay locked to the committed color —
-        ;; same mismatch the custom-tab-cp text tile fixed for the
-        ;; icon picker.
+        ;; swatches in the color popover. The text-picker subscribes
+        ;; here so its gallery preview tiles tint along with the
+        ;; page-icon as the user moves over swatches.
         hover-preview-state (state/sub :ui/icon-hover-preview)
-        hover-color (when hover-preview-state
+        hover-color-match? (and hover-preview-state
+                                (icon-preview-matches? hover-preview-state preview-target-db-id scope-property))
+        hover-color (when hover-color-match?
                       (let [c (:color hover-preview-state)]
                         (when (and c (not (string/blank? c)) (not= c "inherit"))
                           c)))
@@ -6492,7 +6504,14 @@
                                                         c (assoc :color c)
                                                         @*alignment (assoc :alignment @*alignment)
                                                         @*mode (assoc :mode @*mode))}]
-                                 (on-chosen nil icon-item true))))
+                                 (on-chosen nil icon-item true)))
+                      :on-hover! (when (or preview-target-db-id (seq preview-target-db-ids))
+                                   (fn [c]
+                                     (merge-into-icon-preview!
+                                      (assoc preview-base-target :color c))))
+                      :on-hover-end! (when (or preview-target-db-id (seq preview-target-db-ids))
+                                       (fn []
+                                         (dissoc-icon-preview-field! preview-base-target :color))))
         ;; Trash button — mirrors the outer icon-picker's three modes.
         ;; ::deleted? must be flipped before any branch so the will-unmount
         ;; doesn't re-commit the about-to-be-deleted text icon.
@@ -7166,7 +7185,15 @@
                     :delete-mode delete-mode
                     :current-icon normalized-icon-value
                     :selected-color @*color
-                    :page-title page-title})
+                    :page-title page-title
+                    ;; Forward the preview scope so text-picker's color
+                    ;; swatches can broadcast `:ui/icon-hover-preview`
+                    ;; writes targeted at the right entity (same chain
+                    ;; the icon-picker uses to live-tint the page-icon).
+                    :preview-target-db-id (:preview-target-db-id opts)
+                    :preview-target-db-ids (:preview-target-db-ids opts)
+                    :preview-inheritor-db-ids (:preview-inheritor-db-ids opts)
+                    :property (:property opts)})
 
       ;; Default - Level 1: Icon Picker view
       [:div.cp__emoji-icon-picker
