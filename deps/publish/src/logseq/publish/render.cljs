@@ -11,7 +11,7 @@
             [logseq.publish.model :as publish-model]))
 
 ;; Timestamp in milliseconds used for cache busting static assets.
-(defonce version 1777365821532)
+(defonce version 1779272152856)
 
 (def ref-regex
   (js/RegExp. "\\[\\[([0-9a-fA-F-]{36})\\]\\]|\\(\\(([0-9a-fA-F-]{36})\\)\\)" "g"))
@@ -814,8 +814,7 @@
     :else (str value)))
 
 (defn block-content-nodes [block ctx depth]
-  (let [raw (or (:block/content block)
-                (:block/title block)
+  (let [raw (or (:block/title block)
                 (:block/name block)
                 "")
         heading (heading-level block depth)
@@ -838,8 +837,7 @@
     (into [container {:dir "auto"}] content)))
 
 (defn block-raw-content [block]
-  (or (:block/content block)
-      (:block/title block)
+  (or (:block/title block)
       (:block/name block)
       ""))
 

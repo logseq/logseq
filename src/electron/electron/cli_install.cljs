@@ -31,6 +31,14 @@
        "set ELECTRON_RUN_AS_NODE=1\r\n"
        "\"" exe-path "\" \"" cli-path "\" %*\r\n"))
 
+(defn- launcher-exe-path
+  [{:keys [windows? exe-path appimage-path]}]
+  (if windows?
+    exe-path
+    (if (string/blank? appimage-path)
+      exe-path
+      appimage-path)))
+
 (defn- write-cli-launcher!
   [{:keys [target-path content windows? exists? read-file! write-file! chmod!]}]
   (let [should-write? (if (exists? target-path)
@@ -50,7 +58,7 @@
       (str error)))
 
 (defn install-cli-launcher!
-  [{:keys [windows? cli-path cli-dir cli-dir! exe-path path-join exists? show-message-box!
+  [{:keys [windows? cli-path cli-dir cli-dir! path-join exists? show-message-box!
            show-error-box! t log-info! log-warn!]
     :as deps}]
   (try
@@ -67,6 +75,7 @@
 
         :else
         (let [target-path (path-join cli-dir (if windows? "logseq.cmd" "logseq"))
+              exe-path (launcher-exe-path deps)
               content (if windows?
                         (render-win-cli-launcher exe-path cli-path)
                         (render-unix-cli-launcher exe-path cli-path))

@@ -54,7 +54,7 @@
                  (is (.-ok sync-health))
                  (is (= true (aget sync-health-body "ok"))))
                (p/let [tx-data [{:block/uuid (random-uuid)
-                                 :block/content "hello"}]
+                                 :block/title "hello"}]
                        tx-entry {:tx (protocol/tx->transit tx-data)
                                  :outliner-op :save-block}
                        tx-resp (post-json (str base-url "/sync/" graph-id "/tx/batch")
@@ -95,7 +95,7 @@
                         (.send client (protocol/encode-message {:type "hello" :client "test"}))))
                  (p/let [_ (p/delay 50)
                          tx-data [{:block/uuid (random-uuid)
-                                   :block/content "ws"}]
+                                   :block/title "ws"}]
                          txs (protocol/tx->transit tx-data)
                          _ (post-json (str base-url "/sync/" graph-id "/tx/batch")
                                       {:t-before 0

@@ -63,7 +63,7 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
                 return
             }
 
-            nav.setNavigationBarHidden(hidden, animated: true)
+            nav.setNavigationBarHidden(hidden, animated: false)
             guard !hidden else {
                 call.resolve()
                 return

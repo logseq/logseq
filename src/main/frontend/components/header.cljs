@@ -6,10 +6,12 @@
             [dommy.core :as d]
             [electron.ipc :as ipc]
             [frontend.common.missionary :as c.m]
+            [frontend.components.avatar :as avatar]
             [frontend.components.block :as component-block]
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
+            [frontend.components.repo :as repo]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.components.server :as server]
@@ -35,7 +37,6 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [logseq.shui.util :as shui-util]
             [missionary.core :as m]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -51,6 +52,24 @@
                                            (state/set-left-sidebar-open! false))
                                          (route-handler/redirect-to-home!))})
    (t :nav/home)
+   {:trigger-props {:as-child true}}))
+
+(defn current-local-uploadable-graph
+  []
+  (let [current-repo (state/get-current-repo)]
+    (some (fn [{:keys [url] :as graph}]
+            (when (and (= current-repo url)
+                       (repo/local-uploadable-graph? graph))
+              graph))
+          (state/get-repos))))
+
+(defn local-graph-sync-button
+  [graph]
+  (ui/tooltip
+   (shui/button-ghost-icon :cloud
+                           {:class "local-graph-sync-btn"
+                            :on-click #(repo/upload-local-graph-with-confirm! graph)})
+   (t :graph/use-sync-beta)
    {:trigger-props {:as-child true}}))
 
 (rum/defcs rtc-collaborators <
@@ -84,17 +103,15 @@
        (when (seq online-users)
          (for [{user-email :user/email
                 user-name :user/name
-                user-uuid :user/uuid} online-users
-               :let [color (shui-util/uuid-color user-uuid)]]
+                user-uuid :user/uuid} online-users]
            (when user-name
-             (shui/avatar
+             (avatar/user-avatar
               {:class "w-5 h-5"
                :style {:app-region "no-drag"}
-               :title user-email}
-              (shui/avatar-fallback
-               {:style {:background-color (str color "50")
-                        :font-size 11}}
-               (some-> (subs user-name 0 2) (string/upper-case)))))))])))
+               :title user-email
+               :name user-name
+               :uuid user-uuid
+               :fallback-props {:style {:font-size 11}}}))))])))
 
 (rum/defc left-menu-button < rum/reactive
   < {:key-fn #(identity "left-menu-toggle-button")}
@@ -448,6 +465,9 @@
        (when (user-handler/logged-in?)
          (rtc-indicator/uploading-detail))
        (search-index-progress)
+
+       (when-let [graph (current-local-uploadable-graph)]
+         (local-graph-sync-button graph))
 
        (when (and (not= (state/get-current-route) :home)
                   (not custom-home-page?))
