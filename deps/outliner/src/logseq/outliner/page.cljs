@@ -7,6 +7,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.namespace :as ns-util]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
@@ -297,7 +298,7 @@
   [db title*
    {uuid' :uuid
     :keys [tags properties persist-op?
-           class? today-journal? split-namespace? class-ident-namespace]
+           class? journal? today-journal? split-namespace? class-ident-namespace]
     :or   {properties               nil
            persist-op?              true}
     :as options}]
@@ -311,7 +312,7 @@
         _ (outliner-validate/validate-page-title-no-hashtag title {:node {:block/title title}})
         types (cond class?
                     #{:logseq.class/Tag}
-                    today-journal?
+                    (or journal? today-journal?)
                     #{:logseq.class/Journal}
                     (seq tags)
                     (set (map :db/ident tags))
@@ -375,7 +376,9 @@
                                           {:class? class?
                                            :page-uuid (when (uuid? uuid') uuid')
                                            :skip-existing-page-check? true})
-            [page parents'] (if (and (text/namespace-page? title) split-namespace?)
+            [page parents'] (if (and (not (:block/journal-day page))
+                                     (text/namespace-page? title)
+                                     split-namespace?)
                               (let [pages (split-namespace-pages db page date-formatter class?)]
                                 [(last pages) (butlast pages)])
                               [page nil])]
@@ -389,7 +392,10 @@
             (doseq [parent parents']
               (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))
 
-          (let [page-uuid (:block/uuid page)
+          (let [page-uuid (if-let [journal-day (:block/journal-day page)]
+                            (common-uuid/gen-uuid :journal-page-uuid journal-day)
+                            (:block/uuid page))
+                page (assoc page :block/uuid page-uuid)
                 page-txs (build-page-tx db properties page (select-keys options [:class? :tags :class-ident-namespace]))
                 txs (concat
                      ;; transact doesn't support entities
