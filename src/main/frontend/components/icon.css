@@ -1481,14 +1481,18 @@
   }
 
   /* Active (selected) alignment — shadcn's button injects an
-     `as-secondary` class for `:variant :secondary`. Override with the
-     same subtle-bg + accent-outline pattern used for tile selections
-     in icon/asset pickers, so the active button reads as clearly
-     chosen without overwhelming the icon glyph. */
+     `as-secondary` class for `:variant :secondary`. Use a lifted-bg +
+     inset-shadow "pressed in" look (no accent border) so the selected
+     state reads as a clearly chosen segment without competing with
+     the focus-ring aesthetic. */
   .ui__button.as-secondary {
     @apply !bg-gray-04;
-    border-color: var(--lx-accent-09) !important;
+    /* Keep the resting border color so the selected button matches the
+       chrome rhythm — the inset shadow + bolder glyph color carry the
+       "I am pressed" signal. */
+    border-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05))) !important;
     color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12))) !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
   }
 }
 
