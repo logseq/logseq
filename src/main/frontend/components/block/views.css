@@ -1,6 +1,14 @@
 .ls-cards {
+  --ls-gallery-card-width: 220px;
+  --ls-gallery-card-height: 320px;
+
   .ls-card-item {
-    @apply dark:shadow-gray-700 shadow-md rounded-md p-4 h-[15rem] w-full overflow-auto;
+    @apply w-full overflow-hidden rounded-md border bg-background shadow-sm transition-shadow;
+    @apply hover:shadow-md dark:border-gray-700 dark:hover:shadow-gray-800;
+    height: var(--ls-gallery-card-height);
+    cursor: pointer;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
   }
 
   > div[data-virtuoso-scroller] {
@@ -8,10 +16,91 @@
   }
 
   .virtuoso-grid-list {
-    @apply flex flex-wrap gap-3;
+    @apply flex flex-wrap gap-4;
   }
 
   .virtuoso-grid-item {
-    @apply flex w-[290px];
+    @apply flex;
+    width: min(var(--ls-gallery-card-width), 100%);
+    flex: 0 1 min(var(--ls-gallery-card-width), 100%);
+  }
+
+  .ls-gallery-card-media {
+    @apply flex items-center justify-center overflow-hidden bg-gray-02 text-muted-foreground;
+    min-height: 0;
+  }
+
+  .ls-gallery-card-media .asset-container {
+    @apply flex h-full w-full items-center justify-center;
+  }
+
+  .ls-gallery-card-media img {
+    @apply h-auto max-h-full w-auto max-w-full object-contain;
+  }
+
+  .ls-gallery-card-media video,
+  .ls-gallery-card-media audio {
+    @apply max-h-full max-w-full;
+  }
+
+  .ls-gallery-card-meta {
+    @apply flex flex-col gap-1 p-3;
+    min-width: 0;
+  }
+
+  .ls-gallery-card-title {
+    @apply min-w-0 truncate text-sm font-normal leading-snug text-foreground opacity-100;
+  }
+
+  .ls-gallery-card-property {
+    @apply min-w-0 truncate text-sm font-normal leading-snug text-foreground opacity-90;
+  }
+
+  .ls-gallery-card-title * {
+    @apply text-sm font-normal leading-snug text-foreground opacity-100;
+  }
+
+  .ls-gallery-card-property * {
+    @apply text-sm font-normal leading-snug text-foreground opacity-100;
+  }
+
+  .ls-gallery-card-property .multi-values {
+    @apply block min-w-0;
+    white-space: normal;
+  }
+
+  .ls-gallery-card-property .multi-values > * {
+    display: inline;
+  }
+
+  .ls-gallery-card-property .multi-values > .opacity-50 {
+    @apply ml-0 opacity-100;
+  }
+
+  @media (max-width: 640px) {
+    .virtuoso-grid-list {
+      @apply gap-3;
+    }
+
+    .virtuoso-grid-item {
+      width: calc((100% - 0.75rem) / 2);
+      flex-basis: calc((100% - 0.75rem) / 2);
+    }
+
+    .ls-card-item {
+      height: auto;
+      min-height: 220px;
+    }
+
+    .ls-gallery-card-media {
+      height: clamp(140px, 48vw, 220px);
+    }
+  }
+
+  @media (max-width: 360px) {
+    .virtuoso-grid-item {
+      width: 100%;
+      flex-basis: 100%;
+    }
   }
 }

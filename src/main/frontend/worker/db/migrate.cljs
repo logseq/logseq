@@ -126,7 +126,12 @@
              :properties [:logseq.property.comments/blocks]}]
    ["65.28" {:classes [:logseq.class/Comment]
              :fix tag-comment-blocks}]
-   ["65.29" {:fix add-single-block-comment-targets}]])
+   ["65.29" {:fix add-single-block-comment-targets}]
+   ["65.30" {:properties [:logseq.property.view/gallery-asset-property
+                          :logseq.property.view/gallery-display-properties
+                          :logseq.property.view/gallery-card-size
+                          :logseq.property.view/gallery-card-width
+                          :logseq.property.view/gallery-card-height]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

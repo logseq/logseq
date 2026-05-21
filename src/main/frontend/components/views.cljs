@@ -476,6 +476,142 @@
 (defonce groups-sort-by-property-identity->name
   (set/map-invert groups-sort-by-name->property-identity))
 
+(defn- set-view-property!
+  [view-entity property-ident value]
+  (property-handler/set-block-property! (:db/id view-entity) property-ident value))
+
+(defn- property-ident->id
+  [property-ident]
+  (:db/id (db/entity property-ident)))
+
+(defn- gallery-asset-columns
+  [columns]
+  (filter (fn [column]
+            (when-let [property (db/entity (:id column))]
+              (= :asset (:logseq.property/type property))))
+          columns))
+
+(defn- set-gallery-display-properties!
+  [view-entity property-idents]
+  (set-view-property! view-entity
+                      :logseq.property.view/gallery-display-properties
+                      (vec (keep property-ident->id property-idents))))
+
+(defn- gallery-display-properties-menu
+  [view-entity columns]
+  (let [asset-property-ident (db-view/gallery-asset-property-ident (db/get-db) view-entity columns)
+        display-property-idents (set (db-view/gallery-display-property-idents view-entity columns asset-property-ident))
+        property-columns (remove #(contains? #{:select :id asset-property-ident} (:id %)) columns)]
+    (shui/dropdown-menu-sub
+     (shui/dropdown-menu-sub-trigger
+      (t :view.gallery/display-properties))
+     (shui/dropdown-menu-sub-content
+      (for [column property-columns]
+        (shui/dropdown-menu-checkbox-item
+         {:key (str "gallery-display-" (:id column))
+          :checked (contains? display-property-idents (:id column))
+          :onCheckedChange (fn [checked?]
+                             (let [new-idents (if checked?
+                                                (conj display-property-idents (:id column))
+                                                (disj display-property-idents (:id column)))]
+                               (set-gallery-display-properties! view-entity
+                                                                (filter new-idents (map :id property-columns)))))
+          :onSelect (fn [e] (.preventDefault e))}
+         (:name column)))))))
+
+(defn- gallery-asset-property-menu
+  [view-entity columns]
+  (let [asset-columns (seq (gallery-asset-columns columns))]
+    (when asset-columns
+      (let [asset-property-ident (db-view/gallery-asset-property-ident (db/get-db) view-entity columns)]
+        (shui/dropdown-menu-sub
+         (shui/dropdown-menu-sub-trigger
+          (t :view.gallery/asset-property))
+         (shui/dropdown-menu-sub-content
+          (for [column asset-columns]
+            (shui/dropdown-menu-checkbox-item
+             {:key (str "gallery-asset-" (:id column))
+              :checked (= asset-property-ident (:id column))
+              :onCheckedChange (fn [checked?]
+                                 (when checked?
+                                   (set-view-property! view-entity
+                                                       :logseq.property.view/gallery-asset-property
+                                                       (property-ident->id (:id column)))))
+              :onSelect (fn [e] (.preventDefault e))}
+             (:name column)))))))))
+
+(defn- positive-int
+  [value]
+  (let [number-value (util/safe-parse-int value)]
+    (when (and number-value (pos? number-value))
+      number-value)))
+
+(rum/defc gallery-custom-card-size-inputs
+  [view-entity dimensions set-size!]
+  (let [[width set-width!] (hooks/use-state (str (:width dimensions)))
+        [height set-height!] (hooks/use-state (str (:height dimensions)))
+        apply! (fn []
+                 (when-let [width' (positive-int width)]
+                   (when-let [height' (positive-int height)]
+                     (p/do!
+                      (set-size! :custom)
+                      (set-view-property! view-entity :logseq.property.view/gallery-card-width width')
+                      (set-view-property! view-entity :logseq.property.view/gallery-card-height height')))))
+        stop-menu-input! (fn [e]
+                           (when-not (= "Escape" (util/ekey e))
+                             (util/stop-propagation e))
+                           (when (= "Enter" (util/ekey e))
+                             (util/stop e)
+                             (apply!)
+                             (some-> (.-target e) (.blur))))]
+    [:div
+     {:class "flex flex-col items-stretch gap-2 w-[320px] max-w-[calc(100vw-32px)] px-4 py-2"
+      :on-click util/stop-propagation
+      :on-key-down stop-menu-input!}
+     [:div.w-full.text-sm.leading-8 (t :view.gallery/custom-size)]
+     [:div.flex.flex-row.items-center.justify-between.gap-3.w-full
+      (shui/input
+       {:type "number"
+        :min 80
+        :class "w-[88px] h-8"
+        :placeholder (t :view.gallery/width)
+        :value width
+        :onChange #(set-width! (util/evalue %))})
+      (shui/input
+       {:type "number"
+        :min 80
+        :class "w-[88px] h-8"
+        :placeholder (t :view.gallery/height)
+        :value height
+        :onChange #(set-height! (util/evalue %))})
+      (shui/button
+       {:variant "secondary"
+        :size :sm
+        :class "h-8 px-3"
+        :on-click (fn [e]
+                    (util/stop e)
+                    (apply!))}
+       (t :ui/apply))]]))
+
+(defn- gallery-card-size-menu
+  [view-entity]
+  (let [size (:logseq.property.view/gallery-card-size view-entity)
+        dimensions (db-view/gallery-card-dimensions view-entity)
+        set-size! #(set-view-property! view-entity :logseq.property.view/gallery-card-size %)]
+    (shui/dropdown-menu-sub
+     (shui/dropdown-menu-sub-trigger
+      (t :view.gallery/card-size))
+     (shui/dropdown-menu-sub-content
+      (for [[value label] [[:default (t :view.gallery/default-size)]
+                           [:compact (t :view.gallery/compact-size)]]]
+        (shui/dropdown-menu-checkbox-item
+         {:key (str "gallery-size-" (name value))
+          :checked (= value (or size :default))
+          :onCheckedChange #(when % (set-size! value))
+          :onSelect (fn [e] (.preventDefault e))}
+         label))
+      (gallery-custom-card-size-inputs view-entity dimensions set-size!)))))
+
 (rum/defc groups-sort
   [view-entity sort-by-value]
   (let [property-ident (or (:db/ident sort-by-value) :block/journal-day)]
@@ -519,6 +655,7 @@
   [view-entity columns {:keys [column-visible? rows column-toggle-visibility]} {:keys [group-by-property-ident]}]
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
         table? (= display-type :logseq.property.view/type.table)
+        gallery? (= display-type :logseq.property.view/type.gallery)
         group-by-columns (concat (when (or
                                         (contains? #{:linked-references :unlinked-references}
                                                    (:logseq.property.view/feature-type view-entity))
@@ -557,6 +694,12 @@
                :onCheckedChange #(column-toggle-visibility column %)
                :onSelect (fn [e] (.preventDefault e))}
               (:name column))))))
+       (when gallery?
+         (gallery-display-properties-menu view-entity columns))
+       (when gallery?
+         (gallery-asset-property-menu view-entity columns))
+       (when gallery?
+         (gallery-card-size-menu view-entity))
        (when (seq group-by-columns)
          (shui/dropdown-menu-sub
           (shui/dropdown-menu-sub-trigger
@@ -1717,21 +1860,71 @@
             (lazy-item-render rows idx)
             (str "partition-" idx)))))))
 
+(defn- gallery-card-asset-block
+  [block asset-property-ident]
+  (let [asset-value (when (and block asset-property-ident (not= :block/uuid asset-property-ident))
+                      (get block asset-property-ident))]
+    (cond
+      (= :block/uuid asset-property-ident)
+      block
+
+      (de/entity? asset-value)
+      asset-value
+
+      (number? asset-value)
+      (db/entity asset-value)
+
+      (set? asset-value)
+      (some #(if (number? %) (db/entity %) %) asset-value)
+
+      (sequential? asset-value)
+      (some #(if (number? %) (db/entity %) %) asset-value))))
+
+(rum/defc gallery-property-value
+  [block property-ident]
+  (if (= :block/title property-ident)
+    [:div.ls-gallery-card-title
+     (some->> (:block/title block)
+              string/trim
+              string/split-lines
+              first)]
+    (when-let [property (db/entity property-ident)]
+      [:div.ls-gallery-card-property
+       (pv/property-value block property {:view? true
+                                          :gallery-view? true})])))
+
 (rum/defc gallery-card-item
-  [view-entity block config]
-  [:div.ls-card-item.content
-   {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
-   [:div.-ml-4
-    (block-container (assoc config
-                            :id (str (:block/uuid block))
-                            :gallery-view? true
-                            :view? true)
-                     block)]])
+  [view-entity block config {:keys [asset-property-ident display-property-idents]}]
+  (let [asset-block (gallery-card-asset-block block asset-property-ident)]
+    [:div.ls-card-item.content
+     {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))
+      :on-click (fn [e]
+                  (when-not (some-> (.-target e) (.closest (str "button, a, input, textarea, select, [role='menuitem'], "
+                                                                 ".ls-gallery-card-media, .ls-gallery-card-property")))
+                    (route-handler/redirect-to-page! (:block/uuid block))))}
+     [:div.ls-gallery-card-media
+      (if (and asset-block (state/get-component :block/asset-cp))
+        (let [asset-cp (state/get-component :block/asset-cp)]
+          (asset-cp (assoc config :disable-resize? true :gallery-view? true) asset-block))
+        (ui/icon "photo" {:size 36}))]
+     [:div.ls-gallery-card-meta
+      (for [property-ident display-property-idents
+            :let [property-value (gallery-property-value block property-ident)]
+            :when property-value]
+        (rum/with-key
+          property-value
+          (str "gallery-property-" (:db/id block) "-" property-ident)))]]))
 
 (rum/defcs gallery-view < rum/static mixins/container-id
   [state {:keys [config]} table view-entity blocks *scroller-ref]
-  (let [config' (assoc config :container-id (:container-id state))]
+  (let [config' (assoc config :container-id (:container-id state))
+        columns (:columns table)
+        dimensions (db-view/gallery-card-dimensions view-entity)
+        asset-property-ident (db-view/gallery-asset-property-ident (db/get-db) view-entity columns)
+        display-property-idents (db-view/gallery-display-property-idents view-entity columns asset-property-ident)]
     [:div.ls-cards
+     {:style {"--ls-gallery-card-width" (str (:width dimensions) "px")
+              "--ls-gallery-card-height" (str (:height dimensions) "px")}}
      (when (seq blocks)
        (ui/virtualized-grid
         {:ref #(reset! *scroller-ref %)
@@ -1743,7 +1936,9 @@
          :item-content (fn [idx]
                          (lazy-item (:data table) idx {}
                                     (fn [block]
-                                      (gallery-card-item view-entity block config'))))}))]))
+                                      (gallery-card-item view-entity block config'
+                                                         {:asset-property-ident asset-property-ident
+                                                          :display-property-idents display-property-idents}))))}))]))
 
 (defn- run-effects!
   [option {:keys [data]} *scroller-ref gallery? set-ready?]

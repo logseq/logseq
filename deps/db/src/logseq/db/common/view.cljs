@@ -17,6 +17,89 @@
 
 (def valid-type-for-sort? (some-fn number? string? boolean?))
 
+(def gallery-default-card-dimensions
+  {:width 220
+   :height 320})
+
+(def gallery-compact-card-dimensions
+  {:width 160
+   :height 232})
+
+(defn- column-ident
+  [column]
+  (or (:id column)
+      (:db/ident column)))
+
+(defn- column-property
+  [db column]
+  (cond
+    (de/entity? column) column
+    (column-ident column) (d/entity db (column-ident column))))
+
+(defn- asset-property-column?
+  [db column]
+  (= :asset (:logseq.property/type (column-property db column))))
+
+(defn- asset-property-idents
+  [db columns]
+  (->> columns
+       (filter #(asset-property-column? db %))
+       (keep column-ident)
+       vec))
+
+(defn gallery-asset-property-ident
+  "Returns the property ident used as the gallery card asset source.
+
+  `:block/uuid` means the row itself is an asset block. Other keywords point to
+  an asset-valued property on the row. `nil` means the view needs an explicit
+  gallery asset property."
+  [db view columns]
+  (let [configured-ident (:db/ident (:logseq.property.view/gallery-asset-property view))
+        view-for (:logseq.property/view-for view)
+        asset-tag? (= :logseq.class/Asset (:db/ident view-for))
+        tag-view? (and (= :class-objects (:logseq.property.view/feature-type view))
+                       (ldb/class? view-for))]
+    (cond
+      asset-tag?
+      :block/uuid
+
+      configured-ident
+      configured-ident
+
+      tag-view?
+      (let [asset-idents (asset-property-idents db columns)]
+        (when (= 1 (count asset-idents))
+          (first asset-idents))))))
+
+(defn gallery-display-property-idents
+  [view columns asset-property-ident]
+  (let [configured-idents (set (keep :db/ident (:logseq.property.view/gallery-display-properties view)))
+        display-idents (if (seq configured-idents)
+                         (->> columns
+                              (keep column-ident)
+                              (filter configured-idents)
+                              vec)
+                         [:block/title])]
+    (->> display-idents
+         (remove #{:select :id asset-property-ident})
+         vec)))
+
+(defn gallery-card-dimensions
+  [view]
+  (case (:logseq.property.view/gallery-card-size view)
+    :compact
+    gallery-compact-card-dimensions
+
+    :custom
+    (let [width (:logseq.property.view/gallery-card-width view)
+          height (:logseq.property.view/gallery-card-height view)]
+      (if (and (number? width) (number? height) (pos? width) (pos? height))
+        {:width width
+         :height height}
+        gallery-default-card-dimensions))
+
+    gallery-default-card-dimensions))
+
 (defn get-property-value-for-search
   [block property]
   (let [v (get block (:db/ident property))]

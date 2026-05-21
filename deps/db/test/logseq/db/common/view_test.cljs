@@ -15,6 +15,73 @@
                                 (assoc :logseq.property/view-for view-for-id))])]
     (get-in tx [:tempids -100])))
 
+(deftest gallery-asset-property-ident-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:cover {:logseq.property/type :asset}
+                            :back-cover {:logseq.property/type :asset}
+                            :author {:logseq.property/type :default}}
+               :classes {:Book {:build/class-properties [:cover :author]}
+                         :Album {:build/class-properties [:cover :back-cover]}}})
+        db @conn
+        asset-class-id (:db/id (d/entity db :logseq.class/Asset))
+        book-class-id (:db/id (d/entity db :user.class/Book))
+        album-class-id (:db/id (d/entity db :user.class/Album))
+        asset-view-id (create-view-id conn :class-objects :view-for-id asset-class-id)
+        book-view-id (create-view-id conn :class-objects :view-for-id book-class-id)
+        album-view-id (create-view-id conn :class-objects :view-for-id album-class-id)
+        query-view-id (create-view-id conn :query-result)
+        columns (mapv #(d/entity @conn %) [:user.property/cover :user.property/back-cover :user.property/author])]
+    (is (= :block/uuid
+           (db-view/gallery-asset-property-ident @conn (d/entity @conn asset-view-id) columns)))
+    (is (= :user.property/cover
+           (db-view/gallery-asset-property-ident @conn (d/entity @conn book-view-id) columns)))
+    (is (nil?
+         (db-view/gallery-asset-property-ident @conn (d/entity @conn album-view-id) columns)))
+    (is (nil?
+         (db-view/gallery-asset-property-ident @conn (d/entity @conn query-view-id) columns)))
+    (d/transact! conn [[:db/add album-view-id :logseq.property.view/gallery-asset-property
+                        (:db/id (d/entity @conn :user.property/back-cover))]
+                       [:db/add query-view-id :logseq.property.view/gallery-asset-property
+                        (:db/id (d/entity @conn :user.property/cover))]])
+    (is (= :user.property/back-cover
+           (db-view/gallery-asset-property-ident @conn (d/entity @conn album-view-id) columns)))
+    (is (= :user.property/cover
+           (db-view/gallery-asset-property-ident @conn (d/entity @conn query-view-id) columns)))))
+
+(deftest gallery-display-property-idents-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:cover {:logseq.property/type :asset}
+                            :author {:logseq.property/type :default}
+                            :rating {:logseq.property/type :number}}
+               :classes {:Book {:build/class-properties [:cover :author :rating]}}})
+        book-class-id (:db/id (d/entity @conn :user.class/Book))
+        view-id (create-view-id conn :class-objects :view-for-id book-class-id)
+        columns (mapv #(d/entity @conn %) [:user.property/cover :user.property/author :user.property/rating])]
+    (is (= [:block/title]
+           (db-view/gallery-display-property-idents (d/entity @conn view-id) columns :user.property/cover)))
+    (d/transact! conn [[:db/add view-id :logseq.property.view/gallery-display-properties
+                        (:db/id (d/entity @conn :user.property/cover))]
+                       [:db/add view-id :logseq.property.view/gallery-display-properties
+                        (:db/id (d/entity @conn :user.property/author))]
+                       [:db/add view-id :logseq.property.view/gallery-display-properties
+                        (:db/id (d/entity @conn :user.property/rating))]])
+    (is (= [:user.property/author :user.property/rating]
+           (db-view/gallery-display-property-idents (d/entity @conn view-id) columns :user.property/cover)))))
+
+(deftest gallery-card-dimensions-test
+  (let [conn (db-test/create-conn)
+        view-id (create-view-id conn :query-result)]
+    (is (= {:width 220 :height 320}
+           (db-view/gallery-card-dimensions (d/entity @conn view-id))))
+    (d/transact! conn [[:db/add view-id :logseq.property.view/gallery-card-size :compact]])
+    (is (= {:width 160 :height 232}
+           (db-view/gallery-card-dimensions (d/entity @conn view-id))))
+    (d/transact! conn [[:db/add view-id :logseq.property.view/gallery-card-size :custom]
+                       [:db/add view-id :logseq.property.view/gallery-card-width 180]
+                       [:db/add view-id :logseq.property.view/gallery-card-height 260]])
+    (is (= {:width 180 :height 260}
+           (db-view/gallery-card-dimensions (d/entity @conn view-id))))))
+
 (deftest get-view-data-all-pages-sorts-and-filters-hidden-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks

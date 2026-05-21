@@ -1913,6 +1913,15 @@
  :view.filter/to "to"
  :view.filter/type-to-search "Type to search"
 
+ :view.gallery/asset-property "Asset property"
+ :view.gallery/card-size "Card size"
+ :view.gallery/compact-size "Compact"
+ :view.gallery/custom-size "Custom"
+ :view.gallery/default-size "Default"
+ :view.gallery/display-properties "Display properties"
+ :view.gallery/height "Height"
+ :view.gallery/width "Width"
+
  :view.table/ascending "Ascending"
  :view.table/columns-visibility "Columns visibility"
  :view.table/default-title (fn [total] (str total (if (<= total 1) " Node" " Nodes")))

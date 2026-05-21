@@ -186,3 +186,36 @@
                      (:logseq.property.comments/blocks
                       (d/entity @conn [:block/uuid range-comments-uuid])))))
         "Existing range comment targets should be preserved")))
+
+(deftest migrate-65-30-adds-gallery-view-properties
+  (let [conn (d/create-conn db-schema/schema)
+        property-idents [:logseq.property.view/gallery-asset-property
+                         :logseq.property.view/gallery-display-properties
+                         :logseq.property.view/gallery-card-size
+                         :logseq.property.view/gallery-card-width
+                         :logseq.property.view/gallery-card-height]]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 29}}])
+
+    (is (every? nil? (map #(d/entity @conn %) property-idents)))
+
+    (db-migrate/migrate conn :target-version {:major 65 :minor 30})
+
+    (is (= {:major 65 :minor 30}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (every? some? (map #(d/entity @conn %) property-idents)))
+    (is (= :property
+           (:logseq.property/type
+            (d/entity @conn :logseq.property.view/gallery-asset-property))))
+    (is (= :db.cardinality/many
+           (:db/cardinality
+            (d/entity @conn :logseq.property.view/gallery-display-properties))))
+    (is (= :keyword
+           (:logseq.property/type
+            (d/entity @conn :logseq.property.view/gallery-card-size))))
+    (is (= :default
+           (:logseq.property/scalar-default-value
+            (d/entity @conn :logseq.property.view/gallery-card-size))))
+    (is (every? #(= :raw-number (:logseq.property/type (d/entity @conn %)))
+                [:logseq.property.view/gallery-card-width
+                 :logseq.property.view/gallery-card-height]))))
