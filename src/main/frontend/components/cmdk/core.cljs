@@ -347,11 +347,14 @@
         current-page? (and current-page-uuid
                            (= current-page-uuid result-page-id))
         icon (icon-component/get-node-icon-cp entity {:ignore-current-icon? true})
-        title (:block.temp/unique-title page)]
+        title (:block.temp/unique-title page)
+        plain-title (block-handler/block-unique-title entity
+                                                       :alias (:block/title source-page)
+                                                       :truncate? false)]
     (hash-map :icon icon
               :icon-theme :gray
               :text (if (string/includes? title "$pfts_2lqh>$") ; sqlite matched
-                      [:span {"data-testid" title}
+                      [:span {"data-testid" plain-title}
                        (highlight-content-query title input)]
                       title)
               :header (when (:block/parent entity)
