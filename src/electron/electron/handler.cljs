@@ -34,6 +34,7 @@
             [logseq.cli.common :as cli-common]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
+            [logseq.common.graph-registry :as graph-registry]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -206,17 +207,23 @@
   "Given a graph's name of string, returns the graph's fullname. For example, given
   `cat`, returns `logseq_db_cat`.  Returns `nil` if no such graph exists."
   [graph-identifier]
-  (when-let [repo (canonical-repo graph-identifier)]
-    (let [graph-name (common-config/strip-leading-db-version-prefix repo)]
-      (->> (get-graphs)
-           (some #(when (or
-                         (= (utils/normalize-lc %) (utils/normalize-lc repo))
-                         (string/ends-with? (utils/normalize-lc %)
-                                            (str "/" (utils/normalize-lc graph-name))))
-                    %))))))
+  (or (:repo (graph-registry/resolve-target
+              (cfgs/read-graph-registry)
+              {:graph-identifier graph-identifier}))
+      (when-let [repo (canonical-repo graph-identifier)]
+        (let [graph-name (common-config/strip-leading-db-version-prefix repo)]
+          (->> (get-graphs)
+               (some #(when (or
+                             (= (utils/normalize-lc %) (utils/normalize-lc repo))
+                             (string/ends-with? (utils/normalize-lc %)
+                                                (str "/" (utils/normalize-lc graph-name))))
+                        %)))))))
 
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
+
+(defmethod handle :upsertGraphRegistryEntry [_window [_ entry]]
+  (cfgs/upsert-graph-registry-entry! entry))
 
 (defmethod handle :deleteGraph [_window [_ graph]]
   (when-let [repo (canonical-repo graph)]

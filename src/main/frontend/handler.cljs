@@ -21,12 +21,14 @@
             [frontend.handler.events.export]
             [frontend.handler.events.rtc]
             [frontend.handler.events.ui]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.common.idb :as idb]
@@ -36,6 +38,7 @@
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.url :as url-util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -57,7 +60,9 @@
 (defn restore-and-setup!
   [repo]
   (when repo
-    (-> (p/let [_ (db-restore/restore-graph! repo)]
+    (-> (p/let [_ (db-restore/restore-graph! repo)
+                _ (graph-handler/<upsert-current-graph-registry!)]
+          (graph-handler/remember-current-graph-id-in-tab!)
           (repo-config-handler/start {:repo repo}))
         (p/then
          (fn []
@@ -120,6 +125,26 @@
     (p/let [info (ipc/ipc :system/info)]
       (state/set-state! :system/info (bean/->clj info)))))
 
+(defn- current-url-target
+  []
+  (try
+    (url-util/parse-web-url-target (.-href js/window.location))
+    (catch js/Error e
+      (log/warn :url-target/parse-failed e)
+      nil)))
+
+(defn- apply-url-target-route!
+  [url-target]
+  (let [{:keys [to page-id block-id]} (:route url-target)]
+    (case to
+      :page
+      (route-handler/redirect-to-page! page-id)
+
+      :block
+      (route-handler/redirect-to-page! block-id)
+
+      nil)))
+
 (defn start!
   [render]
   (let [t1 (util/time-ms)]
@@ -154,10 +179,26 @@
                  repos (repo-handler/get-repos)
                  _ (state/set-repos! repos)
                  _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
-                 repo (or (state/get-current-repo) (:url (first repos)))
+                 url-target (current-url-target)
+                 registry (graph-handler/<get-graph-registry)
+                 target-repo (when (seq url-target)
+                               (:repo (graph-handler/resolve-registry-target
+                                       (concat registry
+                                               (graph-handler/registry-from-repo-summaries repos))
+                                       url-target)))
+                 _ (when (and (seq (:graph-id url-target)) (nil? target-repo))
+                     (log/warn :url-target/unresolved-graph-id url-target))
+                 repo (graph-handler/resolve-startup-repo
+                       registry
+                       repos
+                       url-target
+                       (graph-handler/get-tab-graph)
+                       (state/get-current-repo))
                  _ (if (empty? repos)
                      (repo-handler/new-db! config/demo-repo)
-                     (restore-and-setup! repo))]
+                     (restore-and-setup! repo))
+                 _ (when target-repo
+                     (apply-url-target-route! url-target))]
            (set-network-watcher!)
            (when (mobile-util/native-platform?)
              (state/restore-mobile-theme!)))
