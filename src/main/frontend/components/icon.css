@@ -2238,7 +2238,17 @@ html:not(.dark) .avatar-customize-zone .cb-rail {
 }
 
 html.dark .avatar-customize-zone .cb-rail {
-  border-top-color: var(--ls-secondary-border-color);
+  /* In dark OG, `--ls-secondary-border-color` (#126277) is actually
+     BRIGHTER than `--ls-border-color` (#0e5263) — wrong direction for
+     muting. Fade the border-color with 50% transparency instead, which
+     blends it half-and-half with the recessed banner bg behind it. The
+     resulting line is a subtle hue-aligned teal rather than a loud
+     ring. */
+  border-top-color: color-mix(
+    in srgb,
+    var(--ls-border-color),
+    transparent 50%
+  );
 }
 
 .avatar-customize-zone[data-expanded="true"] {
