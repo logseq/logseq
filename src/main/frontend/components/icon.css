@@ -28,9 +28,11 @@
     overflow-y: hidden !important;
   }
 
-  /* More visible separator like combobox */
+  /* Themed separator. `--ls-border-color` is OG's themed border (#0e5263,
+     a one-shade-lighter teal that matches the picker hue). Radix themes
+     still pick up --lx-gray-05 at step 1. */
   .icon-picker-separator {
-    background-color: var(--lx-gray-05, var(--rx-gray-05)) !important;
+    background-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05))) !important;
   }
 
   /* Topbar wrapper for easier inspection */
@@ -47,15 +49,11 @@
        falling back to `--ls-tertiary-background-color`. Raw
        `var(--lx-gray-03)` would be invalid in OG → transparent. */
     @apply bg-gray-03;
-    border-bottom: 1px solid var(--lx-gray-06, var(--rx-gray-06));
-
-    /* Focus-within tell: the borderless input has no focus ring of its
-       own, so the section's existing bottom-border lights up the
-       theme accent when the input is focused. Themed, accessible,
-       and preserves the edge-to-edge feel. */
-    &:focus-within {
-      border-bottom-color: var(--lx-accent-09);
-    }
+    /* Themed bottom border (--ls-border-color middle step for OG). The
+       search input has no validation state to communicate, so the
+       border doesn't change on focus — the search icon's opacity
+       change provides enough active-state feedback. */
+    border-bottom: 1px solid var(--lx-gray-06, var(--ls-border-color, var(--rx-gray-06)));
   }
 
   /* Icon-picker-specific tab bar look (gray backdrop, right-side actions slot).
@@ -955,13 +953,10 @@
   /* Tailwind utility for the proper themed fallback chain (see icon
      picker .search-section comment). */
   @apply bg-gray-03;
-  /* Grey line at bottom of header section, matching icon picker */
-  border-bottom: 1px solid var(--lx-gray-06, var(--rx-gray-06));
-
-  /* Focus-within accent (see icon picker .search-section). */
-  &:focus-within {
-    border-bottom-color: var(--lx-accent-09);
-  }
+  /* Themed bottom border (matches icon picker — `--ls-border-color`
+     middle step for OG). No focus accent: search icon opacity is the
+     active-state signal. */
+  border-bottom: 1px solid var(--lx-gray-06, var(--ls-border-color, var(--rx-gray-06)));
 
   .search-input {
     @apply relative flex-1 px-2;
