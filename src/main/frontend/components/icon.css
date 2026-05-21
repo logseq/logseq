@@ -2168,17 +2168,16 @@
      The expanded-state gradient (`::before`) layers on top — its peak
      opacity is capped at 0.55 so this veil still reads through under
      the gradient. */
-  /* Resting state: a SLIGHTLY-DARKER-THAN-PICKER band so it reads as
-     "tucked into" without bleeding into the page bg behind the popover
-     (a problem in OG, where `--lx-gray-01` chains to `--ls-primary-bg`
-     — the same color the page itself uses, making the banner look
-     like a hole punched through the picker). color-mix darkens the
-     picker's secondary-bg by 10% with black, giving a recessed-but-
-     still-distinct color in every theme. Hover lifts via `:has()`
-     below. */
+  /* Resting state: a recessed band, ~20% darker than the picker bg.
+     We can't use `--lx-gray-01` directly because in OG it chains to
+     `--ls-primary-bg` — the same color the page itself uses — making
+     the banner look like a hole punched through the picker. color-mix
+     darkens the picker's secondary-bg by 20% with black, giving a
+     clearly recessed band that's still distinct from page bg in every
+     theme. Hover lifts via `:has()` below. */
   background-color: color-mix(
     in srgb,
-    var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02))) 90%,
+    var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02))) 80%,
     black
   );
   transition: background-color 120ms cubic-bezier(0.32, 0.72, 0, 1);
@@ -2251,12 +2250,15 @@
    hover fires off the actual click target, not off ambient hovers
    of the rail-wrap or the avatar tile. */
 .avatar-customize-zone:has(.cb-row-trigger:hover) {
-  background-color: var(--lx-gray-03, var(--rx-gray-03));
+  /* Hover LIFTS the banner from its recessed resting state up to the
+     tertiary-teal level (same shade as the topbar above) — clear
+     "interactive" cue. Tailwind chain handles theming in OG. */
+  @apply bg-gray-03;
 }
 
 /* Brighten the Edit label when the row is hovered. */
 .avatar-customize-zone:has(.cb-row-trigger:hover) .banner-edit {
-  color: var(--lx-gray-12, var(--rx-gray-12));
+  color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
 }
 
 /* Gradient lives on a pseudo-element so opacity can crossfade independently
