@@ -2220,6 +2220,25 @@ html.dark .avatar-customize-zone {
   );
 }
 
+/* Light-mode overrides for picker dividers. The default chain
+   `var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)))` hits
+   `--lx-gray-05` first (defined in light mode as #e8e8e8), which is
+   nearly invisible on a white bg. Bump to `--ls-border-color`
+   directly (#ccc in OG light) so the divider has perceptual weight
+   comparable to dark mode's themed teal. Dark mode untouched: the
+   parent rules above keep using the full chain. */
+html:not(.dark) .icon-picker-separator {
+  background-color: var(--ls-border-color) !important;
+}
+
+html:not(.dark) .avatar-customize-zone {
+  border-bottom-color: var(--ls-border-color);
+}
+
+html:not(.dark) .avatar-customize-zone .cb-rail {
+  border-top-color: var(--ls-border-color);
+}
+
 .avatar-customize-zone[data-expanded="true"] {
   --avatar-size: 56px;
 }
