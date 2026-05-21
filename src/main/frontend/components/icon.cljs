@@ -2186,7 +2186,7 @@
         (shui/shortcut keyboard-hint {:style :compact})]))])
 
 (rum/defc pane-section
-  [label icon-items & {:keys [collapsible? keyboard-hint total-count searching? virtual-list? render-item-fn expanded? focus-region show-header? *virtuoso-ref]
+  [label icon-items & {:keys [collapsible? keyboard-hint total-count searching? virtual-list? render-item-fn expanded? focus-region show-header? *virtuoso-ref header-cp]
                        :or {virtual-list? true collapsible? false expanded? true show-header? true}
                        :as opts}]
   (let [*el-ref (rum/use-ref nil)
@@ -2223,6 +2223,18 @@
                      :ref (fn [^js el]
                             (when *virtuoso-ref
                               (reset! *virtuoso-ref el)))
+                     ;; Single-scroller layout: Virtuoso delegates
+                     ;; scrolling to the nearest `.bd-scroll` ancestor
+                     ;; instead of creating its own internal scroller.
+                     ;; This keeps `.bd` as the only scroll surface
+                     ;; across every picker mode (All / Emojis / Icons /
+                     ;; reaction / search), reclaiming the ~6px the
+                     ;; inner Virtuoso scrollbar would otherwise eat so
+                     ;; the 9-column grid stays at 9. On first render
+                     ;; the ref isn't attached yet and this is `nil`;
+                     ;; Virtuoso falls back to internal scrolling for
+                     ;; one frame, then re-renders with the parent.
+                     :custom-scroll-parent (some-> (rum/deref *el-ref) (.closest ".bd-scroll"))
                      :item-content (fn [idx]
                                      (icons-row
                                       (let [last? (= (dec rows) idx)
@@ -2238,55 +2250,48 @@
                                                 (render-fn item (assoc opts :wave {:r idx :c c-idx})))
                                               icons)))))}
 
-              searching?
-              (assoc :custom-scroll-parent (some-> (rum/deref *el-ref) (.closest ".bd-scroll"))))))
+              header-cp
+              (assoc :components #js {:Header header-cp}))))
          [:div.its
           (map-indexed
            (fn [i item]
              (render-fn item (assoc opts :wave {:r (quot i icon-grid-cols) :c (mod i icon-grid-cols)})))
            icon-items)]))]))
 
-(defn- normalize-tabs
-  [tabs default-tab]
-  (let [tabs (or tabs [[:all (t :icon/tab-all)]
-                       [:emoji (t :icon/tab-emojis)]
-                       [:icon (t :icon/tab-icons)]])
-        default-tab (or default-tab (ffirst tabs) :all)
-        default-tab (if (some #(= (first %) default-tab) tabs)
-                      default-tab
-                      (ffirst tabs))]
-    {:tabs tabs
-     :default-tab default-tab
-     :has-icon-tab? (boolean (some #(= (first %) :icon) tabs))}))
+(def reaction-picker-opts
+  "Standard opts for the minimal emoji-only reaction picker. Callers
+   `merge` their own `:on-chosen` (and any additional opts) onto this."
+  {:allowed-tabs [:emoji]
+   :hide-topbar? true
+   :show-used? true
+   :icon-value nil})
 
-(defn- emoji-sections
-  [emojis* used-items show-used?]
-  (let [emoji-used-items (when (seq used-items)
-                           (filterv #(= :emoji (:type %)) used-items))
-        sections (cond-> []
-                   (and show-used? (seq emoji-used-items))
-                   (conj {:title (t :ui/frequently-used)
-                          :items emoji-used-items
-                          :virtual-list? false})
-                   true
-                   (conj {:title (t :icon/emojis-count (count emojis*))
-                          :items emojis*
-                          :virtual-list? true}))]
-    sections))
-
-;; Note: `get-used-items` and `add-used-item!` are defined further down
-;; (~line 2194) with v2-storage migration + type-aware dedup + renderable
-;; filtering — preferred over master's simpler legacy-format versions.
+(declare get-used-items)
 
 (rum/defc emojis-cp < rum/static
-  [emojis* opts]
-  (let [icon-items (map (fn [emoji]
+  [emojis* {:keys [show-used?] :as opts}]
+  (let [used-emojis (when show-used?
+                      (->> (get-used-items)
+                           (filterv #(= :emoji (:type %)))))
+        has-recents? (seq used-emojis)
+        icon-items (map (fn [emoji]
                           {:type :emoji
                            :id (:id emoji)
                            :label (or (:name emoji) (:id emoji))
                            :data {:value (:id emoji)}})
                         emojis*)]
-    (pane-section "Emojis" icon-items (assoc opts :show-header? false))))
+    ;; Recents render as a sibling pane-section above the full grid.
+    ;; Single scroll surface (.bd) means a sibling no longer triggers
+    ;; a second scrollbar — same compositional pattern as `all-pane`.
+    ;; The Emojis header doubles as the visual divider between the two
+    ;; sections; suppress it when there are no recents (full picker
+    ;; Emojis tab) to keep the picker minimal there.
+    [:<>
+     (when has-recents?
+       (pane-section "Recently used" used-emojis
+                     (assoc opts :virtual-list? false)))
+     (pane-section "Emojis" icon-items
+                   (assoc opts :show-header? has-recents?))]))
 
 (rum/defc icons-cp < rum/static
   [icons opts]
@@ -4991,7 +4996,7 @@
 (defn- compute-flat-items
   "Compute the flat navigable item list and section metadata for the current view.
    Returns {:items [icon-item ...] :sections [{:start N :count N :cols N} ...]}."
-  [tab result section-states]
+  [tab result section-states & [{:keys [show-used?]}]]
   (let [build-sections (fn [& groups]
                          (loop [gs groups offset 0 items [] sections []]
                            (if-let [g (first gs)]
@@ -5071,14 +5076,24 @@
                               :label icon-name :data {:value icon-name}}))))
         :cols icon-grid-cols})
 
-      ;; Emojis tab: full emoji list
+      ;; Emojis tab: full emoji list, optionally preceded by recently-used
+      ;; emojis when :show-used? is true (reaction-picker context).
       (= tab :emoji)
-      (let [items (vec (map (fn [emoji]
-                              {:type :emoji :id (:id emoji)
-                               :label (or (:name emoji) (:id emoji))
-                               :data {:value (:id emoji)}})
-                            emojis))]
-        {:items items :sections [{:start 0 :count (count items) :cols icon-grid-cols}]})
+      (build-sections
+       (when show-used?
+         {:label "Recently used"
+          :items (when (get section-states "Recently used" true)
+                   (->> (get-used-items)
+                        (filterv #(= :emoji (:type %)))))
+          :cols icon-grid-cols})
+       {:label "Emojis"
+        :items (when (get section-states "Emojis" true)
+                 (mapv (fn [emoji]
+                         {:type :emoji :id (:id emoji)
+                          :label (or (:name emoji) (:id emoji))
+                          :data {:value (:id emoji)}})
+                       emojis))
+        :cols icon-grid-cols})
 
       ;; Icons tab: full icon list
       (= tab :icon)
@@ -7020,7 +7035,8 @@
         ;; reads can stay as bare derefs once the component is hooked up.
         highlighted-idx (rum/react *highlighted-index)
         section-states @*section-states
-        {flat-items :items sections :sections} (compute-flat-items @*tab result section-states)
+        {flat-items :items sections :sections} (compute-flat-items @*tab result section-states
+                                                                   {:show-used? (:show-used? opts)})
         highlighted-id (when-let [idx highlighted-idx]
                          (when (< idx (count flat-items))
                            (:id (nth flat-items idx))))

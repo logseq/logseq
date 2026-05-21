@@ -158,11 +158,12 @@
     }
 
     &.has-virtual-list {
-      @apply h-[358px] overflow-y-visible;
-
-      &.searching-result {
-        @apply h-auto;
-      }
+      /* Single-scroller layout: pane-section grows to Virtuoso's
+         reported list height; the outer `.bd-scroll` is the only
+         scroll surface (Virtuoso uses `:custom-scroll-parent` to
+         defer scrolling to it). The class itself stays as a marker
+         hook for other rules / data attributes. */
+      @apply h-auto;
     }
 
     .virtuoso-item-list {

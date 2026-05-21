@@ -271,16 +271,10 @@
      target
      (fn [{:keys [id]}]
        (icon-component/icon-search
-        {:on-chosen (fn [_emoji-event emoji _keep-popup?]
-                      (reaction-handler/toggle-reaction! (:block/uuid comment-block) (:id emoji))
-                      (shui/popup-hide! id))
-         ;; Reaction picker is emoji-only and minimal — no tabs/color/trash
-         ;; chrome, just search + emoji grid.
-         :allowed-tabs [:emoji]
-         :default-tab :emoji
-         :hide-topbar? true
-         :show-used? true
-         :icon-value nil}))
+        (merge icon-component/reaction-picker-opts
+               {:on-chosen (fn [_emoji-event emoji _keep-popup?]
+                             (reaction-handler/toggle-reaction! (:block/uuid comment-block) (:id emoji))
+                             (shui/popup-hide! id))})))
      {:align :end
       :content-props {:class "ls-icon-picker"}})))
 

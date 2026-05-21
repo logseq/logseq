@@ -219,22 +219,16 @@
          {:class "!p-0"}
          [:div.p-1
           (icon-component/icon-search
-           {:on-chosen (fn [_e icon]
-                         (let [emoji-id (:id icon)
-                               emoji? (= :emoji (:type icon))]
-                           (if emoji?
-                             (do
-                               (reaction-handler/toggle-reaction! block-id emoji-id)
-                               (state/hide-custom-context-menu!)
-                               (shui/popup-hide!))
-                             (notification/show! (t :block.reaction/emoji-required-warning) :warning))))
-            ;; Reaction picker is emoji-only and minimal — no tabs/color/trash
-            ;; chrome, just search + emoji grid.
-            :allowed-tabs [:emoji]
-            :default-tab :emoji
-            :hide-topbar? true
-            :show-used? true
-            :icon-value nil})]))
+           (merge icon-component/reaction-picker-opts
+                  {:on-chosen (fn [_e icon _keep-popup?]
+                                (let [emoji-id (:id icon)
+                                      emoji? (= :emoji (:type icon))]
+                                  (if emoji?
+                                    (do
+                                      (reaction-handler/toggle-reaction! block-id emoji-id)
+                                      (state/hide-custom-context-menu!)
+                                      (shui/popup-hide!))
+                                    (notification/show! (t :block.reaction/emoji-required-warning) :warning))))}))]))
 
        (shui/dropdown-menu-sub
         {:open set-icon-sub-menu-open?
