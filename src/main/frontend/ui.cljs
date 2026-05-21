@@ -1021,6 +1021,7 @@
   (shui/calendar
    (merge
     {:mode "single"
+     :weekStartsOn (mod (inc (state/get-start-of-week)) 7)
      :caption-layout "dropdown-buttons"
      :fromYear 1000
      :toYear 3000
