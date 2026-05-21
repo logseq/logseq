@@ -1,3 +1,13 @@
+/* Themed picker separator — shared between icon picker and asset
+   picker. `--ls-border-color` is OG's themed border (#0e5263, a
+   one-shade-lighter teal that matches the picker hue). Radix themes
+   still pick up --lx-gray-05 at step 1. Unscoped so it can be used
+   inside both `.cp__emoji-icon-picker` and `.asset-picker` (the
+   latter applies it via `(shui/separator {:class "icon-picker-separator"})`). */
+.icon-picker-separator {
+  background-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05))) !important;
+}
+
 .cp__emoji-icon-picker {
   --ls-color-icon-preset: "inherit";
 
@@ -26,13 +36,6 @@
 
   &.drag-active [data-virtuoso-scroller] {
     overflow-y: hidden !important;
-  }
-
-  /* Themed separator. `--ls-border-color` is OG's themed border (#0e5263,
-     a one-shade-lighter teal that matches the picker hue). Radix themes
-     still pick up --lx-gray-05 at step 1. */
-  .icon-picker-separator {
-    background-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05))) !important;
   }
 
   /* Topbar wrapper for easier inspection */
@@ -1694,8 +1697,11 @@
 
     .license-badge {
       @apply text-xs px-2 py-0.5 rounded mt-1 self-start;
-      background-color: var(--lx-gray-04);
-      color: var(--lx-gray-11);
+      /* Tailwind utility for the full themed chain — raw
+         var(--lx-gray-04) was invalid in OG (where the var is unset),
+         making the pill background transparent. */
+      @apply bg-gray-04;
+      color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
     }
   }
 }
@@ -1706,8 +1712,9 @@
 .web-images-error {
   @apply flex items-center gap-2 px-3 py-2;
   font-size: 12px;
-  color: var(--lx-gray-11);
-  background-color: var(--lx-gray-03);
+  color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+  /* Tailwind utility for themed chain. */
+  @apply bg-gray-03;
   border-radius: 4px;
   margin: 0 8px;
 }

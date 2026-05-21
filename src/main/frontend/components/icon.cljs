@@ -4021,7 +4021,11 @@
                {:on-select #(reset-and-call :remove-entirely)}
                (shui/tabler-icon "trash" {:size 14 :class "mr-2 opacity-80"})
                (t :icon/remove-entirely))))))]]
-      (shui/separator {:class "my-0 opacity-50"})
+      ;; Reuse icon-picker-separator class so the divider gets the same
+      ;; themed treatment as the icon picker's (lx-gray-05 →
+      ;; --ls-border-color middle step → themed teal in OG instead of
+      ;; the shadcn default's washed-out bg-border at 50% opacity).
+      (shui/separator {:class "my-0 icon-picker-separator"})
       [:div.asset-picker-search
        [:div.search-input
         (shui/tabler-icon "search" {:size 16 :class "ls-icon-search"})
