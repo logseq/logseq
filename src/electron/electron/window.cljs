@@ -18,7 +18,8 @@
 
 (def MAIN_WINDOW_ENTRY (if dev?
                          ;; Use index.html to test plugins on development mode
-                         "http://localhost:3001"
+                         ;"http://localhost:3001"
+                         (str "file://" (node-path/join js/__dirname "index.html"))
                          (str "file://" (node-path/join js/__dirname "index.html"))))
 
 (defn create-main-window!
