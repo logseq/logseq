@@ -1167,7 +1167,9 @@
                          (.-nativeEvent e)
 
                          :else e))]
-       (.-isComposing native-event))))
+       (or (.-isComposing native-event)
+           (= (gobj/get native-event "keyCode") 229)
+           (= (gobj/get native-event "key") "Process")))))
 
 #?(:cljs
    (defn open-url
