@@ -7,7 +7,9 @@
 
    Supported options:
 
-   * :uuid                    - when set, use this uuid instead of generating a new one.
+   * :uuid                    - when set, use this uuid instead of generating a new one; ignored
+                                when :journal? or :today-journal? uses a deterministic journal
+                                uuid from :block/journal-day.
    * :class?                  - create the page as a Tag class page.
    * :journal?                - create the page as a Journal page.
    * :today-journal?          - mark the create-page tx as today's journal creation.
