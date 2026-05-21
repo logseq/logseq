@@ -1,12 +1,14 @@
 import Foundation
 import Capacitor
 import SwiftUI
+import UIKit
 import WebKit
 
 @objc(LiquidTabsPlugin)
 public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
     // So SwiftUI can notify JS
     static weak var shared: LiquidTabsPlugin?
+    private static let maxPhoneContentTabs = 4
 
     private let store = LiquidTabsStore.shared
     private var keyboardHackScriptInstalled = false
@@ -26,6 +28,14 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
         super.load()
         LiquidTabsPlugin.shared = self
         installKeyboardHackScript()
+    }
+
+    private static func visibleContentTabs(_ tabs: [LiquidTab]) -> [LiquidTab] {
+        guard UIDevice.current.userInterfaceIdiom == .phone else {
+            return tabs
+        }
+
+        return Array(tabs.prefix(maxPhoneContentTabs))
     }
 
     // MARK: - Methods from JS
@@ -63,12 +73,13 @@ public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
 
         DispatchQueue.main.async {
             let selectedId = self.store.selectedId
-            self.store.tabs = tabs
+            let visibleTabs = Self.visibleContentTabs(tabs)
+            self.store.tabs = visibleTabs
             if let selectedId = selectedId,
-               selectedId == "search" || tabs.contains(where: { $0.id == selectedId }) {
+               selectedId == "search" || visibleTabs.contains(where: { $0.id == selectedId }) {
                 self.store.selectedId = selectedId
             } else {
-                self.store.selectedId = tabs.first?.id
+                self.store.selectedId = visibleTabs.first?.id
             }
         }
 
