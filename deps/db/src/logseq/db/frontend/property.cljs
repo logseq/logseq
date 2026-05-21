@@ -646,6 +646,11 @@
                                        :schema {:type :node
                                                 :public? false
                                                 :hide? true}}
+     :logseq.property.agent/session-id {:title "agent session id"
+                                        :schema {:type :string
+                                                 :db/cardinality :db.cardinality/one
+                                                 :public? false
+                                                 :hide? true}}
      :logseq.property/used-template {:title "Used template"
                                      :schema {:type :node
                                               :public? false
