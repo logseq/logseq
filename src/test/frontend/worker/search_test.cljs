@@ -3,7 +3,8 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.search :as search]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.test.helper :as db-test]))
 
 (defn- sql-placeholder-count
   [sql]
@@ -670,6 +671,28 @@
                        :snippet "$pfts_2lqh>$Artificial$<pfts_2lqh$ Intelligence"})]
           (is (= "$pfts_2lqh>$Artificial$<pfts_2lqh$ Intelligence" (:block/title result)))
           (is (not (contains? result :alias))))))))
+(deftest search-result-includes-block-unique-title
+  (testing "search responses include the title cmdk should render"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:Project {:block/title "Project"}
+                           :Area {:block/title "Area"}
+                           :user.class/Milestone {:block/title "Milestone"
+                                                  :build/class-extends [:Project]}
+                           :other.class/Milestone {:block/title "Milestone"
+                                                   :build/class-extends [:Area]}}})
+          milestone (d/entity @conn :user.class/Milestone)
+          result (#'search/search-result->block-result
+                  conn
+                  "stone"
+                  nil
+                  {:enable-snippet? true}
+                  {:id (str (:block/uuid milestone))
+                   :page (str (:block/uuid milestone))
+                   :title "Milestone"})]
+      (is (= "Project/Mile$pfts_2lqh>$stone$<pfts_2lqh$"
+             (:block.temp/unique-title result)))
+      (is (= "Mile$pfts_2lqh>$stone$<pfts_2lqh$"
+             (:block/title result))))))
 
 (deftest upsert-blocks-batches-rows-into-single-sql-statement
   (let [calls (atom [])
