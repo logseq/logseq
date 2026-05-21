@@ -2173,16 +2173,16 @@
      The expanded-state gradient (`::before`) layers on top — its peak
      opacity is capped at 0.55 so this veil still reads through under
      the gradient. */
-  /* Resting state: a recessed band, ~20% darker than the picker bg.
-     We can't use `--lx-gray-01` directly because in OG it chains to
-     `--ls-primary-bg` — the same color the page itself uses — making
-     the banner look like a hole punched through the picker. color-mix
-     darkens the picker's secondary-bg by 20% with black, giving a
-     clearly recessed band that's still distinct from page bg in every
-     theme. Hover lifts via `:has()` below. */
+  /* Resting state: a clearly recessed band, ~35% darker than the
+     picker bg. We can't use `--lx-gray-01` directly because in OG it
+     chains to `--ls-primary-bg` — the same color the page itself uses
+     — making the banner look like a hole punched through the picker.
+     color-mix darkens the picker's secondary-bg by 35% with black,
+     giving a noticeably recessed band that's still distinct from page
+     bg in every theme. Hover lifts via `:has()` below. */
   background-color: color-mix(
     in srgb,
-    var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02))) 80%,
+    var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02))) 65%,
     black
   );
   transition: background-color 120ms cubic-bezier(0.32, 0.72, 0, 1);
