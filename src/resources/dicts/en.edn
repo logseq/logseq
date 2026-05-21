@@ -110,6 +110,15 @@
  :block/switch-to-plugin-renderer "Switch to plugin renderer"
  :block/untitled-query "Untitled query"
 
+ :block.comments/add-comment "Add comment"
+ :block.comments/add-comment-command-desc "Add a comment to this block."
+ :block.comments/collapsed-summary (fn [n author] (str n (if (= 1 n) " comment" " comments") " · latest from " author))
+ :block.comments/date-at-time "{1} at {2}"
+ :block.comments/label "Comments"
+ :block.comments/on-those-blocks "On those blocks"
+ :block.comments/placeholder "Reply..."
+ :block.comments/yesterday-at "Yesterday at {1}"
+
  :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
  :block.macro/namespace-deprecated "{{namespace}} is deprecated. Use the {1} feature instead."
  :block.macro/query-deprecated "{{query}} is deprecated. Use '/Query' command instead."
@@ -154,6 +163,7 @@
  :class.built-in/card "Card"
  :class.built-in/cards "Cards"
  :class.built-in/code-block "Code"
+ :class.built-in/comments "Comments"
  :class.built-in/journal "Journal"
  :class.built-in/math-block "Math"
  :class.built-in/page "Page"
@@ -259,6 +269,7 @@
 
  :command.command-palette/toggle "Search commands"
 
+ :command.editor/add-comment "Add comment"
  :command.editor/add-property "Add property"
  :command.editor/add-property-deadline "Add task deadline to selected block"
  :command.editor/add-property-icon "Add icon"
@@ -529,6 +540,8 @@
  :electron/add-to-dictionary "Add to dictionary"
  :electron/block-not-exist "Open link failed. Block-id `{1}` doesn't exist in the graph."
  :electron/cancel "Cancel"
+ :electron/cli-install-failed "Failed to install Logseq CLI.\n{1}"
+ :electron/cli-installed "Logseq CLI was installed to {1}"
  :electron/copy-image "Copy Image"
  :electron/link-open-confirm "Are you sure you want to open this link? \n{1}"
  :electron/link-open-failed-missing-graph "Failed to open link. Missing graph identifier after `logseq://graph/`."
@@ -734,6 +747,7 @@
  :graph/time-travel-now "Now"
  :graph/toggle-tag "Toggle tag {1}"
  :graph/updated-switching "Graph updated! Switching to graph ..."
+ :graph/upload-local-confirm-desc "Upload graph \"{1}\" to Logseq Server?"
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
  :graph/view-mode "View mode"
@@ -989,6 +1003,7 @@
  :mobile.settings/github "GitHub"
  :mobile.settings/report-bug "Report bug"
  :mobile.settings/revision "Revision"
+ :mobile.settings/tabs "Tabs"
  :mobile.settings/theme "Theme"
  :mobile.settings/version "Version"
 
@@ -998,6 +1013,7 @@
  :mobile.share/unsupported-import-type "Import {1} file is not supported. You can report it on {2}. We will look into it soon."
 
  :mobile.tab/capture "Capture"
+ :mobile.tab/flashcards "Cards"
  :mobile.tab/go-to "Go To"
  :mobile.tab/graphs "Graphs"
 

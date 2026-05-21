@@ -107,6 +107,15 @@
  :block/status-history "状态历史"
  :block/untitled-query "未命名查询"
 
+ :block.comments/add-comment "添加评论"
+ :block.comments/add-comment-command-desc "为此块添加评论。"
+ :block.comments/collapsed-summary "{1} 条评论 · 最新来自 {2}"
+ :block.comments/date-at-time "{1} {2}"
+ :block.comments/label "评论"
+ :block.comments/on-those-blocks "在这些块上"
+ :block.comments/placeholder "回复..."
+ :block.comments/yesterday-at "昨天 {1}"
+
  :block.macro/embed-deprecated "{{embed}} 已弃用。请改用“/节点嵌入”命令。"
  :block.macro/namespace-deprecated "{{namespace}} 已弃用。请改用 {1} 功能。"
  :block.macro/query-deprecated "{{query}} 已弃用。请改用“/查询”命令。"
@@ -151,6 +160,7 @@
  :class.built-in/card "卡片"
  :class.built-in/cards "卡片集"
  :class.built-in/code-block "代码"
+ :class.built-in/comments "评论"
  :class.built-in/journal "日记"
  :class.built-in/math-block "数学"
  :class.built-in/page "页面"
@@ -256,6 +266,7 @@
 
  :command.command-palette/toggle "切换命令面板"
 
+ :command.editor/add-comment "添加评论"
  :command.editor/add-property "添加属性"
  :command.editor/add-property-deadline "添加截止日期属性"
  :command.editor/add-property-icon "添加图标属性"
@@ -526,6 +537,8 @@
  :electron/add-to-dictionary "添加到字典"
  :electron/block-not-exist "打开链接失败。块 ID `{1}` 在当前图谱中不存在。"
  :electron/cancel "取消"
+ :electron/cli-install-failed "安装 Logseq CLI 失败。\n{1}"
+ :electron/cli-installed "Logseq CLI 已安装到 {1}"
  :electron/copy-image "复制图片"
  :electron/link-open-confirm "确定要打开此链接吗？\n{1}"
  :electron/link-open-failed-missing-graph "打开链接失败。在 `logseq://graph/` 后缺少图谱标识符。"
@@ -730,6 +743,7 @@
  :graph/time-travel-now "现在"
  :graph/toggle-tag "切换标签 {1}"
  :graph/updated-switching "图谱已更新！正在切换到图谱……"
+ :graph/upload-local-confirm-desc "要将图谱“{1}”上传到 Logseq Server 吗？"
  :graph/use-sync-beta "使用 Logseq Sync（Beta 测试）"
  :graph/use-sync-label "使用 Logseq Sync？"
  :graph/view-mode "视图模式"
@@ -985,6 +999,7 @@
  :mobile.settings/github "GitHub 仓库"
  :mobile.settings/report-bug "报告问题"
  :mobile.settings/revision "修订"
+ :mobile.settings/tabs "标签页"
  :mobile.settings/theme "主题"
  :mobile.settings/version "版本"
 
@@ -994,6 +1009,7 @@
  :mobile.share/unsupported-import-type "不支持导入 {1} 文件。您可以在 {2} 上反馈，我们会尽快处理。"
 
  :mobile.tab/capture "速记"
+ :mobile.tab/flashcards "闪卡"
  :mobile.tab/go-to "跳转"
  :mobile.tab/graphs "图谱"
 

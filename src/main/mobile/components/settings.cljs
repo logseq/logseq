@@ -2,11 +2,16 @@
   "Mobile settings"
   (:require [clojure.string :as string]
             [frontend.common.missionary :as c.m]
+            [frontend.components.dnd :as dnd]
             [frontend.components.user.login :as login]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.dicts :as dicts]
+            [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :as version]
@@ -14,7 +19,9 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
+            [mobile.bottom-tabs :as bottom-tabs]
             [mobile.state :as mobile-state]
+            [mobile.tabs :as mobile-tabs]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -55,6 +62,24 @@
    [:option {:value "system"} (t :settings.general/theme-system)]
    [:option {:value "light"}  (t :settings.general/theme-light)]
    [:option {:value "dark"}   (t :settings.general/theme-dark)]])
+
+(defn language-select
+  [{:keys [value on-change]}]
+  [:select
+   {:value     value
+    :class     "text-sm bg-transparent rounded border-none focus:outline-none"
+    :on-change (fn [e]
+                 (let [new-value (util/evalue e)]
+                   (on-change new-value)))}
+   (for [language dicts/languages
+         :let [lang-code (name (:value language))]]
+     [:option {:key lang-code :value lang-code} (:label language)])])
+
+(defn- set-language!
+  [lang-code]
+  (state/set-preferred-language! lang-code)
+  (state/pub-event! [:init/commands])
+  (ui-handler/re-render-root!))
 
 (rum/defc log
   []
@@ -111,12 +136,101 @@
         (for [record records]
           [:li (str (:level record) " " (:message record))])])]))
 
+(defn- persist-mobile-tabs!
+  [tab-ids]
+  (storage/set :ls-mobile-tabs tab-ids)
+  (when-not (contains? (set tab-ids) @mobile-state/*tab)
+    (mobile-state/set-tab! mobile-tabs/required-tab-id))
+  (bottom-tabs/configure))
+
+(defn- selected-mobile-tabs-label
+  []
+  (let [available-tabs (mobile-tabs/available-tabs
+                        {:flashcards? (state/enable-flashcards?)})
+        available-tabs-by-id (zipmap (map :id available-tabs) available-tabs)]
+    (->> (bottom-tabs/selected-tab-ids)
+         (keep #(some-> (get available-tabs-by-id %) :title-key t))
+         (string/join " · "))))
+
+(defn- mobile-tab-picker-row
+  [{:keys [id title-key checked? disabled? sortable? toggle-tab! key]}]
+  [:label.flex.items-center.justify-between.gap-3.py-2
+   {:key (or key id)
+    :class (util/classnames
+            [{:opacity-50 disabled?}])}
+   [:span.flex.items-center.gap-2.min-w-0
+    [:span.text-muted-foreground
+     {:class (if sortable? "cursor-grab" "opacity-30")}
+     (shui/tabler-icon "grip-vertical" {:size 14})]
+    [:span.text-base.truncate (t title-key)]]
+   (shui/checkbox
+    {:checked checked?
+     :disabled disabled?
+     :on-checked-change #(toggle-tab! id %)})])
+
+(rum/defc mobile-tabs-picker
+  []
+  (let [[custom-tab-ids set-custom-tab-ids!] (hooks/use-state
+                                              (storage/get :ls-mobile-tabs))
+        features {:flashcards? (state/enable-flashcards?)}
+        max-tabs (mobile-tabs/max-main-tabs (mobile-util/native-iphone?))
+        selected-tab-ids (mobile-tabs/selected-tab-ids custom-tab-ids features max-tabs)
+        selected-tab-id-set (set selected-tab-ids)
+        available-tabs (mobile-tabs/available-tabs features)
+        available-tabs-by-id (zipmap (map :id available-tabs) available-tabs)
+        toggle-tab! (fn [id checked?]
+                      (let [next-requested-ids (if checked?
+                                                 (conj selected-tab-ids id)
+                                                 (filterv #(not= id %) selected-tab-ids))
+                            next-tab-ids (mobile-tabs/selected-tab-ids next-requested-ids
+                                                                       features
+                                                                       max-tabs)]
+                        (set-custom-tab-ids! next-tab-ids)
+                        (persist-mobile-tabs! next-tab-ids)))
+        reorder-tab! (fn [tab-ids]
+                       (let [next-tab-ids (mobile-tabs/selected-tab-ids tab-ids features max-tabs)]
+                         (set-custom-tab-ids! next-tab-ids)
+                         (persist-mobile-tabs! next-tab-ids)))
+        selected-tabs (keep available-tabs-by-id selected-tab-ids)
+        unselected-tabs (remove #(contains? selected-tab-id-set (:id %)) available-tabs)]
+    [:div.p-4.space-y-3.min-w-64
+     [:div.text-lg.font-medium (t :mobile.settings/tabs)]
+     [:div.space-y-2
+      (dnd/items
+       (mapv
+        (fn [{:keys [id title-key]}]
+          (let [required? (= id mobile-tabs/required-tab-id)]
+            {:id id
+             :value id
+             :disabled? required?
+             :content (mobile-tab-picker-row
+                       {:id id
+                        :title-key title-key
+                        :checked? true
+                        :disabled? required?
+                        :sortable? (not required?)
+                        :toggle-tab! toggle-tab!})}))
+        selected-tabs)
+       {:on-drag-end (fn [tab-ids _drag]
+                       (reorder-tab! tab-ids))})
+      (for [{:keys [id title-key]} unselected-tabs
+            :let [disabled? (>= (count selected-tab-ids) max-tabs)]]
+        (mobile-tab-picker-row
+         {:id id
+          :key id
+          :title-key title-key
+          :checked? false
+          :disabled? disabled?
+          :sortable? false
+          :toggle-tab! toggle-tab!}))]]))
+
 (rum/defc page < rum/reactive
   []
   (let [login? (and (state/sub :auth/id-token)
                     (user-handler/logged-in?))
         theme (state/sub :ui/theme)
         system-theme? (state/sub :ui/system-theme?)
+        preferred-language (state/sub :preferred-language)
         theme-value (if system-theme?
                       "system"
                       (or theme "system"))]
@@ -130,8 +244,20 @@
                        :on-change state/use-theme-mode!})]]
 
       [:div.mobile-setting-item
+       [:span.text-base (t :settings.general/language)]
+       [:div.flex.items-center
+        (language-select {:value preferred-language
+                          :on-change set-language!})]]
+
+      [:div.mobile-setting-item
        [:span.text-base (t :mobile.settings/version)]
        [:span.text-sm version/version]]
+
+      [:div.mobile-setting-item
+       {:on-click (fn []
+                    (shui/popup-show! nil (fn [] (mobile-tabs-picker)) {}))}
+       [:span.text-base (t :mobile.settings/tabs)]
+       [:span.text-sm.opacity-70 (selected-mobile-tabs-label)]]
 
       (let [revision (string/replace (build-version/revision) "-dirty" "")]
         [:div.mobile-setting-item

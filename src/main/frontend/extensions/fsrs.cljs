@@ -115,6 +115,22 @@
              q)]
     (db-async/<q repo {:transact-db? false} q' card-ids now-inst-ms (:rules result))))
 
+(defn- global-cards-id?
+  [cards-id]
+  (contains? #{:global "global"} cards-id))
+
+(defn- selected-cards-title
+  [all-cards cards-id]
+  (or (some (fn [card]
+              (when (= (:db/id card) cards-id)
+                (:block/title card)))
+            all-cards)
+      (some (fn [card]
+              (when (= (:db/id card) :global)
+                (:block/title card)))
+            all-cards)
+      (t :flashcard/all-cards)))
+
 (defn- <create-cards-block!
   []
   (editor-handler/api-insert-new-block! ""
@@ -123,7 +139,8 @@
                                          :sibling? false
                                          :end? true}))
 
-(defn- btn-with-shortcut [{:keys [shortcut id btn-text due on-click class]}]
+(defn- btn-with-shortcut [{:keys [shortcut id btn-text due on-click class show-due? mobile?]
+                           :or {show-due? true}}]
   (let [bg-class (case id
                    "card-again" "primary-red"
                    "card-hard" "primary-purple"
@@ -131,21 +148,29 @@
                    "card-easy" "primary-green"
                    nil)]
     [:div.flex.flex-row.items-center.gap-2
+     {:class (when mobile? "w-full")}
      (shui/button
-      {:variant :outline
-       :title (t :flashcard/shortcut-tooltip shortcut)
-       :auto-focus false
-       :size :sm
-       :id id
-       :class (str id " " class " !px-2 !py-1 bg-primary/5 hover:bg-primary/10
+      (cond->
+       {:variant :outline
+        :auto-focus false
+        :size :sm
+        :id id
+        :class (str id " " class " "
+                    (if mobile?
+                      "!w-full !min-h-[48px] !px-4 !py-3 rounded-xl text-base justify-center "
+                      "!px-2 !py-1 ")
+                    "bg-primary/5 hover:bg-primary/10
         border-primary opacity-90 hover:opacity-100 " bg-class)
-       :on-pointer-down (fn [e] (util/stop-propagation e))
-       :on-click (fn [_e] (js/setTimeout #(on-click) 10))}
+        :on-pointer-down (fn [e] (util/stop-propagation e))
+        :on-click (fn [_e] (js/setTimeout #(on-click) 10))}
+        (not mobile?)
+        (assoc :title (t :flashcard/shortcut-tooltip shortcut)))
       [:div.flex.flex-row.items-center.gap-1
        [:span btn-text]
-       (when-not (util/sm-breakpoint?)
+       (when-not (or mobile? (util/sm-breakpoint?))
          [:span.scale-90 (shui/shortcut shortcut)])])
-     (when due [:div.text-sm.opacity-50 (util/human-time due {:ago? false})])]))
+     (when (and show-due? due)
+       [:div.text-sm.opacity-50 (util/human-time due {:ago? false})])]))
 
 (defn- has-cloze?
   [block]
@@ -184,9 +209,10 @@
   (t (rating-key rating)))
 
 (defn- rating-btns
-  [repo block *card-index *phase]
+  [repo block *card-index *phase opts]
   (let [block-id (:db/id block)]
     [:div.flex.flex-row.items-center.gap-8.flex-wrap
+     {:class (when (:mobile? opts) "ls-mobile-card-rating-buttons")}
      (mapv
       (fn [rating]
         (let [card-map (get-card-map block)
@@ -194,26 +220,29 @@
           (btn-with-shortcut {:btn-text (rating-label rating)
                               :shortcut (rating->shortcut rating)
                               :due due
+                              :show-due? (not (:mobile? opts))
+                              :mobile? (:mobile? opts)
                               :id (str "card-" (name rating))
                               :on-click #(do (repeat-card! repo block-id rating)
                                              (swap! *card-index inc)
                                              (reset! *phase :init))})))
       ratings)
-     (shui/button
-      {:variant :ghost
-       :size :sm
-       :class "!px-0 text-muted-foreground !h-4"
-       :on-click (fn [e]
-                   (shui/popup-show! (.-target e)
-                                     (fn []
-                                       [:div.p-4.max-w-lg
-                                        (for [rating ratings]
-                                          ^{:key (name rating)}
-                                          [:dl
-                                           [:dt (t (rating-key rating))]
-                                           [:dd (t (rating-desc-key rating))]])])
-                                     {:align "start"}))}
-      (ui/icon "info-circle"))]))
+     (when-not (:mobile? opts)
+       (shui/button
+        {:variant :ghost
+         :size :sm
+         :class "!px-0 text-muted-foreground !h-4"
+         :on-click (fn [e]
+                     (shui/popup-show! (.-target e)
+                                       (fn []
+                                         [:div.p-4.max-w-lg
+                                          (for [rating ratings]
+                                            ^{:key (name rating)}
+                                            [:dl
+                                             [:dt (t (rating-key rating))]
+                                             [:dd (t (rating-desc-key rating))]])])
+                                       {:align "start"}))}
+        (ui/icon "info-circle")))]))
 
 (rum/defcs ^:private card-view < rum/reactive db-mixins/query
   {:will-mount (fn [state]
@@ -222,25 +251,28 @@
                    (p/let [result (db-async/<get-block repo block-id {:children? true})]
                      (reset! *block result))
                    (assoc state ::block *block)))}
-  [state repo _block-id *card-index *phase]
+  [state repo _block-id *card-index *phase opts]
   (when-let [block (rum/react (::block state))]
     (when-let [block-entity (db/sub-block (:db/id block))]
       (let [phase (rum/react *phase)
             _card-index (rum/react *card-index)
             next-phase (phase->next-phase block-entity phase)]
-        [:div.ls-card.content.flex.flex-col.overflow-y-auto.overflow-x-hidden
-         [:div.mb-4.ml-2.opacity-70.text-sm
-          (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
-         (let [option (case phase
-                        :init
-                        {:hide-children? true}
-                        :show-cloze
-                        {:show-cloze? true
-                         :hide-children? true}
-                        {:show-cloze? true
-                         :ignore-block-collapsed? true})]
-           (component-block/blocks-container option [block-entity]))
-         [:div.mt-8.pb-2
+        [:div.ls-card.content.flex.flex-col.overflow-hidden
+         {:class (when (:mobile? opts) "ls-mobile-card")}
+         [:div.ls-card-scroll.flex-1.min-h-0.overflow-y-auto.overflow-x-hidden
+          [:div.mb-4.ml-2.opacity-70.text-sm
+           (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
+          (let [option (case phase
+                         :init
+                         {:hide-children? true}
+                         :show-cloze
+                         {:show-cloze? true
+                          :hide-children? true}
+                         {:show-cloze? true
+                          :ignore-block-collapsed? true})]
+            (component-block/blocks-container option [block-entity]))]
+         [:div.mt-8.pb-2.shrink-0
+          {:class (when (:mobile? opts) "ls-mobile-card-actions")}
           (if (contains? #{:show-cloze :show-answer} next-phase)
             (btn-with-shortcut {:btn-text (case next-phase
                                             :show-answer
@@ -250,11 +282,12 @@
                                             :init
                                             (t :flashcard.review/hide-answers))
                                 :shortcut "s"
+                                :mobile? (:mobile? opts)
                                 :id "card-answers"
                                 :on-click #(swap! *phase
                                                   (fn [phase]
                                                     (phase->next-phase block-entity phase)))})
-            [:div.flex.justify-center (rating-btns repo block-entity *card-index *phase)])]]))))
+            [:div.flex.justify-center (rating-btns repo block-entity *card-index *phase opts)])]]))))
 
 (declare update-due-cards-count)
 (rum/defcs ^:large-vars/cleanup-todo cards-view < rum/reactive
@@ -263,7 +296,8 @@
   {:init (fn [state]
            (let [*block-ids (atom nil)
                  *loading? (atom nil)
-                 cards-id (last (:rum/args state))
+                 [cards-id opts] (:rum/args state)
+                 opts (or opts {})
                  *cards-list (atom [{:db/id :global
                                      :block/title (t :flashcard/all-cards)}])
                  repo (state/get-current-repo)
@@ -290,13 +324,21 @@
              (assoc state
                     ::block-ids *block-ids
                     ::cards-id (atom (or cards-id :global))
+                    ::opts opts
                     ::loading? *loading?
                     ::cards-list *cards-list)))
    :will-unmount (fn [state]
+                   (let [opts (::opts state)]
+                     (when-let [on-header-change (:on-header-change opts)]
+                       (on-header-change nil))
+                     (when-let [on-selector-change (:on-selector-change opts)]
+                       (on-selector-change nil)))
                    (update-due-cards-count)
                    state)}
-  [state _cards-id]
+  [state _cards-id _opts]
   (let [repo (state/get-current-repo)
+        opts (::opts state)
+        mobile? (:mobile? opts)
         *cards-id (::cards-id state)
         cards-id (rum/react *cards-id)
         *cards-list (::cards-list state)
@@ -307,47 +349,59 @@
         block-ids (rum/react *block-ids)
         loading? (rum/react (::loading? state))
         *card-index (::card-index state)
-        *phase (atom :init)]
+        card-index (rum/react *card-index)
+        *phase (atom :init)
+        progress-label (str (min (inc card-index) (count block-ids)) "/" (count block-ids))
+        select-card! (fn [v]
+                       (reset! *cards-id v)
+                       (let [cards-id' (when-not (global-cards-id? v) v)]
+                         (p/let [result (<get-due-card-block-ids repo cards-id')]
+                           (reset! *card-index 0)
+                           (reset! *block-ids result))))]
     (when (false? loading?)
-      [:div#cards-modal.flex.flex-col.gap-8.flex-1
-       [:div.flex.flex-row.items-center.gap-2.flex-wrap
-        (shui/select
-         {:on-value-change (fn [v]
-                             (reset! *cards-id v)
-                             (let [cards-id' (when-not (contains? #{:global "global"} v) v)]
-                               (p/let [result (<get-due-card-block-ids repo cards-id')]
-                                 (reset! *card-index 0)
-                                 (reset! *block-ids result))))
-          :default-value cards-id}
-         (shui/select-trigger
-          {:class "!px-2 !py-0 !h-8 w-64"}
-          (shui/select-value
-           {:placeholder (t :flashcard/select-cards)}))
-         (shui/select-content
-          (shui/select-group
-           (for [card-entity all-cards]
-             (shui/select-item {:value (:db/id card-entity)}
-                               (:block/title card-entity))))))
-        (shui/button
-         {:variant :ghost
-          :id "ls-cards-add"
-          :size :sm
-          :title (t :flashcard/add-query)
-          :class "!px-1 text-muted-foreground"
-          :on-click (fn []
-                      (p/let [saved-block (<create-cards-block!)]
-                        (shui/dialog-close!)
-                        (when saved-block
-                          (route-handler/redirect-to-page! (:block/uuid saved-block)
-                                                           {}))))}
-         (ui/icon "plus"))
-        [:span.text-sm.opacity-50 (str (min (inc @*card-index) (count @*block-ids)) "/" (count @*block-ids))]]
-       (let [block-id (nth block-ids @*card-index nil)]
+      (when mobile?
+        (when-let [on-header-change (:on-header-change opts)]
+          (on-header-change {:title (selected-cards-title all-cards cards-id)
+                             :progress progress-label}))
+        (when-let [on-selector-change (:on-selector-change opts)]
+          (on-selector-change {:cards all-cards
+                               :cards-id cards-id
+                               :select-card! select-card!})))
+      [:div#cards-modal.flex.flex-col.gap-8.flex-1.min-h-0
+       (when-not mobile?
+         [:div.flex.flex-row.items-center.gap-2
+          (shui/select
+           {:on-value-change select-card!
+            :default-value cards-id}
+           (shui/select-trigger
+            {:class "!px-2 !py-0 !h-8 w-64"}
+            (shui/select-value
+             {:placeholder (t :flashcard/select-cards)}))
+           (shui/select-content
+            (shui/select-group
+             (for [card-entity all-cards]
+               (shui/select-item {:value (:db/id card-entity)}
+                                 (:block/title card-entity))))))
+          (shui/button
+           {:variant :ghost
+            :id "ls-cards-add"
+            :size :sm
+            :title (t :flashcard/add-query)
+            :class "!px-1 text-muted-foreground"
+            :on-click (fn []
+                        (p/let [saved-block (<create-cards-block!)]
+                          (shui/dialog-close!)
+                          (when saved-block
+                            (route-handler/redirect-to-page! (:block/uuid saved-block)
+                                                             {}))))}
+           (ui/icon "plus"))
+          [:span.text-sm.opacity-50.whitespace-nowrap progress-label]])
+       (let [block-id (nth block-ids card-index nil)]
          (cond
            block-id
-           [:div.flex.flex-col
+           [:div.flex.flex-col.flex-1.min-h-0
             (rum/with-key
-              (card-view repo block-id *card-index *phase)
+              (card-view repo block-id *card-index *phase opts)
               (str "card-" block-id))]
 
            (empty? block-ids)

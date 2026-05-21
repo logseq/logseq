@@ -133,6 +133,50 @@ ul {
   @apply mx-8 p-0;
 }
 
+.ls-mobile-flashcards {
+  @apply h-full flex flex-col px-1 py-2;
+
+  #cards-modal {
+    @apply h-full min-h-0 gap-2;
+  }
+
+  #cards-modal .ls-card {
+    @apply flex-1 min-h-0 border-0 bg-transparent px-0 py-2 shadow-none;
+  }
+
+  #cards-modal .ls-card > .blocks-container {
+    @apply text-base;
+  }
+
+  #cards-modal .ls-card.content.ml-2 {
+    @apply ml-0 flex-none;
+  }
+
+  #cards-modal button {
+    @apply rounded-md;
+  }
+
+  .ls-mobile-card {
+    @apply min-h-0;
+  }
+
+  .ls-mobile-card .ls-card-scroll > .mb-4 {
+    @apply ml-0 mb-3;
+  }
+
+  .ls-mobile-card-actions {
+    @apply mt-4 pb-6;
+  }
+
+  .ls-mobile-card-rating-buttons {
+    @apply grid grid-cols-2 gap-2 w-full;
+  }
+
+  .ls-mobile-card-rating-buttons > div {
+    @apply w-full;
+  }
+}
+
 .ui__notifications {
   @apply fixed top-8 pointer-events-none w-full;
 
