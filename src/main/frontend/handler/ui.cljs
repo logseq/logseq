@@ -240,12 +240,21 @@
     (state/pub-event! [:modal/show-cards])))
 
 (defn open-new-window-or-tab!
-  "Open a new Electron window."
-  [target-repo]
-  (when target-repo
-    (if (util/electron?)
-      (ipc/ipc "openNewWindow" target-repo)
-      (js/window.open (str config/app-website "#/?graph=" target-repo) "_blank"))))
+  "Open a new Electron window or web tab."
+  [target]
+  (when target
+    (let [{:keys [repo graph-id]} (if (map? target)
+                                    target
+                                    {:repo target})]
+      (if (util/electron?)
+        (ipc/ipc "openNewWindow" repo)
+        (do
+          (when-not (seq graph-id)
+            (throw (js/Error. "Missing graph id")))
+          (js/window.open (str config/app-website
+                               "#/?graph-id="
+                               (js/encodeURIComponent graph-id))
+                          "_blank"))))))
 
 (defn toggle-show-empty-hidden-properties!
   []

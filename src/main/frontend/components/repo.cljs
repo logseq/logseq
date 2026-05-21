@@ -125,13 +125,22 @@
         (p/then (fn []
                   (repo-handler/remove-repo! repo))))))
 
+(defn graph-open-new-window-target
+  [{:keys [url] :as repo}]
+  (when-let [graph-id (:graph-id (graph/repo-summary->registry-entry repo))]
+    {:repo url
+     :graph-id graph-id}))
+
 (defn open-in-another-tab-action?
-  [{:keys [root]}]
-  (boolean (and util/web-platform? root)))
+  [{:keys [root] :as repo}]
+  (boolean (and util/web-platform?
+                root
+                (graph-open-new-window-target repo))))
 
 (defn open-graph-in-another-tab!
-  [{:keys [url]}]
-  (state/pub-event! [:graph/open-new-window url]))
+  [repo]
+  (when-let [target (graph-open-new-window-target repo)]
+    (state/pub-event! [:graph/open-new-window target])))
 
 (rum/defc ^:large-vars/cleanup-todo repos-inner
   "Graph list in `All graphs` page"
@@ -346,8 +355,11 @@
                                          (when-let [on-click (:on-click opts)]
                                            (on-click e))
                                          (if (and (gobj/get e "shiftKey")
-                                                  (not (and rtc-graph? remote?)))
-                                           (state/pub-event! [:graph/open-new-window url])
+                                                  (:root graph)
+                                                  (graph-open-new-window-target graph))
+                                           (state/pub-event!
+                                            [:graph/open-new-window
+                                             (graph-open-new-window-target graph)])
                                            (cond
                                                   ;; exists locally?
                                              (or (:root graph) (not rtc-graph?))

@@ -130,8 +130,8 @@
     (let [t2 (t/now)]
       (log/info ::graph-switch-spent (- t2 t1))))))
 
-(defmethod handle :graph/open-new-window [[_ev target-repo]]
-  (ui-handler/open-new-window-or-tab! target-repo))
+(defmethod handle :graph/open-new-window [[_ev target]]
+  (ui-handler/open-new-window-or-tab! target))
 
 (defmethod handle :page/create [[_ page-name opts]]
   (if (= page-name (date/today))

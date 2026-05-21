@@ -29,11 +29,15 @@
     (when actionable-f
       (with-redefs [util/web-platform? true]
         (is (true? (actionable-f {:url "logseq_db_demo"
-                                  :root "/graphs/demo"})))
+                                  :root "/graphs/demo"
+                                  :GraphUUID "graph-uuid"})))
+        (is (false? (actionable-f {:url "logseq_db_demo"
+                                   :root "/graphs/demo"})))
         (is (false? (actionable-f {:url "logseq_db_remote"}))))
       (with-redefs [util/web-platform? false]
         (is (false? (actionable-f {:url "logseq_db_demo"
-                                   :root "/graphs/demo"})))))))
+                                   :root "/graphs/demo"
+                                   :GraphUUID "graph-uuid"})))))))
 
 (deftest open-graph-in-another-tab-publishes-graph-open-window-event-test
   (let [open-f (some-> (resolve 'frontend.components.repo/open-graph-in-another-tab!) deref)
@@ -42,8 +46,10 @@
     (when open-f
       (with-redefs [state/pub-event! (fn [event]
                                        (swap! events conj event))]
-        (open-f {:url "logseq_db_demo"})
-        (is (= [[:graph/open-new-window "logseq_db_demo"]]
+        (open-f {:url "logseq_db_demo"
+                 :GraphUUID "graph-uuid"})
+        (is (= [[:graph/open-new-window {:repo "logseq_db_demo"
+                                          :graph-id "graph-uuid"}]]
                @events))))))
 
 (deftest upload-local-graph-with-confirm-asks-before-upload-test
@@ -360,3 +366,24 @@
                                      (swap! events conj event))]
       (on-click #js {})
       (is (empty? @events)))))
+
+(deftest shift-click-opens-downloaded-remote-graph-in-new-tab-with-graph-id-test
+  (let [events (atom [])
+        links (#'repo/repos-dropdown-links
+               [{:url "logseq_db_demo"
+                 :root "/graphs/demo"
+                 :remote? true
+                 :rtc-graph? true
+                 :GraphName "demo"
+                 :GraphUUID "graph-uuid"
+                 :GraphSchemaVersion "65"
+                 :graph-ready-for-use? true}]
+               nil
+               nil)
+        on-click (get-in (first links) [:options :on-click])]
+    (with-redefs [state/pub-event! (fn [event]
+                                     (swap! events conj event))]
+      (on-click #js {:shiftKey true})
+      (is (= [[:graph/open-new-window {:repo "logseq_db_demo"
+                                        :graph-id "graph-uuid"}]]
+             @events)))))
