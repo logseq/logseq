@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp // New Import for DP units
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -76,6 +77,11 @@ class LiquidTabsPlugin : Plugin() {
     // 💡 NEW: Define padding for the Tab Bar edges (makes it compact and adds left/right space)
     private val TAB_BAR_HORIZONTAL_PADDING = 12.dp
     private val ACCENT_COLOR_HEX = "#6097c7"
+
+    private fun tabIconResId(tabId: String): Int? = when (tabId) {
+        "flashcards" -> R.drawable.ic_tab_flashcards
+        else -> null
+    }
 
     @PluginMethod
     fun configureTabs(call: PluginCall) {
@@ -579,6 +585,7 @@ class LiquidTabsPlugin : Plugin() {
                     val icon = remember(tab.systemImage, tab.id) {
                         MaterialIconResolver.resolve(tab.systemImage) ?: MaterialIconResolver.resolve(tab.id)
                     }
+                    val iconResId = remember(tab.id) { tabIconResId(tab.id) }
                     val accent = ComposeColor(NativeUiUtils.parseColor(ACCENT_COLOR_HEX, Color.parseColor(ACCENT_COLOR_HEX)))
 
                     NavigationBarItem(
@@ -592,10 +599,17 @@ class LiquidTabsPlugin : Plugin() {
                             indicatorColor = accent.copy(alpha = 0.12f)
                         ),
                         icon = {
-                            Icon(
-                                imageVector = icon ?: Icons.Filled.Circle,
-                                contentDescription = tab.title
-                            )
+                            if (iconResId != null) {
+                                Icon(
+                                    painter = painterResource(id = iconResId),
+                                    contentDescription = tab.title
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = icon ?: Icons.Filled.Circle,
+                                    contentDescription = tab.title
+                                )
+                            }
                         },
                         // Slightly reduce the default Material3 gap between icon and label.
                         label = { Text(tab.title, modifier = Modifier.offset(y = (-4).dp)) }
