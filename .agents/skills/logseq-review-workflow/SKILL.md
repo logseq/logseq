@@ -87,7 +87,7 @@ Then read every matching module below.
 
 ### 3. Launch independent pass subagents
 
-Launch all pass subagents in parallel in one delegation round. Do not run pass subagents serially unless the environment cannot start them in parallel. Give every read-only subagent:
+Launch read-only pass subagents with a maximum concurrency of 4. Start the first batch of up to 4 pass subagents, wait for at least one to finish, then start the next pending pass subagent until every pass has been launched. Do not exceed 4 running pass subagents at the same time. Do not run pass subagents serially unless the environment cannot support concurrent subagents. Give every read-only subagent:
 
 - the diff, commit range, PR, patch, or changed file list under review
 - the scope collected in step 1
@@ -109,7 +109,7 @@ Passes:
 | Test coverage | [`rules/passes/test-coverage.md`](./rules/passes/test-coverage.md) |
 | Repository convention | [`rules/passes/repository-convention.md`](./rules/passes/repository-convention.md) |
 
-Ask each subagent to inspect only its assigned pass and return only candidate findings, supporting evidence, checks already run, and unresolved questions. While the subagents run in parallel, the main agent may prepare aggregation and validation steps but must wait for every pass report before the final review. If subagents are unavailable or parallel launch is not possible, run each pass locally with the same rule files and state that delegation or parallelism was unavailable in the verification summary.
+Ask each subagent to inspect only its assigned pass and return only candidate findings, supporting evidence, checks already run, and unresolved questions. While up to 4 subagents run in parallel, the main agent may prepare aggregation and validation steps but must keep launching pending passes as slots open and must wait for every pass report before the final review. If subagents are unavailable or concurrent launch is not possible, run each pass locally with the same rule files and state that delegation or concurrency was unavailable in the verification summary.
 
 ### 4. Aggregate pass results
 
@@ -156,11 +156,14 @@ Each finding should include:
 
 ```markdown
 - **Severity:** Blocking | Important | Minor | Question
+- **Category:** Correctness | Data contract | Regression | Failure mode | Migration validation | Performance | Test coverage | Repository convention
 - **Location:** `path/to/file.cljs:line`
 - **Issue:** What is wrong.
 - **Impact:** Concrete user, data, runtime, or maintenance impact.
 - **Suggestion:** Smallest actionable fix or verification step.
 ```
+
+Separate findings with a horizontal rule (`---`) when reporting more than one finding.
 
 If there are no findings, say what was reviewed and which rule modules were applied.
 
@@ -170,7 +173,7 @@ Add a short verification summary after findings or after the no-findings stateme
 
 - Did you apply `rules/common.md`?
 - Did you route every touched library/module to its rule file?
-- Did you launch one read-only subagent for each independent pass in parallel, or state why delegation or parallelism was unavailable?
+- Did you launch one read-only subagent for each independent pass with at most 4 running concurrently, starting new pass subagents as slots opened, or state why delegation or concurrency was unavailable?
 - Did each subagent only collect issues and avoid modifying code?
 - Did you wait for all pass reports before writing the final review?
 - Did you deduplicate and validate actionable findings before including them?
