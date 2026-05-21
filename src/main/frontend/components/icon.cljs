@@ -6426,6 +6426,22 @@
                           (:block/title)))
         derived-initials (or (derive-initials title) "?")
         derived-abbreviated (derive-abbreviated title)
+        ;; Live color preview during hover/keyboard nav over color
+        ;; swatches in the color popover. Without this, hovering a
+        ;; swatch updates the page-icon (which subscribes to
+        ;; :ui/icon-hover-preview via get-node-icon-cp) while the
+        ;; gallery previews stay locked to the committed color —
+        ;; same mismatch the custom-tab-cp text tile fixed for the
+        ;; icon picker.
+        hover-preview-state (state/sub :ui/icon-hover-preview)
+        hover-color (when hover-preview-state
+                      (let [c (:color hover-preview-state)]
+                        (when (and c (not (string/blank? c)) (not= c "inherit"))
+                          c)))
+        committed-color (when-not (string/blank? @*color) @*color)
+        ;; Hover wins over committed so the previews tint live; on
+        ;; mouse-leave the hover-preview clears and committed re-emerges.
+        selected-color (or hover-color committed-color)
         build-icon (fn [text-override]
                      (let [text (or text-override
                                     (if (string/blank? @*text-value) derived-initials @*text-value))]
@@ -6433,7 +6449,7 @@
                         :id (str "text-" text)
                         :label text
                         :data (cond-> {:value text}
-                                @*color (assoc :color @*color)
+                                selected-color (assoc :color selected-color)
                                 @*alignment (assoc :alignment @*alignment)
                                 @*mode (assoc :mode @*mode))}))
         *persist-timer (::persist-timer state)
