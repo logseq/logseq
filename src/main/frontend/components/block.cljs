@@ -2852,9 +2852,12 @@
                        (:db/id (db/entity repo [:block/uuid user-id]))))
         summary (reaction/summarize reactions user-db-id)
         read-only? config/publishing?
-        on-pick (fn [popup-id emoji]
-                  (reaction-handler/toggle-reaction! (:block/uuid block) (:id emoji))
-                  (shui/popup-hide! popup-id))
+        on-pick (fn [popup-id icon]
+                  (if (= :emoji (:type icon))
+                    (do
+                      (reaction-handler/toggle-reaction! (:block/uuid block) (:id icon))
+                      (shui/popup-hide! popup-id))
+                    (notification/show! (t :block.reaction/emoji-required-warning) :warning)))
         open-picker! (fn [^js e]
                        (util/stop e)
                        (shui/popup-show!
@@ -2862,7 +2865,7 @@
                         (fn [{:keys [id]}]
                           (icon-component/icon-search
                            (merge icon-component/reaction-picker-opts
-                                  {:on-chosen (fn [_emoji-event emoji _keep-popup?] (on-pick id emoji))})))
+                                  {:on-chosen (fn [_e icon _keep-popup?] (on-pick id icon))})))
                         {:align :start
                          :content-props {:class "ls-icon-picker"}}))]
     (when (seq summary)

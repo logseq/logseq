@@ -9,6 +9,7 @@
             [frontend.date :as date]
             [frontend.format.block :as block]
             [frontend.handler.comments :as comments-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.reaction :as reaction-handler]
             [frontend.handler.user :as user-handler]
@@ -272,9 +273,12 @@
      (fn [{:keys [id]}]
        (icon-component/icon-search
         (merge icon-component/reaction-picker-opts
-               {:on-chosen (fn [_emoji-event emoji _keep-popup?]
-                             (reaction-handler/toggle-reaction! (:block/uuid comment-block) (:id emoji))
-                             (shui/popup-hide! id))})))
+               {:on-chosen (fn [_emoji-event icon _keep-popup?]
+                             (if (= :emoji (:type icon))
+                               (do
+                                 (reaction-handler/toggle-reaction! (:block/uuid comment-block) (:id icon))
+                                 (shui/popup-hide! id))
+                               (notification/show! (t :block.reaction/emoji-required-warning) :warning)))})))
      {:align :end
       :content-props {:class "ls-icon-picker"}})))
 
