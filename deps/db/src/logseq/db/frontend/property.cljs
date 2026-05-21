@@ -648,7 +648,6 @@
                                                 :hide? true}}
      :logseq.property.agent/session-id {:title "agent session id"
                                         :schema {:type :string
-                                                 :db/cardinality :db.cardinality/one
                                                  :public? false
                                                  :hide? true}}
      :logseq.property/used-template {:title "Used template"
@@ -723,7 +722,7 @@
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
     "logseq.property.user" "logseq.property.history"
     "logseq.property.reaction" "logseq.property.sync" "logseq.property.publish"
-    "logseq.property.recycle" "logseq.property.comments"})
+    "logseq.property.recycle" "logseq.property.comments" "logseq.property.agent"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"

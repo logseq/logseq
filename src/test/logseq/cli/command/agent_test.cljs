@@ -101,10 +101,12 @@
     (let [property (get db-property/built-in-properties :logseq.property.agent/session-id)]
       (is (= "agent session id" (:title property)))
       (is (= :string (get-in property [:schema :type])))
-      (is (= :db.cardinality/one (get-in property [:schema :db/cardinality])))
+      (is (not (contains? (:schema property) :db/cardinality)))
       (is (= false (get-in property [:schema :public?])))
       (is (= true (get-in property [:schema :hide?])))
-      (is (not (contains? db-property/public-built-in-properties :logseq.property.agent/session-id))))))
+      (is (not (contains? db-property/public-built-in-properties :logseq.property.agent/session-id)))
+      (is (db-property/logseq-property? :logseq.property.agent/session-id))
+      (is (db-property/internal-property? :logseq.property.agent/session-id)))))
 
 (deftest test-agent-command-entries
   (testing "parse agent bridge command surface"
