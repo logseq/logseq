@@ -6548,7 +6548,11 @@
                (shui/tabler-icon "pencil" {:size 20}))]
             [:span.text-picker-gallery-label label]]))]
 
-      (shui/separator {:class "my-0 opacity-50 -mx-3"})
+      ;; Themed via the shared `icon-picker-separator` class instead of
+      ;; shadcn's `bg-border opacity-50` default, which fades the line
+      ;; to near-invisible in dark OG. `-mx-3` keeps the edge-to-edge
+      ;; geometry that the original layout depended on.
+      (shui/separator {:class "my-0 -mx-3 icon-picker-separator"})
 
       ;; Controls row: Text input + Alignment side by side
       [:div.text-picker-controls-row
