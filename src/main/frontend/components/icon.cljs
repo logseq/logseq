@@ -697,7 +697,9 @@
                            :justify-content "center"
                            :width (str size "px")
                            :height (str size "px")
-                           :border "1px dashed var(--rx-gray-08)"
+                           ;; Themed dashed border (matches Custom-tab image
+                           ;; tile — see custom-tab-cp image branch).
+                           :border "1px dashed var(--lx-gray-08, var(--ls-border-color, var(--rx-gray-08)))"
                            :border-radius "5px"
                            :background "var(--rx-gray-03-alpha)"
                            :color "var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)))"}}
@@ -2595,7 +2597,11 @@
                      #(reset! *view :text-picker))
          :on-mouse-over (fn [] (some-> on-tile-hover! (apply [text-item])))}
         [:div.custom-tab-item-preview {:aria-hidden "true"}
-         (icon text-item {:size 32})]
+         ;; `:color? true` wraps the SVG in `.ls-icon-color-wrap` so the
+         ;; text-tile preview picks up the user's selected color via
+         ;; `currentColor` (avatar and image previews use other paths,
+         ;; but text icons rely on this wrapper to colorize their fill).
+         (icon text-item {:size 32 :color? true})]
         [:span.custom-tab-item-label (t :icon.mode/text)]])
 
      ;; Avatar option. In page-icon context: commits the synthesized initials
@@ -2641,7 +2647,9 @@
        [:span.image-tile-placeholder
         {:style {:width 32
                  :height 32
-                 :border "1px dashed var(--rx-gray-08)"
+                 ;; Themed dashed border via `--ls-border-color` middle
+                 ;; step (matches the ghost-highlight outline pattern).
+                 :border "1px dashed var(--lx-gray-08, var(--ls-border-color, var(--rx-gray-08)))"
                  :border-radius "3px"
                  :display "flex"
                  :align-items "center"

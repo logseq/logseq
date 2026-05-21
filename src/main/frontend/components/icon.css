@@ -681,7 +681,9 @@
   transition: background-color 150ms, outline-color 150ms;
 
   &:hover {
-    background-color: var(--lx-gray-05, var(--rx-gray-05));
+    /* Themed hover bg via `--ls-border-color` middle step (matches the
+       regular icon grid's hover; see icon.css:&:hover above). */
+    background-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
   }
 }
 
@@ -695,7 +697,15 @@
 }
 
 .cp__emoji-icon-picker button.custom-tab-item.is-highlighted .custom-tab-item-preview {
-  background-color: var(--lx-accent-04);
+  /* Subtle themed bg (same color-mix as the ghost-highlight in the
+     regular grid) so line-icons inside the preview remain readable
+     regardless of the user's icon-color preset. Outline carries the
+     "I am selected" signal. */
+  background-color: color-mix(
+    in srgb,
+    var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04))) 50%,
+    transparent
+  );
   outline: 2px solid var(--lx-accent-09);
   outline-offset: -2px;
 }
@@ -706,12 +716,15 @@
 
 .custom-tab-item-label {
   @apply text-xs;
-  color: var(--lx-gray-11, var(--rx-gray-11));
+  /* Themed via `--ls-primary-text-color` middle step (matches section
+     headers and tab labels). */
+  color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
   transition: color 150ms;
 }
 
 .custom-tab-item:hover .custom-tab-item-label {
-  color: var(--lx-gray-12, var(--rx-gray-12));
+  /* Brighter on hover via `--ls-secondary-text-color` middle step. */
+  color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
 }
 
 /* Shared drag overlay hint — used by both icon picker and asset picker */
