@@ -9,6 +9,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.block-title :as db-block-title]
             [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.text :as text]))
 
@@ -658,11 +659,18 @@ DROP TRIGGER IF EXISTS blocks_au;
               tag-ids (seq (map :db/id (:block/tags block)))
               icon (:logseq.property/icon block)
               alias (some-> (first (:block/_alias block))
-                            (select-keys [:block/uuid :block/title]))]
+                            (select-keys [:block/uuid :block/title]))
+              unique-title (db-block-title/block-unique-title
+                            @conn
+                            block
+                            :title display-title
+                            :alias (:block/title alias)
+                            :truncate? false)]
           (cond-> {:db/id (:db/id block)
                    :block/uuid (:block/uuid block)
                    :block/title display-title
                    :block.temp/original-title (:block/title block)
+                   :block.temp/unique-title unique-title
                    :page? (ldb/page? block)}
             block-page
             (assoc :block/page block-page)
