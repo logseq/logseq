@@ -4288,7 +4288,7 @@
      (when show-inline-comments?
        [:div.ls-inline-comments
         (when-not (:page-title? config)
-          {:style {:padding-left (if (util/mobile?) 12 45)}})
+          {:class "ls-block-content-indent"})
         (block-comments/comments-area-view
          (assoc config :container-id (comments-model/inline-comment-container-id (:container-id config)))
          comment-thread
@@ -4306,7 +4306,7 @@
                (and
                  (not collapsed?)
                  (not (or table? property?)))))
-       [:div (when-not (:page-title? config) {:style {:padding-left (if (util/mobile?) 12 45)}})
+       [:div (when-not (:page-title? config) {:class "ls-block-content-indent"})
         (db-properties-cp config block {:in-block-container? true})])
 
      (when (and show-query? (not (:table? config)))

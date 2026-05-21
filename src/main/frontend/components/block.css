@@ -49,6 +49,14 @@
   @apply flex flex-1 flex-col w-full pr-1;
 }
 
+.ls-block-content-indent {
+  padding-left: 45px;
+}
+
+html.is-mobile .ls-block-content-indent {
+  padding-left: 12px;
+}
+
 .block-head-wrap {
   @apply flex flex-1 w-full flex-row flex-wrap;
   @apply justify-between items-center;
