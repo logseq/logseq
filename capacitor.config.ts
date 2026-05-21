@@ -37,7 +37,6 @@ const config: CapacitorConfig = {
 
     Keyboard: {
       resize: KeyboardResize.None,
-      resizeOnFullScreen: true,
     },
 
     SafeArea: {

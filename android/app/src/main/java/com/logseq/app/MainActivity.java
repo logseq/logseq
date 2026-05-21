@@ -62,6 +62,7 @@ public class MainActivity extends BridgeActivity {
         // Let Compose host the WebView with system bar padding for safe areas.
         // Android back is still delegated to JS from the Activity back dispatcher.
         ComposeHost.INSTANCE.renderWithSystemInsets(this, webView);
+        WebViewKeyboardRecovery.install(this, webView);
 
         // On API 33+ (Android 13+), predictive back routes through the platform-level
         // OnBackInvokedDispatcher. AndroidX's OnBackPressedDispatcher bridges into it at
@@ -272,6 +273,7 @@ public class MainActivity extends BridgeActivity {
             unregisterReceiver(routeChangeReceiver);
             routeChangeReceiver = null;
         }
+        WebViewKeyboardRecovery.uninstall(this);
         super.onDestroy();
     }
 
