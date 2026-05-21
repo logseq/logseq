@@ -877,8 +877,10 @@
   align-items: center;
   padding: 0 14px;
   height: 40px;
-  background-color: var(--lx-gray-03);
-  border-bottom: 1px solid var(--lx-gray-05, var(--rx-gray-05));
+  /* Tailwind utility for the full themed chain (matches the icon
+     picker's tabs-section so both topbars read as the same chrome). */
+  @apply bg-gray-03;
+  border-bottom: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
 }
 
 .asset-picker-back {
@@ -889,10 +891,10 @@
     @apply text-sm font-medium cursor-pointer;
     @apply border-none bg-transparent p-0;
     @apply transition-colors duration-150;
-    color: var(--lx-gray-10, var(--rx-gray-10));
+    color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
 
     &:hover {
-      color: var(--lx-gray-12, var(--rx-gray-12));
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
     }
   }
 }
@@ -911,11 +913,11 @@
    of options, the active segment inverts to read as "current value". */
 .segmented-control {
   @apply flex items-center;
-  /* Container bg sits on top of the asset-picker topbar's --lx-gray-03;
-     stepping up to --rx-gray-06 gives enough contrast in both themes
-     so the control reads as a bounded group instead of bleeding into
-     the topbar. */
-  background-color: var(--lx-gray-06, var(--rx-gray-06));
+  /* Container bg steps one step up from the topbar so the control reads
+     as a bounded group. Tailwind `bg-gray-06` chains through
+     `--ls-quaternary-background-color` (#094b5a in OG) — themed teal
+     instead of neutral gray. */
+  @apply bg-gray-06;
   border-radius: 6px;
   padding: 2px;
   gap: 2px;
@@ -926,19 +928,22 @@
     @apply transition-colors duration-100;
     border: none;
     background: transparent;
-    color: var(--lx-gray-11, var(--rx-gray-11));
+    color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
     padding: 2px 10px;
     border-radius: 4px;
     min-width: 56px;
     line-height: 1.4;
 
     &:hover {
-      color: var(--lx-gray-12, var(--rx-gray-12));
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
     }
 
     &[data-active="true"] {
-      background-color: var(--lx-gray-01);
-      color: var(--lx-gray-12, var(--rx-gray-12));
+      /* Active segment darkens to gray-01 — Tailwind chain hits
+         `--ls-primary-background-color` in OG, creating a "carved in"
+         feel against the lighter quaternary control bg. */
+      @apply bg-gray-01;
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     }
 
@@ -2156,15 +2161,21 @@
      The expanded-state gradient (`::before`) layers on top — its peak
      opacity is capped at 0.55 so this veil still reads through under
      the gradient. */
-  /* Solid theme-token background — no alpha veil. Resting state uses
-     gray-01 (the most-recessed surface in the gray scale, page-bg-ish
-     in both themes) so the banner reads as "tucked into" the popover
-     rather than a competing surface. Hover lifts one step to gray-02
-     via `:has()` below; the transition is on background-color so
-     state changes interpolate cleanly across light + dark themes. */
-  background-color: var(--lx-gray-01, var(--rx-gray-01));
+  /* Resting state: a SLIGHTLY-DARKER-THAN-PICKER band so it reads as
+     "tucked into" without bleeding into the page bg behind the popover
+     (a problem in OG, where `--lx-gray-01` chains to `--ls-primary-bg`
+     — the same color the page itself uses, making the banner look
+     like a hole punched through the picker). color-mix darkens the
+     picker's secondary-bg by 10% with black, giving a recessed-but-
+     still-distinct color in every theme. Hover lifts via `:has()`
+     below. */
+  background-color: color-mix(
+    in srgb,
+    var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02))) 90%,
+    black
+  );
   transition: background-color 120ms cubic-bezier(0.32, 0.72, 0, 1);
-  border-bottom: 1px solid var(--lx-gray-05, var(--rx-gray-05));
+  border-bottom: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
   isolation: isolate;
   /* Isolate the band's layout from siblings: when the rail expands or
      collapses, the browser can compute layout for the band without
