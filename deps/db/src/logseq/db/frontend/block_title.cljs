@@ -98,7 +98,7 @@
                            (if (class-title-conflicts? db block-e)
                              (class-title-with-extends block-e display-title)
                              display-title))
-                         (or title (:block/title block)))
+                         (or title (:block/title block-e)))
             trunc-title (if (and truncate? base-title (> (count base-title) 256))
                           (subs base-title 0 256)
                           base-title)
