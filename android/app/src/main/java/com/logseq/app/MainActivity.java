@@ -229,17 +229,15 @@ public class MainActivity extends BridgeActivity {
         WebView webView = getBridge().getWebView();
         if (webView != null) {
             NavigationRenderState nativePopState = navigationCoordinator.prepareNativePop();
-            if (nativePopState == null) {
-                finish();
-                return;
+            if (nativePopState != null) {
+                Log.d(
+                    "NavStack",
+                    NAV_STACK_DEBUG_PREFIX + " activity.nativeBack consumed=native-stack-pop target="
+                        + nativePopState.getPath()
+                        + " paths=" + nativePopState.getPaths()
+                );
+                ComposeHost.applyNavigation(nativePopState);
             }
-            Log.d(
-                "NavStack",
-                NAV_STACK_DEBUG_PREFIX + " activity.nativeBack consumed=native-stack-pop target="
-                    + nativePopState.getPath()
-                    + " paths=" + nativePopState.getPaths()
-            );
-            ComposeHost.applyNavigation(nativePopState);
             // Send "native back" into JS. JS will call your UILocal/route-change,
             // which flows into ComposeHost.applyNavigation(...) and animates.
             sendJsBack(webView);
