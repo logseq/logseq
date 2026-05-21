@@ -112,12 +112,13 @@
    :cancelButton (t :ui/cancel)})
 
 (defn- native-graph-actions
-  [{:keys [url root remote? GraphUUID GraphSchemaVersion]}]
+  [repos {:keys [url root remote? GraphUUID GraphSchemaVersion] :as graph}]
   (let [graph-name (config/db-graph-name url)
         warning (t :graph/delete-warning)
-        delete-message (fn [message] (str message "\n\n" warning))]
+        delete-message (fn [message] (str message "\n\n" warning))
+        delete-local? (repo-handler/removable-repo? graph repos)]
     (cond-> []
-      root
+      (and root delete-local?)
       (conj
        (native-graph-action
         "deleteLocal"
@@ -147,10 +148,10 @@
         (t :graph/leave-confirm-desc))))))
 
 (defn- native-graph-item
-  [downloading-graph-id {:keys [url root remote? graph-e2ee?
-                                GraphName GraphSchemaVersion GraphUUID
-                                graph-ready-for-use? created-at last-seen-at]
-                         :as graph}]
+  [repos downloading-graph-id {:keys [url root remote? graph-e2ee?
+                                      GraphName GraphSchemaVersion GraphUUID
+                                      graph-ready-for-use? created-at last-seen-at]
+                               :as graph}]
   (let [display-name (text-util/get-graph-name-from-path url)
         time (safe-locale-date (or last-seen-at created-at))
         downloading? (and downloading-graph-id (= GraphUUID downloading-graph-id))]
@@ -167,7 +168,7 @@
        :graphName GraphName
        :graphUUID GraphUUID
        :graphSchemaVersion GraphSchemaVersion
-       :actions (native-graph-actions graph)})))
+       :actions (native-graph-actions repos graph)})))
 
 (defn- native-graph-sections
   [repos remotes login? downloading-graph-id]
@@ -185,7 +186,7 @@
         {own-graphs true shared-graphs false}
         (group-by (fn [graph] (= "manager" (:graph<->user-user-type graph))) remote-graphs)
         section (fn [id title refreshable? show-empty? graphs]
-                  (let [items (vec (keep #(native-graph-item downloading-graph-id %) graphs))]
+                  (let [items (vec (keep #(native-graph-item repos downloading-graph-id %) graphs))]
                     (when (or show-empty? (seq items))
                       {:id id
                        :title title
