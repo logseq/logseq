@@ -4042,6 +4042,61 @@
             (is (= local-title (:block/title (d/entity @conn [:block/uuid block-uuid]))))
             (is (= 1 (count pending)))))))))
 
+(deftest rebase-replays-fix-pending-tx-with-empty-reversed-data-test
+  (testing "schema fix txs with no reverse data should not fail remote rebase"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          parent-uuid (:block/uuid parent)
+          child-uuid (:block/uuid child1)
+          fix-title "local fix title"]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (seed-client-op-txs!
+           test-repo
+           [{:db-sync/tx-id tx-id
+             :db-sync/pending? true
+             :db-sync/created-at 1
+             :db-sync/outliner-op :fix
+             :db-sync/normalized-tx-data
+             [[:db/add [:block/uuid parent-uuid] :block/title fix-title]]
+             :db-sync/reversed-tx-data []}])
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:tx-data [[:db/add [:block/uuid child-uuid] :block/title "remote child"]]}])
+          (let [pending-after (#'sync-apply/pending-tx-by-id test-repo tx-id)]
+            (is (= fix-title
+                   (:block/title (d/entity @conn [:block/uuid parent-uuid]))))
+            (is (= "remote child"
+                   (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+            (is (= :rebase (:outliner-op pending-after)))))))))
+
+(deftest rebase-drops-no-op-fix-pending-tx-with-empty-reversed-data-test
+  (testing "schema fix txs with no reverse data should be dropped when remote already applied the same tx"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          tx-id (random-uuid)
+          parent-uuid (:block/uuid parent)
+          fix-title "remote already fixed"]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (seed-client-op-txs!
+           test-repo
+           [{:db-sync/tx-id tx-id
+             :db-sync/pending? true
+             :db-sync/created-at 1
+             :db-sync/outliner-op :fix
+             :db-sync/normalized-tx-data
+             [[:db/add [:block/uuid parent-uuid] :block/title fix-title]]
+             :db-sync/reversed-tx-data []}])
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:tx-data [[:db/add [:block/uuid parent-uuid] :block/title fix-title]]}])
+          (is (= fix-title
+                 (:block/title (d/entity @conn [:block/uuid parent-uuid]))))
+          (is (not-any? #(= tx-id (:tx-id %))
+                        (#'sync-apply/pending-txs test-repo))))))))
+
 (deftest reverse-tx-data-create-property-text-block-restores-base-db-test
   (testing "reverse-tx-data for create-property-text-block should restore the base db"
     (let [conn (db-test/create-conn-with-blocks
