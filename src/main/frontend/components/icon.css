@@ -1206,17 +1206,22 @@
    in gray-11, inline links in accent-11. */
 .asset-picker-footer-hint {
   @apply flex w-full items-center px-3 py-2 gap-1.5 text-sm;
-  border-top: 1px solid var(--lx-gray-05);
-  background-color: var(--lx-gray-03);
+  /* Raw `var(--lx-gray-05)` / `var(--lx-gray-03)` were invalid in OG
+     (where those vars are unset) — the top border disappeared and the
+     bg fell to transparent, killing the elevated footer effect. The
+     Tailwind utility chain gives `--ls-border-color` / themed tertiary
+     teal in OG; Radix themes still use --lx-gray-N at step 1. */
+  border-top: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
+  @apply bg-gray-03;
 
   .tip-label {
     @apply font-medium;
-    color: var(--lx-gray-12);
+    color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
   }
 
   .tip-body {
     @apply flex flex-row flex-wrap items-center gap-1;
-    color: var(--lx-gray-11);
+    color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
   }
 
   .tip-link,
