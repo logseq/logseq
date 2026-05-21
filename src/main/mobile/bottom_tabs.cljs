@@ -110,7 +110,8 @@
 (defn- delete-local-graph!
   [url]
   (when-let [repo (repo-by-url url)]
-    (repo-handler/remove-repo! repo)))
+    (when (repo-handler/removable-repo? repo (state/get-repos))
+      (repo-handler/remove-repo! repo))))
 
 (defn- refresh-remote-graphs!
   []
