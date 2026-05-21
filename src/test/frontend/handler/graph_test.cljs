@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is testing]]
             [frontend.common.idb :as idb]
             [frontend.handler.graph]
+            [frontend.state :as state]
             [logseq.common.graph-registry :as graph-registry]
             [promesa.core :as p]))
 
@@ -34,14 +35,31 @@
 
 (deftest remember-current-graph-id-in-tab-test
   (let [remember-f (some-> (resolve 'frontend.handler.graph/remember-current-graph-id-in-tab!) deref)
-        stored-graph-id (atom nil)]
+        stored-graph (atom nil)]
     (is (fn? remember-f) "Current graph id should be remembered for same-tab reloads")
     (when remember-f
       (p/with-redefs [frontend.handler.graph/current-graph-id (constantly "remote-uuid")
-                      frontend.handler.graph/set-tab-graph-id! (fn [graph-id]
-                                                                 (reset! stored-graph-id graph-id))]
+                      state/get-current-repo (constantly "logseq_db_work")
+                      frontend.handler.graph/set-tab-graph! (fn [repo graph-id]
+                                                              (reset! stored-graph {:repo repo
+                                                                                    :graph-id graph-id}))]
         (remember-f)
-        (is (= "remote-uuid" @stored-graph-id))))))
+        (is (= {:repo "logseq_db_work"
+                :graph-id "remote-uuid"}
+               @stored-graph))))))
+
+(deftest resolve-startup-repo-prefers-tab-repo-before-global-current-test
+  (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
+    (is (fn? resolve-f) "Startup repo resolver should exist")
+    (when resolve-f
+      (is (= "logseq_db_tab"
+             (resolve-f []
+                        [{:url "logseq_db_tab"}
+                         {:url "logseq_db_current"}]
+                        {}
+                        {:repo "logseq_db_tab"
+                         :graph-id "tab-uuid"}
+                        "logseq_db_current"))))))
 
 (deftest resolve-startup-repo-prefers-url-graph-id-test
   (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
@@ -56,7 +74,8 @@
                           :graph-id "tab-uuid"}]
                         [{:url "logseq_db_current"}]
                         {:graph-id "url-uuid"}
-                        "tab-uuid"
+                        {:repo "logseq_db_tab"
+                         :graph-id "tab-uuid"}
                         "logseq_db_current"))))))
 
 (deftest resolve-startup-repo-uses-tab-graph-id-before-global-current-test
@@ -70,7 +89,8 @@
                             :graph-id "tab-uuid"}]
                           [{:url "logseq_db_current"}]
                           {}
-                          "tab-uuid"
+                          {:repo "logseq_db_tab"
+                           :graph-id "tab-uuid"}
                           "logseq_db_current"))))
       (testing "global current graph remains the last fallback"
         (is (= "logseq_db_current"

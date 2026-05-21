@@ -5,41 +5,24 @@
             [electron.ipc :as ipc]
             [frontend.common.idb :as idb]
             [frontend.db :as db]
+            [frontend.graph-tab :as graph-tab]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
             [logseq.common.graph-registry :as graph-registry]
             [logseq.db :as ldb]
-            [goog.object :as gobj]
             [promesa.core :as p]))
 
 (def graph-registry-key
   "ls-graph-registry")
 
-(def tab-graph-id-key
-  "ls-tab-graph-id")
-
 (def normalize-registry-entry graph-registry/normalize-entry)
 
 (def resolve-registry-target graph-registry/resolve-target)
 
-(defn- session-storage
-  []
-  (gobj/get js/globalThis "sessionStorage"))
-
-(defn get-tab-graph-id
-  []
-  (when-let [storage (session-storage)]
-    (let [graph-id (.getItem storage tab-graph-id-key)]
-      (when-not (string/blank? graph-id)
-        graph-id))))
-
-(defn set-tab-graph-id!
-  [graph-id]
-  (when-not (string/blank? graph-id)
-    (when-let [storage (session-storage)]
-      (.setItem storage tab-graph-id-key graph-id))))
+(def set-tab-graph! graph-tab/set-tab-graph!)
+(def get-tab-graph graph-tab/get-tab-graph)
 
 (defn- storage-registry->clj
   [registry]
@@ -85,14 +68,21 @@
   (keep repo-summary->registry-entry repos))
 
 (defn resolve-startup-repo
-  [registry repos url-target tab-graph-id current-repo]
+  [registry repos url-target tab-graph current-repo]
   (let [registry' (concat registry (registry-from-repo-summaries repos))
+        tab-repo (:repo tab-graph)
+        tab-graph-id (:graph-id tab-graph)
+        repo-exists? (fn [repo]
+                       (some #(= repo (:url %)) repos))
         url-target-repo (:repo (resolve-registry-target registry' url-target))
         tab-target-repo (when (and (nil? url-target-repo)
                                    (string/blank? (:graph-id url-target)))
-                          (:repo (resolve-registry-target
-                                  registry'
-                                  {:graph-id tab-graph-id})))]
+                          (or (when (and (not (string/blank? tab-repo))
+                                         (repo-exists? tab-repo))
+                                tab-repo)
+                              (:repo (resolve-registry-target
+                                      registry'
+                                      {:graph-id tab-graph-id}))))]
     (or url-target-repo
         tab-target-repo
         current-repo
@@ -108,8 +98,9 @@
 
 (defn remember-current-graph-id-in-tab!
   []
-  (when-let [graph-id (current-graph-id)]
-    (set-tab-graph-id! graph-id)))
+  (when-let [repo (state/get-current-repo)]
+    (when-let [graph-id (current-graph-id)]
+      (set-tab-graph! repo graph-id))))
 
 (defn <upsert-current-graph-registry!
   []

@@ -192,7 +192,7 @@
                        registry
                        repos
                        url-target
-                       (graph-handler/get-tab-graph-id)
+                       (graph-handler/get-tab-graph)
                        (state/get-current-repo))
                  _ (if (empty? repos)
                      (repo-handler/new-db! config/demo-repo)
