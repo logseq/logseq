@@ -544,11 +544,18 @@
     [?p :block/name ?page-name]])
 
 (def registered-agent-query
-  '[:find [(pull ?b [:db/id :block/uuid :block/title]) ...]
-    :in $ ?page-id ?agent-name
+  '[:find [(pull ?p [:db/id
+                     :block/uuid
+                     :block/name
+                     :block/title
+                     :logseq.property/deleted-at
+                     {:block/parent [:db/id
+                                     :logseq.property/deleted-at
+                                     {:block/parent [:db/id
+                                                     :logseq.property/deleted-at]}]}]) ...]
+    :in $ ?agent-page-name
     :where
-    [?b :block/parent ?page-id]
-    [?b :block/title ?agent-name]])
+    [?p :block/name ?agent-page-name]])
 
 (declare ensure-registry-page!)
 
@@ -782,10 +789,6 @@
                  {}
                  [:task :comment]))))))
 
-(defn random-bridge-block-uuid
-  []
-  (random-uuid))
-
 (defn- first-entity
   [entities]
   (first (filter :db/id entities)))
@@ -797,6 +800,10 @@
 (defn- registry-page-name
   []
   (common-util/page-name-sanity-lc agent-bridge-registry-page))
+
+(defn- agent-page-name
+  [agent-name]
+  (common-util/page-name-sanity-lc agent-name))
 
 (defn- pull-registry-page
   [cfg repo]
@@ -830,19 +837,21 @@
               (throw (ex-info "agent bridge registry page uuid not found"
                               {:code :agent-registration-failed})))
           existing (transport/invoke cfg :thread-api/q
-                                     [repo [registered-agent-query page-id agent-name]])]
-    (if (first-entity existing)
+                                     [repo [registered-agent-query
+                                            (agent-page-name agent-name)]])]
+    (if (first-live-entity existing)
       true
-      (p/let [_ (transport/invoke cfg :thread-api/apply-outliner-ops
-                                  [repo [[:insert-blocks [[{:block/title agent-name
-                                                            :block/uuid (random-bridge-block-uuid)}]
-                                                          page-uuid
-                                                          {:outliner-op :insert-blocks
-                                                           :sibling? false
-                                                           :bottom? true
-                                                           :keep-uuid? true}]]]
-                                   {}])]
-        true))))
+      (p/let [result (transport/invoke cfg :thread-api/apply-outliner-ops
+                                       [repo [[:create-page [agent-name {}]]] {}])]
+        (if (second result)
+          true
+          (p/let [created (transport/invoke cfg :thread-api/q
+                                            [repo [registered-agent-query
+                                                   (agent-page-name agent-name)]])]
+            (if (first-live-entity created)
+              true
+              (throw (ex-info "agent bridge agent page not found after create"
+                              {:code :agent-registration-failed})))))))))
 
 (def agent-session-id-property-name "agent-session-id")
 
