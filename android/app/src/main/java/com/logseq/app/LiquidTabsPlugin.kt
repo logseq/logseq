@@ -14,9 +14,12 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material3.Icon
@@ -59,7 +62,7 @@ class LiquidTabsPlugin : Plugin() {
     private var searchContainer: LinearLayout? = null
     private var searchInput: EditText? = null
     private var resultsContainer: LinearLayout? = null
-    private var closeButton: TextView? = null
+    private var closeButton: ImageButton? = null
     private var originalBottomPadding: Int? = null
 
     private var tabsState by mutableStateOf<List<TabSpec>>(emptyList())
@@ -369,17 +372,20 @@ class LiquidTabsPlugin : Plugin() {
             }
 
             // Close Button
-            val button = TextView(activity).apply {
-                text = "X" // Close icon (using simple 'X')
-                setTextColor(secondaryLabelColor)
-                textSize = 18f
-                gravity = Gravity.CENTER
+            val button = ImageButton(activity).apply {
+                setImageDrawable(AppCompatResources.getDrawable(activity, R.drawable.ic_search_clear))
+                background = null
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                contentDescription = "Clear search"
+                alpha = if (theme.isDark) 0.92f else 0.8f
                 setPadding(
-                    NativeUiUtils.dp(activity, 8f),
-                    NativeUiUtils.dp(activity, 8f),
-                    NativeUiUtils.dp(activity, 8f),
-                    NativeUiUtils.dp(activity, 8f)
+                    NativeUiUtils.dp(activity, 4f),
+                    NativeUiUtils.dp(activity, 4f),
+                    NativeUiUtils.dp(activity, 4f),
+                    NativeUiUtils.dp(activity, 4f)
                 )
+                minimumWidth = NativeUiUtils.dp(activity, 28f)
+                minimumHeight = NativeUiUtils.dp(activity, 28f)
                 visibility = View.GONE // Initially hidden
 
                 setOnClickListener {
@@ -387,7 +393,12 @@ class LiquidTabsPlugin : Plugin() {
                     // TextWatcher will handle notifying the web view and hiding the button
                 }
                 // Set layout params for the button
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    marginStart = NativeUiUtils.dp(activity, 8f)
+                }
             }
 
             // 1. Add EditText
