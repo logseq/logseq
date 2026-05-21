@@ -125,9 +125,15 @@ private fun NavHostController.rebuildBackStack(paths: List<String>) {
     }
 }
 
-@Suppress("UNUSED_PARAMETER")
 private fun shouldAnimateNavigation(navigationType: String): Boolean =
-    false
+    when (navigationType.trim().lowercase()) {
+        "push",
+        "pop",
+        "back",
+        "forward",
+        "replace" -> true
+        else -> false
+    }
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
