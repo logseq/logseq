@@ -133,6 +133,14 @@
       @apply leading-none pl-8 outline-none border-none bg-transparent rounded-none;
       @apply focus:bg-transparent !h-8;
       box-shadow: none !important;
+
+      /* Placeholder takes the same themed middle step as the section
+         header — muted teal-gray in OG, themed Radix gray elsewhere.
+         Override shadcn's `text-muted-foreground` default (which would
+         render as a desaturated neutral in OG). */
+      &::placeholder {
+        color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+      }
     }
 
     &:focus-within {
@@ -302,7 +310,11 @@
     box-shadow: none !important;
     border: none !important;
     height: auto !important;
-    color: var(--lx-gray-11, var(--rx-gray-11));
+    /* `--ls-primary-text-color` is the themed middle step that gives
+       OG (#a4b5b6 — muted teal-gray) a label-appropriate tone instead
+       of falling all the way to neutral `--rx-gray-11`. Radix themes
+       still pick up `--lx-gray-11` in step 1. */
+    color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
 
     /* Reserve bold width to prevent layout shift on active */
     &::before {
@@ -317,13 +329,15 @@
     /* Underline for active state */
     &[data-active="true"] {
       @apply opacity-100 font-bold;
-      color: var(--lx-gray-12, var(--rx-gray-12));
+      /* Active tab brighter; `--ls-secondary-text-color` (#dfdfdf in OG)
+         is the themed equivalent of gray-12. */
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
 
       &::after {
         content: "";
         @apply absolute bottom-0 left-0 right-0;
         @apply h-[2px];
-        background-color: var(--lx-gray-12, var(--rx-gray-12));
+        background-color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
       }
     }
 
@@ -953,6 +967,11 @@
       @apply leading-none pl-8 outline-none border-none bg-transparent rounded-none;
       @apply focus:bg-transparent !h-8;
       box-shadow: none !important;
+
+      /* Themed placeholder (matches icon picker). */
+      &::placeholder {
+        color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
+      }
     }
 
     /* Rounded-circle clear button — mirrors the icon-search affordance
