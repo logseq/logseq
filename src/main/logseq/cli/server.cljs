@@ -338,7 +338,7 @@
   (p/let [expected (expected-revision config)
           server (ensure-server-started-once! config repo)]
     (if-not (revision-mismatch? expected (:revision server))
-      (cleanup-additional-revision-mismatched-servers! config repo expected server)
+      server
       (p/let [stop-result (profile/time! (:profile-session config)
                                           "server.restart-version-mismatch"
                                           (fn []
