@@ -1019,6 +1019,7 @@
  :mobile.tab/graphs "Graphs"
 
  :mobile.toolbar/audio "Audio"
+ :mobile.toolbar/comment "Comment"
  :mobile.toolbar/copy-ref "Copy ref"
  :mobile.toolbar/copy-url "Copy url"
  :mobile.toolbar/hide "Hide"

@@ -54,7 +54,7 @@
                    (editor-handler/on-tab :right))}]
       (when (seq comment-targets)
         [{:id "comment"
-          :label (t :block.comments/add-comment)
+          :label (t :mobile.toolbar/comment)
           :system-icon "text.bubble"
           :handler (fn []
                      (comments-handler/add-comment-to-blocks! comment-targets)
