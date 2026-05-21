@@ -50,17 +50,17 @@
 (defn repo-summary->registry-entry
   [{:keys [url GraphName GraphUUID metadata sync-meta] :as repo}]
   (when url
-    (let [rtc-graph-id (some-> (or GraphUUID
-                                   (:kv/value metadata)
-                                   (second sync-meta))
-                               str)
+    (let [graph-id (some-> (or GraphUUID
+                                (:kv/value metadata)
+                                (second sync-meta))
+                            str)
           local-graph-id (some-> (:local-graph-id repo) str)]
-      (when (or rtc-graph-id local-graph-id)
+      (when (or graph-id local-graph-id)
         (normalize-registry-entry
          {:repo url
           :graph-name (or GraphName
                           (common-config/strip-leading-db-version-prefix url))
-          :rtc-graph-id rtc-graph-id
+          :graph-id graph-id
           :local-graph-id local-graph-id})))))
 
 (defn registry-from-repo-summaries
@@ -110,7 +110,9 @@
        {:repo repo
         :graph-name (common-config/strip-leading-db-version-prefix repo)
         :local-graph-id (some-> (ldb/get-graph-local-uuid db*) str)
-        :rtc-graph-id (some-> (ldb/get-graph-rtc-uuid db*) str)}))))
+        :graph-id (some-> (or (ldb/get-graph-rtc-uuid db*)
+                              (ldb/get-graph-local-uuid db*))
+                          str)}))))
 
 (defn settle-metadata-to-local!
   [m]

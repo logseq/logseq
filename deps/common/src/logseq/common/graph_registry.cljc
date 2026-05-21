@@ -11,15 +11,15 @@
 
 (defn normalize-entry
   [entry]
-  (let [rtc-graph-id (:rtc-graph-id entry)
-        local-graph-id (:local-graph-id entry)
-        graph-id (or (when (present-string? rtc-graph-id) rtc-graph-id)
-                     (when (present-string? local-graph-id) local-graph-id)
-                     (when (present-string? (:graph-id entry)) (:graph-id entry)))]
+  (let [local-graph-id (:local-graph-id entry)
+        graph-id (or (when (present-string? (:graph-id entry)) (:graph-id entry))
+                     (when (present-string? local-graph-id) local-graph-id))]
     (when-not graph-id
       (throw (ex-info "Missing graph identity"
                       {:entry entry})))
-    (assoc entry :graph-id graph-id)))
+    (-> entry
+        (assoc :graph-id graph-id)
+        (dissoc :rtc-graph-id))))
 
 (defn ^:api upsert-entry
   [registry entry]
@@ -29,9 +29,7 @@
                       (and (present-string? (:repo entry'))
                            (= (:repo entry') (:repo %)))
                       (and (present-string? (:local-graph-id entry'))
-                           (= (:local-graph-id entry') (:local-graph-id %)))
-                      (and (present-string? (:rtc-graph-id entry'))
-                           (= (:rtc-graph-id entry') (:rtc-graph-id %)))))
+                           (= (:local-graph-id entry') (:local-graph-id %)))))
          (cons entry')
          vec)))
 

@@ -104,17 +104,16 @@
   (let [normalize-f (some-> (resolve 'frontend.handler.graph/normalize-registry-entry) deref)]
     (is (fn? normalize-f) "Graph registry entry normalizer should exist")
     (when normalize-f
-      (testing "remote graphs use the RTC graph uuid as canonical graph-id"
+      (testing "remote graphs store graph-id without duplicating rtc-graph-id"
         (is (= {:repo "logseq_db_work"
                 :graph-name "work"
                 :local-graph-id "local-uuid"
-                :rtc-graph-id "remote-uuid"
                 :graph-id "remote-uuid"}
                (select-keys
                 (normalize-f {:repo "logseq_db_work"
                               :graph-name "work"
                               :local-graph-id "local-uuid"
-                              :rtc-graph-id "remote-uuid"})
+                              :graph-id "remote-uuid"})
                 [:repo :graph-name :local-graph-id :rtc-graph-id :graph-id]))))
       (testing "local-only graphs use local graph uuid as canonical graph-id"
         (is (= "local-uuid"
@@ -155,9 +154,10 @@
                    {:repo "logseq_db_work"
                     :graph-name "work"
                     :local-graph-id "local-uuid"
-                    :rtc-graph-id "remote-uuid"})]
+                    :graph-id "remote-uuid"})]
     (is (= 1 (count registry')))
     (is (= "remote-uuid" (:graph-id (first registry'))))
+    (is (not (contains? (first registry') :rtc-graph-id)))
     (is (nil? (graph-registry/resolve-target registry' {:graph-id "local-uuid"})))
     (is (= "logseq_db_work"
            (:repo (graph-registry/resolve-target registry' {:graph-id "remote-uuid"}))))))
