@@ -95,7 +95,7 @@
 (declare page-cp)
 
 (rum/defc add-button-inner
-  [block {:keys [container-id editing?] :as config*}]
+  [block {:keys [container-id editing? block?] :as config*}]
   (let [*ref (rum/use-ref nil)
         has-children? (:block/_parent block)
         page? (ldb/page? block)
@@ -109,7 +109,7 @@
                         has-children? "opacity-0"
                         :else "opacity-50")
         config (dissoc config* :page)]
-    (when (or page? (util/mobile?))
+    (when (or page? block? (util/mobile?))
       [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
        {:class opacity-class
         :parentblockid (:db/id block)
