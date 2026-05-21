@@ -1359,7 +1359,8 @@
   @apply flex flex-col overflow-hidden;
   width: 380px;
   min-width: 380px;
-  background-color: var(--lx-gray-02);
+  /* Tailwind utility for themed chain (matches asset-picker outer). */
+  @apply bg-gray-02;
 }
 
 .text-picker-topbar {
@@ -1369,18 +1370,19 @@
 .text-picker-back {
   @apply flex-shrink-0 flex items-center justify-between;
   padding: 8px 14px 7px 14px;
-  background-color: var(--lx-gray-03);
-  border-bottom: 1px solid var(--lx-gray-05, var(--rx-gray-05));
+  /* Themed via Tailwind chain (matches the asset-picker and icon-picker topbars). */
+  @apply bg-gray-03;
+  border-bottom: 1px solid var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
 
   .back-button {
     @apply flex items-center gap-0.5;
     @apply text-sm font-medium cursor-pointer;
     @apply border-none bg-transparent p-0;
     @apply transition-colors duration-150;
-    color: var(--lx-gray-10, var(--rx-gray-10));
+    color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
 
     &:hover {
-      color: var(--lx-gray-12, var(--rx-gray-12));
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
     }
   }
 
@@ -1399,7 +1401,7 @@
 
   .format-note {
     @apply text-xs leading-relaxed;
-    color: var(--lx-gray-09, var(--rx-gray-09));
+    color: var(--lx-gray-09, var(--ls-primary-text-color, var(--rx-gray-09)));
   }
 }
 
@@ -1408,7 +1410,7 @@
 
   > label {
     @apply text-xs font-medium;
-    color: var(--lx-gray-11, var(--rx-gray-11));
+    color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
   }
 }
 
@@ -1429,8 +1431,10 @@
   @apply w-14 h-14 rounded-lg;
   @apply flex items-center justify-center;
   @apply transition-all duration-150;
-  border: 2px solid var(--lx-gray-06, var(--rx-gray-06));
-  background-color: var(--lx-gray-03, var(--rx-gray-03));
+  border: 2px solid var(--lx-gray-06, var(--ls-border-color, var(--rx-gray-06)));
+  /* Tailwind chain → themed tertiary teal in OG (background for the
+     preview tile is meant to sit one step lighter than the picker bg). */
+  @apply bg-gray-03;
 
   &:hover { border-color: var(--rx-accent-09); }
 }
@@ -1442,7 +1446,7 @@
 
 .text-picker-gallery-label {
   @apply text-xs;
-  color: var(--lx-gray-11, var(--rx-gray-11));
+  color: var(--lx-gray-11, var(--ls-primary-text-color, var(--rx-gray-11)));
 }
 
 .text-picker-gallery-item.selected .text-picker-gallery-label {
@@ -1474,12 +1478,12 @@
 
   .info-icon {
     @apply p-0.5 rounded border-none bg-transparent cursor-help transition-colors;
-    color: var(--lx-gray-10, var(--rx-gray-10));
+    color: var(--lx-gray-10, var(--ls-primary-text-color, var(--rx-gray-10)));
     margin-left: auto;
     margin-right: 12px;
 
     &:hover {
-      color: var(--lx-gray-12, var(--rx-gray-12));
+      color: var(--lx-gray-12, var(--ls-secondary-text-color, var(--rx-gray-12)));
     }
   }
 }
