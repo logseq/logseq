@@ -366,11 +366,13 @@
                                          (when-let [on-click (:on-click opts)]
                                            (on-click e))
                                          (if (and (gobj/get e "shiftKey") (:root graph))
-                                           (if-let [target (graph-open-new-window-target graph)]
-                                             (state/pub-event! [:graph/open-new-window target])
-                                             (p/let [target (<graph-open-new-window-target graph)]
-                                               (when target
-                                                 (state/pub-event! [:graph/open-new-window target]))))
+                                           (if (util/electron?)
+                                             (state/pub-event! [:graph/open-new-window url])
+                                             (if-let [target (graph-open-new-window-target graph)]
+                                               (state/pub-event! [:graph/open-new-window target])
+                                               (p/let [target (<graph-open-new-window-target graph)]
+                                                 (when target
+                                                   (state/pub-event! [:graph/open-new-window target])))))
                                            (cond
                                                   ;; exists locally?
                                              (or (:root graph) (not rtc-graph?))

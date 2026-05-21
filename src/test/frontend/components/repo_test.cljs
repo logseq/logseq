@@ -440,3 +440,25 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest electron-shift-click-opens-local-graph-in-new-window-by-repo-test
+  (let [events (atom [])
+        registry-reads (atom 0)
+        links (#'repo/repos-dropdown-links
+               [{:url "logseq_db_demo"
+                 :root "/graphs/demo"
+                 :graph-ready-for-use? true}]
+               nil
+               nil)
+        on-click (get-in (first links) [:options :on-click])]
+    (with-redefs [util/electron? (constantly true)
+                  graph-handler/<get-graph-registry
+                  (fn []
+                    (swap! registry-reads inc)
+                    (p/resolved []))
+                  state/pub-event! (fn [event]
+                                     (swap! events conj event))]
+      (on-click #js {:shiftKey true})
+      (is (= [[:graph/open-new-window "logseq_db_demo"]]
+             @events))
+      (is (zero? @registry-reads)))))
