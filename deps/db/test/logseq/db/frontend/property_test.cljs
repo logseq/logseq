@@ -93,10 +93,11 @@
     (testing "schema"
       (is (= "agent session id" (:title property)))
       (is (= :string (get-in property [:schema :type])))
-      (is (= :db.cardinality/one (get-in property [:schema :db/cardinality])))
+      (is (not (contains? (:schema property) :db/cardinality)))
       (is (= false (get-in property [:schema :public?])))
       (is (= true (get-in property [:schema :hide?]))))
 
     (testing "internal built-in logseq property"
       (is (not (contains? db-property/public-built-in-properties :logseq.property.agent/session-id)))
-      (is (db-property/logseq-property? :logseq.property.agent/session-id)))))
+      (is (db-property/logseq-property? :logseq.property.agent/session-id))
+      (is (db-property/internal-property? :logseq.property.agent/session-id)))))
