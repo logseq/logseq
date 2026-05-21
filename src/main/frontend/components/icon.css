@@ -264,7 +264,12 @@
      `!important` semantics that beat the hover-bg rule on .icons-row
      buttons. */
   @apply !bg-gray-04;
-  outline: 1.5px solid var(--lx-gray-08, var(--rx-gray-08));
+  /* Tailwind's gray-08 chain stops at `--lx-gray-08, --rx-gray-08` —
+     no `--ls-*` step. Inject `--ls-border-color` manually so OG
+     (where `--lx-gray-08` is unset) picks up the themed teal border
+     (#0e5263, one step lighter than the bg) instead of falling to
+     neutral `--rx-gray-08`. */
+  outline: 1.5px solid var(--lx-gray-08, var(--ls-border-color, var(--rx-gray-08)));
   outline-offset: -1.5px;
 }
 
