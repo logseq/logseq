@@ -950,61 +950,107 @@
                             (set! (.-spawn child-process) original-spawn)
                             (done)))))))
 
-(deftest test-registration-writes-agent-name-to-graph
+(deftest test-registration-creates-agent-name-page
   (async done
          (let [calls* (atom [])
-               page-uuid (uuid "33333333-3333-3333-3333-333333333333")]
-           (p/finally
-             (p/catch
-              (p/with-redefs [agent-command/random-bridge-block-uuid (fn [] (uuid "44444444-4444-4444-4444-444444444444"))
-                              transport/invoke (fn [_ method args]
-                                                 (swap! calls* conj [method args])
-                                                 (case method
-                                                   :thread-api/q
-                                                   (let [[_ [query & query-args]] args]
-                                                     (cond
-                                                       (= query agent-command/agent-bridge-registry-page-query)
-                                                       (p/resolved [])
+               registry-page-uuid (uuid "33333333-3333-3333-3333-333333333333")
+               agent-page-uuid (uuid "44444444-4444-4444-4444-444444444444")]
+           (-> (p/with-redefs [transport/invoke
+                                (fn [_ method args]
+                                  (swap! calls* conj [method args])
+                                  (case method
+                                    :thread-api/q
+                                    (let [[_ [query & query-args]] args]
+                                      (cond
+                                        (= query agent-command/agent-bridge-registry-page-query)
+                                        (p/resolved [])
 
-                                                       (= query agent-command/registered-agent-query)
-                                                       (p/resolved [])
+                                        (= query agent-command/registered-agent-query)
+                                        (p/resolved [])
 
-                                                       :else
-                                                       (p/rejected (ex-info "unexpected query"
-                                                                            {:query query
-                                                                             :query-args query-args}))))
+                                        :else
+                                        (p/rejected (ex-info "unexpected query"
+                                                             {:query query
+                                                              :query-args query-args}))))
 
-                                                   :thread-api/apply-outliner-ops
-                                                   (let [[_ ops _] args]
-                                                     (if (= [[:create-page [agent-command/agent-bridge-registry-page {}]]] ops)
-                                                       (p/resolved [agent-command/agent-bridge-registry-page page-uuid])
-                                                       (p/resolved {:ok true})))
+                                    :thread-api/apply-outliner-ops
+                                    (let [[_ ops _] args]
+                                      (cond
+                                        (= [[:create-page [agent-command/agent-bridge-registry-page {}]]] ops)
+                                        (p/resolved [agent-command/agent-bridge-registry-page registry-page-uuid])
 
-                                                   :thread-api/pull
-                                                   (p/resolved {:db/id 300
-                                                                :block/uuid page-uuid
-                                                                :block/title agent-command/agent-bridge-registry-page})
+                                        (= [[:create-page ["build-host" {}]]] ops)
+                                        (p/resolved ["build-host" agent-page-uuid])
 
-                                                   (p/rejected (ex-info "unexpected invoke"
-                                                                        {:method method
-                                                                         :args args}))))]
-                (p/let [_ (agent-command/register-agent-bridge! {:root-dir "/tmp/logseq"} "logseq_db_demo" "build-host")]
-                  (let [apply-ops (->> @calls*
-                                       (filter #(= :thread-api/apply-outliner-ops (first %)))
-                                       (mapv (comp second second)))]
-                    (is (= [[:create-page [agent-command/agent-bridge-registry-page {}]]]
-                           (first apply-ops)))
-                    (is (= [[:insert-blocks [[{:block/title "build-host"
-                                               :block/uuid (uuid "44444444-4444-4444-4444-444444444444")}]
-                                             page-uuid
-                                             {:outliner-op :insert-blocks
-                                              :sibling? false
-                                              :bottom? true
-                                              :keep-uuid? true}]]]
-                           (second apply-ops))))))
-              (fn [e]
-                (is false (str "unexpected error: " e))))
-             done))))
+                                        :else
+                                        (p/rejected (ex-info "unexpected apply-outliner-ops"
+                                                             {:ops ops}))))
+
+                                    :thread-api/pull
+                                    (p/resolved {:db/id 300
+                                                 :block/uuid registry-page-uuid
+                                                 :block/title agent-command/agent-bridge-registry-page})
+
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method
+                                                          :args args}))))]
+                 (p/let [_ (agent-command/register-agent-bridge! {:root-dir "/tmp/logseq"} "logseq_db_demo" "build-host")]
+                   (let [apply-ops (->> @calls*
+                                        (filter #(= :thread-api/apply-outliner-ops (first %)))
+                                        (mapv (comp second second)))]
+                     (is (= [[:create-page [agent-command/agent-bridge-registry-page {}]]]
+                            (first apply-ops)))
+                     (is (= [[:create-page ["build-host" {}]]]
+                            (second apply-ops)))
+                     (is (not-any? #(= :insert-blocks (ffirst %)) apply-ops)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-registration-keeps-existing-agent-name-page
+  (async done
+         (let [calls* (atom [])
+               registry-page {:db/id 300
+                              :block/uuid (uuid "33333333-3333-3333-3333-333333333333")
+                              :block/name "agentbridge"
+                              :block/title agent-command/agent-bridge-registry-page}
+               agent-page {:db/id 400
+                           :block/uuid (uuid "44444444-4444-4444-4444-444444444444")
+                           :block/name "build-host"
+                           :block/title "build-host"}]
+           (-> (p/with-redefs [transport/invoke
+                                (fn [_ method args]
+                                  (swap! calls* conj [method args])
+                                  (case method
+                                    :thread-api/q
+                                    (let [[_ [query & query-args]] args]
+                                      (cond
+                                        (and (= query agent-command/agent-bridge-registry-page-query)
+                                             (= ["agentbridge"] query-args))
+                                        (p/resolved [registry-page])
+
+                                        (and (= query agent-command/registered-agent-query)
+                                             (= ["build-host"] query-args))
+                                        (p/resolved [agent-page])
+
+                                        :else
+                                        (p/rejected (ex-info "unexpected query"
+                                                             {:query query
+                                                              :query-args query-args}))))
+
+                                    :thread-api/apply-outliner-ops
+                                    (p/rejected (ex-info "unexpected apply-outliner-ops"
+                                                         {:args args}))
+
+                                    (p/rejected (ex-info "unexpected invoke"
+                                                         {:method method
+                                                          :args args}))))]
+                 (p/let [result (agent-command/register-agent-bridge! {:root-dir "/tmp/logseq"} "logseq_db_demo" "build-host")]
+                   (is (true? result))
+                   (is (not-any? #(= :thread-api/apply-outliner-ops (first %)) @calls*))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-write-agent-session-id
   (async done
