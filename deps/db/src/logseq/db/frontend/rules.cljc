@@ -22,13 +22,7 @@
    '[[(alias ?e2 ?e1)
       [?e2 :block/alias ?e1]]
      [(alias ?e2 ?e1)
-      [?e1 :block/alias ?e2]]
-     [(alias ?e1 ?e3)
-      [?e1 :block/alias ?e2]
-      [?e2 :block/alias ?e3]]
-     [(alias ?e3 ?e1)
-      [?e1 :block/alias ?e2]
-      [?e2 :block/alias ?e3]]]
+      [?e1 :block/alias ?e2]]]
 
    :self-ref
    '[(self-ref ?b ?ref)
