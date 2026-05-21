@@ -646,10 +646,12 @@
                                        :schema {:type :node
                                                 :public? false
                                                 :hide? true}}
-     :logseq.property.agent/session-id {:title "agent session id"
+     :logseq.property.agent/session-id {:title "Agent Session ID"
                                         :schema {:type :string
-                                                 :public? false
-                                                 :hide? true}}
+                                                 :public? true
+                                                 :hide? true}
+                                        :properties
+                                        {:logseq.property/description "Stores the AgentBridge session ID for a routed task."}}
      :logseq.property/used-template {:title "Used template"
                                      :schema {:type :node
                                               :public? false

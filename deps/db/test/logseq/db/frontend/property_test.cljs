@@ -91,13 +91,15 @@
 (deftest agent-session-id-built-in-property
   (let [property (get db-property/built-in-properties :logseq.property.agent/session-id)]
     (testing "schema"
-      (is (= "agent session id" (:title property)))
+      (is (= "Agent Session ID" (:title property)))
       (is (= :string (get-in property [:schema :type])))
       (is (not (contains? (:schema property) :db/cardinality)))
-      (is (= false (get-in property [:schema :public?])))
+      (is (= true (get-in property [:schema :public?])))
       (is (= true (get-in property [:schema :hide?]))))
 
-    (testing "internal built-in logseq property"
-      (is (not (contains? db-property/public-built-in-properties :logseq.property.agent/session-id)))
+    (testing "built-in logseq property"
+      (is (= "Stores the AgentBridge session ID for a routed task."
+             (get-in property [:properties :logseq.property/description])))
+      (is (contains? db-property/public-built-in-properties :logseq.property.agent/session-id))
       (is (db-property/logseq-property? :logseq.property.agent/session-id))
       (is (db-property/internal-property? :logseq.property.agent/session-id)))))

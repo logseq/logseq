@@ -197,10 +197,12 @@
              (:kv/value (d/entity @conn :logseq.kv/schema-version))))
       (let [property (d/entity @conn :logseq.property.agent/session-id)]
         (is (some? property))
-        (is (= "agent session id" (:block/title property)))
+        (is (= "Agent Session ID" (:block/title property)))
         (is (= :string (:logseq.property/type property)))
-        (is (false? (:logseq.property/public? property)))
-        (is (true? (:logseq.property/hide? property))))
+        (is (true? (:logseq.property/public? property)))
+        (is (true? (:logseq.property/hide? property)))
+        (is (= "Stores the AgentBridge session ID for a routed task."
+               (:block/title (:logseq.property/description property)))))
       (is (some #(= {:properties [:logseq.property.agent/session-id]}
                     (:migrate-updates %))
                 (:upgrade-result-coll result))))))
