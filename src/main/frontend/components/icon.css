@@ -293,14 +293,17 @@
 
 .cp__emoji-icon-picker button.is-ghost-highlighted,
 .asset-picker button.is-ghost-highlighted {
-  /* Tailwind utility resolves through the full chain
-     `var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)))`,
-     so in OG (where `--lx-gray-04` is unset) the tile picks up the
-     themed `--ls-quaternary-background-color` instead of falling all
-     the way to neutral `--rx-gray-04`. The `!` prefix preserves the
-     `!important` semantics that beat the hover-bg rule on .icons-row
-     buttons. */
-  @apply !bg-gray-04;
+  /* Same themed token chain as @apply bg-gray-04 (which resolves to
+     `--ls-quaternary-background-color` in OG), but rendered at 50%
+     alpha so it visibly recedes against the picker bg. The diluted
+     tint pulls ghost a couple shades closer to the picker bg, giving
+     hover (full `--ls-border-color`) a clearer pop. Important to
+     beat the .icons-row > button:hover bg. */
+  background-color: color-mix(
+    in srgb,
+    var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04))) 50%,
+    transparent
+  ) !important;
   /* Tailwind's gray-08 chain stops at `--lx-gray-08, --rx-gray-08` —
      no `--ls-*` step. Inject `--ls-border-color` manually so OG
      (where `--lx-gray-08` is unset) picks up the themed teal border
