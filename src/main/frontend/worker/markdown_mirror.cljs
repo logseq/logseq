@@ -324,17 +324,6 @@
                (not (ldb/page? target)))
       target)))
 
-(defn- block-id-comment
-  [db-id]
-  (str "<!-- id: " db-id " -->"))
-
-(defn- append-block-id-comment
-  [content db-id]
-  (let [comment-text (block-id-comment db-id)]
-    (if (string/blank? content)
-      comment-text
-      (str content " " comment-text))))
-
 (defn- content-first-line
   [content]
   (-> (or content "")
@@ -385,8 +374,7 @@
 
 (defn- block-line-info
   [db block marker]
-  {:db/id (:db/id block)
-   :first-line-fragment (block-first-line-fragment block)
+  {:first-line-fragment (block-first-line-fragment block)
    :code-block? (code-block? block)
    :status-marker (when (seq (d/datoms db :eavt (:db/id block) :logseq.property/status))
                     (some-> (:logseq.property/status block) status-marker))
@@ -460,9 +448,6 @@
         options
         {:initial-lines []}))
       (let [content (decorate-block-content block-info title)
-            content (cond-> content
-                      (not (:code-block? block-info))
-                      (append-block-id-comment (:db/id block-info)))
             marker (or (:marker block-info) "-")]
         [(str spaces marker
               (when-not (string/blank? content) " ")
