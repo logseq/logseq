@@ -352,6 +352,30 @@
                   (js/JSON.stringify (clj->js metadata))
                   "utf8"))
 
+(def ^:private vector-page-filter-topk-multipliers [4 16 64])
+
+(defn- vector-query-topks
+  [limit page]
+  (let [limit (or limit 100)]
+    (if page
+      (mapv #(* limit %) vector-page-filter-topk-multipliers)
+      [limit])))
+
+(defn- query-zvec
+  [collection embedding topk]
+  (.querySync ^js collection
+              #js {:fieldName zvec-vector-field
+                   :topk topk
+                   :vector (clj->js embedding)
+                   :outputFields #js [zvec-page-field]
+                   :params #js {:indexType (zvec-enum-value "ZVecIndexType" "HNSW")
+                                :ef 300}}))
+
+(defn- enough-vector-results?
+  [results limit page]
+  (or (nil? page)
+      (>= (count results) limit)))
+
 (defn- open-vector-index
   [{:keys [path dimension]}]
   (p/let [_ (ensure-dir! (node-path/dirname path))]
@@ -360,21 +384,23 @@
                     (reset! collection* (open-zvec-collection! path dimension)))]
       {:query (fn [embedding limit page]
                 (let [limit (or limit 100)
-                      topk (if page (* 4 limit) limit)
-                      docs (.querySync ^js @collection*
-                                       #js {:fieldName zvec-vector-field
-                                            :topk topk
-                                            :vector (clj->js embedding)
-                                            :outputFields #js [zvec-page-field]
-                                            :params #js {:indexType (zvec-enum-value "ZVecIndexType" "HNSW")
-                                                         :ef 300}})]
-                  (->> (array-seq docs)
-                       (map zvec-result->map)
-                       (filter (fn [result]
-                                 (or (nil? page)
-                                     (= page (:page result)))))
-                       (take limit)
-                       vec)))
+                      topks (vector-query-topks limit page)]
+                  (loop [remaining-topks (seq topks)
+                         latest-results []]
+                    (if-let [topk (first remaining-topks)]
+                      (let [docs (query-zvec @collection* embedding topk)
+                            results (->> (array-seq docs)
+                                         (map zvec-result->map)
+                                         (filter (fn [result]
+                                                   (or (nil? page)
+                                                       (= page (:page result)))))
+                                         (take limit)
+                                         vec)]
+                        (if (or (enough-vector-results? results limit page)
+                                (nil? (next remaining-topks)))
+                          results
+                          (recur (next remaining-topks) results)))
+                      latest-results))))
        :upsert! (fn [docs]
                   (.upsertSync ^js @collection* (clj->js (mapv zvec-doc docs)))
                   nil)

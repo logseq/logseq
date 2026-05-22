@@ -138,6 +138,11 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest node-platform-vector-page-query-topks-expand-adaptively
+  (let [topks #'platform-node/vector-query-topks]
+    (is (= [10] (topks 10 nil)))
+    (is (= [40 160 640] (topks 10 "page-1")))))
+
 (deftest node-platform-backup-uses-shared-sqlite-backup-implementation
   (let [source (node-platform-source)]
     (is (string/includes? source "logseq.db.sqlite.backup"))
