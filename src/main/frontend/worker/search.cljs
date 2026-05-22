@@ -146,7 +146,9 @@ DROP TRIGGER IF EXISTS blocks_au;
 (def ^:private query-boolean-operators #{"and" "or" "not" "|" "&"})
 (def ^:private query-break-chars #{\, \. \; \! \? \uFF0C \u3002 \uFF1B \uFF01 \uFF1F \u3001}) ;; , . ; ! ? ， 。 ； ！ ？ 、
 (def vector-embedding-dimension 384)
-(def ^:private vector-score-weight 300)
+(def vector-context-version 1)
+(def ^:private rrf-k 60)
+(def ^:private source-score-tie-break-weight 0.001)
 
 (defn- query->terms
   [q]
@@ -802,12 +804,63 @@ DROP TRIGGER IF EXISTS blocks_au;
        ((fn [{:keys [order by-id]}]
           (mapv by-id order)))))
 
+(defn reciprocal-rank-fusion
+  ([result-lists]
+   (reciprocal-rank-fusion result-lists nil))
+  ([result-lists weights]
+   (let [scores (reduce-kv
+                 (fn [scores list-idx results]
+                   (let [weight (or (get weights list-idx) 1.0)]
+                     (reduce-kv
+                      (fn [scores rank {:keys [id] :as result}]
+                        (if id
+                          (update scores id
+                                  (fn [{existing-result :result
+                                        :keys [score top-rank]}]
+                                    {:result (or existing-result result)
+                                     :score (+ (or score 0)
+                                               (/ weight (+ rrf-k rank 1)))
+                                     :top-rank (min (or top-rank js/Infinity) rank)}))
+                          scores))
+                      scores
+                      (vec results))))
+                 {}
+                 (vec result-lists))]
+     (->> scores
+          vals
+          (sort-by (juxt (comp - :score)
+                         :top-rank
+                         (comp :id :result)))
+          (mapv (fn [{:keys [result score]}]
+                  (assoc result :rrf-score score)))))))
+
+(defn- rrf-score-by-id
+  [result-lists weights]
+  (reduce-kv
+   (fn [scores list-idx results]
+     (let [weight (or (get weights list-idx) 1.0)]
+       (reduce-kv
+        (fn [scores rank {:keys [id]}]
+          (if id
+            (update scores id (fnil + 0) (/ weight (+ rrf-k rank 1)))
+            scores))
+        scores
+        (vec results))))
+   {}
+   (vec result-lists)))
+
 ;; Combine and re-rank keyword and vector results
 (defn combine-results
   ([db keyword-results]
    (combine-results db keyword-results nil))
   ([db keyword-results vector-results]
-   (let [unique-results (unique-search-results (concat keyword-results vector-results))
+   (let [keyword-results (vec (or keyword-results []))
+         vector-results (vec (or vector-results []))
+         use-rrf? (seq vector-results)
+         fused-score-by-id (when use-rrf?
+                             (rrf-score-by-id [keyword-results vector-results]
+                                              [1.0 1.0]))
+         unique-results (unique-search-results (concat keyword-results vector-results))
          block-by-id (pull-search-result-blocks db unique-results)
          merged (keep (fn [{:keys [id] :as result}]
                         (let [block (get block-by-id id)]
@@ -816,8 +869,12 @@ DROP TRIGGER IF EXISTS blocks_au;
                                                   (+ (or (:keyword-score result) 0.0) 2)
                                                   (or (:keyword-score result) 0.0))
                                   vector-score (or (:vector-score result) 0.0)
-                                  combined-score (+ keyword-score
-                                                    (* vector-score-weight vector-score)
+                                  base-score (if use-rrf?
+                                               (or (get fused-score-by-id id) 0.0)
+                                               keyword-score)
+                                  combined-score (+ base-score
+                                                    (* source-score-tie-break-weight
+                                                       (+ keyword-score vector-score))
                                                     (cond
                                                       (ldb/page? block)
                                                       0.02

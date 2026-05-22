@@ -598,7 +598,72 @@
           (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
           (p/let [result (#'db-core/<embed-index-blocks test-repo blocks)]
             (is (= (count blocks) (count result)))
-            (is (= (repeat 65 1) @batch-sizes))))))
+            (is (= [16 16 16 16 1] @batch-sizes))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-index-blocks-falls-back-to-single-embeddings-when-batch-fails-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [batch-sizes (atom [])
+              blocks [{:id "block-1" :page "page-1" :title "Block 1"}
+                      {:id "block-2" :page "page-1" :title "Block 2"}
+                      {:id "block-3" :page "page-1" :title "Block 3"}]
+              embed-texts (fn [texts]
+                            (swap! batch-sizes conj (count texts))
+                            (if (> (count texts) 1)
+                              (p/rejected (js/Error. "batch too large"))
+                              (p/resolved (mapv (fn [_] [0]) texts))))]
+          (p/let [result (#'db-core/<embed-index-batch-with-fallback embed-texts blocks)]
+            (is (= (count blocks) (count result)))
+            (is (= [3 1 1 1] @batch-sizes))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-build-blocks-indice-in-worker-rebuilds-when-vector-metadata-mismatches-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+              conn (d/create-conn db-schema/schema)
+              search-db (fake-db {:user-version db-core/search-db-version})
+              truncate-calls (atom 0)
+              metadata-writes (atom [])
+              idle-status-atom (:thread-atom/search-input-idle-status @worker-state/*state)]
+          (d/transact! conn [{:block/uuid (random-uuid)}])
+          (platform/set-platform! (build-test-platform {:runtime :node}))
+          (reset! worker-state/*sqlite-conns {test-repo {:search search-db}})
+          (reset! worker-state/*datascript-conns {test-repo conn})
+          (reset! worker-state/*vector-indexes
+                  {test-repo {:upsert! (fn [_docs] nil)
+                              :truncate! (fn [] (swap! truncate-calls inc))
+                              :metadata (fn []
+                                          {:embedding-model-id "old-model"
+                                           :embedding-dimension search/vector-embedding-dimension
+                                           :context-version search/vector-context-version})
+                              :set-metadata! (fn [metadata]
+                                               (swap! metadata-writes conj metadata))}})
+          (reset! idle-status-atom {test-repo {:idle? true
+                                               :ts (.now js/Date)}})
+          (reset! worker-state/*main-thread (fn [& _] (p/resolved nil)))
+          (with-redefs [search/truncate-table! (fn [_db] nil)
+                        search/upsert-blocks! (fn [_db _blocks] nil)
+                        search/hidden-entity? (constantly false)
+                        search/block->index-with-context (fn [_context _entity]
+                                                           {:id "block-1"
+                                                            :page "page-1"
+                                                            :title "Hello"})]
+            (p/let [_ (build-index! test-repo false)]
+              (is (= 1 @truncate-calls))
+              (is (= [{:embedding-model-id "test-model"
+                       :embedding-dimension search/vector-embedding-dimension
+                       :context-version search/vector-context-version}]
+                     @metadata-writes)))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
      (p/finally done))))

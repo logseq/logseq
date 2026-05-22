@@ -717,6 +717,16 @@
           (is (= 10 (count result)))
           (is (= 10 @consumed)))))))
 
+(deftest reciprocal-rank-fusion-promotes-cross-source-agreement
+  (testing "a result found by both keyword and vector search outranks a vector-only top hit"
+    (let [rrf #'search/reciprocal-rank-fusion
+          result (rrf [[{:id "keyword-only"}
+                        {:id "shared"}]
+                       [{:id "vector-only"}
+                        {:id "shared"}]])]
+      (is (= ["shared" "keyword-only" "vector-only"]
+             (mapv :id result))))))
+
 (deftest search-blocks-hybrid-ranks-keyword-and-vector-results
   (testing "SQLite keyword hits and zvec vector hits share the final ranking"
     (let [keyword-id (test-uuid-string 910)
@@ -758,7 +768,7 @@
                                                {:limit 10
                                                 :enable-snippet? false
                                                 :query-embedding [0.4 0.5 0.6]}))]
-          (is (= ["related semantic result" "alpha keyword"]
+          (is (= ["alpha keyword" "related semantic result"]
                  (mapv :block/title result))))))))
 
 (deftest search-blocks-ranks-exact-keyword-before-weak-vector-result

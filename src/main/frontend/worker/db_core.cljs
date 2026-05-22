@@ -73,7 +73,8 @@
 (def ^:private recycle-gc-kv :logseq.kv/recycle-last-gc-at)
 
 (def ^:private search-index-build-batch-size 200)
-(def ^:private vector-embedding-batch-size 1)
+(def ^:private vector-embedding-batch-size 16)
+(def ^:private vector-embedding-max-batch-chars (* vector-embedding-batch-size 2048))
 (def ^:private vector-embedding-max-title-length 2048)
 (def ^:private search-index-build-time-budget-ms 8)
 (def ^:private search-index-build-idle-status-ttl-ms 2000)
@@ -622,6 +623,25 @@
   [^js search-db]
   (aget (aget (.exec search-db #js {:sql "PRAGMA user_version" :rowMode "array"}) 0) 0))
 
+(defn- expected-vector-index-metadata
+  []
+  {:embedding-model-id (platform/embedding-model-id (platform/current))
+   :embedding-dimension search/vector-embedding-dimension
+   :context-version search/vector-context-version})
+
+(defn- vector-index-current?
+  [repo]
+  (if-let [vector-index (worker-state/get-vector-index repo)]
+    (if-let [metadata-fn (:metadata vector-index)]
+      (= (expected-vector-index-metadata) (metadata-fn))
+      false)
+    true))
+
+(defn- persist-vector-index-metadata!
+  [repo]
+  (when-let [set-metadata! (:set-metadata! (worker-state/get-vector-index repo))]
+    (set-metadata! (expected-vector-index-metadata))))
+
 (defn- start-search-index-build!
   [repo]
   (let [build-id (str (random-uuid))]
@@ -859,24 +879,68 @@
       (subs title 0 vector-embedding-max-title-length)
       title)))
 
+(defn- vector-embedding-batches
+  [blocks]
+  (loop [remaining (seq blocks)
+         batch []
+         batch-chars 0
+         result []]
+    (if-let [block (first remaining)]
+      (let [text (vector-embedding-title block)
+            text-chars (count text)
+            full? (or (>= (count batch) vector-embedding-batch-size)
+                      (and (seq batch)
+                           (> (+ batch-chars text-chars)
+                              vector-embedding-max-batch-chars)))]
+        (if full?
+          (recur remaining [] 0 (conj result batch))
+          (recur (next remaining)
+                 (conj batch block)
+                 (+ batch-chars text-chars)
+                 result)))
+      (cond-> result
+        (seq batch) (conj batch)))))
+
+(defn- <embed-index-batch
+  ([batch]
+   (<embed-index-batch #(platform/embed-texts (platform/current) %) batch))
+  ([embed-texts-fn batch]
+   (p/let [embeddings (embed-texts-fn (mapv vector-embedding-title batch))
+           _ (validate-embedding-count! batch embeddings)]
+     (mapv (fn [block embedding]
+             (assoc block :embedding embedding))
+           batch
+           embeddings))))
+
+(defn- <embed-index-batch-with-fallback
+  ([batch]
+   (<embed-index-batch-with-fallback #(platform/embed-texts (platform/current) %) batch))
+  ([embed-texts-fn batch]
+   (-> (<embed-index-batch embed-texts-fn batch)
+       (p/catch
+        (fn [error]
+          (if (= 1 (count batch))
+            (throw error)
+            (p/loop [remaining (seq batch)
+                     result []]
+              (if-let [block (first remaining)]
+                (p/let [embedded (<embed-index-batch embed-texts-fn [block])]
+                  (p/recur (next remaining)
+                           (into result embedded)))
+                result))))))))
+
 (defn- <embed-index-blocks
   [repo blocks]
   (let [blocks (vec (filter embeddable-index-block? blocks))]
     (if (and (seq blocks) (worker-state/get-vector-index repo))
-      (p/loop [remaining (partition-all vector-embedding-batch-size blocks)
+      (p/loop [remaining (seq (vector-embedding-batches blocks))
                result []]
         (if (empty? remaining)
           result
           (let [batch (vec (first remaining))]
-            (p/let [embeddings (platform/embed-texts (platform/current)
-                                                     (mapv vector-embedding-title batch))
-                    _ (validate-embedding-count! batch embeddings)]
+            (p/let [embedded (<embed-index-batch-with-fallback batch)]
               (p/recur (rest remaining)
-                       (into result
-                             (mapv (fn [block embedding]
-                                     (assoc block :embedding embedding))
-                                   batch
-                                   embeddings)))))))
+                       (into result embedded))))))
       (p/resolved []))))
 
 (defn- <search-blocks
@@ -1238,6 +1302,7 @@
              (p/recur remaining' processed' (if should-report? progress last-progress))))
          (do
            (ensure-active-search-index-build! repo build-id)
+           (persist-vector-index-metadata! repo)
            (.exec search-db (str "PRAGMA user_version = " search-db-version))
            (report-search-index-progress! repo {:build-id build-id
                                                 :status :completed
@@ -1251,7 +1316,9 @@
   (p/let [search-db (get-search-db repo)]
     (when search-db
       (let [version (search-index-version search-db)]
-        (if (and (= version search-db-version) (not force?))
+        (if (and (= version search-db-version)
+                 (vector-index-current? repo)
+                 (not force?))
           version
           (when-let [conn (worker-state/get-datascript-conn repo)]
             (let [build-id (start-search-index-build! repo)]
