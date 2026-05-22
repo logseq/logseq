@@ -3952,7 +3952,7 @@
          {:options [[:avatar (t :icon.asset-mode/avatar)] [:image (t :icon.asset-mode/image)]]
           :active mode
           :on-change (fn [m _e] (on-mode-change m))
-          :aria-label "Icon rendering mode"
+          :aria-label (t :icon.asset-mode/picker-aria-label)
           :button-attrs {:data-topbar-stop "tab"}})]
        ;; Right-side action group. Holds the color trigger (Avatar mode
        ;; only) and the trash button. Bundling them under one grid slot

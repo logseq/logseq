@@ -1,5 +1,4 @@
-{
- :account/authentication "身份验证"
+{:account/authentication "身份验证"
  :account/benefits-desc "使用 Logseq 帐户，您可以访问 Logseq Sync 等云服务和 alpha/beta 功能。"
  :account/billing "订阅计费"
  :account/billing-expired-on-label "Pro 计划过期时间：{1}"
@@ -906,6 +905,7 @@
 
  :icon.asset-mode/avatar "头像"
  :icon.asset-mode/image "图片"
+ :icon.asset-mode/picker-aria-label "资产类型"
 
  :icon.asset-search/empty "未找到匹配的图片"
  :icon.asset-search/placeholder "搜索图片"
@@ -2053,5 +2053,4 @@
  :zotero/attachments "附件"
  :zotero/imported-file-warning "这是一个从 Zotero 导入的文件，设置 Zotero 数据目录 后即可在 Logseq 中打开该文件。"
  :zotero/linked-file-warning "这是一个 Zotero 链接文件，设置 Zotero 链接附件基础目录 后即可在 Logseq 中打开该文件。"
- :zotero/notes "笔记"
-}
+ :zotero/notes "笔记"}
