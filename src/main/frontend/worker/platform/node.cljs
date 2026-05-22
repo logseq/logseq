@@ -238,9 +238,11 @@
     (if (empty? texts)
       (p/resolved [])
       (p/let [extractor (<embedding-pipeline model-id)
-              tensor (extractor (clj->js texts)
-                                #js {:pooling "mean"
-                                     :normalize true})]
+              tensor (.call (gobj/get extractor "_call")
+                            extractor
+                            (clj->js texts)
+                            #js {:pooling "mean"
+                                 :normalize true})]
         (let [vectors (tensor->vectors tensor)]
           (when-let [dispose (gobj/get tensor "dispose")]
             (.call dispose tensor))
