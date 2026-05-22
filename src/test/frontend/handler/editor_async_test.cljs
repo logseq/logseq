@@ -492,8 +492,7 @@
                                                                  (reset! revealed [area opts]))
                         state/clear-selection! (fn [])
                         state/pub-event! (fn [_])]
-          (comments-handler/add-comment-to-current-context!)
-          (p/resolved nil))
+          (comments-handler/add-comment-to-current-context!))
         (p/then (fn [_]
                   (is @saved?)
                   (is @cleared?
