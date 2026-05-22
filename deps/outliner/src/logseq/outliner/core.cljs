@@ -863,10 +863,17 @@
   (or (comments-area? block)
       (comment-block? block)))
 
+(defn- move-source-allowed-for-comments?
+  [block sibling?]
+  (and (not (comment-block? block))
+       (or sibling?
+           (not (comments-area? block)))))
+
 (defn- move-target-allowed-for-comments?
-  [target-block]
-  (and (not (comments-area? target-block))
-       (not (comment-block? target-block))))
+  [target-block sibling?]
+  (and (not (comment-block? target-block))
+       (or sibling?
+           (not (comments-area? target-block)))))
 
 (defn- block-subtree-ids
   [db block]
@@ -1044,7 +1051,7 @@
           current-blocks (map (fn [block]
                                 (d/entity db (:db/id block)))
                               blocks)
-          top-level-blocks (remove protected-comment-block?
+          top-level-blocks (remove comment-block?
                                    (filter-top-level-blocks db current-blocks))]
       (when (seq top-level-blocks)
         (let [[target-block sibling?] (get-target-block db top-level-blocks target-block opts)
@@ -1058,7 +1065,8 @@
                                    block
                                    (d/entity db (:db/id block))))))
               original-position? (move-to-original-position? blocks target-block sibling? non-consecutive?)]
-          (when (and (move-target-allowed-for-comments? target-block)
+          (when (and (every? #(move-source-allowed-for-comments? % sibling?) blocks)
+                     (move-target-allowed-for-comments? target-block sibling?)
                      (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                      (not original-position?))
             (let [parents' (->> (ldb/get-block-parents db (:block/uuid target-block) {})
