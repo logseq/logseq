@@ -2596,7 +2596,19 @@
         ;; translation; here we pass the resolved item directly.
         image-placeholder-item {:type :image-placeholder :id "image-placeholder"}]
     [:div.custom-tab-content
-     ;; Text option
+     ;; Text option. In page-icon context: commits the synthesized
+     ;; Initials text-item immediately (mirrors the Avatar/Image
+     ;; tiles' commit-on-click pattern), then lands on the
+     ;; text-picker so the user can customize mode / text / color /
+     ;; alignment. Without the commit-on-click the page icon would
+     ;; revert to the prior icon (e.g. an emoji) the instant the
+     ;; hover preview cleared on click, since text-picker's
+     ;; `:will-mount` doesn't write a preview. Closing the popup
+     ;; without further edits would then *also* commit a text icon
+     ;; via text-picker's `:will-unmount` — making the de-facto
+     ;; semantic "opening text-picker overwrites the prior icon"
+     ;; already. Committing on click makes that semantic explicit
+     ;; and removes the stale-preview window.
      (when text-item
        [:button.custom-tab-item
         {:data-item-id "custom-text"
@@ -2604,7 +2616,9 @@
          :class (when (= "custom-text" highlighted-id) "is-highlighted")
          :on-click (if default-icon?
                      #(when on-chosen (on-chosen % text-item))
-                     #(reset! *view :text-picker))
+                     (fn [e]
+                       (when on-chosen (on-chosen e text-item true))
+                       (reset! *view :text-picker)))
          :on-mouse-over (fn [] (some-> on-tile-hover! (apply [text-item])))}
         [:div.custom-tab-item-preview {:aria-hidden "true"}
          ;; `:color? true` wraps the SVG in `.ls-icon-color-wrap` so the
