@@ -80,6 +80,18 @@
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest node-platform-embedding-backend-embeds-text
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-embedding-text")]
+      (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
+                  embeddings ((get-in platform [:embedding :embed-texts]) ["hello"])]
+            (is (= 1 (count embeddings)))
+            (is (= 384 (count (first embeddings))))
+            (is (every? number? (first embeddings))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest node-platform-vector-index-creates-missing-collection-path
   (async done
     (let [root-dir (node-helper/create-tmp-dir "platform-node-vector")
