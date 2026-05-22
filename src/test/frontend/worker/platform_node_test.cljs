@@ -95,7 +95,7 @@
 (deftest node-platform-vector-index-creates-missing-collection-path
   (async done
     (let [root-dir (node-helper/create-tmp-dir "platform-node-vector")
-          vector-path (node-path/join root-dir "graphs" "graph-a" "search-vector" "db.sqlite")]
+          vector-path (node-path/join root-dir "graphs" "graph-a" "search" "vector")]
       (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
                   vector-index ((get-in platform [:vector :open-index])
                                 {:path vector-path

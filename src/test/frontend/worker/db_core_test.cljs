@@ -522,6 +522,31 @@
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
 
+(deftest search-index-blocks-embeds-in-bounded-batches-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [batch-sizes (atom [])
+              blocks (mapv (fn [n]
+                              {:id (str "block-" n)
+                               :page "page-1"
+                               :title (str "Block " n)})
+                            (range 65))]
+          (platform/set-platform!
+           (build-test-platform
+            {:runtime :node
+             :embed-texts (fn [texts]
+                            (swap! batch-sizes conj (count texts))
+                            (p/resolved (mapv (fn [_] [0]) texts)))}))
+          (reset! worker-state/*vector-indexes {test-repo {:upsert! (fn [_] nil)}})
+          (p/let [result (#'db-core/<embed-index-blocks test-repo blocks)]
+            (is (= (count blocks) (count result)))
+            (is (= [32 32 1] @batch-sizes))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
 (deftest release-access-handles-clears-active-import-state-test
   (restoring-worker-state
    (fn []
@@ -709,6 +734,18 @@
                     (str repo "-" path))))
        (is (= (str test-repo "-/db.sqlite")
               (resolve-db-path test-repo pool "/db.sqlite")))))))
+
+(deftest vector-index-path-resolves-under-search-vector-dir-test
+  (restoring-worker-state
+   (fn []
+     (let [vector-index-path #'db-core/vector-index-path
+           pool #js {:id "pool"}]
+       (platform/set-platform!
+        (assoc-in (build-test-platform) [:storage :resolve-db-path]
+                  (fn [_repo _pool path]
+                    (str "/graph/" path))))
+       (is (= "/graph/search/vector"
+              (vector-index-path test-repo pool)))))))
 
 ;; ---- checkpoint-db! tests ----
 
