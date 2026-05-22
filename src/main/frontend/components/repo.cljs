@@ -113,17 +113,50 @@
   [{:keys [root]}]
   (util/open-url (str "file://" root)))
 
+(defn- can-delete-local-graph?
+  [repo]
+  (repo-handler/removable-repo? repo (state/get-repos)))
+
 (defn- delete-local-graph!
   [{:keys [url] :as repo}]
-  (let [graph-name (config/db-graph-name url)
-        dialog-config {:cancel-label (t :ui/cancel)
-                       :ok-label (t :ui/confirm)}]
-    (-> (shui/dialog-confirm!
-         (assoc dialog-config
-                :title (t :graph/delete-local-confirm-desc graph-name)
-                :description (t :graph/delete-warning)))
-        (p/then (fn []
-                  (repo-handler/remove-repo! repo))))))
+  (when (can-delete-local-graph? repo)
+    (let [graph-name (config/db-graph-name url)
+          dialog-config {:cancel-label (t :ui/cancel)
+                         :ok-label (t :ui/confirm)}]
+      (-> (shui/dialog-confirm!
+           (assoc dialog-config
+                  :title (t :graph/delete-local-confirm-desc graph-name)
+                  :description (t :graph/delete-warning)))
+          (p/then (fn []
+                    (repo-handler/remove-repo! repo)))))))
+
+(defn graph-open-new-window-target
+  [{:keys [url] :as repo}]
+  (when-let [graph-id (:graph-id (graph/repo-summary->registry-entry repo))]
+    {:repo url
+     :graph-id graph-id}))
+
+(defn- <graph-open-new-window-target
+  [{:keys [url] :as repo}]
+  (if-let [target (graph-open-new-window-target repo)]
+    (p/resolved target)
+    (p/let [registry (graph/<get-graph-registry)
+            entry (graph/resolve-registry-target registry {:graph-identifier url})]
+      (when entry
+        {:repo (:repo entry)
+         :graph-id (:graph-id entry)}))))
+
+(defn open-in-another-tab-action?
+  [{:keys [root]}]
+  (boolean (and util/web-platform? root)))
+
+(defn open-graph-in-another-tab!
+  [repo]
+  (if-let [target (graph-open-new-window-target repo)]
+    (state/pub-event! [:graph/open-new-window target])
+    (p/let [target (<graph-open-new-window-target repo)]
+      (when target
+        (state/pub-event! [:graph/open-new-window target])))))
 
 (rum/defc ^:large-vars/cleanup-todo repos-inner
   "Graph list in `All graphs` page"
@@ -171,12 +204,22 @@
             (ui/icon "dots" {:size 15})))
           (shui/dropdown-menu-content
            {:align "end"}
-           (when root
+           (when (open-in-another-tab-action? repo)
              (shui/dropdown-menu-item
-              {:key "delete-locally"
-               :class "delete-local-graph-menu-item"
-               :on-click #(delete-local-graph! repo)}
-              (t :graph/delete-local-action)))
+              {:key "open-in-another-tab"
+               :class "open-in-another-tab-menu-item"
+               :on-click #(open-graph-in-another-tab! repo)}
+              (t :graph/open-in-another-tab-action)))
+
+           (when root
+             (let [disabled? (not (can-delete-local-graph? repo))]
+               (shui/dropdown-menu-item
+                {:key "delete-locally"
+                 :class "delete-local-graph-menu-item"
+                 :disabled disabled?
+                 :on-click #(when-not disabled?
+                              (delete-local-graph! repo))}
+                (t :graph/delete-local-action))))
 
            (when (and root
                       (user-handler/logged-in?)
@@ -330,9 +373,14 @@
                                        (when (and ready-for-use? (not downloading?))
                                          (when-let [on-click (:on-click opts)]
                                            (on-click e))
-                                         (if (and (gobj/get e "shiftKey")
-                                                  (not (and rtc-graph? remote?)))
-                                           (state/pub-event! [:graph/open-new-window url])
+                                         (if (and (gobj/get e "shiftKey") (:root graph))
+                                           (if (util/electron?)
+                                             (state/pub-event! [:graph/open-new-window url])
+                                             (if-let [target (graph-open-new-window-target graph)]
+                                               (state/pub-event! [:graph/open-new-window target])
+                                               (p/let [target (<graph-open-new-window-target graph)]
+                                                 (when target
+                                                   (state/pub-event! [:graph/open-new-window target])))))
                                            (cond
                                                   ;; exists locally?
                                              (or (:root graph) (not rtc-graph?))
@@ -440,23 +488,26 @@
 
 (defn- current-repo-context-menu-content
   [repo]
-  [:<>
-   (shui/dropdown-menu-item
-    {:key "open-repo-folder"
-     :on-click #(open-repo-folder! repo)}
-    [:span.flex.items-center.gap-1
-     (ui/icon "folder-pin")
-     (t :graph/open-folder-action)])
+  (let [disabled? (not (can-delete-local-graph? repo))]
+    [:<>
+     (shui/dropdown-menu-item
+      {:key "open-repo-folder"
+       :on-click #(open-repo-folder! repo)}
+      [:span.flex.items-center.gap-1
+       (ui/icon "folder-pin")
+       (t :graph/open-folder-action)])
 
-   (shui/dropdown-menu-separator)
+     (shui/dropdown-menu-separator)
 
-   (shui/dropdown-menu-item
-    {:key "delete-locally"
-     :class "delete-local-graph-menu-item"
-     :on-click #(delete-local-graph! repo)}
-    [:span.flex.items-center.gap-1.text-red-700
-     (ui/icon "trash")
-     (t :graph/delete-local-action)])])
+     (shui/dropdown-menu-item
+      {:key "delete-locally"
+       :class "delete-local-graph-menu-item"
+       :disabled disabled?
+       :on-click #(when-not disabled?
+                    (delete-local-graph! repo))}
+      [:span.flex.items-center.gap-1.text-red-700
+       (ui/icon "trash")
+       (t :graph/delete-local-action)])]))
 
 (rum/defcs graphs-selector < rum/reactive
   [_state]

@@ -12,6 +12,7 @@
             [electron.ipc :as ipc]
             [frontend.components.avatar :as avatar]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
+            [frontend.components.block.asset :as block-asset]
             [frontend.components.block.comments :as block-comments]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.components.block.drop :as block-drop]
@@ -518,8 +519,8 @@
     (:image-placeholder config)
     (if (and (:image-placeholder config) (nil? @src))
       (:image-placeholder config)
-      (let [ext (keyword (or (util/get-file-ext @src)
-                             (util/get-file-ext href)))
+      (let [asset-block (:asset-block config)
+            ext (block-asset/link-ext @src href asset-block)
             repo (state/get-current-repo)
             repo-dir (config/get-repo-dir repo)
             share-fn (fn [event]
@@ -560,15 +561,14 @@
            title]
 
           util/web-platform?
-          (let [file-name (str (:block/title (:asset-block config)) "." (name ext))]
+          (let [file-name (block-asset/link-file-name asset-block ext)]
             [:a.asset-ref
              {:href @src
               :download file-name}
              file-name])
 
-          (and (util/electron?) (:asset-block config))
-          (let [asset-block (:asset-block config)
-                file-name (str (:block/title asset-block) "." (name ext))]
+          (and (util/electron?) asset-block)
+          (let [file-name (block-asset/link-file-name asset-block ext)]
             [:a.asset-ref
              {:on-click (fn [e]
                           (util/stop e)
@@ -582,7 +582,7 @@
                                 file-fpath (if local-ext-url?
                                               ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
                                              (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
-                                             (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) "." (name ext))))]
+                                             (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) (when ext (str "." (name ext))))))]
                             (if remote-ext-url?
                               (js/window.apis.openExternal ext-url)
                               (js/window.apis.openPath file-fpath))))}
@@ -2577,6 +2577,10 @@
    (dom/closest target ".cloze-revealed")
    (dom/closest target ".query-table")))
 
+(defn- comments-area-target?
+  [target]
+  (boolean (util/rec-get-node target "ls-comments-area")))
+
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
   (when-not @(:ui/scrolling? @state/state)
@@ -2586,7 +2590,7 @@
           mobile? (util/mobile?)
           mobile-selection? (and mobile? (seq selection-blocks))
           block-dom-element (util/rec-get-node target "ls-block")]
-      (if mobile-selection?
+      (if (and mobile-selection? (not (comments-area-target? target)))
         (let [ids (set (state/get-selection-block-ids))]
           (if (contains? ids (:block/uuid block))
             (do
@@ -2595,6 +2599,7 @@
                 (state/set-state! :mobile/show-action-bar? false)))
             (state/conj-selection-block! block-dom-element)))
         (when-not (or
+                   (comments-area-target? target)
                    (:closed-values? config)
                    (> (count content) (state/block-content-max-length (state/get-current-repo))))
           (let [target (gobj/get e "target")
@@ -3710,16 +3715,18 @@
   [^js e block *control-show? block-id doc-mode? selection-block-ids]
   (let [last-client-y (:client-y @*block-last-mouse-event)
         client-y (.-clientY e)
-        block-dom-node (util/rec-get-node (.-target e) "ls-block")]
+        target (.-target e)
+        block-dom-node (util/rec-get-node target "ls-block")]
     (remember-block-pointer! e)
     (reset! *control-show? true)
-    (when (block-selection/select-on-hover?
-           {:last-client-y last-client-y
-            :client-y client-y
-            :dragging? @*dragging?
-            :editing-same-block? (= (:block/uuid block)
-                                    (:block/uuid (state/get-edit-block)))
-            :active-selection? (boolean (seq (state/get-selection-blocks)))})
+    (when (and (not (comments-area-target? target))
+               (block-selection/select-on-hover?
+                {:last-client-y last-client-y
+                 :client-y client-y
+                 :dragging? @*dragging?
+                 :editing-same-block? (= (:block/uuid block)
+                                         (:block/uuid (state/get-edit-block)))
+                 :active-selection? (boolean (seq (state/get-selection-blocks)))}))
       (.preventDefault e)
       (when-let [parent (gdom/getElement block-id)]
         (let [node (.querySelector parent ".bullet-container")]
@@ -4368,7 +4375,7 @@
      (when show-inline-comments?
        [:div.ls-inline-comments
         (when-not (:page-title? config)
-          {:style {:padding-left (if (util/mobile?) 12 45)}})
+          {:class "ls-block-content-indent"})
         (block-comments/comments-area-view
          (assoc config :container-id (comments-model/inline-comment-container-id (:container-id config)))
          comment-thread
@@ -4386,7 +4393,7 @@
                     (and
                      (not collapsed?)
                      (not (or table? property?)))))
-       [:div (when-not (:page-title? config) {:style {:padding-left (if (util/mobile?) 12 45)}})
+       [:div (when-not (:page-title? config) {:class "ls-block-content-indent"})
         (db-properties-cp config block {:in-block-container? true})])
 
      (when (and show-query? (not (:table? config)))

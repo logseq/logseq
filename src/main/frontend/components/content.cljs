@@ -16,6 +16,7 @@
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
@@ -271,9 +272,10 @@
          (shui/dropdown-menu-item
           {:key "Copy block URL"
            :on-click (fn [_e]
-                       (let [current-repo (state/get-current-repo)
-                             tap-f (fn [block-id]
-                                     (url-util/get-logseq-graph-uuid-url nil current-repo block-id))]
+                       (let [tap-f (fn [block-id]
+                                     (url-util/get-logseq-web-block-url config/app-website
+                                                                        (graph-handler/current-graph-id)
+                                                                        block-id))]
                          (editor-handler/copy-block-ref! block-id tap-f)))}
           (t :block/copy-url)))
 

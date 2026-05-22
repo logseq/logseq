@@ -3,12 +3,17 @@
             ["fs-extra" :as ^js fs]
             ["path" :as ^js node-path]
             [cljs.reader :as reader]
-            [electron.logger :as logger]))
+            [electron.logger :as logger]
+            [logseq.common.graph-registry :as graph-registry]))
 
 ;; FIXME: move configs.edn to where it should be
 (defonce dot-root (.join node-path (.getPath app "home") ".logseq"))
 (defonce cfg-root (.getPath app "userData"))
 (defonce cfg-path (.join node-path cfg-root "configs.edn"))
+
+(defn graph-registry-path
+  []
+  (.join node-path dot-root "graphs.edn"))
 
 (defn- ensure-cfg
   []
@@ -40,3 +45,33 @@
 (defn get-config
   []
   (ensure-cfg))
+
+(defn- read-edn-file
+  [path]
+  (try
+    (.ensureFileSync fs path)
+    (let [body (.toString (.readFileSync fs path))]
+      (if (seq body) (reader/read-string body) []))
+    (catch :default e
+      (logger/error :graph-registry-read-error e)
+      [])))
+
+(defn read-graph-registry
+  []
+  (read-edn-file (graph-registry-path)))
+
+(defn write-graph-registry!
+  [registry]
+  (try
+    (.ensureDirSync fs dot-root)
+    (.writeFileSync fs (graph-registry-path) (pr-str (vec registry)))
+    (vec registry)
+    (catch :default e
+      (logger/error :graph-registry-write-error e)
+      nil)))
+
+(defn upsert-graph-registry-entry!
+  [entry]
+  (let [registry (read-graph-registry)
+        registry' (graph-registry/upsert-entry registry entry)]
+    (write-graph-registry! registry')))

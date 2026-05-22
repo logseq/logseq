@@ -34,6 +34,23 @@
                      eid))
     :else nil))
 
+(def ^:private comments-class-ident :logseq.class/Comments)
+(def ^:private comment-class-ident :logseq.class/Comment)
+
+(defn- comments-area?
+  [db block]
+  (ldb/class-instance? (d/entity db comments-class-ident) block))
+
+(defn- comment-block?
+  [db block]
+  (or (ldb/class-instance? (d/entity db comment-class-ident) block)
+      (comments-area? db (:block/parent block))))
+
+(defn- publishable-block?
+  [db block]
+  (not (or (comments-area? db block)
+           (comment-block? db block))))
+
 (defn- publish-refs-from-blocks
   [db blocks page-entity graph-uuid]
   (let [page-uuid (:block/uuid page-entity)
@@ -134,6 +151,7 @@
                   uuid (:block/uuid entity)
                   children (when uuid
                              (ldb/get-block-and-children db uuid))
+                  children (filter #(publishable-block? db %) children)
                   child-links (->> children
                                    (map :block/link)
                                    (map publish-ref-eid)
@@ -145,7 +163,7 @@
 (defn- publish-collect-page-eids
   [db entity]
   (let [page-id (:db/id entity)
-        blocks (collect-publish-blocks db entity)
+        blocks (filter #(publishable-block? db %) (collect-publish-blocks db entity))
         embedded-blocks (collect-embedded-blocks db blocks)
         blocks (concat blocks embedded-blocks)
         block-eids (map :db/id blocks)

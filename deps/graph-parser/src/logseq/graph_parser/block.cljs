@@ -328,6 +328,7 @@
         original-page-name (common-util/remove-boundary-slashes original-page-name)
         [original-page-name' page-name journal-day] (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?})
         namespace? (and (or (not db-based?) @*export-to-db-graph?)
+                        (not journal-day)
                         (not (boolean (text/get-nested-page-name original-page-name')))
                         (text/namespace-page? original-page-name'))
         page-entity (when (and db (not skip-existing-page-check?))
@@ -442,7 +443,9 @@
                                                 p)]
                                         (when (string? p)
                                           (let [p (or (text/get-nested-page-name p) p)]
-                                            (if (and (text/namespace-page? p) (not tag?))
+                                            (if (and (text/namespace-page? p)
+                                                     (not (common-date/valid-journal-title-with-slash? p))
+                                                     (not tag?))
                                               (common-util/split-namespace-pages p)
                                               [p])))))
                                     col)

@@ -105,6 +105,8 @@
   (p/do!
    (repo-handler/restore-and-setup-repo! graph)
    (graph-switch graph)
+   (graph-handler/<upsert-current-graph-registry!)
+   (graph-handler/remember-current-graph-id-in-tab!)
    (state/set-state! :sync-graph/init? false)
    (when (:rtc-download? opts)
      (repo-handler/refresh-repos!)
@@ -128,8 +130,8 @@
     (let [t2 (t/now)]
       (log/info ::graph-switch-spent (- t2 t1))))))
 
-(defmethod handle :graph/open-new-window [[_ev target-repo]]
-  (ui-handler/open-new-window-or-tab! target-repo))
+(defmethod handle :graph/open-new-window [[_ev target]]
+  (ui-handler/open-new-window-or-tab! target))
 
 (defmethod handle :page/create [[_ page-name opts]]
   (if (= page-name (date/today))

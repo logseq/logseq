@@ -1,7 +1,5 @@
 (ns ^:no-doc frontend.handler.block
   (:require [clojure.string :as string]
-            [datascript.core :as d]
-            [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.config :as config]
@@ -18,6 +16,7 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [logseq.db :as ldb]
+            [logseq.db.frontend.block-title :as db-block-title]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op]
             [promesa.core :as p]))
@@ -79,21 +78,6 @@
         (or "")
         (subs 0 pos))))
 
-(defn- class-title-conflicts?
-  [class-entity]
-  (let [class-title (:block/title class-entity)
-        class-id (:db/id class-entity)]
-    (when-let [db (and class-title (db/get-db))]
-      (boolean
-       (d/q '[:find ?other .
-              :in $ ?class-title ?class-id
-              :where
-              [?other :block/title ?class-title]
-              [?other :block/tags :logseq.class/Tag]
-              [(not= ?other ?class-id)]
-              (not [?other :logseq.property/deleted-at])]
-            db class-title class-id)))))
-
 (defn mark-last-input-time!
   [repo]
   (when repo
@@ -113,51 +97,8 @@
 (defn block-unique-title
   "Multiple pages/objects may have the same `:block/title`.
    Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
-  [block & {:keys [with-tags? alias truncate?]
-            :or {with-tags? true
-                 truncate? true}}]
-  (if (ldb/built-in? block)
-    (:block/title block)
-    (let [block-e (cond
-                    (de/entity? block)
-                    block
-
-                    (number? (:db/id block))
-                    (or (db/entity (:db/id block)) block)
-
-                    (uuid? (:block/uuid block))
-                    (db/entity [:block/uuid (:block/uuid block)])
-
-                    :else
-                    block)
-          class? (ldb/class? block-e)
-          tags (when (and with-tags? (not class?))
-                 (remove (fn [t]
-                           (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
-                               (ldb/private-tags (:db/ident t))))
-                         (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block))))
-          base-title (if class?
-                       (if (class-title-conflicts? block-e)
-                         (ldb/get-class-title-with-extends block-e)
-                         (:block/title block-e))
-                       (:block/title block))
-          trunc-title (if (and truncate? base-title (> (count base-title) 256))
-                        (subs base-title 0 256)
-                        base-title)
-          title (if (seq tags)
-                  (str (or trunc-title "")
-                       " "
-                       (string/join
-                        ", "
-                        (keep (fn [tag]
-                                (when-let [title (:block/title tag)]
-                                  (str "#" title)))
-                              tags)))
-                  trunc-title)]
-      (when title
-        (str title
-             (when alias
-               (str " -> alias: " alias)))))))
+  [block & {:as opts}]
+  (db-block-title/block-unique-title (db/get-db) block opts))
 
 (defn edit-block!
   [block pos & {:keys [_container-id custom-content tail-len save-code-editor?]

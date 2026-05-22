@@ -4,6 +4,7 @@
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.db :as db]
             [frontend.handler.db-based.sync :as rtc-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
@@ -22,6 +23,60 @@
                 user-handler/logged-in? (constantly true)
                 user-handler/rtc-group? (constantly true)]
     (is (true? (repo/local-uploadable-graph? {:url "logseq_db_mobile"})))))
+
+(deftest open-in-another-tab-action-is-web-only-for-existing-graphs-test
+  (let [actionable-f (some-> (resolve 'frontend.components.repo/open-in-another-tab-action?) deref)]
+    (is (fn? actionable-f) "All graphs should expose a web open-in-another-tab action predicate")
+    (when actionable-f
+      (with-redefs [util/web-platform? true]
+        (is (true? (actionable-f {:url "logseq_db_demo"
+                                  :root "/graphs/demo"
+                                  :GraphUUID "graph-uuid"})))
+        (is (true? (actionable-f {:url "logseq_db_demo"
+                                  :root "/graphs/demo"})))
+        (is (false? (actionable-f {:url "logseq_db_remote"}))))
+      (with-redefs [util/web-platform? false]
+        (is (false? (actionable-f {:url "logseq_db_demo"
+                                   :root "/graphs/demo"
+                                   :GraphUUID "graph-uuid"})))))))
+
+(deftest open-graph-in-another-tab-publishes-graph-open-window-event-test
+  (let [open-f (some-> (resolve 'frontend.components.repo/open-graph-in-another-tab!) deref)
+        events (atom [])]
+    (is (fn? open-f) "All graphs should expose a web open-in-another-tab action")
+    (when open-f
+      (with-redefs [state/pub-event! (fn [event]
+                                       (swap! events conj event))]
+        (open-f {:url "logseq_db_demo"
+                 :GraphUUID "graph-uuid"})
+        (is (= [[:graph/open-new-window {:repo "logseq_db_demo"
+                                          :graph-id "graph-uuid"}]]
+               @events))))))
+
+(deftest open-local-graph-in-another-tab-resolves-graph-id-from-registry-test
+  (async done
+         (let [open-f (some-> (resolve 'frontend.components.repo/open-graph-in-another-tab!) deref)
+               events (atom [])]
+           (is (fn? open-f) "All graphs should expose a web open-in-another-tab action")
+           (if-not open-f
+             (done)
+             (-> (p/with-redefs [graph-handler/<get-graph-registry
+                                 (fn []
+                                   (p/resolved [{:repo "logseq_db_demo"
+                                                 :graph-name "demo"
+                                                 :graph-id "local-uuid"}]))
+                                 state/pub-event! (fn [event]
+                                                    (swap! events conj event))]
+                   (open-f {:url "logseq_db_demo"
+                            :root "/graphs/demo"}))
+                 (p/then (fn []
+                           (is (= [[:graph/open-new-window {:repo "logseq_db_demo"
+                                                             :graph-id "local-uuid"}]]
+                                  @events))
+                           (done)))
+                 (p/catch (fn [error]
+                            (is false (str error))
+                            (done))))))))
 
 (deftest upload-local-graph-with-confirm-asks-before-upload-test
   (async done
@@ -337,3 +392,73 @@
                                      (swap! events conj event))]
       (on-click #js {})
       (is (empty? @events)))))
+
+(deftest shift-click-opens-downloaded-remote-graph-in-new-tab-with-graph-id-test
+  (let [events (atom [])
+        links (#'repo/repos-dropdown-links
+               [{:url "logseq_db_demo"
+                 :root "/graphs/demo"
+                 :remote? true
+                 :rtc-graph? true
+                 :GraphName "demo"
+                 :GraphUUID "graph-uuid"
+                 :GraphSchemaVersion "65"
+                 :graph-ready-for-use? true}]
+               nil
+               nil)
+        on-click (get-in (first links) [:options :on-click])]
+    (with-redefs [state/pub-event! (fn [event]
+                                     (swap! events conj event))]
+      (on-click #js {:shiftKey true})
+      (is (= [[:graph/open-new-window {:repo "logseq_db_demo"
+                                        :graph-id "graph-uuid"}]]
+             @events)))))
+
+(deftest shift-click-opens-local-graph-in-new-tab-with-registry-graph-id-test
+  (async done
+         (let [events (atom [])
+               links (#'repo/repos-dropdown-links
+                      [{:url "logseq_db_demo"
+                        :root "/graphs/demo"
+                        :graph-ready-for-use? true}]
+                      nil
+                      nil)
+               on-click (get-in (first links) [:options :on-click])]
+           (-> (p/with-redefs [graph-handler/<get-graph-registry
+                               (fn []
+                                 (p/resolved [{:repo "logseq_db_demo"
+                                               :graph-name "demo"
+                                               :graph-id "local-uuid"}]))
+                               state/pub-event! (fn [event]
+                                                  (swap! events conj event))]
+                 (on-click #js {:shiftKey true}))
+               (p/then (fn []
+                         (is (= [[:graph/open-new-window {:repo "logseq_db_demo"
+                                                           :graph-id "local-uuid"}]]
+                                @events))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest electron-shift-click-opens-local-graph-in-new-window-by-repo-test
+  (let [events (atom [])
+        registry-reads (atom 0)
+        links (#'repo/repos-dropdown-links
+               [{:url "logseq_db_demo"
+                 :root "/graphs/demo"
+                 :graph-ready-for-use? true}]
+               nil
+               nil)
+        on-click (get-in (first links) [:options :on-click])]
+    (with-redefs [util/electron? (constantly true)
+                  graph-handler/<get-graph-registry
+                  (fn []
+                    (swap! registry-reads inc)
+                    (p/resolved []))
+                  state/pub-event! (fn [event]
+                                     (swap! events conj event))]
+      (on-click #js {:shiftKey true})
+      (is (= [[:graph/open-new-window "logseq_db_demo"]]
+             @events))
+      (is (zero? @registry-reads)))))

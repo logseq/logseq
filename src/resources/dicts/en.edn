@@ -736,6 +736,7 @@
  :graph/no-selected-node "No graph node selected."
  :graph/node-count (fn [n] (str n " " (if (= 1 n) "node" "nodes")))
  :graph/open-folder-action "Open graph folder"
+ :graph/open-in-another-tab-action "Open in another tab"
  :graph/open-selected-node "Open {1}"
  :graph/preparing "Preparing"
  :graph/refresh-remote-graphs "Refresh remote graphs"
@@ -1128,10 +1129,12 @@
  :mobile.share/unsupported-import-type "Import {1} file is not supported. You can report it on {2}. We will look into it soon."
 
  :mobile.tab/capture "Capture"
+ :mobile.tab/flashcards "Cards"
  :mobile.tab/go-to "Go To"
  :mobile.tab/graphs "Graphs"
 
  :mobile.toolbar/audio "Audio"
+ :mobile.toolbar/comment "Comment"
  :mobile.toolbar/copy-ref "Copy ref"
  :mobile.toolbar/copy-url "Copy url"
  :mobile.toolbar/hide "Hide"
@@ -1250,6 +1253,11 @@
  :page.delete/total "Total: {1}"
  :page.delete/warning "These pages had their content deleted but were unable to be deleted: {1}. See javascript console for more details."
 
+ :page.validation/alias-batch-multiple-owners "Aliases can't be batch-set on multiple pages."
+ :page.validation/alias-duplicate-owner "This page is already an alias of another page."
+ :page.validation/alias-owns-aliases "A page that has aliases can't be used as an alias."
+ :page.validation/alias-self "Alias can't be the page itself."
+ :page.validation/alias-source-is-alias "A page that is an alias of another page can't have its own aliases."
  :page.validation/cant-set-built-in-tags "New page can't set built-in tags: {1}"
  :page.validation/duplicate "Another page named \"{1}\" already exists for tags: {2}."
  :page.validation/name-blank "Page name can't be blank."
