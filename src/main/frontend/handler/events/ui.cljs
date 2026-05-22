@@ -257,9 +257,10 @@
      (editor-handler/save-current-block!)
      (editor-new-property block target opts))))
 
-(defn- editor-new-reaction [target]
+(defn- editor-new-reaction [block target]
   (let [editing-block (state/get-edit-block)
-        target-block-id (or (:block/uuid editing-block)
+        target-block-id (or (:block/uuid block)
+                            (:block/uuid editing-block)
                             (first (state/get-selection-block-ids)))
         target' (or target
                     (some-> (state/get-edit-input-id)
@@ -286,11 +287,11 @@
        {:align :start
         :content-props {:class "ls-icon-picker"}}))))
 
-(defmethod events/handle :editor/new-reaction [[_ {:keys [target]}]]
+(defmethod events/handle :editor/new-reaction [[_ {:keys [block target]}]]
   (when-not config/publishing?
     (p/do!
      (editor-handler/save-current-block!)
-     (editor-new-reaction target))))
+     (editor-new-reaction block target))))
 
 (defmethod events/handle :graph/new-db-graph [[_ _opts]]
   (shui/dialog-open!
