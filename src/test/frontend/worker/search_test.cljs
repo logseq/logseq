@@ -681,6 +681,37 @@
                 (uuid "00000000-0000-0000-0000-000000000295")]
                (mapv :block/uuid (search/expand-vector-context-blocks [current]))))))))
 
+(deftest sync-search-indice-refreshes-vector-context-on-structure-change
+  (testing "moving a block under a parent re-embeds the parent with child context"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Teams"}
+                                     :blocks [{:block/title "which team is Manu in?"}
+                                              {:block/title "Spurs"}]}]})
+          manu (db-test/find-block-by-content @conn "which team is Manu in?")
+          spurs (db-test/find-block-by-content @conn "Spurs")
+          tx-report (d/transact! conn [[:db/add (:db/id spurs) :block/parent (:db/id manu)]])
+          blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report))
+          manu-index (some #(when (= "which team is Manu in?" (:title %)) %) blocks-to-add)]
+      (is (some? manu-index))
+      (is (true? (some-> (:vector-title manu-index)
+                         (string/includes? "Children: Spurs"))))))
+
+  (testing "reordering a sibling re-embeds the previous block with next-sibling context"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Teams"}
+                                     :blocks [{:block/title "Spurs"
+                                               :block/order "a"}
+                                              {:block/title "Which team is Tony in?"
+                                               :block/order "b"}]}]})
+          tony (db-test/find-block-by-content @conn "Which team is Tony in?")
+          spurs (db-test/find-block-by-content @conn "Spurs")
+          tx-report (d/transact! conn [[:db/add (:db/id spurs) :block/order "c"]])
+          blocks-to-add (:blocks-to-add (search/sync-search-indice tx-report))
+          tony-index (some #(when (= "Which team is Tony in?" (:title %)) %) blocks-to-add)]
+      (is (some? tony-index))
+      (is (true? (some-> (:vector-title tony-index)
+                         (string/includes? "Next: Spurs")))))))
+
 (deftest search-blocks-includes-vector-only-results
   (testing "zvec vector hits are merged into desktop search even when SQLite has no keyword hit"
     (let [page-id (test-uuid-string 900)
@@ -720,6 +751,50 @@
           (is (= 1 (count @vector-queries)))
           (is (= query-embedding
                  (:embedding (first @vector-queries)))))))))
+
+(deftest search-blocks-excludes-built-in-class-vector-results-when-built-ins-disabled
+  (testing "built-in classes do not hide user block vector matches in block reference search"
+    (let [built-in-id (test-uuid-string 905)
+          user-id (test-uuid-string 906)
+          page-id (test-uuid-string 907)
+          blocks {built-in-id {:db/id 905
+                               :block/uuid (uuid built-in-id)
+                               :block/title "Cards"
+                               :block/page {:block/uuid (uuid page-id)}
+                               :logseq.property/built-in? true}
+                  user-id {:db/id 906
+                           :block/uuid (uuid user-id)
+                           :block/title "which team is Manu in?"
+                           :block/page {:block/uuid (uuid page-id)}}}
+          vector-index {:query (fn [_embedding _limit _page]
+                                 [{:id built-in-id
+                                   :page page-id
+                                   :vector-score 0.99}
+                                  {:id user-id
+                                   :page page-id
+                                   :vector-score 0.98}])}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? (constantly false)
+                    ldb/built-in? (fn [block]
+                                    (true? (:logseq.property/built-in? block)))
+                    ldb/class? (fn [block]
+                                 (= (:db/id block) 905))]
+        (let [result (vec (search/search-blocks (atom :db)
+                                                (checking-db)
+                                                vector-index
+                                                "manu spurs"
+                                                {:limit 10
+                                                 :built-in? false
+                                                 :enable-snippet? false
+                                                 :query-embedding [0.1 0.2 0.3]}))]
+          (is (= ["which team is Manu in?"]
+                 (mapv :block/title result))))))))
 
 (deftest search-blocks-bounds-vector-results-before-combining
   (testing "large graph vector search cannot force the search core to materialize more than the requested limit"
@@ -860,6 +935,65 @@
                                                  :enable-snippet? false
                                                  :query-embedding [0.4 0.5 0.6]}))]
           (is (= ["alpha" "contextually adjacent but weak"]
+                 (mapv :block/title result))))))))
+
+(deftest combine-results-uses-vector-context-terms-as-semantic-tie-breaker
+  (testing "embedded context terms can promote a lower raw vector hit without page/tag boosts inverting rank"
+    (let [unrelated-id (test-uuid-string 930)
+          page-id (test-uuid-string 931)
+          semantic-id (test-uuid-string 932)
+          tag-id (test-uuid-string 933)
+          blocks {unrelated-id {:db/id 930
+                                :block/uuid (uuid unrelated-id)
+                                :block/title "Which team is Tony in?"}
+                  page-id {:db/id 931
+                           :block/uuid (uuid page-id)
+                           :block/title "nba"
+                           :page? true}
+                  semantic-id {:db/id 932
+                               :block/uuid (uuid semantic-id)
+                               :block/title "which team is Manu in?"}
+                  tag-id {:db/id 933
+                          :block/uuid (uuid tag-id)
+                          :block/title "generic tagged result"
+                          :block/tags [{:db/id 934}]}}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? :page?]
+        (let [db #js {:exec (constantly #js [])}
+              vector-index {:query (fn [_embedding _limit _page]
+                                      [{:id unrelated-id
+                                       :vector-score 0.72
+                                       :title "Which team is Tony in?"
+                                       :vector-title "Previous: which team is Manu in?\nBlock: Which team is Tony in?\nNext: Spurs"}
+                                      {:id page-id
+                                       :vector-score 0.70
+                                       :title "nba"
+                                       :vector-title "Page: nba\nBlock: nba"}
+                                      {:id semantic-id
+                                       :vector-score 0.69
+                                       :title "which team is Manu in?"
+                                       :vector-title "Block: which team is Manu in?\nChildren: Spurs"}
+                                      {:id tag-id
+                                       :vector-score 0.68
+                                       :title "generic tagged result"
+                                       :vector-title "Block: generic tagged result"}])}
+              result (vec (search/search-blocks (atom :db)
+                                                db
+                                                vector-index
+                                                "manu spurs"
+                                                {:limit 10
+                                                 :enable-snippet? false
+                                                 :query-embedding [0.4 0.5 0.6]}))]
+          (is (= ["which team is Manu in?"
+                  "Which team is Tony in?"
+                  "nba"
+                  "generic tagged result"]
                  (mapv :block/title result))))))))
 
 (deftest benchmark-scoring-keeps-keyword-result-ahead-of-strong-vector-only-hit
