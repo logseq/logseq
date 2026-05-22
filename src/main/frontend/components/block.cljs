@@ -747,7 +747,20 @@
                     (or (model/untitled-page? (:block/title page-entity))
                         (and (ldb/page? page-entity) (string/blank? (:block/title page-entity)))))
         show-icon? (:show-icon? config)
-        icon-size (heading-icon-size (:parent-heading config))]
+        ;; Inline page-refs in regular block context use a fixed 20px
+        ;; slot (matches the left sidebar's `.page-icon` and right
+        ;; sidebar tabs — the canonical "this is a page" baseline).
+        ;; Heading contexts override via `heading-icon-size` so refs
+        ;; scale with the heading. Restored after a May-20 merge
+        ;; conflict resolution silently dropped the 20-default and
+        ;; let inline refs fall through to `heading-icon-size`'s 14.
+        ;; The matching CSS (`.page-ref .icon-cp-container`'s 20×20
+        ;; slot, the non-photo 16×16 inner SVG clamp, the
+        ;; `translateY(-1px)` optical lift, and the emoji font-size
+        ;; clamp) survived the merge intact and is still load-bearing.
+        icon-size (if-let [heading-level (:parent-heading config)]
+                    (heading-icon-size heading-level)
+                    20)]
     [:a.relative
      (cond->
       {:tabIndex "0"
