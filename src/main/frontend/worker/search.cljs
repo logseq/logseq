@@ -148,7 +148,9 @@ DROP TRIGGER IF EXISTS blocks_au;
 (def vector-embedding-dimension 384)
 (def vector-context-version 1)
 (def ^:private rrf-k 60)
-(def ^:private source-score-tie-break-weight 0.001)
+(def ^:private keyword-rrf-weight 1.25)
+(def ^:private vector-rrf-weight 1.0)
+(def ^:private source-score-tie-break-weight 0.000001)
 
 (defn- query->terms
   [q]
@@ -859,7 +861,7 @@ DROP TRIGGER IF EXISTS blocks_au;
          use-rrf? (seq vector-results)
          fused-score-by-id (when use-rrf?
                              (rrf-score-by-id [keyword-results vector-results]
-                                              [1.0 1.0]))
+                                              [keyword-rrf-weight vector-rrf-weight]))
          unique-results (unique-search-results (concat keyword-results vector-results))
          block-by-id (pull-search-result-blocks db unique-results)
          merged (keep (fn [{:keys [id] :as result}]

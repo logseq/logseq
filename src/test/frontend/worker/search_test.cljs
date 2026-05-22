@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.search :as search]
+            [frontend.worker.search-benchmark :as search-benchmark]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
 
@@ -860,6 +861,36 @@
                                                  :query-embedding [0.4 0.5 0.6]}))]
           (is (= ["alpha" "contextually adjacent but weak"]
                  (mapv :block/title result))))))))
+
+(deftest benchmark-scoring-keeps-keyword-result-ahead-of-strong-vector-only-hit
+  (testing "hybrid RRF weighting preserves keyword precision at rank 1"
+    (let [keyword-id (test-uuid-string 940)
+          vector-id (test-uuid-string 941)
+          page-id (test-uuid-string 942)
+          blocks {keyword-id {:db/id 940
+                              :block/uuid (uuid keyword-id)
+                              :block/title "keyword hit"
+                              :block/page {:block/uuid (uuid page-id)}}
+                  vector-id {:db/id 941
+                             :block/uuid (uuid vector-id)
+                             :block/title "semantic only"
+                             :block/page {:block/uuid (uuid page-id)}}}]
+      (with-redefs [d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? (constantly false)]
+        (let [result (search/combine-results
+                      :db
+                      [{:id keyword-id
+                        :keyword-score 0.1
+                        :title "keyword hit"}]
+                      [{:id vector-id
+                        :vector-score 1000
+                        :title "semantic only"}])
+              score (search-benchmark/score-results result [keyword-id] 1)]
+          (is (= 1 (:recall-at-1 score))))))))
 
 (deftest search-result-keeps-page-title-when-alias-matches
   (testing "alias matches annotate the page result without replacing its title"
