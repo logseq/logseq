@@ -156,7 +156,9 @@
                           :logseq.property.asset/license
                           :logseq.property.asset/attribution]}]
    ["65.32" {:fix fix-asset-source-url-property-type}]
-   ["65.33" {:fix fix-asset-source-url-schema-lock}]])
+   ["65.33" {:fix fix-asset-source-url-schema-lock}]
+   ["65.34" {:delete-properties [:logseq.property/wikidata-id
+                                 :logseq.property/property-key-width]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
@@ -252,10 +254,8 @@
   (let [version (db-schema/parse-schema-version version)
         db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
-                            ;; property already exists, this should never happen
-                            (remove (fn [[k _]]
-                                      (when (d/entity db k)
-                                        (assert (str "DB migration: property already exists " k)))))
+                            ;; Skip props that already exist (e.g. imported from a backup ahead of schema-version); matches classes branch.
+                            (remove (fn [[k _]] (d/entity db k)))
                             (into {})
                             sqlite-create-graph/build-properties
                             (map (fn [b] (assoc b :logseq.property/built-in? true))))
