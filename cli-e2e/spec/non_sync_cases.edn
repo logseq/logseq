@@ -776,6 +776,44 @@ PY"
      :upsert ["--blocks-file" "--target-id" "--pos"]}},
    :tags [:upsert],
    :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-file-inline-property-name-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name 'Correct Answer' --type default --cardinality one --public true >/dev/null"
+    "printf '%s' '[{:block/title \"Question block\" \"Correct Answer\" \"answer\"}]' > {{export-path-arg}}"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --blocks-file {{export-path-arg}} >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Home"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["Question block" "Correct Answer:" "answer"]},
+   :covers
+   {:commands ["upsert block" "upsert property" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks-file" "--target-page" "--name" "--type" "--cardinality" "--public"],
+     :show ["--page"]}},
+   :tags [:upsert :show],
+   :extends :non-sync/graph-json-env}
+  {:id "block-upsert-blocks-inline-properties-per-block-json",
+   :setup
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name 'Inline Note' --type default --cardinality one --public true >/dev/null"],
+   :cmds
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --blocks '[{:block/title \"First inline\" \"Inline Note\" \"First note\"} {:block/title \"Second inline\" \"Inline Note\" \"Second note\"}]' >/dev/null"
+    "first_id=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"First inline\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; second_id=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Second inline\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\"; first_show=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --id \"$first_id\")\"; second_show=\"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --id \"$second_id\")\"; printf '%s\n---\n%s\n' \"$first_show\" \"$second_show\"; printf '%s' \"$first_show\" | grep 'Inline Note: First note' >/dev/null; ! printf '%s' \"$first_show\" | grep 'Second note' >/dev/null; printf '%s' \"$second_show\" | grep 'Inline Note: Second note' >/dev/null; ! printf '%s' \"$second_show\" | grep 'First note' >/dev/null"],
+   :expect
+   {:exit 0,
+    :stdout-contains ["First inline" "Inline Note: First note" "Second inline" "Inline Note: Second note"]},
+   :covers
+   {:commands ["upsert block" "upsert property" "query" "show"],
+    :options
+    {:global ["--config" "--graph" "--root-dir" "--output"],
+     :upsert ["--blocks" "--target-page" "--name" "--type" "--cardinality" "--public"],
+     :query ["--query"],
+     :show ["--id"]}},
+   :tags [:upsert :show],
+   :extends :non-sync/graph-json-env}
   {:id "block-upsert-target-uuid-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"

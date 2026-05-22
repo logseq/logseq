@@ -4,6 +4,7 @@
             [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
+            [logseq.cli.server :as cli-server]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.cli.transport :as transport]
             [promesa.core :as p]))
@@ -95,6 +96,58 @@
     (let [result (#'add-command/partition-ref-values ["3.14" "1e5"])]
       (is (empty? (:id-refs result)))
       (is (= ["3.14" "1e5"] (:page-refs result))))))
+
+(deftest test-extract-inline-properties-from-blocks
+  (testing "removes inline property attrs while preserving block uuids and children"
+    (let [root-uuid (uuid "00000000-0000-0000-0000-000000000101")
+          child-uuid (uuid "00000000-0000-0000-0000-000000000102")
+          result (#'add-command/extract-inline-properties
+                  [{:block/title "Root"
+                    :block/uuid root-uuid
+                    :block/page [:block/name "Home"]
+                    :block/tags [1]
+                    :user.property/root-answer "root"
+                    "Correct Answer" "named value"
+                    :logseq.property/status :logseq.property/status.todo
+                    :block/children [{:block/title "Child"
+                                      :block/uuid child-uuid
+                                      :user.property/child-answer "child"}]}])]
+      (is (= [{:block/title "Root"
+               :block/uuid root-uuid
+               :block/page [:block/name "Home"]
+               :block/tags [1]
+               :block/children [{:block/title "Child"
+                                 :block/uuid child-uuid}]}]
+             (:blocks result)))
+      (is (= [{:block-uuid root-uuid
+               :properties {:user.property/root-answer "root"
+                            "Correct Answer" "named value"
+                            :logseq.property/status :logseq.property/status.todo}}
+              {:block-uuid child-uuid
+               :properties {:user.property/child-answer "child"}}]
+             (:property-assignments result))))))
+
+(deftest test-extract-inline-properties-keeps-non-property-attrs
+  (testing "only property namespace keywords and string property names are extracted"
+    (let [block-uuid (uuid "00000000-0000-0000-0000-000000000103")
+          result (#'add-command/extract-inline-properties
+                  [{:block/title "Block"
+                    :block/uuid block-uuid
+                    :db/id 101
+                    :build/keep-uuid? true
+                    :plugin/option "kept"
+                    :logseq.property.asset/type "png"
+                    :plugin.property._test_plugin/rating "5"}])]
+      (is (= [{:block/title "Block"
+               :block/uuid block-uuid
+               :db/id 101
+               :build/keep-uuid? true
+               :plugin/option "kept"
+               :logseq.property.asset/type "png"}]
+             (:blocks result)))
+      (is (= [{:block-uuid block-uuid
+               :properties {:plugin.property._test_plugin/rating "5"}}]
+             (:property-assignments result))))))
 
 (def ^:private mock-transport-invoke
   (fn [_ method args]
@@ -302,3 +355,90 @@
              (p/catch (fn [e]
                         (is false (str "unexpected error: " e))))
              (p/finally done))))
+
+(deftest test-execute-add-block-applies-inline-properties-per-block
+  (async done
+         (let [target-uuid (uuid "00000000-0000-0000-0000-000000000200")
+               root-uuid (uuid "00000000-0000-0000-0000-000000000201")
+               child-uuid (uuid "00000000-0000-0000-0000-000000000202")
+               ops* (atom nil)
+               resolve-properties-calls* (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               add-command/resolve-tags (fn [_ _ _] (p/resolved nil))
+                               add-command/resolve-properties
+                               (fn [_ _ properties & [opts]]
+                                 (swap! resolve-properties-calls* conj {:properties properties
+                                                                         :opts opts})
+                                 (p/resolved properties))
+                               add-command/resolve-property-identifiers (fn [_ _ _ & _] (p/resolved nil))
+                               transport/invoke
+                               (fn [_ method args]
+                                 (case method
+                                   :thread-api/pull
+                                   (let [[_ _ lookup] args]
+                                     (p/resolved
+                                      (cond
+                                        (= lookup 900)
+                                        {:db/id 900 :block/uuid target-uuid}
+
+                                        (= lookup [:block/uuid root-uuid])
+                                        {:db/id 901 :block/uuid root-uuid}
+
+                                        (= lookup [:block/uuid child-uuid])
+                                        {:db/id 902 :block/uuid child-uuid}
+
+                                        :else {})))
+
+                                   :thread-api/apply-outliner-ops
+                                   (let [[_ ops _] args]
+                                     (reset! ops* ops)
+                                     (p/resolved {:result :ok}))
+
+                                   (p/rejected (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (add-command/execute-add-block
+                                 {:type :add-block
+                                  :repo "demo"
+                                  :target-id 900
+                                  :pos "last-child"
+                                  :blocks [{:block/title "Root"
+                                            :block/uuid root-uuid
+                                            :user.property/root-answer "root"
+                                            :block/children [{:block/title "Child"
+                                                              :block/uuid child-uuid
+                                                              :user.property/child-answer "child"}]}]}
+                                 {})]
+                   (is (= :ok (:status result)))
+                   (is (= [901 902] (get-in result [:data :result])))
+                   (let [ops @ops*
+                         insert-op (first ops)
+                         inserted-blocks (get-in insert-op [1 0])]
+                     (is (= :insert-blocks (first insert-op)))
+                     (is (= [{:block/title "Root"
+                              :block/uuid root-uuid}
+                             {:block/title "Child"
+                              :block/uuid child-uuid
+                              :block/parent [:block/uuid root-uuid]}]
+                            inserted-blocks))
+                     (is (some #(= [:batch-set-property [[root-uuid]
+                                                          :user.property/root-answer
+                                                          "root"
+                                                          {}]]
+                                    %)
+                               ops))
+                     (is (some #(= [:batch-set-property [[child-uuid]
+                                                          :user.property/child-answer
+                                                          "child"
+                                                          {}]]
+                                    %)
+                               ops))
+                     (is (some #(= {:properties {:user.property/root-answer "root"}
+                                    :opts {:allow-non-built-in? true}}
+                                  %)
+                               @resolve-properties-calls*))
+                     (is (some #(= {:properties {:user.property/child-answer "child"}
+                                    :opts {:allow-non-built-in? true}}
+                                  %)
+                               @resolve-properties-calls*)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
