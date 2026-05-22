@@ -32,3 +32,7 @@
   [asset-block ext]
   (cond-> (str (:block/title asset-block))
     ext (str "." (name ext))))
+
+(def read-mode-title-attrs
+  {:class "asset-title-slot text-xs opacity-60 mt-1 cursor-text"
+   :style {:min-height 24}})
