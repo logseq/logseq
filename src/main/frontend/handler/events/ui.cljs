@@ -257,10 +257,18 @@
      (editor-handler/save-current-block!)
      (editor-new-property block target opts))))
 
-(defn- editor-new-reaction [target]
-  (let [editing-block (state/get-edit-block)
-        target-block-id (or (:block/uuid editing-block)
-                            (first (state/get-selection-block-ids)))
+(defn- reaction-target-block-ids [blocks]
+  (let [blocks' (cond
+                  (nil? blocks) nil
+                  (sequential? blocks) blocks
+                  :else [blocks])]
+    (vec
+     (or (seq (keep :block/uuid blocks'))
+         (some-> (state/get-edit-block) :block/uuid vector)
+         (seq (state/get-selection-block-ids))))))
+
+(defn- editor-new-reaction [blocks target]
+  (let [target-block-ids (reaction-target-block-ids blocks)
         target' (or target
                     (some-> (state/get-edit-input-id)
                             (gdom/getElement))
@@ -270,10 +278,11 @@
                         emoji? (= :emoji (:type icon))]
                     (if emoji?
                       (do
-                        (reaction-handler/toggle-reaction! target-block-id emoji-id)
+                        (doseq [target-block-id target-block-ids]
+                          (reaction-handler/toggle-reaction! target-block-id emoji-id))
                         (shui/popup-hide! popup-id))
                       (notification/show! (t :block.reaction/emoji-required-warning) :warning))))]
-    (when (and target-block-id target')
+    (when (and (seq target-block-ids) target')
       (shui/popup-show!
        target'
        (fn [{:keys [id]}]
@@ -283,11 +292,11 @@
        {:align :start
         :content-props {:class "ls-icon-picker"}}))))
 
-(defmethod events/handle :editor/new-reaction [[_ {:keys [target]}]]
+(defmethod events/handle :editor/new-reaction [[_ {:keys [block blocks target]}]]
   (when-not config/publishing?
     (p/do!
      (editor-handler/save-current-block!)
-     (editor-new-reaction target))))
+     (editor-new-reaction (if (seq blocks) blocks block) target))))
 
 (defmethod events/handle :graph/new-db-graph [[_ _opts]]
   (shui/dialog-open!

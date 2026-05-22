@@ -1505,6 +1505,7 @@
  :property/update-success "Property updated!"
  :property/use-choice-in-tag "Use in #{1}"
 
+ :property.built-in/agent-session-id "Agent Session ID"
  :property.built-in/alias "Alias"
  :property.built-in/asset "Asset"
  :property.built-in/asset-align "Asset alignment"
@@ -1518,6 +1519,7 @@
  :property.built-in/asset-size "File Size"
  :property.built-in/asset-type "File Type"
  :property.built-in/asset-width "Image width"
+ :property.built-in/assignee "Assignee"
  :property.built-in/background-color "Background color"
  :property.built-in/built-in "Built in?"
  :property.built-in/checkbox-display-properties "Properties displayed as checkbox"

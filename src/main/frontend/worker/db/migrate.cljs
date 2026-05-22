@@ -93,7 +93,7 @@
                    [:db/add comments-area-id :logseq.property.comments/blocks parent-id]))))))
 
 (defn- fix-asset-source-url-property-type
-  "65.31 mistakenly registered :logseq.property.asset/source-url with type :url
+  "65.33 mistakenly registered :logseq.property.asset/source-url with type :url
    (a ref-typed schema), which made datascript treat string URLs as tempid
    lookups during transact and block all asset saves. Coerce the existing
    property's type to :string in any DB that ran the bad migration."
@@ -103,7 +103,7 @@
       [[:db/add (:db/id e) :logseq.property/type :string]])))
 
 (defn- fix-asset-source-url-schema-lock
-  "65.32 changed :logseq.property/type to :string but left :db/valueType
+  "65.34 changed :logseq.property/type to :string but left :db/valueType
    :db.type/ref on the entity. In Logseq's datascript fork, :db/valueType
    on a :db/ident-keyed entity IS the live schema entry — so the attribute
    stayed ref-typed and string URLs continued to fail with 'Tempids used
@@ -150,14 +150,25 @@
    ["65.28" {:classes [:logseq.class/Comment]
              :fix tag-comment-blocks}]
    ["65.29" {:fix add-single-block-comment-targets}]
-   ["65.30" {:properties [:logseq.property.class/default-icon]}]
-   ["65.31" {:properties [:logseq.property.asset/source-url
+   ["65.30" {:properties [:logseq.property/assignee]}]
+   ["65.31" {:properties [:logseq.property.agent/session-id]}]
+   ["65.32" {:properties [:logseq.property.class/default-icon]}]
+   ["65.33" {:properties [:logseq.property.asset/source-url
                           :logseq.property.asset/source-name
                           :logseq.property.asset/license
                           :logseq.property.asset/attribution]}]
-   ["65.32" {:fix fix-asset-source-url-property-type}]
-   ["65.33" {:fix fix-asset-source-url-schema-lock}]
-   ["65.34" {:delete-properties [:logseq.property/wikidata-id
+   ["65.34" {:fix fix-asset-source-url-property-type}]
+   ["65.35" {:fix fix-asset-source-url-schema-lock}]
+   ;; 65.36 — orphan cleanup + catch-up for dev DBs whose kv was stuck at our
+   ;; pre-merge 65.30/65.31/65.32 (now renumbered to 65.32/65.33/65.34) and
+   ;; therefore skipped master's 65.30 (:assignee) and 65.31 (:agent/session-id),
+   ;; or stopped after the buggy property-type fix. `:properties` re-registration
+   ;; is idempotent (skipped if the ident already resolves); `:fix` re-runs the
+   ;; property-type coercion which is itself guarded by `(= :url ...)`.
+   ["65.36" {:properties [:logseq.property/assignee
+                          :logseq.property.agent/session-id]
+             :fix fix-asset-source-url-property-type
+             :delete-properties [:logseq.property/wikidata-id
                                  :logseq.property/property-key-width]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)

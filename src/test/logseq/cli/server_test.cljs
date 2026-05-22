@@ -7,6 +7,7 @@
             [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
+            [lambdaisland.glogi :as log]
             [logseq.cli.config :as cli-config]
             [logseq.cli.profile :as profile]
             [logseq.cli.server :as cli-server]
@@ -171,6 +172,11 @@
                discover-calls (atom 0)
                spawn-calls (atom 0)
                shutdown-calls (atom 0)
+               info-logs (atom [])
+               log-handler (fn [record]
+                             (when-let [data (get (:message record)
+                                                  :cli-server-restart-version-mismatch)]
+                               (swap! info-logs conj data)))
                old-server (revision-test-server {:repo repo
                                                  :port 9411
                                                  :owner-source :cli
@@ -199,6 +205,7 @@
                                                                             [new-server]))))
                                daemon/wait-for-lock (fn [_] (p/resolved true))
                                daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (log/add-handler log-handler)
                  (cli-server/ensure-server! {:root-dir root-dir
                                              :owner-source :cli
                                              :expected-revision "expected-revision"}
@@ -206,10 +213,22 @@
                (p/then (fn [config]
                          (is (= "http://127.0.0.1:9412" (:base-url config)))
                          (is (= 1 @shutdown-calls))
-                         (is (= 1 @spawn-calls))))
+                         (is (= 1 @spawn-calls))
+                         (is (= [{:repo repo
+                                  :expected-revision "expected-revision"
+                                  :current-revision "old-revision"
+                                  :owner-source :cli
+                                  :pid (.-pid js/process)
+                                  :host "127.0.0.1"
+                                  :port 9411
+                                  :root-dir root-dir
+                                  :status :ready}]
+                                @info-logs))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally done)))))
+               (p/finally (fn []
+                            (log/remove-handler log-handler)
+                            (done)))))))
 
 (deftest ensure-server-restarts-cross-owner-mismatched-revision
   (async done
