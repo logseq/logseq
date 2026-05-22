@@ -283,13 +283,21 @@
     "comment-thread-context" (or comments-area-tree-text (:block/title (:block/parent comment-block)) "")
     "requesting-comment" (or comment-tree-text (:block/title comment-block) "")}))
 
+(defn- codex-exec-prefix
+  [codex-bin]
+  [(or (trim-non-empty codex-bin) "codex")
+   "--sandbox" "danger-full-access"
+   "exec"])
+
 (defn build-codex-command
   [prompt {:keys [codex-bin]}]
-  [(or (trim-non-empty codex-bin) "codex") "exec" "--json" prompt])
+  (conj (codex-exec-prefix codex-bin)
+        "--json" "--skip-git-repo-check" prompt))
 
 (defn- build-codex-resume-command
   [session-id prompt {:keys [codex-bin]}]
-  [(or (trim-non-empty codex-bin) "codex") "exec" "resume" "--json" session-id prompt])
+  (conj (codex-exec-prefix codex-bin)
+        "resume" "--json" "--skip-git-repo-check" session-id prompt))
 
 (defn- shell-quote
   [value]

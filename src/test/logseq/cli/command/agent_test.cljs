@@ -67,6 +67,12 @@
                                               :block/title "Target block B"}]}
          overrides))
 
+(def codex-exec-prefix
+  ["codex" "--sandbox" "danger-full-access" "exec" "--json" "--skip-git-repo-check"])
+
+(def codex-resume-prefix
+  ["codex" "--sandbox" "danger-full-access" "exec" "resume" "--json" "--skip-git-repo-check"])
+
 (defn- assert-comment-request-prompt
   [prompt]
   (doseq [expected ["You are handling a Logseq AgentBridge comment request."
@@ -235,8 +241,8 @@
       (is (string/includes? prompt "- Ship the CLI bridge")))
 
     (testing "codex command uses exec and shell-safe preview"
-      (is (= ["codex" "exec" "--json" prompt] command))
-      (is (string/starts-with? preview "codex exec --json '"))
+      (is (= (conj codex-exec-prefix prompt) command))
+      (is (string/starts-with? preview "codex --sandbox danger-full-access exec --json --skip-git-repo-check '"))
       (is (string/includes? preview "Ship the CLI bridge")))))
 
 (deftest test-prompt-templates
@@ -581,7 +587,7 @@
                          (let [[_ command] (some #(when (= :codex (first %)) %) @calls)]
                            (is (some? command))
                            (when command
-                             (assert-comment-request-prompt (nth command 3))))
+                             (assert-comment-request-prompt (last command))))
                          (is (fn? @start-on-exit*))
                          (p/let [_ (p/delay 10)]
                            (is (some #(= [:thread-api/apply-outliner-ops
@@ -714,8 +720,8 @@
                (p/then (fn [_]
                          (let [[_ command] (some #(when (= :codex (first %)) %) @calls)]
                            (is (some? command))
-                           (is (= ["codex" "exec" "resume" "--json" "existing-session-123"]
-                                  (vec (take 5 command))))
+                           (is (= (conj codex-resume-prefix "existing-session-123")
+                                  (vec (take 8 command))))
                            (when command
                              (assert-basic-comment-request-prompt (last command))))))
                (p/catch (fn [e]
@@ -778,8 +784,8 @@
                (p/then (fn [_]
                          (let [[_ command] (some #(when (= :codex (first %)) %) @calls)]
                            (is (some? command))
-                           (is (= ["codex" "exec" "--json"]
-                                  (vec (take 3 command))))
+                           (is (= codex-exec-prefix
+                                  (vec (take (count codex-exec-prefix) command))))
                            (when command
                              (assert-basic-comment-request-prompt (last command))))))
                (p/catch (fn [e]
@@ -1241,9 +1247,9 @@
                            [:list "logseq_db_demo" "build-host"]]
                           @calls))
                    (is (= 1 (count (get-in result [:data :commands]))))
-                   (is (string/includes? (get-in result [:data :commands 0 :command 3])
+                   (is (string/includes? (last (get-in result [:data :commands 0 :command]))
                                          "Custom task demo"))
-                   (is (not (string/includes? (get-in result [:data :commands 0 :command 3])
+                   (is (not (string/includes? (last (get-in result [:data :commands 0 :command]))
                                                "You are handling a Logseq AgentBridge task.")))
                    (is (string/includes? (first (get-in result [:data :logs]))
                                          "checking the environment"))
@@ -1298,7 +1304,7 @@
                             [:prompt-templates "logseq_db_demo"]
                             [:register "logseq_db_demo" "build-host"]
                             [:list "logseq_db_demo" "build-host"]
-                            [:codex ["codex" "exec" "--json" "Task demo 11111111-1111-1111-1111-111111111111 build-host\n- Ship the CLI bridge"]]
+                            [:codex (conj codex-exec-prefix "Task demo 11111111-1111-1111-1111-111111111111 build-host\n- Ship the CLI bridge")]
                             [:ensure-server root "logseq_db_demo"]
                             [:write-session "logseq_db_demo" (:block/uuid block) "session-123"]]
                            @calls))

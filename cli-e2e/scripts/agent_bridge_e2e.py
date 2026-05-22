@@ -33,8 +33,8 @@ if args == ["--version"]:
     print("codex-cli 0.0.0-e2e")
     sys.exit(0)
 
-if args[:2] == ["exec", "--json"]:
-    prompt = args[2] if len(args) > 2 else ""
+if args[:5] == ["--sandbox", "danger-full-access", "exec", "--json", "--skip-git-repo-check"]:
+    prompt = args[5] if len(args) > 5 else ""
     block_uuid_match = re.search(r"^Block UUID: (.+)$", prompt, re.MULTILINE)
     block_uuid = block_uuid_match.group(1) if block_uuid_match else None
     log_path = pathlib.Path(os.environ["CODEX_FAKE_LOG"])
@@ -57,9 +57,9 @@ if args[:2] == ["exec", "--json"]:
     print(json.dumps({"type": "thread.started", "thread_id": session_id}), flush=True)
     sys.exit(0)
 
-if args[:3] == ["exec", "resume", "--json"]:
-    session_id = args[3] if len(args) > 3 else ""
-    prompt = args[4] if len(args) > 4 else ""
+if args[:6] == ["--sandbox", "danger-full-access", "exec", "resume", "--json", "--skip-git-repo-check"]:
+    session_id = args[6] if len(args) > 6 else ""
+    prompt = args[7] if len(args) > 7 else ""
     comment_uuid_match = re.search(r"^Comment UUID: (.+)$", prompt, re.MULTILINE)
     comment_uuid = comment_uuid_match.group(1) if comment_uuid_match else None
     log_path = pathlib.Path(os.environ["CODEX_FAKE_LOG"])
@@ -605,9 +605,9 @@ def dry_run_prompt(cli, repo_root, root_dir, config, graph, env):
     if len(commands) != 1:
         raise SystemExit("expected one dry-run command for {}, got {!r}".format(graph, commands))
     command = commands[0].get("command", [])
-    if len(command) < 4:
+    if len(command) < 1:
         raise SystemExit("dry-run command did not contain a prompt: {!r}".format(command))
-    return command[3]
+    return command[-1]
 
 
 def assert_contains(text, expected):
