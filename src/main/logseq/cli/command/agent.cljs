@@ -936,15 +936,27 @@
         (p/resolved nil))
       (route-task! cfg opts task))))
 
+(def ^:private max-concurrent-routes 4)
+
+(defn- p-map-batched
+  [limit f coll]
+  (reduce (fn [result-promise batch]
+            (p/let [result result-promise
+                    batch-result (p/all (mapv f batch))]
+              (into result batch-result)))
+          (p/resolved [])
+          (partition-all limit coll)))
+
 (defn- process-tasks!
   [cfg {:keys [repo graph agent-name prompt-templates]}]
   (p/let [tasks (list-routable-tasks cfg repo agent-name)]
-    (p/all (mapv #(route-task-once! cfg {:repo repo
-                                         :graph graph
-                                         :agent-name agent-name
-                                         :prompt-templates prompt-templates}
-                                    %)
-                 tasks))))
+    (p-map-batched max-concurrent-routes
+                   #(route-task-once! cfg {:repo repo
+                                           :graph graph
+                                           :agent-name agent-name
+                                           :prompt-templates prompt-templates}
+                                      %)
+                   tasks)))
 
 (def ^:private assignee-property-ident :logseq.property/assignee)
 
@@ -1023,6 +1035,14 @@
        (string? (:v datom))
        (or (string/includes? (:v datom) (str "[[" agent-name "]]"))
            (string/includes? (:v datom) "[["))))
+
+(defn- task-routability-datom?
+  [datom]
+  (and (true? (:added datom))
+       (or (and (= :block/tags (:a datom))
+                (= :logseq.class/Task (:v datom)))
+           (and (= :logseq.property/status (:a datom))
+                (= :logseq.property/status.todo (:v datom))))))
 
 (defn- pull-assignee-property
   [cfg repo]
@@ -1212,6 +1232,15 @@
                 (route-task-once! cfg opts {:block block
                                             :tree-text tree-text})))))))))
 
+(defn- route-routability-datom!
+  [cfg {:keys [repo agent-name] :as opts} datom]
+  (when-let [block-id (:e datom)]
+    (p/let [block (pull-task-block cfg repo block-id)]
+      (when (routable-task? block agent-name)
+        (p/let [tree-text (show-task-tree cfg repo block)]
+          (route-task-once! cfg opts {:block block
+                                      :tree-text tree-text}))))))
+
 (defn- route-comment-datom!
   [cfg {:keys [repo agent-name] :as opts} datom]
   (when-let [block-id (:e datom)]
@@ -1222,8 +1251,10 @@
 (defn- process-sync-db-changes-event!
   [cfg {:keys [repo] :as opts} {:keys [tx-data]}]
   (p/let [assignee-datoms (resolve-assignee-datoms cfg repo tx-data)]
-    (let [comment-datoms (filter #(comment-title-datom? % (:agent-name opts)) tx-data)
+    (let [routability-datoms (filter task-routability-datom? tx-data)
+          comment-datoms (filter #(comment-title-datom? % (:agent-name opts)) tx-data)
           routing (vec (concat (map #(route-assignee-datom! cfg opts %) assignee-datoms)
+                               (map #(route-routability-datom! cfg opts %) routability-datoms)
                                (map #(route-comment-datom! cfg opts %) comment-datoms)))]
       (when (seq routing)
         (p/all routing)))))
@@ -1295,10 +1326,10 @@
                           :agent-name agent-name
                           :logs logs
                           :commands commands}})
-                (do
-                  (doseq [line (conj logs (log-line "listening graph changes ..."))]
-                    (emit-log! cfg line))
-                  (if (:process-once? action)
+                (if (:process-once? action)
+                  (do
+                    (doseq [line (conj logs (log-line "listening graph changes ..."))]
+                      (emit-log! cfg line))
                     (p/let [routed (process-tasks! cfg {:repo repo
                                                         :graph graph
                                                         :agent-name agent-name
@@ -1308,12 +1339,15 @@
                        :data {:mode :processed-once
                               :graph graph
                               :agent-name agent-name
-                              :routed routed}})
+                              :routed routed}}))
+                  (let [listen-promise (listen-forever! cfg {:repo repo
+                                                             :graph graph
+                                                             :agent-name agent-name
+                                                             :prompt-templates prompt-templates})]
+                    (doseq [line (conj logs (log-line "listening graph changes ..."))]
+                      (emit-log! cfg line))
                     (p/let [_ (process-tasks! cfg {:repo repo
                                                    :graph graph
                                                    :agent-name agent-name
                                                    :prompt-templates prompt-templates})]
-                      (listen-forever! cfg {:repo repo
-                                            :graph graph
-                                            :agent-name agent-name
-                                            :prompt-templates prompt-templates}))))))))))))
+                      listen-promise)))))))))))
