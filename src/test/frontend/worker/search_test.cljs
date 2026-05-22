@@ -603,6 +603,37 @@
           (is (string/includes? vector-title "Children: Cross block context"))
           (is (string/includes? vector-title "Next: Ranking policy")))))))
 
+(deftest build-blocks-indice-reuses-sorted-vector-context
+  (testing "large pages do not sort the same sibling set once per indexed block"
+    (let [page-id #uuid "00000000-0000-0000-0000-000000000250"
+          page {:db/id 1
+                :page? true
+                :block/uuid page-id
+                :block/title "Search Perf"}
+          blocks (mapv (fn [idx]
+                         {:db/id (+ 100 idx)
+                          :block/uuid (uuid (test-uuid-string (+ 250 idx)))
+                          :block/title (str "Sibling " idx)
+                          :block/order idx
+                          :block/parent page
+                          :block/page page})
+                       (range 40))
+          page (assoc page :block/_parent blocks)
+          blocks (mapv #(assoc % :block/parent page) blocks)
+          sort-calls (atom 0)]
+      (with-redefs [search/get-all-blocks (fn [_db] blocks)
+                    ldb/sort-by-order (fn [children]
+                                        (swap! sort-calls inc)
+                                        (sort-by :block/order children))
+                    ldb/page? (fn [entity] (true? (:page? entity)))
+                    ldb/object? (constantly false)
+                    ldb/journal? (constantly false)
+                    ldb/closed-value? (constantly false)
+                    ldb/hidden? (constantly false)
+                    ldb/get-title-with-parents (fn [entity] (:block/title entity))]
+        (is (= 40 (count (search/build-blocks-indice :db))))
+        (is (<= @sort-calls 2))))))
+
 (deftest search-blocks-includes-vector-only-results
   (testing "zvec vector hits are merged into desktop search even when SQLite has no keyword hit"
     (let [page-id (test-uuid-string 900)
@@ -728,6 +759,50 @@
                                                 :enable-snippet? false
                                                 :query-embedding [0.4 0.5 0.6]}))]
           (is (= ["related semantic result" "alpha keyword"]
+                 (mapv :block/title result))))))))
+
+(deftest search-blocks-ranks-exact-keyword-before-weak-vector-result
+  (testing "weak semantic hits do not outrank exact keyword hits"
+    (let [keyword-id (test-uuid-string 920)
+          vector-id (test-uuid-string 921)
+          page-id (test-uuid-string 922)
+          blocks {keyword-id {:db/id 920
+                              :block/uuid (uuid keyword-id)
+                              :block/title "alpha"
+                              :block/page {:block/uuid (uuid page-id)}}
+                  vector-id {:db/id 921
+                             :block/uuid (uuid vector-id)
+                             :block/title "contextually adjacent but weak"
+                             :block/page {:block/uuid (uuid page-id)}}}
+          db #js {:exec (fn [opts]
+                          (let [sql (aget opts "sql")]
+                            (cond
+                              (string/includes? sql "title = ?")
+                              (clj->js [[keyword-id page-id "alpha"]])
+
+                              :else
+                              #js [])))}
+          vector-index {:query (fn [_embedding _limit _page]
+                                 [{:id vector-id
+                                   :page page-id
+                                   :vector-score 0.34}])}]
+      (with-redefs [d/entity (fn [_db [_attr id]]
+                               (get blocks (str id)))
+                    d/pull-many (fn [_db _selector lookup-refs]
+                                  (mapv (fn [[_attr id]]
+                                          (get blocks (str id)))
+                                        lookup-refs))
+                    ldb/hidden? (constantly false)
+                    ldb/page? (constantly false)
+                    ldb/built-in? (constantly false)]
+        (let [result (vec (search/search-blocks (atom :db)
+                                                db
+                                                vector-index
+                                                "alpha"
+                                                {:limit 10
+                                                 :enable-snippet? false
+                                                 :query-embedding [0.4 0.5 0.6]}))]
+          (is (= ["alpha" "contextually adjacent but weak"]
                  (mapv :block/title result))))))))
 
 (deftest search-result-keeps-page-title-when-alias-matches

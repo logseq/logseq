@@ -146,7 +146,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 (def ^:private query-boolean-operators #{"and" "or" "not" "|" "&"})
 (def ^:private query-break-chars #{\, \. \; \! \? \uFF0C \u3002 \uFF1B \uFF01 \uFF1F \u3001}) ;; , . ; ! ? ， 。 ； ！ ？ 、
 (def vector-embedding-dimension 384)
-(def ^:private vector-score-weight 100000)
+(def ^:private vector-score-weight 300)
 
 (defn- query->terms
   [q]
@@ -627,18 +627,73 @@ DROP TRIGGER IF EXISTS blocks_au;
            (keep vector-context-title)
            (string/join " | ")))
 
+(defn- vector-context-child-titles-from-cache
+  [children-by-parent-id block]
+  (some->> (get children-by-parent-id (vector-context-block-id block))
+           seq
+           (take vector-context-child-limit)
+           (keep vector-context-title)
+           (string/join " | ")))
+
+(defn- vector-context-children-by-parent-id
+  [blocks]
+  (let [children-by-parent-id (reduce (fn [result block]
+                                        (if-let [parent-id (some-> (:block/parent block)
+                                                                   vector-context-block-id)]
+                                          (update result parent-id (fnil conj []) block)
+                                          result))
+                                      {}
+                                      blocks)]
+    (into {}
+          (map (fn [[parent-id children]]
+                 [parent-id (vec (ldb/sort-by-order children))]))
+          children-by-parent-id)))
+
+(defn- vector-context-neighbor-title-by-id
+  [children-by-parent-id]
+  (reduce-kv
+   (fn [result _parent-id children]
+     (reduce (fn [result [idx child]]
+               (let [block-id (vector-context-block-id child)]
+                 (if block-id
+                   (assoc result block-id
+                          {:previous-title (vector-context-title (get children (dec idx)))
+                           :next-title (vector-context-title (get children (inc idx)))})
+                   result)))
+             result
+             (map-indexed vector children)))
+   {}
+   children-by-parent-id))
+
+(defn build-vector-context-cache
+  [blocks]
+  (let [children-by-parent-id (vector-context-children-by-parent-id blocks)]
+    {:children-by-parent-id children-by-parent-id
+     :neighbor-title-by-id (vector-context-neighbor-title-by-id children-by-parent-id)}))
+
 (defn- block->vector-title
-  [block title]
-  (let [previous-sibling (vector-context-sibling block -1)
-        next-sibling (vector-context-sibling block 1)]
+  ([block title]
+   (block->vector-title nil block title))
+  ([context block title]
+   (let [block-id (vector-context-block-id block)
+         neighbor-titles (get-in context [:neighbor-title-by-id block-id])
+         previous-title (if context
+                          (:previous-title neighbor-titles)
+                          (vector-context-title (vector-context-sibling block -1)))
+         next-title (if context
+                      (:next-title neighbor-titles)
+                      (vector-context-title (vector-context-sibling block 1)))
+         child-titles (if context
+                        (vector-context-child-titles-from-cache (:children-by-parent-id context) block)
+                        (vector-context-child-titles block))]
     (->> [(vector-context-segment "Page" (vector-context-page-title block))
           (vector-context-segment "Path" (vector-context-parent-path block))
-          (vector-context-segment "Previous" (vector-context-title previous-sibling))
+          (vector-context-segment "Previous" previous-title)
           (vector-context-segment "Block" (truncate-vector-context-segment title))
-          (vector-context-segment "Children" (vector-context-child-titles block))
-          (vector-context-segment "Next" (vector-context-title next-sibling))]
+          (vector-context-segment "Children" child-titles)
+          (vector-context-segment "Next" next-title)]
          (keep identity)
-         (string/join "\n"))))
+         (string/join "\n")))))
 
 (defn- matched-alias
   [q block]
@@ -652,9 +707,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                             first)]
         (select-keys alias [:block/uuid :block/title])))))
 
-(defn block->index
-  "Convert a block to the index for searching"
-  [{:block/keys [uuid page title] :as block}]
+(defn- block->index*
+  [context {:block/keys [uuid page title] :as block}]
   (when-not (or
              (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
@@ -665,10 +719,20 @@ DROP TRIGGER IF EXISTS blocks_au;
           {:id (str uuid)
            :page (str (or (:block/uuid page) uuid))
            :title (if (page-or-object? block) title (sanitize title))
-           :vector-title (block->vector-title block title)}))
+           :vector-title (block->vector-title context block title)}))
       (catch :default e
         (prn "Error: failed to run block->index on block " (:db/id block))
         (js/console.error e)))))
+
+(defn block->index
+  "Convert a block to the index for searching"
+  [block]
+  (block->index* nil block))
+
+(defn block->index-with-context
+  "Convert a block with a precomputed vector context cache."
+  [context block]
+  (block->index* context block))
 
 (def ^:private search-result-block-key ::block)
 
@@ -977,8 +1041,10 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn build-blocks-indice
   [db]
-  (->> (get-all-blocks db)
-       (keep block->index)))
+  (let [blocks (get-all-blocks db)
+        context (build-vector-context-cache blocks)]
+    (->> blocks
+         (keep #(block->index* context %)))))
 
 (defn- get-blocks-from-datoms-impl
   [{:keys [db-after db-before]} datoms]
