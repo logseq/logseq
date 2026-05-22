@@ -12,6 +12,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
+            [logseq.db :as ldb]
             [logseq.outliner.core :as outliner-core]
             [promesa.core :as p]))
 
@@ -359,6 +360,87 @@
           :cursor-pos 9}
          (keydown-dollar-without-selection-result {:value "inline $$"
                                                    :cursor-pos 8}))))
+
+(defn- delete-block-at-zero-pos-result
+  [block]
+  (let [deleted? (atom false)
+        stopped? (atom false)
+        input #js {:value ""}]
+    (with-redefs [state/get-input (constantly input)
+                  cursor/pos (constantly 0)
+                  util/stop (fn [_] (reset! stopped? true))
+                  state/get-current-repo (constantly test-helper/test-db)
+                  state/get-edit-block (constantly block)
+                  db/entity (fn [_] block)
+                  ldb/get-left-sibling (constantly nil)
+                  editor/get-state (constantly {:config {}})
+                  editor/delete-block! (fn [_] (reset! deleted? true))]
+      (#'editor/delete-block-when-zero-pos! nil)
+      {:deleted? @deleted?
+       :stopped? @stopped?})))
+
+(deftest delete-block-when-zero-pos-keeps-asset-block-test
+  (testing "Backspace at the start of an asset block does not delete the block"
+    (is (= {:deleted? false
+            :stopped? true}
+           (delete-block-at-zero-pos-result
+            {:db/id 1
+             :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+             :block/title ""
+             :block/page {:db/id 10}
+             :logseq.property.asset/type "png"})))))
+
+(deftest delete-block-when-zero-pos-keeps-comments-block-test
+  (testing "Backspace at the start of a Comments block does not delete the block"
+    (is (= {:deleted? false
+            :stopped? true}
+           (delete-block-at-zero-pos-result
+            {:db/id 1
+             :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+             :block/title ""
+             :block/page {:db/id 10}
+             :block/tags [{:db/ident :logseq.class/Comments}]})))))
+
+(deftest delete-block-when-zero-pos-keeps-regular-empty-block-behavior-test
+  (testing "Backspace at the start of a regular empty block still deletes it"
+    (is (= {:deleted? true
+            :stopped? true}
+           (delete-block-at-zero-pos-result
+            {:db/id 1
+             :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+             :block/title ""
+             :block/page {:db/id 10}})))))
+
+(deftest move-to-prev-block-edit-fn-focuses-merged-asset-title-test
+  (let [asset-block {:db/id 1
+                     :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                     :block/title ""
+                     :logseq.property.asset/type "png"}
+        sibling-dom #js {:getAttribute #({"blockid" (str (:block/uuid asset-block))
+                                          "containerid" nil} %)}
+        edit-calls (atom [])]
+    (with-redefs [db/entity (fn [lookup-ref]
+                              (when (contains? #{[:block/uuid (:block/uuid asset-block)]
+                                                 (:db/id asset-block)}
+                                               lookup-ref)
+                                asset-block))
+                  editor/edit-block! (fn [block pos opts]
+                                       (swap! edit-calls conj {:block block
+                                                               :pos pos
+                                                               :opts opts}))]
+      (let [{:keys [new-content pos edit-block-f]} (#'editor/move-to-prev-block
+                                                    test-helper/test-db
+                                                    sibling-dom
+                                                    "after")]
+        (is (= "after" new-content))
+        (is (= 0 pos))
+        (edit-block-f)
+        (is (= [{:block asset-block
+                 :pos 0
+                 :opts {:custom-content "after"
+                        :tail-len 5
+                        :container-id nil}}]
+               @edit-calls))))))
 
 (defn- handle-last-input-handler
   "Spied version of editor/handle-last-input"
