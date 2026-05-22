@@ -59,6 +59,7 @@
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
+(defonce *vector-indexes worker-state/*vector-indexes)
 (defonce *datascript-conns worker-state/*datascript-conns)
 (defonce *client-ops-conns worker-state/*client-ops-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
@@ -68,7 +69,7 @@
 (def search-db-version
   "Current search index version, stored in PRAGMA user_version.
   Bump to force a rebuild when the index format changes."
-  1)
+  2)
 (def ^:private recycle-gc-kv :logseq.kv/recycle-last-gc-at)
 
 (def ^:private search-index-build-batch-size 200)
@@ -268,6 +269,10 @@
     (js/clearInterval timer))
   (swap! *client-ops-cleanup-timers dissoc repo)
   (swap! *sqlite-conns dissoc repo)
+  (when-let [vector-index (worker-state/get-vector-index repo)]
+    (when-let [close-fn (:close! vector-index)]
+      (close-fn)))
+  (swap! *vector-indexes dissoc repo)
   (swap! *datascript-conns dissoc repo)
   (swap! *client-ops-conns dissoc repo)
   (swap! client-op/*repo->pending-local-tx-count dissoc repo)
@@ -296,6 +301,7 @@
   (if-let [search-db (worker-state/get-sqlite-conn repo :search)]
     (do
       (search/truncate-table! search-db)
+      (search/truncate-vector-index! (worker-state/get-vector-index repo))
       (p/resolved nil))
     (when-not @*publishing?
       (p/let [pool (<get-opfs-pool repo)
@@ -332,7 +338,7 @@
                                             {:sqlite @*sqlite
                                              :path "/search-db.sqlite"
                                              :mode "c"})]
-      [db search-db])
+      [db search-db nil nil])
     (p/let [^js pool (<get-opfs-pool repo)
             capacity (when (exists? (.-getCapacity pool))
                        (.getCapacity pool))
@@ -340,6 +346,7 @@
                 (.unpauseVfs pool))
             db-path (resolve-db-path repo pool repo-path)
             search-path (resolve-db-path repo pool (str "search" repo-path))
+            vector-path (resolve-db-path repo pool (str "search-vector" repo-path))
             client-ops-path (resolve-db-path repo pool (str "client-ops-" repo-path))
             _ (log/info :db-worker/get-dbs-open {:repo repo :db-path db-path})
             db (platform/sqlite-open (platform/current)
@@ -351,12 +358,15 @@
                                             {:sqlite @*sqlite
                                              :pool pool
                                              :path search-path})
+            vector-index (platform/vector-open (platform/current)
+                                               {:path vector-path
+                                                :dimension search/vector-embedding-dimension})
             _ (log/info :db-worker/get-dbs-open {:repo repo :client-ops-path client-ops-path})
             client-ops-db (platform/sqlite-open (platform/current)
                                                 {:sqlite @*sqlite
                                                  :pool pool
                                                  :path client-ops-path})]
-      [db search-db client-ops-db])))
+      [db search-db client-ops-db vector-index])))
 
 (defn- enable-sqlite-wal-mode!
   [^Object db]
@@ -501,11 +511,15 @@
                (nil? (client-op/get-local-tx repo)))
       (client-op/update-local-tx repo 0)))
   (when-not (worker-state/get-sqlite-conn repo)
-    (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
+    (p/let [[db search-db client-ops-db vector-index] (get-dbs repo)
+            dbs (cond-> [db search-db]
+                  client-ops-db (conj client-ops-db))
             storage (new-sqlite-storage db)]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
                                        :client-ops client-ops-db})
+      (when vector-index
+        (swap! *vector-indexes assoc repo vector-index))
       (doseq [db' dbs]
         (enable-sqlite-wal-mode! db'))
       (common-sqlite/create-kvs-table! db)
@@ -812,8 +826,9 @@
 (defn- search-blocks
   [repo q option]
   (let [search-db (get-search-db repo)
-        conn (worker-state/get-datascript-conn repo)]
-    (search/search-blocks conn search-db q option)))
+        conn (worker-state/get-datascript-conn repo)
+        vector-index (worker-state/get-vector-index repo)]
+    (search/search-blocks conn search-db vector-index q option)))
 
 (def-thread-api :thread-api/block-refs-check
   [repo id {:keys [unlinked?]}]
@@ -1045,18 +1060,21 @@
 (def-thread-api :thread-api/search-upsert-blocks
   [repo blocks]
   (when-let [db (get-search-db repo)]
+    (search/upsert-vector-blocks! (worker-state/get-vector-index repo) blocks)
     (search/upsert-blocks! db (bean/->js blocks))
     nil))
 
 (def-thread-api :thread-api/search-delete-blocks
   [repo ids]
   (when-let [db (get-search-db repo)]
+    (search/delete-vector-blocks! (worker-state/get-vector-index repo) ids)
     (search/delete-blocks! db ids)
     nil))
 
 (def-thread-api :thread-api/search-truncate-tables
   [repo]
   (when-let [db (get-search-db repo)]
+    (search/truncate-vector-index! (worker-state/get-vector-index repo))
     (search/truncate-table! db)
     nil))
 
@@ -1106,6 +1124,7 @@
   [repo search-db conn build-id]
   (ensure-active-search-index-build! repo build-id)
   (search/truncate-table! search-db)
+  (search/truncate-vector-index! (worker-state/get-vector-index repo))
   (let [db @conn
         datoms (d/datoms db :avet :block/uuid)
         total (count datoms)]
@@ -1134,6 +1153,7 @@
                           (min 100 (int (* 100 (/ processed' total)))))
                should-report? (> progress last-progress)]
            (when (seq indexed)
+             (search/upsert-vector-blocks! (worker-state/get-vector-index repo) indexed)
              (search/upsert-blocks! search-db (bean/->js indexed)))
            (when should-report?
              (report-search-index-progress! repo {:build-id build-id

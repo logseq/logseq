@@ -1,6 +1,7 @@
 (ns frontend.worker.platform.node
   "Node.js platform adapter for db-worker."
-  (:require ["fs/promises" :as fs]
+  (:require ["@zvec/zvec" :as zvec]
+            ["fs/promises" :as fs]
             ["node:sqlite" :as node-sqlite]
             ["os" :as os]
             ["path" :as node-path]
@@ -209,6 +210,108 @@
   [write-guard-fn {:keys [path]}]
   (p/let [_ (ensure-dir! (node-path/dirname path))]
     (wrap-node-sqlite-db (new DatabaseSync path) write-guard-fn)))
+
+(defonce ^:private *zvec-initialized? (atom false))
+
+(def ^:private zvec-vector-field "embedding")
+(def ^:private zvec-page-field "page")
+
+(defn- zvec-enum-value
+  [enum-name value-name]
+  (gobj/get (gobj/get zvec enum-name) value-name))
+
+(defn- initialize-zvec! []
+  (when (compare-and-set! *zvec-initialized? false true)
+    ((gobj/get zvec "ZVecInitialize")
+     #js {:logLevel (zvec-enum-value "ZVecLogLevel" "WARN")})))
+
+(defn- zvec-schema
+  [dimension]
+  (let [Schema (gobj/get zvec "ZVecCollectionSchema")]
+    (new Schema
+         #js {:name "blocks"
+              :vectors #js [#js {:name zvec-vector-field
+                                  :dataType (zvec-enum-value "ZVecDataType" "VECTOR_FP32")
+                                  :dimension dimension
+                                  :indexParams #js {:indexType (zvec-enum-value "ZVecIndexType" "HNSW")
+                                                    :metricType (zvec-enum-value "ZVecMetricType" "COSINE")}}]
+              :fields #js [#js {:name zvec-page-field
+                                 :dataType (zvec-enum-value "ZVecDataType" "STRING")
+                                 :indexParams #js {:indexType (zvec-enum-value "ZVecIndexType" "INVERT")}}]})))
+
+(defn- create-zvec-collection!
+  [path dimension]
+  ((gobj/get zvec "ZVecCreateAndOpen")
+   path
+   (zvec-schema dimension)
+   #js {:enableMMAP true}))
+
+(defn- open-zvec-collection!
+  [path dimension]
+  (initialize-zvec!)
+  (try
+    ((gobj/get zvec "ZVecOpen") path #js {:enableMMAP true})
+    (catch :default error
+      (if (= "ZVEC_NOT_FOUND" (gobj/get error "code"))
+        (create-zvec-collection! path dimension)
+        (throw error)))))
+
+(defn- zvec-doc
+  [{:keys [id page embedding]}]
+  (let [vectors (js-obj)
+        fields (js-obj)]
+    (gobj/set vectors zvec-vector-field (clj->js embedding))
+    (gobj/set fields zvec-page-field page)
+    #js {:id id
+         :vectors vectors
+         :fields fields}))
+
+(defn- zvec-result->map
+  [doc]
+  (let [fields (gobj/get doc "fields")
+        distance (gobj/get doc "score")]
+    {:id (gobj/get doc "id")
+     :page (gobj/get fields zvec-page-field)
+     :vector-score (if (number? distance)
+                     (/ 1 (+ 1 distance))
+                     0.0)}))
+
+(defn- open-vector-index
+  [{:keys [path dimension]}]
+  (p/let [_ (ensure-dir! (node-path/dirname path))]
+    (let [collection* (atom (open-zvec-collection! path dimension))
+          reopen! (fn []
+                    (reset! collection* (open-zvec-collection! path dimension)))]
+      {:query (fn [embedding limit page]
+                (let [limit (or limit 100)
+                      topk (if page (* 4 limit) limit)
+                      docs (.querySync ^js @collection*
+                                       #js {:fieldName zvec-vector-field
+                                            :topk topk
+                                            :vector (clj->js embedding)
+                                            :outputFields #js [zvec-page-field]
+                                            :params #js {:indexType (zvec-enum-value "ZVecIndexType" "HNSW")
+                                                         :ef 300}})]
+                  (->> (array-seq docs)
+                       (map zvec-result->map)
+                       (filter (fn [result]
+                                 (or (nil? page)
+                                     (= page (:page result)))))
+                       (take limit)
+                       vec)))
+       :upsert! (fn [docs]
+                  (.upsertSync ^js @collection* (clj->js (mapv zvec-doc docs)))
+                  nil)
+       :delete! (fn [ids]
+                  (.deleteSync ^js @collection* (clj->js (vec ids)))
+                  nil)
+       :truncate! (fn []
+                    (.destroySync ^js @collection*)
+                    (reopen!)
+                    nil)
+       :close! (fn []
+                 (.closeSync ^js @collection*)
+                 nil)})))
 
 (defn- install-opfs-pool
   [data-dir _sqlite pool-name]
@@ -476,6 +579,7 @@
                :transaction (fn [db f] (.transaction db f))
                :backup-db (fn [^js db path]
                             (.backup db path))}
+      :vector {:open-index open-vector-index}
       :crypto {:save-secret-text! (fn [key text]
                                     (<save-secret-text-by-owner! kv owner-source key text))
                :read-secret-text (fn [key]
