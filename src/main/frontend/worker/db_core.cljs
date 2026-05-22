@@ -1168,6 +1168,7 @@
     (p/do!
      (report-search-index-progress! repo {:build-id build-id
                                           :status :running
+                                          :stage :keyword-index
                                           :progress 0
                                           :processed 0
                                           :total total})
@@ -1189,13 +1190,21 @@
                           100
                           (min 100 (int (* 100 (/ processed' total)))))
                should-report? (> progress last-progress)]
-           (p/let [_ (when (seq indexed)
+           (p/let [_ (when (worker-state/get-vector-index repo)
+                       (report-search-index-progress! repo {:build-id build-id
+                                                            :status :running
+                                                            :stage :vector-index
+                                                            :progress progress
+                                                            :processed processed'
+                                                            :total total}))
+                   _ (when (seq indexed)
                        (p/let [vector-blocks (<embed-index-blocks repo indexed)]
                          (search/upsert-vector-blocks! (worker-state/get-vector-index repo) vector-blocks)
                          (search/upsert-blocks! search-db (bean/->js indexed))))
                    _ (when should-report?
                        (report-search-index-progress! repo {:build-id build-id
                                                             :status :running
+                                                            :stage :keyword-index
                                                             :progress progress
                                                             :processed processed'
                                                             :total total}))
@@ -1206,6 +1215,7 @@
            (.exec search-db (str "PRAGMA user_version = " search-db-version))
            (report-search-index-progress! repo {:build-id build-id
                                                 :status :completed
+                                                :stage :keyword-index
                                                 :progress 100
                                                 :processed total
                                                 :total total})))))))

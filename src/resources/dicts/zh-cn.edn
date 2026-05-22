@@ -1601,6 +1601,7 @@
  :search/indices-rebuilt-success "搜索索引已成功重建！"
  :search/no-result "未找到匹配项"
  :search/result-count "{1} 个结果"
+ :search/vector-index-progress "正在索引向量 {1}%"
 
  :search.find-in-page/input-placeholder "在页面中查找"
  :search.find-in-page/match-case "区分大小写"

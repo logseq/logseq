@@ -1612,6 +1612,7 @@
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "No matched result"
  :search/result-count (fn [n] (str n (if (> n 1) " results" " result")))
+ :search/vector-index-progress "Indexing vectors {1}%"
 
  :search.find-in-page/input-placeholder "Find in page"
  :search.find-in-page/match-case "Match case"
