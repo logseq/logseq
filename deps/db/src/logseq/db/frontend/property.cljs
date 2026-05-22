@@ -403,6 +403,7 @@
                                          :cardinality :many
                                          :public? true
                                          :ui-position :block-below}
+                                :classes #{:logseq.class/Page}
                                 :properties {:logseq.property/hide-empty-value true}
                                 :queryable? true}
 
