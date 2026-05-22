@@ -325,7 +325,7 @@
      (if block
        [:div.flex.flex-row.items-center.gap-2.min-w-0
         (when (and (= property-ident :block/title) (not many?))
-          (when-let [icon-el (icon-component/get-node-icon-cp block* {:size 16 :color? true})]
+          (when-let [icon-el (icon-component/get-node-icon-cp block* {:size 16 :avatar-size 20 :color? true})]
             [:div.table-row-icon.flex-shrink-0.flex.items-center.justify-center
              {:style {:width 20 :height 20}
               :on-click (fn [^js e]

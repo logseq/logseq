@@ -977,11 +977,13 @@
                     :else
                     (get-node-icon entity))
         ;; Photo-based custom icons (avatar/image) default to 20px but respect caller's :size.
+        ;; Callers can also pass `:avatar-size` to override only the photo branch — e.g. a
+        ;; table cell can keep tabler glyphs at 16 while letting avatars breathe at 20.
         ;; Symbolic icons (emoji, tabler, text, defaults) use caller's :size or 14.
         photo-icon? (and (map? node-icon)
                          (contains? #{:avatar :image} (:type node-icon)))
         effective-size (if photo-icon?
-                         (or (:size opts) 20)
+                         (or (:avatar-size opts) (:size opts) 20)
                          (or (:size opts) 14))
         opts' (assoc opts :size effective-size)
         ;; Hover preview from icon-picker — overrides node's icon and/or
