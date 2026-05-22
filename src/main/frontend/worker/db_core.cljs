@@ -73,6 +73,7 @@
 (def ^:private recycle-gc-kv :logseq.kv/recycle-last-gc-at)
 
 (def ^:private search-index-build-batch-size 200)
+(def ^:private vector-embedding-batch-size 32)
 (def ^:private search-index-build-time-budget-ms 8)
 (def ^:private search-index-build-idle-status-ttl-ms 2000)
 (def ^:private search-index-build-pause-ms 300)
@@ -327,6 +328,10 @@
       (d/reset-conn! conn new-db' {:reset-conn! true})
       (d/reset-schema! conn (:schema new-db)))))
 
+(defn- vector-index-path
+  [repo pool]
+  (resolve-db-path repo pool "search/vector"))
+
 (defn- get-dbs
   [repo]
   (if @*publishing?
@@ -346,7 +351,7 @@
                 (.unpauseVfs pool))
             db-path (resolve-db-path repo pool repo-path)
             search-path (resolve-db-path repo pool (str "search" repo-path))
-            vector-path (resolve-db-path repo pool (str "search-vector" repo-path))
+            vector-path (vector-index-path repo pool)
             client-ops-path (resolve-db-path repo pool (str "client-ops-" repo-path))
             _ (log/info :db-worker/get-dbs-open {:repo repo :db-path db-path})
             db (platform/sqlite-open (platform/current)
@@ -846,12 +851,19 @@
   [repo blocks]
   (let [blocks (vec (filter embeddable-index-block? blocks))]
     (if (and (seq blocks) (worker-state/get-vector-index repo))
-      (p/let [embeddings (platform/embed-texts (platform/current) (mapv :title blocks))
-              _ (validate-embedding-count! blocks embeddings)]
-        (mapv (fn [block embedding]
-                (assoc block :embedding embedding))
-              blocks
-              embeddings))
+      (p/loop [remaining (partition-all vector-embedding-batch-size blocks)
+               result []]
+        (if (empty? remaining)
+          result
+          (let [batch (vec (first remaining))]
+            (p/let [embeddings (platform/embed-texts (platform/current) (mapv :title batch))
+                    _ (validate-embedding-count! batch embeddings)]
+              (p/recur (rest remaining)
+                       (into result
+                             (mapv (fn [block embedding]
+                                     (assoc block :embedding embedding))
+                                   batch
+                                   embeddings)))))))
       (p/resolved []))))
 
 (defn- <search-blocks
