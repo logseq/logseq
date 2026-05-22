@@ -417,7 +417,7 @@
   "Renders an image icon by loading the asset URL asynchronously.
    Tries common extensions if asset-type is unknown.
    Accepts optional :on-click-error callback in opts for error state clicks."
-  [state asset-uuid _asset-type-arg opts]
+  [state _asset-uuid _asset-type-arg opts]
   (let [;; Re-render on any main-thread tx so we can react to retractions.
         ;; `model/sub-block` can't drive this — the worker's affected-keys
         ;; pipeline (worker/react.cljs:63-67) calls `(d/entity db-after id)`,
@@ -531,7 +531,7 @@
                  state)}
   "Renders an avatar with an image, with initials as fallback.
    Uses shui/avatar for circular display with object-fit: cover."
-  [state asset-uuid _asset-type avatar-data opts]
+  [state _asset-uuid _asset-type avatar-data opts]
   (let [;; Re-render on every tx so :did-update can react to retractions
         ;; (it watches `:deleted-ids` and clears `*url`).
         _latest-tx (state/sub :db/latest-transacted-entity-uuids)
@@ -645,18 +645,18 @@
                           (let [found (string/index-of text " " idx)]
                             (if (some? found)
                               (recur (inc found) (conj result found))
-                              result))))]
-      (let [spaces (find-spaces)]
-        (if (seq spaces)
-          ;; Split at space nearest to midpoint
-          (let [best (apply min-key #(js/Math.abs (- % mid)) spaces)]
-            [(string/trim (subs text 0 best))
-             (string/trim (subs text (inc best)))])
-          ;; No spaces: try letters+digits boundary
-          (if-let [[_ letters digits] (re-matches #"^([A-Za-z]+)(\d+)$" text)]
-            [letters digits]
-            ;; Fallback: midpoint
-            [(subs text 0 mid) (subs text mid)]))))))
+                              result))))
+          spaces (find-spaces)]
+      (if (seq spaces)
+        ;; Split at space nearest to midpoint
+        (let [best (apply min-key #(js/Math.abs (- % mid)) spaces)]
+          [(string/trim (subs text 0 best))
+           (string/trim (subs text (inc best)))])
+        ;; No spaces: try letters+digits boundary
+        (if-let [[_ letters digits] (re-matches #"^([A-Za-z]+)(\d+)$" text)]
+          [letters digits]
+          ;; Fallback: midpoint
+          [(subs text 0 mid) (subs text mid)])))))
 
 (defn icon
   [icon' & [opts]]
@@ -1240,12 +1240,12 @@
    `normalize-icon` (which targets rendering) but inverts intent — keep only
    what the renderer will need to reconstruct the icon, drop ephemeral
    picker state."
-  [icon]
+  [icon-data]
   (cond
-    (= :text (:type icon))   {:type :text   :data (:data icon)}
-    (= :avatar (:type icon)) {:type :avatar :data (:data icon)}
-    (= :image (:type icon))  {:type :image  :id (:id icon) :data (:data icon)}
-    :else                    (select-keys icon [:id :type :color])))
+    (= :text (:type icon-data))   {:type :text   :data (:data icon-data)}
+    (= :avatar (:type icon-data)) {:type :avatar :data (:data icon-data)}
+    (= :image (:type icon-data))  {:type :image  :id (:id icon-data) :data (:data icon-data)}
+    :else                         (select-keys icon-data [:id :type :color])))
 
 (defn renderable-icon?
   "True when icon-value would produce a visible element via `icon`. For :icon type
@@ -1400,9 +1400,9 @@
    content-type->extension. :kind :html distinguishes HTML pages from
    unknown binary blobs so callers can surface a dedicated error."
   [^js array-buffer]
-  (let [bytes     (js/Uint8Array. array-buffer)
-        len       (.-length bytes)
-        b         (fn [i] (when (< i len) (aget bytes i)))
+  (let [byte-arr  (js/Uint8Array. array-buffer)
+        len       (.-length byte-arr)
+        b         (fn [i] (when (< i len) (aget byte-arr i)))
         starts?   (fn [prefix]
                     (and (>= len (count prefix))
                          (every? (fn [[i v]] (= v (b i)))
@@ -2526,7 +2526,7 @@
 
 (rum/defc custom-tab-cp < rum/reactive
   "Combined tab showing Text, Avatar, and Image options side by side"
-  [*q page-title *color *view *asset-picker-initial-mode icon-value opts]
+  [*q page-title *color *view *asset-picker-initial-mode _icon-value opts]
   (let [query @*q
         ;; Text item
         text-value (if (string/blank? query)
@@ -2546,7 +2546,7 @@
         ;; Icon picker doesn't bleed previews into a sibling page-title
         ;; picker on the same entity.
         preview-target-db-id (:preview-target-db-id opts)
-        preview-target-db-ids (:preview-target-db-ids opts)
+        _preview-target-db-ids (:preview-target-db-ids opts)
         scope-property (or (:property opts) :logseq.property/icon)
         hover-preview-state (state/sub :ui/icon-hover-preview)
         hover-color-match? (and hover-preview-state
@@ -2915,25 +2915,25 @@
                           src (or upscaled url thumb-url)
                           open! (fn [s w h]
                                   (lightbox/preview-images!
-                                   [{:src s :w w :h h}]))]
-                      (let [^js probe (js/Image.)]
-                        (set! (.-onload probe)
-                              (fn [_] (open! src
-                                             (.-naturalWidth probe)
-                                             (.-naturalHeight probe))))
-                        (set! (.-onerror probe)
-                              (fn [_]
-                                (if (and base-thumb (not= base-thumb src))
-                                  (let [^js retry (js/Image.)]
-                                    (set! (.-onload retry)
-                                          (fn [_] (open! base-thumb
-                                                         (.-naturalWidth retry)
-                                                         (.-naturalHeight retry))))
-                                    (set! (.-onerror retry)
-                                          (fn [_] (open! src 1600 1200)))
-                                    (set! (.-src retry) base-thumb))
-                                  (open! src 1600 1200))))
-                        (set! (.-src probe) src))))}
+                                   [{:src s :w w :h h}]))
+                          ^js probe (js/Image.)]
+                      (set! (.-onload probe)
+                            (fn [_] (open! src
+                                           (.-naturalWidth probe)
+                                           (.-naturalHeight probe))))
+                      (set! (.-onerror probe)
+                            (fn [_]
+                              (if (and base-thumb (not= base-thumb src))
+                                (let [^js retry (js/Image.)]
+                                  (set! (.-onload retry)
+                                        (fn [_] (open! base-thumb
+                                                       (.-naturalWidth retry)
+                                                       (.-naturalHeight retry))))
+                                  (set! (.-onerror retry)
+                                        (fn [_] (open! src 1600 1200)))
+                                  (set! (.-src retry) base-thumb))
+                                (open! src 1600 1200))))
+                      (set! (.-src probe) src)))}
        (shui/tabler-icon "arrows-maximize" {:size 16})]]
      [:div.content-wrapper
       [:div.image-info
@@ -3483,7 +3483,7 @@
         ;; Per-instance drag/upload state — atoms previously module-global.
         *drag-active?       (::drag-active? state)
         *drag-depth         (::drag-depth state)
-        *asset-picker-open? (::asset-picker-open? state)
+        _*asset-picker-open? (::asset-picker-open? state)
         *upload-status      (::upload-status state)
         ;; Optimistic local mirror — see ::pending-icon comment in mixins.
         *pending-icon      (::pending-icon state)
@@ -3492,9 +3492,9 @@
         ;; *before* the (async, ~30-50ms) entity write fires. The tile reads
         ;; `pending-icon` ahead of the stale `current-icon` prop, so there's
         ;; no flash of the previous value between commit and entity refresh.
-        on-chosen* (fn [e v & rest]
+        on-chosen* (fn [e v & remaining]
                      (reset! *pending-icon v)
-                     (apply on-chosen e v rest))
+                     (apply on-chosen e v remaining))
         ;; Keyboard-nav state
         *focus-region      (::focus-region state)
         *highlighted-index (::highlighted-index state)
@@ -3805,7 +3805,7 @@
         (boolean (some-> js/navigator .-clipboard .-read))
 
         ;; Click the hidden <input type=file> to open the native file picker.
-        trigger-upload!
+        _trigger-upload!
         (fn []
           (when-let [input (js/document.getElementById "asset-upload-input")]
             (.click input)))
@@ -3974,10 +3974,10 @@
                           ;; @*color. Mirrors the icon-picker callback at
                           ;; icon.cljs:5642-5662.
                           (reset! *color c)
-                          (let [icon (or (when (= :avatar (:type current-icon)) current-icon)
-                                         synthesized-avatar-context)]
+                          (let [icon-data (or (when (= :avatar (:type current-icon)) current-icon)
+                                              synthesized-avatar-context)]
                             (on-chosen* nil
-                                        (-> icon
+                                        (-> icon-data
                                             (assoc :color c)
                                             (assoc-in [:data :color] c)
                                             (assoc-in [:data :backgroundColor] c))
@@ -4200,7 +4200,7 @@
                                (not loading?)
                                (empty? filtered-assets)
                                (empty? assets))
-           search-miss?   (and available-expanded?
+           _search-miss?  (and available-expanded?
                                (not loading?)
                                (empty? filtered-assets)
                                (seq assets)
@@ -4688,19 +4688,19 @@
                                              (.focus input))))}
                      [:div.p-1
                       (icon-search
-                       {:on-chosen (fn [_e icon & _rest]
+                       {:on-chosen (fn [_e icon-data & _rest]
                                      ;; Dispatch on the tile's :type so
                                      ;; emojis route to set-fallback-emoji!
                                      ;; (which writes :fallback-type :emoji)
                                      ;; and tabler icons route to the
                                      ;; existing :icon path.
-                                     (let [glyph-id (or (get-in icon [:data :value])
-                                                        (:id icon))]
+                                     (let [glyph-id (or (get-in icon-data [:data :value])
+                                                        (:id icon-data))]
                                        (cond
-                                         (and (= :emoji (:type icon)) glyph-id)
+                                         (and (= :emoji (:type icon-data)) glyph-id)
                                          (set-fallback-emoji! glyph-id)
 
-                                         (and (#{:icon :tabler-icon} (:type icon)) glyph-id)
+                                         (and (#{:icon :tabler-icon} (:type icon-data)) glyph-id)
                                          (set-fallback-icon! glyph-id))))
                         ;; "All" lets the user start typing and search
                         ;; emojis + icons together — common case where
@@ -5368,7 +5368,7 @@
                                      (focus-tabs! prev-tab)))
 
                                (or (= code 13) (= (.-key e) " "))
-                               (do (util/stop e))
+                               (util/stop e)
 
                                (or (= code 40) (and (= code 9) (not (.-shiftKey e))))
                                (do (util/stop e) (focus-search!))
@@ -5443,7 +5443,7 @@
         (hooks/use-callback
          (fn [^js e]
            (let [region @*focus-region
-                 code (.-keyCode e)]
+                 _code (.-keyCode e)]
              (if (and *tab (util/meta-key? e) (.-altKey e))
                ;; Alt+meta + 1/2/3/4 toggles section collapse on the All tab
                ;; (icon-picker only). Mac: ⌥⌘1-4 — Win/Linux: Ctrl+Alt+1-4.
@@ -5521,7 +5521,8 @@
    for putting the right neighbour in the right slot."
   [{:keys [colors color set-color! set-hover! on-select!
            on-hover! on-hover-end!
-           on-custom-click! custom-active? picker-open?]}]
+           on-custom-click! picker-open?]
+    custom? :custom-active?}]
   (let [*parent (rum/use-ref nil)
         ;; Split entries: first is Default (no value), rest are presets
         default-entry (first colors)
@@ -5579,7 +5580,7 @@
         (fn []
           (when-let [^js parent (rum/deref *parent)]
             (when-let [^js btn (or (.querySelector parent ".color-swatch.is-selected")
-                                   (when custom-active?
+                                   (when custom?
                                      (.querySelector parent ".color-swatch--custom"))
                                    (.querySelector parent ".color-swatch"))]
               (.focus btn))))
@@ -5706,7 +5707,7 @@
      [:div.control-col
       ;; Default — corresponds to the original first entry (`:value nil`)
       (let [{value :value label :label hint :hint} default-entry
-            active? (and (= value color) (not custom-active?))]
+            active? (and (= value color) (not custom?))]
         (shui/tooltip-provider
          {:delay-duration 300}
          (shui/tooltip
@@ -5749,11 +5750,11 @@
          {:as-child true}
          [:button.color-swatch.color-swatch--custom
           {:role "radio"
-           :aria-checked (str (boolean custom-active?))
+           :aria-checked (str (boolean custom?))
            :aria-label (t :icon.color/custom)
            :aria-expanded (str (boolean picker-open?))
-           :tab-index (if custom-active? "0" "-1")
-           :class (when custom-active? "is-selected")
+           :tab-index (if custom? "0" "-1")
+           :class (when custom? "is-selected")
            :on-click (fn [] (some-> on-custom-click! (apply [])))
            :on-key-down (fn [^js e]
                           (when (or (= (.-key e) "Enter")
@@ -5799,7 +5800,7 @@
    via the CSS-Grid 0fr↔1fr trick."
   [{:keys [color hex-input set-hex-input!
            hex-invalid? set-hex-invalid!
-           set-hover! on-hover! on-hover-end!
+           set-hover! on-hover! _on-hover-end!
            on-commit! on-escape!
            recents
            open?]}]

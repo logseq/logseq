@@ -579,7 +579,7 @@
                                                  :hide? false
                                                  :public? true}
                                         :queryable? true}
-     :logseq.property.asset/source-name {:title "Source"
+     :logseq.property.asset/source-name {:title "Source name"
                                          :schema {:type :string
                                                   :hide? false
                                                   :public? true}

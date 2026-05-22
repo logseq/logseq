@@ -66,7 +66,7 @@
 (defn- invalidate-bg-var-cache! []
   (reset! *bg-var-cache {}))
 
-(defonce ^:private bg-var-theme-observer
+(defonce ^:private _bg-var-theme-observer
   (when (and (exists? js/MutationObserver) (exists? js/document))
     (let [obs (js/MutationObserver. (fn [_] (invalidate-bg-var-cache!)))]
       (.observe obs js/document.documentElement
